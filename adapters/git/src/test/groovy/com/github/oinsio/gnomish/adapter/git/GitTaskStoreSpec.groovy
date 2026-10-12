@@ -104,6 +104,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
         record.get().context().title().forLog() == 'Fix it'
     }
 
+    // Scenario: git/git-task-persistence / Absence and unavailability are distinct answers
     def "FR1 of fix-envelope-medium: an envelope the tip does not carry reads as empty, not as a fault"() {
         given: 'a worktree on a branch whose tip never carried a task envelope'
         def worktree = addWorktree(cloneDir, tempDir.resolve('plain'), 'plain')
@@ -127,6 +128,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
         store.readRecordedState(worktree) == Optional.of(state)
     }
 
+    // Scenario: git/git-task-persistence / A stale worktree does not change what resume reads
     def "readTaskRecord answers the tip when a killed predecessor removed the envelope from the worktree"() {
         given: 'FR1 of fix-envelope-medium: a completed task whose tip carries the Completed envelope'
         def state = seedTask('PROJ-6', 'Fix it')
@@ -145,6 +147,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
         record.get().outcome() instanceof RecordedOutcome.Completed
     }
 
+    // Scenario: git/git-task-persistence / Absence and unavailability are distinct answers
     def "NFR-R2 of fix-envelope-medium: a read cut off before git exits is unavailability, never absence"() {
         given: 'a git that blocks on every read, so the read can only end on an interrupt'
         Path stallDir = Files.createDirectories(tempDir.resolve('stall'))

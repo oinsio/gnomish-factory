@@ -124,6 +124,7 @@ class GitNetworkCommandsSpec extends Specification {
         environment['GIT_SSH_COMMAND'] == 'ssh -J bastion.example.com'
     }
 
+    // Scenario: git/git-task-persistence / Operator git configuration is not modified
     def "FR4: the settings reach the child process itself, and only the network ones"() {
         given: 'a git stand-in that records both the argv and the ssh command it was handed'
         def fakeGit = StandIn.recording(tempDir, 'record-ssh')

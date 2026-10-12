@@ -44,6 +44,8 @@ class BoundaryProbeCannotVerifySpec extends Specification implements BareGitRepo
         commitAll(repo, 'gnome touched the state directory')
     }
 
+    // Scenario: git/git-task-persistence / A failed boundary probe never passes as clean
+    // Scenario: git/git-task-persistence / Both boundary media report cannot-verify
     def "FR13: a failed worktree boundary diff is cannot-verify, not a clean boundary"() {
         given: 'the boundary diff fails while every other git read still answers'
         def previousTip = head()
@@ -76,6 +78,7 @@ class BoundaryProbeCannotVerifySpec extends Specification implements BareGitRepo
         violation.message.contains('.gnomish-task/ was modified by the gnome')
     }
 
+    // Scenario: git/git-task-persistence / A failed boundary probe never passes as clean
     def "FR13: a cannot-verify boundary burns no attempt — no round commit is written"() {
         given: 'persistence whose boundary probe cannot run, over a worktree with real history'
         def persistence = new GitAttemptPersistence(
@@ -93,6 +96,7 @@ class BoundaryProbeCannotVerifySpec extends Specification implements BareGitRepo
         gitOutput(repo, 'log', '--format=%H', "${headBefore}..HEAD").isEmpty()
     }
 
+    // Scenario: git/git-task-persistence / Both boundary media report cannot-verify
     def "FR13: a failed harvested boundary diff is cannot-verify, not a clean boundary"() {
         given:
         def previousTip = head()
@@ -109,6 +113,8 @@ class BoundaryProbeCannotVerifySpec extends Specification implements BareGitRepo
         failure.message.contains(GIT_FAILURE_STDERR)
     }
 
+    // Scenario: git/git-task-persistence / No in-box check decides the boundary
+    // Scenario: git/git-task-persistence / Sandboxed boundary verification runs on harvested refs
     def "FR13: a seeded tamper on harvested refs is still a violation"() {
         given:
         def previousTip = head()

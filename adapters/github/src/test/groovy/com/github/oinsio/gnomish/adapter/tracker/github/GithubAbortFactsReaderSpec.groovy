@@ -91,6 +91,7 @@ class GithubAbortFactsReaderSpec extends Specification {
         result == AbortFacts.none()
     }
 
+    // Scenario: tracker/github-tracker / Returned-fact listing reads are conditional
     def "re-reading an unchanged comment thread sends If-None-Match and reuses the 304 body (NFR-P1)"() {
         given: 'the comments answer 200+ETag once, then 304 on the conditional re-read'
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/7/comments?per_page=100'))

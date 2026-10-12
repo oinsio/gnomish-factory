@@ -34,6 +34,13 @@ class BranchShapeClassifierSpec extends Specification {
     }
 
     // FR1: the happy-path progression, one row per shape it passes through.
+    // Scenario: lifecycle/task-branch-contract / A branch ref with no STARTED commit is Bare
+    // Scenario: lifecycle/task-branch-contract / A started branch with no completed round is Created
+    // Scenario: lifecycle/task-branch-contract / A run underway is InProgress
+    // Scenario: lifecycle/task-branch-contract / An outcome awaiting a human at a non-gate position is Parked
+    // Scenario: lifecycle/task-branch-contract / An appended decision with the outcome cleared is Answered
+    // Scenario: lifecycle/task-branch-contract / A recorded completion awaiting cleanup is CompletedUncleaned
+    // Scenario: lifecycle/task-branch-contract / A cleanup commit in the task's own history is Delivered
     def "the content progression classifies to #expected"() {
         expect:
         classifier.classify(facts(overrides)) == expected
@@ -52,6 +59,8 @@ class BranchShapeClassifierSpec extends Specification {
 
     // FR3: a branch created before this contract carries task.json alone — a legal initial shape
     // that resumes the first stage from scratch, never a corruption.
+    // Scenario: git/git-task-persistence / A pre-contract tip is a legal shape
+    // Scenario: lifecycle/task-branch-contract / Pre-contract tip is a legal initial shape
     def "a pre-contract tip is Created, not corrupt"() {
         expect:
         classifier.classify(facts(stateEnvelope: new EnvelopeStatus.Absent())) == new BranchShape.Created()
@@ -59,6 +68,7 @@ class BranchShapeClassifierSpec extends Specification {
 
     // FR1: a decision followed by a round is a run underway again, not a still-Answered branch —
     // the attempt history, reset by the decision commit itself, is what separates the two.
+    // Scenario: lifecycle/task-branch-contract / A run underway is InProgress
     def "a decision with a round recorded since is InProgress"() {
         expect:
         classifier.classify(facts(decisionsRecorded: true, roundsRecorded: true)) == new BranchShape.InProgress()
@@ -66,6 +76,7 @@ class BranchShapeClassifierSpec extends Specification {
 
     // FR1: delivery is searched for in history, so a commit made after cleanup does not hide it —
     // and a delivered branch stays delivered even if a later commit re-adds a broken state file.
+    // Scenario: lifecycle/task-branch-contract / A cleanup commit in the task's own history is Delivered
     def "delivery in history wins over whatever the tip carries now"() {
         expect:
         classifier.classify(facts(
@@ -74,6 +85,8 @@ class BranchShapeClassifierSpec extends Specification {
     }
 
     // FR15: an unsupported version is its own shape, and its diagnosis names the file and versions.
+    // Scenario: lifecycle/task-branch-contract / Unsupported envelope version is its own shape, not a parse failure
+    // Scenario: lifecycle/task-branch-contract / An unsupported version never reads as its closest legal shape
     def "an unsupported #file version is its own shape"() {
         when:
         def shape = classifier.classify(facts(overrides))
@@ -88,6 +101,7 @@ class BranchShapeClassifierSpec extends Specification {
     }
 
     // FR15, NFR-R2: unreadable content is a Corrupt shape naming the offending file, never a throw.
+    // Scenario: lifecycle/task-branch-contract / Unreadable or self-contradictory content is Corrupt
     def "an unreadable #file is Corrupt naming the file"() {
         when:
         def shape = classifier.classify(facts(overrides))
@@ -112,6 +126,8 @@ class BranchShapeClassifierSpec extends Specification {
 
     // FR15: a version diagnosis outranks a parse failure on the same envelope's sibling, so the
     // version can be named rather than reported as "unreadable".
+    // Scenario: lifecycle/task-branch-contract / Unsupported envelope version is its own shape, not a parse failure
+    // Scenario: lifecycle/task-branch-contract / An unsupported version never reads as its closest legal shape
     def "a version fault outranks a parse fault"() {
         expect:
         classifier.classify(facts(
@@ -121,6 +137,7 @@ class BranchShapeClassifierSpec extends Specification {
     }
 
     // FR1: a combination this contract does not recognize is Unknown — never a closest match.
+    // Scenario: lifecycle/task-branch-contract / A legal but unrecognized combination is Unknown
     def "state without task is Unknown, not Bare"() {
         when:
         def shape = classifier.classify(facts(taskEnvelope: new EnvelopeStatus.Absent()))
@@ -146,6 +163,7 @@ class BranchShapeClassifierSpec extends Specification {
     // FR11 of make-checkpoint-gate-durable: a tip at a gate classifies by its position, not by the
     // park — a lost park (no outcome), a landed park (paused) and a stale earlier outcome all name
     // the same owed step, and never InProgress or Parked.
+    // Scenario: lifecycle/task-branch-contract / A gate classifies by its position, not by the park
     def "a gate with #variant classifies as AwaitingApproval"() {
         expect:
         classifier.classify(facts(

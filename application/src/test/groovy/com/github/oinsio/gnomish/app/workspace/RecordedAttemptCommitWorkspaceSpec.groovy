@@ -71,6 +71,7 @@ class RecordedAttemptCommitWorkspaceSpec extends Specification {
 
     // FR1 of close-plugin-api-compilability-gap: what a check client actually does — it receives
     // an opaque Workspace and narrows it to the API type, never to this record.
+    // Scenario: plugin/plugin-api-contract / External check learns the commit it verifies via the api type
     def "a check narrowing the engine's workspace to the api type reads the round's sha"() {
         given:
         def ref = ClosedRounds.at('sha-one')
@@ -91,6 +92,7 @@ class RecordedAttemptCommitWorkspaceSpec extends Specification {
 
     // FR1: the protocol error is part of the published contract, not an implementation detail the
     // narrowing hides.
+    // Scenario: plugin/plugin-api-contract / Reading the sha before any snapshot is a protocol error
     def "reading through the api type before any snapshot is a protocol error"() {
         given:
         AttemptCommitWorkspace narrowed = new RecordedAttemptCommitWorkspace(new CurrentRound())

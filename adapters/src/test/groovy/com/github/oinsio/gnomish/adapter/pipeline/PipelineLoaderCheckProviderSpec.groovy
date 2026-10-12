@@ -22,6 +22,7 @@ class PipelineLoaderCheckProviderSpec extends Specification implements PipelineL
     @TempDir
     Path root
 
+    // Scenario: pipeline/pipeline-config / External check provider defaults to github and validates its params
     def "an external check declaring no provider resolves to github, recorded in the model"() {
         given:
         writeValidTree()
@@ -36,6 +37,7 @@ class PipelineLoaderCheckProviderSpec extends Specification implements PipelineL
         external.params() == [:]
     }
 
+    // Scenario: pipeline/pipeline-config / Unknown provider is a located load error
     def "an external check naming an undiscovered provider is a located error aggregated with the rest"() {
         given: 'a valid tree whose build stage selects sonar, and whose plan stage pins no judge model'
         writeValidTree()

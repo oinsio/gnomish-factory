@@ -59,6 +59,8 @@ class FreshClaimBaseBindingSpec extends Specification {
     }
 
     // FR4: an explicit --base wins outright, refreshed fresh, never held against the allowed bases.
+    // Scenario: git/git-task-persistence / An explicit base overrides the resolution
+    // Scenario: tracker/tracker-take / An explicit base outranks the designator
     def "binds the law to the explicit --base once refreshed, never touching the tracker"() {
         given:
         def request = new FreshClaimBaseBinding.Request('release/1.2', taskWithNoDesignator(), NO_ALLOWED_BASES)
@@ -81,6 +83,7 @@ class FreshClaimBaseBindingSpec extends Specification {
     }
 
     // FR2, FR4: a designator accepted by the allowed bases resolves and refreshes.
+    // Scenario: tracker/tracker-take / Auto mode resolves without flags
     def "binds the law to a designator accepted by the allowed bases"() {
         given:
         def base = new BaseDefinition(AllowedBases.of([
@@ -105,9 +108,11 @@ class FreshClaimBaseBindingSpec extends Specification {
     // attempt burned, never a fetch of the default branch or a refresh attempt — and the report
     // names both the offending value and the configured allowed bases so the human knows what to
     // fix without reading code.
+    // Scenario: tracker/tracker-take / Non-reachability base failures park the task
+    // Scenario: git/base-ref-resolution / A disallowed selection escalates
     def "parks INFRA with a report when the task's designator is not allowed, never reaching refresh"() {
         given:
-        def logs = LogCaptureSupport.attach(FreshClaimBaseBinding)
+        def logs = LogCaptureSupport.attach(FreshClaimBaseFailures)
         def base = new BaseDefinition(AllowedBases.of([
             AllowedBase.of(BasePattern.compile('develop'))
         ]), null)
@@ -147,9 +152,11 @@ class FreshClaimBaseBindingSpec extends Specification {
 
     // FR9: a conflicting designator is a deterministic refusal — parked, no attempt burned, never a
     // fetch of the default branch or a refresh attempt (the base was never resolved at all).
+    // Scenario: tracker/tracker-take / Escalation is reserved for human-decidable input
+    // Scenario: git/base-ref-resolution / Two base labels park the task
     def "parks INFRA with a report when the task's designator conflicts, never reaching refresh"() {
         given:
-        def logs = LogCaptureSupport.attach(FreshClaimBaseBinding)
+        def logs = LogCaptureSupport.attach(FreshClaimBaseFailures)
         def request = new FreshClaimBaseBinding.Request(null, taskNaming(Designator.conflict(['a', 'b'])), NO_ALLOWED_BASES)
 
         when:
@@ -184,9 +191,10 @@ class FreshClaimBaseBindingSpec extends Specification {
 
     // FR9: a resolved ref whose refresh refuses (missing, diverging, ambiguous) also parks, never
     // silently falling back and never burning a stage attempt.
+    // Scenario: tracker/tracker-take / Non-reachability base failures park the task
     def "parks INFRA with a report when the resolved ref's refresh refuses"() {
         given:
-        def logs = LogCaptureSupport.attach(FreshClaimBaseBinding)
+        def logs = LogCaptureSupport.attach(FreshClaimBaseFailures)
         def request = new FreshClaimBaseBinding.Request('release/9.9', taskWithNoDesignator(), NO_ALLOWED_BASES)
 
         when:
@@ -222,9 +230,12 @@ class FreshClaimBaseBindingSpec extends Specification {
 
     // D9: a configured origin that never answers the refresh is the daemon's infrastructure
     // condition, not the task's — the claim is released, plain, no attempt burned.
+    // Scenario: tracker/tracker-take / Escalation is reserved for human-decidable input
+    // Scenario: tracker/tracker-take / Released-on-outage exit
+    // Scenario: serve/factory-serve / An outage posts no escalation
     def "releases the claim and returns InfrastructureUnavailable when the refresh's origin never answers"() {
         given:
-        def logs = LogCaptureSupport.attach(FreshClaimBaseBinding)
+        def logs = LogCaptureSupport.attach(FreshClaimBaseFailures)
         def request = new FreshClaimBaseBinding.Request(null, taskWithNoDesignator(), NO_ALLOWED_BASES)
 
         when:
@@ -262,7 +273,7 @@ class FreshClaimBaseBindingSpec extends Specification {
         tracker.park(*_) >> {
             throw new RuntimeException('tracker unreachable')
         }
-        def logs = LogCaptureSupport.attach(FreshClaimBaseBinding)
+        def logs = LogCaptureSupport.attach(FreshClaimBaseFailures)
         def request = new FreshClaimBaseBinding.Request(null, taskNaming(Designator.conflict(['a', 'b'])), NO_ALLOWED_BASES)
 
         when:
@@ -291,7 +302,7 @@ class FreshClaimBaseBindingSpec extends Specification {
         tracker.release(_) >> {
             throw new RuntimeException('tracker unreachable')
         }
-        def logs = LogCaptureSupport.attach(FreshClaimBaseBinding)
+        def logs = LogCaptureSupport.attach(FreshClaimBaseFailures)
         def request = new FreshClaimBaseBinding.Request(null, taskWithNoDesignator(), NO_ALLOWED_BASES)
 
         when:

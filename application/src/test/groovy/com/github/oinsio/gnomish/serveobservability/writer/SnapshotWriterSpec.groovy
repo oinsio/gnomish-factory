@@ -72,6 +72,7 @@ class SnapshotWriterSpec extends Specification {
     // that specific write. Two ticks against a clock that advances between them
     // must produce two different writtenAt values reflecting write time, not
     // whatever instant the supplier itself might have embedded.
+    // Scenario: observability/serve-observability / Timer beat
     def "two consecutive ticks at different times produce different writtenAt values reflecting the actual write time"() {
         given:
         def target = tempDir.resolve('snapshot.json')
@@ -95,6 +96,7 @@ class SnapshotWriterSpec extends Specification {
 
     // FR2: intervalSeconds must reflect the writer's configured interval so a
     // reader with only the file can size its staleness threshold correctly.
+    // Scenario: observability/serve-observability / The reaper's interval is its own cadence
     def "intervalSeconds in the written file matches the writer's configured interval"() {
         given:
         def target = tempDir.resolve('snapshot.json')
@@ -148,6 +150,7 @@ class SnapshotWriterSpec extends Specification {
     // FR15, design D7: the retention sweep shares the snapshot writer's tick, scanning
     // targetFile's parent directory for ledger-*.jsonl files older than the configured
     // retention.
+    // Scenario: observability/serve-observability / Old ledgers expire
     def "tick() sweeps stale ledger files older than the configured retention from the snapshot directory"() {
         given:
         def target = tempDir.resolve('snapshot.json')

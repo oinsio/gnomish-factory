@@ -94,6 +94,10 @@ class RunParkRecordingSpec extends Specification implements BareGitRepoFixture, 
         assert new RunExitCodeMapper().getExitCode(stop) == exitCode
     }
 
+    // Scenario: git/git-task-persistence / Parking records the outcome
+    // Scenario: cli/manual-run / Escalation ends the process with its return path on stdout
+    // Scenario: cli/manual-run / Park is on the branch before the process exits
+    // Scenario: cli/manual-run / A run park carries no pending tracker write
     def "FR1, FR10: a fresh host run that escalates records the park and exits 10"() {
         when:
         freshRunner().run(new RunOrder(cloneDir, null, ParkPipelines.escalating(), false), context('PARK-1'), TaskState.atStageStart('build'))
@@ -103,6 +107,9 @@ class RunParkRecordingSpec extends Specification implements BareGitRepoFixture, 
         assertParked('PARK-1', stop, TaskOutcomeDto.Escalated, 10)
     }
 
+    // Scenario: cli/manual-run / Park is on the branch before the process exits
+    // Scenario: cli/manual-run / A run park carries no pending tracker write
+    // Scenario: cli/manual-run / A checkpoint ends the process with its resume command
     def "FR2, FR10: a fresh host run that reaches a checkpoint records the park and exits 11"() {
         when:
         freshRunner().run(new RunOrder(cloneDir, null, ParkPipelines.pausing(), false), context('PARK-2'), TaskState.atStageStart('build'))
@@ -114,6 +121,8 @@ class RunParkRecordingSpec extends Specification implements BareGitRepoFixture, 
         tipState('PARK-2').position() == new Position.AwaitingApproval('build')
     }
 
+    // Scenario: cli/manual-run / Park is on the branch before the process exits
+    // Scenario: cli/manual-run / Kill between the round commit and the park record of an exhausted stage
     def "FR1, FR10: a host resume that escalates records the park and exits 10"() {
         given: 'a run killed at its escalation before the park was recorded — the interrupted-run shape'
         def order = new RunOrder(cloneDir, null, ParkPipelines.escalating(), false)
@@ -131,6 +140,7 @@ class RunParkRecordingSpec extends Specification implements BareGitRepoFixture, 
         assertParked('PARK-3', stop, TaskOutcomeDto.Escalated, 10)
     }
 
+    // Scenario: cli/manual-run / Resume of a gate whose park was lost
     def "FR4, FR10: a host resume over a gate whose park was lost approves it in one commit, runs the next stage and exits 11 at its gate"() {
         given: 'a run killed at its first checkpoint before the park was recorded'
         def order = new RunOrder(cloneDir, null, ParkPipelines.pausing(), false)

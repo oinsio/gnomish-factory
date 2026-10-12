@@ -2,8 +2,8 @@
 
 Sequenced **first** in the queue (proposal, Impact): every archive stage is red until this change
 lands. Per-task verification follows `verification-scope.md`; the whole-tree `./gradlew check`
-runs once, in task 7.4. Production Java is touched only for a finding sorted into this change
-at a decision point (proposal NG5, FR11; design D9); such a fix runs the scoped PIT of
+ran in task 7.4 and runs once more, in task 8.16, after group 8 changes the test trees.
+Production Java is touched only for a finding sorted into this change at a decision point (proposal NG5, FR11; design D9); such a fix runs the scoped PIT of
 `verification-scope.md` for the classes it changes. Group 1 and group 7 run `build-logic`'s
 functional tests through the root build (`./gradlew :build-logic:functionalTest` via the root,
 never `-p build-logic`).
@@ -32,7 +32,7 @@ nothing durable references them.
 
 ## 1. The checker, unwired (D5, D6, D7; FR1, FR2, FR5, FR6, NFR-R1, NFR-R3, NFR-O1, NFR-S1, NFR-C1; UX1; M6)
 
-- [ ] 1.1 Fix Q1 and write the reader: `SpecContractReader` in
+- [x] 1.1 Fix Q1 and write the reader: `SpecContractReader` in
       `build-logic/src/main/groovy/com/github/oinsio/gnomish/build/` reads one spec file into
       requirement blocks — heading, body lines, metadata lines (`^\*\*[^*]+\*\*:`), scenario
       headings (`^####\s`), with fenced blocks masked — and one test file into its
@@ -43,7 +43,7 @@ nothing durable references them.
       ending a body, a marker inside `/* */`, a `// Scenario:` line not in the
       `<spec-id> / <title>` form, reported as malformed), one feature per shape, named by
       FR1/FR2/FR5.
-- [ ] 1.2 Write `SpecContractCheck` (a `@CacheableTask`, inputs: the spec tree — `openspec/specs/**`
+- [x] 1.2 Write `SpecContractCheck` (a `@CacheableTask`, inputs: the spec tree — `openspec/specs/**`
       by default, or the directory `specsDir` names, so a previewed tree can stand in for the
       real one — the unarchived deltas when `changes` is set, and the test trees: `*/src/test`,
       `*/*/src/test`, `build-checks/*/src/test` and `build-logic/src/functionalTest`; one
@@ -58,7 +58,7 @@ nothing durable references them.
       tree) — one feature per scenario of the `quality-gates` delta, each shown red with the
       rule removed; wall time of the task over a copy of the real `openspec/specs` and test trees
       under five seconds, recorded in the task report (M6).
-- [ ] 1.3 Register the task in the root `build.gradle` as `checkSpecContract` with an empty
+- [x] 1.3 Register the task in the root `build.gradle` as `checkSpecContract` with an empty
       exemption block and the `--changes` / `-PspecContractChanges`, `-PspecContractScope`
       (a comma-separated list of spec ids) and `-PspecContractSpecsDir` (the spec tree to read
       instead of `openspec/specs`, used by groups 5 and 7 against the preview) properties, **not** yet a dependency of `check` (D7); add `scripts/check-spec-contract.sh`
@@ -68,7 +68,7 @@ nothing durable references them.
       line (expected 537), of comment-form hits, of unlinked scenarios (expected close to
       1 457), of malformed markers (expected 20); numbers recorded in the task report. `./gradlew check` unchanged (the task is not
       wired).
-- [ ] 1.4 Add the verification command to `.gnomish/stages/fix-artifacts/stage.yaml`
+- [x] 1.4 Add the verification command to `.gnomish/stages/fix-artifacts/stage.yaml`
       (`./gradlew -q checkSpecContract -PspecContractChanges=true`, after the strict validate)
       and `.gnomish/stages/archive/stage.yaml` (`./gradlew -q checkSpecContract`, after the
       strict validate of the merged specs), each a launcher of one line with the message
@@ -78,26 +78,26 @@ nothing durable references them.
 
 ## 2. Rules and guides (D1, D2, D4; FR7; UX3)
 
-- [ ] 2.1 `.claude/rules/traceability.md`: the table row for "Spec requirement (markdown)"
+- [x] 2.1 `.claude/rules/traceability.md`: the table row for "Spec requirement (markdown)"
       becomes `**Implements**: FR-X of <change-name>`; a new row "Spec scenario" →
       `// Scenario: <spec-id> / <title>` in the test that exercises it; a sentence that the
       YAML-like forms keep `# implements`. Verify: the file shows the two rows; `grep -n
       "<!-- implements" .claude/rules/traceability.md` is empty.
-- [ ] 2.2 `.claude/rules/delta-specs.md`: the template shows the finished shape (text within
+- [x] 2.2 `.claude/rules/delta-specs.md`: the template shows the finished shape (text within
       OpenSpec's limit, `**Implements**:` line, an optional one-line `**Notes**:`, scenarios);
       a "One behavior per requirement" section stating the limit as a fact to design for, the
       scenario-or-requirement rule for normative text, notes as the exception, the marker
       obligation for every new scenario; the Rules list updated. Verify: the file's example
       passes `checkSpecContract` when dropped into the functional spec's fixture tree (add it as
       a feature).
-- [ ] 2.3 `.claude/rules/testing.md`: a short section "Every scenario has a test" — the marker
+- [x] 2.3 `.claude/rules/testing.md`: a short section "Every scenario has a test" — the marker
       beside the feature, both directions checked, the exemption form and its bar (a mechanism
       that really verifies the scenario, named). `openspec/config.yaml` `rules.specs`: replace the
       invariant line with three lines (the `**Implements**:` line; one behavior per requirement,
       OpenSpec's 500-character limit; a marker for every scenario). `.claude/commands/fix-uncommitted.md`
       line 104: the exception now names the `**Implements**:` line. Verify: `openspec instructions
       specs --change tighten-spec-contract --json` returns the three rules.
-- [ ] 2.4 `docs/guides/developer-guide.md`: one subsection under verification — the gate, the
+- [x] 2.4 `docs/guides/developer-guide.md`: one subsection under verification — the gate, the
       manual launcher, how to fix each finding, how to exempt a scenario; `docs/glossary.md`: an
       entry "Spec contract" (the project's rules on top of OpenSpec's, and the gate that checks
       them) in the build/quality context. Verify: both files render (headings in the guide's
@@ -105,7 +105,7 @@ nothing durable references them.
 
 ## 3. The migration deltas (D3; FR8, NFR-R2; M2)
 
-- [ ] 3.1 Write `scripts/generate-spec-deltas.sh` (bash 3 + awk/sed, no other runtime):
+- [x] 3.1 Write `scripts/generate-spec-deltas.sh` (bash 3 + awk/sed, no other runtime):
       for every `openspec/specs/**/spec.md`, write
       `openspec/changes/tighten-spec-contract/specs/<spec-id>/spec.md` with `## MODIFIED
       Requirements` and one block per requirement — heading verbatim, comment lines turned into
@@ -118,13 +118,13 @@ nothing durable references them.
       main spec's comments with the id set of the delta's line, the heading set, and the
       scenario count, and exits non-zero on any difference; run on the real tree: 537
       requirements, 0 differences.
-- [ ] 3.2 Run the generator; commit nothing (the human commits); run
+- [x] 3.2 Run the generator; commit nothing (the human commits); run
       `openspec validate tighten-spec-contract --strict` (expected: valid — `MODIFIED` length is
       not checked) and `scripts/check-spec-contract.sh --changes`
       (expected: no FR1/FR2 finding under `openspec/changes/tighten-spec-contract/specs`; the
       main specs and the other changes still report, as in 1.3). Verify: both outputs in the
       task report; `grep -rn "<!-- implements" openspec/changes/tighten-spec-contract` empty.
-- [ ] 3.3 Strict preview of the untouched migration: run the recipe, `openspec validate --specs
+- [x] 3.3 Strict preview of the untouched migration: run the recipe, `openspec validate --specs
       --strict` in the scratch worktree. Expected: still 44 failing specs, now about 271 findings
       (the comments no longer count) and no finding of any other kind — this is the baseline
       group 4 works down. Verify: the per-spec counts recorded in the task report and matched
@@ -145,56 +145,76 @@ capability (headings intact, scenario count not lower); the strict preview passe
 `openspec validate <spec-id> --type spec --strict` for each capability named; the inventory file
 has one row per normative sentence.
 
-- [ ] 4.1 `git-task-persistence`, requirements 1–17 in file order (the spec's first half).
-- [ ] 4.2 `git-task-persistence`, requirements 18–34.
-- [ ] 4.3 `tracker-take` (21 long of 27).
-- [ ] 4.4 `execution-environment` (15 of 26).
-- [ ] 4.5 `github-tracker` (15 of 22).
-- [ ] 4.6 `tracker-port` (15 of 22).
-- [ ] 4.7 `observability/dashboard-page` (12 of 29) and `observability/tracker-board` (5 of 8).
-- [ ] 4.8 `factory-serve` (12 of 23) and `serve-observability` (4 of 26).
-- [ ] 4.9 `agent-executor` (11 of 19).
-- [ ] 4.10 `manual-run` (10 of 18), `cli-arguments` (3 of 3), `operator-console` (1 of 3).
-- [ ] 4.11 `stage-engine` (12 of 17) and `pipeline-config` (6 of 23).
-- [ ] 4.12 `quality-gates` (8 of 29), `module-layering` (4 of 6), `build/sandbox-module-split`
+- [x] 4.1 `git-task-persistence`, requirements 1–17 in file order (the spec's first half).
+- [x] 4.2 `git-task-persistence`, requirements 18–34.
+- [x] 4.3 `tracker-take` (21 long of 27).
+- [x] 4.4 `execution-environment` (15 of 26).
+- [x] 4.5 `github-tracker` (15 of 22).
+- [x] 4.6 `tracker-port` (14 of 22; 15 before the 3.3 preview).
+- [x] 4.7 `observability/dashboard-page` (12 of 29) and `observability/tracker-board` (5 of 8).
+- [x] 4.8 `factory-serve` (12 of 23) and `serve-observability` (4 of 26).
+- [x] 4.9 `agent-executor` (11 of 19).
+- [x] 4.10 `manual-run` (10 of 18), `cli-arguments` (3 of 3), `operator-console` (1 of 3).
+- [x] 4.11 `stage-engine` (12 of 17) and `pipeline-config` (6 of 23).
+- [x] 4.12 `quality-gates` (8 of 29), `module-layering` (4 of 6), `build/sandbox-module-split`
       (1 of 2); `build/build-conventions` and `build/test-fixtures-module` are already within
       the limit — confirm in the preview and leave their generated deltas untouched.
-- [ ] 4.13 `lifecycle/claim-heartbeat` (8 of 12), `lifecycle/task-branch-contract` (7 of 8),
+- [x] 4.13 `lifecycle/claim-heartbeat` (8 of 12), `lifecycle/task-branch-contract` (7 of 8),
       `lifecycle/subprocess-supervision` (1 of 2); `lifecycle/factory-bootstrap`,
       `daemon-supervision` and `time-source` confirmed clean — confirm in the preview and leave
       their generated deltas untouched.
-- [ ] 4.14 `factory-logging` (7 of 12), `untrusted-text` (4 of 5), `status-report` (4 of 6).
-- [ ] 4.15 `sandbox-lifecycle` (7 of 10), `sandbox-egress` (5 of 10), `factory-egress-allowlist`
+- [x] 4.14 `factory-logging` (7 of 12), `untrusted-text` (4 of 5), `status-report` (4 of 6).
+- [x] 4.15 `sandbox-lifecycle` (7 of 10), `sandbox-egress` (5 of 10), `factory-egress-allowlist`
       (1 of 3).
-- [ ] 4.16 `verification/github-external-check` (5 of 11), `verification/verification-hardening`
+- [x] 4.16 `verification/github-external-check` (5 of 11), `verification/verification-hardening`
       (2 of 8), `verification/check-provider-model` (1 of 8), `verification/http-check-provider`
       (1 of 4), `plugin/plugin-api-contract` (2 of 7), `plugin/adapter-binding-registry` (1 of 8),
       `plugin/github-plugin` (1 of 3), `plugin/plugin-discovery` (1 of 6);
       `verification/dependency-verification` confirmed clean.
-- [ ] 4.17 `project-licensing` (5 of 8), `base-ref-resolution` (4 of 7), `git-transfer` (3 of 9),
+- [x] 4.17 `project-licensing` (5 of 8), `base-ref-resolution` (4 of 7), `git-transfer` (3 of 9),
       `task-inspection` (3 of 5).
-- [ ] 4.18 `project-registry` (3 of 4), `operator-configuration` (3 of 3), `release-distribution`
+- [x] 4.18 `project-registry` (3 of 4), `operator-configuration` (3 of 3), `release-distribution`
       (2 of 4), `vendor-connection-profile` (2 of 3), `secrets-provider` (1 of 4).
-- [ ] 4.19 Whole-corpus preview: the strict preview with `--specs`; expected 50 of 50 passing
+- [x] 4.19 Whole-corpus preview: the strict preview with `--specs`; expected 50 of 50 passing
       (M1). Verify: the output in the task report; any remaining finding goes back to the task
       that owns the capability, not fixed here.
 
 ## 5. Every scenario has a test (D4, D9; FR5, FR9; NFR-C2; M3, M4)
 
-- [ ] 5.1 Inventory, automated first pass: a one-off script (scratch, not committed) matches
+- [x] 5.1 Inventory, automated first pass: a one-off script (scratch, not committed) matches
       every scenario title of the previewed main specs (group 4's result, including the new
       scenarios listed in the group-4 inventories) against feature names and comments of every
       test tree by normalized word overlap, and writes `scenarios-<spec-id>.md` per capability
       with status linked / probable / missing and the candidate file. Verify: the tables exist
       for all 48 capabilities; the totals (linked, probable, missing) are in the task report.
-- [ ] 5.2 **Decision point (D9, FR11, Q2).** Present to the operator the totals of 5.1, the
+- [x] 5.2 **Decision point (D9, FR11, Q2).** Present to the operator the totals of 5.1, the
       "missing" scenarios grouped by capability, the obvious exemptions (scenarios verified by
       CI workflows, release scripts, or the OpenSpec CLI itself), and every open row of
       `findings.md` so far (group 4's normative remainders without a home among them). The
       operator sorts each item: "this change" or "new change `<name>`". Verify: the sorted
       list with reasons copied under `## Decisions` in this file, every row of `findings.md`
       closed with its disposition, before 5.3 starts.
-- [ ] 5.3 Markers and tests for the capabilities of tasks 4.1–4.3 (`git-task-persistence`,
+- [x] 5.2a Text corrections sorted into this change at 5.2: for every finding the Decisions list
+      assigns to 5.2a, edit this change's delta of that capability so the requirement or scenario
+      states what the code and its tests do (the finding id in the inventory row and in the task
+      report); rename one of the two tracker-port `Suite passes on both adapters` scenarios (F1);
+      turn the stage-engine classification table into scenarios (F26). No production code. Verify:
+      `openspec validate tighten-spec-contract --strict` valid; the strict preview passes for every
+      capability touched; the generator's `verify` reports no new difference beyond the accepted
+      ones and the renamed scenarios; each finding's row in `findings.md` marked done.
+- [x] 5.2b Exemptions move to one data file per capability (operator decision after 5.2: several
+      hundred `pending-test:` entries do not fit the root build file's 200-line cap):
+      `config/spec-contract-exemptions/<spec-id with / → ->.txt`, one line per scenario,
+      `<scenario title> => <mechanism | pending-test: <change>>`, blank lines and `#` comments
+      allowed; `SpecContractCheck` reads the directory as an input (cacheable); a line naming no
+      scenario of its capability, a malformed line, or a file naming no capability is a finding with
+      the file and line; the `exemption scenario:…, verifiedBy:…` DSL and the empty block in the root
+      `build.gradle` are removed; `testing.md` ("Every scenario has a test"), the developer guide and
+      design D5 describe the new home. Verify: the functional specs of the exemption scenarios
+      (`An exempt scenario passes with its reason`, `A stale exemption fails the gate`, the
+      pending-test feature) rewritten to the file form and green, each shown red with its rule removed;
+      `ModuleBuildFileSpec` green.
+- [x] 5.3 Markers and tests for the capabilities of tasks 4.1–4.3 (`git-task-persistence`,
       `tracker-take`): confirm each "probable" by reading the test; place the marker above the
       feature (converting the twenty informal `// Scenario:` comments of `TakeBareAutoSpec`,
       `TakeDispositionSpec` and `serve/TakeSlotRunnerSpec` to the form — the checker reports
@@ -207,28 +227,28 @@ has one row per normative sentence.
       green against the previewed specs (`-PspecContractSpecsDir=<preview>` from 1.3 points the task at the
       preview tree's `openspec/specs`);
       the module specs the task touched run by name; no `.@` field read introduced.
-- [ ] 5.4 Same for tasks 4.4–4.6 (`execution-environment`, `github-tracker`, `tracker-port`).
-- [ ] 5.5 Same for tasks 4.7–4.8 (`observability/*`, `factory-serve`, `serve-observability`).
-- [ ] 5.6 Same for tasks 4.9–4.11 (`agent-executor`, `manual-run`, `cli-arguments`,
+- [x] 5.4 Same for tasks 4.4–4.6 (`execution-environment`, `github-tracker`, `tracker-port`).
+- [x] 5.5 Same for tasks 4.7–4.8 (`observability/*`, `factory-serve`, `serve-observability`).
+- [x] 5.6 Same for tasks 4.9–4.11 (`agent-executor`, `manual-run`, `cli-arguments`,
       `operator-console`, `stage-engine`, `pipeline-config`).
-- [ ] 5.7 Same for tasks 4.12–4.13 (`quality-gates`, `module-layering`, `build/*`,
+- [x] 5.7 Same for tasks 4.12–4.13 (`quality-gates`, `module-layering`, `build/*`,
       `lifecycle/*`, `daemon-supervision`, `time-source`) — here most "tests" are `build-logic`
       functional specs, `build-checks` specs, `:bootstrap` architecture specs and the
       `app/daemon` and time-source specs of `:application` and `:domain`; a scenario verified only by CI (`Continuous integration`, `Security
       scanning`) is an exemption naming the workflow file.
-- [ ] 5.8 Same for tasks 4.14–4.16 (`factory-logging`, `untrusted-text`, `status-report`,
+- [x] 5.8 Same for tasks 4.14–4.16 (`factory-logging`, `untrusted-text`, `status-report`,
       `sandbox-*`, `factory-egress-allowlist`, `verification/*`, `plugin/*`).
-- [ ] 5.9 Same for tasks 4.17–4.18 (`project-licensing`, `base-ref-resolution`, `git-transfer`,
+- [x] 5.9 Same for tasks 4.17–4.18 (`project-licensing`, `base-ref-resolution`, `git-transfer`,
       `task-inspection`, `project-registry`, `operator-configuration`, `release-distribution`,
       `vendor-connection-profile`, `secrets-provider`) — `project-licensing` and
       `release-distribution` scenarios verified by `scripts/check-distribution-terms.sh`,
       `scripts/release-preflight.sh` or a workflow are exemptions naming that file.
-- [ ] 5.10 Exemption review: every entry of the exemption block in the root `build.gradle`
+- [x] 5.10 Exemption review: every entry of the exemption block in the root `build.gradle`
       re-read against its bar (`testing.md`, "Every scenario has a test"); the count and the
       list in the task report (M4); `pending-test:` entries, if any, each name the follow-up
       change from 5.2. Verify: `./gradlew checkSpecContract -PspecContractSpecsDir=<preview>`
       green over all 48 capabilities with zero unlinked and zero dangling.
-- [ ] 5.11 Fixes sorted into this change at 5.2 (revealed defects, normative remainders that
+- [x] 5.11 Fixes sorted into this change at 5.2 (revealed defects, normative remainders that
       needed a home): each by TDD — the `@PendingFeature` removed, the feature red, the
       production fix, green — one finding per sub-step, the finding id in the feature's
       comment and in the task report. Verify: the module's named specs green; the scoped PIT
@@ -251,23 +271,23 @@ test file that would carry its marker if one exists. Verify, per task:
 `scripts/check-spec-contract.sh --changes` reports nothing for them; the findings rows added
 are listed in the task report.
 
-- [ ] 6.1 `add-pipeline-entry-precondition`, `add-decision-inheritance`, `add-epic-decomposition`,
+- [x] 6.1 `add-pipeline-entry-precondition`, `add-decision-inheritance`, `add-epic-decomposition`,
       `add-pipeline-routing` (the four with the most long `ADDED` requirements).
-- [ ] 6.2 `add-stage-finished-event`, `add-subprocess-access-log`, `add-claim-return`,
+- [x] 6.2 `add-stage-finished-event`, `add-subprocess-access-log`, `add-claim-return`,
       `add-sandbox-base-image`.
-- [ ] 6.3 `add-sandbox-cloud-executor`, `add-sandbox-colima-vm`, `add-sandbox-gha-executor`,
+- [x] 6.3 `add-sandbox-cloud-executor`, `add-sandbox-colima-vm`, `add-sandbox-gha-executor`,
       `add-sandbox-hardening`.
-- [ ] 6.4 `add-command-executor`, `add-decision-arbiter`, `add-doctor-command`,
+- [x] 6.4 `add-command-executor`, `add-decision-arbiter`, `add-doctor-command`,
       `add-tracker-task-hierarchy`.
-- [ ] 6.5 `add-artifact-depot`, `define-executor-contract`, `enforce-artifact-contracts`,
+- [x] 6.5 `add-artifact-depot`, `define-executor-contract`, `enforce-artifact-contracts`,
       `extract-agent-round-runner`.
-- [ ] 6.6 `fix-docker-exec-env-argv`, `fix-terminal-receipt-convergence`,
+- [x] 6.6 `fix-docker-exec-env-argv`, `fix-terminal-receipt-convergence`,
       `harden-verification-integrity`, `own-git-invocation-policy`,
       `migrate-verify-to-executor-contract`.
-- [ ] 6.7 `add-stage-iteration`; then `openspec list --json` in the task report, proving that
+- [x] 6.7 `add-stage-iteration`; then `openspec list --json` in the task report, proving that
       every change it lists is named in 6.1–6.7 — a change that entered the queue after this
       proposal was written is reworked here too, and added to this list.
-- [ ] 6.8 **Decision point (D9, FR11).** Present every open row of `findings.md` added since
+- [x] 6.8 **Decision point (D9, FR11).** Present every open row of `findings.md` added since
       5.2 — the queued scenarios without a test from 6.1–6.7, any defect revealed in 5.3–5.10 —
       to the operator, who sorts each into "this change" or "new change `<name>`". For a
       queued scenario sorted into this change: the marker and the test are written now (the
@@ -276,14 +296,14 @@ are listed in the task report.
       record — note the finding id in that change's `tasks.md` as a plain bullet. Verify: the
       sorted list under `## Decisions`; `findings.md` has no open row; the tests written here
       run by name and the scoped checker (`-PspecContractScope=<spec-ids>`) is green.
-- [ ] 6.9 Fixes sorted into this change at 6.8, by the rules of 5.11. Verify: as 5.11.
+- [x] 6.9 Fixes sorted into this change at 6.8, by the rules of 5.11. Verify: as 5.11.
 
 ## 7. Wiring and the single whole-tree gate (D5, D7; FR6; G1, G3)
 
-- [ ] 7.1 Final strict preview with `--specs` and with the checker run against the preview tree:
+- [x] 7.1 Final strict preview with `--specs` and with the checker run against the preview tree:
       both green; the generator's `verify` passes for all 48 capabilities. Verify: outputs in the
       task report.
-- [ ] 7.2 Make root `check` depend on `checkSpecContract` (root `build.gradle`, next to the other
+- [x] 7.2 Make root `check` depend on `checkSpecContract` (root `build.gradle`, next to the other
       gate wirings), remove `scripts/generate-spec-deltas.sh` and its sidecar hashes (D3: the
       generator has no second use; its `verify` logic that group 4 relied on is not needed once
       the change is archived — say so in the commit recommendation). Verify:
@@ -291,10 +311,33 @@ are listed in the task report.
       checkSpecContract` green on the working clone **against the current `openspec/specs`** is
       not expected yet (the comments are still there until archive) — so the wiring is verified
       with `-PspecContractSpecsDir=<preview>`; the task report states this explicitly.
-- [ ] 7.3 Record the archive-time order in `## Workflow follow-up` below and in the task report:
+- [x] 7.3 Record the archive-time order in `## Workflow follow-up` below and in the task report:
       the first root `check` on the real tree is green only after `openspec archive` merges the
       deltas; the archive stage's own verification (1.4) is what proves it on the task branch.
-- [ ] 7.4 Whole-tree gate: `./gradlew check` once, with `-PspecContractSpecsDir=<preview>` for
+- [x] 7.3a Regroup — move (FR12, D10): by one mapping table old → new, `git mv` of the 33 flat
+      main specs into their group directories and placement of the 18 new capabilities of queued
+      changes (the five existing groups stay); the `specs/<old>` directories of every unarchived
+      change, this change's 50 deltas and their `# Spec Delta: <id>` lines;
+      `add-subprocess-access-log/specs/subprocess-supervision` to `lifecycle/`. Any
+      `spec.md.generated` sidecar still present (7.2 not yet run) moves with its delta or is
+      deleted. Verify: `git status` shows only renames under `openspec/specs/`; `find` lists no
+      flat spec under `openspec/specs/` or any unarchived change.
+- [x] 7.3b Regroup — markers and exemptions: every `// Scenario: <old> /` in every test tree of
+      FR5 re-prefixed, anchored on the exact `Scenario: <old> / `, one pass per id, the
+      `quality-gates / Root check runs the gate` marker of 7.2 included; the exemption files
+      renamed (`/` → `-`) with their `spec:` header. Verify: `scripts/check-spec-contract.sh`
+      against the strict preview, no scope, green; the anchored grep of M7 empty.
+- [x] 7.3c Regroup — references: `openspec/specs/<old>` paths and ids in `docs/`, `.claude/`, the
+      proposals, designs and tasks of unarchived changes, `build-logic` and `bootstrap` sources,
+      reviewed hit by hit; the area mapping of decision point 5.2 under `## Decisions` rewritten
+      to the new ids; a one-line old → new note at the top of `findings.md` and
+      `temporary-docs/scenario-rename-via-two-changes.ru.md` on the new ids. Verify: grep of M7
+      over those trees empty.
+- [x] 7.3d Regroup — proof: `openspec validate <change> --strict` for every unarchived change;
+      strict preview with `--specs`; the layering proof (archive this change, then every queued
+      change in order, in a scratch worktree, `openspec validate --specs --strict`). Verify: all
+      green, outputs in the task report.
+- [x] 7.4 Whole-tree gate: `./gradlew check` once, with `-PspecContractSpecsDir=<preview>` for
       this run only; fix what fails; then `scripts/check-spec-contract.sh --changes` over the
       queue one last time. Verify: `check` green; the summary line of the checker in the report
       (scenarios checked, linked, exempt); `findings.md` has no open row and every row's
@@ -302,12 +345,73 @@ are listed in the task report.
       `pending-test:` entry names a change listed there; the recommended commit message lists
       the change and the requirement ids.
 
+## 8. Tests for the pending scenarios (D9 as revised 2026-10-12; FR5, FR11; NFR-C2; M3, M4, M8)
+
+The six area changes `add-scenario-tests-*` sorted at 5.2 are withdrawn (operator, 2026-10-12):
+their scenarios are tested here. Each task takes the capabilities it names and, for every
+`pending-test: add-scenario-tests-<area>` entry of their exemption files: writes the feature
+that exercises the scenario by the rules of `testing.md` (effects on the real flow, not private
+fields; stand-in presets, never generated scripts; virtual time; port fakes above the process
+boundary), places the marker, and deletes the entry. A scenario that review shows is verified
+by something other than a test becomes an exemption that meets the bar, its mechanism named.
+A test that reveals a defect gets a `findings.md` row and stays in place under
+`@PendingFeature(reason = "F<n>: …")`; no production edit happens in 8.1–8.13 (NG5) — the row
+is sorted at 8.14. Verify per task: the named specs green; `./gradlew checkSpecContract
+-PspecContractSpecsDir=<preview> -PspecContractScope=<spec-ids>` green; no
+`add-scenario-tests-` left in the touched exemption files.
+
+- [x] 8.1 `git/git-task-persistence` (16), `git/base-ref-resolution` (6), `git/git-transfer` (4);
+      F3: rewrite the one-push feature of `PushBestEffortTaskRepositorySpec` to the
+      two-operation shape (or delete it as covered by `PushBestEffortTaskLifecycleStoreSpec`)
+      and mark `Completion pushes around the tracker write`.
+- [x] 8.2 `lifecycle/task-branch-contract` (12), `lifecycle/claim-heartbeat` (11).
+- [x] 8.3 `tracker/tracker-take` (20).
+- [x] 8.4 `tracker/github-tracker` (16).
+- [x] 8.5 `tracker/tracker-port` (13); F10: the two shared-contract features (stale-claim
+      removal, index repair) in `:test-fixtures`' tracker contract, run by both adapters.
+- [x] 8.6 `sandbox/execution-environment` (27).
+- [x] 8.7 `executor/agent-executor` (17), `sandbox/sandbox-egress` (4), `sandbox/sandbox-lifecycle` (3).
+- [x] 8.8 `observability/dashboard-page` (17), `observability/serve-observability` (3),
+      `observability/tracker-board` (1).
+- [x] 8.9 `observability/status-report` (8), `serve/factory-serve` (8),
+      `observability/factory-logging` (7), `serve/daemon-supervision` (1).
+- [x] 8.10 `core/time-source` (9), `core/untrusted-text` (6), `cli/task-inspection` (5).
+- [x] 8.11 `cli/manual-run` (6), `pipeline/*` (8), `operator/*` (8), `verification/*` (5),
+      `plugin/*` (3), `build/dependency-verification` (2).
+- [x] 8.12 `build/quality-gates` (25).
+- [x] 8.13 `build/module-layering` (12), `build/build-conventions` (7),
+      `build/sandbox-module-split` (4), `build/test-fixtures-module` (2), `release/*` (5),
+      `lifecycle/factory-bootstrap` (1).
+- [x] 8.14 **Decision point (D9, FR11).** Present every `findings.md` row added by 8.1–8.13;
+      the operator sorts each into this change or a new change; the sorted rows are copied
+      under `## Decisions`.
+- [x] 8.15 Fixes sorted into this change at 8.14, by the rules of 5.11. Verify: as 5.11.
+- [x] 8.16 Exemption review and the whole-tree gate again: `grep -rn "add-scenario-tests-"`
+      over the repository empty, outside this change's own records (M8); the exemption count
+      and list in the task report (M4); then the checks of 7.4 once more — `./gradlew check`
+      with `-PspecContractSpecsDir=<preview>`, `scripts/check-spec-contract.sh --changes`.
+      Verify: as 7.4.
+
 ## Workflow follow-up
 
-- `/opsx:archive tighten-spec-contract` merges the 50 deltas; immediately after the merge,
-  `openspec validate --specs --strict` and `./gradlew checkSpecContract` (now without the
-  preview override) are green on the real tree — the archive stage's verification commands from
-  1.4 run exactly these. If either is red at archive, the merge is wrong, never the delta.
+- Since 7.2 root `check` runs `checkSpecContract`, which is red on the real tree until this
+  change is archived (812 retired comments, 537 requirements without the `**Implements**:`
+  line, 662 markers naming preview titles); every `check` or CI run on this branch before the
+  archive is red by design.
+- Archive-time order: (1) `/opsx:archive tighten-spec-contract` merges the 50 deltas;
+  (2) `openspec validate --specs --strict`, then `./gradlew checkSpecContract` (no preview
+  override), both green on the real tree — the archive stage's verification commands from 1.4
+  run exactly these two, so on the task branch that stage is the proof; (3) only then root
+  `check`, the first one green on the real tree. If (2) is red at archive, the merge is wrong,
+  never the delta.
+- The queued changes archive after this one. One order consistent with the declared sequencing
+  (the one the 6.7 report used), binding only as far as those declarations go:
+  `fix-docker-exec-env-argv`, `own-git-invocation-policy`, `add-subprocess-access-log`,
+  `define-executor-contract`, `add-command-executor`, `migrate-verify-to-executor-contract`,
+  `extract-agent-round-runner`, `harden-verification-integrity`, `add-pipeline-routing`,
+  `enforce-artifact-contracts`, then the rest of the queue named in 6.1–6.7.
+- `retire-misnamed-scenarios` and `restore-renamed-scenarios` (F1, F39, F28 titles) follow the
+  step-by-step plan agreed with the operator on 2026-10-11 (two changes, archived back to back).
 - Every new change named under `## Decisions` is proposed right after archive, with its
   findings (the `pending-test:` entries, the `@PendingFeature` tests, the queued scenarios) as
   the seed of its task list.
@@ -315,4 +419,161 @@ are listed in the task report.
 ## Decisions
 
 Filled at 5.2 and 6.8 (D9, FR11): one line per finding — `F<n> — <capability> / <scenario or
-requirement> — <kind> — this change | new change <name> — <reason>`. Empty until then.
+requirement> — <kind> — this change | new change <name> — <reason>`.
+
+### Decision point 5.2 (2026-10-11, operator)
+
+Rules decided:
+- **Scenarios with no test after 5.3–5.9 read the tests**: markers and exemptions are placed in
+  this change; each scenario still without a test gets a `pending-test: <change>` exemption naming
+  the follow-up change of its area: `add-scenario-tests-git` (git/*, lifecycle/task-branch-contract),
+  `add-scenario-tests-tracker` (tracker/*, lifecycle/claim-heartbeat),
+  `add-scenario-tests-execution` (sandbox/*, verification/factory-egress-allowlist,
+  executor/agent-executor, lifecycle/subprocess-supervision), `add-scenario-tests-serve`
+  (serve/*, observability/*, core/*, cli/task-inspection), `add-scenario-tests-run`
+  (cli/manual-run, cli/cli-arguments, cli/operator-console, pipeline/*, verification/*
+  except factory-egress-allowlist, plugin/*, operator/*) and `add-scenario-tests-build`
+  (build/*, release/*, lifecycle/factory-bootstrap). Ids are given after the regroup of
+  7.3a (FR12); before it, the same capabilities under their flat names.
+- **Spec text that disagrees with the code is corrected here, in this change's deltas** (task 5.2a),
+  to what the code and its tests do; a scenario proven wrong against the code and its tests may be
+  reworded or renamed, citing its finding id — the one exception to NG4.
+- **Normative tables** in a requirement body become scenarios, never a fenced block (F26).
+- **Exemptions live in one data file per capability** under `config/spec-contract-exemptions/`, not
+  in the root build file (decided after 5.2a; task 5.2b).
+
+Findings:
+- F1 — tracker/tracker-port / two scenarios `Suite passes on both adapters` — other — new changes `retire-misnamed-scenarios` + `restore-renamed-scenarios` (re-decided after 5.2a: OpenSpec cannot drop a scenario from a MODIFIED block, so a rename is REMOVED then re-ADDED in two changes archived back to back) — until then both scenarios share one marker identity.
+- F2 — build/quality-gates / fix-artifacts stage command — other — this change (5.11) — add a per-change delta filter to `checkSpecContract` and use it in the fix-artifacts command.
+- F3 — git/git-task-persistence / `PushBestEffortTaskRepositorySpec` one-push feature — other — new change `add-scenario-tests-git` — the test is rewritten where the area's tests are written; no marker goes on it here. (Revised 2026-10-12: this change, 8.1.)
+- F6 — tracker/tracker-take / claim-time locate fetch on an unreachable origin — revealed defect — this change (5.11) — the code is aligned with the base rule: release the claim outside the abort accounting (production fix by TDD, scoped PIT).
+- F10 — tracker/tracker-port / `Contract suite covers lease maintenance` — other — new change `add-scenario-tests-tracker` — the two shared-contract features are written there. (Revised 2026-10-12: this change, 8.5.)
+- F26 — pipeline/stage-engine / `Failure classification` table — other — this change (5.2a) — rows become scenarios, as in `manual-run`.
+- F29 — build/module-layering / access-log emitter and observer hook — other — new change `add-subprocess-access-log` — the three scenarios named in the finding are `pending-test: add-subprocess-access-log`; they become true when it lands.
+- F43 — operator/secrets-provider / permission check scope — other — this change, no edit — the scenario's scope (secrets folders only) matches the code; accepted.
+- F4 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F5 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F7 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F8 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F9 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F11 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F12 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F13 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F14 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F15 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F16 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F17 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F18 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F19 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F20 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F21 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F22 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F23 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F24 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F25 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F27 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F28 — build/module-layering / enumerations — spec text vs code — this change (5.2a), text aligned; the title `The baseref leaf stays empty of dependencies` goes to `retire-misnamed-scenarios` + `restore-renamed-scenarios` (as F1).
+- F30 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F31 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F32 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F33 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F34 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F35 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F36 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F37 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F38 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
+- F39 — verification/verification-hardening / `Interactive client with nothing declared passes the pin` — title only — new changes `retire-misnamed-scenarios` + `restore-renamed-scenarios` (as F1); the scenario text is already true.
+- F40 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code (the park reason stays INFRA; the text is aligned).
+- F41 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code (the spec says "the tar archive").
+- F42 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code (drop "by default").
+
+### Decision point 6.8 (2026-10-11, operator)
+
+- F44, F46, F47, F48, F49, F50, F51, F52, F53, F61 — spec text vs code — this change (6.9) — the 5.2 rule: the THEN is aligned with the code in this change's delta, titles kept; a scenario whose test now matches gets its marker instead of `pending-test`.
+- F45 — `docs/guides/adapter-author-guide.md` §7 — doc text vs code — this change (6.9) — WARN becomes INFO, as F8.
+- F65 — `add-decision-arbiter` — MODIFIED blocks of absent requirements — this change (6.9) — each block becomes an `ADDED` requirement (new behavior under a new heading), or a `MODIFIED` block of the requirement it really changes, layered on this change's text.
+- F71 — `add-stage-iteration` — as F65 — this change (6.9) — as F65.
+- F58, F60, F64 — scenario titles left behind by a queued change — new changes `retire-misnamed-scenarios` + `restore-renamed-scenarios` — candidates added to that plan; renamed once the change that made the title stale has landed.
+- F59 — `add-claim-return` — the return replaces the release inside `ClaimOutageRelease` — that change (plain bullet in its `tasks.md`).
+- F62, F63 — `add-subprocess-access-log` — the composed-environment requirement vs the subtractive client environment; the two dropped deltas accepted — that change (plain bullet in its `tasks.md`).
+- F66 — `define-executor-contract` — adds the `State directory with one writer per file` block — that change (plain bullet).
+- F67 — `fix-terminal-receipt-convergence` — retarget the no-op marker and test the narrowed no-op — that change (plain bullet).
+- F68, F70 — `own-git-invocation-policy` — reach entries and enumerations; narrow task 7.3's first hand-off — that change (plain bullet).
+- F69 — `fix-docker-exec-env-argv`, `own-git-invocation-policy` — ADR numbers collide with 0011 — those changes (plain bullet in each).
+- F54 — tracker/tracker-take / locate authentication refusal — accepted — the text agrees with the code; no change.
+- F55 — remote-outage gate and the locate outage — accepted — the gate keeps its `BaseRefGit` signals only.
+- F56 — `TakeClaimAndWork` over the 200-line cap after F6 — this change (6.9) — a responsibility split by the rules of `process-invariants.md`, TDD and scoped PIT.
+
+### Revision 2026-10-12 (operator)
+
+- The six area changes `add-scenario-tests-git`, `-tracker`, `-execution`, `-serve`, `-run` and
+  `-build` sorted at 5.2 are withdrawn; their 302 `pending-test:` scenarios are tested in this
+  change (group 8), F3 in 8.1 and F10 in 8.5. `pending-test:` stays only for a scenario whose
+  behavior a queued change still delivers (`add-subprocess-access-log`, F29).
+- `retire-misnamed-scenarios` and `restore-renamed-scenarios` (F1, F28, F39; F58, F60, F64)
+  stay follow-up changes.
+
+### Decision point 8.14 (2026-10-12, operator)
+
+Rules decided:
+- **Spec text against code** — the 5.2 rule: the THEN (or body sentence) is aligned with the code
+  in this change's delta, titles kept; the test then asserts the aligned text and loses its
+  `@PendingFeature` (8.15, text pass).
+- **A finding sorted to a new change** keeps its test under `@PendingFeature`, whose reason names
+  the finding and the change (`"F<n> (<change>): …"`); a scenario with no test keeps its
+  `pending-test: <change>` exemption. The changes named here are follow-ups, not yet proposed.
+
+Findings:
+- F72 — git/git-task-persistence / `A slow but progressing transfer completes` — revealed defect — this change (8.15, text) — the network deadline is a hard wall-clock bound; the requirement is restated, the operator raises `factory.git-network-timeout` for large transfers.
+- F73 — git/git-task-persistence / `Event-driven detection only wakes the poll` — revealed defect — this change (8.15, text) — no event-driven detection exists; the sentence becomes a `**Notes**:` constraint on a future detection and the scenario is dropped (or, where OpenSpec refuses the drop, restated to the polling the code does).
+- F74 — lifecycle/task-branch-contract / `A split tenure record cannot be assembled` — revealed defect — new change `close-assembly-escape-hatches` — writers take the book only from `TaskGit`.
+- F75 — tracker/tracker-take / `Revoked sandboxed task keeps a stopped environment` — revealed defect — this change (8.15, text) — the sweep stops the box (D3); the THEN is restated.
+- F76 — tracker/tracker-take / `Nothing eligible is a clean no-op naming the reason` — revealed defect — this change (8.15, code) — an INFO line names the reason.
+- F77 — tracker/tracker-take / `WIP limit blocks a fresh start` — spec text vs code — this change (8.15, text) — no work, reason named, exit 15.
+- F78 — tracker/github-tracker / `Every marker kind is written through the upsert` — spec text vs code — this change (8.15, text) — the claim comment is written by POST and verified by read-back (D6).
+- F79 — tracker/github-tracker / `Each removed claim gets its own removal marker` — revealed defect — new change `fix-stale-claim-removal-redrive`.
+- F80 — tracker/github-tracker / canonical id vs host-less markers — spec text vs spec — this change (8.15, text) — the records carry the repository-scoped id.
+- F81 — tracker/tracker-port / `The repair marker names the observed shape` — revealed defect — this change (8.15, code) — the in-memory adapter names the shape, as GitHub does.
+- F82 — sandbox/execution-environment / `No constructor mixes installation equipment and task inputs` — revealed defect — new change `close-assembly-escape-hatches`.
+- F83 — sandbox/execution-environment / in-branch decision file in host mode — revealed defect — this change (8.15, text) — host mode keeps its temp decision file (the declared pair `DecisionFileTransport` / `BranchDecisionFile`).
+- F84 — sandbox/execution-environment / `Container runtime outage` body — spec text vs code — this change (8.15, text) — no retry, immediate escalation.
+- F85 — sandbox/sandbox-egress / `Guard crash burns no attempt` — revealed defect — new change `probe-egress-guard-per-round`.
+- F86 — executor/agent-executor / telemetry failure — spec text vs code — this change (8.15, text) — wall time is kept.
+- F87 — sandbox/sandbox-lifecycle / `Same vocabulary in daemon and one-shot logs` — spec text vs code — this change (8.15, text) — the ledger records acting verdicts only, category spelled as the ledger does.
+- F88 — observability/serve-observability / `An outage open at stop writes no line` — revealed defect — this change (8.15, code) — the lookup's outage release opens the gate.
+- F89 — observability/dashboard-page / outage alert duration — spec text vs code — this change (8.15, text) — "open since <instant>".
+- F90 — observability/dashboard-page / `Silent stall becomes loud` — revealed defect — new change `surface-check-urls-and-sweep-sources`.
+- F91 — observability/serve-observability / `Probes advance the section without claims` — spec text vs code — this change (8.15, text) — the count is 4 (the opening failure plus three probes).
+- F92 — observability/tracker-board / board writes — revealed defect — this change (8.15, text) — board provisioning of missing labels is stated in the requirement.
+- F93 — observability/dashboard-page / six browser-only scenarios — other — new change `add-dashboard-browser-tests` (`pending-test`).
+- F94 — observability/dashboard-page / `Hygiene block degrades on its own` — spec text vs code — this change (8.15, text) — the stale hygiene vital alarms in the status card.
+- F95 — serve/factory-serve / `Probe intervals grow with jitter and stop at the cap` — revealed defect — this change (8.15, code) — clamp after jitter.
+- F96 — serve/factory-serve / `Reaping unblocks a WIP-blocked feed` — spec text vs code — this change (8.15, text) — the returned task is taken first.
+- F97 — serve/factory-serve / `Graceful release` — revealed defect — `add-claim-return` (plain bullet in its `tasks.md`).
+- F98 — observability/factory-logging / `The local-string bypass fails the gate` — revealed defect — this change (8.15, code; test-side gate) — the log gate scan covers `FindingsSanitizer.forLog`.
+- F99 — serve/factory-serve / `Two bases, one broken` — revealed defect — this change (8.15, code) — the `Base ref:` line names the ref.
+- F100 — observability/status-report / `A breaking change to a released contract bumps the version` — other — new change `document-contract-versioning` (`pending-test`).
+- F101, F102 — core/time-source — spec text vs code — this change (8.15, text) — time is built from the root's parts; the in-memory tracker keeps its own counter.
+- F103 — cli/task-inspection / `Freshly created branch renders as pending` — spec text vs code — this change (8.15, text) — `Created` renders as the first stage with no rounds.
+- F104 — core/untrusted-text / `GitShowTip` as `@UntrustedParser` — other — this change (8.15, text) — accepted, text clarified.
+- F105 — core/untrusted-text / tip shape — revealed defect — this change (8.15, code) — `VerifiedTip` checks 40 or 64 hex characters.
+- F106 — operator/operator-configuration / `List-valued keys are replaced whole` — revealed defect — new change `fix-list-config-merge`.
+- F107 — operator/secrets-provider / `One seam to audit` — revealed defect — new change `route-agent-credentials-through-secrets`.
+- F108 — verification/verification-hardening / `Terminal escape attack is neutralized` — spec text vs code — this change (8.15, text) — field-by-field rendering (D6), no fence.
+- F109 — verification/github-external-check / `A green check is auditable from the tracker` — revealed defect — new change `surface-check-urls-and-sweep-sources`.
+- F110 — plugin/plugin-api-contract / re-baseline without a bump — other — this change (8.15, text) — accepted, text clarified.
+- F111 — build/quality-gates / `Dead private code fails compilation` — revealed defect — new change `restore-unused-code-checks`.
+- F112 — build/quality-gates / `A production-scope advisory is fixed, never suppressed` — spec text vs code — this change (8.15, text) — the scenario is scoped to the allowlisted artifacts; the catalog comment is corrected.
+- F113 — build/quality-gates / `An override reaches every configuration that resolves the artifact` — revealed defect — new change `fix-buildscript-jackson-lock`.
+- F114 — build/quality-gates / `Source file size cap` — other — this change (8.15, text) — the cap stays a review rule (`process-invariants.md`); the scenario's THEN is restated to it, or it becomes an exemption naming that review.
+- F115, F120 — one-time migration and refactor scenarios — other — new change `retire-one-time-scenarios` (`pending-test`).
+- F116, F117 — build/quality-gates / `Shared app-layer assembly fixture` — spec text vs code — this change (8.15, text) — one standard site plus named deviations.
+- F118 — build/quality-gates / `Fresh clone needs no tuning` — spec text vs code — this change (8.15, text) — "no `gradle.properties` sets …".
+- F119 — build/module-layering / `A use case reaches its collaborator through a port` — revealed defect — new change `close-assembly-escape-hatches`.
+- F121 — release/release-distribution / `Release build carries the tag's version` — other — this change (8.15, text) — accepted, text clarified.
+
+### Follow-up 2026-10-12
+
+- F122 — lifecycle/task-branch-contract / delivery read from a commit subject the gnome can
+  write — revealed defect — new change `bind-delivery-to-factory-record`. The test predates this
+  change (#71); its `@PendingFeature` reason now names the finding and the change.

@@ -80,4 +80,16 @@ public record TaskGit(
     public TaskGit withBaseRefs(BaseRefGit baseRefs) {
         return new TaskGit(store, branches, worktrees, midRoundPush, baseRefs, epochs);
     }
+
+    /**
+     * The same bundle with its branch-level capability replaced — the seam the serve slot's
+     * outage-signaling decoration of the task-branch lookup is attached at (FR14 of
+     * add-base-ref-resolution), beside {@link #withBaseRefs}.
+     *
+     * @param branches the branch-level capability the copy carries; never null
+     * @return a copy differing only in {@code branches}; never null
+     */
+    public TaskGit withBranches(TaskBranchGit branches) {
+        return new TaskGit(store, branches, worktrees, midRoundPush, baseRefs, epochs);
+    }
 }

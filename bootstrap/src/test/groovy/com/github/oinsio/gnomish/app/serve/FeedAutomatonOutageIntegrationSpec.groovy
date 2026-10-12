@@ -76,6 +76,7 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
                 .build()
     }
 
+    // Scenario: serve/factory-serve / Outage passes through
     def "the feed survives a sustained tracker outage and resumes claiming once WireMock recovers"() {
         given: 'the List Issues endpoint resets the connection twice, then recovers with one ready task'
         wireMock.stubFor(get(urlEqualTo(

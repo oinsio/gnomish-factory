@@ -26,6 +26,7 @@ class ManualRunRelativeDirSpec extends Specification implements AppAssemblyFixtu
     @TempDir
     Path homeDir
 
+    // Scenario: cli/cli-arguments / Relative directory starts git mode
     def "FR7: run with a --dir relative to the working directory starts git mode"() {
         given:
         makeProjectRootAGitClone(projectRoot)

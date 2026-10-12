@@ -30,6 +30,7 @@ class DockerCommandsSpec extends Specification {
                 opts.get('overrides', NO_OVERRIDES) as DeclaredVolumeOverrides)
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Object is born owned
     def "FR3: createNetwork is internal-only and carries all four ownership labels"() {
         when:
         def argv = DockerCommands.createNetwork(KEY, OWNERSHIP)
@@ -51,6 +52,7 @@ class DockerCommandsSpec extends Specification {
         ]
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Object is born owned
     def "FR3: createVolume carries all four ownership labels"() {
         when:
         def argv = DockerCommands.createVolume(KEY, OWNERSHIP)
@@ -76,6 +78,7 @@ class DockerCommandsSpec extends Specification {
         DockerCommands.startContainer('gnomish-box-' + KEY) == ['start', 'gnomish-box-' + KEY]
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Object is born owned
     def "FR10: runContainer applies runtime, cpu/memory/pid limits, the labelled mount and workdir"() {
         when:
         def argv = DockerCommands.runContainer(runSpec())
@@ -125,6 +128,7 @@ class DockerCommandsSpec extends Specification {
         ]
     }
 
+    // Scenario: sandbox/execution-environment / Disk quota is enforced only when opted in
     def "FR10: the disk quota is added only when opted in"() {
         when:
         def argv = DockerCommands.runContainer(runSpec(image: 'img', runtime: 'runc', enforceDiskQuota: true))
@@ -170,6 +174,7 @@ class DockerCommandsSpec extends Specification {
 
     // NFR-S1 of fix-image-declared-volumes: the override introduces no host path and no named
     // object — the only host-backed or named mount in the argv stays the factory's own volume.
+    // Scenario: sandbox/execution-environment / The override introduces no host path
     def "NFR-S1: every override fragment is memory-backed, with no source and no volume name"() {
         when:
         def argv = DockerCommands.runContainer(
@@ -201,6 +206,7 @@ class DockerCommandsSpec extends Specification {
     // FR4, design D6 of fix-image-declared-volumes: the one exemption from the mechanism. The
     // seed helper is self-removing, and docker removes a --rm container's anonymous volumes with
     // it — so this pin is what says the exemption rests on --rm and not on an oversight.
+    // Scenario: sandbox/execution-environment / The seed-clone helper is exempt from the overrides
     def "FR4: the seed helper stays exempt by being self-removing"() {
         expect:
         DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/clone', 'gnomish/task-x', null, OWNERSHIP)

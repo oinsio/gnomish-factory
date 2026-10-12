@@ -23,6 +23,7 @@ import java.nio.file.Files
  * precedent (there for a request-rewriting delegate; here inline, since
  * {@link JudgeVoterContract#arrange} takes no request to rewrite).
  */
+// Scenario: executor/agent-executor / One suite, real machinery
 class CliJudgeVoterContractSpec extends JudgeVoterContract {
 
     @Override

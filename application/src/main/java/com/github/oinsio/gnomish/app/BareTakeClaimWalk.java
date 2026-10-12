@@ -14,6 +14,8 @@ import java.time.Duration;
 import java.time.InstantSource;
 import java.util.List;
 import java.util.Random;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 /**
@@ -24,6 +26,11 @@ import org.slf4j.MDC;
  * candidate ({@link OpenFrontGate}, D5) — until either a claim succeeds (processing that one task to
  * its terminal result) or every eligible entry has lost its claim race. Extracted from {@link
  * TakeBareAuto} for file size; that class fetches the snapshot and delegates the decision here.
+ *
+ * <p>The one place that names why a bare take found nothing eligible ({@link #emptyCandidatesResult}):
+ * {@link TakeResult.EmptyQueue} carries no fields, so its reason is logged where it is decided —
+ * one INFO line telling an empty ready queue from one hidden entirely by abort backoff (F76 of
+ * tighten-spec-contract).
  *
  * <p>Implements FR10, NFR-C1, NFR-O1 of add-tracker-port. Implements FR6, FR9, NFR-C1, D2, D4, D5
  * of add-factory-serve.
@@ -36,6 +43,8 @@ record BareTakeClaimWalk(
         InstantSource clock,
         int wipLimit,
         Random random) {
+
+    private static final Logger log = LoggerFactory.getLogger(BareTakeClaimWalk.class);
 
     /**
      * Selects claim candidates from {@code readyTasks} and walks them (see class javadoc): returns
@@ -88,11 +97,22 @@ record BareTakeClaimWalk(
      * WIP-blocked ({@link TakeResult.Skipped} naming the WIP limit, FR6's "WIP limit blocks a fresh
      * start" scenario). The per-claim {@link OpenFrontGate} re-check inside the claim loop is a
      * narrower, later concern (bounding race overshoot, D5) and does not redefine this boundary.
+     *
+     * <p>An {@code EmptyQueue} is named here, in one INFO line, since the result itself carries no
+     * reason: either the ready queue was empty, or every ready task was inside its abort backoff
+     * (FR10 of add-tracker-port, scenario "Nothing eligible is a clean no-op naming the reason").
      */
     private TakeResult emptyCandidatesResult(List<ReadyTask> readyTasks, int openFrontCount) {
         List<ReadyTask> backoffEligible =
                 BackoffPolicy.filterEligible(readyTasks, backoffBase, backoffCap, clock.instant());
         if (backoffEligible.isEmpty()) {
+            if (readyTasks.isEmpty()) {
+                log.info("bare take: nothing eligible: the ready queue is empty");
+            } else {
+                log.info(
+                        "bare take: nothing eligible: every one of {} ready task(s) is inside its abort backoff",
+                        readyTasks.size());
+            }
             return new TakeResult.EmptyQueue();
         }
         return new TakeResult.Skipped(UntrustedText.factory("WIP limit reached: " + openFrontCount

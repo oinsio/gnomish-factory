@@ -26,6 +26,7 @@ class ProjectNamesSpec extends Specification {
     }
 
     // FR2: an invalid project name is refused with the accepted shape
+    // Scenario: operator/project-registry / An invalid project name is refused
     def "project name '#value' is refused naming the shape"() {
         when:
         new ProjectName(value)

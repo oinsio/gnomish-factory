@@ -59,6 +59,7 @@ class ThrowableConventionGateSpec extends Specification {
     }
 
     // D9: the detector is the gate — a seeded violation must fail it, or a green run means nothing.
+    // Scenario: observability/factory-logging / Gate rejects amputated diagnosis
     def "a seeded #form violation is detected"() {
         given: 'a source in the shape the rule forbids'
         def code = """
@@ -83,6 +84,7 @@ class ThrowableConventionGateSpec extends Specification {
     }
 
     // D9: the fluent builder form must be scanned too — its arguments sit past the level call.
+    // Scenario: observability/factory-logging / Gate rejects amputated diagnosis
     def "a seeded fluent violation is detected"() {
         given:
         def code = '''

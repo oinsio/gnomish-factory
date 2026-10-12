@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -87,6 +88,8 @@ class BaseRefLawBindingSpec extends Specification implements BareGitRepoFixture,
     // FR11, FR8, M5 of add-base-ref-resolution: a --base override sends both the pipeline law and
     // the task branch's pin to that ref's own committed content — the clone's current checkout
     // (main) and its uncommitted working-tree edit play no part in either.
+    // Scenario: pipeline/pipeline-config / Base differs from the clone's checked-out ref
+    // Scenario: pipeline/pipeline-config / Uncommitted clone edits are not law in autonomous modes
     def "a task based on release/1.18 binds law and pin from that branch, not from main or the clone's dirty edit"() {
         given: 'a release/1.18 branch with its own committed law, diverging from main'
         gitOutput(cloneDir, 'checkout', '-b', 'release/1.18')
@@ -122,9 +125,40 @@ class BaseRefLawBindingSpec extends Specification implements BareGitRepoFixture,
         Files.readString(cloneDir.resolve('.gnomish/instructions.md')).contains(DIRTY_LAW)
     }
 
+    // FR15, M5 of add-base-ref-resolution (design D7): one resolution of the base name, three uses
+    //     of its answer — the branch's start point, the pinned SHA and the law — so the three are one
+    //     commit on the real medium, never three resolutions that could each see another tip.
+    // Scenario: git/base-ref-resolution / Branch, law and pin are one commit
+    def "FR15: the task branch starts at the pinned SHA, and that is the commit whose law the round ran under"() {
+        given: 'a release/1.18 branch with its own committed law'
+        gitOutput(cloneDir, 'checkout', '-b', 'release/1.18')
+        commit(cloneDir, '.gnomish/instructions.md', RELEASE_LAW + '\n')
+        def releaseTip = gitOutput(cloneDir, 'rev-parse', 'HEAD')
+        gitOutput(cloneDir, 'checkout', mainBranch)
+        def captureFile = tempDir.resolve('plain-round.log')
+        def context = new TaskContext('BASE-3', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
+
+        when: 'a fresh git-mode run based on release/1.18'
+        runner(captureFile).run(new RunOrder(cloneDir, 'release/1.18', pipeline(), false), context, TaskState.atStageStart('build'))
+
+        then: "the creation commit's parent — the branch's start point — is the release tip"
+        def created = gitOutput(cloneDir, 'log', '--format=%H', '--reverse', 'gnomish/BASE-3', '--', '.gnomish-task/task.json').readLines().first()
+        gitOutput(cloneDir, 'rev-parse', "${created}^") == releaseTip
+
+        and: 'the pin written in that same commit names the same object'
+        def taskJson = TaskStateJson.mapper().readTree(gitOutput(cloneDir, 'show', "${created}:.gnomish-task/task.json"))
+        taskJson.get('baseCommit').asText() == releaseTip
+        taskJson.get('baseRef').asText() == 'release/1.18'
+
+        and: "the round ran under that commit's law"
+        captureFile.toFile().text.contains(RELEASE_LAW)
+        Files.readString(cloneDir.resolve('.gnomish/instructions.md')).contains(MAIN_LAW)
+    }
+
     // FR8, M5 of add-base-ref-resolution: the contrast case — with no --base at all, nothing was
     // resolved, so the clone's working tree stays the law source and an uncommitted edit is what
     // the run actually binds, exactly as ManualRunLawBindingSpec proves at the unit level.
+    // Scenario: pipeline/pipeline-config / Manual run without a base keeps working-tree law
     def "a manual run with no --base still binds the clone's uncommitted working-tree edit"() {
         given: 'the clone on main, dirtied with an uncommitted law edit'
         Files.writeString(cloneDir.resolve('.gnomish/instructions.md'), DIRTY_LAW + '\n')

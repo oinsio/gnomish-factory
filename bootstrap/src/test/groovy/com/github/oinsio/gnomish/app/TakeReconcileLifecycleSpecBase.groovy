@@ -98,6 +98,7 @@ tracker:
         newTakeCommand(factoryProperties, registeredClone, [github: trackerFactory])
     }
 
+    // Scenario: tracker/tracker-take / Deferred finish is delivered, not re-run
     def "M4: a delivered branch with a missing tracker finish reconciles without running any stage"() {
         given: 'a task delivered once — its branch now records Completed with a cleaned-up tip'
         def factoryProperties = FakeAgentSupport.propertiesFor('plain-round')

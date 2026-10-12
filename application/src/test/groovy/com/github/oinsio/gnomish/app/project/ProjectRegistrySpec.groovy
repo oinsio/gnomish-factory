@@ -45,6 +45,8 @@ class ProjectRegistrySpec extends Specification {
     }
 
     // FR2: the first clone creates the project's file
+    // Scenario: operator/project-registry / First clone creates the project
+    // Scenario: operator/project-registry / A clone is named after its folder
     def "the first clone creates the project and names the clone after its folder"() {
         given:
         def widgets = gitTree('widgets')
@@ -60,6 +62,7 @@ class ProjectRegistrySpec extends Specification {
     }
 
     // FR2, U2: a second clone of the same project shares the project file
+    // Scenario: operator/project-registry / Second clone of the same project
     def "a second clone joins the existing project"() {
         given:
         def widgets = gitTree('widgets')
@@ -75,6 +78,7 @@ class ProjectRegistrySpec extends Specification {
     }
 
     // NFR-R1: a clones map the edit cannot extend leaves the project file as it was
+    // Scenario: operator/project-registry / A failed registration leaves the registry as it was
     def "a project file whose clones map is in flow style is refused and left unchanged"() {
         given:
         def file = home.project(name('widgets')).config()
@@ -92,6 +96,7 @@ class ProjectRegistrySpec extends Specification {
     }
 
     // FR2: one path, one project
+    // Scenario: operator/project-registry / One path, one project
     def "a path registered to any project is refused naming its owner"() {
         given:
         def widgets = gitTree('widgets')
@@ -123,6 +128,7 @@ class ProjectRegistrySpec extends Specification {
     }
 
     // FR2: only a git working tree is a clone
+    // Scenario: operator/project-registry / A directory that is not a git working tree is refused
     def "a directory that is not a git working tree is refused"() {
         given:
         Files.createDirectories(src.resolve('plain'))
@@ -150,6 +156,7 @@ class ProjectRegistrySpec extends Specification {
     }
 
     // FR2: clone names are unique within a project
+    // Scenario: operator/project-registry / A clone name already used in the project is refused
     def "a second clone with the same folder name is refused"() {
         given:
         def first = gitTree('widgets')
@@ -165,6 +172,8 @@ class ProjectRegistrySpec extends Specification {
     }
 
     // NFR-R1: a refused registration leaves the file as it was
+    // Scenario: operator/project-registry / A clone name already used in the project is refused
+    // Scenario: operator/project-registry / A failed registration leaves the registry as it was
     def "a failed add leaves the project file unchanged"() {
         given:
         def first = gitTree('widgets')
@@ -204,6 +213,7 @@ class ProjectRegistrySpec extends Specification {
     }
 
     // FR3: a symlinked path reaches its registered clone
+    // Scenario: operator/project-registry / A symlinked path reaches its registered clone
     def "a symlinked directory resolves to the clone it points at"() {
         given:
         def widgets = gitTree('widgets')
@@ -232,6 +242,7 @@ class ProjectRegistrySpec extends Specification {
     }
 
     // FR3: a subdirectory of a clone names the clone to use
+    // Scenario: operator/project-registry / Subdirectory of a clone
     def "a directory inside a registered clone is refused naming that clone"() {
         given:
         def widgets = gitTree('widgets')

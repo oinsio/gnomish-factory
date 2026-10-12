@@ -33,6 +33,7 @@ class LedgerLineReaderSpec extends Specification {
         records.size() == 3
     }
 
+    // Scenario: observability/serve-observability / Torn last line after a crash
     def "a torn trailing line is skipped silently, yielding only the complete records"() {
         given:
         def file = writeRaw(tempDir, completeLines(3).join('\n') + '\n' + '{"version":1,"type":"taskOutcome","tas')

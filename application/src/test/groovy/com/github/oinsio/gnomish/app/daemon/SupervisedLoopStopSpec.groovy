@@ -23,6 +23,7 @@ class SupervisedLoopStopSpec extends Specification {
     }
 
     // FR4 (daemon-supervision "Stop during a run lets the run finish without a warning").
+    // Scenario: serve/daemon-supervision / Stop during a run lets the run finish without a warning
     def "a stop requested during a tick does not interrupt it, and no wait or tick follows"() {
         given:
         def interruptedAfterStop = null

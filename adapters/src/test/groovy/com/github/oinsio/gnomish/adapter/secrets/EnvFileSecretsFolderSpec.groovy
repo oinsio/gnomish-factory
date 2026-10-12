@@ -36,6 +36,7 @@ class EnvFileSecretsFolderSpec extends Specification {
     }
 
     // FR8: "Project secret wins over host and environment"
+    // Scenario: operator/secrets-provider / Project secret wins over host and environment
     def "FR8: the project folder's file wins over the host folder, N_FILE and N"() {
         given:
         secret(widgets.secret(TOKEN), 'from-project\n')
@@ -48,6 +49,7 @@ class EnvFileSecretsFolderSpec extends Specification {
     }
 
     // FR8: "Shared agent token from the host folder"
+    // Scenario: operator/secrets-provider / Shared agent token from the host folder
     def "FR8: a secret only the host folder holds resolves for every project and for none"() {
         given:
         secret(home.hostSecret('CLAUDE_CODE_OAUTH_TOKEN'), 'shared')
@@ -84,6 +86,7 @@ class EnvFileSecretsFolderSpec extends Specification {
     }
 
     // NFR-S2: "Loose permissions are refused"
+    // Scenario: operator/secrets-provider / Loose permissions are refused
     def "NFR-S2: a #where folder file with mode #mode is refused naming the file and the chmod"() {
         given:
         def file = secret(where == 'project' ? widgets.secret(TOKEN) : home.hostSecret(TOKEN), 'leaked', mode)

@@ -62,6 +62,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
                         KEY, 'gnomish/img', 'runc', LIMITS, false, '/gnomish/work', OWNERSHIP, overrides))
     }
 
+    // Scenario: sandbox/execution-environment / One task, one box
     def "FR3: materialize inspects, then creates network, volume, seed clone, container, scratch dir, in order"() {
         when:
         env().materialize('gnomish/task-x', null)
@@ -85,6 +86,8 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     // FR2 of harden-logging-observability: the remote end of a task's lifecycle gets its own INFO
     // anchor at its own choke point. Creating and reattaching mean very different things about
     // what the run started from, so the two are separate words, not one "materialized".
+    // Scenario: sandbox/execution-environment / Image with no declared volumes
+    // Scenario: observability/factory-logging / Container lifecycle is reconstructible
     def "FR2: a fresh materialize logs the creation anchor with the key, branch and image"() {
         given:
         def capture = LogCaptureSupport.attach(ContainerMaterializer)
@@ -105,6 +108,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
 
     // NFR-O1, UX1, design D7 of fix-image-declared-volumes: what the image's declared paths became
     // rides the creation anchor rather than a line of its own — one lifecycle event, one anchor.
+    // Scenario: sandbox/execution-environment / Operator sees which paths were made ephemeral
     def "NFR-O1: the creation anchor names every declared path the box made ephemeral"() {
         given:
         def capture = LogCaptureSupport.attach(ContainerMaterializer)
@@ -305,6 +309,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     // FR2, UX1, M2 of polish-sandbox-forensics: an operator diagnosing a failed materialize must
     // be able to paste a name into `docker logs` / `docker cp` straight from the message. M2 is
     // "every touched failure site", so this covers each of the materializer's throw sites, not one.
+    // Scenario: sandbox/execution-environment / Materialize failure names the box
     def "FR2: every materialize failure names the task container ready-to-paste"() {
         given: 'the named management step is the one the daemon refuses'
         docker.onRun = { List<String> args ->
@@ -341,6 +346,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     // FR1, FR2, NFR-C1 of fix-image-declared-volumes: the declared-volume read happens once per
     // create, before the run it feeds — the box's paths are occupied by the same argv that starts
     // it, so no window exists in which the daemon could make an anonymous volume for this image.
+    // Scenario: sandbox/execution-environment / Explicit factory mounts are not overridden
     def "FR1: a fresh materialize reads the image's declared volumes once, before the run"() {
         given:
         docker.onRun = { List<String> args ->
@@ -408,6 +414,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         image << [null, '', '   ']
     }
 
+    // Scenario: sandbox/execution-environment / One task, one box
     def "NFR-R2: dispose removes container, guard, volume and network"() {
         when:
         env().dispose()
@@ -421,6 +428,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         ]
     }
 
+    // Scenario: sandbox/execution-environment / Dispose is idempotent
     def "NFR-R2: dispose is best-effort — one failing step never stops the others or throws"() {
         given:
         docker.onRun = { args ->
@@ -541,6 +549,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     // FR9, D6, M3 (task 7.2): the exec child environment is the composed allowlist with an EMPTY
     // container base — passthrough names (values live from the factory environment) plus the
     // factory-set fragment become -e entries; no other factory variable reaches the argv.
+    // Scenario: sandbox/execution-environment / The container base set is empty
     def "FR9: exec passes exactly the composed allowlist as --env entries, with an empty container base"() {
         given: 'an allowlist passing JAVA_HOME through, over a factory env that also holds a noise key'
         def factoryEnv = [JAVA_HOME: '/jdk', AWS_SECRET_ACCESS_KEY: 'never', PATH: '/usr/bin']

@@ -7,7 +7,7 @@ For every agent executor round the runner SHALL set the executor's declared conf
 variable to a factory-owned directory holding only factory-written content and SHALL pass the
 declared repo-policy-disabling flags; an agent executor declaring neither SHALL be a located load
 error unless the law exempts it by name with a reason.
-<!-- implements FR5, NFR-S2, M2 of harden-verification-integrity -->
+**Implements**: FR5, NFR-S2, M2 of harden-verification-integrity
 
 #### Scenario: Settings file in the working copy changes nothing
 - **WHEN** attempt 1 writes `.claude/settings.json` granting every tool and attempt 2 starts
@@ -22,7 +22,7 @@ error unless the law exempts it by name with a reason.
 A check declaring `severity: advisory` SHALL have its findings recorded in the attempt and
 published to the tracker tagged `advisory`, SHALL NOT fail the stage and SHALL NOT burn an
 attempt; `blocking` is the default and keeps today's behavior.
-<!-- implements FR6, UX2, G4 of harden-verification-integrity -->
+**Implements**: FR6, UX2, G4 of harden-verification-integrity
 
 #### Scenario: Lint warnings do not block
 - **WHEN** an advisory `shell` check fails with three findings

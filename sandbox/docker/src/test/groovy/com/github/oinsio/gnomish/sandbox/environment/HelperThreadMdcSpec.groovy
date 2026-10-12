@@ -76,6 +76,7 @@ class HelperThreadMdcSpec extends Specification {
                 }
     }
 
+    // Scenario: observability/factory-logging / Pump thread keeps the task
     def "FR8: the stdin pump's line lands in the round's task scope"() {
         given:
         logs = LogCaptureSupport.attach(ChildProcessStdin, Level.DEBUG)

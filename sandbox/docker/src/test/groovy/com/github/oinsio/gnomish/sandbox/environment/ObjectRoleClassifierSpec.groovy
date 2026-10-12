@@ -9,6 +9,7 @@ import spock.lang.Specification
  */
 class ObjectRoleClassifierSpec extends Specification {
 
+    // Scenario: sandbox/execution-environment / Role recovered from the object itself
     def "classifies containers by name prefix and the -j/-v suffix on the label key"() {
         expect:
         ObjectRoleClassifier.classify(ObjectKind.CONTAINER, 'gnomish-box-k1', 'k1') == ObjectRole.MAIN_BOX
@@ -17,6 +18,7 @@ class ObjectRoleClassifierSpec extends Specification {
         ObjectRoleClassifier.classify(ObjectKind.CONTAINER, 'gnomish-guard-k1', 'k1') == ObjectRole.GUARD
     }
 
+    // Scenario: sandbox/execution-environment / An unnamed factory container is the seed helper
     def "a container matching no factory name pattern is the seed helper"() {
         expect:
         ObjectRoleClassifier.classify(ObjectKind.CONTAINER, 'a1b2c3d4e5f6', 'k1') == ObjectRole.SEED_HELPER

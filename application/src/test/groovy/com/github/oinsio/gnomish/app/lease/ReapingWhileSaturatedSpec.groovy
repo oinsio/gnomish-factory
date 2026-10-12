@@ -67,6 +67,7 @@ class ReapingWhileSaturatedSpec extends Specification {
     // still observes and, once its TTL has elapsed, removes the stale foreign claim, returning it
     // to Ready and lowering the open-front count — with no human involved and without either of
     // this instance's own busy claims ever being touched, by either tick.
+    // Scenario: serve/factory-serve / Reaping while saturated
     def "a foreign claim gone stale is reaped by a standing-reaper tick while every slot is busy"() {
         given: 'every slot is busy: this instance holds both claims and beats them normally'
         heartbeat.register(OWN_A)

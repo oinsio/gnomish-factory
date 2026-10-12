@@ -18,6 +18,7 @@ import spock.lang.Specification
 class AdapterBindingRegistrySpec extends Specification {
 
     // FR1/FR3: each discovered provider contributes its binding, carrying the ratified passport
+    // Scenario: build/sandbox-module-split / A backend contributes its binding without a core edit
     def "discovered providers become bindings keyed by their config name"() {
         when: 'the host and container providers are indexed'
         def registry = hostAndContainer()
@@ -42,6 +43,7 @@ class AdapterBindingRegistrySpec extends Specification {
     // The table is the one the superseded AdapterBindingSpec carried: config names are matched
     // exactly, so a differently-cased name is unknown rather than helpfully coerced, and an
     // empty name is a name nobody contributed rather than a silent default.
+    // Scenario: plugin/adapter-binding-registry / Unknown binding name lists discovered options
     def "an unknown binding name #name is refused naming the discovered options and the fix"() {
         when: 'a name no provider contributes is required'
         hostAndContainer().require(name)
@@ -66,6 +68,7 @@ class AdapterBindingRegistrySpec extends Specification {
     }
 
     // FR8/NFR-R1: two providers claiming one name is a refusal, never an arbitrary pick
+    // Scenario: plugin/adapter-binding-registry / Duplicate config name fails with the conflict named
     def "two providers claiming one config name fail fast naming both"() {
         given: 'two providers of different classes, as two modules colliding really are'
         def first = provider(BindingNames.CONTAINER, CapabilityPassport.container())

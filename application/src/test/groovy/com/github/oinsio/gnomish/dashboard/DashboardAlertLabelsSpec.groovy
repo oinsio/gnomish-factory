@@ -20,6 +20,7 @@ class DashboardAlertLabelsSpec extends Specification {
         DashboardAlertLabels.label(gate(false)).startsWith('remote outage, probing')
     }
 
+    // Scenario: observability/dashboard-page / A sustained outage escalates the wording
     def "a sustained-open gate reads as blocked on the remote"() {
         expect:
         DashboardAlertLabels.label(gate(true)).startsWith('blocked on the remote')

@@ -51,6 +51,9 @@ class ResumeLawBindingSpec extends Specification {
     // FR12, D13: a resolved tip — fetched from a configured origin, or read locally when the clone
     // has none, ResumeBaseOutcome.Bound does not distinguish the two at this layer — rebinds the
     // task's law to that commit, never touching the tracker.
+    // Scenario: git/git-task-persistence / Autonomous resume refreshes the pinned base for the law
+    // Scenario: pipeline/pipeline-config / Resume picks up human-fixed criteria
+    // Scenario: pipeline/pipeline-config / The task tier binds from the base's law commit
     def "binds the law to the resolved tip and never touches the tracker"() {
         when:
         def outcome = ResumeLawBinding.bind(baseRefGit, ROOT, PINNED, STATE, REF, tracker)
@@ -69,6 +72,7 @@ class ResumeLawBindingSpec extends Specification {
 
     // FR12, D13: a pinned ref that resolves nowhere parks the task with a report — never a silent
     // fall-back to the pinned SHA — and burns no stage attempt.
+    // Scenario: pipeline/pipeline-config / Resume after the pinned ref disappeared
     def "parks INFRA with a report naming the ref when it resolves nowhere"() {
         given:
         def logs = LogCaptureSupport.attach(ResumeLawBinding)
@@ -227,6 +231,8 @@ class ResumeLawBindingSpec extends Specification {
 
     // FR7, NFR-R1: a resumed task never re-resolves its base — only #resolveForResume is ever
     // called; a fake whose default-branch-discovery methods throw stays untouched.
+    // Scenario: git/git-task-persistence / Resume re-resolves only the pinned ref
+    // Scenario: tracker/tracker-take / Resume never re-resolves
     def "never reaches default-branch discovery on resume — the pinned ref is only re-resolved, not re-derived"() {
         given:
         def throwingBaseRefGit = new BaseRefGit() {

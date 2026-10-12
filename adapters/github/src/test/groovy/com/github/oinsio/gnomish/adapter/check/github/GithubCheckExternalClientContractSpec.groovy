@@ -106,6 +106,7 @@ class GithubCheckExternalClientContractSpec extends ExternalCheckClientContract 
         Optional.of(client.poll(sampleCheck(), sampleWorkspace()))
     }
 
+    // Scenario: verification/github-external-check / The adapter consumes the engine workspace type
     def "refuses a workspace that is not an AttemptCommitWorkspace, naming its class"() {
         given:
         def client = clientFor(wireMock.baseUrl())

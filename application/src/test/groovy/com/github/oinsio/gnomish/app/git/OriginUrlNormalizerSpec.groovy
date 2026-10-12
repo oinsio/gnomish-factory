@@ -14,6 +14,7 @@ class OriginUrlNormalizerSpec extends Specification {
     private static final String CANONICAL = 'https://github.com/acme/widgets'
 
     // FR1, M1: every credential and cosmetic variant of one remote normalizes to one spelling.
+    // Scenario: sandbox/sandbox-lifecycle / Normalization rewrites only the cosmetic parts of the URL
     def "FR1: cosmetic and credential variants of one remote fold to one spelling: #variant"() {
         expect:
         OriginUrlNormalizer.normalize(variant) == CANONICAL
@@ -34,6 +35,7 @@ class OriginUrlNormalizerSpec extends Specification {
     }
 
     // FR1: the scp-style form folds into the shape of its ssh:// equivalent, credential-free.
+    // Scenario: sandbox/sandbox-lifecycle / Normalization rewrites only the cosmetic parts of the URL
     def "FR1: the scp-style form folds to the shape of the equivalent ssh URL: #variant"() {
         expect:
         OriginUrlNormalizer.normalize(variant) == 'ssh://github.com/acme/widgets'
@@ -50,6 +52,7 @@ class OriginUrlNormalizerSpec extends Specification {
     }
 
     // FR1: a rotated credential — the motivating case — leaves the spelling untouched.
+    // Scenario: sandbox/sandbox-lifecycle / A rotated credential keeps the project identity
     def "FR1: rotating an embedded credential does not change the normalized URL"() {
         expect:
         OriginUrlNormalizer.normalize('https://ghp_OLDTOKEN@github.com/acme/widgets.git') ==
@@ -75,6 +78,7 @@ class OriginUrlNormalizerSpec extends Specification {
     }
 
     // FR2: a non-default port is identity-bearing; only the scheme's own default is redundant.
+    // Scenario: sandbox/sandbox-lifecycle / Normalization rewrites only the cosmetic parts of the URL
     def "FR2: only the scheme's own default port is dropped"() {
         expect:
         OriginUrlNormalizer.normalize('http://github.com:80/acme/widgets') == 'http://github.com/acme/widgets'
@@ -105,6 +109,7 @@ class OriginUrlNormalizerSpec extends Specification {
     }
 
     // NFR-S1: the stripped userinfo must not survive anywhere the output travels.
+    // Scenario: sandbox/sandbox-lifecycle / No credential reaches the identity, a label, a log line or an error
     def "NFR-S1: no removed userinfo survives into the normalized URL or the derived identity"() {
         given:
         // A fabricated token shape; the point of the spec is that it is stripped.

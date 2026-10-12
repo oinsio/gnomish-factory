@@ -15,24 +15,13 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
  * heartbeat / stale-claim-removal requirements; tasks 2.1–2.3, FR5, FR8,
  * NFR-R2 of add-claim-heartbeat). Extends {@link TrackerFetchContract} to
  * reuse its {@code arrange}/{@code seedTask}/{@code seedReply} seams rather
- * than duplicating them; a concrete adapter subclass instantiates THIS class
- * (not {@link TrackerContract}, {@link TrackerMarkerContract}, or {@link
- * TrackerFetchContract} directly) to run the full suite, per M1 — the same
- * suite against every adapter. Kept in a fourth file because the combined
- * property set of the whole chain would exceed the project's per-file line
- * cap.
+ * than duplicating them. Kept in its own file because the combined property
+ * set of the whole chain would exceed the project's per-file line cap.
  *
- * <p>Both the in-memory reference ({@link
- * com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerContractSpec})
- * and the GitHub adapter ({@link
- * com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerContractSpec})
- * extend this class through the contract chain, so the full suite below runs
- * against both.
- *
- * <p>This file covers task 2.1: {@code listOpen} filtering and claim-version
- * carry ("Listing carries versions"). Tasks 2.2 (heartbeat) and 2.3
- * ({@code removeStaleClaim}) append their properties to this same class, or to
- * a further {@code extends} file if the line cap forces a split.
+ * <p>This link covers {@code listOpen} filtering and claim-version carry
+ * ("Listing carries versions"); the heartbeat and {@code removeStaleClaim}
+ * properties live in {@link TrackerHeartbeatContract} and {@link
+ * TrackerReapContract}.
  *
  * <p>Implements FR5 of add-claim-heartbeat.
  */
@@ -49,7 +38,7 @@ abstract class TrackerLeaseContract extends TrackerFetchContract {
      * state the port reports with an ABSENT (null) claim (github-tracker:
      * "missing claim comment → absent claim"). Only an explicit claim marker
      * carries a version, so the version-carry properties need this dedicated
-     * seam. Implementers (in-memory task 2.4, GitHub task 3.5) MUST create the
+     * seam. Each adapter's implementation MUST create the
      * adapter's actual claim marker (the in-memory claim record, a GitHub claim
      * comment, ...) so that {@code listOpen} reports {@code Working(holder)} with
      * a non-null claim version read back from the marker.

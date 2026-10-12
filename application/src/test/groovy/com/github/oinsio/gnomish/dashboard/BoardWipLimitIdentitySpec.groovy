@@ -42,6 +42,7 @@ class BoardWipLimitIdentitySpec extends Specification {
     private static final Instant NOW = Instant.parse('2026-08-06T09:00:00Z')
     private static final int READY_LIMIT = 50
 
+    // Scenario: observability/dashboard-page / Limit matches the held rows
     def "FR12/FR13/FR14 of supervise-daemon-loops-and-embed-dashboard, Limit matches the held rows: JSON wipLimit, WIP denominator and the held row's limit are one value (limit #wipLimit)"() {
         given: 'three open fronts (two working, one waiting for a human) and one fresh ready task'
         def tracker = new RecordingReadOnlyTracker(

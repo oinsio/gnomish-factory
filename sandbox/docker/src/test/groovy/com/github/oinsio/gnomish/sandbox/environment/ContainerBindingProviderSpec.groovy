@@ -23,6 +23,7 @@ class ContainerBindingProviderSpec extends Specification {
 
     // FR3: the container binding's name and passport, asserted against literals rather than against
     // another call to the same factory method — a stubbed-out factory is caught, not masked
+    // Scenario: plugin/adapter-binding-registry / Container binding is contributed from the docker module
     def "the provider declares the container binding with the container passport"() {
         given: 'the provider as ServiceLoader would build it — public no-arg constructor'
         def provider = new ContainerBindingProvider()
@@ -33,6 +34,7 @@ class ContainerBindingProviderSpec extends Specification {
     }
 
     // FR2: reading the descriptor starts nothing — no daemon, no CLI, no environment
+    // Scenario: plugin/adapter-binding-registry / Passport enumerated without a running backend
     def "the descriptor is readable with no docker daemon and no live environment"() {
         expect: 'repeated reads answer identically from stateless instances'
         new ContainerBindingProvider().passport() == new ContainerBindingProvider().passport()
@@ -46,6 +48,7 @@ class ContainerBindingProviderSpec extends Specification {
     // FR1/FR3: the module's own META-INF/services entry is what makes the binding available —
     // guarded here so a lost or misspelled entry fails in this module rather than at an operator's
     // first run
+    // Scenario: plugin/adapter-binding-registry / A backend module contributes a binding without core logic edits
     def "the module's service entry contributes the container binding to a discovery pass"() {
         when: 'a plain ServiceLoader pass over the module classpath is ratified'
         def registry = AdapterBindingRegistry.ratified(

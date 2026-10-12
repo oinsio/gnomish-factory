@@ -53,6 +53,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         new StatusCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(registeredClone), console)
     }
 
+    // Scenario: cli/task-inspection / Status renders through the status-report contract
     def "FR13: text render of a found task prints the status block"() {
         given:
         persistRound('PROJ-1', TaskState.atStageStart('implement'))
@@ -67,6 +68,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         output.contains('Stage: implement')
     }
 
+    // Scenario: cli/task-inspection / Status renders through the status-report contract
     def "FR13: --json render of a found task prints the v1 JSON contract"() {
         given:
         persistRound('PROJ-2', TaskState.atStageStart('implement'))
@@ -80,6 +82,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         output.contains('"id" : "PROJ-2"')
     }
 
+    // Scenario: git/git-task-persistence / The worktree path is shown to the operator
     def "FR6: the worktree path is shown for a found task"() {
         given:
         persistRound('PROJ-3', TaskState.atStageStart('implement'))
@@ -93,6 +96,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         output.contains('Worktree: ' + expectedWorktree)
     }
 
+    // Scenario: cli/task-inspection / Interrupted task reported honestly
     def "task-inspection: interrupted task (outcome null) is rendered honestly as in-progress"() {
         given: 'a task with a recorded round but no recordOutcome call — a crash mid-flight'
         persistRound('PROJ-4', TaskState.atStageStart('implement'))
@@ -119,6 +123,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         output.contains('NO-SUCH-TASK')
     }
 
+    // Scenario: cli/task-inspection / Deleted branch after merge
     def "FR13, UX3, D15: 'Deleted branch after merge' — a branch that existed and was deleted reports not-found the same as a never-existing task"() {
         given: 'a task branch created, its worktree removed, then the branch deleted — mirroring a merged-and-cleaned-up PR'
         persistRound('PROJ-7', TaskState.atStageStart('implement'))
@@ -176,6 +181,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     // FR13 of harden-logging-observability, "A failed enumeration is an error, not an empty table":
     // per-branch degradation stops at the branch — the listing itself failing is the command
     // failing, because "verified: no tasks" and "could not look" are opposite answers.
+    // Scenario: cli/task-inspection / A failed enumeration is an error, not an empty table
     def "FR13: a failed enumeration fails the command instead of printing an empty table"() {
         given: 'a clone that is not a git repository, so the ref enumeration exits non-zero'
         def notARepo = Files.createDirectory(tempDir.resolve('not-a-repo'))
@@ -208,6 +214,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
 
     // FR16, UX4 of harden-task-branch-contract: every legal shape renders calmly, and only the
     // three quarantine shapes refuse inspection — with a diagnosis, never a stack trace.
+    // Scenario: cli/task-inspection / Delivered branch renders as delivered
     def "FR16: a delivered branch renders as delivered, not as a missing state file"() {
         given: 'a completed task whose cleanup commit stripped .gnomish-task/ from the tip'
         persistRound('DELIVERED-1', TaskState.atStageStart('implement'))
@@ -226,6 +233,8 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         !output.contains('Diagnosis')
     }
 
+    // Scenario: git/git-task-persistence / Unknown version refuses the inspection commands
+    // Scenario: cli/task-inspection / Unknown state-file version refuses inspection
     def "FR16: an unknown state-file version refuses inspection with a diagnosis, no stack trace, nothing mutated"() {
         given: 'a task branch whose state.json declares version 2'
         persistRound('VERSION-2', TaskState.atStageStart('implement'))
@@ -271,6 +280,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         output.contains('declaring version 9')
     }
 
+    // Scenario: cli/task-inspection / One bad branch never kills the listing
     def "FR16, UX4: a mixed-shape clone lists one row per task, the bad branch included"() {
         given: 'one healthy task, one delivered task and one with a broken state file'
         persistRound('MIXED-OK', TaskState.atStageStart('implement'))
@@ -302,6 +312,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
     // itself (ScriptedConsoleIO records the machine calls separately), because a human-path render
     // of well-formed JSON still looks like JSON — a site quietly switched to `print` would corrupt
     // the document only for the characters that make the corruption worth catching.
+    // Scenario: cli/operator-console / JSON survives the console untouched
     def "FR5, UX3: the single-task --json document goes out on the machine path, byte for byte"() {
         given: 'a task whose tracker title carries an escape sequence and a bidirectional override'
         persistRound('MACHINE-1', TaskState.atStageStart('implement'), 'implement', 0, HOSTILE_TITLE)

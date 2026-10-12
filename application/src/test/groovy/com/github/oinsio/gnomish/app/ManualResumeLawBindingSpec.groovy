@@ -27,6 +27,7 @@ class ManualResumeLawBindingSpec extends Specification {
 
     // FR7: a legacy branch predating the durable pin carries only the base commit, itself a valid
     //     revision — the same fallback the tracker-driven resume takes.
+    // Scenario: git/git-task-persistence / Legacy task file reads as unpinned
     def "FR7: a legacy branch with no pin binds law at its recorded base commit"() {
         expect:
         ManualResumeLawBinding.of(CLONE, BasePin.UNPINNED, 'c0ffee') == new LawBinding.AtRevision(CLONE, 'c0ffee')

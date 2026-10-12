@@ -13,6 +13,20 @@ for-each-ref answer data/stdout-git#for-each-ref-noisy 0
 log answer @log.out 0
 * delegate git
 
+[progressing-fetch]
+# fetch prints a progress line every half second for two seconds, then succeeds: a transfer that
+# keeps making progress past a short deadline (GitProcessRunnerProgressingTransferSpec).
+rev-parse,--git-common-dir answer data/common#git-dir 0
+fetch stderr data/stderr#fetch-progress
+fetch delay 0.5
+fetch stderr data/stderr#fetch-progress
+fetch delay 0.5
+fetch stderr data/stderr#fetch-progress
+fetch delay 0.5
+fetch stderr data/stderr#fetch-progress
+fetch delay 0.5
+fetch answer - 0
+
 [ls-remote-hostile-symref]
 # ls-remote answers a default-branch name carrying an escape sequence; the rest is the real git
 # (RemoteDefaultBranchSpec).

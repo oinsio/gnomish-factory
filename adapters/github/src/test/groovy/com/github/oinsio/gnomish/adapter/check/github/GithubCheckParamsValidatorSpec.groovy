@@ -23,6 +23,7 @@ class GithubCheckParamsValidatorSpec extends Specification {
 
     // FR5: a param this provider does not define is a located error identifying the check and the
     //     offending key — the check-provider-model scenario "Provider validates its own params".
+    // Scenario: verification/check-provider-model / Provider validates its own params
     def "an unknown param is a located error naming the key and the provider"() {
         when:
         def errors = validator.validate(FILE, WHERE, [('pass_when'): [jsonPath: '$.status']])

@@ -71,6 +71,7 @@ class LogbackConfigSpec extends Specification {
 
     // FR11 of add-project-registry: the file is the one the operator configuration loader
     // published from the factory home — this configuration computes no path of its own
+    // Scenario: cli/manual-run / The log location has the operator-path owner
     def "the file appender writes the log file the loader published"() {
         given:
         String published = "${home.absolutePath}/projects/widgets/logs/default.log"
@@ -88,6 +89,7 @@ class LogbackConfigSpec extends Specification {
 
     // FR11 of add-project-registry, design D1: the old derivations are gone — no home lookup and
     // no log-directory variable remain in the file
+    // Scenario: cli/manual-run / The log location has the operator-path owner
     def "the production configuration reads neither user.home nor GNOMISH_LOG_DIR"() {
         given:
         String xml = configSource(PRODUCTION_CONFIG).replaceAll(/(?s)<!--.*?-->/, '')
@@ -114,6 +116,8 @@ class LogbackConfigSpec extends Specification {
 
     // NFR-O1 + FR8: the correlation keys the post-mortem greps by, including the daemon
     // `component` — rendered through the sink converter since FR4 of harden-untrusted-text-sinks
+    // Scenario: cli/manual-run / Quiet dialog
+    // Scenario: cli/manual-run / Every log line carries the task context
     def "every appender's pattern carries the taskId, stage, attempt and component MDC placeholders"() {
         given:
         LoggerContext context = configure()
@@ -181,6 +185,8 @@ class LogbackConfigSpec extends Specification {
     }
 
     // NFR-O2: stdout belongs to the dialog - console appender passes WARN+ only
+    // Scenario: cli/manual-run / Quiet dialog
+    // Scenario: cli/manual-run / The console passes warnings and errors only
     def "the stdout console appender targets System.out and is filtered to WARN and above"() {
         given:
         ConsoleAppender<?> stdout = stdout(configure())
@@ -193,6 +199,7 @@ class LogbackConfigSpec extends Specification {
     }
 
     // NFR-O2: ERROR is duplicated to stderr via a dedicated appender
+    // Scenario: cli/manual-run / The console passes warnings and errors only
     def "the stderr console appender targets System.err and is filtered to ERROR only"() {
         given:
         ConsoleAppender<?> stderr = stderr(configure())
@@ -215,6 +222,7 @@ class LogbackConfigSpec extends Specification {
     }
 
     // FR10: verbosity is raisable for one run without a rebuild, and defaults to INFO
+    // Scenario: observability/factory-logging / Operator raises verbosity for one run
     def "the root level is #expected when GNOMISH_LOG_LEVEL is #override"() {
         given:
         Map<String, String> properties = override == null ? [:] : [GNOMISH_LOG_LEVEL: override]

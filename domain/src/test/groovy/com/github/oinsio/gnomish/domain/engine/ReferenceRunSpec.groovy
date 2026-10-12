@@ -108,6 +108,8 @@ class ReferenceRunSpec extends Specification {
 
     // M1: the whole story in two runs — decision escalation, decision-carrying resume,
     //     all four check types, a quality retry with feedback, and a manual pause.
+    // Scenario: pipeline/stage-engine / Every effect crosses an injected port
+    // Scenario: pipeline/stage-engine / Reference run with fakes only
     def "a task is driven end to end through all four check types to a manual pause"() {
         given: 'a four-stage pipeline and a task with no decisions yet'
         def pipeline = pipeline()

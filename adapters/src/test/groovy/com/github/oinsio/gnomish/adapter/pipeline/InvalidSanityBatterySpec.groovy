@@ -49,6 +49,7 @@ instructions: stages/plan/instructions.md
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Non-positive attempt limit is rejected
     def "M2/FR7: a resolved attempt limit below 1 (default 0, no override) yields exactly its located error"() {
         given: 'config.yaml declares no autonomy default and the stage no override, so it resolves to 0'
         write('config.yaml', 'schemaVersion: "1"\n')

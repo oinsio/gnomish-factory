@@ -170,6 +170,7 @@ autonomy:
     // random. The retry masks that race only; own-git-invocation-policy removes the write and
     // this @Retry with it (a task of that change).
     @Retry(count = 2, mode = Retry.Mode.SETUP_FEATURE_CLEANUP)
+    // Scenario: serve/factory-serve / Two slots run containers concurrently
     def "two slots run containers concurrently, each isolated by its own task key"() {
         given:
         def slotRunner = newContainerSlotRunner(tracker)

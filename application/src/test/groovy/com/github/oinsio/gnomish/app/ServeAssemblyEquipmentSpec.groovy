@@ -80,6 +80,7 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
     }
 
     // FR14 of add-base-ref-resolution: a fresh daemon's gate starts closed.
+    // Scenario: serve/factory-serve / A restart forgets the gate
     def "the remote-outage gate starts closed"() {
         when:
         def gate = builders.remoteOutageGate(BaseRefGit.UNWIRED, CLONE_DIR, { -> }, { outage -> })
@@ -113,6 +114,7 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
         slotLedger.release(ref)
     }
 
+    // Scenario: observability/serve-observability / Two projects on one host keep separate state
     def "FR10 of add-project-registry: two projects with the default instance name write to separate serve directories"() {
         given: 'daemons for projects widgets and gateway, both with the default instance name'
         def ref = new TaskRef('github:o/r#1')

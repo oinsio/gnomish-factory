@@ -18,6 +18,8 @@ class DecisionFileTransportSpec extends Specification {
     @TempDir
     Path workspaceRoot
 
+    // Scenario: executor/agent-executor / In-place mode uses a temp file outside the workspace
+    // Scenario: cli/manual-run / Decision requests travel by the mode's own channel
     def "the decision file path lives outside the workspace root"() {
         given:
         def transport = new DecisionFileTransport()
@@ -72,6 +74,7 @@ class DecisionFileTransportSpec extends Specification {
         content.get().contains('Refactor or patch?')
     }
 
+    // Scenario: executor/agent-executor / In-place mode uses a temp file outside the workspace
     def "readAndClose deletes the temp directory, present or absent"() {
         given:
         def transport = new DecisionFileTransport()

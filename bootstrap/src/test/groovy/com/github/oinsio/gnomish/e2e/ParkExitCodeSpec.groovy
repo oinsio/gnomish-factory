@@ -22,6 +22,7 @@ import java.nio.file.Path
  */
 class ParkExitCodeSpec extends AbstractE2eProcessSpec {
 
+    // Scenario: cli/manual-run / Deliberate exit at an escalation
     def "FR1, FR7: an escalation with stdin closed exits 10 by outcome, with no return path in in-place mode"() {
         given: 'the fake agent asks a decision on its first round'
         def agent = FakeAgentSupport.wrapperFor('decision-needed')
@@ -41,6 +42,7 @@ class ParkExitCodeSpec extends AbstractE2eProcessSpec {
         !result.stdout().contains('To continue:')
     }
 
+    // Scenario: cli/manual-run / Deliberate exit at a checkpoint
     def "FR2, FR7: a manual checkpoint with stdin closed exits 11 by outcome, with no return path in in-place mode"() {
         given: 'the stateful command check pre-passes, so the stage passes on its first attempt'
         Files.writeString(E2eFixture.projectRoot().resolve(MARKER_FILE), '')
@@ -63,6 +65,8 @@ class ParkExitCodeSpec extends AbstractE2eProcessSpec {
         !result.stdout().contains('To continue:')
     }
 
+    // Scenario: cli/manual-run / Deliberate exit at an escalation
+    // Scenario: cli/manual-run / Unanswered question is restated
     def "FR4: an unanswered DecisionNeeded resumed without --decision exits 10 again with the question restated and no round run"() {
         given: 'a git-mode run parked on the gnome\'s question'
         Path clone = E2eGitTree.publishedCopyOf('e2e')

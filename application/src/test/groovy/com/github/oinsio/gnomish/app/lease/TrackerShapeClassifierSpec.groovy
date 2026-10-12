@@ -26,6 +26,14 @@ class TrackerShapeClassifierSpec extends Specification {
     private static final ClaimFacts DEAD = new ClaimFacts.Dead('inst-1')
     private static final ClaimFacts NONE = new ClaimFacts.None()
 
+    // Scenario: lifecycle/claim-heartbeat / A ready label with no live claim is Ready
+    // Scenario: lifecycle/claim-heartbeat / A working label with a live claim is Claimed
+    // Scenario: lifecycle/claim-heartbeat / A needs-human label is Parked
+    // Scenario: lifecycle/claim-heartbeat / A delivered label is Finished
+    // Scenario: lifecycle/claim-heartbeat / A closed issue is Revoked over every other fact
+    // Scenario: lifecycle/claim-heartbeat / A working label with no claim footprint is ClaimPending
+    // Scenario: lifecycle/claim-heartbeat / A footprint no working tenure backs is ClaimAbandoned
+    // Scenario: lifecycle/claim-heartbeat / A dead footprint on a ready task is tenure history
     def "classifies #description as #expected"() {
         expect:
         TrackerShapeClassifier.classify(facts) == expected
@@ -45,6 +53,7 @@ class TrackerShapeClassifierSpec extends Specification {
 
     // The boundary rows: a marker recorded after the newest claim while the working label is still
     // on is a lagging index, whatever the footprint says.
+    // Scenario: lifecycle/claim-heartbeat / A boundary newer than the labels is IndexLagging
     def "a #boundary marker under a still-working label is a lagging index"() {
         expect:
         TrackerShapeClassifier.classify(new TrackerFacts(StateLabels.workingOnly(), claim, boundary))
@@ -60,6 +69,9 @@ class TrackerShapeClassifierSpec extends Specification {
 
     // A human who returned a parked or finished task set the ready label themselves: the marker is
     // history they have already acted on, not an index that lags behind it.
+    // Scenario: lifecycle/claim-heartbeat / A ready label with park or finish history is Returned
+    // Scenario: lifecycle/claim-heartbeat / A park the human returned is Returned, not a lagging index
+    // Scenario: lifecycle/claim-heartbeat / A dead footprint on a ready task is tenure history
     def "a ready task carrying a #boundary marker is Returned, never a lagging index"() {
         expect:
         TrackerShapeClassifier.classify(new TrackerFacts(StateLabels.readyOnly(), DEAD, boundary))
@@ -87,6 +99,7 @@ class TrackerShapeClassifierSpec extends Specification {
     }
 
     // Precedence: a closed task classifies Revoked over every other fact, including a live claim.
+    // Scenario: lifecycle/claim-heartbeat / A closed issue is Revoked over every other fact
     def "a closed task outranks every other fact"() {
         expect:
         TrackerShapeClassifier.classify(new TrackerFacts(
@@ -96,6 +109,7 @@ class TrackerShapeClassifierSpec extends Specification {
 
     // Totality: the classification is exhaustive over the whole fact space — every combination of
     // label set, footprint and boundary yields exactly one shape and none throws.
+    // Scenario: lifecycle/claim-heartbeat / Every fact combination yields exactly one shape
     def "every fact combination classifies to exactly one shape"() {
         given:
         def labelSets = []
@@ -140,6 +154,7 @@ class TrackerShapeClassifierSpec extends Specification {
 
     // The Foreign row keeps the classification total: a task wearing no gnomish state label at all
     // is a combination no repair may touch, surfaced with a diagnosis instead.
+    // Scenario: lifecycle/claim-heartbeat / Any other combination is Foreign
     def "a task wearing no state label at all is Foreign, with a diagnosis"() {
         when:
         def shape = TrackerShapeClassifier.classify(

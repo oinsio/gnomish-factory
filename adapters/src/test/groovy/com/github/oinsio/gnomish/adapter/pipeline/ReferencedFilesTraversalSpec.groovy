@@ -30,6 +30,7 @@ class ReferencedFilesTraversalSpec extends Specification implements GnomishTreeW
     @TempDir
     Path root
 
+    // Scenario: pipeline/pipeline-config / Path escaping the config root is rejected
     def "a traversing instructions ref is rejected as escaping the root, not existence-checked (NFR-S2)"() {
         expect: 'the escape is reported as traversal; existence of the outside file is never checked'
         ReferencedFiles.check(root, [stage('plan', ref)]) == [
@@ -63,6 +64,7 @@ class ReferencedFilesTraversalSpec extends Specification implements GnomishTreeW
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Path escaping the config root is rejected
     def "an escaping ref is reported as traversal only, never also as does-not-exist (NFR-S2)"() {
         given: 'both refs escape via ..; neither file exists under the root'
         def stages = [
@@ -77,6 +79,7 @@ class ReferencedFilesTraversalSpec extends Specification implements GnomishTreeW
     }
 
     @IgnoreIf({ !PathSafetySpec.symlinksSupported() })
+    // Scenario: pipeline/pipeline-config / Symlink escaping the config root is rejected
     def "a symlink whose target is outside the root is rejected as escaping (NFR-S2)"() {
         given: 'a file OUTSIDE the root, a symlink INSIDE .gnomish/ pointing at it'
         Path outsideDir = Files.createTempDirectory('gnomish-outside')

@@ -67,6 +67,7 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
         new MidRoundHarvestListener(env, runner, clone, clock, interval, context)
     }
 
+    // Scenario: git/git-task-persistence / Mid-round tip movement in a box is pushed
     def "FR5: a moved harvested tip is pushed best-effort to origin"() {
         given: 'an environment whose harvest lands one new commit on the branch'
         String pushed = null
@@ -92,6 +93,7 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
         runner.run(origin, 'rev-parse', '--verify', 'refs/heads/' + BRANCH).exitCode() != 0
     }
 
+    // Scenario: git/git-task-persistence / Tip observation is a rate-limited factory-side poll
     def "FR5: polls inside the rate-limit window are skipped — the box cannot cause a fetch storm"() {
         given:
         def harvests = 0
@@ -129,6 +131,8 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
         harvests == 2
     }
 
+    // Scenario: git/git-task-persistence / A failed harvest skips the push
+    // Scenario: git/git-task-persistence / A refused mid-round harvest leaves the verdict to the round boundary
     def "FR5: a refused harvest skips the push and never throws — the round boundary keeps the verdict"() {
         given:
         def l = listener(environment({

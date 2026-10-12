@@ -50,6 +50,7 @@ class RefspecPushSpec extends Specification implements BareGitRepoFixture {
     // not that it is spelled this way. The runner adds its own stall-detection options in front, a
     // push being a network command (FR4 of bound-subprocess-commands), pinned by its own specs; the
     // argv handed to it is this class's.
+    // Scenario: git/git-task-persistence / Push names exactly the task branch
     def "the command is the exact explicit refspec, with no other argument"() {
         given: 'a git whose push succeeds'
         def git = new ScriptedGit().answer(['push'], 0)

@@ -116,6 +116,7 @@ class StatusTextRendererSpec extends Specification {
     }
 
     // UX1, FR12 of make-checkpoint-gate-durable: a gate renders as awaiting approval after its stage
+    // Scenario: observability/status-report / A gate renders as awaiting approval
     def "renderFull renders a gate as awaiting approval after the stage that passed"() {
         given:
         def renderer = new StatusTextRenderer()
@@ -197,6 +198,7 @@ class StatusTextRendererSpec extends Specification {
 
     // UX1 of fix-denial-report-attachment: the reviewer reads the denial in the same block as the
     //     attempt, needing to know nothing about guard logs or container internals
+    // Scenario: observability/status-report / The text render shows attempt denials
     def "renderFull lists a passing attempt's egress denials under its summary line"() {
         given: 'a passing round that recorded one denial'
         def denial = new Finding(
@@ -247,6 +249,7 @@ class StatusTextRendererSpec extends Specification {
     // FR2, UX1 of fix-denial-attribution-durability: the round that could not execute left
     //     no attempt line, so its denials hang under the escalation — the reviewer sees the
     //     blocked exfiltration beside the reason the round died, without reading any log.
+    // Scenario: observability/status-report / The text render lists escalation denials beside the reason
     def "renderFull lists a cannotExecute escalation's denials under the escalation line"() {
         given: 'an escalation for a round killed on its timeout after a denied egress'
         def denial = new Finding(
@@ -267,6 +270,7 @@ class StatusTextRendererSpec extends Specification {
     // NFR-S1 of fix-denial-attribution-durability: the escalation's denials are gnome-chosen
     //     text like an attempt's, so they pass the same findings funnel — the escalation path
     //     must not be the one that skips it.
+    // Scenario: observability/status-report / The text render lists escalation denials beside the reason
     def "renderFull neutralizes escape sequences in an escalation denial's text"() {
         given:
         def esc = '\u001B'
@@ -291,6 +295,7 @@ class StatusTextRendererSpec extends Specification {
 
     // UX2: an escalation whose round recorded no denial renders exactly as it did before
     //     this change — no heading, no empty list.
+    // Scenario: observability/status-report / Escalations without denials stay quiet
     def "renderFull renders nothing extra for a cannotExecute escalation with no denials"() {
         given:
         def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess('adapter crashed'), [])
@@ -304,6 +309,7 @@ class StatusTextRendererSpec extends Specification {
     }
 
     // UX2: zero denials render nothing at all — no heading, no empty list
+    // Scenario: sandbox/sandbox-egress / A quiet task shows nothing
     def "renderFull renders nothing for a round with no denials"() {
         given:
         def state = new TaskState(new Position.AtStage('implement'), 1, [passedRound(0)], ExecutorUsage.none())
@@ -320,6 +326,7 @@ class StatusTextRendererSpec extends Specification {
     //     channel, so the render must show it exactly like a denial — that is what lets a report
     //     say "no data" instead of implying "no denials". The wording is DenialLossMarker's; this
     //     spec pins the channel, not the sentence.
+    // Scenario: sandbox/sandbox-egress / A saturated tail cap surfaces as loss
     def "UX3: a loss marker renders beside the denials it stands in for"() {
         given: 'a round reporting one real denial and one synthetic loss marker, neither identified'
         def denial = Denial.unidentified(

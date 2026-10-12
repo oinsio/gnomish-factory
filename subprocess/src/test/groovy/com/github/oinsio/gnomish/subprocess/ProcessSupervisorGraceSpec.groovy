@@ -17,6 +17,8 @@ class ProcessSupervisorGraceSpec extends Specification implements FakeBinaries {
     @TempDir
     Path dir
 
+    // Scenario: lifecycle/subprocess-supervision / Cooperative termination is attempted first
+    // Scenario: lifecycle/subprocess-supervision / A child ignoring the terminate is killed after the grace
     def "design D3: the tree is asked cooperatively first, and only what ignores that is forced"() {
         given: 'a binary that dies on SIGTERM, over a child that records the signal and keeps running'
         // The parent lingers half a second before exiting so the assertions below read a settled

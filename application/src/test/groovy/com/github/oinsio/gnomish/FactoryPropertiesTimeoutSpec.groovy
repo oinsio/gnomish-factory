@@ -16,6 +16,7 @@ import spock.lang.Specification
 class FactoryPropertiesTimeoutSpec extends Specification {
 
     // FR7/D2 of fix-round-stdout-drain: the tail-drain grace defaults to 5 seconds
+    // Scenario: executor/agent-executor / Tail-drain grace is operator-tunable with a safe default
     def "agent-cli-tail-drain-grace defaults to five seconds when unset"() {
         when: 'a properties record is created through a constructor that predates the grace'
         def properties = new FactoryProperties('factory-01', 'claude', null, null)
@@ -25,6 +26,7 @@ class FactoryPropertiesTimeoutSpec extends Specification {
     }
 
     // FR7: an explicit grace overrides the default
+    // Scenario: executor/agent-executor / Tail-drain grace is operator-tunable with a safe default
     def "agent-cli-tail-drain-grace of an explicit value is exposed unchanged"() {
         when:
         def properties = new FactoryProperties(
@@ -35,6 +37,7 @@ class FactoryPropertiesTimeoutSpec extends Specification {
     }
 
     // FR7/D2: a non-positive grace is a startup error, before any dialog
+    // Scenario: executor/agent-executor / Tail-drain grace is operator-tunable with a safe default
     def "agent-cli-tail-drain-grace of #description is rejected with the property name"() {
         when:
         new FactoryProperties('factory-01', 'claude', grace, null, null, null)

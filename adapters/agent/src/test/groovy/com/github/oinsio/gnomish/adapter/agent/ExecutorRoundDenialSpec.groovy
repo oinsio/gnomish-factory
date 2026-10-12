@@ -51,6 +51,7 @@ class ExecutorRoundDenialSpec extends AbstractDenialRoundSpec {
     // NFR-R1: the denial read is observability of work the gnome already finished — a source that
     //     cannot answer at all must cost the round nothing. The port contract promises a degraded
     //     empty answer, but a round is far too expensive to stake on a collaborator keeping it.
+    // Scenario: sandbox/execution-environment / Unreadable denial log degrades to empty
     def "NFR-R1: a throwing denial read still yields a completed round"() {
         given:
         def logs = LogCaptureSupport.attach(RoundDenialRead)

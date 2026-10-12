@@ -14,8 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
  * footprint the open listing does — and every adapter's {@code repairIndex} restores a claimless
  * working task to {@code Ready} with a changed-facts no-op.
  *
- * <p>This is the MOST-DERIVED contract class in the chain: a concrete adapter subclass instantiates
- * THIS class. The kill windows of the multi-write sequences are not expressible here — the
+ * <p>The kill windows of the multi-write sequences are not expressible here — the
  * in-memory reference adapter's writes are atomic — so each adapter whose writes are physically
  * non-atomic covers them in its own suite (github-tracker's index-repair and claim-ordering specs).
  *

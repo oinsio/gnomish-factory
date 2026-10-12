@@ -31,6 +31,8 @@ class FeedOutageRetrySuppressionSpec extends Specification {
     private static final Duration POLL = Duration.ofSeconds(30)
 
     // FR4/UX3: the tenth consecutive failure of one outage is not the tenth WARN.
+    // Scenario: observability/factory-logging / Dead dependency floods no console
+    // Scenario: observability/factory-logging / Roll-up edges are contract too
     def "a sustained outage is one WARN plus periodic roll-ups, not one WARN per retry"() {
         given:
         def retry = new FeedOutageRetry(sleeper, { POLL }, suppressor)

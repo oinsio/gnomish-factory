@@ -21,6 +21,7 @@ class ProviderDiscoveryReportSpec extends Specification {
     // NFR-O1: "the set of discovered providers per port is reported, each with the jar that
     //     contributed it" — the discriminator an operator configures, the artifact behind it, and
     //     the class, on one line each under a counted header naming the port.
+    // Scenario: plugin/plugin-discovery / Loaded providers are observable to the operator
     def "the report names the port, every discriminator, and the contributing artifact"() {
         given: 'two discovered providers of one port'
         def registry = [github: new StubProvider(), inmemory: new StubProvider()]
@@ -70,6 +71,7 @@ class ProviderDiscoveryReportSpec extends Specification {
 
     // NFR-O1: "including which jar contributed each provider" — a packaged distribution loads
     //     providers from jars, and the jar's own file name is what an operator recognises.
+    // Scenario: plugin/plugin-discovery / Loaded providers are observable to the operator
     def "a provider loaded from a jar is reported by that jar's file name"() {
         expect:
         ProviderDiscoveryReport.artifactOfSource(codeSource('file:/opt/gnomish/lib/github-1.2.3.jar')) == 'github-1.2.3.jar'

@@ -68,6 +68,7 @@ class GitObjectsPipelineLawReaderSpec extends Specification implements GitObject
         law.controlFile('instructions.md') == 'Original instructions.'
     }
 
+    // Scenario: pipeline/pipeline-config / Uncommitted clone edits are not law in autonomous modes
     def "FR11, D12: an uncommitted edit in the clone's working tree is no part of the law"() {
         given:
         write('.gnomish/instructions.md', 'Committed instructions.')

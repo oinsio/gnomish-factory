@@ -57,6 +57,7 @@ class RecordedDenialMergeSpec extends Specification {
 
     // FR7: an unidentified denial matches nothing, so the merge keeps it — design D3 prefers a
     //     duplicate a reviewer can see over an event nobody ever hears about
+    // Scenario: sandbox/sandbox-egress / Records written before identities existed still merge
     def "FR7: a denial with no identity is kept, whatever the tip records"() {
         given:
         def merge = new RecordedDenialMerge(KEY)
@@ -84,6 +85,7 @@ class RecordedDenialMergeSpec extends Specification {
     }
 
     // FR7: the merge is reported so duplicates — and their absence — are explainable
+    // Scenario: sandbox/sandbox-egress / A merge that dropped denials says how many
     def "FR7: a merge that dropped something says how many were present and how many recovered"() {
         given:
         def logs = LogCaptureSupport.attach(RecordedDenialMerge)

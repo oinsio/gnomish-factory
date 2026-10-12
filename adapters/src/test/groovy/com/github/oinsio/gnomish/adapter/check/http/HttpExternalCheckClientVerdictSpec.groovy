@@ -12,6 +12,7 @@ class HttpExternalCheckClientVerdictSpec extends Specification implements HttpCh
 
     // FR10: a check declaring only the default pass_when passes on 2xx after one request — the
     //     one-shot probe is a degenerate poll, not a second code path.
+    // Scenario: verification/http-check-provider / One-shot probe passes on 2xx
     def "a one-shot 2xx probe passes without polling"() {
         given:
         def exchange = new ScriptedExchange(200, 'anything at all')
@@ -44,6 +45,7 @@ class HttpExternalCheckClientVerdictSpec extends Specification implements HttpCh
 
     // FR10, D4: jsonPath narrows a 2xx — JSON status documents are one of the two body shapes CI
     //     and quality APIs split between.
+    // Scenario: verification/http-check-provider / pass-when narrows on an extracted value
     def "pass_when narrows a 2xx on an extracted jsonPath value"() {
         given:
         def params = [url: URL, ('pass-when'): [('json-path'): '$.projectStatus.status', equals: 'OK']]
@@ -62,7 +64,26 @@ class HttpExternalCheckClientVerdictSpec extends Specification implements HttpCh
         'not json at all' || PollStatus.Fail
     }
 
+    // D4: the json-path dialect — an optional $ root, dot-separated field names, [n] array indexes
+    // Scenario: verification/http-check-provider / json-path addresses fields and array indexes
+    def "json-path #path addresses the value at that field"() {
+        given:
+        def body = '{"projectStatus":{"conditions":[{"status":"OK"},{"status":"ERROR"}]}}'
+        def params = [url: URL, ('pass-when'): [('json-path'): path, equals: 'OK']]
+
+        expect:
+        poll(params, new ScriptedExchange(200, body)).class == expected
+
+        where:
+        path || expected
+        '$.projectStatus.conditions[0].status' || PollStatus.Pass
+        'projectStatus.conditions[0].status' || PollStatus.Pass
+        '$.projectStatus.conditions[1].status' || PollStatus.Fail
+        '$.projectStatus.conditions[2].status' || PollStatus.Fail
+    }
+
     // FR10, D4: regex covers the other half — plain-text and heterogeneous bodies.
+    // Scenario: verification/http-check-provider / pass-when narrows on an extracted value
     def "pass_when narrows a 2xx on an extracted regex group"() {
         given:
         def params = [url: URL, ('pass-when'): [regex: 'status=(\\w+)', equals: 'green']]
@@ -112,6 +133,7 @@ class HttpExternalCheckClientVerdictSpec extends Specification implements HttpCh
 
     // FR10: pending_when marks a response non-terminal, which is what makes the engine poll again
     //     at the check's interval and classify a timeout by the check's own timeoutClass.
+    // Scenario: verification/http-check-provider / pending-when polls until terminal
     def "pending_when keeps the check running until the response is terminal"() {
         given:
         def params = [

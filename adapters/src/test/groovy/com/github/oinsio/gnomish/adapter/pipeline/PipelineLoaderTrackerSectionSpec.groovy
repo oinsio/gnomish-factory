@@ -44,6 +44,7 @@ tracker:
 
     // "No tracker section" delta-spec scenario: loading succeeds exactly as before
     // and the definition reports no tracker configuration
+    // Scenario: pipeline/pipeline-config / No tracker section
     def "a tree with no tracker section loads unchanged, with no tracker configuration"() {
         given:
         writeValidTree()
@@ -59,6 +60,7 @@ tracker:
     // "Defaulted threshold" delta-spec scenario: a tracker section declaring type but no
     // abort-threshold resolves to 3. Includes a matching github: subsection (task 3.2's
     // seam rule requires one for a known type) so this test proves only the default.
+    // Scenario: pipeline/pipeline-config / Defaulted threshold
     def "a tracker section with type but no abort-threshold loads with threshold 3"() {
         given:
         writePlanOnlyTree(GITHUB_TRACKER_CONFIG)
@@ -105,6 +107,7 @@ tracker:
     }
 
     // "Missing subsection" delta-spec scenario
+    // Scenario: pipeline/pipeline-config / Missing subsection
     def "a known tracker type with no matching subsection fails to load with a located error"() {
         given:
         writePlanOnlyTree('schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\ntracker:\n  type: github\n')
@@ -121,6 +124,7 @@ tracker:
 
     // "Mismatched subsection" delta-spec scenario: the stray jira: key is reported
     // even though github: is present
+    // Scenario: pipeline/pipeline-config / Mismatched subsection
     def "a tracker section with a stray subsection not matching type fails to load with a located error"() {
         given:
         writePlanOnlyTree(GITHUB_TRACKER_CONFIG + '  jira:\n    project: FOO\n')
@@ -137,6 +141,7 @@ tracker:
     }
 
     // The seam-mechanics half of "Adapter errors aggregate with core errors"
+    // Scenario: pipeline/pipeline-config / Adapter errors aggregate with core errors
     def "a tracker seam error aggregates with an unrelated core error in one pass"() {
         given: 'an unknown tracker type plus an unrelated structural error (unknown executor)'
         write('config.yaml', UNKNOWN_TYPE_TRACKER_CONFIG)

@@ -13,7 +13,7 @@ For every round and check the factory SHALL materialize the frozen law tree from
 commit into the environment at a factory-owned path outside the working copy, exposed as
 `GNOMISH_LAW_DIR`, read-only for the task user; content SHALL never be taken from the working
 copy.
-<!-- implements FR1, NFR-S1, NFR-R1 of harden-verification-integrity -->
+**Implements**: FR1, NFR-S1, NFR-R1 of harden-verification-integrity
 
 #### Scenario: Gnome edit to a script is irrelevant
 - **WHEN** the gnome rewrites `.gnomish/verify/run-tests.sh` in the working copy and a check runs
@@ -27,7 +27,7 @@ copy.
 ### Requirement: Protected paths are declared in the law
 The law MAY declare `protected:` globs; the loader SHALL validate them lexically (no traversal,
 no absolute paths) and SHALL reject a glob matching the law tree itself as redundant.
-<!-- implements FR2 of harden-verification-integrity -->
+**Implements**: FR2 of harden-verification-integrity
 
 #### Scenario: Traversal in a glob
 - **WHEN** `protected:` contains `../secrets/**`
@@ -38,7 +38,7 @@ The built-in `diff-scope` SHALL compare the attempt commit with the task base fr
 clone's objects and SHALL fail with one finding per protected path changed unless the stage
 declares `allows-protected`, SHALL fail on deletion of a protected file regardless, and SHALL
 fail when the diff exceeds the declared size cap. It needs no box.
-<!-- implements FR3, NFR-R2, NFR-O1, UX1, M1 of harden-verification-integrity -->
+**Implements**: FR3, NFR-R2, NFR-O1, UX1, M1 of harden-verification-integrity
 
 #### Scenario: Relaxed test is caught
 - **WHEN** the attempt edits `src/test/FooSpec.groovy` and `src/test/**` is protected
@@ -61,7 +61,7 @@ fail when the diff exceeds the declared size cap. It needs no box.
 Every `verdict` request SHALL carry, as delimited data, the list of protected paths the attempt
 changed (possibly empty), so a judge grades with that knowledge and never from the gnome's
 narrative alone.
-<!-- implements FR4 of harden-verification-integrity -->
+**Implements**: FR4 of harden-verification-integrity
 
 #### Scenario: Judge sees the protected change
 - **WHEN** an attempt edits a protected threshold file and a judge runs

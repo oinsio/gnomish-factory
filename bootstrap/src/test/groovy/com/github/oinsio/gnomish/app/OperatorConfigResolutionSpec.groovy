@@ -49,6 +49,7 @@ class OperatorConfigResolutionSpec extends Specification {
     }
 
     // FR3: "A symlinked path reaches its registered clone"
+    // Scenario: operator/project-registry / A symlinked path reaches its registered clone
     def "FR3: a symlinked --dir resolves the registered clone and its real path"() {
         given:
         def link = Files.createSymbolicLink(tmp.resolve('w'), widgets)

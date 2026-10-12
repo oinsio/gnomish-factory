@@ -56,6 +56,7 @@ class FinishedDeclineInterruptSpec extends Specification {
     }
 
     // FR12, NFR-O2: the stop ends the sweep quietly; the second decline is never attempted.
+    // Scenario: serve/factory-serve / Interrupted decline stops the loop
     def "a decline that fails on an interrupted thread stops the sweep with no warning"() {
         given:
         def attempted = []

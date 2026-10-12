@@ -38,6 +38,8 @@ class AbortCauseCapWiringSpec extends Specification {
 
     // FR1, NFR-O1 of cap-abort-cause-length: an over-budget cause reaches the
     // tracker's abort marker already capped, while the returned result keeps the full text
+    // Scenario: tracker/tracker-take / Capped cause never breaks the abort accounting
+    // Scenario: tracker/tracker-take / Oversized cause is capped before the tracker write
     def "an over-budget cause is capped before the recordAbort write"() {
         given: 'a cause far past every tracker comment limit'
         def cause = 'persist failed\n' + ('f' * 200_000) + '\nCaused by: disk full'
@@ -73,6 +75,7 @@ class AbortCauseCapWiringSpec extends Specification {
 
     // FR1, NFR-R1 of cap-abort-cause-length: the fuse-trip park report carries the
     // capped cause, so an oversized cause cannot cost the park write its body
+    // Scenario: tracker/tracker-take / Oversized cause is capped before the tracker write
     def "an over-budget cause is capped before the fuse-trip park report"() {
         given:
         def cause = 'persist failed\n' + ('f' * 200_000) + '\nCaused by: disk full'
@@ -100,6 +103,7 @@ class AbortCauseCapWiringSpec extends Specification {
     // cause plus the builder's own framing — stays inside the smallest supported
     // tracker comment limit (Jira Cloud, 32_767 characters), which is the headroom
     // invariant of design D2
+    // Scenario: tracker/tracker-take / Capped cause never breaks the abort accounting
     def "the complete fuse-trip report fits the smallest tracker comment limit"() {
         given: 'a maximal cause and the wordiest framing the builder can produce'
         def facts = new AbortFacts(999_999, Instant.parse('2026-07-17T09:00:00Z'), 999_998)
@@ -121,6 +125,7 @@ class AbortCauseCapWiringSpec extends Specification {
 
     // FR1 of cap-abort-cause-length: a cause within the budget reaches both
     // tracker writes byte-for-byte, with no marker introduced
+    // Scenario: tracker/tracker-take / Cause within the budget is untouched
     def "a within-budget cause reaches the tracker writes unchanged"() {
         given:
         def cause = 'connection reset by peer'

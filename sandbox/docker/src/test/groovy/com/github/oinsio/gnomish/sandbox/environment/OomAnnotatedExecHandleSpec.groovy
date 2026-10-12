@@ -33,6 +33,7 @@ class OomAnnotatedExecHandleSpec extends Specification {
 
     // FR1, UX2, M1: the OOM-killed exec is the whole point — the annotation names the container
     // and the exit code at the moment the exit code is surfaced.
+    // Scenario: sandbox/execution-environment / OOM-killed process is reported as likely OOM
     def "FR1: an exit 137 in an OOM-killed container is reported as a likely container OOM"() {
         given:
         docker.onRun = { List<String> args -> state('true') }
@@ -62,6 +63,7 @@ class OomAnnotatedExecHandleSpec extends Specification {
         capture.detach()
     }
 
+    // Scenario: sandbox/execution-environment / Plain kill is not blamed on memory
     def "FR1: a plain kill is not blamed on memory"() {
         given:
         docker.onRun = { List<String> args -> state('false') }
@@ -81,6 +83,7 @@ class OomAnnotatedExecHandleSpec extends Specification {
     }
 
     // NFR-R1: forensics never invent a failure of their own — both shapes of an unreadable state
+    // Scenario: sandbox/execution-environment / Unreadable runtime state degrades to no annotation
     def "NFR-R1: an unreadable runtime state degrades to no annotation and no new failure"() {
         given:
         docker.onRun = failing

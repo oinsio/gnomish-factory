@@ -49,6 +49,23 @@ class TransitionKillPointSpec extends Specification implements KillPointWorlds, 
         root
     }
 
+    // Scenario: git/git-task-persistence / A checkpoint continuation clears the park
+    // Scenario: git/git-task-persistence / A reply-less return clears the park
+    // Scenario: git/git-task-persistence / A stale worktree does not change what resume reads
+    // Scenario: git/git-task-persistence / Cleanup follows every constructive receipt
+    // Scenario: git/git-task-persistence / Kill between outcome and cleanup does not re-run the final stage
+    // Scenario: git/git-task-persistence / Kill between the staged removal and its commit converges on the same worktree
+    // Scenario: tracker/tracker-take / A finish that already landed is not posted twice
+    // Scenario: tracker/tracker-take / A gate killed before its park is delivered, not run
+    // Scenario: tracker/tracker-take / A kill during the finish leaves the recoverable shape
+    // Scenario: tracker/tracker-take / Bare return of an exhausted stage resets once
+    // Scenario: tracker/tracker-take / Kill between Completed and cleanup costs no re-run
+    // Scenario: tracker/tracker-take / Returned checkpoint is approved before the run continues
+    // Scenario: sandbox/execution-environment / Kill between intent and receipt converges
+    // Scenario: lifecycle/task-branch-contract / Recovering a recovered state is a no-op
+    // Scenario: lifecycle/task-branch-contract / Kill mid-recovery converges on the next pickup
+    // Scenario: lifecycle/task-branch-contract / The instance that froze the state converges it
+    // Scenario: lifecycle/task-branch-contract / A transition is durable at its push
     def "M1, NFR-R1: #transition.name converges from every kill window, twice over"() {
         expect:
         KillPointHarness.verify(transition)

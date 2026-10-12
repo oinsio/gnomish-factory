@@ -128,6 +128,8 @@ class UntrustedTextSinkInvariantSpec extends Specification {
 
     // NFR-S1: (a) the corpus as a message argument — the laundering path the accessor gate cannot
     // see, since the hostile text arrives as a String with no accessor left at the call site
+    // Scenario: observability/factory-logging / A laundered string is neutralized at the sink
+    // Scenario: observability/factory-logging / The end-to-end invariant holds on the real appenders
     def "a hostile message argument writes one inert, bounded record: #shape on #plane.appender of #plane.config"() {
         given:
         Capture capture = capture(plane)
@@ -148,6 +150,8 @@ class UntrustedTextSinkInvariantSpec extends Specification {
     // NFR-S1: (b) the corpus as the message of a thrown-and-caught exception passed as the trailing
     // argument — the widest laundering path of all, and the one part of a record that is
     // legitimately many lines, so "one record" here means "no line at column 0 but the first"
+    // Scenario: observability/factory-logging / A laundered string is neutralized at the sink
+    // Scenario: observability/factory-logging / The end-to-end invariant holds on the real appenders
     def "a hostile exception message writes an inert, bounded record no line of which forges a second: #shape on #plane.appender of #plane.config"() {
         given:
         Capture capture = capture(plane)
@@ -216,6 +220,9 @@ class UntrustedTextSinkInvariantSpec extends Specification {
 
     // NFR-S1: (c) the corpus as an MDC value — a stage name read out of the target repository's own
     // manifest, rendered ahead of the message where a forged prefix would be most convincing
+    // Scenario: observability/factory-logging / The end-to-end invariant holds on the real appenders
+    // Scenario: observability/factory-logging / A hostile stage name in the MDC is inert
+    // Scenario: observability/factory-logging / Every MDC value renders single-line and inert
     def "a hostile MDC value writes one inert, bounded record: #shape on #plane.appender of #plane.config"() {
         given:
         Capture capture = capture(plane)
@@ -238,6 +245,7 @@ class UntrustedTextSinkInvariantSpec extends Specification {
     // FR2, G3: the layer is invisible to a call site that used the choke point — the record carries
     // the prepared text byte for byte, with no second escaping of the visible newline marker and no
     // second cap below the first
+    // Scenario: observability/factory-logging / Choke-point output passes the sink unchanged
     def "choke-point output reaches the bytes unchanged: #shape on #plane.appender of #plane.config"() {
         given:
         Capture capture = capture(plane)
@@ -255,6 +263,7 @@ class UntrustedTextSinkInvariantSpec extends Specification {
 
     // NFR-S2: the console half of the same invariant — the human path shows what a terminal would
     // obey instead of obeying it, and keeps the line structure an operator report is written in
+    // Scenario: cli/operator-console / The corpus is inert on the human path
     def "the console owner's human path leaves the corpus inert and keeps its line breaks: #shape"() {
         given:
         def out = new ByteArrayOutputStream()

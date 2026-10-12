@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Only genuinely unexpected failures reach here: deliberate, dedicated-exit-code control flow
  * ({@code UsageException} &rarr; 2) is rethrown by the
- * caller ({@code TakeClaimAndWork}) and never funnels into this protocol, since D16 keeps the exit
+ * caller ({@code ClaimedRunFailureDispatch}) and never funnels into this protocol, since D16 keeps the exit
  * codes shared with {@code run} at their own meaning.
  *
  * <p>Abort facts are read best-effort: a dead tracker is itself a plausible crash cause and must

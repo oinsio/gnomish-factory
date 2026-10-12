@@ -35,6 +35,8 @@ class AtomicWriteBoundarySpec extends Specification {
     .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
     .importPackages('com.github.oinsio.gnomish')
 
+    // Scenario: build/module-layering / The atomic file writer lives in atomicfile
+    // Scenario: build/module-layering / Host-side writers and the dashboard writer share one atomic writer
     def "FR5: the atomic-rename discipline exists only in the atomicfile leaf"() {
         given: 'the rule reserving StandardCopyOption to the shared writer'
         def rule = noClasses()
@@ -46,6 +48,9 @@ class AtomicWriteBoundarySpec extends Specification {
         rule.check(productionClasses)
     }
 
+    // Scenario: git/git-task-persistence / A kill mid-write on the host leaves a whole file
+    // Scenario: build/module-layering / The atomic file writer lives in atomicfile
+    // Scenario: build/module-layering / Host-side writers and the dashboard writer share one atomic writer
     def "FR5: every host-side factory-file writer goes through the shared writer"() {
         given: 'the writers named by design D10 — the .gnomish-task/ four plus the dashboard and snapshot writers'
         def rule = classes()

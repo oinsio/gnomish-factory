@@ -39,6 +39,7 @@ class TaskJsonMapperSpec extends Specification {
     def createdAt = Instant.parse("2026-07-18T09:00:00Z")
     def baseCommit = "abc123"
 
+    // Scenario: git/git-task-persistence / task.json carries the task context and the outcome
     def "toDto maps taskId, title, body, createdAt, baseCommit, version=1"() {
         when:
         def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, null, false, BasePin.UNPINNED)
@@ -207,6 +208,7 @@ class TaskJsonMapperSpec extends Specification {
         json.contains('"lastEscalation":null')
     }
 
+    // Scenario: git/git-task-persistence / task.json carries the task context and the outcome
     def "round-trip: every TaskOutcomeDto kind survives serialize/deserialize"() {
         given:
         def mapper = TaskStateJson.mapper()
@@ -421,6 +423,8 @@ class TaskJsonMapperSpec extends Specification {
     // FR2 of fix-denial-attribution-durability: the round that could not execute left no
     //     attempt record, so its egress denials ride the escalation itself — through the same
     //     finding shape a check's findings and an attempt's denials use.
+    // Scenario: git/git-task-persistence / A parked task keeps the hung round's denial
+    // Scenario: git/git-task-persistence / task.json carries the task context and the outcome
     def "toDto carries a CannotExecute escalation's denials under lastEscalation"() {
         given: 'an escalation for a round that recorded two egress denials'
         def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess("round timed out"), [
@@ -459,6 +463,8 @@ class TaskJsonMapperSpec extends Specification {
 
     // FR2 of fix-denial-attribution-durability: the field is additive under contract v1 — a
     //     task.json written before it existed must keep parsing, with the denials read as empty.
+    // Scenario: git/git-task-persistence / Pre-existing task files stay readable
+    // Scenario: observability/status-report / An escalation without the denials field reads as empty
     def "readDto parses a cannotExecute escalation written before the denials field existed"() {
         given: 'a version-1 document whose escalation carries no denials field'
         def json = '''
@@ -484,6 +490,7 @@ class TaskJsonMapperSpec extends Specification {
 
     // FR2 of fix-denial-attribution-durability: the cursor is additive under contract v1 —
     //     a task.json written before the field existed reads as "no cursor to resume from"
+    // Scenario: git/git-task-persistence / A task.json without a cursor offers none
     def "readDto parses a task.json written before the egress cursor existed"() {
         given: 'a version-1 document with no egressCursor field'
         def json = '''
@@ -623,6 +630,8 @@ class TaskJsonMapperSpec extends Specification {
 
     // FR7 of fix-denial-attribution-durability: the escalation path carries identities exactly
     //     like the attempt path, so a resume merges a re-read of a drained round's denials too
+    // Scenario: git/git-task-persistence / An escalation denial carries its identity when known
+    // Scenario: sandbox/sandbox-egress / The identity stays out of status.json and the text render
     def "FR7: an escalation denial's identity survives the task.json round-trip"() {
         given: 'a drained denial the guard stamped'
         def escalation = new EscalationReport.CannotExecute(UntrustedText.subprocess("round timed out"), [
@@ -643,6 +652,7 @@ class TaskJsonMapperSpec extends Specification {
     }
 
     // FR7: "unknown, keep" — a denial entry written before identities existed still parses
+    // Scenario: git/git-task-persistence / An escalation denial carries its identity when known
     def "FR7: an escalation denial written before identities existed reads as unidentified"() {
         given:
         def json = '''

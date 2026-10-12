@@ -20,6 +20,7 @@ class DashboardOutcomesBlockSpec extends Specification {
 
     // FR6: full-width mix bars, never scaled by volume — a 2-outcome day and a 20-outcome day
     //      span the same width so their mixes compare directly.
+    // Scenario: observability/dashboard-page / Mix comparable across unequal days
     def "unequal days span the same width, differing only in their numbers"() {
         given:
         def history = new LedgerHistoryView(
@@ -68,6 +69,7 @@ class DashboardOutcomesBlockSpec extends Specification {
     }
 
     // FR6: the day total is the sum of all four categories, and the bar's aria-label names each.
+    // Scenario: observability/dashboard-page / Outcome bars share one legend
     def "a four-category day totals every category and labels the bar with all four"() {
         given:
         def history = new LedgerHistoryView(
@@ -124,6 +126,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         segmentWidths(html) == [34, 33, 33]
     }
 
+    // Scenario: observability/dashboard-page / Outcome bars share one legend
     def "the one shared legend names all four categories with their own swatches"() {
         given:
         def history = new LedgerHistoryView(
@@ -144,6 +147,7 @@ class DashboardOutcomesBlockSpec extends Specification {
                 + '</div>')
     }
 
+    // Scenario: observability/dashboard-page / Observation times are explicit
     def "the block states the window it covers and its empty state when there is none"() {
         given:
         def history = new LedgerHistoryView(
@@ -162,6 +166,7 @@ class DashboardOutcomesBlockSpec extends Specification {
     }
 
     // NFR-O3 of add-base-ref-resolution: a compact line under the bar, not a bar of its own.
+    // Scenario: observability/dashboard-page / Overnight outage in the morning view
     def "a day with a closed outage renders a compact line under its bar; a day with none renders nothing for it"() {
         given:
         def history = new LedgerHistoryView(

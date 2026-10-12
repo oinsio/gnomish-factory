@@ -72,6 +72,7 @@ class VitalsSnapshotAssemblerSpec extends Specification {
     }
 
     // FR7: the assembled vitals carry every field verbatim from the three collaborators.
+    // Scenario: observability/serve-observability / The reaper's interval is its own cadence
     def "assembles the vitals section field-for-field from the given collaborators"() {
         given:
         def heartbeat = newHeartbeat()
@@ -107,6 +108,8 @@ class VitalsSnapshotAssemblerSpec extends Specification {
     // FR6 of supervise-daemon-loops-and-embed-dashboard (daemon-supervision "Reaper restarts stay
     //     visible in the snapshot"): the reaper's thread dies and is respawned by its supervised
     //     loop; a snapshot assembled afterwards shows the grown vitals.reaper.restartCount.
+    // Scenario: observability/serve-observability / Reaper degradation is a field
+    // Scenario: serve/daemon-supervision / Reaper restarts stay visible in the snapshot
     def "a snapshot after the reaper's thread was respawned shows a grown restartCount"() {
         given: 'a reaper whose first tick throws an Error past its loop guard, and whose second tick stops it'
         def logs = LogCaptureSupport.attach(SupervisedLoop)

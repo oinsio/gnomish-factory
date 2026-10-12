@@ -43,6 +43,7 @@ class TestEnvironmentHygieneSpec extends Specification implements BareGitRepoFix
 
     // FR22, M10: a GNOMISH_DECISION_FILE in the box's parent environment never reaches the fake
     //     agent (task 9.1; red with LocalBoxEnvironment.exec inheriting)
+    // Scenario: sandbox/execution-environment / The fixture box inherits nothing from the test process
     def "FR22, M10: a fake-agent round through the fixture box leaves a planted GNOMISH_DECISION_FILE untouched"() {
         given: 'a factory clone with one commit on its branch'
         Path clone = initWorkingRepo(tempDir, 'clone')

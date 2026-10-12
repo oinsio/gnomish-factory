@@ -21,6 +21,11 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
  *
  * <p>Implements FR1, FR3, FR18, M3, UX4 of add-tracker-port.
  */
+// The inherited features run a real gnome round as a subprocess, launched with the MCP exclusion,
+// and read the tracker's own thread back: claim, progress and finish, every entry written by the
+// factory core and none by the gnome (CliStageExecutorCredentialScrubSpec pins that the tracker
+// credential never reaches the round).
+// Scenario: tracker/tracker-port / Gnome never transitions
 class InMemoryTakeLifecycleReadyToDeliveredSpec extends TakeLifecycleReadyToDeliveredSpecBase {
 
     @Override

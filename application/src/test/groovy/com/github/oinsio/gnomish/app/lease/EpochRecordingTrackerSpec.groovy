@@ -40,6 +40,7 @@ class EpochRecordingTrackerSpec extends Specification {
     def tracker = new EpochRecordingTracker(delegate, book)
 
     // FR13: the epoch is recorded before the caller can make its first write of the tenure
+    // Scenario: lifecycle/claim-heartbeat / Epoch is available for stamping
     def "records the epoch a successful claim was issued"() {
         when:
         def result = tracker.claim(REF, 'gnomish-a-1')
@@ -79,6 +80,7 @@ class EpochRecordingTrackerSpec extends Specification {
     //     and destructive-step commits run behind the confirmed write and must carry the epoch, so
     //     the run-scoped choke point (TakeClaimAndWork#dispatchAfterClaim's finally) ends it after
     //     those commits. Forgetting here left the last commit of every tenure outside the fence.
+    // Scenario: lifecycle/claim-heartbeat / Epoch is available for stamping
     def "keeps the tenure across #operation, whose branch-side commits still belong to it"() {
         given:
         holdTenure()

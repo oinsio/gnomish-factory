@@ -39,6 +39,8 @@ class GithubPluginAbsenceSpec extends Specification {
 
     // FR12: "the factory still starts, the github tracker and check providers are absent" — and
     //     M2's other half, the reference adapters core ships are untouched by the extraction.
+    // Scenario: plugin/github-plugin / Removing the github jar cleanly disables github providers
+    // Scenario: plugin/github-plugin / inmemory stays in core as the reference adapter
     def "without the github artifact the #port port keeps its core provider and loses github"() {
         when:
         def registry = discover(withoutGithub)
@@ -58,6 +60,7 @@ class GithubPluginAbsenceSpec extends Specification {
 
     // FR12: "the factory still starts" — the composition root derives a validator registry per port
     //     from the discovered set, and both still build, keyed by whatever remains.
+    // Scenario: plugin/github-plugin / Removing the github jar cleanly disables github providers
     def "the composition root's derived registries still build without github"() {
         given:
         def trackers = TrackerAdapterDiscovery.discover(withoutGithub)
@@ -75,6 +78,7 @@ class GithubPluginAbsenceSpec extends Specification {
 
     // M2: "with no core source change". Nothing outside the bundle may name a github type in code,
     //     so removing the jar is a packaging decision — never an edit to core.
+    // Scenario: plugin/github-plugin / GitHub is discovered like any third-party plugin
     def "no production source outside the bundle names a github type"() {
         given:
         def sources = RepoSourceTree.productionSources {

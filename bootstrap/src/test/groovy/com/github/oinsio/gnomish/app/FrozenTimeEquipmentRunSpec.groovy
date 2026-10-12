@@ -75,6 +75,8 @@ class FrozenTimeEquipmentRunSpec extends Specification implements BareGitRepoFix
     }
 
     // FR18, FR19, FR22: one frozen equipment, one container run — every instant on the branch is it.
+    // Scenario: core/time-source / A frozen equipment freezes the whole run
+    // Scenario: core/time-source / The root is the one source
     def "a container run assembled on a frozen time equipment stamps only the frozen instant"() {
         given: 'a project with a one-stage container-bound pipeline'
         def projectRoot = projectWithOneStage()

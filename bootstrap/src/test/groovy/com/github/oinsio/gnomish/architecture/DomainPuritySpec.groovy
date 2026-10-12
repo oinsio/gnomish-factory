@@ -31,6 +31,8 @@ class DomainPuritySpec extends Specification {
     .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
     .importPackages('com.github.oinsio.gnomish')
 
+    // Scenario: pipeline/stage-engine / Every effect crosses an injected port
+    // Scenario: pipeline/pipeline-config / Domain dependency on I/O fails the build
     def "FR10: no domain class depends on #forbiddenPackage"() {
         given: 'the purity rule forbidding the dependency'
         def rule = noClasses()

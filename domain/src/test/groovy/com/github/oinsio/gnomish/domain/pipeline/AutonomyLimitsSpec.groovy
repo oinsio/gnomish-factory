@@ -14,6 +14,8 @@ import spock.lang.Specification
 class AutonomyLimitsSpec extends Specification {
 
     // FR7: override wins when present, default applies when there is none
+    // Scenario: pipeline/pipeline-config / Stage override wins over default
+    // Scenario: pipeline/pipeline-config / Default applies when no override
     def "resolves #resolved from default #defaultLimit and override #override"() {
         expect: 'resolution picks the stage override when present, else the default'
         AutonomyLimits.resolve(defaultLimit, override) == new AutonomyLimits(resolved)

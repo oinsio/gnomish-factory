@@ -91,6 +91,7 @@ class BranchShapeSpec extends Specification {
     // the same word for the same shape. Labels are load-bearing (the kill-point harness asserts on
     // them), so every shape's label is pinned as a literal, and the pin is checked against the
     // sealed set itself: a renamed shape fails its row, an twelfth shape fails the coverage check.
+    // Scenario: lifecycle/task-branch-contract / No shape name collides with a domain type
     def "label() pins every shape of the closed set"() {
         given: 'one instance of every shape, each with its pinned label'
         def pinned = [

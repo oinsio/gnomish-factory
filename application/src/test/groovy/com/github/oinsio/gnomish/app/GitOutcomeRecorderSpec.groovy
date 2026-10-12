@@ -64,6 +64,7 @@ class GitOutcomeRecorderSpec extends Specification {
     // spend the terminal-boundary refs read. A park's caller runs the delivery fence over the same
     // unchanged tip right afterwards — same origin gate, same ls-remote, a stronger push — so
     // reconciling first would buy nothing and cost a second round-trip.
+    // Scenario: git/git-task-persistence / A parking terminal boundary spends no second read
     def "passes the terminal outcome through to both ports unchanged"() {
         given:
         def taskRepository = Mock(TaskLifecycleStore)

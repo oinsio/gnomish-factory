@@ -31,6 +31,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
     @TempDir
     Path tempDir
 
+    // Scenario: serve/factory-serve / Overlapping slot lifecycles
     def "N concurrent slot lifecycles against one clone never corrupt it, and every branch is pushed correctly"() {
         given: 'one shared clone with an origin remote, and a logging git wrapper to observe mutating calls'
         def bare = initBareRepo(tempDir, 'origin.git')

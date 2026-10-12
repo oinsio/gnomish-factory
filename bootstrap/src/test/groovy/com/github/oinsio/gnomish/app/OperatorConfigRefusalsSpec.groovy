@@ -32,6 +32,7 @@ class OperatorConfigRefusalsSpec extends Specification {
     }
 
     // NFR-S2: "Group-writable project file"
+    // Scenario: operator/operator-configuration / Group-writable project file
     def "NFR-S2: a configuration file #who may write stops startup naming the chmod"() {
         given:
         def file = harness.home.project(new ProjectName('widgets')).config()

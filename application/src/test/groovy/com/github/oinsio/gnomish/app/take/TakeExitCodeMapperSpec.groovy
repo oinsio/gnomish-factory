@@ -14,6 +14,11 @@ class TakeExitCodeMapperSpec extends Specification {
 
     private static final TaskState STATE = TaskState.atStageStart('implement')
 
+    // Scenario: tracker/tracker-take / Escalation park exit
+    // Scenario: tracker/tracker-take / Every refusal and skip exits 15
+    // Scenario: tracker/tracker-take / Infra park exit
+    // Scenario: tracker/tracker-take / Refusal exit
+    // Scenario: tracker/tracker-take / Released-on-outage exit
     def "exitCodeFor maps #result.class.simpleName to #expectedCode"() {
         expect:
         TakeExitCodeMapper.exitCodeFor(result) == expectedCode

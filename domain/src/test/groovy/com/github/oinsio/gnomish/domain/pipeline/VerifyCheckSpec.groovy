@@ -14,6 +14,7 @@ import spock.lang.Specification
 class VerifyCheckSpec extends Specification {
 
     // D5/FR2: exhaustive switching needs the variant set to be closed
+    // Scenario: pipeline/pipeline-config / External check carries provider and opaque params
     def "VerifyCheck is sealed over exactly the four check types"() {
         expect: 'the interface is sealed'
         VerifyCheck.isSealed()
@@ -109,6 +110,7 @@ class VerifyCheckSpec extends Specification {
     // FR7 (add-plugin-architecture): the external variant carries the provider
     // discriminator and opaque provider-owned params alongside the unchanged
     // engine-common fields — no fifth sealed variant is introduced for it
+    // Scenario: pipeline/pipeline-config / External check carries provider and opaque params
     def "External carries its provider and opaque params beside the engine-common fields"() {
         when: 'an external check is modeled with a provider and provider-owned params'
         VerifyCheck check = new VerifyCheck.External('quality-gate', 'http', [url: 'https://sonar/api', pollKey: 'status'],

@@ -41,6 +41,7 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
 
     // FR14: an outage met by the fresh-claim refresh opens the gate right there, with the
     //     outcome still handed back so the claim releases as before.
+    // Scenario: serve/factory-serve / Slot signals come from the base read, not the outcome
     def "an unavailable refresh opens the gate and is forwarded"() {
         given:
         def outage = new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('connection refused'))
@@ -134,6 +135,7 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
     //     FR14 of add-base-ref-resolution promised rather than the idle floor. The mirror of
     //     RemoteOutageGateSpec's "the first successful refresh after a close resets the interval to
     //     idle", which ends with a third probe where this one must stay at two.
+    // Scenario: serve/factory-serve / A clone-served success after a close keeps the grown interval
     def "a clone-served success after a close keeps the grown probe interval"() {
         given:
         def probes = new AtomicInteger()

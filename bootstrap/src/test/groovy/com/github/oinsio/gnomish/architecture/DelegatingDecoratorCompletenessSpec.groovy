@@ -55,6 +55,7 @@ class DelegatingDecoratorCompletenessSpec extends Specification {
     .importPackages('com.github.oinsio.gnomish')
 
     // FR9, M5: the rule over the whole production tree — every delegating implementer is complete.
+    // Scenario: build/quality-gates / An unforwarded default fails the build
     def "no production delegating implementer leaves an interface default unforwarded"() {
         given: 'every named production class ArchUnit can reflect on'
         // Named classes only, and the exclusion is a limitation worth stating: a generated body
@@ -75,6 +76,8 @@ class DelegatingDecoratorCompletenessSpec extends Specification {
 
     // M5: the rule's own teeth — a seeded delegator that forgets one default is reported, and the
     //     complete twin beside it is not, so a rule that reported nothing could not pass this.
+    // Scenario: build/quality-gates / An unforwarded default fails the build
+    // Scenario: build/quality-gates / The rule's own spec proves it can fail
     def "a seeded delegator that forgets a default fails the rule"() {
         expect:
         unforwardedDefaults([ForgetfulDelegator], EXEMPT).size() == 1
@@ -104,6 +107,7 @@ class DelegatingDecoratorCompletenessSpec extends Specification {
     // FR9: the allowlist is a list of signatures with reasons, not a pattern — and every entry
     //     still names a default that exists, so a rename or a changed parameter list cannot
     //     silently widen the exemption; it turns the build red instead.
+    // Scenario: build/quality-gates / An allowlisted self-delegating overload passes with its reason recorded
     def "every exemption names a default that exists and states its reason"() {
         expect:
         EXEMPT.every { entry ->

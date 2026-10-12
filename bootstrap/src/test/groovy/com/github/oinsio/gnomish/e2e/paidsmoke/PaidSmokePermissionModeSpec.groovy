@@ -74,6 +74,7 @@ class PaidSmokePermissionModeSpec extends Specification {
         rounds.each { report('recorded round', it) }
     }
 
+    // Scenario: executor/agent-executor / Executor round can edit files with no wrapper
     def "FR1, FR3: the executor round edits a file with the stock claude binary"() {
         given:
         def executor = rounds.find { it.argvMode() == 'acceptEdits' }

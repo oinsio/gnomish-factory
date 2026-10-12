@@ -257,6 +257,11 @@ as a bug (kubernetes#119905), not a documentation fix.
   *return* / *release*, `operator-guide-serve.md`, `adapter-author-guide.md`.
 - Sequencing: proposed while `add-base-ref-resolution` is active and touches
   the same two binding classes; applied only after that change archives.
+- Sequencing after `tighten-spec-contract`: this change's MODIFIED blocks of `tracker-take`
+  ("Base infrastructure failure releases the claim outside the abort accounting"),
+  `tracker-port` ("Contract suite covers lease maintenance"), `factory-serve` ("SIGTERM stops
+  cleanly within grace") and `lifecycle/claim-heartbeat` ("Zombie fencing") are layered on that
+  change's text, which must sync first.
 
 ## Open Questions
 

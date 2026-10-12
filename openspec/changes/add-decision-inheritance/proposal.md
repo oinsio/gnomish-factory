@@ -86,5 +86,7 @@ owner) and `add-epic-decomposition` (the plan, briefs, and hierarchy).
   for the claim-time fetch failure rule (ADR 0005): the epic-branch fetch
   classifies by cause exactly as the base refresh does — a dead remote
   releases the claim and opens the remote outage gate, a missing branch
-  parks the task. Requirement IDs FR1–FR5,
+  parks the task. Sequenced after `tighten-spec-contract`: its deltas carry the
+  `**Implements**:` lines and the 500-character requirement bodies that change
+  introduces (it has no MODIFIED block to layer). Requirement IDs FR1–FR5,
   NFR-R1, NFR-C1, NG1–NG4, scoped to `add-decision-inheritance`.

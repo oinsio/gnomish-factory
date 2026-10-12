@@ -19,6 +19,7 @@ class TakeBatchExitCodeSpec extends Specification {
     private static final TaskState STATE = TaskState.atStageStart('build')
 
     // FR3, D7: every ref delivering exits 0.
+    // Scenario: tracker/tracker-take / An all-delivered batch exits zero
     def "exits 0 when every outcome is exit-code 0"() {
         given:
         def outcomes = [
@@ -33,6 +34,7 @@ class TakeBatchExitCodeSpec extends Specification {
     // Delta spec scenario "Mixed batch summarized": WHEN take 42 43 44 delivers 42, skips 43 as
     // held by another instance, and parks 44 as an escalation, THEN the aggregate exit code comes
     // from the legitimate-outcome family — here the smallest of {0, 15, 10} is 10.
+    // Scenario: tracker/tracker-take / Mixed batch summarized
     def "mixed batch summarized: the aggregate code comes from the legitimate-outcome family"() {
         given:
         def outcomes = [
@@ -48,6 +50,7 @@ class TakeBatchExitCodeSpec extends Specification {
     // Delta spec scenario "Tool failure dominates": WHEN one ref fails with a pipeline load
     // failure and the others deliver, THEN the aggregate exit code comes from the below-10 family
     // — the tool failure's code (2, UsageException's family) beats every delivering ref's 0.
+    // Scenario: tracker/tracker-take / Tool failure dominates
     def "tool failure dominates: the aggregate code comes from the below-10 family"() {
         given:
         def outcomes = [

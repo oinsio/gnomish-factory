@@ -67,6 +67,25 @@ class GithubWorkflowRunVerdictWireMockSpec extends Specification {
         pollVerdict() instanceof PollStatus.Pass
     }
 
+    // NFR-O2 of add-sandbox-core: a green check carries the authoritative run's link onward
+    // Scenario: verification/github-external-check / A green check is auditable from the tracker
+    def "a run concluding success maps end-to-end to a Pass carrying that run's URL"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(200).withBody('''
+                {"workflow_runs":[
+                    {"id":7,"head_sha":"abc123","path":"ci.yml","run_attempt":1,"status":"completed",
+                     "conclusion":"success","html_url":"https://github.com/acme/widgets/actions/runs/7"}
+                ]}
+                ''')))
+
+        when:
+        def status = pollVerdict()
+
+        then:
+        status instanceof PollStatus.Pass
+        (status as PollStatus.Pass).runUrl() == 'https://github.com/acme/widgets/actions/runs/7'
+    }
+
     def "a run concluding failure maps end-to-end to Fail"() {
         given:
         wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(200).withBody('''
@@ -79,6 +98,7 @@ class GithubWorkflowRunVerdictWireMockSpec extends Specification {
         pollVerdict() instanceof PollStatus.Fail
     }
 
+    // Scenario: verification/github-external-check / CI has not picked up the push yet
     def "no matching run yet maps end-to-end to Running"() {
         given:
         wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(200).withBody('{"workflow_runs":[]}')))

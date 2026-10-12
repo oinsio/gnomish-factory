@@ -3,12 +3,16 @@ package com.github.oinsio.gnomish.architecture
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
+import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerAdapterFactory
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
+import com.tngtech.archunit.core.domain.JavaClass
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
 import java.nio.file.Files
+import spock.lang.PendingFeature
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -60,6 +64,7 @@ class SecretsPortBoundarySpec extends Specification {
     }
 
     // NFR-S1: adapters resolve secrets through the port; only the composition root binds the impl
+    // Scenario: operator/secrets-provider / Consumers do not know the backend
     def "no class but the composition root depends on the secrets adapter"() {
         given: 'the boundary rule, exempting the one class whose job is to bind the port'
         def rule = noClasses()
@@ -75,6 +80,27 @@ class SecretsPortBoundarySpec extends Specification {
         rule.check(productionClasses)
     }
 
+    // FR18: the composition root can select only the env/file adapter — no other implementation exists
+    // Scenario: operator/secrets-provider / The env/file adapter is the only adapter
+    def "FR18: the env/file adapter is the one production implementation of the port"() {
+        expect: 'test-fixtures ships on this classpath as a jar, and its in-memory fake is no production adapter'
+        productionClasses.findAll {
+            !it.interface && it.isAssignableTo(SecretsProvider) && !fromTestFixtures(it)
+        }*.name == [EnvFileSecretsProvider.name]
+    }
+
+    // FR18, NFR-S1: the process environment, where a credential variable lives, is read by the adapter alone
+    // Scenario: operator/secrets-provider / One seam to audit
+    @PendingFeature(reason = 'F107 (route-agent-credentials-through-secrets): the agent credential seam and the child-env allowlist read credentials from the process environment')
+    def "FR18, NFR-S1: no class outside the secrets adapter reads the process environment"() {
+        expect:
+        productionClasses.findAll { owner ->
+            !fromTestFixtures(owner) && owner.accessesFromSelf.any {
+                it.targetOwner.name == System.name && it.name == 'getenv'
+            }
+        }*.name.toSorted() == [EnvFileSecretsProvider.name]
+    }
+
     // NFR-S1: no credential name — and so no credential value — lives in any module's build metadata
     def "no credential name appears in the build metadata"() {
         given: 'every build script, lockfile, properties file and the version catalog'
@@ -85,6 +111,12 @@ class SecretsPortBoundarySpec extends Specification {
 
         expect: 'none of them names a credential'
         offenders.isEmpty()
+    }
+
+    private static boolean fromTestFixtures(JavaClass javaClass) {
+        javaClass.source.map {
+            it.uri.toString().contains('/test-fixtures/')
+        }.orElse(false)
     }
 
     private static List<File> buildMetadataFiles() {

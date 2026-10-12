@@ -34,6 +34,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         result.fromStage() == null
     }
 
+    // Scenario: cli/manual-run / Default invocation from the project directory
     def "FR3: with --dir absent, dir is still the registered clone's path"() {
         when:
         RunArguments result = parser.parse(args('--task=fix the flaky spec'), CLONE)
@@ -42,6 +43,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         result.dir() == CLONE.clonePath()
     }
 
+    // Scenario: cli/manual-run / Git mode is the default
     def "FR7/D8: --mode absent defaults to Mode.GIT"() {
         when:
         RunArguments result = parser.parse(args('--task=t'), CLONE)
@@ -86,6 +88,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         ex.message.contains('--mode')
     }
 
+    // Scenario: tracker/tracker-take / The run flag matrix is unchanged
     def "FR1: --task-file parses to TaskSource.FromFile"() {
         when:
         RunArguments result = parser.parse(args('--task-file=task.md'), CLONE)
@@ -134,6 +137,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
     }
 
     @Unroll
+    // Scenario: cli/manual-run / A task id outside the safe charset is a usage error
     def "UX1: --task-id=#taskId with an invalid character is a usage error"() {
         when:
         parser.parse(args('--task=t', "--task-id=${taskId}"), CLONE)
@@ -159,6 +163,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         result.fromStage() == null
     }
 
+    // Scenario: tracker/tracker-take / The run flag matrix is unchanged
     def "FR1: --from-stage present parses through as a plain string (definition-validity is task 7.3)"() {
         when:
         RunArguments result = parser.parse(args('--task=t', '--from-stage=build'), CLONE)
@@ -187,6 +192,8 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
 
     // FR1 of remove-interactive-console: no flag swaps a role for a human any more, so every
     // spelling of the retired --interactive is refused the way any unknown option is.
+    // Scenario: cli/manual-run / Mixed run for judge calibration
+    // Scenario: cli/manual-run / Full interactive override
     def "FR1 of remove-interactive-console: #flag is rejected as an unknown option"() {
         when:
         parser.parse(args('--task=t', flag), CLONE)
@@ -259,6 +266,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
     }
 
     @Unroll
+    // Scenario: cli/manual-run / Resume excludes the fresh-start flags
     def "FR8/UX1: --resume with #conflictingFlag is a usage error naming the conflict"() {
         when:
         parser.parse(args('--resume=my-task', conflictingFlag), CLONE)
@@ -277,6 +285,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
     }
 
     @Unroll
+    // Scenario: cli/manual-run / Git flag rejected in in-place mode
     def "FR7/UX1: #gitOnlyFlag with --mode=in-place is a usage error naming the conflict"() {
         when:
         parser.parse(args('--task=t', '--mode=in-place', gitOnlyFlag), CLONE)
@@ -293,6 +302,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         '--decision=x' | '--decision'
     }
 
+    // Scenario: cli/manual-run / Git flag rejected in in-place mode
     def "FR7/UX1: --resume with --mode=in-place is a usage error naming the conflict"() {
         when:
         parser.parse(args('--resume=my-task', '--mode=in-place'), CLONE)
@@ -379,6 +389,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         ] | ['--decision', 'once']
     }
 
+    // Scenario: cli/manual-run / Typo re-prompts
     def "FR9 of make-run-headless (Typo re-prompts): --decison with --resume is an unknown option naming the accepted flags"() {
         when:
         parser.parse(args('--resume=my-task', '--decison=x'), CLONE)
@@ -389,6 +400,7 @@ class RunArgumentsParserSpec extends Specification implements ApplicationArgumen
         ex.message.contains('--decision')
     }
 
+    // Scenario: cli/manual-run / Decision without a question is a usage error
     def "FR9/D2 of make-run-headless: --decision without --resume is reported as the missing --resume, not as a missing task"() {
         when:
         parser.parse(args('--decision=x'), CLONE)

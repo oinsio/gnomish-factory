@@ -68,6 +68,7 @@ class SupervisedLoopSpec extends Specification {
     // FR2 (daemon-supervision "An Exception in the work does not end the loop"): an Exception from
     //     the tick is a WARN with the component's code and key; the loop goes on to its wait and
     //     ticks again, and the clean tick announces the recovery.
+    // Scenario: serve/daemon-supervision / An Exception in the work does not end the loop
     def "an Exception thrown by the tick is logged and the loop waits and ticks again"() {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait()) { n ->
@@ -97,6 +98,7 @@ class SupervisedLoopSpec extends Specification {
     // FR2, FR3 (daemon-supervision "An Error in the work ends the worker and the restart policy
     //     takes over"): no tick-failed WARN; the worker dies with one ERROR death line, and the
     //     Unbounded policy respawns it after one backoff, where it ticks again.
+    // Scenario: serve/daemon-supervision / An Error in the work ends the worker and the restart policy takes over
     def "an Error in the work ends the worker and the restart policy takes over"() {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait()) { n ->
@@ -123,6 +125,7 @@ class SupervisedLoopSpec extends Specification {
     }
 
     // FR2 (daemon-supervision "A throwing wait does not end the loop").
+    // Scenario: serve/daemon-supervision / A throwing wait does not end the loop
     def "an Exception thrown by the wait is logged and the loop ticks again"() {
         given:
         def wait = rig.fixedWait { n ->
@@ -142,6 +145,8 @@ class SupervisedLoopSpec extends Specification {
 
     // FR2, NFR-O1 (daemon-supervision "Repeated failures of a loop log edges"): one WARN, DEBUG
     //     repeats, one INFO recovery carrying the streak's count.
+    // Scenario: serve/daemon-supervision / A persistently failing loop floods no console
+    // Scenario: serve/daemon-supervision / Recovery is announced
     def "repeated tick failures log one WARN, then DEBUG repeats, then one INFO recovery"() {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait()) { n ->
@@ -187,6 +192,8 @@ class SupervisedLoopSpec extends Specification {
     // FR2, NFR-O1 (daemon-supervision "The roll-up period outlives the loop's own interval"): a
     //     5 min loop failing for an hour rolls up every 30 min (six ticks), never once per tick —
     //     on the catalog's 5 min default every one of its twelve failures would have been a WARN.
+    // Scenario: serve/daemon-supervision / A persistently failing loop floods no console
+    // Scenario: serve/daemon-supervision / The roll-up period outlives the loop's own interval
     def "FR2: a five-minute loop failing for an hour logs the first WARN and at most one roll-up per six runs"() {
         given:
         def fiveMinutes = Duration.ofMinutes(5)
@@ -212,6 +219,7 @@ class SupervisedLoopSpec extends Specification {
     // FR2 (daemon-supervision "Suppression runs on the loop's clock"): the roll-up and the
     //     recovery's outage duration are read from the clock the loop was built with — only the
     //     virtual clock moves, by the loop's own 1 min waits, and both edges appear.
+    // Scenario: serve/daemon-supervision / Suppression runs on the loop's time source
     def "FR2: the roll-up and the recovery are timed on the loop's own virtual clock"() {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.clockedWait(INTERVAL)) { n ->

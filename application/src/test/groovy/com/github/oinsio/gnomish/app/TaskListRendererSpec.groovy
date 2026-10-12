@@ -70,6 +70,7 @@ class TaskListRendererSpec extends Specification {
     }
 
     // FR16 of harden-task-branch-contract: every branch is one row, whatever its shape.
+    // Scenario: cli/task-inspection / Mixed-shape repository lists one row per task
     def "FR16: a mixed-shape listing renders one row per branch, each naming its shape"() {
         given:
         def rows = [

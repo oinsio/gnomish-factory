@@ -79,6 +79,10 @@ class CannotExecuteSpec extends Specification {
 
     // FR10: the executor port throwing escalates as Escalated(CannotExecute) with NO round
     //     recorded, NO attempt burned, NO state persisted, and NO verify check ran.
+    // Scenario: executor/agent-executor / Missing result event is infrastructure
+    // Scenario: executor/agent-executor / Hung CLI cannot hang the engine
+    // Scenario: executor/agent-executor / Unreadable control file stops before spawn
+    // Scenario: pipeline/stage-engine / Executor infrastructure failure
     def "an executor throw escalates as CannotExecute without recording, burning or persisting"() {
         given: 'a stage whose executor throws instead of returning a result'
         def stageDef = stage('build', 5, [builtin('files_exist')])

@@ -64,6 +64,10 @@ class GitTransferBoundarySpec extends Specification {
     // FR9, M1, M3: a transfer literal outside the owner is a second argv builder — the shape
     //     the origin fetch builder and the literal harvest argv had before this change, whose flags then
     //     drifted apart (the 2026-09-13 reproductions).
+    // Scenario: build/module-layering / Two media build one transfer from one leaf
+    // Scenario: build/module-layering / The transfer policy is pure values in gittransfer
+    // Scenario: git/git-transfer / A new fetch site fails the build
+    // Scenario: git/git-task-persistence / No path pulls
     def "FR9, M1, M3: no production source outside the owner spells a transfer subcommand"() {
         given: 'every production source of the build, comments stripped'
         def sources = RepoSourceTree.productionSources()
@@ -86,6 +90,7 @@ class GitTransferBoundarySpec extends Specification {
     // FR9's reach clause: "every production source root" is a claim only the build's own module
     //     list can back — a new module falls inside the scan by construction, and a walk that
     //     missed one reds here rather than passing over the rest.
+    // Scenario: git/git-transfer / The scan proves its reach
     def "FR9, M1: the scanned source roots are exactly the build's module set"() {
         given: 'the modules settings.gradle declares, main build and included build alike'
         def declared = declaredModules()
@@ -128,6 +133,7 @@ class GitTransferBoundarySpec extends Specification {
     // The same judgement over a whole file, through the comment-stripped reader the gate uses:
     //     a seeded source outside the owner is reported by its path, and a file that only
     //     documents the subcommand is not.
+    // Scenario: git/git-transfer / A new fetch site fails the build
     def "a seeded production file is reported, a documenting one is not"() {
         given: 'a file that builds a fetch argv, and one whose javadoc names the subcommand'
         def violating = tempDir.resolve('Violating.java')

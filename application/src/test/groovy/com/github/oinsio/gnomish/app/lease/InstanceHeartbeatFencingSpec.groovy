@@ -76,6 +76,7 @@ class InstanceHeartbeatFencingSpec extends Specification {
 
     // FR13: past the threshold the holder no longer knows its claim is live, so it surfaces the
     //     freeze — before any reaper could reassign the task
+    // Scenario: lifecycle/task-branch-contract / Unconfirmed heartbeat self-fences
     def "beats failing past the lost-detection threshold fence the claim"() {
         given:
         tracker.heartbeat(A, _) >> {
@@ -106,6 +107,7 @@ class InstanceHeartbeatFencingSpec extends Specification {
 
     // FR13: the fence is not the end of the run — the thread keeps beating, and a beat that lands
     //     confirms the claim again so the freeze lifts
+    // Scenario: lifecycle/claim-heartbeat / Holder recovers within the grace window
     def "a beat that lands again confirms the claim"() {
         given:
         hb.register(A)

@@ -34,6 +34,9 @@ class BoardModelEligibilitySpec extends Specification {
     // (reports abortFacts/returned/finished as String/Boolean/Boolean); Spock resolves them
     // correctly at runtime from the table — this is an IDE-only false positive.
     @SuppressWarnings('GroovyAssignabilityCheck')
+    // Scenario: observability/tracker-board / Fresh task is WIP-held when the front is full
+    // Scenario: observability/tracker-board / The backoff deadline is the feed's own
+    // Scenario: observability/tracker-board / Each task counts under exactly one reason
     def "annotates the Ready row with the feed's own precedence reason"() {
         given: 'a single ready task built from the scenario\'s facts'
         def readyTasks = [

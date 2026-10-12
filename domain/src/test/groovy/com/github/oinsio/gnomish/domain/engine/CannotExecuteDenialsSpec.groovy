@@ -84,6 +84,7 @@ class CannotExecuteDenialsSpec extends Specification {
 
     // FR1: a round killed before its close hands its drained denials out on the ExecutorFailure,
     //     and the engine copies them onto the escalation report the reviewer reads.
+    // Scenario: pipeline/stage-engine / A round killed before its close reports its denials
     def "an executor failure carrying denials escalates CannotExecute with those denials"() {
         given: 'a round the guard blocked twice before the executor gave up'
         def blockedPost = denial('egress denied: POST paste.example/api')
@@ -100,6 +101,8 @@ class CannotExecuteDenialsSpec extends Specification {
 
     // FR1: carrying denials changes no classification — no attempt is burned and no round is
     //     recorded, exactly as for the same failure without them.
+    // Scenario: git/git-task-persistence / A parked task keeps the hung round's denial
+    // Scenario: pipeline/stage-engine / A round killed before its close reports its denials
     def "denials on the escalation burn no attempt and record no round"() {
         when: 'the executor throws a failure carrying a denial'
         def outcome = runWith(new ExecutorFailure(new RuntimeException('provider 503'), [denial('egress denied')]))
@@ -115,6 +118,7 @@ class CannotExecuteDenialsSpec extends Specification {
 
     // FR1, design D1: the wrapper adds attribution, not a failure mode — the engine renders the
     //     CAUSE, so the escalation text is byte-identical to that of the bare failure.
+    // Scenario: pipeline/stage-engine / Denials of a failed round gate nothing
     def "the escalation text is identical to the same failure thrown without denials"() {
         given: 'one and the same infrastructure failure, thrown bare and thrown wrapped'
         def original = new RuntimeException('provider 503')

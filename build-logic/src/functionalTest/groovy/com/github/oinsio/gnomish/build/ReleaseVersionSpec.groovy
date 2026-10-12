@@ -49,11 +49,13 @@ tasks.register('printVersions') {
         output.contains('version.app=9.9.9')
     }
 
+    // Scenario: release/release-distribution / Local build is marked as not a release
     def "FR3: a build without a release version is a development build"() {
         expect:
         versions().contains('version.app=0.0.0-dev')
     }
 
+    // Scenario: release/release-distribution / Plugin contract is untouched
     def "a sibling module keeping its own version is unchanged, with or without a release version"() {
         expect:
         versions(*arguments).contains('version.lib=4.5.6')

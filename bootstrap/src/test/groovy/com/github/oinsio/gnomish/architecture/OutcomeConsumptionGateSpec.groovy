@@ -48,6 +48,7 @@ class OutcomeConsumptionGateSpec extends Specification {
     ]
 
     // FR7: the attempts reset lives only where its hand-off to a lifecycle writer is visible
+    // Scenario: lifecycle/task-branch-contract / No in-memory attempt reset precedes its write
     def "FR7: resetAttempts is named in production only in the allowlisted files, the required ones all reached"() {
         given: 'every production source, comments stripped'
         def sources = RepoSourceTree.productionSources()

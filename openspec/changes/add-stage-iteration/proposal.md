@@ -46,6 +46,14 @@ construct.
 - `task-inspection`: `status` renders item progress (k of N, discovered
   count) for iterating stages.
 
+Sequenced after `tighten-spec-contract`: that change's text is the base of every requirement
+this change touches. Its three former `MODIFIED` headings of `git-task-persistence`,
+`stage-engine` and `task-inspection` named no existing requirement (finding F71 of
+`tighten-spec-contract`, settled there): each states new behavior under its own heading and is
+now an `ADDED` requirement; the existing requirements nearest to them (`State-file JSON contract
+v1`, `State directory with one writer per file`, `Attempt limit and exhaustion`, `External
+status reader`) are left unchanged.
+
 ## Goals
 
 - G1: each item executes in a fresh agent context that receives the plan,

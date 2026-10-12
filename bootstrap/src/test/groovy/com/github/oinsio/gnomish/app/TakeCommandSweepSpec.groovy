@@ -76,6 +76,7 @@ tracker:
                 { time -> TakeCommandSeams.defaults(time) }, pass)
     }
 
+    // Scenario: tracker/tracker-take / A tracker error during the sweep skips the verdict
     def "the startup sweep pass runs once, for this invocation's own directory and liveness verdict"() {
         given:
         def calls = []
@@ -98,6 +99,8 @@ tracker:
 
     // NFR-R1: a Docker outage aborts the pass; the take has not even claimed a task yet and must
     // not fail because project-wide hygiene could not run.
+    // Scenario: tracker/tracker-take / A failing sweep never fails the take
+    // Scenario: sandbox/sandbox-lifecycle / A skipped sweep blocks nothing and is retried on the next pass
     def "a failing sweep pass never fails the take"() {
         given:
         SandboxLifecyclePass pass = { Path dir, LivenessVerdict liveness ->

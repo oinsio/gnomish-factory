@@ -44,6 +44,7 @@ Execution failed for task ':bootstrap:test'.
     @TempDir
     Path work
 
+    // Scenario: build/quality-gates / Cross-file mutation rot is caught within a day
     def "UX4: with no open issue, one is created naming every failed task with its reason"() {
         when:
         def run = runScript(label: '', openIssue: '')
@@ -67,6 +68,7 @@ Execution failed for task ':bootstrap:test'.
         body.contains('the `pit-report` artifact')
     }
 
+    // Scenario: build/quality-gates / A repeat failure updates the open issue
     def "FR6: with an issue still open, the report is a comment on it and no issue is created"() {
         when:
         def run = runScript(label: 'nightly-mutation', openIssue: '17')
@@ -114,6 +116,7 @@ Execution failed for task ':bootstrap:test'.
     }
 
     // FR6: the workflow runs the failure report through this script, so the features above test what CI runs
+    // Scenario: build/quality-gates / Cross-file mutation rot is caught within a day
     def "FR6: the nightly workflow reports a failure through the script"() {
         given:
         def workflow = Files.readString(RepoSourceTree.repoRoot().resolve('.github/workflows/pitest-nightly.yml'))

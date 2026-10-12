@@ -60,6 +60,7 @@ class GithubForeignRepoCheckSpec extends Specification {
 
     // FR12 of harden-logging-observability: a rename redirect that resolved is a recovered
     //     transient — the verification succeeded — so it is INFO, off the operator console.
+    // Scenario: tracker/github-tracker / Renamed repo is tolerated
     def "foreign repo whose full_name resolves to the configured repo: proceeds with an INFO"() {
         given: 'the id names a pre-rename repo that GitHub now reports under the configured owner/repo'
         wireMock.stubFor(get(urlEqualTo('/repos/old-org/widgets'))
@@ -80,6 +81,8 @@ class GithubForeignRepoCheckSpec extends Specification {
         events.every { it.level != Level.WARN }
     }
 
+    // Scenario: tracker/tracker-take / Foreign canonical id is refused
+    // Scenario: tracker/github-tracker / Renamed repo is tolerated
     def "foreign repo whose full_name resolves elsewhere: refused, naming both repos"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/other-org/other-repo'))

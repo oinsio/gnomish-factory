@@ -17,12 +17,9 @@ import java.time.Instant
  * port contract suite (tracker-port spec, "Ready listing carries the
  * returned fact" / "Contract suite covers the returned fact"; task 1.2,
  * FR6, FR7, NFR-R1 of add-factory-serve). Extends {@link TrackerReapContract}
- * — the most-derived link in the lease chain — to reuse every seam it
- * accumulates ({@code arrange}, {@code seedTask}, {@code seedReply}, {@code
- * seedWorkingWithClaim}) rather than duplicating them; a concrete adapter
- * subclass instantiates THIS class (not {@link TrackerReapContract} or any
- * earlier link directly) to run the full suite, per M1 — the same suite
- * against every adapter. Kept in its own file because the combined property
+ * to reuse every seam it accumulates ({@code arrange}, {@code seedTask},
+ * {@code seedReply}, {@code seedWorkingWithClaim}) rather than duplicating
+ * them. Kept in its own file because the combined property
  * set of the whole chain would exceed the project's per-file line cap.
  *
  * <p>{@link #returnToReady} is the one new seam this file adds: the port
@@ -33,17 +30,8 @@ import java.time.Instant
  * InMemoryTrackerHarness#returnToReady}, which already exists for this exact
  * purpose. The seam MUST touch only the logical state, never the recorded
  * correspondence history (park report, claim/holder-transition markers), so
- * the returned-fact derivation an adapter builds on top of that history in
- * tasks 1.3/1.4 has something real to observe.
- *
- * <p>The "park-and-return" and "stale-claim removal" properties below are
- * EXPECTED to fail until tasks 1.3 (in-memory) and 1.4 (GitHub) replace the
- * {@code returned = false} placeholder every {@code ReadyTask} construction
- * site currently carries with a real derivation from adapter history — this
- * is intentional TDD red, not a suite defect. The "never-claimed" and
- * "listOpen size" properties pass immediately: the former's expected value is
- * {@code false}, which the placeholder already satisfies; the latter asserts
- * behavior {@code listOpen} already had before this task.
+ * the returned-fact derivation each adapter builds on top of that history has
+ * something real to observe.
  *
  * <p>Implements FR6, FR7, NFR-R1 of add-factory-serve.
  */
@@ -84,8 +72,7 @@ abstract class TrackerReturnedFactContract extends TrackerReapContract {
 
     // FR6, FR7: a task claimed, parked with an escalation report, then moved back
     //     to Ready by a human carries a park-report history — its returned fact is
-    //     true ("Park round-trip sets the fact"); EXPECTED RED until task 1.3/1.4
-    //     replace the returned = false placeholder with a real derivation
+    //     true ("Park round-trip sets the fact")
     def "listReady reports the returned fact as true after a park-and-return round-trip"() {
         given: 'a task claimed, then parked with an escalation report'
         def tracker = arrange()
@@ -105,7 +92,7 @@ abstract class TrackerReturnedFactContract extends TrackerReapContract {
 
     // FR6, FR7: a task whose stale claim was reaped and returned to Ready carries a
     //     holder-transition-marker history — its returned fact is true ("Reaped task
-    //     is returned"); EXPECTED RED until task 1.3/1.4 replace the placeholder
+    //     is returned")
     def "listReady reports the returned fact as true after a stale-claim removal"() {
         given: 'a Working task holding a live claim'
         def tracker = arrange()

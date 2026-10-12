@@ -26,6 +26,7 @@ class PipelineLoaderDesignatorSeamSpec extends Specification implements Pipeline
     }
 
     // FR3: "Selection rule without allowed bases is a load error"
+    // Scenario: pipeline/pipeline-config / Selection rule without allowed bases is a load error
     def "a base designator rule with nothing allowed fails the load, naming the rule and the allowed list"() {
         given: 'the adapter extracts kind base, and the project allows nothing'
         writePlanOnlyTree(withTracker(''))
@@ -41,6 +42,7 @@ class PipelineLoaderDesignatorSeamSpec extends Specification implements Pipeline
         errors[0].contains('add a task-branch.base.allowed entry or remove the rule')
     }
 
+    // Scenario: pipeline/pipeline-config / Selection rule without allowed bases is a load error
     def "a base section declaring no allowed base fails the same way as an absent section"() {
         given:
         writePlanOnlyTree(withTracker('task-branch:\n  base:\n    default: main\n'))

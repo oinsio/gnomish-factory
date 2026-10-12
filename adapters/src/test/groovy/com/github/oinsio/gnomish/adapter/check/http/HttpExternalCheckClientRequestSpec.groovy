@@ -31,6 +31,7 @@ class HttpExternalCheckClientRequestSpec extends Specification implements HttpCh
     }
 
     // FR11, NFR-S1: the secret is resolved by name and set on the request; the manifest never holds it.
+    // Scenario: verification/http-check-provider / Secret is injected at request time, never stored in the manifest
     def "the named credential is resolved and set as a header at request time"() {
         given:
         def params = [url: URL, auth: [credential: 'GNOMISH_SONAR_TOKEN']]
@@ -59,6 +60,7 @@ class HttpExternalCheckClientRequestSpec extends Specification implements HttpCh
 
     // NFR-S2: the allowlisted run variables reach the composed request, so a check addresses exactly
     // this run's result.
+    // Scenario: verification/factory-egress-allowlist / Whitelisted run variables address a branch-scoped result
     def "allowlisted run variables are interpolated into the url and headers"() {
         given:
         def runContext = { name ->

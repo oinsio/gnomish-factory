@@ -22,13 +22,31 @@ Uniqueness is per change: `add-tracker-port.FR1` and `add-pipeline.FR1` are diff
 
 | Artifact                       | Required reference                          |
 |--------------------------------|---------------------------------------------|
-| Spec requirement (markdown)    | `<!-- implements FR-X of <change-name> -->` |
+| Spec requirement (markdown)    | `**Implements**: FR-X of <change-name>`     |
+| Spec scenario                  | `// Scenario: <spec-id> / <title>` in the test that exercises it |
 | Domain spec invariant/use case | `# implements FR-X of <change-name>`        |
 | Gherkin scenario               | tags `@<change-name> @FR-X` above scenario  |
 | Port interface (doc comment)   | `Implements FR-X of <change-name>`          |
 | Code unit (doc comment)        | `Implements FR-X of <change-name>`          |
 | Test (description or comment)  | `FR-X: <what is verified>`                  |
 | Local ADR (`design.md`)        | "Context: driven by FR-X from proposal"     |
+
+**Spec requirements.** Each requirement carries exactly one `**Implements**:` line, after the
+requirement text and before its first scenario. A requirement driven by several changes joins
+them with `; ` (`**Implements**: FR1, FR2 of add-x; FR3 of fix-y`). The old HTML-comment
+form (`implements … ` inside `<!-- -->`) is not accepted in `openspec/specs/` or in an
+unarchived change; archived changes keep it, since they are immutable. The YAML-like forms (domain spec
+invariants and use cases) keep `# implements`.
+
+**Spec scenarios.** `<spec-id>` is the capability path (`verification/verification-hardening`)
+and `<title>` is the scenario heading, copied verbatim. The marker sits on the line above the
+feature that exercises the scenario, or inside it when one feature covers several. The marker
+rules and exemptions are in `testing.md` ("Every scenario has a test"); the requirement shape
+is in `delta-specs.md`.
+
+The gate `./gradlew checkSpecContract` (or `scripts/check-spec-contract.sh`) checks both: the
+`**Implements**:` line of every requirement, and a marker for every scenario in both
+directions.
 
 ## Verification rule
 

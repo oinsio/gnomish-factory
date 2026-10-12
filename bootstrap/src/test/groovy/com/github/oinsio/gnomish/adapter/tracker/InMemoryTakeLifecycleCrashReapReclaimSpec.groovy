@@ -16,6 +16,10 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
  * allowed to name a concrete adapter class alongside the {@code app}-package base spec's port-only
  * seams — the same placement {@link InMemoryTakeLifecycleEscalateResumeSpec} documents.
  */
+// The inherited feature reclaims a branch whose tip carries the reaped tenure's older epoch and
+// delivers it: the older stamp is never a ground for quarantine (the branch half of the scenario;
+// GithubTrackerFactsSpec pins the tracker half).
+// Scenario: tracker/tracker-port / An older token never marks an artifact stale
 class InMemoryTakeLifecycleCrashReapReclaimSpec extends TakeLifecycleCrashReapReclaimSpecBase {
 
     private InMemoryTrackerHarness harness

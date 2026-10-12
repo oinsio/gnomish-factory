@@ -28,6 +28,7 @@ class PipelineLoaderBaseSectionSpec extends Specification implements PipelineLoa
     }
 
     // FR1: "Settled shape loads" — the compiled list, the default and the roles are all exposed
+    // Scenario: pipeline/pipeline-config / Settled shape loads
     def "the settled shape loads and exposes the compiled allowed bases, the roles and the default"() {
         given:
         writePlanOnlyTree(tree('''\
@@ -59,6 +60,7 @@ task-branch:
     }
 
     // FR1: "No task-branch section" — absent is valid, and allows nothing with no default
+    // Scenario: pipeline/pipeline-config / No task-branch section
     def "a tree with no task-branch section loads exactly as before, allowing nothing and defaulting to nothing"() {
         given:
         writePlanOnlyTree('schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\n')
@@ -107,6 +109,7 @@ task-branch:
     }
 
     // FR1: "Unknown discriminator is a load error"
+    // Scenario: pipeline/pipeline-config / Unknown discriminator is a load error
     def "an unknown type is a located error naming the discriminator"() {
         given:
         writePlanOnlyTree(tree('task-branch:\n  base:\n    type: script\n'))
@@ -121,6 +124,7 @@ task-branch:
     }
 
     // FR1: "Default outside the allowed bases is a load error"
+    // Scenario: pipeline/pipeline-config / Default outside the allowed bases is a load error
     def "a default matching no allowed pattern is a located error naming what it failed"() {
         given:
         writePlanOnlyTree(tree('''\
@@ -195,6 +199,7 @@ task-branch:
     }
 
     // FR1: patterns compile at load, so a malformed one is a located error, not a claim-time surprise
+    // Scenario: pipeline/pipeline-config / An invalid allowed pattern is a load error
     def "an invalid allowed pattern is a located error naming the violated rule"() {
         given:
         writePlanOnlyTree(tree('''\
@@ -248,6 +253,8 @@ task-branch:
     }
 
     // FR1: an unknown role
+    // Scenario: pipeline/pipeline-config / An unknown role is a load error
+    // Scenario: git/base-ref-resolution / A role outside development and release is refused
     def "an unknown role is a located error naming the accepted roles"() {
         given:
         writePlanOnlyTree(tree('''\
@@ -290,6 +297,7 @@ task-branch:
     }
 
     // FR1: "Unknown keys are not ignored"
+    // Scenario: pipeline/pipeline-config / Unknown keys are not ignored
     def "an unknown key in the section is a located error"() {
         given:
         writePlanOnlyTree(tree('task-branch:\n  base:\n    defualt: main\n'))
@@ -317,6 +325,7 @@ task-branch:
     }
 
     // FR1, D16: "The earlier draft shape is not an alias" — the root-level key is gone
+    // Scenario: pipeline/pipeline-config / The earlier draft shape is not an alias
     def "a root-level base section is an unknown key, not the section under its old name"() {
         given:
         writePlanOnlyTree(tree('base:\n  default: main\n'))
@@ -332,6 +341,7 @@ task-branch:
     }
 
     // FR1, D16: "The earlier draft shape is not an alias" — `menu` is no alias for `allowed`
+    // Scenario: pipeline/pipeline-config / The earlier draft shape is not an alias
     def "a menu key inside the section is an unknown key, not an alias for allowed"() {
         given:
         writePlanOnlyTree(tree('task-branch:\n  base:\n    menu:\n      - pattern: main\n'))
@@ -347,6 +357,7 @@ task-branch:
     }
 
     // UX1: one pass reports every problem in the section together
+    // Scenario: pipeline/pipeline-config / An invalid allowed pattern is a load error
     def "several problems in the section are reported in one pass"() {
         given:
         writePlanOnlyTree(tree('''\

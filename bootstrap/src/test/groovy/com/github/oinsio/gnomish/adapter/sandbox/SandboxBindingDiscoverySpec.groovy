@@ -29,6 +29,7 @@ class SandboxBindingDiscoverySpec extends Specification {
 
     // FR3: the shipped service entries are what makes host and container available — asserted on
     // the real classpath, so the entry files themselves are guarded
+    // Scenario: plugin/adapter-binding-registry / A backend module contributes a binding without core logic edits
     def "the production service entries contribute the host and container bindings"() {
         when: 'the production discovery pass runs over the running build classpath'
         def registry = SandboxBindingDiscovery.discover()

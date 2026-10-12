@@ -38,6 +38,21 @@ class StallingGitOwnerSpec extends Specification {
         GIT_TESTS + 'GitProcessRunnerShutdownReportSpec.groovy',
     ]
 
+    /**
+     * The sources whose literal {@code sleep} is a box workload, not a stand-in: argv a spec hands
+     * a real container through {@code exec}, so no host process stalls and no host preset could
+     * serve it — a link into the stand-in library does not resolve inside the box (the container
+     * exemption category of {@code testing.md}, "Stand-ins are prepared, not generated"). Each row
+     * must still spell its sleep, so a workload rewritten without one drops its exemption here.
+     *
+     * <p>{@code ContainerBoxBoundarySpec} forks short-lived {@code sleep 1} children past the box's
+     * PID limit (FR10 of add-sandbox-core, "Runaway build is contained"): the children must outlive
+     * the fork loop to exhaust the limit, and must die soon after so the box answers again.
+     */
+    private static final List<String> IN_BOX_WORKLOADS = [
+        'adapters/git/src/test/groovy/com/github/oinsio/gnomish/sandbox/environment/ContainerBoxBoundarySpec.groovy',
+    ]
+
     // FR2, UX2: a stalling script outside the owner is the tenth copy — the shape that sat out a
     //     minute-long stall on the key resolution while every spec stayed green.
     def "FR2, UX2: no Groovy source writes a script that sleeps; the owner spells the one sleep"() {
@@ -49,10 +64,10 @@ class StallingGitOwnerSpec extends Specification {
             RepoSourceTree.relative(it)
         }
 
-        expect: 'no source writes a script that sleeps'
+        expect: 'no source writes a script that sleeps, save the in-box workloads, each still reached'
         // The three hand-written exemptions design D4 kept — a tracing wrapper, a leaky stall and a
         // closed-stdout stall — became committed presets with design D23.
-        sleeping.sort() == []
+        sleeping.sort() == IN_BOX_WORKLOADS.sort()
 
         and: 'the owner is where the sleep is spelled'
         StallingScriptRule.SHELL_SLEEP.matcher(RepoSourceTree.repoRoot().resolve(OWNER).toFile().text).find()

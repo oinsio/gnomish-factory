@@ -69,6 +69,8 @@ tracker:
         tracker.heartbeatTtlMultiplier() == 4
     }
 
+    // Scenario: lifecycle/claim-heartbeat / The reaper ticks on the beat interval from the factory's clone
+    // Scenario: lifecycle/claim-heartbeat / Gnome edits to config are inert
     def "FR3/NFR-S1: a gnome's worktree config edit does not change the running instance's beat/TTL"() {
         given: 'the factory clone pins 10m/×4 — the protocol constants for the run'
         writeTree(factoryClone, '10m', 4)

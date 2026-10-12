@@ -83,5 +83,7 @@ converges to a complete, well-briefed child set no matter where a kill lands.
 - `.gnomish/` config surface: `decompose:` in `stage.yaml`; loader
   validation.
 - Depends on: `add-tracker-task-hierarchy` (createSubtask, hierarchy facts,
-  blocked-aware claim). Requirement IDs FR1–FR6, NFR-R1, NFR-O1, NG1–NG4,
+  blocked-aware claim). Sequenced after `tighten-spec-contract`: its deltas carry
+  the `**Implements**:` lines and the 500-character requirement bodies that change
+  introduces (it has no MODIFIED block to layer). Requirement IDs FR1–FR6, NFR-R1, NFR-O1, NG1–NG4,
   scoped to `add-epic-decomposition`.

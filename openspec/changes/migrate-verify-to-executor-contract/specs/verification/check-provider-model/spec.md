@@ -42,7 +42,7 @@ law, the same mechanism stages use.
 ### Requirement: Check identity for findings correlation is executor plus checkId
 Findings SHALL be correlated by executor name plus `checkId`, so two checks on the same
 executor remain distinguishable in the attempt record and the tracker.
-<!-- implements FR1 of migrate-verify-to-executor-contract -->
+**Implements**: FR1 of migrate-verify-to-executor-contract
 
 #### Scenario: Same executor, two checks
 - **WHEN** two `http` checks with different `checkId`s run in one stage

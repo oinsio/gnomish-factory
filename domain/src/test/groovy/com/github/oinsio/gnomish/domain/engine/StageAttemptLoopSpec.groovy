@@ -77,6 +77,9 @@ class StageAttemptLoopSpec extends Specification {
 
     // FR4, FR13: a check that CannotVerify escalates without burning an attempt, and the
     //     round is still recorded with its check results and usages (recorded, not counted)
+    // Scenario: pipeline/stage-engine / Infrastructure-classed timeout burns no attempt
+    // Scenario: pipeline/stage-engine / Unburned round is still recorded
+    // Scenario: verification/verification-hardening / Malformed judge verdict burns no attempt
     def "escalates CannotVerify recording the round without counting it"() {
         given: 'a stage whose single builtin check cannot be verified, run by a Completed executor'
         def stageDef = stage('build', 3, [builtin('files_exist')])
@@ -117,6 +120,7 @@ class StageAttemptLoopSpec extends Specification {
 
     // FR13: the recorded round carries the executor's ExecutorUsage and the verification's
     //     JudgeUsage — the metrics of the round land in attempts()[0]
+    // Scenario: pipeline/stage-engine / Round metrics carry wall time, tool aggregates and per-model tokens
     def "records the executor and judge usage of the round"() {
         given: 'a stage with a judge check that cannot verify, and a Completed executor reporting usage'
         def stageDef = stage('build', 3, [judge(1)])
@@ -159,6 +163,7 @@ class StageAttemptLoopSpec extends Specification {
     // FR15: the recorded round carries startedAt equal to the Clock reading taken WHEN the round
     //     BEGAN — even when the clock advances DURING execution/verification, the timestamp is the
     //     begin instant, not a later reading. Asserted for every round result the engine records.
+    // Scenario: pipeline/stage-engine / Round start is timestamped
     def "records startedAt as the begin-of-round Clock reading, unaffected by mid-round advance"() {
         given: "the clock is at a known begin instant and advances mid-round during verification"
         clock.advance(Duration.between(clock.instant(), begin))
@@ -193,6 +198,7 @@ class StageAttemptLoopSpec extends Specification {
 
     // FR15: a DecisionNeeded round — no verify chain runs — still carries startedAt equal to the
     //     Clock reading taken when the round began.
+    // Scenario: pipeline/stage-engine / Round start is timestamped
     def "records startedAt on a DecisionNeeded round taken when the round began"() {
         given: 'the clock is at a known begin instant and the executor asks a human'
         def begin = Instant.parse('2026-07-16T09:30:00Z')
@@ -224,6 +230,7 @@ class StageAttemptLoopSpec extends Specification {
 
     // FR15: across multiple rounds of one stage, each round's startedAt is the Clock reading taken
     //     when THAT round began — the clock advances between rounds and each record captures its own.
+    // Scenario: pipeline/stage-engine / Round start is timestamped
     def "records each round's own begin instant as the clock advances between rounds"() {
         given: 'a stage that fails its check twice then passes on the third round'
         clock.advance(Duration.between(clock.instant(), Instant.parse('2026-07-16T10:00:00Z')))

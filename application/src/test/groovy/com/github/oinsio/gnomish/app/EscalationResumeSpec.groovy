@@ -60,6 +60,8 @@ class EscalationResumeSpec extends Specification {
     private EscalationResume resume = new EscalationResume(
     new DialogConsole(io), Clock.fixed(NOW, ZoneOffset.UTC), RETURN_PATH)
 
+    // Scenario: cli/manual-run / Decision-carrying resume
+    // Scenario: cli/manual-run / Empty decision retries after an environment fix
     def "FR3, FR4: #report.class.simpleName with decision #decision resumes with attempts reset and the decision #appended"() {
         when:
         def resumption = resume.decide(CONTEXT, new TaskOutcome.Escalated(BURNED, report), decision)
@@ -147,6 +149,7 @@ class EscalationResumeSpec extends Specification {
     // FR7, FR8 of make-checkpoint-gate-durable (design D4): what decide resolved lands as exactly one
     //     lifecycle commit — the decision commit with a decision, the resumed commit without one —
     //     carrying the reset state, never a reset held in memory alone
+    // Scenario: cli/manual-run / Resume of an escalated task
     def "FR7: land writes the #write commit for decision #decision, once"() {
         given:
         def repository = Mock(TaskRepository)

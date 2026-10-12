@@ -46,6 +46,8 @@ class StandingReaperSupervisionSpec extends Specification {
 
     // FR4, D5 of fix-reaper-idle-liveness; FR6: consecutive deaths double the backoff from the
     //     reaper's interval, and the 10-minute cap stops further growth.
+    // Scenario: lifecycle/claim-heartbeat / A dead reaper's restart backoff is capped and reset
+    // Scenario: lifecycle/claim-heartbeat / The reaper is restarted without limit
     def "consecutive deaths double the backoff from the interval up to the 10-minute cap"() {
         given:
         rig.build(INTERVAL, { n ->
@@ -79,6 +81,7 @@ class StandingReaperSupervisionSpec extends Specification {
 
     // FR4, D5 of fix-reaper-idle-liveness; FR6: a clean tick after a respawn resets the backoff,
     //     so a later death starts again from the interval.
+    // Scenario: lifecycle/claim-heartbeat / A dead reaper's restart backoff is capped and reset
     def "a clean tick after a respawn resets the backoff to the interval"() {
         given:
         rig.build(INTERVAL, { n ->
@@ -100,6 +103,7 @@ class StandingReaperSupervisionSpec extends Specification {
 
     // FR4, NFR-O1, UX2 of fix-reaper-idle-liveness; FR6: each respawn logs the loop's ERROR with
     //     component=reaper and a rising count, and restartCount() reports the same lifetime count.
+    // Scenario: lifecycle/claim-heartbeat / Reaper faults are logged by severity
     def "each respawn logs an ERROR with a rising restart count that restartCount() reports"() {
         given:
         rig.build(INTERVAL, { n ->

@@ -168,6 +168,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
         } as SlotRunner
     }
 
+    // Scenario: observability/serve-observability / Write economy unchanged
     def "steady-state tracker interactions are identical with the task 5.1 observability collaborators attached or absent (NFR-P1, M4)"() {
         given: 'the bare pre-task-5.1 shape: raw tracker, no-op dirty notifier, no ledger write point'
         def bareTracker = new RecordingTracker()

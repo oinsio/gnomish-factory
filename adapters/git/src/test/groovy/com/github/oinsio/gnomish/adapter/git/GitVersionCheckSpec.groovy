@@ -34,6 +34,7 @@ class GitVersionCheckSpec extends Specification {
         logs.detach()
     }
 
+    // Scenario: git/git-transfer / Passing check is logged once
     def "FR10, NFR-O1: a git at or above the floor passes with one INFO line naming the typed version: #line"() {
         given: 'a git that reports the line'
         def check = new GitVersionCheck(new GitProcessRunner(StandIn.git(preset).toString()))
@@ -53,6 +54,7 @@ class GitVersionCheckSpec extends Specification {
         'git version 2.55.0 (Apple Git-200)' | 'version-2-55-apple' || new GitVersion(2, 55, 0)
     }
 
+    // Scenario: git/git-transfer / Old git is refused before any work
     def "FR10, UX2, NFR-O1: a git below the floor is refused, naming floor, installed and reason"() {
         given: 'a git one release below the floor'
         def check = new GitVersionCheck(new GitProcessRunner(StandIn.recording(tempDir, 'version-2-44').toString()))
@@ -114,6 +116,7 @@ class GitVersionCheckSpec extends Specification {
         logs.list[0].formattedMessage.contains(brokenInstall())
     }
 
+    // Scenario: git/git-transfer / Passing check is logged once
     def "NFR-R2: the check runs git once per process — a second call answers from the first"() {
         given: 'a git that records every invocation'
         def git = StandIn.recording(tempDir, 'version-record-2-55')

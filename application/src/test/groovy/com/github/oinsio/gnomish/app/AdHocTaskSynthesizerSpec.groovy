@@ -50,6 +50,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
         new RunArguments(Path.of('').toAbsolutePath(), source, taskId, fromStage, RunArguments.Mode.GIT, null, null, false, null)
     }
 
+    // Scenario: cli/manual-run / An explicit task id replaces the generated one
     def "FR2: --task-id present is used verbatim"() {
         given:
         def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
@@ -62,6 +63,8 @@ class AdHocTaskSynthesizerSpec extends Specification {
         result.context().taskId() == 'my-task-1'
     }
 
+    // Scenario: cli/manual-run / Default invocation from the project directory
+    // Scenario: cli/manual-run / An explicit task id replaces the generated one
     def "FR2: --task-id absent generates manual-<yyyyMMdd-HHmmss>-<2 chars> using the injected Clock and random source"() {
         given:
         Clock fixedClock = Clock.fixed(Instant.parse('2026-07-16T14:35:02Z'), ZoneOffset.UTC)
@@ -90,6 +93,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
     }
 
     @Unroll
+    // Scenario: cli/manual-run / The description's first line becomes the title
     def "FR2: title/body split — #description"() {
         given:
         def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
@@ -129,6 +133,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
         result.context().body().forLog() == 'Steps here.'
     }
 
+    // Scenario: cli/manual-run / The description's first line becomes the title
     def "FR2: initial decisions are empty"() {
         given:
         def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
@@ -141,6 +146,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
         result.context().decisions() == []
     }
 
+    // Scenario: cli/manual-run / A run starts at the named stage
     def "FR2/D4: --from-stage naming a real stage resolves the initial state to that stage"() {
         given:
         def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
@@ -153,6 +159,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
         result.initialState() == TaskState.atStageStart('build')
     }
 
+    // Scenario: cli/manual-run / Default invocation from the project directory
     def "FR2/D4: --from-stage absent resolves to the first stage"() {
         given:
         def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())
@@ -165,6 +172,7 @@ class AdHocTaskSynthesizerSpec extends Specification {
         result.initialState() == TaskState.atStageStart('plan')
     }
 
+    // Scenario: cli/manual-run / Unknown stage is a usage error
     def "D4: --from-stage naming an unknown stage throws UsageException listing the known stage names"() {
         given:
         def synthesizer = new AdHocTaskSynthesizer(new VirtualClock(), new Random())

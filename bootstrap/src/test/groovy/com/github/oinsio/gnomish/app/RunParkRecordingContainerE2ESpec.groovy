@@ -47,6 +47,8 @@ class RunParkRecordingContainerE2ESpec extends ContainerParkSpecBase {
         assert new RunExitCodeMapper().getExitCode(stop) == exitCode
     }
 
+    // Scenario: git/git-task-persistence / Kept environment is stopped, not running
+    // Scenario: cli/manual-run / Park is on the branch before the process exits
     def "FR1, FR10: a fresh container run that escalates records the park, keeps the box stopped, exits 10"() {
         given:
         taskId = "PARK-CE-${System.nanoTime() % 100000}"

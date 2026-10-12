@@ -101,6 +101,7 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
     // take/serve exit carriers are the same shape: the command reported its own outcome and throws
     // only to hand Spring Boot the code (D16 of add-tracker-port) — a completed take is not an
     // unhandled failure.
+    // Scenario: cli/cli-arguments / A completed take is not an unhandled failure
     def "stays silent for a failure the callee already reported"() {
         given:
         def logs = LogCaptureSupport.attach(RunExceptionReportingSpec)
@@ -188,6 +189,7 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
 
     // UX3: anything unclassified is the generic fallback — named as a run failure and carrying the
     // cause's message, so an unexpected fault is still legible without a stack trace.
+    // Scenario: cli/cli-arguments / An unclassified fault keeps its trace
     def "reports an unclassified failure as a run failure, carrying its message"() {
         given: 'the reporter logs through the caller-supplied logger, which here is this spec class'
         def logs = LogCaptureSupport.attach(RunExceptionReportingSpec)

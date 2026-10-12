@@ -28,6 +28,7 @@ class StatePositionWireSpec extends Specification {
     }
 
     // FR10: no hand-listed subset — every permitted subclass has a sample and comes back equal
+    // Scenario: git/git-task-persistence / Every position and stop variant round-trips
     def "the #variant.simpleName position survives the state.json write and read"() {
         given:
         def position = SAMPLES[variant]

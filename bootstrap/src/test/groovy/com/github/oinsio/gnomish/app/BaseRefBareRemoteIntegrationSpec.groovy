@@ -132,6 +132,7 @@ advancement: auto
 
     // M1: on a zero-config project, a newly created task branch's recorded base SHA equals the
     // remote default-branch tip observed at claim, and the rule names the zero-config tier.
+    // Scenario: git/base-ref-resolution / Zero configuration resolves to the remote default branch
     def "zero-config claim pins the task branch base to the remote default-branch tip"() {
         given: 'no task-branch section at all, and a task naming no base designator'
         writeConfig()
@@ -154,6 +155,7 @@ advancement: auto
 
     // M1: staleness does not grow with serve uptime — a second, later claim against an advanced
     // remote pins the NEW tip, not the tip observed by the first claim's process.
+    // Scenario: git/git-task-persistence / Fresh base at claim
     def "a later claim against an advanced remote pins the new tip, not a stale one"() {
         given: 'a first claim taken against the remote as it stood originally'
         writeConfig()
@@ -189,6 +191,8 @@ advancement: auto
     // U2: a triager-selected release base is fetched, validated against the allowed bases, and
     // pinned — the happy path only; the disallowed-selection park/report case is out of scope here
     // (covered at unit level by FreshClaimBaseBindingSpec's DESIGNATOR_NOT_ALLOWED case).
+    // Scenario: git/base-ref-resolution / An allowed selection is accepted
+    // Scenario: git/base-ref-resolution / Automation-set label drives the choice
     def "a designator-selected release base is fetched, validated, and pinned"() {
         given: 'an allowed-bases section naming a release pattern'
         writeConfig('''\

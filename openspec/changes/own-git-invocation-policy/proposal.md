@@ -202,3 +202,7 @@ statement of how it invokes git.
   `docs/glossary.md`.
 - Sequencing: this change lands before `add-subprocess-access-log`, which touches the same
   `GitProcessRunner.execute`.
+- Sequenced after `tighten-spec-contract`: the MODIFIED blocks of `git-task-persistence` and
+  `module-layering` are layered on that change's text (its rewritten module enumerations among
+  them), which must sync first. `add-subprocess-access-log` no longer carries a `module-layering`
+  delta, so the two changes no longer overlap there.

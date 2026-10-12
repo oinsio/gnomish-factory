@@ -19,6 +19,8 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
 
     // FR4, NFR-O1: a builtin adapter throwing is caught into a CannotVerify whose details
     //     carry the exception's stack trace, and — being non-Pass — stops the chain
+    // Scenario: pipeline/stage-engine / A throwing adapter keeps its stack trace
+    // Scenario: pipeline/stage-engine / Stack trace reaches the report
     def "catches a throwing builtin adapter into a CannotVerify carrying its stack trace"() {
         given: 'a builtin runner set to throw, then a command that would pass if reached'
         def builtinRunner = new ScriptedBuiltinCheckRunner()
@@ -128,6 +130,7 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
     // NFR-O1: the caught adapter throw is logged at ERROR at the point of capture, naming the
     //     check — the delta-spec "Stack trace reaches the report" scenario's "an ERROR line is
     //     logged" clause, asserted via a capture on the VerifyOrchestrator logger.
+    // Scenario: pipeline/stage-engine / Stack trace reaches the report
     def "logs the caught adapter throw at ERROR at the point of capture"() {
         given: 'a capture on the VerifyOrchestrator logger'
         def logs = LogCaptureSupport.attach(VerifyOrchestrator)

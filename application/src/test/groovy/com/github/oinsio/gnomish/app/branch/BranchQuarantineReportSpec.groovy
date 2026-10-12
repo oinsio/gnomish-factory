@@ -19,6 +19,10 @@ class BranchQuarantineReportSpec extends Specification {
 
     // NFR-O2: the report names the shape and its diagnosis — for an unsupported envelope, the
     // offending file with the observed and the supported version
+    // Scenario: tracker/tracker-take / The quarantine report stands without the logs
+    // Scenario: tracker/tracker-take / Unsupported version is a shape, not a crash
+    // Scenario: lifecycle/task-branch-contract / Unsupported envelope version is its own shape, not a parse failure
+    // Scenario: lifecycle/task-branch-contract / A quarantine report stands without the logs
     def "names the offending file with the observed and supported versions"() {
         when:
         def report = BranchQuarantineReport.of('PROJ-1', new BranchShape.UnsupportedVersion('state.json', 9, 1), FACTS)
@@ -32,6 +36,8 @@ class BranchQuarantineReportSpec extends Specification {
 
     // NFR-O2: the attempts consumed are stated per category — "born unreadable" and "went
     // unreadable after four automatic attempts" are different diagnoses
+    // Scenario: tracker/tracker-take / The quarantine report stands without the logs
+    // Scenario: lifecycle/task-branch-contract / A quarantine report stands without the logs
     def "states the attempts consumed, split by category, and that the quarantine spent none"() {
         when:
         def report = BranchQuarantineReport.of('PROJ-1', new BranchShape.Corrupt('task.json: bad json'), FACTS)

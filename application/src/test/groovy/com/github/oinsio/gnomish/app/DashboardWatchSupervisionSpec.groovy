@@ -65,6 +65,8 @@ class DashboardWatchSupervisionSpec extends Specification {
     }
 
     // FR9 (dashboard-page "Tracker outage is not a death").
+    // Scenario: observability/dashboard-page / Tracker outage is not a death
+    // Scenario: observability/dashboard-page / Outage during the wall display
     def "FR9: an hour of tracker outage keeps the loop rendering on the cached board and never disables it"() {
         given: 'a tracker that answers once, then is unreachable'
         def tracker = new RecordingReadOnlyTracker([], []) {
@@ -119,6 +121,7 @@ class DashboardWatchSupervisionSpec extends Specification {
     }
 
     // FR9 (dashboard-page "A watch render loop that keeps dying is disabled"), D7: Bounded 10 s / 10 min / 5 in 10 min.
+    // Scenario: observability/dashboard-page / Standalone renderer gives up
     def "FR9: a watch thread that keeps dying is disabled on the sixth death, and awaitEnd says it gave up"() {
         given: 'every render-cadence wait kills the thread; every other sleep is a restart backoff'
         def calls = new AtomicInteger()

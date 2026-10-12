@@ -70,6 +70,7 @@ abstract class TakeParkReconcileLifecycleSpecBase extends Specification implemen
         writeTwoInstanceProjectFixture()
     }
 
+    // Scenario: tracker/tracker-take / Deferred park is delivered, not re-run
     def "an orphaned park (Escalated branch + pending marker) reconciles as a deferred park, zero engine rounds"() {
         given: 'instance A takes the ref; the single attempt fails quality and the run escalates and parks'
         def exitA = runExitCode(newCommand('instance-a'), takeArgs('take', 'PROJ-1', "--dir=$projectDir"))

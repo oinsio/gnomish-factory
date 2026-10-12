@@ -99,6 +99,8 @@ class AdvancementSpec extends Specification {
 
     // FR8/FR14: a two-stage auto pipeline runs each stage once and resets the attempt
     //      history between stages — the second stage's executor request starts at attempt 0
+    // Scenario: pipeline/stage-engine / History resets on advancement
+    // Scenario: pipeline/stage-engine / Cumulative totals survive advancement
     def "an auto pipeline advances stage to stage resetting history between stages"() {
         given: 'two auto stages, each with its own passing builtin check so both are observed'
         def stage1 = stage('build', AdvancementMode.AUTO, [builtin('build_check')])
@@ -147,6 +149,8 @@ class AdvancementSpec extends Specification {
     // FR1, FR2 of make-checkpoint-gate-durable: a manual first stage that passes returns Paused
     //      at its gate; a run from the gate pauses again, and only the approved state runs the
     //      next stage
+    // Scenario: pipeline/stage-engine / Manual checkpoint
+    // Scenario: pipeline/stage-engine / Approval opens the gate once
     def "a manual stage that passes returns Paused at its gate and only the approval runs the next stage"() {
         given: 'a two-stage pipeline whose first stage is a manual checkpoint'
         def stage1 = stage('build', AdvancementMode.MANUAL, [])
@@ -184,6 +188,7 @@ class AdvancementSpec extends Specification {
     // FR1 of make-checkpoint-gate-durable: a manual pause on the LAST stage holds the gate, never
     //      the pipeline end; only the approved state is at the pipeline end, and a run from it
     //      completes immediately, invoking neither the executor nor the persistence port
+    // Scenario: pipeline/stage-engine / Manual pause on the last stage
     def "a manual pause on the last stage holds its gate and only the approval reaches the pipeline end"() {
         given: 'a two-stage pipeline whose final stage is a manual checkpoint'
         def stage1 = stage('build', AdvancementMode.AUTO, [])

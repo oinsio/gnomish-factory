@@ -11,7 +11,7 @@ persisted, how any factory instance resumes the poll, and how the wait ends.
 When a verdict executor returns `pending`, the engine SHALL persist the key with the check
 identity, attempt and start time in the task-branch state in one commit, pushed, before the
 first `poll`. The key SHALL be opaque to the engine and capped in size.
-<!-- implements FR2, NFR-R1 of migrate-verify-to-executor-contract -->
+**Implements**: FR2, NFR-R1 of migrate-verify-to-executor-contract
 
 #### Scenario: Key lands before polling
 - **WHEN** `start` returns `pending`
@@ -26,7 +26,7 @@ The engine SHALL call `poll(key)` at the check's `interval`, passing the interva
 executor's in-poll wait bound, until a terminal status or the check's `timeout`; expiry SHALL
 classify per the declared timeout class, and `absent after timeout` of an expected context
 SHALL be infrastructure regardless of class.
-<!-- implements FR2, FR4 of migrate-verify-to-executor-contract -->
+**Implements**: FR2, FR4 of migrate-verify-to-executor-contract
 
 #### Scenario: Timeout with a quality class
 - **WHEN** a `quality` check polls past its timeout with a running context
@@ -40,7 +40,7 @@ SHALL be infrastructure regardless of class.
 A resuming instance SHALL read the persisted key and continue with `poll(key)`; it SHALL NOT
 call `start` again. A persisted key for an executor that no longer declares `poll` SHALL be an
 infrastructure failure.
-<!-- implements FR3, NFR-R1, UX3 of migrate-verify-to-executor-contract -->
+**Implements**: FR3, NFR-R1, UX3 of migrate-verify-to-executor-contract
 
 #### Scenario: Kill between start and persist re-drives start
 - **WHEN** the factory is killed after `start` returned `pending` and before the key commit
@@ -58,7 +58,7 @@ infrastructure failure.
 ### Requirement: Poll observability
 Each `poll` SHALL log executor, key prefix, elapsed and remaining time under the task's MDC; the
 check's ledger line SHALL carry `executor=<name> status=<status>`.
-<!-- implements NFR-O1, UX1 of migrate-verify-to-executor-contract -->
+**Implements**: NFR-O1, UX1 of migrate-verify-to-executor-contract
 
 #### Scenario: Timeout names the missing contexts
 - **WHEN** an `scm-status` check times out

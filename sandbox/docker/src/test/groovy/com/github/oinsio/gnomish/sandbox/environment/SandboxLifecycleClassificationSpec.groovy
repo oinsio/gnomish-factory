@@ -4,6 +4,7 @@ import spock.lang.Specification
 
 class SandboxLifecycleClassificationSpec extends Specification {
 
+    // Scenario: sandbox/sandbox-lifecycle / Object is born owned
     def "classifies a well-labelled object"() {
         given:
         def object = new ListedDockerObject('gnomish-box-k1-j', ObjectKind.CONTAINER, [

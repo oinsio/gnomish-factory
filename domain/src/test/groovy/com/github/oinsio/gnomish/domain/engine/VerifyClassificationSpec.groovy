@@ -22,6 +22,10 @@ class VerifyClassificationSpec extends VerifyOrchestratorSpecBase {
     // FR4, M4: every line of the normative classification table classifies exactly as
     //          the table says — the engine collapses each situation to the expected
     //          Verdict class (Fail = quality failure, CannotVerify = infrastructure).
+    // Scenario: pipeline/stage-engine / Classification table verified
+    // Scenario: pipeline/stage-engine / A command check classifies by how it ended
+    // Scenario: pipeline/stage-engine / An external check classifies by its poll
+    // Scenario: pipeline/stage-engine / A judge check classifies by its votes
     def "classifies each normative table row as its table class: #situation"() {
         given: 'the orchestrator built over the scripted fakes for this row'
         def orchestrator = orchestrator(builtinRunner, commandRunner, externalClient, judgeVoter)

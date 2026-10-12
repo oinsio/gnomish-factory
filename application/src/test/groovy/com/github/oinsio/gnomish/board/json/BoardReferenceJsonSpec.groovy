@@ -20,6 +20,7 @@ class BoardReferenceJsonSpec extends Specification {
 
     def mapper = new BoardJsonMapper()
 
+    // Scenario: observability/tracker-board / JSON is byte-stable for a fixed tracker state
     def "reference anchor: serializing the deterministic sample is byte-identical to board-v1.reference.json"() {
         given:
         def referenceText = getClass().getResourceAsStream('/board-v1.reference.json').getText('UTF-8')

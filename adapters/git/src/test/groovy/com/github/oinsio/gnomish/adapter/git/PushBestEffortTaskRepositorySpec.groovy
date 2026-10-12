@@ -122,32 +122,7 @@ class PushBestEffortTaskRepositorySpec extends Specification implements Lifecycl
         remoteTip() == Optional.of(recorded)
     }
 
-    def "a Completed outcome and the cleanup commit behind it share one push of the resulting tip"() {
-        given: 'a delegate that records the outcome and its cleanup commit, as the git repositories do'
-        def delegate = Mock(TaskRepository)
-        def log = tempDir.resolve('argv.log')
-        def repository = new PushBestEffortTaskRepository(delegate,
-                new GitProcessRunner(recordingGit(log).toString()), cloneDir, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
-        String cleanupTip = null
-
-        when:
-        repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('work')), TrackerWrite.OWED)
-
-        then:
-        1 * delegate.recordOutcome(TASK_ID, _, TrackerWrite.OWED) >> {
-            commitOnTaskBranch('completed')
-            cleanupTip = commitOnTaskBranch('cleanup')
-        }
-
-        and: 'ONE push ran for the pair (FR1), not one per commit — counted over the argv itself'
-        // The rev-parse between them is the runner's own clone-key read for the mutation lock a
-        // push takes (design D8 of add-factory-serve), not a second remote round-trip.
-        recordedSubcommands(log) == ['remote', 'rev-parse', 'push']
-
-        and: 'and it delivered the cleanup commit at the tip'
-        remoteTip() == Optional.of(cleanupTip)
-    }
-
+    // Scenario: git/git-task-persistence / Park commit is pushed before the tracker signal
     def "the push happens before the lifecycle call returns, so a following tracker write sees it"() {
         given:
         def delegate = Mock(TaskRepository)

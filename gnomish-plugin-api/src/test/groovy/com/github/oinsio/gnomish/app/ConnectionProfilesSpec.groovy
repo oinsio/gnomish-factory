@@ -71,6 +71,8 @@ class ConnectionProfilesSpec extends Specification {
 
     // FR16, D8: the resolved view is the profile's keys plus the subsection's own, with the
     //     reference key itself gone — so `repo` may stay per-port while the endpoint is shared.
+    // Scenario: verification/github-external-check / An inline key the profile lacks overlays it
+    // Scenario: operator/vendor-connection-profile / A non-overlapping inline key overlays the profile
     def "a referencing subsection resolves to the profile's keys plus its own"() {
         when:
         def resolved = profiles().resolve([connection: 'github-main', repo: 'acme/widgets'])
@@ -105,6 +107,7 @@ class ConnectionProfilesSpec extends Specification {
 
     // FR16, "Undefined profile name is a located error": the error names the missing profile AND the
     //     defined set, so a typo is fixed from the message alone.
+    // Scenario: operator/vendor-connection-profile / Undefined profile name is a located error
     def "an undefined profile reference is a located error naming it and the defined set"() {
         when:
         def errors = profiles().validateReference(FILE, WHERE, [connection: 'nope'])
@@ -130,6 +133,8 @@ class ConnectionProfilesSpec extends Specification {
 
     // FR16, "Ambiguous connection declaration is a located error": declaring both forms is reported
     //     per offending key, in key order, so an operator sees every duplicate at once.
+    // Scenario: verification/github-external-check / An inline key the profile also defines is a load error
+    // Scenario: operator/vendor-connection-profile / An inline key the profile also defines is a located error
     def "declaring both a reference and an inline key the profile carries is a located error per key"() {
         when:
         def errors = profiles().validateReference(FILE, WHERE,

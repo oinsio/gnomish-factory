@@ -20,6 +20,7 @@ class PipelineLoaderPuritySpec extends Specification implements PipelineLoaderFi
     @TempDir
     Path root
 
+    // Scenario: pipeline/pipeline-config / Loading never writes to disk
     def "loading is deterministic: the same tree yields an equal outcome twice (NFR-R1)"() {
         given:
         writeValidTree()
@@ -28,6 +29,7 @@ class PipelineLoaderPuritySpec extends Specification implements PipelineLoaderFi
         loadTree() == loadTree()
     }
 
+    // Scenario: pipeline/pipeline-config / Loading never writes to disk
     def "loading never creates, modifies, or deletes anything under the root (NFR-R1)"() {
         given: 'a valid tree and a snapshot of every file before loading'
         writeValidTree()
@@ -40,6 +42,7 @@ class PipelineLoaderPuritySpec extends Specification implements PipelineLoaderFi
         snapshot() == before
     }
 
+    // Scenario: pipeline/pipeline-config / No configured action is executed
     def "loading executes no configured command (NFR-S1, NFR-C1): a destructive command leaves no trace"() {
         // NFR-C1: with no command, model, or external check ever run, loading
         // makes no model or network call — zero token cost.

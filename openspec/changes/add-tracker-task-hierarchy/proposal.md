@@ -71,3 +71,6 @@ _None — all changes extend existing capabilities._
 - Requirement IDs: FR1–FR5, NFR-R1 (idempotent creation/recovery),
   NFR-P1 (no feed fan-out), NG1–NG5. Uniqueness scoped to
   `add-tracker-task-hierarchy` per `traceability.md`.
+- Sequencing after `tighten-spec-contract`: this change's MODIFIED block of `tracker-take`
+  ("Bare auto mode takes the head of the queue") is layered on that change's text, which must
+  sync first.

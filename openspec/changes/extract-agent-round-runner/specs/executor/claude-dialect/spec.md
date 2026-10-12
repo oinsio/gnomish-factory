@@ -9,12 +9,17 @@ The observable behavior of the Claude Code dialect: how the contract's request b
 
 ### Requirement: Claude describe
 The Claude dialect SHALL describe roles `transform`, `verdict`, `decision`; capabilities
-`streams_progress`, `cancel`, `resumable`; enforcement level `TOOL_GATE`; credentials
-`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
-`ANTHROPIC_MODEL`; egress host from the configured base URL; config-directory variable
-`CLAUDE_CONFIG_DIR` and the flags that disable repo-local policy sources; a settings schema
-with `allowedTools`, `disallowedTools`, `maxTurns`, `roundTimeout` and the three bounds.
-<!-- implements FR3, FR7, NFR-S1 of extract-agent-round-runner -->
+`streams_progress`, `cancel`, `resumable`; enforcement level `TOOL_GATE`; its credentials, egress
+host and config-directory isolation; and a settings schema with `allowedTools`,
+`disallowedTools`, `maxTurns`, `roundTimeout` and the three bounds.
+**Implements**: FR3, FR7, NFR-S1 of extract-agent-round-runner
+
+#### Scenario: Describe names the credentials, the egress host and the config isolation
+- **WHEN** the Claude dialect's describe is read
+- **THEN** its credentials are `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
+  `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` and `ANTHROPIC_MODEL`, its egress host is the host
+  of the configured base URL, and its config-directory variable is `CLAUDE_CONFIG_DIR` together
+  with the flags that disable repo-local policy sources
 
 #### Scenario: Settings typo is a load error
 - **WHEN** a judge check's settings contain `allowedTols`
@@ -29,7 +34,7 @@ The dialect SHALL compile `workspaceWrite` to `--permission-mode acceptEdits`, `
 `--permission-mode dontAsk` with a read-only tool set that settings may only narrow, and SHALL
 always pass `--strict-mcp-config`; no rendered argv SHALL carry the mode that skips permission
 checks.
-<!-- implements FR3, FR5 of extract-agent-round-runner -->
+**Implements**: FR3, FR5 of extract-agent-round-runner
 
 #### Scenario: Verdict role is read-only
 - **WHEN** a `verdict` request compiles
@@ -44,7 +49,7 @@ checks.
 For `verdict` and `decision` requests the dialect SHALL pass the answer's JSON Schema to the
 CLI (`--json-schema`) and SHALL write the validated final output to the answer file; a final
 output that fails the schema SHALL be reported as a malformed answer, never as a pass.
-<!-- implements FR3, FR4 of extract-agent-round-runner -->
+**Implements**: FR3, FR4 of extract-agent-round-runner
 
 #### Scenario: Judge verdict arrives as SARIF
 - **WHEN** a `verdict` run completes
@@ -58,7 +63,7 @@ output that fails the schema SHALL be reported as a malformed answer, never as a
 The dialect SHALL keep today's stream-json behavior: prompt on stdin, `init`, `assistant` and
 `result` events, per-model token usage, top-level tool trace, the result event as essential
 and other telemetry best-effort; the session id from `init` is the continuation key.
-<!-- implements FR3, FR9, NFR-O1 of extract-agent-round-runner -->
+**Implements**: FR3, FR9, NFR-O1 of extract-agent-round-runner
 
 #### Scenario: Reference transcripts still parse
 - **WHEN** the committed reference stream-json fixtures are replayed through the dialect

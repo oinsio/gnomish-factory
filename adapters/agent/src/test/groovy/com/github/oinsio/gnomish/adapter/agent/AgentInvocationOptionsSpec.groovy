@@ -145,6 +145,7 @@ class AgentInvocationOptionsSpec extends Specification {
 
     // FR12, NFR-S2, D7: the decision-file path gets a pinpoint Write allowance
     // even when the settings map has no allowedTools entry at all.
+    // Scenario: executor/agent-executor / The executor may write exactly its decision file
     def "renderForExecutor adds a pinpoint Write allowance with no allowedTools setting"() {
         when:
         def argv = AgentInvocationOptions.renderForExecutor('m', [:], Path.of('/tmp/round-1/decision.json'))
@@ -160,6 +161,7 @@ class AgentInvocationOptionsSpec extends Specification {
 
     // FR12, NFR-S2, D7: an existing allowedTools setting is preserved and the
     // decision-file entry is appended after it.
+    // Scenario: executor/agent-executor / The executor may write exactly its decision file
     def "renderForExecutor appends the pinpoint Write allowance to an existing allowedTools setting"() {
         when:
         def argv = AgentInvocationOptions.renderForExecutor(
@@ -232,6 +234,7 @@ class AgentInvocationOptionsSpec extends Specification {
 
     // FR12, NFR-S1, D7: a manifest allowedTools subset of the read-only set is
     // preserved as-is — narrowing further is allowed, in manifest order.
+    // Scenario: executor/agent-executor / A judge check may narrow its tools
     def "renderForJudge preserves a manifest allowedTools list that only narrows the read-only set"() {
         when:
         def argv = AgentInvocationOptions.renderForJudge('m', [allowedTools: ['Glob', 'Read']])
@@ -247,6 +250,7 @@ class AgentInvocationOptionsSpec extends Specification {
 
     // FR12, NFR-S1, D7, "Judge cannot widen its tools" scenario: a write-capable
     // tool requested in settings is silently dropped from the effective set.
+    // Scenario: executor/agent-executor / Judge cannot widen its tools
     def "renderForJudge drops a write-capable tool requested in allowedTools"() {
         when:
         def argv = AgentInvocationOptions.renderForJudge('m', [allowedTools: [

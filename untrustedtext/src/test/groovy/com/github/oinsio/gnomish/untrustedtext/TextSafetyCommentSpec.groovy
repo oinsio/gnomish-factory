@@ -30,11 +30,13 @@ class TextSafetyCommentSpec extends Specification {
         cp == 0x1B || (cp >= 0x7F && cp <= 0x9F) || (cp < 0x20 && cp != 0x0A && cp != 0x09)
     }
 
+    // Scenario: core/untrusted-text / The comment exit neutralizes mentions and fences safely
     def "the block is labeled and fenced"() {
         expect:
         TextSafety.forComment('tests failed') == 'Untrusted machine output:\n~~~~\ntests failed\n~~~~'
     }
 
+    // Scenario: core/untrusted-text / The comment exit neutralizes mentions and fences safely
     def "a mention cannot ping anyone"() {
         when:
         def fenced = TextSafety.forComment('@team please approve this')
@@ -44,6 +46,7 @@ class TextSafetyCommentSpec extends Specification {
         !fenced.contains('@team')
     }
 
+    // Scenario: core/untrusted-text / The comment exit neutralizes mentions and fences safely
     def "an issue reference cannot cross-link"() {
         when:
         def fenced = TextSafety.forComment('see #123 for the failing build')
@@ -53,6 +56,7 @@ class TextSafetyCommentSpec extends Specification {
         !fenced.contains('#123')
     }
 
+    // Scenario: core/untrusted-text / The comment exit neutralizes mentions and fences safely
     def "the fence is longer than the longest run the content opens a line with"() {
         when:
         def fenced = TextSafety.forComment('~~~~\ntext\n~~~~~~~\nmore')
@@ -102,6 +106,7 @@ class TextSafetyCommentSpec extends Specification {
         !fenced.contains(ESC)
     }
 
+    // Scenario: core/untrusted-text / The comment exit neutralizes mentions and fences safely
     def "line structure is kept — a comment reader is a person, not grep"() {
         when:
         def fenced = TextSafety.forComment('first\nsecond\nthird')
@@ -116,11 +121,13 @@ class TextSafetyCommentSpec extends Specification {
         TextSafety.forComment('') == 'Untrusted machine output:\n~~~~\n\n~~~~'
     }
 
+    // Scenario: core/untrusted-text / Each exit renders for its consumer
     def "the inline shape neutralizes without labeling or fencing"() {
         expect: 'a field quoted inside the factory\'s own line carries no label and no fence'
         TextSafety.forCommentInline('tests failed') == 'tests failed'
     }
 
+    // Scenario: core/untrusted-text / Each exit renders for its consumer
     def "the inline shape breaks mentions and issue references too"() {
         when:
         def inline = TextSafety.forCommentInline('@team see #123')

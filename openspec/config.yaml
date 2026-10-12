@@ -94,5 +94,7 @@ rules:
     - Break tasks into chunks of max 2 hours
   specs:
     - "Use delta format: ADDED/MODIFIED/REMOVED"
-    - Mark invariants with "# implements FR-X of <change-name>"
+    - "Every requirement carries exactly one `**Implements**: FR-X of <change-name>` line, after the requirement text and before its first scenario; YAML-like invariants and use cases keep `# implements FR-X of <change-name>` (.claude/rules/traceability.md)"
+    - "One behavior per requirement: the requirement text stays within OpenSpec's 500-character limit; normative remainder becomes a scenario or an ADDED requirement, never a note (.claude/rules/delta-specs.md)"
+    - "Every scenario gets a test marker `// Scenario: <spec-id> / <title>`, title verbatim, in the test that exercises it (.claude/rules/testing.md, \"Every scenario has a test\")"
     - Include use cases with inputs, effects, and errors

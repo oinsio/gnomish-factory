@@ -100,6 +100,7 @@ class StreamJsonReferenceDumpSpec extends Specification {
     }
 
     // M3, D4, FR5: result event with modelUsage entirely absent — fallback to the flat usage keyed by the init model
+    // Scenario: executor/agent-executor / Old CLI fallback
     def "falls back to the flat usage field keyed by the init event's model when modelUsage is absent"() {
         given: 'the result-without-model-usage reference dump parsed into timestamped events'
         def events = parser.parse(readerOf('result-without-model-usage'))

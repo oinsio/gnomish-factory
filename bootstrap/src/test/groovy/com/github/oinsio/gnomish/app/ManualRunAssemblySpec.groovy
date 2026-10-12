@@ -79,6 +79,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
 
     // FR2 of remove-interactive-console: the manifest alone binds both roles — the CLI stage
     // executor and the CLI judge voter — with no flag in the run order to swap either.
+    // Scenario: cli/manual-run / Flagless run uses real adapters
     def "FR2: a run binds the CLI stage executor and the CLI judge voter from the manifest"() {
         given:
         def assembly = newAssembly()
@@ -128,6 +129,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
 
     // FR7, D10, task 9.4: the wired CliJudgeVoter's round reaches the shared renderer too
     // (judge rounds feed the same log renderer as executor rounds, per design D10).
+    // Scenario: executor/agent-executor / Judge rounds feed the same listeners
     def "the wired CLI judge voter's round reaches the renderer"() {
         given:
         Files.createDirectories(workspaceDir.resolve('.gnomish'))

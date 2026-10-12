@@ -15,10 +15,7 @@ import java.time.Instant
  * contract suite (tracker-port spec, "Port contract spec suite binds every
  * adapter" — structural-marker round-trip; task 2.3, FR4, FR12, FR14,
  * NFR-R3). Extends {@link TrackerContract} to reuse its {@code arrange}/
- * {@code seedTask}/{@code seedReply} seams rather than duplicating them; a
- * concrete adapter subclass instantiates this class (not {@code
- * TrackerContract} directly) to run the FULL suite, per M1 — the same
- * suite against every adapter.
+ * {@code seedTask}/{@code seedReply} seams rather than duplicating them.
  *
  * <p>Covers two spec scenarios: "Fresh instance sees abort history" (a
  * second port call against the same adapter stands in for "a different

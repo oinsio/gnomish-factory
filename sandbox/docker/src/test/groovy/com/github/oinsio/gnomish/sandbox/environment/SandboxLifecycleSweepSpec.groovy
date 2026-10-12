@@ -22,6 +22,7 @@ class SandboxLifecycleSweepSpec extends SandboxLifecycleSweepSpecBase {
         SandboxLifecycleSweep.create(listener, Duration.ofMinutes(5)) != null
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Two projects share one Docker host
     def "lists only this project's objects, using both the factory and project label filters"() {
         given:
         docker.onRun = { List<String> args -> ok('') }
@@ -194,6 +195,7 @@ class SandboxLifecycleSweepSpec extends SandboxLifecycleSweepSpecBase {
     // completes no tick — a permanently unreachable daemon must not publish an empty tally as a
     // healthy zero-work tick, which would reset the consecutive-skipped run length and leave the
     // stalled sweep invisible to every alert.
+    // Scenario: sandbox/sandbox-lifecycle / An unreachable runtime completes no tick
     def "a docker runtime outage aborts the whole pass and reaches the caller"() {
         given:
         docker.onRun = { List<String> args ->

@@ -19,8 +19,8 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
  * resolved a conflict, applied a default, or invented a value would fail
  * these rows even though its own storage was seeded correctly.
  *
- * <p>Once the most-derived link in the chain (now {@link TrackerReleaseContract} is), so a concrete adapter subclass
- * instantiates THIS class to run the full suite (M1).
+ * <p>Extends {@link TrackerShapeFactsContract} to reuse its {@code arrange} and seeding seams;
+ * the hook below is the one seam this link adds.
  *
  * <p>Implements FR3 of add-base-ref-resolution.
  */

@@ -73,3 +73,7 @@ Sequenced after `make-checkpoint-gate-durable` (shared files: `TakeLoadedBranchR
       sentence naming this change.
 - [ ] 5.2 Operator guides: a finished task's branch is cleaned by the next `take <ref>`,
       `run --resume`, or `serve` pass — no manual cleanup.
+
+## Follow-ups from tighten-spec-contract
+
+- F67: move the marker of `GitResumeOutcomeSpec` "run() with outcome completed reports and exits without further touching the worktree or branch" (a lost-cleanup tip) to `Completed task with a lost cleanup converges`, asserting the cleanup, and write a test of the narrowed `Completed task resumes to a no-op` on a cleaned-up branch.

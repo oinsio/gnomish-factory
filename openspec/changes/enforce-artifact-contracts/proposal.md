@@ -30,6 +30,9 @@ separation this change introduces.
 - **MODIFIED** (agent-executor): the briefing's input-artifacts section renders the declared
   path when the producer declares one — prompt enrichment falls out for free.
 - No schema version bump: the field is additive and optional (see design D6).
+- Sequenced after `tighten-spec-contract` and then `add-pipeline-routing`: the MODIFIED
+  blocks are layered on tighten-spec-contract's text, and `pipeline-config`'s "Artifact
+  references by identifier" also on add-pipeline-routing's per-pipeline scope; both sync first.
 
 ## Capabilities
 

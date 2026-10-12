@@ -50,6 +50,11 @@ class GitTransferSpec extends Specification {
 
     // FR3, FR4, FR5, FR6: a named remote gets the fetch-only half in full — `--refmap=` included —
     //     and keeps the operator's configuration, re-asserted by the `-c` pairs.
+    // Scenario: git/git-transfer / A harvest and a base refresh share one flag set
+    // Scenario: git/git-transfer / Configured fetch refspecs move nothing
+    // Scenario: git/git-transfer / Origin cannot use the container transport
+    // Scenario: git/git-transfer / Inherited repository overrides are stripped
+    // Scenario: git/git-transfer / A refspec that looks like an option is a refspec
     def "an origin fetch is the common set, the fetch-only half, and the operator's configuration"() {
         when:
         def transfer = GitTransfer.fetch(TransferSource.ORIGIN, new Refspec('+refs/heads/main:refs/remotes/origin/main'))
@@ -72,6 +77,9 @@ class GitTransferSpec extends Specification {
 
     // FR3, FR4, FR5, FR6: a container fetch names its URL in place of the remote, so no refmap
     //     applies; it reads no operator configuration at all.
+    // Scenario: git/git-transfer / A harvest and a base refresh share one flag set
+    // Scenario: git/git-transfer / A harvest sees no operator configuration at all
+    // Scenario: git/git-transfer / Inherited repository overrides are stripped
     def "a container fetch is the common set, the fetch-only half without a refmap, and full isolation"() {
         when:
         def transfer = GitTransfer.fetch(
@@ -101,6 +109,7 @@ class GitTransferSpec extends Specification {
     // FR3, FR6, FR7: the seed clone takes git's transport path, one branch, no tags, and carries
     //     the branch as the leaf's placeholder; neither fetch-only flag appears (clone rejects
     //     `--no-write-fetch-head` and has no remote for `--refmap=`).
+    // Scenario: git/git-transfer / Inherited repository overrides are stripped
     def "a seed clone is the common set, the clone flags, and isolation but for the safe.directory file"() {
         when:
         def transfer = GitTransfer.clone(new TransferSource.SeedPath(SOURCE, DESTINATION))

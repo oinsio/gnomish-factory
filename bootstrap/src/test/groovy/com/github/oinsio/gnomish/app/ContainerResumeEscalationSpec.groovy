@@ -35,6 +35,7 @@ class ContainerResumeEscalationSpec extends ContainerResumeSpecBase {
 
     // FR6, FR25, D19; FR3 of make-run-headless: --decision over an escalated task is committed
     // factory-side over bare objects, and the continuation drives to Completed.
+    // Scenario: sandbox/execution-environment / Container park round-trips a human decision
     def "resuming an escalated task with --decision appends the operator decision factory-side and completes"() {
         given: 'an escalated task parked at PipelineEnd, so the resumed drive completes at once'
         recordEscalated('T-ESC')

@@ -45,6 +45,7 @@ class OrderedExitSpec extends Specification {
         steps == ['closeContext', 'stopLogging']
     }
 
+    // Scenario: serve/factory-serve / One shutdown sequence for signal and normal exit
     def "FR9: a normal exit runs the same sequence when no stop has begun"() {
         when:
         OrderedExit.onNormalExit()
@@ -104,6 +105,7 @@ class OrderedExitSpec extends Specification {
         steps == ['closeContext', 'stopLogging']
     }
 
+    // Scenario: serve/factory-serve / Second pass is a no-op
     def "NFR-R1: a second pass is a no-op"() {
         given:
         OrderedExit.closeAndStopLogging()

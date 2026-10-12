@@ -93,6 +93,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
                 new ToolTrace(new AttemptKey(taskId, stage, 0), []))
     }
 
+    // Scenario: cli/task-inspection / Overview of all tasks
     def "FR13: overview of all tasks — three local gnomish branches are all listed with stage and attempts"() {
         given:
         createLocalTask('PROJ-1', 'implement', 0)
@@ -125,6 +126,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         rows*.stage() == ['release']
     }
 
+    // Scenario: cli/task-inspection / Remote-only tasks are listed once
     def "FR13: remote-only tasks are listed once, and a task present both locally and on origin reads from its local tip"() {
         // Each createTask below resolves its start commit in the very repository the branch is cut
         //     in. Resolving it in `cloneDir` instead only ever worked by SHA coincidence: that repo
@@ -193,6 +195,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
     // which branches exist, so it must not render as "no tasks" — the empty table is a positive
     // claim, and printing it for a listing that never ran is the most misleading answer this
     // read-only command can give.
+    // Scenario: cli/task-inspection / A failed enumeration is an error, not an empty table
     def "FR13: a refused enumeration is a command failure, not an empty table"() {
         given: 'a directory that is not a git repository at all, so for-each-ref exits non-zero'
         def notARepo = Files.createDirectory(tempDir.resolve('not-a-repo'))
@@ -265,6 +268,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         rows[0].taskId() == 'PROJ-1'
     }
 
+    // Scenario: cli/task-inspection / Mixed-shape repository lists one row per task
     def "FR16: a mixed-shape clone lists one row per branch, each carrying its shape"() {
         given: 'a delivered branch, a freshly created one, an in-flight one and a parked one'
         def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
@@ -294,6 +298,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         byId['PARKED-1'].outcome() == 'paused'
     }
 
+    // Scenario: cli/task-inspection / One bad branch never kills the listing
     def "FR16, UX4: one unparseable branch degrades to its own diagnostic row and never kills the listing"() {
         given: 'two healthy tasks and one whose state.json was corrupted at the tip'
         createLocalTask('HEALTHY-1')

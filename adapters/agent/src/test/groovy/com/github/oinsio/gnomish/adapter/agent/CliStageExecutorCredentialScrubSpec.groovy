@@ -65,6 +65,9 @@ class CliStageExecutorCredentialScrubSpec extends Specification {
         FakeAgentSupport.requestFor(workspaceDir)
     }
 
+    // Scenario: verification/check-provider-model / A plugin's credential is scrubbed without a core constant
+    // Scenario: operator/secrets-provider / Port values stay out of the box
+    // Scenario: tracker/tracker-port / Gnome never transitions
     def "a declared credential in the allowlist never reaches the spawned process"() {
         given:
         def executor = new CliStageExecutor(

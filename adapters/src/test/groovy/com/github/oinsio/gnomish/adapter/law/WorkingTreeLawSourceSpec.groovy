@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.law
 
+import com.github.oinsio.gnomish.untrustedtext.Provenance
 import java.nio.channels.ServerSocketChannel
 import java.nio.file.Files
 import java.nio.file.Path
@@ -125,5 +126,24 @@ class WorkingTreeLawSourceSpec extends Specification {
         then:
         read instanceof LawSource.Unreadable
         ((LawSource.Unreadable) read).reason().contains('MalformedInputException')
+    }
+
+    // FR1 of type-untrusted-text: the refusal interpolates the manifest's own reference raw, so the
+    //     sentence is minted in the manifest family, not under the factory — its control character
+    //     is still raw inside it and is neutralized only where the sentence leaves through an exit.
+    //     The exit-quoted half, a factory sentence, is GitCommandResultDetailSpec's.
+    // Scenario: core/untrusted-text / A sentence interpolating a capture raw keeps the capture's family
+    def "FR1: a refusal quoting the manifest's reference raw is minted in the manifest family"() {
+        given: 'a reference the target repository wrote, holding an escape sequence'
+        def esc = Character.toString(27 as char)
+        def source = new WorkingTreeLawSource(root)
+
+        when:
+        def reason = ((LawSource.Unreadable) source.read('absent' + esc + '[2J.md')).reason()
+
+        then:
+        reason.provenance() == Provenance.MANIFEST
+        reason.contains(esc)
+        !reason.forLog().contains(esc)
     }
 }

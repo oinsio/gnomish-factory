@@ -74,6 +74,7 @@ class AgentDecisionRoundTripSpec extends Specification implements AppAssemblyFix
     // operator's answer, and the resumed CLI invocation's actual stdin prompt carrying it verbatim.
     // FR1 of make-run-headless: the first run stops at the question instead of prompting for it;
     // the second run stands in for the resume, with the answer appended and attempts reset.
+    // Scenario: cli/manual-run / Agent question round-trips
     def "an agent-raised decision stops the run as an escalation, and the answer resumes the stage with the decision verbatim in the CLI round's prompt"() {
         given: 'instructions.md the stage control file reads, and a captured-stdin file the fake will append to'
         Files.createDirectories(workspaceDir.resolve('.gnomish'))

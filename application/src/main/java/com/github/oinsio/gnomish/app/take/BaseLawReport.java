@@ -34,7 +34,8 @@ public final class BaseLawReport {
      * Renders the report.
      *
      * @param taskId the parked task; never null
-     * @param baseRef the base ref the task's law was bound to — the binding's revision; never null
+     * @param baseRef the resolved base ref the task's law was bound to — the pin's ref name, never the
+     *     law commit, which has its own line; never null
      * @param lawCommit the commit the definition was read from; never null
      * @param errors every located problem the loader found, in aggregation order; never empty
      * @return the operator-facing report; never blank

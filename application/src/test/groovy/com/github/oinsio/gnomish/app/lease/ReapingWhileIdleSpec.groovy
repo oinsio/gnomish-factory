@@ -47,6 +47,9 @@ class ReapingWhileIdleSpec extends Specification {
     // foreign Working claim still gets observed and, once its TTL elapses, reaped within one
     // reaper interval, returning the task to Ready without this instance ever claiming
     // anything first.
+    // Scenario: serve/factory-serve / Reaping while idle with no claims of its own
+    // Scenario: serve/factory-serve / Reaping does not wait on the beat thread
+    // Scenario: lifecycle/claim-heartbeat / Reaping continues while the instance holds no claim
     def "reaps a foreign stale claim within one reaper interval though the instance holds nothing"() {
         given: 'the instance never registered any claim of its own'
         assert heartbeat.liveClaimsSnapshot().isEmpty()

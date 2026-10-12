@@ -4,10 +4,7 @@ import static org.gradle.testkit.runner.TaskOutcome.FAILED
 import static org.gradle.testkit.runner.TaskOutcome.SKIPPED
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS
 
-import java.nio.file.Path
 import org.gradle.testkit.runner.BuildResult
-import spock.lang.Specification
-import spock.lang.TempDir
 
 /**
  * Behavioral verification of the scope's CONSUMER — {@code pitest-scope-conventions} with
@@ -22,58 +19,11 @@ import spock.lang.TempDir
  * build's Gradle user home. {@code Foo} has a killing spec; {@code Bar} is in {@code
  * excludedClasses}.
  */
-class MutationScopeConventionsFunctionalSpec extends Specification {
+class MutationScopeConventionsFunctionalSpec extends MutationScopeConventionsSpecBase {
 
-    static final String PKG = 'mod-a/src/main/java/com/github/oinsio/gnomish/mini'
-    static final String FOO = "${PKG}/Foo.java"
-    static final String BAR = "${PKG}/Bar.java"
-    static final String SPEC = 'mod-a/src/test/groovy/com/github/oinsio/gnomish/mini/FooSpec.groovy'
-    static final String KILLING = 'expect: Foo.twice(3) == 6'
-    static final String STALE_REPORT = 'mod-a/build/reports/pitest/mutations.xml'
-    static final String GATE = ':mod-a:pitestVerifyAllKilled'
-
-    @TempDir
-    Path projectDir
-    @TempDir
-    Path home
-
-    MiniScopeRepository repo
-
-    def setup() {
-        repo = new MiniScopeRepository(projectDir, home)
-        repo.write('settings.gradle', """\
-dependencyResolutionManagement {
-    versionCatalogs {
-        libs {
-            from(files('${GradleRunnerSupport.quotedPath(GradleRunnerSupport.requiredProperty('gnomish.versionCatalog'))}'))
-        }
-    }
-}
-rootProject.name = 'mini-scope-consumer'
-includeBuild '${GradleRunnerSupport.quotedPath(GradleRunnerSupport.requiredProperty('gnomish.buildChecksDir'))}'
-include 'mod-a'
-""")
-        repo.write('build.gradle', "tasks.register('pitestAll')\n")
-        repo.write('mod-a/build.gradle', """\
-plugins {
-    id 'library-conventions'
-}
-pitest {
-    excludedClasses = ['com.github.oinsio.gnomish.mini.Bar']
-}
-""")
-        // `adversarial-gitconfig-conventions` declares this file as a test input; nothing reads it here.
-        repo.write('test-fixtures/src/main/resources/adversarial-gitconfig', '# inert\n')
-        // `stand-in-conventions` declares the stand-in library as a test input; nothing reads it here.
-        repo.write('test-fixtures/src/main/resources/stand-in/stand-in.sh', '# inert\n')
-        repo.write(FOO, javaClass('Foo', 'public static int twice(int x) { return x * 2; }'))
-        repo.write(BAR, javaClass('Bar', 'public static int one() { return 1; }'))
-        repo.write(SPEC, spec(KILLING))
-        // A second commit on main: a root commit alone is no scope base (FR2), it would fall back.
-        repo.init([:]).write('README', 'mini\n').commit('second commit on main')
-        repo.git('checkout', '-q', '-b', 'feat')
-    }
-
+    // Scenario: build/quality-gates / Diff with no production changes still passes
+    // Scenario: build/quality-gates / Empty scope is a clean pass
+    // Scenario: build/quality-gates / A run that mutates nothing says so
     def "NFR-R3, NFR-O1: a clean branch skips the module as a whole, a stale report is not judged, the line still prints"() {
         given: 'an earlier run left a report with a survivor'
         repo.write(STALE_REPORT, '<mutations><mutation status="SURVIVED"/></mutations>')
@@ -97,6 +47,8 @@ pitest {
         scopeLines(second).size() == 1
     }
 
+    // Scenario: build/quality-gates / Diff with no production changes still passes
+    // Scenario: build/quality-gates / Empty scope is a clean pass
     def "D1: a change to only an excluded class leaves nothing to mutate, so PIT is skipped, not failed"() {
         given:
         repo.write(BAR, javaClass('Bar', 'public static int one() { return 2 - 1; }'))
@@ -109,6 +61,8 @@ pitest {
         !result.output.contains('No mutations found')
     }
 
+    // Scenario: build/quality-gates / Default run mutates the branch's changed classes
+    // Scenario: build/quality-gates / A branch run explains itself
     def "D1, NFR-O1: a changed class is mutated and the line counts it"() {
         given:
         repo.write(FOO, javaClass('Foo', 'public static int twice(int x) { return x + x; }'))
@@ -122,6 +76,9 @@ pitest {
         scopeLines(result) == ["PIT scope: branch — base ${base()} (merge-base main) — mod-a: 1 class — 0 modules skipped"]
     }
 
+    // Scenario: build/quality-gates / Surviving mutant fails the build
+    // Scenario: build/quality-gates / A weakened spec is caught
+    // Scenario: build/quality-gates / A branch run explains itself
     def "M3, FR3: deleting an assertion from a killing spec widens the module, and the gate fails on the survivor"() {
         given: 'the only production-relevant edit is the weakened spec'
         repo.write(SPEC, spec('when: Foo.twice(3)\n        then: noExceptionThrown()'))
@@ -135,6 +92,9 @@ pitest {
         result.output.contains('below threshold')
     }
 
+    // Scenario: build/quality-gates / No resolvable base preserves full-project mutation
+    // Scenario: build/quality-gates / No resolvable base widens to the whole tree
+    // Scenario: build/quality-gates / A fallback is visible
     def "NFR-R1, NFR-O1: with no resolvable base the whole tree is mutated and the line says why"() {
         given:
         repo.git('branch', '-q', '-m', 'main', 'trunk')
@@ -149,6 +109,7 @@ pitest {
         scopeLines(result)[0].endsWith('— 1 modules mutated — 0 modules skipped')
     }
 
+    // Scenario: build/quality-gates / An abbreviated pitestAll is refused
     def "D5: pitestAll requested by an abbreviation fails before any module runs, rather than mutating the branch scope"() {
         when:
         BuildResult result = repo.runner('pitestA').buildAndFail()
@@ -158,6 +119,9 @@ pitest {
         result.task(':mod-a:pitest') == null
     }
 
+    // Scenario: build/build-conventions / Developer runs PIT for one module
+    // Scenario: build/quality-gates / A one-module run speaks only of its own modules
+    // Scenario: build/quality-gates / A run that mutates nothing says so
     def "UX2, NFR-O1: a one-module run announces only the modules it mutates, not the branch's other changes"() {
         given: 'a second module, and a change only in the first'
         repo.write('settings.gradle', repo.dir.resolve('settings.gradle').text + "include 'mod-b'\n")
@@ -170,43 +134,5 @@ pitest {
         then:
         result.task(':mod-a:pitest') == null
         scopeLines(result) == ["PIT scope: branch — base ${base()} (merge-base main) — every module skipped (1)"]
-    }
-
-    private BuildResult run(String... arguments) {
-        repo.runner(arguments).build()
-    }
-
-    private String base() {
-        repo.git('rev-parse', 'main').take(7)
-    }
-
-    private static List<String> scopeLines(BuildResult result) {
-        result.output.readLines().findAll { it.startsWith('PIT scope:') }
-    }
-
-    private static String javaClass(String name, String method) {
-        """\
-package com.github.oinsio.gnomish.mini;
-
-public final class ${name} {
-    private ${name}() {}
-
-    ${method}
-}
-"""
-    }
-
-    private static String spec(String body) {
-        """\
-package com.github.oinsio.gnomish.mini
-
-import spock.lang.Specification
-
-class FooSpec extends Specification {
-    def "twice doubles"() {
-        ${body}
-    }
-}
-"""
     }
 }

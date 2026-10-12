@@ -18,6 +18,7 @@ class ManualRunLawBindingSpec extends Specification {
 
     // FR8, UX3: without --base nothing was resolved, so the working tree stays the law — the one
     //     behaviour this change promises not to alter.
+    // Scenario: pipeline/pipeline-config / Manual run without a base keeps working-tree law
     def "FR8: a manual run without --base keeps the clone's working tree as its law"() {
         given:
         def assembly = Stub(RunAssembly) {
@@ -30,6 +31,8 @@ class ManualRunLawBindingSpec extends Specification {
 
     // FR11: with --base a ref was resolved, so the law comes from that ref's own commit — by fact,
     //     not by mode, exactly as take and serve bind theirs.
+    // Scenario: git/git-task-persistence / An explicit base overrides the resolution
+    // Scenario: pipeline/pipeline-config / Manual run with a base reads that ref's law offline
     def "FR11: a manual run with --base binds law at that ref"() {
         given:
         def assembly = Stub(RunAssembly) {

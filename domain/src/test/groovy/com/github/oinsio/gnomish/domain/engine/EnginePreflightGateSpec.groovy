@@ -79,6 +79,9 @@ class EnginePreflightGateSpec extends Specification {
 
     // FR2 of make-checkpoint-gate-durable: a run from a gate pauses again with the recorded state
     //      unchanged, framed by the bookends, reaching no port — for a middle and a last stage
+    // Scenario: pipeline/stage-engine / A run at the gate emits only its bracket events
+    // Scenario: pipeline/stage-engine / Resume at a gate runs nothing
+    // Scenario: lifecycle/task-branch-contract / Only the approval write opens a gate
     def "a run from AwaitingApproval at the #placement stage pauses again and invokes no port"() {
         given: 'the state a passing manual round persisted, held at the gate'
         def state = atGate(gate)

@@ -25,6 +25,7 @@ class BackoffPolicySpec extends Specification {
 
     // FR10, D10: delay = base * 2^(count-1), uncapped for small counts
     @Unroll
+    // Scenario: tracker/tracker-take / Backoff grows exponentially up to its cap
     def "delay grows exponentially: count=#count -> #expected"() {
         expect:
         BackoffPolicy.delay(count, BASE, CAP) == expected
@@ -44,6 +45,7 @@ class BackoffPolicySpec extends Specification {
     }
 
     // NFR-C1: a high count's computed delay is clamped to cap
+    // Scenario: tracker/tracker-take / Backoff grows exponentially up to its cap
     def "delay is clamped to the cap for a high count"() {
         expect:
         BackoffPolicy.delay(20, BASE, CAP) == CAP

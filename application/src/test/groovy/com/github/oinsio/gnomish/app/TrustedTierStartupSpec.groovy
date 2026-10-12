@@ -56,6 +56,8 @@ class TrustedTierStartupSpec extends Specification {
 
     // FR13, D14: the common case — origin names a branch, the fetch lands cleanly, and the
     // definition at that tip binds the trusted tier for the process lifetime.
+    // Scenario: pipeline/pipeline-config / The trusted tier binds once at startup
+    // Scenario: git/base-ref-resolution / The section is read from git objects, not a checkout
     def "binds the trusted tier from the discovered branch and refreshed tip when the definition loads cleanly"() {
         given:
         def definition = pipeline()
@@ -79,6 +81,7 @@ class TrustedTierStartupSpec extends Specification {
 
     // FR5, FR13, D14: no remote, no default branch, or an origin that never answered — three
     // distinct discovery facts, all ending fail-fast before any refresh or load is attempted.
+    // Scenario: git/base-ref-resolution / Autonomous mode refuses without a remote
     def "ends fail-fast with a coded GF134 ERROR when default-branch discovery does not yield a branch: #outcome"() {
         given:
         def logs = LogCaptureSupport.attach(TrustedTierStartup)
@@ -146,6 +149,8 @@ class TrustedTierStartupSpec extends Specification {
 
     // FR12 of add-manual-run, unchanged: a definition that fails to load at the refreshed tip
     // keeps the pre-existing exit-3 shape. No GF134 is logged — this is not a base-binding failure.
+    // Scenario: serve/factory-serve / A broken default branch stops startup
+    // Scenario: pipeline/pipeline-config / Startup still fails fast on the default branch
     def "propagates PipelineLoadFailedException, uncoded, when the definition fails to load at the refreshed tip"() {
         given:
         def errors = [

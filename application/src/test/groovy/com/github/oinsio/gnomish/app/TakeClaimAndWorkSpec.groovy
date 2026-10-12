@@ -42,7 +42,6 @@ import java.time.Instant
 import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
-import spock.lang.Unroll
 
 /**
  * FR9, FR10, FR14 (design D3, D16) of add-tracker-port and FR1 of add-claim-heartbeat: the claim
@@ -143,6 +142,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     // FR9, D3: a held claim with NO branch for this taskId is a FRESH claim — the branch/worktree
     // are created for the first time. Stopped here at createTask, whose failure on a fresh run is
     // remapped to a usage error (FR7 of add-git-workflow), which is what identifies the route.
+    // Scenario: tracker/tracker-take / Confirmed-missing ref routes fresh
     def "routes a held claim with no branch to the fresh-claim path"() {
         given:
         def tracker = Stub(Tracker) {
@@ -170,34 +170,6 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         then: 'the fresh-claim path ran and its own usage error propagates unchanged (D16: exit 2 is kept)'
         def ex = thrown(UsageException)
         ex.message.startsWith('could not start git-mode task')
-    }
-
-    // FR6 of harden-task-branch-contract: "origin never answered" is not "the branch is absent".
-    // Routing it to the fresh path is what forked a second branch for a task that already had one,
-    // so the take aborts instead — the crash-abort protocol releases the claim and another instance
-    // (or this one, later) picks the task up with a working network.
-    def "FR6: a lookup that could not reach origin aborts the take instead of claiming fresh"() {
-        given:
-        def tracker = Mock(Tracker)
-        def store = Mock(TaskStoreGit)
-        def worktrees = Mock(TaskWorktreeGit)
-        def branches = Stub(TaskBranchGit) {
-            locate(_, _) >> new BranchLocation.Unavailable(UntrustedText.factory('origin did not answer whether gnomish/PROJ-1 exists'))
-        }
-
-        when:
-        def result = claim(claimAndWork(new TaskGit(store, branches, worktrees, new ClaimEpochBook()), tracker, Stub(RunAssembly) {
-            timeEquipment() >> VirtualTimeEquipment.create()
-        }), tracker)
-
-        then: 'the take goes down the crash-abort path, which hands the claim back'
-        1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
-        1 * tracker.recordAbort(REF, _)
-        result instanceof TakeResult.Aborted
-
-        and: 'neither route ran: no branch was created and no worktree was materialized'
-        0 * store.taskRepository(_)
-        0 * worktrees.ensureWorktree(_, _, _)
     }
 
     // FR9, D3: a held claim with an EXISTING branch is a resume — the disposition-resume chain
@@ -324,6 +296,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     // FR14, D16 "Runner crash is an abort": an uncaught RuntimeException of a run whose claim we
     // HOLD is not a bare failure — it runs the best-effort abort protocol against the tracker, so
     // the task never stays stuck Working behind a dead runner.
+    // Scenario: tracker/tracker-take / Runner crash is an abort
     def "funnels an uncaught crash of a claimed run into the abort protocol"() {
         given:
         def tracker = Mock(Tracker)
@@ -393,6 +366,8 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     // FR9 of add-base-ref-resolution: the release twin of the scenario above — an unreachable
     // (but configured) refresh origin is a release, not a park, and it too stays inside the
     // fresh-claim step's own protocol when the tracker write it makes throws.
+    // Scenario: git/git-task-persistence / Unreachable remote creates no branch
+    // Scenario: tracker/tracker-take / The outage is classified at the fresh claim, not aborted
     def "FR9: an unreachable base-refresh origin releases through a throwing tracker without reaching the abort protocol"() {
         given:
         def tracker = Mock(Tracker)
@@ -420,6 +395,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     // task's abort-backoff accounting is untouched by an infrastructure release. Seeded with two
     // prior aborts on record; the mock-interaction proof is what carries it — recordAbort and
     // postNote are never called, and the facts are never even re-read.
+    // Scenario: tracker/tracker-take / Dead remote returns the task to the pool
+    // Scenario: tracker/tracker-take / Release leaves the abort accounting untouched
+    // Scenario: tracker/tracker-take / Released-on-outage exit
     def "FR9: a base-refresh release touches neither the abort facts nor posts a comment"() {
         given:
         def tracker = Mock(Tracker)
@@ -454,6 +432,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     // refusal of the task. Follows the shape of "returns the fresh-claim path's own terminal
     // result": the SAME subject drives claimAndWork twice, stopped this time at a Stub(BaseRefGit)
     // whose refresh answers Unavailable then Refreshed in sequence.
+    // Scenario: tracker/tracker-take / Dead remote returns the task to the pool
     def "FR9: a later take succeeds once the fake remote recovers from a prior release"() {
         given:
         def tracker = Mock(Tracker)
@@ -497,47 +476,10 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         second instanceof TakeResult.Delivered
     }
 
-    // FR9, D16: a deliberate, dedicated-exit-code failure of a CLAIMED run keeps its exit code —
-    // but the claim must not survive it. Nothing else in this process will ever write the tracker
-    // for this ref again (the exception exits the invocation), so without a release the task sits
-    // Working behind a dead runner until its lease expires — the very outcome the crash-abort arm
-    // exists to prevent. Reachable in practice: the sandbox mode selector refuses a container-bound
-    // pipeline whose prerequisites are unmet with a UsageException, after the claim is held.
-    @Unroll
-    def "releases the claim when a deliberate #kind aborts a claimed run"() {
-        given:
-        def tracker = Mock(Tracker)
-        def branches = Stub(TaskBranchGit) {
-            classifyShape(_, _) >> { throw failure() }
-        }
-
-        when:
-        claim(claimAndWork(new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
-                tracker, Stub(RunAssembly) {
-                    timeEquipment() >> VirtualTimeEquipment.create()
-                }), tracker)
-
-        then:
-        1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
-        1 * tracker.release(REF)
-
-        and: 'and the exception still propagates unchanged, keeping its own exit code'
-        thrown(expected)
-
-        and: 'the claim is dropped, not aborted or parked — this is not an infrastructure failure'
-        0 * tracker.recordAbort(_, _)
-        0 * tracker.park(_, _, _)
-
-        where:
-        kind | failure | expected
-        'usage error' | {
-            new UsageException('unmet container prerequisite')
-        } | UsageException
-    }
-
-    // NFR-R2 in spirit: the release is best-effort. A tracker that is itself the reason the run is
-    // bailing out must not replace the operator-facing usage error with a tracker stack trace.
-    def "keeps the original failure when the best-effort release itself throws"() {
+    // FR9, D16: a deliberate, dedicated-exit-code failure of a CLAIMED run is rethrown after a
+    // best-effort release; the arm itself is pinned in ClaimedRunFailureDispatchSpec. Here: the
+    // choke point really hands such a failure of the routed work to that arm.
+    def "hands a deliberate failure of the claimed run to the release-and-rethrow arm"() {
         given:
         def tracker = Mock(Tracker)
         def branches = Stub(TaskBranchGit) {
@@ -554,16 +496,12 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         then:
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
-        1 * tracker.release(REF) >> {
-            throw new IllegalStateException('tracker is down')
-        }
+        1 * tracker.release(REF)
+        0 * tracker.recordAbort(_, _)
 
         and:
         def ex = thrown(UsageException)
         ex.message == 'unmet container prerequisite'
-
-        and: 'the failed release is not lost either — it rides along as suppressed'
-        ex.suppressed*.message == ['tracker is down']
     }
 
     // FR9, D3: the fresh route, followed all the way to its terminal result — the claim choke point

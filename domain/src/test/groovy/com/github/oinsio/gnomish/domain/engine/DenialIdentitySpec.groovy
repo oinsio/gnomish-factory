@@ -50,6 +50,7 @@ class DenialIdentitySpec extends Specification {
 
     // The shared Finding type is untouched (design D5): every report surface that shows denials
     // reads them through this projection, so identity cannot leak into status.json or the render
+    // Scenario: sandbox/sandbox-egress / The identity stays out of status.json and the text render
     def "FR7: the findings projection drops the identity every report surface must not show"() {
         given:
         def first = new Finding('egress denied: a.example.com:443', null, null)
@@ -63,6 +64,7 @@ class DenialIdentitySpec extends Specification {
         Denial.findings(denials) == [first, second]
     }
 
+    // Scenario: sandbox/sandbox-egress / Repeated denials to the same destination are counted, not collapsed
     def "FR7: two denials to one destination stay two events with distinct identities"() {
         given:
         def finding = new Finding('egress denied: evil.example.com:443', null, null)

@@ -182,6 +182,7 @@ class GithubStateWritesSpec extends Specification {
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('agent CLI crashed'))))
     }
 
+    // Scenario: tracker/tracker-port / recordProgress leaves logical state untouched
     def "recordProgress posts a PROGRESS marker with no label transition"() {
         given:
         stubComment(wireMock, 44)
@@ -211,6 +212,7 @@ class GithubStateWritesSpec extends Specification {
         thrown(GithubStateWriteException)
     }
 
+    // Scenario: tracker/github-tracker / Decline restores the label and explains
     def "declineFinished restores delivered and posts a NOTE marker explaining the decline"() {
         given:
         stubIssue(wireMock, 50, ['gnomish:ready'])
@@ -231,6 +233,7 @@ class GithubStateWritesSpec extends Specification {
                         '$.body', WireMock.containing('This task is already finished. Please open a new task or bug.'))))
     }
 
+    // Scenario: tracker/github-tracker / Already-delivered issue is left untouched
     def "declineFinished on an already-delivered issue is a silent no-op"() {
         given:
         stubIssue(wireMock, 51, ['gnomish:delivered'])
@@ -323,6 +326,8 @@ class GithubStateWritesSpec extends Specification {
         parsed.at() == abortedAt
     }
 
+    // Scenario: tracker/github-tracker / Every marker of a tenure carries its epoch
+    // Scenario: tracker/tracker-port / An adapter's own writes carry the tenure it holds
     def "#kind of a live tenure carries that tenure's epoch (FR13)"() {
         given:
         stubLabelTransition(wireMock, issue, 'gnomish%3Aworking')

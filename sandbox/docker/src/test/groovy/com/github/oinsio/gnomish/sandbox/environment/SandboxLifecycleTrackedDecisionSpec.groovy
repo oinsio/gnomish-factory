@@ -14,6 +14,7 @@ import java.time.Duration
  */
 class SandboxLifecycleTrackedDecisionSpec extends SandboxLifecycleDecisionSpecBase {
 
+    // Scenario: sandbox/sandbox-lifecycle / Concurrent launch survives a sweep tick
     def "an object under the minimum age is untouched regardless of ownership or role"() {
         given:
         def justBorn = NOW - Duration.ofSeconds(1)
@@ -34,6 +35,8 @@ class SandboxLifecycleTrackedDecisionSpec extends SandboxLifecycleDecisionSpecBa
         0 * disposal.dispose(_)
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Freshly claimed task is protected
+    // Scenario: sandbox/sandbox-lifecycle / An alive object is untouched in any role and state
     def "tracked alive by fresh claim is untouched, for any role"() {
         when:
         decision.decideContainer(obj(), cls('alive', role, OwnershipMode.TRACKED), running(), LIVE, NOW, THRESHOLDS)
@@ -54,6 +57,8 @@ class SandboxLifecycleTrackedDecisionSpec extends SandboxLifecycleDecisionSpecBa
         ]
     }
 
+    // Scenario: cli/manual-run / Trackerless run touches no tracked object
+    // Scenario: sandbox/sandbox-lifecycle / Tracker outage removes nothing
     def "an absent liveness verdict skips every tracked object with no-verdict, for any role"() {
         when:
         decision.decideContainer(obj(), cls('x', role, OwnershipMode.TRACKED), running(), NO_VERDICT, NOW, THRESHOLDS)
@@ -74,6 +79,7 @@ class SandboxLifecycleTrackedDecisionSpec extends SandboxLifecycleDecisionSpecBa
         ]
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Abandoned running box is stopped, not destroyed
     def "unowned running main box is stopped, never disposed"() {
         when:
         decision.decideContainer(
@@ -88,6 +94,9 @@ class SandboxLifecycleTrackedDecisionSpec extends SandboxLifecycleDecisionSpecBa
         0 * disposal.dispose(_)
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / An unowned stopped main box is left to the aged reaper
+    // Scenario: sandbox/sandbox-lifecycle / Kept environment survives the human turnaround
+    // Scenario: sandbox/sandbox-lifecycle / Forgotten kept environment is reaped
     def "unowned stopped main box is kept under threshold, then disposed past it"() {
         when:
         decision.decideContainer(
@@ -107,6 +116,9 @@ class SandboxLifecycleTrackedDecisionSpec extends SandboxLifecycleDecisionSpecBa
         8 | SweepVerdictCategory.DISPOSED_AGED
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Unowned guard removed at once
+    // Scenario: sandbox/sandbox-lifecycle / Unowned judge box removed at once
+    // Scenario: sandbox/sandbox-lifecycle / Orphaned seed helper removed at once
     def "an unowned guard/judge/verification/seed-helper object is disposed on sight, never kept"() {
         when:
         decision.decideContainer(obj('n'), cls('x', role, OwnershipMode.TRACKED), running(), UNOWNED, NOW, THRESHOLDS)
@@ -123,6 +135,7 @@ class SandboxLifecycleTrackedDecisionSpec extends SandboxLifecycleDecisionSpecBa
         ]
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Orphaned seed helper removed at once
     def "disposing a guard or seed helper removes only that named container, never the bundled key"() {
         when:
         decision.decideContainer(
@@ -141,6 +154,7 @@ class SandboxLifecycleTrackedDecisionSpec extends SandboxLifecycleDecisionSpecBa
         ]
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Unowned judge box removed at once
     def "disposing a judge or verification object disposes its own exclusive key triple"() {
         when:
         decision.decideContainer(
@@ -160,6 +174,7 @@ class SandboxLifecycleTrackedDecisionSpec extends SandboxLifecycleDecisionSpecBa
         ]
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Unrecognized object falls back safely
     def "an unrecognized role is stopped if running, then aged-reaped once stopped"() {
         when: 'running'
         decision.decideContainer(

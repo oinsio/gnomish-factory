@@ -105,6 +105,7 @@ class SnapshotJsonReaderSpec extends Specification {
     // NFR-O3 of add-base-ref-resolution: a document written before this change carries no
     // "remote" key at all — the reader must not throw, and must treat it as "no gate known"
     // rather than an empty-but-known section.
+    // Scenario: observability/serve-observability / Old snapshots stay readable
     def "a snapshot with no remote section reads back as an empty remote map"() {
         given:
         def json = mapper.serialize(SnapshotJsonMapperSpec.referenceSnapshot())

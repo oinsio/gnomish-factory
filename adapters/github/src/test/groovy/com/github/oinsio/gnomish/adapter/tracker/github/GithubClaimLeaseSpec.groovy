@@ -115,6 +115,7 @@ class GithubClaimLeaseSpec extends Specification {
     // FR12: the kill window between the two writes freezes a task wearing the working label with no
     //     claim footprint at all — the ClaimPending shape the sweep enumerates and the reaper rolls
     //     back — never a state outside the sweep's own listing.
+    // Scenario: tracker/github-tracker / Kill between label transition and claim comment is swept
     def "FR12: a claim killed before its comment leaves the working label on and no claim footprint"() {
         given: 'the claim comment POST fails after the label transition already landed'
         stubLabelCalls(wireMock, 41)
@@ -157,6 +158,7 @@ class GithubClaimLeaseSpec extends Specification {
         wireMock.verify(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/20/comments')))
     }
 
+    // Scenario: tracker/github-tracker / Concurrent claim race
     def "concurrent claim race: the instance whose comment id is earliest wins"() {
         given: 'two instances race on the same issue; instance A posts comment id 601, instance B posts 600'
         stubLabelCalls(wireMock, 21)
@@ -194,6 +196,7 @@ class GithubClaimLeaseSpec extends Specification {
         resultB == new ClaimResult.Acquired(new ClaimEpoch(600))
     }
 
+    // Scenario: tracker/github-tracker / The losing claimant leaves the labels as they stand
     def "loser leaves labels as they stand (does not revert the working-label add)"() {
         given:
         def logs = LogCaptureSupport.attach(GithubClaimLease)
@@ -227,6 +230,7 @@ class GithubClaimLeaseSpec extends Specification {
         logs.detach()
     }
 
+    // Scenario: tracker/github-tracker / Unverifiable claim backs out
     def "unverifiable claim (persistent 5xx on verify-read) backs out: deletes own comment and throws"() {
         given: 'the claim comment posts fine, but the verify-read list-comments call is always down'
         stubLabelCalls(wireMock, 24)
@@ -246,6 +250,7 @@ class GithubClaimLeaseSpec extends Specification {
         wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/800')))
     }
 
+    // Scenario: tracker/github-tracker / Unverifiable claim backs out
     def "unverifiable claim (connection failure on verify-read) backs out: deletes own comment and throws"() {
         given: 'the claim comment posts fine, but the verify-read call fails at the transport level'
         stubLabelCalls(wireMock, 25)
@@ -265,6 +270,7 @@ class GithubClaimLeaseSpec extends Specification {
         wireMock.verify(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/801')))
     }
 
+    // Scenario: tracker/github-tracker / An unverifiable claim deletes its own marker
     def "unverifiable claim: the best-effort delete of the own comment failing does not mask the original failure"() {
         given: 'verify-read is persistently down, and so is the compensating delete'
         stubLabelCalls(wireMock, 26)
@@ -431,6 +437,7 @@ class GithubClaimLeaseSpec extends Specification {
         result == new ClaimResult.Acquired(new ClaimEpoch(920))
     }
 
+    // Scenario: tracker/github-tracker / Marker anchors the next lease round
     def "FR4: boundary-anchors the re-claim past a stale-claim-removed marker so the dead holder's pre-removal claim is ignored (D5)"() {
         given: 'a reaper removed a stale claim but a delete failure left the dead holder CLAIM comment in the thread; a fresh instance now re-claims'
         stubLabelCalls(wireMock, 29)
@@ -453,6 +460,7 @@ class GithubClaimLeaseSpec extends Specification {
         result == new ClaimResult.Acquired(new ClaimEpoch(930))
     }
 
+    // Scenario: tracker/github-tracker / A crashed claim attempt leaves no duplicate
     def "a crashed attempt's duplicate claim is adopted and the retry's own comment is deleted (FR11, UX3)"() {
         given: 'a prior attempt of this same instance already left a claim comment in the window'
         stubLabelCalls(wireMock, 24)
@@ -481,6 +489,9 @@ class GithubClaimLeaseSpec extends Specification {
         wireMock.findAll(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/600'))).isEmpty()
     }
 
+    // Scenario: tracker/github-tracker / A reclaim past a boundary mints a new claim comment
+    // Scenario: lifecycle/claim-heartbeat / Reclaim after a reap advances the epoch
+    // Scenario: lifecycle/task-branch-contract / Reclaim increases the epoch
     def "a reclaim past a boundary posts a new comment and mints a strictly greater epoch (FR13)"() {
         given: 'the same instance claimed before, then the task was returned by an abort'
         stubLabelCalls(wireMock, 25)

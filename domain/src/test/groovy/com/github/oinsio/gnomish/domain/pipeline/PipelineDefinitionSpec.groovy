@@ -52,6 +52,7 @@ class PipelineDefinitionSpec extends Specification {
 
     // FR1/FR3 delta-spec scenario: stages appear in exactly the declared
     // (pipeline.yaml) order — list equality is order-sensitive
+    // Scenario: pipeline/pipeline-config / Order comes from pipeline.yaml
     def "stages are presented in exactly the declared order"() {
         given: 'three stages declared in a specific order'
         def declared = [
@@ -79,6 +80,7 @@ class PipelineDefinitionSpec extends Specification {
     }
 
     // FR1: the exposed stage list itself cannot be mutated
+    // Scenario: pipeline/pipeline-config / Valid configuration loads
     def "the exposed stage list is immutable"() {
         given: 'a modeled pipeline'
         def pipeline = pipelineWith([stage('plan')])

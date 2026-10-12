@@ -60,6 +60,7 @@ abstract class TakeLifecycleProgressResetSpecBase extends Specification implemen
         writeAbortProjectFixture()
     }
 
+    // Scenario: tracker/tracker-take / Progress resets the counter end-to-end
     def "Progress resets the counter"() {
         given: 'two aborts recorded directly against the fresh Ready task, before any progress'
         tracker.recordAbort(REF, new AbortRecord(UntrustedText.subprocess('boom-1'), INSTANCE, START))

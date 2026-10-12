@@ -39,6 +39,8 @@ class ManualRunOfflineBoundarySpec extends Specification {
     // FR4, FR8, UX2, UX3: no manual-run driver imports or names the network base-ref capability —
     //     if one ever did, a --base-less manual run could reach the remote, breaking the offline
     //     guarantee UX3 promises ("identical offline behavior" with or without --base).
+    // Scenario: git/git-task-persistence / Manual run stays offline
+    // Scenario: pipeline/pipeline-config / Manual run with a base reads that ref's law offline
     def "FR4, FR8, UX2, UX3: manual-run drivers never reference the base-ref network capability"() {
         given: 'the two manual-run drivers, comments stripped'
         def sources = RepoSourceTree.productionSources { path ->

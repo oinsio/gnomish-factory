@@ -46,6 +46,7 @@ class BaseDesignatorSpec extends Specification {
     }
 
     // FR4: an allowed selection is accepted, and the accepting entry comes back with it
+    // Scenario: git/base-ref-resolution / An allowed selection is accepted
     def "an allowed single value is accepted with the entry that accepted it"() {
         when:
         def selection = BaseDesignator.single(tracker('release/1.18')).against(ALLOWED)
@@ -80,6 +81,7 @@ class BaseDesignatorSpec extends Specification {
 
     // base-ref-resolution: "No allowed base with a designator is refused, not resolved" — the defensive
     // arm that keeps the runtime fail-closed if the load-time check (pipeline-config) is bypassed
+    // Scenario: git/base-ref-resolution / No allowed bases with a designator is refused, not resolved
     def "a value reaching an empty list of allowed bases is refused rather than branched from"() {
         when:
         def selection = BaseDesignator.single(tracker('release/1.18')).against(AllowedBases.empty())

@@ -59,6 +59,7 @@ class GithubRetryableFailureSpec extends Specification {
 
     // FR18: the label flip of a terminal write fails with a 5xx the client could not retry away —
     //     the transition must surface as a retryable outage, not as a terminal fault.
+    // Scenario: tracker/github-tracker / Label flip failure during a terminal write is retried
     def "a label-operation failure during a terminal write is a retryable tracker outage"() {
         given: 'the truth marker lands, then the label add keeps failing'
         wireMock.stubFor(post(urlEqualTo("/repos/acme/widgets/issues/${ISSUE}/labels"))
@@ -74,6 +75,7 @@ class GithubRetryableFailureSpec extends Specification {
 
     // FR18: a connection reset before any response is an unreachable tracker by any reading — the
     //     bounded terminal-write retry must consume it like any other outage.
+    // Scenario: tracker/github-tracker / Transport failure is not terminal
     def "a transport failure of a tracker write is a retryable tracker outage"() {
         given: 'the comment POST never gets an answer'
         wireMock.stubFor(post(urlEqualTo("/repos/acme/widgets/issues/${ISSUE}/comments"))
@@ -93,6 +95,8 @@ class GithubRetryableFailureSpec extends Specification {
 
     // FR11, NFR-R3 of fix-operator-blockers: the comment POST is interrupted while GitHub holds its
     //     answer back — the write fails as the stop it is, never as a retryable tracker outage.
+    // Scenario: tracker/github-tracker / Tracker write interrupted mid-request
+    // Scenario: tracker/tracker-port / Interrupted write is not a retryable outage
     def "an interrupted tracker write is not a retryable tracker outage"() {
         given: 'the comment POST answers only long after the interrupt'
         wireMock.stubFor(post(urlEqualTo("/repos/acme/widgets/issues/${ISSUE}/comments"))

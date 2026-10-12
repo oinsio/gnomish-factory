@@ -36,6 +36,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
     // FR13, D12: a DecisionNeeded park with no pending reply re-parks, restating the question, and
     // no engine run happens.
+    // Scenario: tracker/tracker-take / Returned without an answer
     def "DecisionNeeded with empty replies re-parks restating the question, no engine run"() {
         given:
         def taskId = 'PROJ-1'
@@ -71,6 +72,9 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
     // FR12: a single pending reply on a DecisionNeeded park is acked BEFORE the engine resumes
     // (ack-before-acting), then the engine resumes with the decision appended.
+    // Scenario: tracker/tracker-take / Ack precedes acting
+    // Scenario: tracker/tracker-take / Reply consumed on resume
+    // Scenario: tracker/tracker-take / The mandate resumes from the recorded outcome
     def "DecisionNeeded with one pending reply acks before acting, then resumes"() {
         given:
         def taskId = 'PROJ-2'
@@ -188,6 +192,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
 
     // D12: AttemptsExhausted with a pending reply still acks and appends it — meaningful context
     // even though not required for resume.
+    // Scenario: tracker/tracker-take / Reply consumed on resume
     def "AttemptsExhausted with a pending reply acks and appends it, then resumes"() {
         given:
         def taskId = 'PROJ-5'

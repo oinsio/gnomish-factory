@@ -116,6 +116,7 @@ class GitObjectsTaskRepositoryApproveCheckpointSpec extends Specification implem
         gitOutput(work, 'push', 'origin', 'HEAD:' + REF)
     }
 
+    // Scenario: git/git-task-persistence / Approval is one commit past the gate
     def "FR3: the approval is one commit moving state.json past the gate and clearing the park"() {
         given:
         parkedAt(gated())
@@ -148,6 +149,7 @@ class GitObjectsTaskRepositoryApproveCheckpointSpec extends Specification implem
         logs.detach()
     }
 
+    // Scenario: git/git-task-persistence / Approval of a non-gate tip refuses
     def "FR3: an approval of a tip at #tipPosition refuses, writes nothing and names the tip's position"() {
         given:
         parkedAt(gated(tipPosition))

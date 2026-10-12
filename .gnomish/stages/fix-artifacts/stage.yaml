@@ -112,6 +112,22 @@ verify:
         echo "openspec validate $change --strict must pass before the round ends - fix the errors above in the change's own artifacts; if one needs a decision rather than a faithful restatement, escalate through \$GNOMISH_DECISION_FILE"
         exit 1
       fi
+  # The project's own spec-contract rules (traceability line, notes, scenario-to-test link) over
+  # the main specs and this task's change's deltas - never another change's, whose defect this
+  # round cannot fix. One Gradle task owns every rule (SpecContractCheck, design D5 of
+  # tighten-spec-contract); this check only names the change, as the checks above do, and
+  # launches it. Its shape is pinned by StageSpecContractCommand (build-logic).
+  - type: command
+    command: |
+      # The change this task works on, named as the checks above name it.
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      change=$(sed -n 's/^Change:[[:space:]]*//p' temporary-docs/gnomish/$task/change.md | head -1)
+      if ! out=$(./gradlew -q checkSpecContract -PspecContractChanges=true -PspecContractChange="$change" 2>&1); then
+        printf '%s\n' "$out" | tail -40
+        echo "the spec-contract check failed (file:line, rule and fix above; the whole list is build/reports/spec-contract.txt) - read .claude/rules/traceability.md, .claude/rules/delta-specs.md and .claude/rules/testing.md and fix each finding in the change's own artifacts; a finding outside them is not this round's to fix - escalate through \$GNOMISH_DECISION_FILE naming it"
+        exit 1
+      fi
   # The stage revises one change: its artifacts and the resolution record are all the branch
   # may carry beyond the reports of the earlier stages. Measured from the merge base, not
   # origin/main itself, which the factory keeps current. `.gnomish-task/` is the factory's own.

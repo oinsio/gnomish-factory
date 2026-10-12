@@ -41,6 +41,7 @@ class PipelineLawReaderSpec extends Specification {
         law.controlFile('criteria.md') == 'The output must be idempotent.'
     }
 
+    // Scenario: pipeline/pipeline-config / Gnome edits to the law have no effect
     def "FR19, NFR-S2, D14: an edit to a law file after freeze does not affect the frozen law"() {
         given:
         write('instructions.md', 'Original instructions.')

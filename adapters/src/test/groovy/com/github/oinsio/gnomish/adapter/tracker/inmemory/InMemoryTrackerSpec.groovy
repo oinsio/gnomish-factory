@@ -95,6 +95,7 @@ class InMemoryTrackerSpec extends AbstractInMemoryTrackerSpec {
 
     // FR1, FR3, D1-D4: recordProgress after an abort clears the abort streak, narrates the
     //     reset in the thread, and leaves the task's logical state untouched.
+    // Scenario: tracker/tracker-port / recordProgress leaves logical state untouched
     def "recordProgress after an abort zeroes the abort count, appends a PROGRESS entry, and does not change state"() {
         given: 'a tracker with one seeded Working task carrying abort history'
         def tracker = new InMemoryTracker()

@@ -10,6 +10,10 @@ the `sandbox-lifecycle` ownership scheme). This change *creates* the
 (C/D/E, `add-artifact-depot`) extend — they depend on it landing first,
 not merely "compose" with it. The depot change extends the self-check via
 a separate requirement; align the requirement home when the two meet.
+Both rebase bases have since archived. Sequenced after `tighten-spec-contract`:
+its MODIFIED blocks ("Container adapter", "Denials are captured as structured
+findings", "Mandatory fail-closed self-check", "Repo declarations can only
+tighten") are layered on that change's text, which must sync first.
 
 ## Why
 

@@ -37,6 +37,7 @@ class GithubCheckClientFactorySpec extends Specification {
         factory.provider() == 'github'
     }
 
+    // Scenario: verification/github-external-check / The default token name is the env/file secret
     def "builds the client when the token secret resolves"() {
         given:
         def factory = new GithubCheckClientFactory()
@@ -60,6 +61,8 @@ class GithubCheckClientFactorySpec extends Specification {
         client.repo() == 'widgets'
     }
 
+    // Scenario: verification/github-external-check / Missing token fails closed at wiring time
+    // Scenario: operator/secrets-provider / Missing secret refuses loudly
     def "a missing token fails closed naming the secret"() {
         given:
         def factory = new GithubCheckClientFactory()
@@ -74,6 +77,8 @@ class GithubCheckClientFactorySpec extends Specification {
 
     // FR17, D11 of add-plugin-architecture: the credential name travels through the SPI, so the
     //     composition root can scrub it without any core source naming the constant.
+    // Scenario: verification/github-external-check / The default token name is the env/file secret
+    // Scenario: verification/check-provider-model / A plugin's credential is scrubbed without a core constant
     def "declares its credential env var through the SPI"() {
         expect:
         new GithubCheckClientFactory().credentialEnvVars(SUBSECTION) == [

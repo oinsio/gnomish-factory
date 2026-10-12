@@ -38,6 +38,7 @@ class EnvironmentLeaseSpec extends Specification {
         }
     }
 
+    // Scenario: sandbox/execution-environment / Reuse within a segment avoids repeated clones
     def "FR12: stages of one segment reuse the same environment with no re-materialization"() {
         given:
         def env = fake(1)
@@ -55,6 +56,7 @@ class EnvironmentLeaseSpec extends Specification {
         events == ['materialize-1:gnomish/t']
     }
 
+    // Scenario: sandbox/execution-environment / Segment switch reuses resume mechanics
     def "FR12/FR13: a segment boundary executes harvest, dispose, materialize in order"() {
         given:
         def envs = [fake(1), fake(2)].iterator()

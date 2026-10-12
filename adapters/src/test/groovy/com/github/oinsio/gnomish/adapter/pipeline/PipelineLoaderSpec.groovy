@@ -35,6 +35,8 @@ class PipelineLoaderSpec extends Specification implements PipelineLoaderFixtureS
     @TempDir
     Path root
 
+    // Scenario: pipeline/pipeline-config / Valid configuration loads
+    // Scenario: pipeline/pipeline-config / Order comes from pipeline.yaml
     def "a fully valid tree loads into a PipelineDefinition with the expected stages in order"() {
         given:
         writeValidTree()
@@ -132,6 +134,7 @@ class PipelineLoaderSpec extends Specification implements PipelineLoaderFixtureS
         !errors.any { it.message().contains('declares no stages') }
     }
 
+    // Scenario: pipeline/pipeline-config / All problems reported in one pass
     def "a tree with independent problems across model-independent tiers reports them all in one pass"() {
         given: 'an unknown executor (structural), a pipeline stage without a manifest and'
         and: 'a dangling stage directory (consistency) — all reportable without a mapped model'

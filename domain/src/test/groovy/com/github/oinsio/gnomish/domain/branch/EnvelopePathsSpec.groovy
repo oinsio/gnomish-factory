@@ -41,6 +41,7 @@ class EnvelopePathsSpec extends Specification {
 
     // FR9, design D8: the domain's diagnosis labels are references to the owner, not a third
     // spelling — the pair that used to be kept in step by hand.
+    // Scenario: git/git-task-persistence / Every medium addresses the envelope by one spelling
     def "the classifier's diagnosis labels are the owner's file names"() {
         expect:
         BranchShapeClassifier.TASK_FILE.is(EnvelopePaths.TASK_FILE)

@@ -31,6 +31,7 @@ class DashboardStatusCardWipSpec extends Specification {
 
     def renderer = new DashboardHtmlRenderer()
 
+    // Scenario: observability/dashboard-page / WIP stat with its split
     def "FR12, UX3: WIP stat with its split — 2 working and 3 waiting under a limit of 10 read 5 / 10"() {
         when:
         def card = statusCard(running(), new BoardSectionView(model(2, 3, 10), FETCHED_AT, null))
@@ -49,6 +50,7 @@ class DashboardStatusCardWipSpec extends Specification {
         card.indexOf('>WIP<') <card.indexOf('>consecutive failures<')
     }
 
+    // Scenario: observability/dashboard-page / Full WIP is not an alarm
     def "FR12, UX3: full WIP is not an alarm — open fronts equal to the limit render in ordinary styling"() {
         when:
         def card = statusCard(running(), new BoardSectionView(model(2, 1, 3), FETCHED_AT, null))
@@ -58,6 +60,7 @@ class DashboardStatusCardWipSpec extends Specification {
         !card.contains('stat__value--bad')
     }
 
+    // Scenario: observability/dashboard-page / No daemon yet
     def "FR13: no daemon yet — no snapshot shows the WIP stat without slot or failure stats"() {
         when:
         def card = statusCard(new DaemonSnapshotView.Absent(), new BoardSectionView(model(0, 2, 5), FETCHED_AT, null))
@@ -70,6 +73,7 @@ class DashboardStatusCardWipSpec extends Specification {
         !card.contains('>consecutive failures<')
     }
 
+    // Scenario: observability/dashboard-page / Board never loaded
     def "FR13: board never loaded — no WIP stat and no placeholder for it"() {
         when:
         def card = statusCard(running(), neverFetchedBoard())

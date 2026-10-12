@@ -28,6 +28,7 @@ class LedgerAggregatorSpec extends Specification {
 
     private static final LocalDate TODAY = LocalDate.parse('2026-08-06')
 
+    // Scenario: observability/dashboard-page / Overnight totals at a glance
     def "aggregates outcome counts per day and sums tokens by model across the whole window"() {
         given:
         writeLedgerFile(TODAY.minusDays(1), [
@@ -56,6 +57,7 @@ class LedgerAggregatorSpec extends Specification {
         view.tokensByModel()['gpt'].input() == 4
     }
 
+    // Scenario: observability/dashboard-page / Torn last line is skipped
     def "a torn last line in the newest file is skipped, not counted"() {
         given:
         writeLedgerFileRaw(TODAY,
@@ -131,6 +133,7 @@ class LedgerAggregatorSpec extends Specification {
         view.perDay()[0].counts() == new OutcomeCounts(1, 0, 0, 0)
     }
 
+    // Scenario: observability/dashboard-page / An unknown outcome is skipped
     def "a taskOutcome line with an unknown or missing outcome is skipped, not a crash"() {
         given: 'a line written by a hypothetical newer factory version, plus one missing outcome, around a good line'
         writeLedgerFile(TODAY, [
@@ -155,6 +158,7 @@ class LedgerAggregatorSpec extends Specification {
 
     // NFR-O3 of add-base-ref-resolution: one remoteOutage line rolls into that day's count and
     // total blocked duration, and days with none render the zero default.
+    // Scenario: observability/dashboard-page / Overnight outage in the morning view
     def "one closed outage adds to that day's outage count and duration, other days stay at zero"() {
         given:
         writeLedgerFile(TODAY.minusDays(1), [

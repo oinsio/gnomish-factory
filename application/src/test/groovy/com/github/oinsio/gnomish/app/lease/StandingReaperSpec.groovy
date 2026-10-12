@@ -58,6 +58,8 @@ class StandingReaperSpec extends Specification {
     //     tick still observes the foreign claim; once its version has stood unchanged for a
     //     full TTL a later tick removes it — the removal alone is what returns the task to
     //     Ready (Reaper never claims a reaped task for itself, per design D5).
+    // Scenario: tracker/tracker-take / The reaper tick lists, observes and removes
+    // Scenario: lifecycle/claim-heartbeat / Reaping continues while the instance holds no claim
     def "reaps a foreign stale claim and the task returns to Ready, though the instance holds no claim"() {
         given:
         def v = version()

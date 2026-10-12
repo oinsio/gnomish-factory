@@ -52,6 +52,8 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
 
     // FR11, NFR-R2: runner start sweeps environments a dead instance left labelled, BEFORE the run
     // materializes its own — so a reattaching resume is never swept by the run it belongs to.
+    // Scenario: git/git-task-persistence / Completion removes the working copy and keeps the branch
+    // Scenario: git/git-task-persistence / Runner start prunes worktrees and sweeps orphans
     def "sweeps orphaned environments before the run starts, then disposes on completion"() {
         when:
         drive()
@@ -71,6 +73,8 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
 
     // NFR-R2: an ABORTED run records the outcome and keeps the box stopped — never disposes. A
     // disposed box would take the evidence and the salvageable work with it.
+    // Scenario: git/git-task-persistence / A boundary violation keeps its evidence
+    // Scenario: git/git-task-persistence / Aborted keeps the evidence
     def "records the abort and keeps the box stopped, never disposing"() {
         given:
         persistence = new InMemoryAttemptPersistence(failOnCall: 1)
@@ -91,6 +95,8 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
     // owed (a manual run has none, so no marker and no receipt commit), and only then the box
     // stopped and kept; never the completion's disposal or cleanup. The run then leaves by its
     // outcome with the return path.
+    // Scenario: git/git-task-persistence / A parked task keeps its working copy
+    // Scenario: git/git-task-persistence / Kept environment is stopped, not running
     def "records a park owing no tracker write, then keeps the box stopped — never disposing"() {
         when:
         drive(new ScriptedConsoleIO(), new Verdict.Fail([]))

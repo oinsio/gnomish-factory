@@ -63,6 +63,8 @@ class CliJudgeVoterSpec extends Specification {
 
     // FR8, FR9: a fenced {"passed": false, ...} final message yields Fail with findings
     // and reports per-model tokens.
+    // Scenario: executor/agent-executor / Fenced verdict accepted
+    // Scenario: executor/agent-executor / Vote tokens keyed by model
     def "fenced fail verdict yields Vote(Fail) with findings and tokens"() {
         given:
         def voter = voterFor('judge-verdict-fail-fenced')
@@ -77,6 +79,7 @@ class CliJudgeVoterSpec extends Specification {
     }
 
     // FR8, NFR-R1: an unparseable final message yields CannotVerify, not a thrown exception.
+    // Scenario: executor/agent-executor / No verdict is never a pass
     def "garbage verdict yields Vote(CannotVerify)"() {
         given:
         def voter = voterFor('judge-verdict-garbage')
@@ -90,6 +93,7 @@ class CliJudgeVoterSpec extends Specification {
 
     // FR13: an unreadable criteria file yields CannotVerify with no process spawned —
     // the scenario is deliberately invalid so any process launch would fail loudly.
+    // Scenario: executor/agent-executor / Unreadable criteria stop the vote before spawn
     def "unreadable criteria file yields Vote(CannotVerify) with no process spawned"() {
         given:
         def voter = voterFor('this-scenario-does-not-exist-and-would-fail-if-launched')
@@ -105,6 +109,7 @@ class CliJudgeVoterSpec extends Specification {
 
     // FR13, NFR-R1: roundTimeout expiry kills the process and returns CannotVerify,
     // never a thrown RoundTimeoutException — the judge port never throws.
+    // Scenario: executor/agent-executor / A dead judge process cannot verify
     def "hung process past roundTimeout yields Vote(CannotVerify), not a thrown exception"() {
         given:
         def voter = voterFor('hangs-forever')
@@ -118,6 +123,7 @@ class CliJudgeVoterSpec extends Specification {
     }
 
     // FR4, NFR-R1: a stream with no result event yields CannotVerify, never a thrown exception.
+    // Scenario: executor/agent-executor / A dead judge process cannot verify
     def "missing result event yields Vote(CannotVerify), not a thrown exception"() {
         given:
         def voter = voterFor('missing-result-event')

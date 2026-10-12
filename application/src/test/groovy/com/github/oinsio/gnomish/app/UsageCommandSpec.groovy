@@ -35,6 +35,7 @@ class UsageCommandSpec extends Specification implements SeededCloneFixture, Stdo
         new UsageCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(registeredClone), liveConsole())
     }
 
+    // Scenario: cli/task-inspection / Text usage is a stage and round table with totals
     def "FR14: text render prints the stage/round table and a totals line"() {
         given:
         def passed = round(0, AttemptRecord.Result.PASSED, 1000, 100)
@@ -50,6 +51,7 @@ class UsageCommandSpec extends Specification implements SeededCloneFixture, Stdo
         output.contains('TOTAL')
     }
 
+    // Scenario: cli/task-inspection / JSON usage carries full granularity under its own version
     def "FR14, NFR-C1: --json render prints the own version:1 mini-contract with full granularity"() {
         given:
         def passed = round(0, AttemptRecord.Result.PASSED, 1000, 100)
@@ -79,6 +81,7 @@ class UsageCommandSpec extends Specification implements SeededCloneFixture, Stdo
         output.contains('NO-SUCH-TASK')
     }
 
+    // Scenario: cli/task-inspection / Deleted branch after merge
     def "FR13, UX3, D15: 'Deleted branch after merge' — a branch that existed and was deleted reports not-found the same as a never-existing task"() {
         given: 'a task branch created, its worktree removed, then the branch deleted — mirroring a merged-and-cleaned-up PR'
         persistRound('PROJ-3', TaskState.atStageStart('implement').recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 10)), 'implement', 0)

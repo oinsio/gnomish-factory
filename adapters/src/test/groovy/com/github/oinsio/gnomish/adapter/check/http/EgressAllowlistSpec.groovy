@@ -29,6 +29,7 @@ class EgressAllowlistSpec extends Specification {
     }
 
     // NFR-S2: only https — an http check sends a credential and reads a verdict.
+    // Scenario: verification/factory-egress-allowlist / Plain http is refused
     def "plain http is refused, naming the scheme rule"() {
         when:
         def refusal = allowing(['sonar.example.com'], ['sonar.example.com': '93.184.216.34'])
@@ -41,6 +42,7 @@ class EgressAllowlistSpec extends Specification {
     }
 
     // NFR-S2, UX2: a host on no entry is refused with the reason and the entries that do apply.
+    // Scenario: verification/factory-egress-allowlist / Non-permitted destination is refused before connecting
     def "a host on no allowlist entry is refused, naming the missing entry"() {
         when:
         def refusal = allowing(['sonar.example.com'], ['evil.example.net': '93.184.216.34'])
@@ -97,6 +99,7 @@ class EgressAllowlistSpec extends Specification {
         refusal.describe().contains('169.254.169.254')
     }
 
+    // Scenario: verification/factory-egress-allowlist / Metadata and private ranges are blocked
     def "every blocked address class is refused and named"() {
         expect:
         def refusal = allowing(['inside.example.com'], ['inside.example.com': literal])
@@ -163,6 +166,7 @@ class EgressAllowlistSpec extends Specification {
     }
 
     // NFR-S2, D5: the allowlist is read from operator config and from nothing else.
+    // Scenario: verification/factory-egress-allowlist / Allowlist lives in operator config, not the manifest
     def "entries are read from the operator subsection"() {
         expect:
         EgressAllowlist.entriesOf([allowlist: [

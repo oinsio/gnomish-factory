@@ -44,6 +44,7 @@ class AgentSettingsValidatorSpec extends Specification {
         AgentSettingsValidator.validate(pipeline(stage)) == []
     }
 
+    // Scenario: executor/agent-executor / Typo fails fast
     def "an unrecognized key on an agent-cli executor is a located error naming the stage and key"() {
         given:
         def stage = stage('build', ExecutorType.AGENT_CLI, [allowedTols: ['Read']], [])
@@ -58,6 +59,7 @@ class AgentSettingsValidatorSpec extends Specification {
     // FR4 of fix-operator-blockers: the permission mode and the MCP exclusion are adapter
     // policy fixed per role; a manifest that tries to set either fails startup, on the executor
     // and on a judge check alike (scenario "Manifest cannot set the permission mode").
+    // Scenario: executor/agent-executor / Manifest cannot set the permission mode
     def "FR4: a stage cannot set the permission mode or the MCP configuration through settings (#key)"() {
         given:
         def stage = stage('build', ExecutorType.AGENT_CLI, [(key): value], [judgeCheck([(key): value])])
@@ -146,6 +148,28 @@ class AgentSettingsValidatorSpec extends Specification {
             new ConfigError('stages/build/stage.yaml', 'verify[0].settings.oops',
             "unrecognized settings key 'oops'"),
         ]
+    }
+
+    // FR11, D7: installation-level knobs and manifest data are not settings, on either role
+    def "FR11: a #what in settings is the unknown-settings-key error, on the executor and a judge check"() {
+        // Scenario: executor/agent-executor / The grace is not a manifest setting
+        // Scenario: executor/agent-executor / The child-environment allowlist is installation config
+        // Scenario: executor/agent-executor / The model is manifest data, not a setting
+        given:
+        def stage = stage('build', ExecutorType.AGENT_CLI, [(key): value], [judgeCheck([(key): value])])
+
+        expect:
+        AgentSettingsValidator.validate(pipeline(stage))*.message() == [
+            "unrecognized settings key '${key}'".toString()
+        ] * 2
+
+        where:
+        what | key | value
+        'tail-drain grace' | 'agentCliTailDrainGrace' | 'PT5S'
+        'tail-drain grace' | 'tailDrainGrace' | 5
+        'child-environment allowlist' | 'envAllowlist' | ['PATH']
+        'passthrough variable' | 'envPassthrough' | ['NPM_TOKEN']
+        'model' | 'model' | 'claude-opus'
     }
 
     private static VerifyCheck.Judge judgeCheck(Map<String, Object> settings) {

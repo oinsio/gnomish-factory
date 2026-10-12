@@ -30,6 +30,8 @@ class ParkDeliveryFenceTerminationSpec extends Specification {
     @TempDir
     Path tempDir
 
+    // Scenario: git/git-task-persistence / An interrupted delivery check reports delivery unverified
+    // Scenario: git/git-task-persistence / An interrupted delivery check spends no re-attempt
     def "FR7, UX2: an interrupted push spends no re-attempt and claims nothing about origin"() {
         given: 'a push that never finishes, and a run that is shut down while it is in flight'
         def push = StalledPush.blocking()
@@ -65,6 +67,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification {
         !warnings.any { it.formattedMessage.contains('push failed') }
     }
 
+    // Scenario: git/git-task-persistence / A timed-out delivery push is re-verified before any claim
     def "FR7, M3: a timed-out push whose commit did arrive is confirmed delivered by the re-check"() {
         given: 'a push that stalls only after the remote has taken the tip — the kill lands too late'
         ParkDeliveryVerdict verdict = null
@@ -87,6 +90,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification {
         }
     }
 
+    // Scenario: git/git-task-persistence / A timed-out delivery push is re-verified before any claim
     def "FR7, UX2: a timed-out push claims origin is behind only once origin confirms it"() {
         given: 'origin answers the re-check and does not have the branch'
         ParkDeliveryVerdict verdict = null
@@ -109,6 +113,7 @@ class ParkDeliveryFenceTerminationSpec extends Specification {
         }
     }
 
+    // Scenario: git/git-task-persistence / A timed-out delivery push is re-verified before any claim
     def "FR7, UX2: an unanswerable re-check reports that delivery could not be verified"() {
         given: 'the remote stops answering ls-remote too, so nothing about origin can be established'
         ParkDeliveryVerdict verdict = null

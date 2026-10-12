@@ -111,6 +111,7 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
         gitOutput(cloneDir, 'rev-parse', tip() + '^') == snapshot
     }
 
+    // Scenario: git/git-task-persistence / A resumed round is checked against its recorded token
     def "FR15: a resumed round is judged against its recorded token, so a forged state write in its snapshot is caught"() {
         given: 'a round that wrote under .gnomish-task/ and was killed between its snapshot and its state commit'
         def box = materializedBox()

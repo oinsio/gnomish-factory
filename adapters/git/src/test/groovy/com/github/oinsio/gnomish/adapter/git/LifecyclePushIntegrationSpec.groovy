@@ -59,6 +59,8 @@ class LifecyclePushIntegrationSpec extends Specification implements LifecyclePus
         new PushBestEffortTaskLifecycleStore(bare, git, clone, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
     }
 
+    // Scenario: git/git-task-persistence / Cleanup works after dispose
+    // Scenario: git/git-task-persistence / Completion reaches origin without human involvement
     def "M1: a task driven to Completed in #mode mode leaves origin at the local tip, with no manual push"() {
         given:
         def repository = repositoryFor(mode, cloneDir)
@@ -83,6 +85,39 @@ class LifecyclePushIntegrationSpec extends Specification implements LifecyclePus
         mode << ['host', 'sandbox']
     }
 
+    // FR10 of harden-task-branch-contract, FR1 of fix-lifecycle-push: the Completed outcome commit
+    //     and its cleanup commit are two lifecycle operations — the terminal tracker write runs
+    //     between them — so each is delivered by its own push, through the production wiring of
+    //     either mode. (F3 of tighten-spec-contract: replaces the one-push feature that a mock
+    //     delegate landing both commits at once had pinned.)
+    // Scenario: git/git-task-persistence / Completion pushes around the tracker write
+    def "FR10: in #mode mode the outcome commit is on origin before the tracker write, the cleanup commit after it"() {
+        given:
+        def repository = repositoryFor(mode, cloneDir)
+        repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+
+        when: 'the outcome is recorded — the point at which the terminal tracker write is signalled'
+        repository.recordOutcome(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
+        def outcomeCommit = localTip()
+        def originAtTrackerWrite = remoteTip()
+
+        and: 'the tracker write has landed and the destructive last step runs'
+        repository.finishCleanup(TASK_ID)
+
+        then: 'origin already held the outcome commit when the tracker write would run'
+        originAtTrackerWrite == Optional.of(outcomeCommit)
+
+        and: 'the cleanup commit is a second commit, delivered by its own push'
+        localTip() != outcomeCommit
+        gitOutput(cloneDir, 'rev-parse', "refs/heads/${BRANCH}^") == outcomeCommit
+        remoteTip() == Optional.of(localTip())
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', "refs/heads/${BRANCH}") == ServiceCommitMessages.cleanup()
+
+        where:
+        mode << ['host', 'sandbox']
+    }
+
+    // Scenario: git/git-task-persistence / Local-only runs stay silent
     def "UX3: a #mode run in a clone with no origin attempts no push and logs nothing"() {
         given: 'a clone with no origin remote at all'
         def local = initWorkingRepo(tempDir, 'local')

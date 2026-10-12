@@ -29,6 +29,11 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
     // FR5 of remove-interactive-console, scenario "Script too short": with stdin closed before the
     //     run starts and a pipeline that neither escalates nor checkpoints, nothing reads stdin —
     //     the run exits 0, prints no prompt, and the retired code 4 is unreachable.
+    // Scenario: cli/manual-run / The first paid round needs no confirmation
+    // Scenario: cli/manual-run / Script too short
+    // Scenario: cli/cli-arguments / Property options pass through
+    // Scenario: cli/cli-arguments / Every dotted option passes through
+    // Scenario: lifecycle/factory-bootstrap / Clean boot
     def "closed stdin and a pipeline with no prompt on its path exits 0"() {
         given: 'the fake agent plays one clean round, and stdin is already closed'
         def agent = FakeAgentSupport.wrapperFor('plain-round')
@@ -78,6 +83,8 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
         (result.stdout() + result.stderr()).contains('--task')
     }
 
+    // Scenario: cli/cli-arguments / A mistyped run flag is not a silent success
+    // Scenario: cli/cli-arguments / A usage error is one line
     def "NFR-O1, FR16 of fix-operator-blockers: a usage error is one stderr line, with no framework trace"() {
         given: 'the subcommand handed an option it does not accept'
         List<String> noArgsNeeded = []
@@ -105,6 +112,7 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
         !result.stdout().contains('UsageException')
     }
 
+    // Scenario: cli/manual-run / Broken pipeline reported before any dialog
     def "broken pipeline exits 3 before any dialog"() {
         given: 'a fixture whose plan stage references a missing instructions.md'
         Path brokenRoot = E2eFixture.brokenRoot()
@@ -129,6 +137,7 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
     // FR3, NFR-O1, D5 of remove-interactive-console: an `external` check on a provider this
     //     factory has no `factory.check.<provider>` section for is a load failure — exit 3, the
     //     located error naming the section to write, and no stage ever started.
+    // Scenario: cli/manual-run / Unconfigured check provider rejected before any dialog
     def "unconfigured check provider exits 3 before any dialog"() {
         given: 'a fixture whose one stage declares an external check on github, with no factory.check.github'
         Path root = E2eFixture.unconfiguredProviderRoot()

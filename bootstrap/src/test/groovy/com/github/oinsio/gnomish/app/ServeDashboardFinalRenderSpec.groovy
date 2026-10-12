@@ -54,6 +54,8 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
     }
 
     // FR11, UX2 (factory-serve "Page after Ctrl-C"): the page's last render reads the stopped snapshot.
+    // Scenario: serve/factory-serve / Page after Ctrl-C
+    // Scenario: observability/serve-observability / Graceful stop leaves a stopped snapshot
     def "FR11: serve --dashboard --drain leaves a page that shows the stopped state and its reason"() {
         given: 'one Ready task the fake agent delivers'
         new InMemoryTrackerHarness(tracker).seed(

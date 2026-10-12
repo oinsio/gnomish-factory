@@ -97,6 +97,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         gitOutput(bareDir, 'show', "${refFor(taskId)}${suffix}:.gnomish-task/task.json")
     }
 
+    // Scenario: git/git-task-persistence / Sandboxed lifecycle commits run on bare objects
     def "FR25: createTask creates the branch ref and commits task.json over bare objects, no checkout"() {
         when:
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
@@ -129,6 +130,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     // FR7 of add-base-ref-resolution: createTask pins the REAL rule that produced the ref, not a
     // stand-in — the ref and the rule land in the STARTED commit's task.json over bare objects too.
+    // Scenario: git/git-task-persistence / Creation commit carries the pin
     def "FR7: createTask pins the resolved ref and its rule in the bare-object STARTED commit"() {
         when:
         repository.createTask(sampleContext(), baseCommit(), CONFIGURED_PIN, TaskState.atStageStart('implement'))
@@ -211,6 +213,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     // FR4 of harden-task-branch-contract: the container-side decision is one bare-object commit
     // carrying both envelopes — the answer and the attempt-counter reset it implies.
+    // Scenario: git/git-task-persistence / Decision and attempt reset are one commit
     def "FR4: the bare-object decision commit carries the attempt-counter reset"() {
         given: 'a task branch and the state a park recorded, with an attempt burned'
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
@@ -237,6 +240,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     // FR3 of fix-denial-attribution-durability: the round died before its close, so no attempt
     //     record exists to carry its denials — the escalation carries them, and the position that
     //     drain left behind rides the very same lifecycle commit
+    // Scenario: git/git-task-persistence / The drained position is committed with the escalation
     def "FR3: a cannotExecute park commits the drained position beside the escalation it delimits"() {
         given: 'a task branch and an environment that read its denial source up to a known position'
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
@@ -261,6 +265,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     }
 
     // NFR-R1: denial bookkeeping never takes a park down — losing the position costs a re-read
+    // Scenario: git/git-task-persistence / An unanswerable cursor never fails the park
     def "NFR-R1: an unanswerable position leaves the escalation cursorless and the park succeeds"() {
         given:
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
@@ -321,6 +326,8 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
 
     // FR5, D8 of fix-denial-attribution-durability: a lifecycle rewrite reads no denial source, so
     //     it has no position of its own — and must not erase the one the tip carries
+    // Scenario: git/git-task-persistence / A decision append preserves the cursor
+    // Scenario: git/git-task-persistence / A lifecycle rewrite preserves the cursor
     def "FR5: a RESUMED commit carries both envelopes' committed cursors forward"() {
         given: 'a tip whose task.json carries an escalation cursor and whose state.json carries an attempt cursor'
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
@@ -470,6 +477,8 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         gitOutput(bareDir, 'rev-parse', refFor('PROJ-1')) == gitOutput(bare2, 'rev-parse', refFor('PROJ-1'))
     }
 
+    // Scenario: git/git-task-persistence / Reading a gnome branch runs nothing
+    // Scenario: git/git-task-persistence / Sandboxed lifecycle commits run on bare objects
     def "FR25: createTask never fires a factory-clone hook (bare-object commits bypass hooks)"() {
         given: 'a pre-commit hook that would fail any hook-running commit'
         StandIn.link(Files.createDirectories(bareDir.resolve('hooks')).resolve('pre-commit'), 'hook-refuse')
@@ -557,6 +566,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
                 new AttemptKey('PROJ-1', 'implement', 0), UntrustedText.subprocess('boom')) | TaskLifecycleEvent.ABORTED | RecordedOutcome.Aborted
     }
 
+    // Scenario: git/git-task-persistence / Park outcome and marker are one commit
     def "FR25: recordOutcome for Escalated populates lastEscalation and the tracker-write pending marker"() {
         given:
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
@@ -574,6 +584,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         content.trackerWritePending()
     }
 
+    // Scenario: git/git-task-persistence / Abort outcome needs no environment
     def "FR25: recordOutcome for Aborted leaves the tracker-write pending marker unset, needs no environment"() {
         given:
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
@@ -652,6 +663,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
     // FR10 of harden-task-branch-contract: running the destructive step twice equals running it once.
     // FR5 of harden-logging-observability: the second run writes nothing, so a DEBUG line is what
     // tells a reader the recovery ran and found the work already done rather than skipping it.
+    // Scenario: git/git-task-persistence / A tip without the state directory is a cleanup no-op
     def "FR10: finishCleanup on an already-cleaned tip changes nothing"() {
         given:
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
@@ -702,6 +714,9 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         logs.detach()
     }
 
+    // Scenario: git/git-task-persistence / Clean tip, full history
+    // Scenario: git/git-task-persistence / Cleanup works after dispose
+    // Scenario: git/git-task-persistence / The cleanup commit is built per mode
     def "FR25/M4: finishCleanup adds the cleanup commit removing .gnomish-task/ from the tip, history preserved"() {
         given: 'a task with an extra lifecycle commit before completion, to prove earlier history stays reachable'
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))

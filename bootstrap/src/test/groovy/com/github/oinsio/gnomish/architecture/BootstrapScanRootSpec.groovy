@@ -57,6 +57,7 @@ class BootstrapScanRootSpec extends Specification {
     }
 
     // FR3: the scan is rooted in the composition root's own package tree
+    // Scenario: build/module-layering / bootstrap is the only Spring scan root
     def "the declared scan roots reach no adapter package"() {
         given: 'the component-scan roots the composition root declares'
         def roots = FactoryApplication.getAnnotation(SpringBootApplication).scanBasePackages()
@@ -71,6 +72,7 @@ class BootstrapScanRootSpec extends Specification {
     }
 
     // FR3, NFR-R1: adapters are contributed explicitly, never swept up by the scan
+    // Scenario: build/module-layering / bootstrap is the only Spring scan root
     def "every class-level bean definition is scanned from a declared root or explicitly exported"() {
         given: 'the auto-configurations the modules on the classpath export by name'
         def exported = exportedAutoConfigurations()

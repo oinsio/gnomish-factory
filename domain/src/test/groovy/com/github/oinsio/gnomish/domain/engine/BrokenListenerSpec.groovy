@@ -27,6 +27,7 @@ class BrokenListenerSpec extends BrokenListenerSpecBase {
     //       silent listener (control), once with throwOnEvent = true — and prove the
     //       throwing listener changed NOTHING observable: same terminal outcome, same
     //       persisted states, same executor requests, same check calls.
+    // Scenario: pipeline/stage-engine / Broken listener does not break the run
     def "a throwing listener changes nothing observable in the run outcome or port calls"() {
         given: 'a control run with a silent recording listener'
         def controlExec = new ScriptedExecutor()
@@ -113,6 +114,7 @@ class BrokenListenerSpec extends BrokenListenerSpecBase {
     //         capture. A Logback ListAppender attached to the Events logger captures the
     //         warnings; there is exactly one WARN per emitted engine event, so the run is
     //         unaffected AND the failure is faithfully recorded rather than silently dropped.
+    // Scenario: pipeline/stage-engine / Broken listener does not break the run
     def "each swallowed listener failure is logged at WARN"() {
         given: 'a ListAppender attached to the Events logger'
         Logger eventsLogger = (Logger) LoggerFactory.getLogger(Events)

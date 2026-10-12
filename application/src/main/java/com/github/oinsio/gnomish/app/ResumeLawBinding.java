@@ -202,30 +202,18 @@ final class ResumeLawBinding {
                 ref.id(),
                 pinnedRef,
                 reason.forLog());
-        releaseBestEffort(tracker, ref);
-        // The reason leaves its carrier through the log exit here rather than at each sink: what is
-        // built is one message the sinks log whole, and minting the composed line keeps the field a
-        // carrier so no sink can take it raw (design D4 of type-untrusted-text). The composed line
-        // is the factory's own sentence around an already-neutralized quote, so it is minted in the
-        // factory's family rather than in the one the quote came from (design D3). The pinned ref
-        // beside it is not untrusted text: PinnedRefGate holds every task.json baseRef to
+        // The pinned ref is not untrusted text: PinnedRefGate holds every task.json baseRef to
         // RefNameSyntax at the read, so a malformed one never reaches this far (NG4, task 12.2 of
         // add-base-ref-resolution).
-        return new TakeResult.InfrastructureUnavailable(
-                UntrustedText.factory("Task " + ref.id() + " claim released (the reaper returns it to Ready after"
-                        + " the claim TTL): origin did not answer the resume refresh of its pinned base ref '"
-                        + pinnedRef + "': " + reason.forLog()));
-    }
-
-    private static void releaseBestEffort(Tracker tracker, TaskRef ref) {
-        try {
-            tracker.release(ref);
-        } catch (RuntimeException unreleased) {
-            log.error(
-                    OperatorEvent.RESUME_BASE_RELEASE_FAILED.head()
-                            + "release failed for task {} whose resume base refresh could not reach origin",
-                    ref.id(),
-                    unreleased);
-        }
+        return ClaimOutageRelease.release(
+                tracker,
+                ref,
+                "the resume refresh of its pinned base ref '" + pinnedRef + "'",
+                reason,
+                unreleased -> log.error(
+                        OperatorEvent.RESUME_BASE_RELEASE_FAILED.head()
+                                + "release failed for task {} whose resume base refresh could not reach origin",
+                        ref.id(),
+                        unreleased));
     }
 }

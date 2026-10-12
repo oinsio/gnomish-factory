@@ -131,6 +131,7 @@ class LogContractGateSpec extends Specification {
     }
 
     // FR10: the catalog constant is the only accepted form, now that every module can reach it.
+    // Scenario: build/module-layering / Every operator event head comes from the catalog leaf
     def "no production source spells a code head as a string literal"() {
         expect: 'the scan really reached the source tree'
         RepoSourceTree.productionSources().size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
@@ -140,6 +141,7 @@ class LogContractGateSpec extends Specification {
     }
 
     // D15: the detector is the gate — a seeded violation must fail it, or a green run means nothing.
+    // Scenario: observability/factory-logging / A code cannot be minted twice
     def "a seeded uncoded operator site is detected: #call"() {
         expect: 'the site is seen at all — a snippet the parser drops would pass this vacuously'
         operatorSitesIn(call, 'Seeded.java').size() == 1
@@ -157,6 +159,7 @@ class LogContractGateSpec extends Specification {
     }
 
     // D15: a duplicated code is the ambiguity the one-code-one-site rule exists to forbid.
+    // Scenario: observability/factory-logging / A code cannot be minted twice
     def "a seeded duplicate code is detected"() {
         given: 'two sites naming the same catalog constant'
         def code = '''
@@ -183,6 +186,7 @@ class LogContractGateSpec extends Specification {
     }
 
     // D15: the correct form is not flagged — a gate that fails the fix is worse than none.
+    // Scenario: observability/factory-logging / A literal head fails the build
     def "a coded site rendering the catalog constant is not flagged: #form"() {
         expect: 'its code is read from the site'
         codesOf(form, 'Correct.java') == [expected] as Set
@@ -199,6 +203,7 @@ class LogContractGateSpec extends Specification {
     // FR10, D4 of split-logtext-leaves: the inverse of the feature above. The literal form was a
     //     pinned-valid shape while `:domain` could not reach the catalog; it is now the violation,
     //     and the same two examples that used to pass are what the detector must catch.
+    // Scenario: observability/factory-logging / A literal head fails the build
     def "a seeded literal head is detected: #form"() {
         expect: 'the site is seen at all — a snippet the parser drops would pass this vacuously'
         LogCallSites.inSource(form, 'Seeded.java').size() == 1
@@ -217,6 +222,7 @@ class LogContractGateSpec extends Specification {
     //     plane just the same (a constant the call prepends, a message assembled a statement
     //     earlier, an exception text an operator greps), and a scan of call text alone never sees
     //     it. Each of these used to pass the gate.
+    // Scenario: observability/factory-logging / A literal head fails the build
     def "a seeded literal head outside a log call is detected: #form"() {
         expect: 'no log call is involved at all, so only a whole-source scan can find it'
         LogCallSites.inSource(form, 'Seeded.java') == []

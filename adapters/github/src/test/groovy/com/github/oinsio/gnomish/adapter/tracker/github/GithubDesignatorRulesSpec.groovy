@@ -18,6 +18,7 @@ class GithubDesignatorRulesSpec extends Specification {
     }
 
     // FR3: one matching label yields one candidate, and the state label plays no part
+    // Scenario: tracker/github-tracker / One matching label yields one candidate
     def "one matching label yields the single designator"() {
         given:
         def rules = rulesFor(base: 'base:(.+)')
@@ -33,6 +34,7 @@ class GithubDesignatorRulesSpec extends Specification {
     }
 
     // FR3: the rule matches a label in full -- a label merely containing the pattern is not a match
+    // Scenario: tracker/github-tracker / Partial matches do not count
     def "partial matches do not count"() {
         given:
         def rules = rulesFor(base: 'base:(.+)')
@@ -42,6 +44,7 @@ class GithubDesignatorRulesSpec extends Specification {
     }
 
     // FR3: two captures with different values are a conflict, in the order the API returned the labels
+    // Scenario: tracker/github-tracker / Two captures with different values are a conflict
     def "two labels with different values are a conflict in label order"() {
         given:
         def rules = rulesFor(base: 'base:(.+)')
@@ -92,6 +95,7 @@ class GithubDesignatorRulesSpec extends Specification {
     }
 
     // FR3: a kind with no rule is never extracted and never reported
+    // Scenario: tracker/github-tracker / Undeclared kind is neither extracted nor reported
     def "a subsection with no designators map declares no kinds and extracts nothing"() {
         given:
         def rules = GithubDesignatorRules.from(['api-url': 'https://api.github.test'])

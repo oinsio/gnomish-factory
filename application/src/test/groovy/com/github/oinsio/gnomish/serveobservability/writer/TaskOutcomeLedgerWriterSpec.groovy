@@ -60,6 +60,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
         new TaskState(position, 1, [], ExecutorUsage.none())
     }
 
+    // Scenario: observability/serve-observability / Delivered task leaves one line
     def "writes exactly one taskOutcome line for a Delivered result, with startedAt from the slot ledger"() {
         given:
         def ref = new TaskRef('PROJ-1')
@@ -119,6 +120,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
         !Files.exists(ledgerFile(now))
     }
 
+    // Scenario: observability/serve-observability / Lost claim race leaves no line
     def "writes nothing to the ledger directory for Skipped"() {
         given:
         def ref = new TaskRef('PROJ-4')
@@ -171,6 +173,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
     //
     // FR15 of harden-logging-observability: the lost line is a task's own outcome, so the ERROR
     // carries the taskId — the attribution key an operator greps the run by.
+    // Scenario: observability/serve-observability / Disk full
     def "swallows an IOException from a blocked ledger directory, leaving an ERROR naming the task"() {
         given:
         def ref = new TaskRef('PROJ-6')

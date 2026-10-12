@@ -32,6 +32,7 @@ class TrackerAdapterDiscoverySpec extends Specification {
     // FR1: "a jar exposing a tracker SPI factory via META-INF/services is present on the classpath
     // → the factory discovers the provider and its discriminator becomes selectable, with no change
     // to any core source file".
+    // Scenario: plugin/plugin-discovery / A provider on the classpath is discovered without a core edit
     def "a service entry the core names nowhere is discovered and becomes selectable"() {
         given: 'a plugin "jar": a service entry naming a factory no core source references'
         Path services = pluginJarRoot.resolve('META-INF/services')
@@ -59,6 +60,7 @@ class TrackerAdapterDiscoverySpec extends Specification {
 
     // FR2, design D2: ServiceLoader instantiates through the public no-arg constructor, so a
     // discovered factory holds no injected SecretsProvider — it receives one per create(...) call.
+    // Scenario: plugin/plugin-discovery / Factory is created before its dependencies exist
     def "discovery builds every provider through its public no-arg constructor"() {
         given:
         def registry = TrackerAdapterDiscovery.discover()
@@ -90,6 +92,7 @@ class TrackerAdapterDiscoverySpec extends Specification {
 
     // NFR-R1: "a discriminator served by two discovered providers fails with a clear error naming
     // the conflict" — never an arbitrary pick between the colliding pair.
+    // Scenario: plugin/plugin-discovery / Duplicate provider fails with a named error
     def "a duplicate discriminator fails the registry build, naming both providers"() {
         given:
         def first = new PluginStandInTrackerAdapterFactory()

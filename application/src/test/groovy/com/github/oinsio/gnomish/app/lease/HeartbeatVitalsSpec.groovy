@@ -94,6 +94,7 @@ class HeartbeatVitalsSpec extends Specification {
 
     // FR7, D3: an abnormal worker death reports DIED, distinct from the normal IDLE stop —
     //     the heartbeat's designed degradation death path becomes a field, not just a log line.
+    // Scenario: observability/serve-observability / Heartbeat death is a field
     def "reports DIED after an abnormal worker death, and RUNNING again after a later claim restarts it"() {
         given: 'a sleeper that throws on its second call, mimicking an adapter Error'
         def base = new BlockingSleeper()

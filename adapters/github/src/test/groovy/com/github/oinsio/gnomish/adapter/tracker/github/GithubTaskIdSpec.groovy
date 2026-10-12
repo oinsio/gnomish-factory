@@ -12,6 +12,7 @@ import spock.lang.Specification
  */
 class GithubTaskIdSpec extends Specification {
 
+    // Scenario: tracker/github-tracker / Default host is omitted
     def "default host is omitted: trailing-slash api-url still resolves to default"() {
         when:
         def id = GithubTaskId.build('https://api.github.com/', 'acme', 'widgets', 42)
@@ -44,6 +45,7 @@ class GithubTaskIdSpec extends Specification {
         id.canonicalId() == 'github:api.github.com/acme/widgets#42'
     }
 
+    // Scenario: tracker/github-tracker / Enterprise host is included
     def "enterprise host is included: a different host is non-default"() {
         when:
         def id = GithubTaskId.build('https://ghe.example.com/api/v3', 'acme', 'widgets', 42)
@@ -90,6 +92,7 @@ class GithubTaskIdSpec extends Specification {
         parsed.issueNumber() == 42
     }
 
+    // Scenario: tracker/github-tracker / The canonical id round-trips to issue coordinates
     def "build then parse round-trips to the same components: #apiUrl"() {
         given:
         def built = GithubTaskId.build(apiUrl, 'acme', 'widgets', 42)
@@ -108,6 +111,7 @@ class GithubTaskIdSpec extends Specification {
         ]
     }
 
+    // Scenario: tracker/github-tracker / The canonical id round-trips to issue coordinates
     def "parse then rebuild yields the same canonical string"() {
         given:
         def original = 'github:ghe.example.com/acme/widgets#7'

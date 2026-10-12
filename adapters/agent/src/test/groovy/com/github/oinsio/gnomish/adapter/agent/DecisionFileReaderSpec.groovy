@@ -68,6 +68,7 @@ class DecisionFileReaderSpec extends Specification {
         decision.get().options()*.forLog() == []
     }
 
+    // Scenario: executor/agent-executor / Garbage decision file is not lost
     def "garbage content logs the raw text at WARN"() {
         given:
         def reader = new DecisionFileReader()
@@ -86,6 +87,7 @@ class DecisionFileReaderSpec extends Specification {
         events[0].formattedMessage.contains(raw)
     }
 
+    // Scenario: executor/agent-executor / Empty decision file asks a fallback question
     def "empty file content yields a fallback question with empty options"() {
         given:
         def reader = new DecisionFileReader()
@@ -112,6 +114,7 @@ class DecisionFileReaderSpec extends Specification {
         decision.get().options()*.forLog() == []
     }
 
+    // Scenario: executor/agent-executor / Empty decision file asks a fallback question
     def "empty file content also logs at WARN"() {
         given:
         def reader = new DecisionFileReader()
@@ -147,6 +150,7 @@ class DecisionFileReaderSpec extends Specification {
     //     that fails to write JSON can choose exactly what the WARN line says. Neutralized on the
     //     way to the log; the Decision the same call returns still carries the content verbatim,
     //     because the human answering the question needs the real text.
+    // Scenario: observability/factory-logging / Unbounded payload is capped
     def "FR6: unparseable content carrying newlines and ANSI escapes renders one inert line"() {
         given:
         def reader = new DecisionFileReader()
@@ -169,6 +173,7 @@ class DecisionFileReaderSpec extends Specification {
     }
 
     // FR6: the cap is the line's, not the decision's — a huge file cannot flood the operator log
+    // Scenario: observability/factory-logging / Unbounded payload is capped
     def "FR6: oversized content is capped in the line while the decision keeps it whole"() {
         given:
         def reader = new DecisionFileReader()

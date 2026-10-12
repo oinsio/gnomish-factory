@@ -30,6 +30,7 @@ class LawSourcesSpec extends Specification implements GitObjectsFixture {
 
     // FR11: a working-tree binding opens the working-tree realization at the binding's own law
     //     root, and reads a file that was never committed — the manual-run edit loop.
+    // Scenario: pipeline/pipeline-config / Law has exactly two sources
     def "FR11: a working-tree binding reads uncommitted law from the repository's .gnomish directory"() {
         given:
         Path root = tempDir.resolve('clone')
@@ -67,6 +68,7 @@ class LawSourcesSpec extends Specification implements GitObjectsFixture {
 
     // FR11, M5: a revision binding reads out of git objects — the working tree plays no part — and
     //     hands back the very commit it read, so law and pin cannot drift apart.
+    // Scenario: pipeline/pipeline-config / Law has exactly two sources
     def "FR11, M5: a revision binding reads committed law and pins the same commit"() {
         given: 'a bare repo whose law is committed, and a working tree saying something else'
         Path bare = seedBareRepo(tempDir, TREE)
@@ -86,6 +88,8 @@ class LawSourcesSpec extends Specification implements GitObjectsFixture {
 
     // M5, D12: the revision is peeled once, at binding. Moving the clone's HEAD afterwards moves
     //     neither the law nor the pin — the double-resolve incident the typed id exists to prevent.
+    // Scenario: pipeline/pipeline-config / Pin guard never re-resolves
+    // Scenario: pipeline/pipeline-config / Law has exactly two sources
     def "M5, D12: moving the clone's HEAD after binding changes neither the law nor the pin"() {
         given: 'a clone checked out at the law commit'
         def git = openGitObjects(checkedOutAtBase(seedBareRepo(tempDir, TREE)), tempDir)

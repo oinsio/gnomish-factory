@@ -68,6 +68,8 @@ class ArtifactGraphReferenceSpec extends Specification {
     // FR4 delta-spec scenarios: internal inputs resolving to earlier outputs
     // and source inputs needing no producer are exactly what a consistent
     // artifact graph looks like — no errors
+    // Scenario: pipeline/pipeline-config / Internal input resolves to an earlier output
+    // Scenario: pipeline/pipeline-config / Source input needs no producer
     def "a consistent artifact graph (#label) produces no errors"() {
         expect: 'validating the stages yields an empty error list'
         ArtifactGraphRule.validate(stages) == []
@@ -93,6 +95,7 @@ class ArtifactGraphReferenceSpec extends Specification {
     // FR4/FR6 delta-spec scenario: dangling or forward reference → located
     // error identifying the input and the missing/late producer; a same-stage
     // reference is not strictly earlier either
+    // Scenario: pipeline/pipeline-config / Dangling or forward reference is rejected
     def "a #label reference is a located error identifying the input and producer"() {
         expect: 'exactly the classified reference error'
         ArtifactGraphRule.validate(stages) == expected

@@ -24,6 +24,7 @@ class SafeThrowableConverterSpec extends Specification {
     private final SafeThrowableConverter converter = started(new SafeThrowableConverter())
 
     // FR3: the message's second line is a marked continuation, never a record of its own
+    // Scenario: observability/factory-logging / A multi-line exception message cannot forge a record
     def "a newline in an exception message cannot place text at column 0"() {
         given:
         def thrown = caught('stage failed\n2026-08-31 12:00:00 ERROR [main] compromised')
@@ -42,6 +43,7 @@ class SafeThrowableConverterSpec extends Specification {
     }
 
     // FR3, UX2: the diagnosis survives — trace lines are written as Logback wrote them
+    // Scenario: observability/factory-logging / Every line of a rendered throwable is neutralized
     def "stack trace lines keep their indentation and are not marked"() {
         given:
         def thrown = caught('plain failure')
@@ -59,6 +61,7 @@ class SafeThrowableConverterSpec extends Specification {
     }
 
     // FR3: the cause chain's own messages are rendered through the same rewriting
+    // Scenario: observability/factory-logging / A line that is not a trace line is marked
     def "a cause chain's messages are neutralized and marked too"() {
         given:
         def cause = caught("inner${AdversarialCorpus.ESC}[2J\nforged cause line")
@@ -79,6 +82,7 @@ class SafeThrowableConverterSpec extends Specification {
     }
 
     // FR3: a suppressed exception's message is rendered by the framework too, so it is covered
+    // Scenario: observability/factory-logging / A line that is not a trace line is marked
     def "a suppressed exception's message is neutralized and marked too"() {
         given:
         def thrown = caught('outer')
@@ -96,6 +100,8 @@ class SafeThrowableConverterSpec extends Specification {
     }
 
     // FR3: every corpus shape in an exception message leaves the rendering inert and CR-free
+    // Scenario: observability/factory-logging / Escapes in a trace line are visible, not executed
+    // Scenario: observability/factory-logging / Every line of a rendered throwable is neutralized
     def "the corpus in an exception message renders inertly: #shape"() {
         when:
         String rendered = converter.convert(event(caught(hostile)))
@@ -117,6 +123,7 @@ class SafeThrowableConverterSpec extends Specification {
     }
 
     // FR3, D3: an unrecognized line shape degrades to a continuation line — the safe direction
+    // Scenario: observability/factory-logging / A line that is not a trace line is marked
     def "an unrecognized line shape is marked rather than trusted"() {
         given:
         def thrown = caught('head\nat com.example.NotAFrame(Fake.java:1)')

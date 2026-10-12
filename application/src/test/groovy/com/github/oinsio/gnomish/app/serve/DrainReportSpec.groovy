@@ -43,6 +43,7 @@ class DrainReportSpec extends Specification {
     }
 
     // FR10, NFR-O2: several worked tasks are all named, in the order they finished.
+    // Scenario: serve/factory-serve / Nightly drain
     def "summarizes multiple recorded outcomes"() {
         given:
         def report = new DrainReport()

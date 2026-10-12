@@ -54,6 +54,7 @@ class ReaperInterruptSpec extends Specification {
     }
 
     // FR12, NFR-O2: the stop is not an outage — quiet, no signal, windows kept, interrupt kept.
+    // Scenario: serve/factory-serve / Interrupted sweep keeps the observation windows
     def "a sweep listing that fails on an interrupted thread returns quietly and keeps the windows"() {
         given: 'a claim first seen a full TTL ago'
         tracker.listOpen() >> [working('T-1')]
@@ -83,6 +84,7 @@ class ReaperInterruptSpec extends Specification {
     }
 
     // FR12, NFR-O2, control row: the same failure with no interrupt is the outage of FR9.
+    // Scenario: serve/factory-serve / A real outage is still reported
     def "a sweep listing that fails on an uninterrupted thread warns and forgets the windows"() {
         given:
         tracker.listOpen() >> [working('T-1')]

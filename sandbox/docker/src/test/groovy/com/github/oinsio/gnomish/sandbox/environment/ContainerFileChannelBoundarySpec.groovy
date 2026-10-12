@@ -16,6 +16,33 @@ class ContainerFileChannelBoundarySpec extends Specification {
         new ContainerFileChannel(docker, 'k1', '/gnomish/work', '/gnomish/scratch')
     }
 
+    // FR1, NFR-S3: the channel's content travels on the exec'd process's own pipes — written to its
+    //     stdin, read from its stdout — and no docker call is a copy or an archive transfer
+    // Scenario: sandbox/execution-environment / Container file content streams through exec
+    def "putFile and readFile stream the content through docker exec, never docker cp or an archive"() {
+        given:
+        def docker = new ScriptedFileChannelDockerCli()
+        def payload = 'factory bytes'.getBytes('UTF-8')
+        docker.process.stdout = 'box bytes'.getBytes('UTF-8')
+
+        when:
+        channel(docker).putFile('note.txt', payload)
+        def read = channel(docker).readFile('note.txt', 64)
+
+        then: 'the written bytes went into the exec stdin, the read bytes came from its stdout'
+        docker.process.stdin.toByteArray() == payload
+        new String(read.get(), 'UTF-8') == 'box bytes'
+
+        and: 'both calls were docker exec, and no argv names cp, an archive, or a host path'
+        docker.starts.size() == 2
+        docker.starts.every { it.first() == 'exec' }
+        docker.starts.every { argv ->
+            !argv.any {
+                it in ['cp', 'tar', 'export', 'save']
+            }
+        }
+    }
+
     def "readFile rejects a non-positive sizeCap before ever touching docker"() {
         given:
         def docker = new ScriptedFileChannelDockerCli()

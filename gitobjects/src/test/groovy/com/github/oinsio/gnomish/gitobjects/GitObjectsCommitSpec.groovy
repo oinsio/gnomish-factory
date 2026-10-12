@@ -58,6 +58,10 @@ class GitObjectsCommitSpec extends Specification implements GitObjectsFixture {
         new String(git.readBlob(second, '.gnomish-task/task.json', 4096), 'UTF-8') == 'v2'
     }
 
+    // FR25 of add-sandbox-core: the compare-and-swap every bare-object lifecycle write goes through
+    //     — the tip the write read is its expected value, so a tip another instance moved in
+    //     between refuses the update rather than forcing it, and the commit it moved to survives.
+    // Scenario: git/git-task-persistence / Concurrent tip movement fails the write
     def "FR25: a stale expectedTip is refused and leaves the ref unchanged"() {
         given:
         def bare = seedBareRepo(tempDir, ['src/App.java': 'class App {}'])

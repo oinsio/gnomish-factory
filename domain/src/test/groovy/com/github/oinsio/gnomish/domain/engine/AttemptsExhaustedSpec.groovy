@@ -79,6 +79,7 @@ class AttemptsExhaustedSpec extends Specification {
     //     escalates as Escalated(AttemptsExhausted(2)) after the 2nd quality failure — the
     //     executor is invoked exactly twice, no 3rd attempt runs after exhaustion, and both
     //     failed rounds are recorded.
+    // Scenario: pipeline/stage-engine / Limit reached mid-run
     def "the last permitted quality failure escalates as AttemptsExhausted with the full history"() {
         given: 'a 2-attempt stage whose check fails on every round'
         def stageDef = stage('build', 2, [builtin('files_exist')])
@@ -131,6 +132,7 @@ class AttemptsExhaustedSpec extends Specification {
     // UX1 (report is self-describing): using ONLY the outcome value and its finalState() — no
     //     logs, no other source — the escalation renders the stage, the limit, and every round's
     //     check results and findings.
+    // Scenario: pipeline/stage-engine / Report is self-describing
     def "the escalation is renderable from the outcome and its final state alone"() {
         given: 'a 2-attempt stage failing with distinct findings each round'
         def stageDef = stage('build', 2, [builtin('files_exist')])

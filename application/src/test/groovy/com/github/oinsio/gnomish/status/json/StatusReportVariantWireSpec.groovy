@@ -67,6 +67,7 @@ class StatusReportVariantWireSpec extends Specification {
         variant << Position.permittedSubclasses.toList()
     }
 
+    // Scenario: observability/status-report / A decision round carries its stop
     def "FR10: stop #variant.simpleName round-trips through its type discriminator"() {
         given:
         def dto = stopOf(STOPS[variant])
@@ -78,6 +79,7 @@ class StatusReportVariantWireSpec extends Specification {
         variant << Stop.permittedSubclasses.toList()
     }
 
+    // Scenario: observability/status-report / The task and position sections
     def "FR12, UX1: the position tokens are atStage(stage), awaitingApproval(stage) and pipelineEnd"() {
         expect:
         json.writeValueAsString(mapper.toDto(reportAt(POSITIONS[variant])).position()) == expected
@@ -89,6 +91,7 @@ class StatusReportVariantWireSpec extends Specification {
         Position.PipelineEnd | '{"type":"pipelineEnd"}'
     }
 
+    // Scenario: observability/status-report / A decision round carries its stop
     def "FR10: the stop tokens are none, decisionNeeded(question, options) and cannotVerify(check, reason, details)"() {
         expect:
         json.writeValueAsString(stopOf(STOPS[variant])) == expected
@@ -100,6 +103,7 @@ class StatusReportVariantWireSpec extends Specification {
         Stop.CannotVerify | '{"type":"cannotVerify","check":"external:ci","reason":"timeout","details":"poll exceeded 5m"}'
     }
 
+    // Scenario: observability/status-report / An attempt carries its round record
     def "FR10: the attempt carries its stop between result and startedAt"() {
         given:
         def attempt = json.readTree(mapper.serialize(reportWith(STOPS[Stop.DecisionNeeded])))

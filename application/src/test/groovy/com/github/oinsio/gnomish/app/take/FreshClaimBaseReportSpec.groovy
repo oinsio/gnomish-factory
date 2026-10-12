@@ -1,6 +1,13 @@
 package com.github.oinsio.gnomish.app.take
 
+import com.github.oinsio.gnomish.baseref.AllowedBases
+import com.github.oinsio.gnomish.baseref.BaseDesignator
+import com.github.oinsio.gnomish.baseref.BaseRefRequest
+import com.github.oinsio.gnomish.baseref.BaseRefResolver
+import com.github.oinsio.gnomish.baseref.BaseResolution
+import com.github.oinsio.gnomish.baseref.ResolutionMode
 import com.github.oinsio.gnomish.baseref.UnderdeterminedCause
+import com.github.oinsio.gnomish.untrustedtext.Provenance
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -45,5 +52,34 @@ class FreshClaimBaseReportSpec extends Specification {
 
         then:
         !report.contains('Values named:')
+    }
+
+    // FR1, FR4 of type-untrusted-text: the operator's own --base, refused by the ref-name grammar
+    //     for the control character it holds, is quoted back to name what to fix — through the
+    //     comment exit, so the character the grammar refused never reaches the tracker comment.
+    // Scenario: core/untrusted-text / A refused operator argument is quoted back through an exit
+    def "a malformed --base reaches the park report as an operator carrier, through the comment exit"() {
+        given: 'a --base holding a cursor-driving escape sequence and a mention'
+        def esc = Character.toString(27 as char)
+        def typed = 'main' + esc + '[2J@team'
+
+        when:
+        def resolution = BaseRefResolver.resolve(new BaseRefRequest(
+                        typed, BaseDesignator.absent(), AllowedBases.empty(), null, ResolutionMode.MANUAL, null))
+
+        then: 'the resolver refuses it and carries the value under the operator provenance'
+        resolution instanceof BaseResolution.Underdetermined
+        def refused = resolution as BaseResolution.Underdetermined
+        refused.cause() == UnderdeterminedCause.EXPLICIT_BASE_MALFORMED
+        refused.values()*.provenance() == [Provenance.OPERATOR]
+
+        when:
+        def report = FreshClaimBaseReport.underdetermined('PROJ-1', refused.cause(), refused.values(), refused.reason())
+
+        then: 'the report names the value as the comment exit renders it, and nothing raw'
+        report.contains(refused.values().first().forCommentInline())
+        !report.contains(esc)
+        !report.contains('@team')
+        report.contains('main')
     }
 }

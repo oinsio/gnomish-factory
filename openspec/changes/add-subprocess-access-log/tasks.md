@@ -167,6 +167,12 @@ no holder is retyped to `GitProcessRunner`, or `GitRunnerBoundarySpec` in `:boot
       this change greps to at least one implementing entity and one spec. Verify:
       `grep -rn "add-subprocess-access-log" --include=*.java --include=*.groovy .`
       covers FR1–FR16, NFR-R1, NFR-R2, NFR-O1, NFR-S1, NFR-S2, NFR-S3, NFR-P1.
+- F29 of `tighten-spec-contract`: the `module-layering` scenarios "Shared logging support lives
+  in logtext", "Access-log emission adds no edge to gitobjects" and "The gitobjects observer hook
+  defaults to a no-op" describe this change's emitter and observer hook and carry
+  `pending-test: add-subprocess-access-log` in `config/spec-contract-exemptions/build-module-layering.txt`;
+  this change writes their tests with the `// Scenario: build/module-layering / <title>` markers and
+  removes the three exemption lines.
 
 ## 7. Secrets at the source, minimized child environments
 
@@ -226,3 +232,8 @@ no holder is retyped to `GitProcessRunner`, or `GitRunnerBoundarySpec` in `:boot
       two disclosed bypasses (container file channel; git `ext::` grandchild, killed
       and reaped through the supervised git tree). Verify: wording greppable; matches
       the `execution-environment` delta's modified sole-seam requirement.
+
+## Follow-ups from tighten-spec-contract
+
+- F62: rewrite `Factory client subprocesses start from a composed environment` to the subtractive client environment `fix-docker-exec-env-argv` decided (inherited environment minus the declared credentials), and drop tasks 7.1–7.3 per that change's queue effect (the git-client half moves to `own-git-invocation-policy`'s `GitInvocation`).
+- F63: the two dropped deltas (`factory-logging`, `module-layering`) are accepted; task 9.1's code has landed (`JudgeVerdictExtractor.cannotVerify` logs `rawMessage.forLog()`) — what remains is its javadoc, which still names the findings funnel, and a spec asserting one record for a multi-line message; task 9.2 is obsolete: the untrusted-text type gate (`UntrustedTextGateSpec`, scenario `Every bypass shape fails the type gate`) already rejects the raw-text log shape.

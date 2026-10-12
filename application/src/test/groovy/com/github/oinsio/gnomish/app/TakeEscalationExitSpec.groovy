@@ -30,6 +30,7 @@ class TakeEscalationExitSpec extends Specification {
     Tracker tracker = Mock()
 
     // FR13, D12: AttemptsExhausted needs a human decision — ESCALATION reason, reply-and-return message.
+    // Scenario: tracker/tracker-take / Escalation ends the run
     def "exit parks AttemptsExhausted escalation as ESCALATION with a reply-and-return report"() {
         given: 'the claim is still ours, so the pre-write guard lets the park through (FR7)'
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
@@ -55,6 +56,7 @@ class TakeEscalationExitSpec extends Specification {
     }
 
     // FR13, D12, UX3: DecisionNeeded's report must also carry the rendered question/options text.
+    // Scenario: tracker/tracker-take / Escalation ends the run
     def "exit parks DecisionNeeded escalation as ESCALATION with the rendered question and a reply-and-return report"() {
         given:
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))

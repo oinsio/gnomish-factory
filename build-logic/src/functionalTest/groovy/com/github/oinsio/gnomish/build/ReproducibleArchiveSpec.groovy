@@ -47,6 +47,9 @@ rootProject.name = 'mini-archive'
         write('src/launcher/run', '#!/bin/sh\necho run\n')
     }
 
+    // Scenario: build/quality-gates / Archive outputs are byte-identical
+    // Scenario: build/quality-gates / Archives carry no order, time or mode of the build machine
+    // Scenario: release/release-distribution / Reproducible archive
     def "NFR-R1: two distTar builds of unchanged content have the same SHA-256 sum"() {
         given:
         buildScript('')
@@ -56,6 +59,7 @@ rootProject.name = 'mini-archive'
                 archiveSumAfterBuild(Instant.parse('2011-06-15T12:00:00Z'))
     }
 
+    // Scenario: build/quality-gates / Archives carry no order, time or mode of the build machine
     def "NFR-R1: a build that preserves file timestamps is not reproducible — the comparison sees them"() {
         given: 'the one opt-out a build script can still write'
         buildScript('tasks.named(\'distTar\') { preserveFileTimestamps = true }')
@@ -65,6 +69,7 @@ rootProject.name = 'mini-archive'
                 archiveSumAfterBuild(Instant.parse('2011-06-15T12:00:00Z'))
     }
 
+    // Scenario: build/quality-gates / Archives carry no order, time or mode of the build machine
     def "NFR-R1: files are 0644 and directories 0755, while a child spec's own 0755 is kept"() {
         given:
         buildScript('')

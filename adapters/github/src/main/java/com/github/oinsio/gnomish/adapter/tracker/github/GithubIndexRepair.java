@@ -38,6 +38,11 @@ import org.slf4j.LoggerFactory;
  * which is what two sweepers meeting looks like — is DEBUG (FR5, FR12 of
  * harden-logging-observability).
  *
+ * <p>Kept in sync with {@code ClaimLeases#observedShape} of the in-memory reference adapter in
+ * {@code :adapters} (no shared classpath, so the link is by name): both repair markers name the
+ * observed shape in the same phrase — {@code claim pending} with no boundary, {@code index lagging
+ * behind the <boundary> marker} otherwise.
+ *
  * <p>Implements FR19, FR12 of harden-task-branch-contract; FR5 of harden-logging-observability.
  */
 // Not a record: a behavior-bearing repair service holding an HTTP client, label ops and the marker

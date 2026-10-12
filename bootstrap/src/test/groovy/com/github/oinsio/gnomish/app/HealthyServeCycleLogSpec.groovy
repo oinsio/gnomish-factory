@@ -126,6 +126,8 @@ tracker:
         capture.detach()
     }
 
+    // Scenario: observability/factory-logging / Claim is the first correlated line
+    // Scenario: observability/factory-logging / Summary closes the grep story
     def "UX2: the task's own lines tell the story in order — claim anchor, engine events, summary last"() {
         given:
         def capture = LogCaptureSupport.attach('ROOT', Level.INFO)

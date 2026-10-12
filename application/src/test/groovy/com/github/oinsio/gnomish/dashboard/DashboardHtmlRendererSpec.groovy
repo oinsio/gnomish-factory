@@ -52,6 +52,7 @@ class DashboardHtmlRendererSpec extends Specification {
     }
 
     // FR2: every block occupies its position regardless of data — nothing appears or disappears.
+    // Scenario: observability/dashboard-page / Every empty data source has a sentence
     def "an entirely empty page still renders every block, each with its own empty-state sentence"() {
         when:
         def html = renderer.render(
@@ -69,6 +70,9 @@ class DashboardHtmlRendererSpec extends Specification {
     }
 
     @Unroll
+    // Scenario: observability/dashboard-page / Only a watch page carries a meta-refresh
+    // Scenario: observability/dashboard-page / The page mode is baked for the static script
+    // Scenario: observability/dashboard-page / One-shot snapshot never banners
     def "watch mode bakes #expectedMode into the body and #refreshDescription"() {
         when:
         def html = renderer.render(
@@ -92,6 +96,7 @@ class DashboardHtmlRendererSpec extends Specification {
         null | 'oneshot' | false | 'carries none'
     }
 
+    // Scenario: observability/dashboard-page / Watch page reloads itself
     def "the meta-refresh interval and the stale threshold are both the render cadence's own"() {
         when:
         def html = renderer.render(
@@ -105,6 +110,7 @@ class DashboardHtmlRendererSpec extends Specification {
 
     // A cadence under a second truncates to content="0" — a reload storm, not a refresh.
     @Unroll
+    // Scenario: observability/dashboard-page / Sub-second cadence is rejected
     def "a render cadence of #cadence is rejected rather than baked into the meta-refresh"() {
         when:
         renderer.render(
@@ -135,6 +141,7 @@ class DashboardHtmlRendererSpec extends Specification {
     }
 
     // FR3: the strip is server-rendered fresh with the absolute instant, so a no-JS reader sees it.
+    // Scenario: observability/dashboard-page / No-JS reader sees absolute time
     def "the freshness strip carries both icons and the page's absolute generated instant"() {
         when:
         def html = renderer.render(

@@ -141,3 +141,5 @@ change seals verification against the tree it verifies, in three mechanisms and 
 - Sequencing: after `extract-agent-round-runner` (describe fields, runner) and
   `migrate-verify-to-executor-contract` (verdict executors); independent of `add-sandbox-hardening`
   except both touch the law surface list (coordinate the `pipeline-config` delta order).
+- Sequenced after `tighten-spec-contract`: its deltas carry the `**Implements**:` lines and the
+  500-character requirement bodies that change introduces; it has no MODIFIED block to layer.

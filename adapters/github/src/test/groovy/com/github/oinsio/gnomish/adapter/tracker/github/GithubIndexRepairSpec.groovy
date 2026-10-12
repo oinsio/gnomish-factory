@@ -53,6 +53,8 @@ class GithubIndexRepairSpec extends Specification {
 
     // FR12: the claim sequence's frozen window — working label, no claim comment — rolls back to
     //     ready, and the repair marker lands before the flip so the record survives a later failure.
+    // Scenario: tracker/github-tracker / ClaimPending rolls back to ready
+    // Scenario: tracker/github-tracker / The repair marker is posted before the flips
     def "a claim-pending window rolls back to ready, marker first"() {
         given:
         stubIssue(7, ['gnomish:working'])
@@ -83,6 +85,9 @@ class GithubIndexRepairSpec extends Specification {
 
     // FR12: a finish marker under a still-working label completes its own flip to delivered, and
     //     the finished work is never re-executed — no report is rewritten, only the labels move.
+    // Scenario: tracker/github-tracker / Finish marker's flip is completed
+    // Scenario: tracker/github-tracker / Kill between finish marker and delivered flip keeps terminality
+    // Scenario: tracker/tracker-port / Index repair completes a marker's transition
     def "a finish marker's flip is completed to delivered"() {
         given:
         stubIssue(8, ['gnomish:working'])
@@ -103,6 +108,10 @@ class GithubIndexRepairSpec extends Specification {
         mutationsInOrder().first() == 'POST /repos/acme/widgets/issues/8/comments'
     }
 
+    // Scenario: tracker/github-tracker / Park and return marker flips are completed
+    // Scenario: tracker/github-tracker / Kill between abort marker and ready flip
+    // Scenario: tracker/github-tracker / Kill between park marker and label flip keeps the report
+    // Scenario: lifecycle/claim-heartbeat / A boundary marker completes its own flip
     def "a #kind marker's flip is completed to #target"() {
         given:
         stubIssue(9, ['gnomish:working'])
@@ -131,6 +140,8 @@ class GithubIndexRepairSpec extends Specification {
 
     // The convergence property: a re-read that no longer matches the observation writes nothing and
     //     reports the current facts, so two reapers repairing the same shape converge.
+    // Scenario: tracker/github-tracker / ClaimPending rolls back to ready
+    // Scenario: tracker/github-tracker / A repair whose observation no longer holds reports the current facts
     def "a re-read that no longer matches the observation writes nothing"() {
         given: 'a fresh claim comment landed since the sweep observed the frozen window'
         stubIssue(10, ['gnomish:working'])
@@ -151,6 +162,7 @@ class GithubIndexRepairSpec extends Specification {
 
     // FR5 of harden-logging-observability: a repair rewrites another instance's labels, so the one
     // that happens is an INFO anchor naming the shape it corrected; a converge-abort is DEBUG.
+    // Scenario: observability/factory-logging / A destructive cross-instance action is logged
     def "FR5: a repair that acts is an INFO anchor naming the observed shape"() {
         given:
         stubIssue(11, ['gnomish:working'])
@@ -172,6 +184,7 @@ class GithubIndexRepairSpec extends Specification {
         logs.detach()
     }
 
+    // Scenario: observability/factory-logging / A destructive cross-instance action is logged
     def "FR5: a converge-abort is DEBUG, not an anchor and not a warning"() {
         given: 'a fresh claim comment landed since the sweep observed the frozen window'
         stubIssue(12, ['gnomish:working'])

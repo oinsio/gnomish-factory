@@ -114,6 +114,8 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
     // FR7, D6, M3: of two holders writing the same task branch, exactly one push lands; the loser
     // gets a non-fast-forward rejection and its round throws the revocation the engine turns into
     // Aborted — no force push anywhere, the new holder's branch untouched.
+    // Scenario: lifecycle/claim-heartbeat / Zombie push is rejected
+    // Scenario: lifecycle/task-branch-contract / A superseded tenure's late push is rejected by the remote
     def "M3: the zombie's late push is fenced non-fast-forward and its round aborts, exactly one push landing"() {
         given: 'both holders clone the same base of the task branch; the tracker reports the NEW holder owns the claim'
         def holderWork = cloneOrigin('holder', true)

@@ -3,6 +3,8 @@
 Sequenced after `make-checkpoint-gate-durable` (which rewrites the same resume routes and the
 same kill-point rows) and alongside `add-claim-return` (which edits the tracker-take return
 protocol; this change touches neither its requirement nor its verb).
+Also sequenced after `tighten-spec-contract`: every MODIFIED block (tracker-port, tracker-take,
+manual-run) is layered on that change's text, which must sync first.
 
 ## Why
 
@@ -52,7 +54,8 @@ None.
 - `tracker-take`: "A Completed-without-cleanup tip is finished, never re-executed"
   (convergence without a claim), new requirement "Receipts are confirmed from tenure history,
   not from the current state".
-- `manual-run`: "Resume invocation" — layered on `make-checkpoint-gate-durable`'s delta:
+- `manual-run`: "Resume invocation" — layered on `tighten-spec-contract`'s delta (which carries
+  the archived `make-checkpoint-gate-durable` text):
   completed → finish the cleanup if it is owed, then report.
 
 ## Goals

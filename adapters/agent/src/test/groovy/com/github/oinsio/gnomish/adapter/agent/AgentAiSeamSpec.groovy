@@ -30,6 +30,7 @@ class AgentAiSeamSpec extends Specification {
 
     // FR5: iterates NAMES rather than a hand-listed subset, so a name added to the seam is covered
     //     by construction and a name dropped from it fails the pinned-set row below.
+    // Scenario: executor/agent-executor / An absent seam variable is omitted
     def "FR5: seam variable #name is selected with its live value when set and omitted when unset"() {
         expect: 'present: selected with the factory-environment value'
         AgentAiSeam.fromEnvironment([(name): "value-of-${name}".toString(), PATH: '/usr/bin']) ==

@@ -48,6 +48,8 @@ class CliStageExecutorSpec extends Specification {
     }
 
     // FR3: no decision file written -> Completed, carrying non-null usage and trace.
+    // Scenario: executor/agent-executor / No signal means Completed
+    // Scenario: executor/agent-executor / Binary path is installation config
     def "plain round with no decision file completes"() {
         given:
         def executor = executorFor('plain-round')
@@ -62,6 +64,8 @@ class CliStageExecutorSpec extends Specification {
     }
 
     // FR3, D1: a well-formed decision file maps to DecisionNeeded with the question and options.
+    // Scenario: executor/agent-executor / Agent asks for a decision
+    // Scenario: executor/agent-executor / A decision round keeps its telemetry
     def "well-formed decision file yields DecisionNeeded"() {
         given:
         def executor = executorFor('decision-needed')
@@ -78,6 +82,7 @@ class CliStageExecutorSpec extends Specification {
     }
 
     // FR3, D1: a garbage decision file still yields DecisionNeeded, raw text as the question.
+    // Scenario: executor/agent-executor / Garbage decision file is not lost
     def "garbage decision file becomes the question verbatim"() {
         given:
         def executor = executorFor('decision-garbage')
@@ -93,6 +98,8 @@ class CliStageExecutorSpec extends Specification {
 
     // FR13, NFR-R1, D7: roundTimeout expiry kills the process and throws — RoundExecution
     // shapes any RuntimeException the port throws into CannotExecute, no attempt burned.
+    // Scenario: executor/agent-executor / Timeout kill still classifies as infrastructure
+    // Scenario: executor/agent-executor / Hung CLI cannot hang the engine
     def "hung process past roundTimeout is killed and throws"() {
         given:
         def executor = executorFor('hangs-forever')
@@ -129,6 +136,7 @@ class CliStageExecutorSpec extends Specification {
     }
 
     // FR4, NFR-R1: a stream with no result event throws, uncaught infrastructure failure.
+    // Scenario: executor/agent-executor / Missing result event is infrastructure
     def "missing result event throws"() {
         given:
         def executor = executorFor('missing-result-event')

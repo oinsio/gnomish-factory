@@ -77,6 +77,7 @@ class RawCaptureGateSpec extends Specification {
     'Files\\.(?:readString|readAllLines|readAllBytes|lines|newBufferedReader|newInputStream|newByteChannel)\\s*\\(')
 
     // FR11: every raw capture in production sits in a declared mint owner.
+    // Scenario: observability/factory-logging / A capture source that never mints fails the build
     def "FR11: raw capture happens only in a declared mint owner"() {
         given: 'every production source, with its comments removed'
         def sources = RepoSourceTree.productionSources()
@@ -95,6 +96,7 @@ class RawCaptureGateSpec extends Specification {
     }
 
     // D12: the detector is the gate — a seeded violation must fail it, or a green run means nothing.
+    // Scenario: observability/factory-logging / A capture source that never mints fails the build
     def "a seeded raw capture outside the allowlist is detected: #shape"() {
         expect:
         capturesRaw(code)
@@ -135,6 +137,7 @@ class RawCaptureGateSpec extends Specification {
 
     // D12: an allowlisted mint owner reads raw and is allowed to — the exemption must work, or a
     //      green gate would mean "the allowlist is ignored" as easily as "the tree is clean".
+    // Scenario: observability/factory-logging / The capture-point scan proves its reach
     def "an allowlisted mint owner captures and is permitted"() {
         given: 'the tracker mint owner, which reads an operator-supplied task file and mints at the read'
         def owner = 'application/src/main/java/com/github/oinsio/gnomish/app/AdHocTaskSynthesizer.java'
@@ -148,6 +151,7 @@ class RawCaptureGateSpec extends Specification {
 
     // D12: the reached-every-file half. Removing an owner's capture while its entry stays is the
     //      drift BaseHeadDefaultBoundarySpec's precedent guards against; this pins that it fails.
+    // Scenario: observability/factory-logging / The capture-point scan proves its reach
     def "an allowlisted file that no longer captures fails the reached-every-file assertion"() {
         given: 'a real production file that captures nothing'
         def clean = 'bootstrap/src/main/java/com/github/oinsio/gnomish/FactoryApplication.java'

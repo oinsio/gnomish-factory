@@ -272,6 +272,48 @@ on 2026-10-10 every module reported zero above threshold while PIT ran for 90 mi
    mutation wall, minion-seconds, summed mutant time, sampled thread state) so the task report
    carries a before/after pair.
 
+## Every scenario has a test
+
+Every `#### Scenario:` in `openspec/specs/` is linked to the test that exercises it by a marker
+comment, `// Scenario: <spec-id> / <title>` — the capability path, then the scenario heading
+copied verbatim (`traceability.md`). The marker sits on the line above the Spock feature, or
+inside it when one feature covers several scenarios (one marker per scenario). The test trees
+read are every module's `src/test`, `build-checks/*/src/test` and `build-logic/src/functionalTest`.
+
+The gate `checkSpecContract` (`SpecContractCheck` in `build-logic`, also
+`scripts/check-spec-contract.sh`) checks both directions: a scenario with no marker and no
+exemption is a finding, and so is a marker naming no scenario of a main spec (a rename left it
+dangling) and a malformed marker line — any line opening with the marker's lead that does not
+continue as `<spec-id> / <title>`, so no second, informal spelling survives. A delta's scenarios
+are not linked while the change is unarchived; the gate holds the link once they merge into
+`openspec/specs/`. Write the marker with the test anyway.
+
+Gotcha: the reader matches the lead at the start of a line, comment prefix allowed, in every file
+of the scanned trees. A fixture string in a test that builds marker text must not start a line
+with the literal; assemble it (`'// ' + 'Scenario: …'`) or indent it inside a larger string.
+
+**The exemption form.** A scenario verified by something other than a test is listed in its
+capability's exemption file, `config/spec-contract-exemptions/<spec-id>.txt` with every `/` of
+the spec id replaced by `-` (`build/ci` → `build-ci.txt`). The header line declares the
+capability, and it alone decides the spec id; the file name must match it, or the gate reports
+the file. Blank lines and `#` comments are allowed; nothing else lives in the directory (a stray
+file is a finding), so the form is documented here, not in a README there:
+
+```text
+spec: <spec-id>
+<scenario title> => <mechanism>
+```
+
+The bar: the named mechanism really verifies the scenario, and is named precisely — a CI
+workflow file, a release script. "Hard to test" is not a mechanism. The list is asserted reached:
+a file whose spec id no main spec has, and a line that names no scenario of its capability, are
+stale and fail the gate; so do a malformed line and a duplicate title.
+`<title> => pending-test: <change-name>` is allowed only for a scenario sorted at a decision
+point to a named follow-up change that will write its test (design D9 of `tighten-spec-contract`).
+A defect a new test reveals is not exempted: the test stays in place, marker included, under
+Spock's `@PendingFeature(reason = "F<n>: …")` with the finding id in the reason, until the change
+that fixes it removes the annotation.
+
 ## Rules
 
 - Maximize automated verification in task plans — avoid manual testing steps

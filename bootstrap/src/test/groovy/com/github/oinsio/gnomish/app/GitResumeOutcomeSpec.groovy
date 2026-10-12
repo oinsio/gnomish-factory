@@ -22,6 +22,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
 
     // FR8: outcome null (process died mid-visit) continues the engine loop straight from
     // state.json's recorded position, no dialog, and eventually records Completed.
+    // Scenario: cli/manual-run / An interrupted task resumes silently
     def "run() with outcome null continues from the recorded position and records Completed"() {
         given: 'a task with one persisted round but no recorded outcome — the process died mid-visit'
         def taskId = 'PROJ-10'
@@ -85,6 +86,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     // FR10, D10: --discard-work actually calls WorktreeSalvage#discard — proven directly against a
     // worktree left dirty on disk (no completion drive involved), distinguishing "discard() ran and
     // reset the tree" from "discard() was never called" (PIT: VoidMethodCallMutator survivor).
+    // Scenario: git/git-task-persistence / Discard replays only the interrupted round
     def "run() with --discard-work removes uncommitted leftovers from the worktree before continuing"() {
         given: 'a task with one persisted round, then leftovers from a process that died mid-round'
         def taskId = 'PROJ-32'
@@ -105,6 +107,8 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     // FR8, UX2; FR5 of make-run-headless: outcome paused continues with no checkpoint line and no
     // prompt — the resume is the approval (FR4 of make-checkpoint-gate-durable): one approval commit
     // opens the gate, then the engine continues from the approved state.
+    // Scenario: cli/manual-run / Checkpoint continues without reset
+    // Scenario: cli/manual-run / Resume of a checkpoint approves it
     def "run() with outcome paused at a gate approves it in one commit and continues to completion without a checkpoint line"() {
         given: 'a task paused after "build" passed — its recorded position the gate of "build"'
         def taskId = 'PROJ-12'
@@ -144,6 +148,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
     // has no task.json left to read). This spec instead models a Completed task.json that has not
     // yet gone through cleanup — a valid intermediate state the outcome switch must still handle
     // correctly — by writing task.json directly rather than through the full recordOutcome path.
+    // Scenario: cli/manual-run / Completed task resumes to a no-op
     def "run() with outcome completed reports and exits without further touching the worktree or branch"() {
         given: 'a task whose task.json already records Completed, before FR15 cleanup ran'
         def taskId = 'PROJ-13'

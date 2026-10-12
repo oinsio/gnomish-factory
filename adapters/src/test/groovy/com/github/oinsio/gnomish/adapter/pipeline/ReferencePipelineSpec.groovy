@@ -97,6 +97,7 @@ class ReferencePipelineSpec extends Specification {
         plan.limits().attemptLimit() == 5
     }
 
+    // Scenario: pipeline/pipeline-config / All four check types are modeled distinctly
     def "M1/FR2/FR4: the implement stage carries both input kinds and all four verify variants in order"() {
         given:
         def implement = model.stages()[1]
@@ -129,6 +130,7 @@ class ReferencePipelineSpec extends Specification {
         settings.roundTimeout == 900 && settings.roundTimeout instanceof Integer
     }
 
+    // Scenario: pipeline/pipeline-config / All four check types are modeled distinctly
     def "M1/FR2: the implement stage's verify list holds all four variants in declaration order"() {
         given:
         def verify = model.stages()[1].verify()
@@ -166,6 +168,7 @@ class ReferencePipelineSpec extends Specification {
         judge.votes() == 3
     }
 
+    // Scenario: pipeline/pipeline-config / Internal input resolves to an earlier output
     def "M1/FR4: the review stage links to the earlier impl-diff output and uses the default limit"() {
         given:
         def review = model.stages()[2]

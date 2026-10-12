@@ -225,6 +225,8 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     // FR25, D19; FR3 of make-run-headless: outcome `escalated` with --decision is committed
     // FACTORY-SIDE over bare objects — before any environment materializes — so the in-box clone
     // contains the decision from the start; the kept box goes first, since its clone is behind.
+    // Scenario: git/git-task-persistence / Decision commit precedes materialization
+    // Scenario: sandbox/execution-environment / Escalated-container resume disposes before deciding
     def "commits a --decision factory-side after disposing the kept box and before the environment materializes"() {
         given:
         def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [

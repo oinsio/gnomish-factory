@@ -18,6 +18,7 @@ class ClaimEpochSpec extends Specification {
     }
 
     // NFR-S1: the token is the whole value, so a stamp carries a counter and nothing else.
+    // Scenario: lifecycle/task-branch-contract / An epoch stamp carries no host or credential data
     def "an epoch carries its token and nothing else"() {
         expect:
         new ClaimEpoch(7).token() == 7L

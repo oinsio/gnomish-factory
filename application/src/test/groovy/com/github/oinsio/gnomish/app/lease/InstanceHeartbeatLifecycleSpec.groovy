@@ -78,6 +78,7 @@ class InstanceHeartbeatLifecycleSpec extends Specification {
 
     // FR1, D3: the beat starts with the first claim — the thread starts, sleeps the interval,
     //     and beats within one interval.
+    // Scenario: tracker/tracker-take / Beat starts with the claim
     def "the beat thread starts with the first claim and beats on the interval"() {
         when: 'the first claim registers'
         hb.register(REF)

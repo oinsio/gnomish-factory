@@ -79,6 +79,8 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
+    // Scenario: observability/status-report / A hung round's blocked exfiltration is visible
+    // Scenario: sandbox/sandbox-egress / Denied exfiltration attempt of a hung round reaches the report
     def "M1: a round killed on its round timeout shows its egress denial under the escalation in both documents"() {
         given: 'a round the guard blocked, then the round timeout killed before it could close'
         def denial = Denial.unidentified(new Finding(

@@ -8,14 +8,14 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReleaseContract
+import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerCirculationContract
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * Wires the production {@link InMemoryTracker} (via {@link
  * InMemoryTrackerHarness}) into the full port contract suite (task 2.4/2.7,
  * 1.2 of add-factory-serve; FR3, FR4, FR5, M1, M2): {@link
- * TrackerReleaseContract} — the most-derived link in the chain —
+ * TrackerCirculationContract} — the most-derived link in the chain —
  * transitively runs every property from {@code TrackerContract}, {@code
  * TrackerMarkerContract}, {@code TrackerFetchContract}, {@code
  * TrackerLeaseContract}, {@code TrackerHeartbeatContract}, {@code
@@ -32,12 +32,68 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
  * <p>Implements FR3, FR4, FR5 of add-tracker-port and add-claim-heartbeat;
  * M1 of add-claim-heartbeat (the extended contract passes on this adapter).
  */
-class InMemoryTrackerContractSpec extends TrackerReleaseContract {
+// Scenario: tracker/tracker-port / Index repair restores a claimless working task to Ready
+// Scenario: tracker/tracker-port / Full fact set for a working task
+// Scenario: tracker/tracker-port / Closed task is Gone
+// Scenario: tracker/tracker-port / Ack consumes decisions
+// Scenario: tracker/tracker-port / Stale replies never resurface
+// Scenario: tracker/tracker-port / Fresh instance sees abort history
+// Scenario: tracker/tracker-port / Progress reset round-trips across instances
+// Scenario: tracker/tracker-port / Abort facts carry no adapter policy
+// Scenario: tracker/tracker-port / Reference passes the contract suite
+// Scenario: tracker/tracker-port / Race simulation
+// Scenario: tracker/tracker-port / Feed filtering property
+// Scenario: tracker/tracker-port / Claim atomicity property
+// Scenario: tracker/tracker-port / Listing carries versions
+// Scenario: tracker/tracker-port / Version changes are observable across instances
+// Scenario: tracker/tracker-port / Uninterpretable combinations are reported as facts
+// Scenario: tracker/tracker-port / Ready entry carries claim facts
+// Scenario: tracker/tracker-port / Beat refreshes the version
+// Scenario: tracker/tracker-port / Gone claim is a signal, not an error
+// Scenario: tracker/tracker-port / Beat of a task the tracker no longer holds is claim-gone
+// Scenario: tracker/tracker-port / Removal round-trip
+// Scenario: tracker/tracker-port / Version mismatch is a no-op
+// Scenario: tracker/tracker-port / Removal of a task the tracker no longer holds is a no-op
+// Scenario: tracker/tracker-port / Concurrent removal race
+// Scenario: tracker/tracker-port / Reopened finished task carries the fact
+// Scenario: tracker/tracker-port / Decline round-trip
+// Scenario: tracker/tracker-port / Decline of an already-terminal task is a no-op
+// Scenario: tracker/tracker-port / Decline does not pollute derivations
+// Scenario: tracker/tracker-port / Fresh task is not returned
+// Scenario: tracker/tracker-port / Park round-trip sets the fact
+// Scenario: tracker/tracker-port / Reaped task is returned
+// Scenario: tracker/tracker-port / Finish-reopen is not returned
+// Scenario: tracker/tracker-port / The open-front count is the open listing's size
+// Scenario: tracker/tracker-port / Ready listing carries titles
+// Scenario: tracker/tracker-port / Open listing carries titles
+// Scenario: tracker/tracker-port / Reclaim returns a greater token
+// Scenario: tracker/tracker-port / Token is observable by other instances
+// Scenario: tracker/tracker-port / Absent is absent, not empty
+// Scenario: tracker/tracker-port / Equal duplicates are one designator
+// Scenario: tracker/tracker-port / Suite passes on both adapters
+// Scenario: tracker/tracker-port / The suite covers the open listing and its facts
+// Scenario: tracker/tracker-port / The suite covers the heartbeat
+// Scenario: tracker/tracker-port / Finish-reopen property is adapter-equivalent
+// Scenario: tracker/tracker-port / The suite covers the decline operation
+// Scenario: tracker/tracker-port / The suite binds the open-front count to the open listing
+// Scenario: tracker/tracker-port / Contract suite binds title propagation
+// Scenario: tracker/tracker-port / Conflict lists every value
+// Scenario: tracker/tracker-port / The contract suite covers every designator shape
+// Scenario: tracker/tracker-port / The suite covers stale-claim removal
+// Scenario: tracker/tracker-port / The suite covers index repair
+// Scenario: tracker/tracker-port / Index repair never claims the task for the caller
+// Scenario: tracker/tracker-port / Parked task returns only through a human
+// Scenario: tracker/tracker-port / Racing declines leave the task terminal
+// Scenario: tracker/tracker-port / The returned fact carries no prioritization
+// Scenario: tracker/tracker-port / An adapter that does not stamp epochs is still constructible
+class InMemoryTrackerContractSpec extends TrackerCirculationContract {
 
     private InMemoryTrackerHarness harness
 
     @Override
     protected Optional<Tracker> arrange() {
+        // FR13 of harden-task-branch-contract: no tenure record is handed in — the reference
+        // adapter stamps no epochs, and the claim-token links of this suite still bind it.
         harness = new InMemoryTrackerHarness(new InMemoryTracker())
         Optional.of(harness.tracker())
     }
@@ -63,6 +119,27 @@ class InMemoryTrackerContractSpec extends TrackerReleaseContract {
         // so seeding the state alone IS the claimless window.
         harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('fixture title'), UntrustedText.tracker('fixture body')),
                 new TrackerTaskState.Working('instance-a'), AbortFacts.none())
+    }
+
+    @Override
+    protected void seedWorkingWithDeadClaim(Tracker adapter, TaskRef ref, String holder) {
+        // The reference adapter's dead footprint is a claim whose marker a release cleared while
+        // the task stays working: both steps are its own port operations.
+        harness.seed(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('fixture title'), UntrustedText.tracker('fixture body')),
+                new TrackerTaskState.Ready(), AbortFacts.none())
+        adapter.claim(ref, holder)
+        adapter.release(ref)
+    }
+
+    @Override
+    protected void rewindIndexToWorking(Tracker adapter, TaskRef ref) {
+        // A state edit under the tracker's own lock: the recorded thread stays as it was.
+        def tracker = harness.adapter()
+        tracker.withLock({
+            ->
+            tracker.store.get(ref).state(new TrackerTaskState.Working('instance-a'))
+            null
+        })
     }
 
     @Override

@@ -44,6 +44,8 @@ class BoardJsonMapperSpec extends Specification {
         BoardModel.build(ready, open, truncated, NOW, new EligibilityInputs(BASE, CAP, open.size(), WIP_LIMIT))
     }
 
+    // Scenario: observability/tracker-board / Truncated window is honest
+    // Scenario: observability/tracker-board / JSON is versioned and self-describing
     def "top-level document carries version 1, generatedAt, and truncated"() {
         given:
         def model = boardOf([], [], true)
@@ -74,6 +76,8 @@ class BoardJsonMapperSpec extends Specification {
         row.eligibility() == new EligibilityDto(true, null, null)
     }
 
+    // Scenario: observability/tracker-board / JSON is versioned and self-describing
+    // Scenario: observability/tracker-board / JSON needs no factory configuration to interpret
     def "an in-backoff Ready row renders the materialized deadline"() {
         given:
         def facts = new AbortFacts(1, NOW - Duration.ofMinutes(1))
@@ -104,6 +108,7 @@ class BoardJsonMapperSpec extends Specification {
         eligibility == new EligibilityDto(false, 'finished', null)
     }
 
+    // Scenario: observability/tracker-board / JSON needs no factory configuration to interpret
     def "a WIP-held Ready row renders reason wipHeld, and openFrontCount/wipLimit are materialized"() {
         given:
         def ready = [
@@ -161,6 +166,7 @@ class BoardJsonMapperSpec extends Specification {
         row.claimUpdatedAt() == updatedAt.toString()
     }
 
+    // Scenario: observability/tracker-board / JSON needs no factory configuration to interpret
     def "a Working row with an absent claim marker renders claimUpdatedAt as explicit JSON null"() {
         given:
         def open = [

@@ -174,3 +174,7 @@ by the engine and persisted on the branch.
 - Sequencing: after `define-executor-contract` and `add-command-executor` (shared command core);
   before `extract-agent-round-runner`; `remove-interactive-console` removes the interactive
   check client independently (its delta on the pin-check requirement precedes ours).
+- Sequenced after `tighten-spec-contract`: its deltas carry the `**Implements**:` lines and the
+  500-character requirement bodies that change introduces; it has no MODIFIED block to layer, and
+  the markers and exemption lines of the scenarios its REMOVED requirements take with them are
+  removed in this change (tasks.md, section 6).

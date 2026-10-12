@@ -71,6 +71,14 @@
   `grep -rn "Kept in sync with" adapters/agent` → zero (M1)
 - [ ] 5.3 Glossary: agent dialect, agent round runner, continuation key (update), answer file;
   update the `Executor` and `Judge` entries
+- Spec contract (`tighten-spec-contract`): this change REMOVES six `agent-executor`
+  requirements and the `stage-engine` requirement "Judge majority voting"; their scenarios carry
+  `// Scenario: executor/agent-executor / <title>` and `// Scenario: pipeline/stage-engine / <title>` markers
+  (41 of the 48 scenarios, today) and eight lines in
+  `config/spec-contract-exemptions/executor-agent-executor.txt`. In this same change, every marker of a
+  removed scenario goes with the test it sits on (or is retargeted to a scenario this change
+  adds), and each exemption line naming a removed scenario is deleted, so `checkSpecContract`
+  reports no marker or exemption naming a scenario that no longer exists.
 
 ## 6. Integration
 

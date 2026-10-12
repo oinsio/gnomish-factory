@@ -41,6 +41,7 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
     }
 
     // FR2: the first non-Pass check stops the chain — later checks are never invoked
+    // Scenario: pipeline/stage-engine / Later checks not reached
     def "stops at the first non-Pass check and never invokes later checks"() {
         given: 'a builtin that fails, then a command that would pass if reached'
         def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Fail([])])

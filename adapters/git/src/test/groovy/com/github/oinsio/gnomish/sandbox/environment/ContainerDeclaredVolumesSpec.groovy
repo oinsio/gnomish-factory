@@ -61,6 +61,9 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
         env?.dispose()
     }
 
+    // Scenario: sandbox/execution-environment / Box image declaring a volume leaves no anonymous volume
+    // Scenario: sandbox/execution-environment / Image content under a declared path is not visible in the box
+    // Scenario: sandbox/execution-environment / Explicit factory mounts are not overridden
     def "FR5: an image-declared path is an ephemeral override and leaves no anonymous volume"() {
         when: 'an environment is materialized from an image declaring /cache and the working copy'
         materialize(DeclaredVolumeSandboxImage.ensureBuilt())
@@ -107,6 +110,7 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
     @IgnoreIf({
         !GuardImageAvailability.available()
     })
+    // Scenario: sandbox/execution-environment / Guard image declaring a volume leaves no anonymous volume
     def "FR5: creating and disposing a guard from the default guard image leaves no anonymous volume"() {
         given: 'a materialized environment, so the guard has its task network to join'
         materialize(GitSandboxImage.ensureBuilt())

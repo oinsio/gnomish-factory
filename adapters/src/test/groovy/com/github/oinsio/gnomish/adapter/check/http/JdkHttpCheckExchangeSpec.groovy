@@ -88,6 +88,7 @@ class JdkHttpCheckExchangeSpec extends Specification implements HttpCheckFixture
 
     // NFR-S2: the response size is bounded, and an oversized body is refused rather than truncated —
     //     a truncated body could satisfy a pass-when the whole body would not.
+    // Scenario: verification/factory-egress-allowlist / A redirect cannot escape into a blocked class
     def "an oversized response body is refused"() {
         given:
         server.createContext('/huge') { exchange ->

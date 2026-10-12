@@ -22,6 +22,7 @@ class TrackerHealthTrackerInterruptSpec extends Specification {
     }
 
     // FR12: the interrupted failure is uncounted and rethrown as it came.
+    // Scenario: serve/factory-serve / An interrupted call is not a tracker failure in the snapshot
     def "a call that fails on an interrupted thread is rethrown unchanged and not counted"() {
         given:
         def failure = new IllegalStateException('call cancelled')

@@ -95,6 +95,7 @@ class GithubCommentUpsertSpec extends Specification {
         wireMock.verify(0, patchRequestedFor(urlMatching('/repos/acme/widgets/issues/comments/.*')))
     }
 
+    // Scenario: tracker/github-tracker / Crash-retry updates instead of duplicating
     def "updates in place and posts nothing when the identity is already on the thread (UX3)"() {
         given:
         stubThread([
@@ -113,6 +114,7 @@ class GithubCommentUpsertSpec extends Specification {
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('parked: re-driven'))))
     }
 
+    // Scenario: tracker/github-tracker / A different instance re-delivers the same intent
     def "matches on content identity, not on the instance that posted it"() {
         given: 'the existing comment was posted by a different factory instance'
         def foreign = GithubMarker.render(GithubMarkerKind.PARK, 'gnomish-factory-other',

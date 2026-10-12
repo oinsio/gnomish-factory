@@ -29,6 +29,7 @@ class PushTerminationLoggingSpec extends Specification {
     @TempDir
     Path tempDir
 
+    // Scenario: git/git-task-persistence / A timed-out push reads as a dead remote
     def "FR8, UX3: a timed-out push names the timeout instead of borrowing a rejection's words"() {
         when:
         def runner = StalledPush.timingOut()
@@ -44,6 +45,7 @@ class PushTerminationLoggingSpec extends Specification {
         !warnings[0].formattedMessage.contains('push failed')
     }
 
+    // Scenario: git/git-task-persistence / An interrupted push is not reported as failed
     def "FR8, NFR-O2: an interrupted lifecycle push names the interruption, never a failure"() {
         given:
         def stalled = StalledPush.blocking()

@@ -21,6 +21,7 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
     static final String KEY = 'org-repo-7'
 
     // FR8, D9: the judge role gets a real self-checked container environment, never a null seam
+    // Scenario: sandbox/sandbox-egress / Fresh judge environment is self-checked too
     def "judgeEnvironment builds a self-checked container environment"() {
         when:
         def judge = environments(KEY).judgeEnvironment()
@@ -67,6 +68,7 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
     // round environment is born carrying what the tip records, so a round box reattaching to the
     // surviving guard container continues the delta instead of replaying it — with no step after
     // the build that a caller could run out of order, every round box of the run gets the offer
+    // Scenario: sandbox/execution-environment / Every box build carries the offer
     def "FR17: the recorded cursor reaches the guard of every round environment built, the second included"() {
         given: 'the guard container named by the committed cursor is the live one'
         docker.onRun = { List<String> args ->
@@ -94,6 +96,7 @@ class ContainerEnvironmentsSpec extends Specification implements ContainerEnviro
     // FR17, design D11 of make-checkpoint-gate-durable: the tip moves between boxes (a round
     // commits a newer cursor), so the supplier is read at each build — a value read once would be
     // the stale baseline the design rejects
+    // Scenario: sandbox/execution-environment / The offer is read when the box is built, not when the run was assembled
     def "FR17: the restoration is read afresh for each round environment built"() {
         given: 'a tip whose recorded position moves between two builds'
         docker.onRun = { List<String> args ->

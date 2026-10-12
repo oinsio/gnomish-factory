@@ -47,6 +47,7 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
         new RecordedAttemptCommitWorkspace(ref)
     }
 
+    // Scenario: git/git-task-persistence / Every check reads the attempt commit its own way
     def "files present in the attempt commit yield Pass"() {
         given: 'paths that exist in the commit tree — a blob from base, the new blob, and a directory'
         def check = new VerifyCheck.Builtin('files_exist', [files: [
@@ -59,6 +60,8 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
         runner().run(check, workspace()) instanceof Verdict.Pass
     }
 
+    // Scenario: git/git-task-persistence / Verification judges the attempt commit
+    // Scenario: cli/manual-run / Sandboxed check reads the commit, not the box
     def "a file absent from the attempt commit is missing, wherever else it may exist"() {
         given: 'the "Sandboxed check reads the commit, not the box" scenario: existence is the commit tree alone'
         def check = new VerifyCheck.Builtin('files_exist', [files: [

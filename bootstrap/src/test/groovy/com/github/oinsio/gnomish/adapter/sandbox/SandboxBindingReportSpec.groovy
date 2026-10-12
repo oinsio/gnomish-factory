@@ -23,6 +23,9 @@ import spock.lang.Specification
 class SandboxBindingReportSpec extends Specification {
 
     // NFR-O1/UX3: the discovered bindings, their origin and their passports, before any stage runs
+    // Scenario: build/sandbox-module-split / AdapterBinding is a discovered registry
+    // Scenario: build/sandbox-module-split / A backend contributes its binding without a core edit
+    // Scenario: plugin/adapter-binding-registry / Startup reports the discovered bindings with their origin
     def "the startup report lists every discovered binding with its origin and passport"() {
         given: 'the bindings this build actually ships'
         def registry = SandboxBindingDiscovery.discover()

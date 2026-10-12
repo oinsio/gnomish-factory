@@ -92,6 +92,7 @@ tracker:
 
     // FR2, FR3: 2+ refs reach batch mode, and the run's aggregate exit code is 0 when every ref
     // delivers.
+    // Scenario: tracker/tracker-take / An all-delivered batch exits zero
     def "batch of two delivering refs exits 0"() {
         given:
         def refA = new TaskRef('github:acme/widgets#1')
@@ -181,6 +182,7 @@ tracker:
     // raises an uncaught RuntimeException (task 6.3's tool-failure-capture gap) while the other
     // ref delivers — the run must not abort, and the aggregate exit code must come from the
     // below-10 tool-failure family, beating the delivering ref's 0.
+    // Scenario: tracker/tracker-take / Tool failure dominates
     def "tool failure dominates: one ref's uncaught exception does not abort the batch, and its exit code wins"() {
         given:
         def refB = new TaskRef('github:acme/widgets#2')

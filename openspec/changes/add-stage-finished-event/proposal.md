@@ -179,3 +179,5 @@ Not applicable — no model calls, no tokens.
   (ADR 0001). Tests: Spock + WireMock, existing patterns.
 - Not touched: `serveobservability` wire mappers, sandbox, tracker adapters, `.gnomish/`
   pipeline config schema.
+- Sequencing after `tighten-spec-contract`: this change's MODIFIED block of `stage-engine`
+  ("Engine events") is layered on that change's text, which must sync first.

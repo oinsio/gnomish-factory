@@ -58,6 +58,7 @@ class BoardCompositionAgreementSpec extends Specification implements Application
         projectDir = GnomishProjectFixture.writeGnomishProject(tempDir.resolve('project'), 3)
     }
 
+    // Scenario: observability/dashboard-page / Backoff annotation matches the board command
     def "the dashboard's BoardComposition.compose call agrees with gnomish board's own model for the same tracker state, including the in-backoff deadline"() {
         given: 'the same tracker state (an in-backoff Ready row, a plain Ready row, a Working row, an AwaitingHuman row) shared by both callers'
         def ready = [

@@ -19,6 +19,9 @@ class TrackerShapeSpec extends Specification {
     private static final ClaimFacts LIVE = new ClaimFacts.Live(
     'inst-1', new ClaimVersion('m-1', Instant.EPOCH, new ClaimEpoch(1)))
 
+    // Scenario: lifecycle/claim-heartbeat / A ready label with no live claim is Ready
+    // Scenario: lifecycle/claim-heartbeat / A working label with a live claim is Claimed
+    // Scenario: lifecycle/claim-heartbeat / A needs-human label is Parked
     def "#shape is owned by #owner"() {
         expect:
         shape.recoveryOwner() == owner

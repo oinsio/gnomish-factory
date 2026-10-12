@@ -55,6 +55,8 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
 
     // FR12: a remote-configured clone narrow-fetches the pinned ref to origin's current tip,
     // exactly the base-refresh fetch — reuse, not a second implementation.
+    // Scenario: git/git-task-persistence / Autonomous resume refreshes the pinned base for the law
+    // Scenario: pipeline/pipeline-config / Resume picks up human-fixed criteria
     def "a configured origin narrow-fetches the pinned ref to its current tip"() {
         given:
         Path log = tempDir.resolve('configured-origin.log')
@@ -74,6 +76,8 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
     // later under the pinned branch's name is not even looked at — no collision, no park, and the
     // law still binds to the branch's tip. Classifying afresh at every resume would instead park
     // every resume of a task whose base name was reused.
+    // Scenario: git/base-ref-resolution / A tag reusing a pinned branch's name does not park the resume
+    // Scenario: git/base-ref-resolution / A legacy pin without a kind is classified against origin
     def "FR7: a tag reusing a pinned branch's name does not park the resume"() {
         given: 'origin gains a tag carrying the pinned branch name, pointing elsewhere'
         def advanced = advance('develop', 'c.txt')
@@ -99,6 +103,7 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
     }
 
     // D9, D13: a configured origin that never answers releases the claim, never parks the task.
+    // Scenario: git/git-task-persistence / Autonomous resume refreshes the pinned base for the law
     def "a configured origin that never answers is the infrastructure class"() {
         given:
         assert gitExitCode(clone, 'remote', 'set-url', 'origin', tempDir.resolve('gone.git').toString()) == 0
@@ -112,6 +117,8 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
 
     // D13: manual resume in a clone with no origin at all binds from the ref's LOCAL tip instead
     // of refusing — a resume with nothing to fetch from is a legitimate shape.
+    // Scenario: git/git-task-persistence / A clone-served success says origin was not contacted
+    // Scenario: git/git-task-persistence / Autonomous resume refreshes the pinned base for the law
     def "a clone with no origin binds from the ref's local tip"() {
         given:
         Path log = tempDir.resolve('no-origin.log')

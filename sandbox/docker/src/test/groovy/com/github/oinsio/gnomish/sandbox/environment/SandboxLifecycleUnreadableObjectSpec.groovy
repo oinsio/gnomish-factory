@@ -21,6 +21,7 @@ class SandboxLifecycleUnreadableObjectSpec extends SandboxLifecycleSweepSpecBase
     static final def SCOPE = new ProjectScope(PROJECT, Optional.empty())
     static final String LABELS = 'com.github.oinsio.gnomish.task=t1,com.github.oinsio.gnomish.mode=tracked'
 
+    // Scenario: sandbox/sandbox-lifecycle / Unreadable object still gets a verdict
     def "an enumerated container whose inspect fails leaves the pass with skipped-no-verdict"() {
         given: 'the container is listed, but its timing inspect no longer resolves'
         docker.onRun = { List<String> args ->
@@ -75,6 +76,7 @@ class SandboxLifecycleUnreadableObjectSpec extends SandboxLifecycleSweepSpecBase
         verdicts[0].category() == SweepVerdictCategory.SKIPPED_NO_VERDICT
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Unreadable object still gets a verdict
     def "an object that vanished between the listing and the inspect is not a degradation"() {
         given: 'the volume is listed, but by inspect time it is gone — and its existence probe agrees'
         docker.onRun = { List<String> args ->

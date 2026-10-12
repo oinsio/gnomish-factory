@@ -69,6 +69,7 @@ class FindingsFileReaderSpec extends Specification {
         logs.detach()
     }
 
+    // Scenario: cli/manual-run / A malformed findings file is logged
     def "content that is not JSON at all is a coded WARN carrying the parse failure"() {
         given:
         def logs = LogCaptureSupport.attach(FindingsFileReader)

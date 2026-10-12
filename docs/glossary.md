@@ -887,6 +887,24 @@ Introduced by `add-project-registry`; the levels and the check are ADR 0011.
   from the resolved project's own project file and nowhere else, the command
   line included.
 
+## Build verification
+
+The gates `./gradlew check` runs over the project's own sources and specs; how to
+run and answer them is the developer guide's *Per-module verification* section.
+
+- **Spec contract** — the project's own rules for its specs, on top of what
+  OpenSpec checks: every requirement carries exactly one `**Implements**:` line
+  naming the requirement ids it traces to, its `**Notes**:` lines only explain
+  and never say `SHALL` or `MUST`, and every scenario of a main spec is linked to
+  the test that exercises it by a `// Scenario: <spec-id> / <title>` marker, or
+  is listed as an exemption naming what verifies it instead. The rules live in
+  `traceability.md`, `delta-specs.md` and `testing.md`; the one gate that checks
+  them is the Gradle task `checkSpecContract`, run by `check`, by
+  `scripts/check-spec-contract.sh` and by the fix-artifacts and archive stages.
+  Introduced by `tighten-spec-contract`. *Not:* OpenSpec's own validation
+  (`openspec validate`), which checks a spec's structure and knows nothing of
+  traceability or tests.
+
 ## Release and distribution
 
 Introduced by `add-release-pipeline`; the release flow is the developer guide's

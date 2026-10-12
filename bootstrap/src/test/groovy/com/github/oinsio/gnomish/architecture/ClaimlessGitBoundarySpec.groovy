@@ -104,7 +104,8 @@ class ClaimlessGitBoundarySpec extends Specification {
      *   <li><b>The plain-{@code run} and {@code run --resume} paths.</b> {@code gnomish run} claims
      *       nothing, so the container and git-mode runner specs, the run-mode resume specs, and the
      *       sandbox lifecycle E2E specs drive writers that hold no tenure — the same shape the
-     *       production {@code run} wiring has. {@code RoundTokenIdentitySpec} belongs here too: it
+     *       production {@code run} wiring has; {@code SandboxTransientFilesE2ESpec} brings up a
+     *       {@code manual}-owned task environment the way {@code run} does. {@code RoundTokenIdentitySpec} belongs here too: it
      *       drives the container-mode round adapters (round source, snapshot, persistence, resume
      *       re-verification) as a {@code run} wires them, and asserts the round's identity, not a
      *       claim's. {@code ContainerContinuationMedium} too: the container medium of the identity
@@ -135,12 +136,14 @@ class ClaimlessGitBoundarySpec extends Specification {
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/GitModeMidRoundPushSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ManualRunRunnerSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/RoundTokenIdentitySpec.groovy',
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/RoundFlowSpecBase.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleCrossInstanceE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleLaunchRaceE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleLegacyIdentityE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleProjectScopingE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleRemnantReapE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleZombieE2ESpec.groovy',
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxTransientFilesE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/killpoint/CreationWorld.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/killpoint/KillPointWorld.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusCommandSpec.groovy',
@@ -169,6 +172,7 @@ class ClaimlessGitBoundarySpec extends Specification {
     // FR5, M3: a claimless git layer outside the claimless commands is an assembly that claims and
     //     stamps nothing — the shape every end-to-end fixture had, and the reason the read-side
     //     fence could fire in production while every spec stayed green.
+    // Scenario: lifecycle/task-branch-contract / A claimless git layer stays in the claimless commands
     def "FR5, M3: production and fixture sources build a claimless git layer only where nothing claims"() {
         given: 'every production and fixture source of the owned trees, comments stripped'
         def sources = RepoSourceTree.productionSources { path ->
@@ -195,6 +199,7 @@ class ClaimlessGitBoundarySpec extends Specification {
     // FR5, M3: a spec that claims must observe stamped commits and recorded epochs exactly as
     //     production does, so it builds through the owner; only a spec that never claims may hold
     //     a claimless layer, and no spec may hold a second book beside its bundle's.
+    // Scenario: lifecycle/task-branch-contract / A claimless git layer stays in the claimless commands
     def "FR5, M3: test sources build through the owner unless they never claim"() {
         given: 'every test source of the owned trees, comments stripped'
         def sources = ownedTestSources()

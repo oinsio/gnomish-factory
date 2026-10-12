@@ -13,25 +13,14 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
  * the "Version changes are observable across instances" scenario; task 2.2,
  * FR1, FR5, FR8 of add-claim-heartbeat). Extends {@link TrackerLeaseContract}
  * to reuse its {@code arrange}/{@code seedTask}/{@code seedWorkingWithClaim}
- * seams rather than duplicating them; a concrete adapter subclass instantiates
- * the MOST-DERIVED class in this chain (not {@link TrackerLeaseContract} or any
- * earlier link directly) to run the full suite, per M1 — the same suite against
- * every adapter. Kept in a fifth file because the combined property set of the
- * whole chain would exceed the project's per-file line cap.
- *
- * <p>No concrete adapter spec extends this class yet: the in-memory reference is
- * wired in task 2.4 and the GitHub adapter in task 3.5, once their adapters
- * implement {@code heartbeat}/{@code removeStaleClaim} and the {@code
- * seedWorkingWithClaim} seam. Until then this abstract spec is never
- * instantiated and therefore does not run — intentional, and it keeps the build
- * green for both adapters between tasks.
+ * seams rather than duplicating them. Kept in its own file because the combined
+ * property set of the whole chain would exceed the project's per-file line cap.
  *
  * <p>The "claim gone" property makes the claim disappear by calling the port's
  * own {@code removeStaleClaim} — the realistic path (a reaper deleted the
  * marker) — rather than introducing a new deletion seam. That keeps the fixture
- * setup at the port level and needs no adapter-specific hook. Task 2.3 adds a
- * further {@code TrackerReapContract extends TrackerHeartbeatContract} covering
- * {@code removeStaleClaim} in its own right.
+ * setup at the port level and needs no adapter-specific hook; {@link
+ * TrackerReapContract} covers {@code removeStaleClaim} in its own right.
  *
  * <p>Implements FR1, FR5, FR8 of add-claim-heartbeat.
  */

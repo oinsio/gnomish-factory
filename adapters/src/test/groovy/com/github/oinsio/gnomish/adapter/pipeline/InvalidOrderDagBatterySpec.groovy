@@ -30,6 +30,7 @@ class InvalidOrderDagBatterySpec extends Specification implements InvalidFixture
         root
     }
 
+    // Scenario: pipeline/pipeline-config / Empty or duplicate order is rejected
     def "M2/FR3: an empty pipeline stage list yields exactly the located order error"() {
         given: 'config.yaml is valid; pipeline.yaml declares an empty list (the model still maps)'
         write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 2\n')
@@ -44,6 +45,7 @@ class InvalidOrderDagBatterySpec extends Specification implements InvalidFixture
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Empty or duplicate order is rejected
     def "M2/FR6: a duplicate stage name yields exactly the located uniqueness error"() {
         given: 'pipeline.yaml lists plan twice; plan declares no output, so only the name rule fires'
         writeValidBaseline()
@@ -58,6 +60,7 @@ class InvalidOrderDagBatterySpec extends Specification implements InvalidFixture
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Duplicate output id is rejected
     def "M2/FR4/FR6: a duplicate output id yields exactly the located DAG error"() {
         given: 'two stages both declaring the output id dup; nothing references it, so only the id rule fires'
         writeTwoStageTree('''\
@@ -77,6 +80,7 @@ outputs:
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Dangling or forward reference is rejected
     def "M2/FR4: a dangling internal reference (no producer) yields exactly its located error"() {
         given: 'plan references an id no stage produces'
         writeSingleStageWith('''\
@@ -113,6 +117,7 @@ outputs:
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Dangling or forward reference is rejected
     def "M2/FR4: a forward reference (produced by a later stage) yields exactly its located error"() {
         given: 'plan consumes late, which the later build stage produces'
         writeTwoStageTree('''\

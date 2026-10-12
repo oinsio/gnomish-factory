@@ -38,6 +38,7 @@ class FactoryHomeBoundarySpec extends Specification {
     private static final String LOGBACK = 'bootstrap/src/main/resources/logback-spring.xml'
 
     // FR1, D1: no production file outside the owner reads user.home or names the home folder
+    // Scenario: operator/project-registry / No component derives an operator path from the user's home
     def "FR1: only FactoryHome reads user.home or spells the home folder's name"() {
         given: 'every production source and resource outside test-fixtures, comments stripped'
         def sources = RepoSourceTree.productionSources {

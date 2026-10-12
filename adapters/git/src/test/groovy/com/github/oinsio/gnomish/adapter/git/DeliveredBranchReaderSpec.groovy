@@ -138,6 +138,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     // FR6 of fix-envelope-medium: a delivered branch that gained commits after its cleanup commit
     // still reports the state it delivered — the reader locates the cleanup commit in history and
     // reads its parent, rather than assuming the tip's parent is the Completed commit.
+    // Scenario: tracker/tracker-take / Delivered state survives commits after cleanup
     def "reads the delivered state from the Completed commit when the branch gained commits after cleanup"() {
         given: 'a delivered branch whose cleanup commit is no longer the tip'
         repository.createTask(context('PROJ-3'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -158,6 +159,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     // FR6 of fix-envelope-medium: on a CompletedUncleaned tip the Completed envelope is still at
     // the tip, so that is where the delivered state is read — never at a parent, which carries the
     // state of the round before the outcome commit.
+    // Scenario: tracker/tracker-take / Delivered state is read at the tip while the envelope is still there
     def "reads at the tip when the tip still carries the envelope"() {
         given: 'a Completed tip whose cleanup commit never landed, carrying a state its parent lacks'
         repository.createTask(context('PROJ-4'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))

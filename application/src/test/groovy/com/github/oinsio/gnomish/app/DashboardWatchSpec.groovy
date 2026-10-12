@@ -57,6 +57,7 @@ class DashboardWatchSpec extends Specification {
     }
 
 
+    // Scenario: observability/dashboard-page / Render cycles between board refreshes reuse the cache
     def "a render cycle between board refreshes reuses the cached model without refetching"() {
         given: 'two cycles inside the 60s board cadence'
         def watch = newWatch()
@@ -83,6 +84,7 @@ class DashboardWatchSpec extends Specification {
         tracker.listReadyCalls == 2
     }
 
+    // Scenario: observability/dashboard-page / Tracker reads bounded by the board cadence
     def "M2: over one hour of render cycles the board is fetched once per board cadence, never per render"() {
         given: 'one full hour of render cycles at the 10s render cadence'
         int cycles = (int) (Duration.ofHours(1).seconds / DashboardWatch.RENDER_CADENCE.seconds)
@@ -126,6 +128,7 @@ class DashboardWatchSpec extends Specification {
         logs.detach()
     }
 
+    // Scenario: observability/dashboard-page / Reload during a render
     def "each cycle atomically replaces the output file with a complete, self-contained page"() {
         when:
         newWatch().tick()
@@ -136,6 +139,7 @@ class DashboardWatchSpec extends Specification {
         html.contains('</html>')
     }
 
+    // Scenario: observability/dashboard-page / Watch page reloads itself
     def "a watch-mode cycle marks the page as watch mode and bakes its meta-refresh"() {
         when:
         newWatch().tick()
@@ -160,6 +164,7 @@ class DashboardWatchSpec extends Specification {
         html.contains('tracker down')
     }
 
+    // Scenario: observability/dashboard-page / Outage during the wall display
     def "the loop keeps running across a board outage: the next cycle after recovery refreshes normally"() {
         given: 'the fetch fails on the first (due) cycle and succeeds on the second, past the board cadence'
         def flaky = failingFirst(1)

@@ -38,6 +38,7 @@ class BoardTextRendererSpec extends Specification {
     }
 
     // UX1: three columns, in Ready / Working / AwaitingHuman order
+    // Scenario: observability/tracker-board / Board renders three columns without a daemon
     def "renders the three columns in Ready, Working, AwaitingHuman order"() {
         given:
         def board = model(
@@ -64,6 +65,7 @@ class BoardTextRendererSpec extends Specification {
     }
 
     // FR2, spec scenario "Backed-off task is annotated with its deadline"
+    // Scenario: observability/tracker-board / Backed-off task is annotated with its deadline
     def "annotates a backed-off Ready row with its deadline, leaving eligible rows unannotated"() {
         given:
         def deadline = Instant.parse('2026-08-05T14:02:00Z')
@@ -82,6 +84,7 @@ class BoardTextRendererSpec extends Specification {
     }
 
     // FR2, spec scenario "Finished task is not counted eligible"
+    // Scenario: observability/tracker-board / Finished task is not counted eligible
     def "annotates a finished Ready row as finished"() {
         given:
         def board = model([
@@ -96,6 +99,7 @@ class BoardTextRendererSpec extends Specification {
     }
 
     // FR2, spec scenario "Fresh task is WIP-held when the front is full"
+    // Scenario: observability/tracker-board / Fresh task is WIP-held when the front is full
     def "annotates a WIP-held Ready row"() {
         given:
         def board = model([
@@ -110,6 +114,8 @@ class BoardTextRendererSpec extends Specification {
     }
 
     // FR3, spec scenario "Summary counts reconcile"
+    // Scenario: observability/tracker-board / Finished task is not counted eligible
+    // Scenario: observability/tracker-board / Summary counts reconcile
     def "renders the Ready summary line reconciling queued, eligible, and each ineligible reason"() {
         given:
         def deadline = Instant.parse('2026-08-05T09:14:00Z')
@@ -132,6 +138,7 @@ class BoardTextRendererSpec extends Specification {
     }
 
     // spec scenario "Returned task is distinguished"
+    // Scenario: observability/tracker-board / Returned task is distinguished
     def "marks a returned Ready row as returned"() {
         given:
         def board = model([
@@ -161,6 +168,7 @@ class BoardTextRendererSpec extends Specification {
         text.contains('truncated')
     }
 
+    // Scenario: observability/tracker-board / A full window states no truncation
     def "does not mention truncation when the window is not capped"() {
         given:
         def board = model([
@@ -175,6 +183,7 @@ class BoardTextRendererSpec extends Specification {
     }
 
     // FR4, spec scenario "Working rows show holder and claim age"
+    // Scenario: observability/tracker-board / Working rows show holder and claim age
     def "renders a Working row's holder and claim age, with no staleness verdict"() {
         given:
         def claimVersion = new ClaimVersion('marker-1', GENERATED_AT.minusSeconds(180), new ClaimEpoch(1))
@@ -192,6 +201,7 @@ class BoardTextRendererSpec extends Specification {
     }
 
     // FR4, spec scenario "Working row with a missing claim marker"
+    // Scenario: observability/tracker-board / Working row with a missing claim marker
     def "renders a Working row's freshness as unknown when the claim marker is absent"() {
         given:
         def board = model([], [
@@ -206,6 +216,7 @@ class BoardTextRendererSpec extends Specification {
     }
 
     // FR5, spec scenario "Park reasons are spelled out"
+    // Scenario: observability/tracker-board / Park reasons are spelled out
     def "renders AwaitingHuman rows with their park reason"() {
         given:
         def board = model([], [], [

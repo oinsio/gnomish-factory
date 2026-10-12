@@ -52,6 +52,7 @@ class FactoryCloneHardeningSpec extends Specification implements BareGitRepoFixt
         Files.list(hooksDir).withCloseable { it.count() == 0L }
     }
 
+    // Scenario: git/git-task-persistence / Reading a gnome branch runs nothing
     def "FR17: a planted pre-commit hook does not fire after hardening"() {
         given: 'a hook that would fail any hook-running commit'
         plantFailingPreCommitHook()

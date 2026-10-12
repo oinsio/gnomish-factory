@@ -60,6 +60,8 @@ class GithubCommentBoundarySpec extends Specification {
         facts.lastAbortAt() == Instant.parse('2026-07-20T10:00:00Z')
     }
 
+    // Scenario: tracker/github-tracker / Without a progress marker the claim-streak count applies
+    // Scenario: tracker/tracker-port / No progress marker preserves the historical count
     def "abortFactsSinceBoundary folds the abort streak before an active claim by the same holder, keeping the latest timestamp"() {
         given: 'two aborts by the same holder immediately before its active claim'
         def markers = [
@@ -120,6 +122,7 @@ class GithubCommentBoundarySpec extends Specification {
         GithubCommentBoundary.abortFactsSinceBoundary(markers) == AbortFacts.none()
     }
 
+    // Scenario: tracker/tracker-port / Aborts before progress are excluded
     def "abortFactsSinceBoundary counts only ABORT markers strictly after the latest PROGRESS marker"() {
         given: 'a PROGRESS marker followed by two ABORT markers'
         def markers = [
@@ -188,6 +191,7 @@ class GithubCommentBoundarySpec extends Specification {
         facts.crashCount() == 2
     }
 
+    // Scenario: tracker/github-tracker / Progress does not disturb claim-holder resolution
     def "latestBoundaryIndex and activeClaim ignore a PROGRESS marker entirely"() {
         given: 'a PROGRESS marker sitting after the active claim'
         def markers = [

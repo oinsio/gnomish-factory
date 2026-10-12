@@ -101,6 +101,7 @@ class FeedCycleSpec extends Specification {
     // FR14, NFR-R3 of add-base-ref-resolution (task 7.3): an open remote outage gate abandons the
     //     reserved permit with ZERO tracker.claim calls — attemptClaim (and outageRetry.run) is
     //     never entered at all, proven here by candidates that WOULD otherwise claim successfully.
+    // Scenario: serve/factory-serve / At most one claim per slot for the whole outage
     def "claimOrAbandon abandons the reserved permit and calls tracker.claim zero times while the gate is open"() {
         given:
         def ledger = new SlotLedger(1, new VirtualClock())
@@ -223,6 +224,7 @@ class FeedCycleSpec extends Specification {
     //     tracker.claim (a same-instance re-claim would be invisible to the InstanceId fence and
     //     would crash on SlotLedger.assign). The walk continues: an unoccupied candidate later in
     //     the list is still claimed on this same cycle.
+    // Scenario: serve/factory-serve / Self-reaped task is not re-claimed while its old slot lives
     def "claimOrAbandon skips a candidate still occupying a local slot and claims the next one instead"() {
         given: 'an old slot still occupies Z (its claim was self-reaped), and a fresh permit is reserved'
         def ledger = new SlotLedger(2, new VirtualClock())
@@ -295,6 +297,7 @@ class FeedCycleSpec extends Specification {
     // FR2, D6: the skip is occupancy-scoped, not a permanent blacklist — once the old slot
     //     releases the ref (the zombie aborted at its round boundary), the very next cycle may
     //     claim the same ref again as an ordinary fresh claim.
+    // Scenario: serve/factory-serve / Self-reaped task is not re-claimed while its old slot lives
     def "the same ref becomes claimable again once its old slot releases"() {
         given: 'the zombie slot has released; only the ledger history remembers it'
         def ledger = new SlotLedger(2, new VirtualClock())

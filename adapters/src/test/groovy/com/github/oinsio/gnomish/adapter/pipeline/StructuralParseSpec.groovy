@@ -28,6 +28,7 @@ class StructuralParseSpec extends Specification {
         (result as StructuralParse.Ok<ConfigDto>).value().schemaVersion() == '1'
     }
 
+    // Scenario: pipeline/pipeline-config / Validation failure is data, not an exception
     def "a content problem yields a single located parse error and no exception escapes"() {
         when: 'a structurally broken file is parsed'
         def result = StructuralParse.parse(file, body, type)

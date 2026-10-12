@@ -57,6 +57,7 @@ class RotatingLedgerAppenderSpec extends Specification implements LifecycleLineF
         lines.length == 2
     }
 
+    // Scenario: observability/serve-observability / Overnight history by filename
     def "an append after crossing the UTC day boundary retargets to the new day's file, leaving the previous day's file untouched"() {
         given:
         def clock = new VirtualClock(Instant.parse('2026-08-03T23:59:59Z'))

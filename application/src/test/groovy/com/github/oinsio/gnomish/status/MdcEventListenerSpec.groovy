@@ -34,6 +34,7 @@ class MdcEventListenerSpec extends Specification {
     }
 
     // NFR-O1, D9: AttemptStarted sets stage/attempt from the key
+    // Scenario: cli/manual-run / Every log line carries the task context
     def "AttemptStarted sets stage and attempt from the key"() {
         given:
         def listener = new MdcEventListener()

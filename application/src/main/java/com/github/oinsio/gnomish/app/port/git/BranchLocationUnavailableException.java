@@ -9,9 +9,12 @@ import java.io.Serial;
  * routing to a fresh claim (FR6).
  *
  * <p>Distinct from {@link TaskGit}'s ordinary failures because it is not a defect and not a
- * usage error: origin was unreachable, and the only safe answer is to stop. The take's own
- * crash-abort protocol releases the claim, so the task returns to the pool for an instance whose
- * network works — routing it to a fresh claim instead is what forked a duplicate branch.
+ * usage error: origin was unreachable, and the only safe answer is to stop. In a take it is a
+ * claim-time fetch outage, so the take releases the claim plain, outside the abort accounting, as
+ * it does a base-refresh outage (finding F6 of tighten-spec-contract; FR9 of
+ * add-base-ref-resolution): the task returns to the pool for an instance whose network works —
+ * routing it to a fresh claim instead is what forked a duplicate branch. The {@link #reason()} is
+ * what the released-on-outage result quotes.
  *
  * <p>Implements FR6 of harden-task-branch-contract.
  */
@@ -19,6 +22,8 @@ public final class BranchLocationUnavailableException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
+
+    private final transient UntrustedText reason;
 
     /**
      * The reason is a sentence the factory composed around git's stderr, so it arrives as a
@@ -33,6 +38,17 @@ public final class BranchLocationUnavailableException extends RuntimeException {
      */
     public BranchLocationUnavailableException(String taskId, UntrustedText reason) {
         super("could not establish whether the task branch for " + taskId + " exists on origin: " + reason.forLog()
-                + "; aborting instead of claiming a fresh branch");
+                + "; stopping instead of claiming a fresh branch");
+        this.reason = reason;
+    }
+
+    /**
+     * What stopped the lookup, still carried, for a caller that reports the outage in its own
+     * sentence rather than rethrowing this exception.
+     *
+     * @return the reason the lookup gave; never null
+     */
+    public UntrustedText reason() {
+        return reason;
     }
 }

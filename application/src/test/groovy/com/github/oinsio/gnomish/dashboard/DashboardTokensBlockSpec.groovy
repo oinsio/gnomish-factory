@@ -33,6 +33,8 @@ class DashboardTokensBlockSpec extends Specification {
     }
 
     // FR7, FR9: the cache share leads the caption, and every count carries its exact value.
+    // Scenario: observability/dashboard-page / Token bars lead with the cache share
+    // Scenario: observability/dashboard-page / Compact count with exact hover
     def "a model's bar is captioned with its integer cache share and compact in/out counts"() {
         given: 'input 3.7K, output 28.8K, cacheCreation 25.6K, cacheRead 4.7644M'
         def history = new LedgerHistoryView(
@@ -56,6 +58,7 @@ class DashboardTokensBlockSpec extends Specification {
     }
 
     // FR7: spend is never coloured with the status palette — a large number is not an alarm.
+    // Scenario: observability/dashboard-page / Token bars lead with the cache share
     def "every bar segment comes from the spend palette"() {
         given: 'a mix where all four segments clear one percent and so all four are drawn'
         def history = new LedgerHistoryView([], [claude: new LedgerTokenUsage(100_000, 200_000, 300_000, 400_000)])
@@ -75,6 +78,7 @@ class DashboardTokensBlockSpec extends Specification {
     }
 
     // FR7: zero cache says so — a 0% would read as a cache that exists and is failing.
+    // Scenario: observability/dashboard-page / Model without cache
     def "a model with no cache traffic says the cache is not in use"() {
         given:
         def history = new LedgerHistoryView([], [claude: new LedgerTokenUsage(10, 5, 0, 0)])

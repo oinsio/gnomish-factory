@@ -49,6 +49,7 @@ class ReleasePreflightScriptSpec extends Specification {
     }
 
     // FR1: the "Malformed tag stops early" scenario — before reachability, before any API call
+    // Scenario: release/release-distribution / Malformed tag stops early
     def "FR1: tag '#tag' fails the shape check naming the expected shape, before any other check"() {
         when:
         def run = preflight(tag, onMain)
@@ -72,6 +73,7 @@ class ReleasePreflightScriptSpec extends Specification {
     }
 
     // FR1, FR3: a well-shaped tag yields the product version, and a suffix marks a pre-release
+    // Scenario: release/release-distribution / A pre-release suffix is accepted
     def "FR1: tag #tag passes and yields version #version, prerelease #prerelease"() {
         given:
         runs << run(onMain, 'main', 'push', 'completed', 'success')
@@ -92,6 +94,7 @@ class ReleasePreflightScriptSpec extends Specification {
     }
 
     // FR2: a commit that never reached main is refused before the CI query
+    // Scenario: release/release-distribution / A tag off main is not released
     def "FR2: a commit not reachable from origin/main fails naming the fix"() {
         when:
         def run = preflight('v0.1.0', offMain)
@@ -103,6 +106,7 @@ class ReleasePreflightScriptSpec extends Specification {
     }
 
     // FR2, NFR-O1: the "Red commit is not released" scenario and its siblings
+    // Scenario: release/release-distribution / Red commit is not released
     def "FR2: the preflight fails when the main push run is #state"() {
         given:
         runs << run(onMain, 'main', 'push', status, conclusion)

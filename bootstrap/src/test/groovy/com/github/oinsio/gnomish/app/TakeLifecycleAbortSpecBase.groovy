@@ -106,6 +106,7 @@ abstract class TakeLifecycleAbortSpecBase extends Specification implements Abort
         }
     }
 
+    // Scenario: tracker/tracker-take / Abort below the fuse
     def "one abort below the fuse returns the task to Ready with an ABORT thread entry and count one"() {
         given: 'the round-boundary check is armed to throw once, forcing a genuine infrastructure abort'
         armToAbortOnNextRoundBoundaryCheck()
@@ -161,6 +162,8 @@ abstract class TakeLifecycleAbortSpecBase extends Specification implements Abort
         tracker.fetchTask(REF).state() instanceof TrackerTaskState.Finished
     }
 
+    // Scenario: tracker/tracker-take / Fuse trips at K
+    // Scenario: tracker/tracker-take / Infra park exit
     def "the K-th abort trips the fuse: AwaitingHuman(INFRA) with a history report, exit 13; further takes are refused (FR14, NFR-C1)"() {
         given: 'the first abort (below threshold), via explicit take which ignores backoff (mandate, D10)'
         armToAbortOnNextRoundBoundaryCheck()

@@ -42,6 +42,7 @@ class GithubWorkflowRunPollInterruptSpec extends Specification {
     }
 
     // FR11: the cancellation leaves the poll unwrapped — no verdict, no outcome line.
+    // Scenario: tracker/github-tracker / Interrupted external-check poll is not "cannot verify"
     def "an interrupted runs query propagates as the cancellation, with no cannot-verify verdict"() {
         given:
         wireMock.stubFor(get(urlEqualTo(RUNS_URL))

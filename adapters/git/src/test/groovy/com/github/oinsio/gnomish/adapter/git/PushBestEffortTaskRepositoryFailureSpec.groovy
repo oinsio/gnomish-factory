@@ -41,6 +41,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
         new PushBestEffortTaskRepository(delegate, git, clone, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
     }
 
+    // Scenario: git/git-task-persistence / Lifecycle push failure stays best-effort
     def "an unreachable origin logs one WARN naming task, branch and event, and never propagates"() {
         given:
         gitOutput(cloneDir, 'remote', 'set-url', 'origin', tempDir.resolve('nowhere.git').toString())
@@ -156,6 +157,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
         remoteTip() == Optional.empty()
     }
 
+    // Scenario: git/git-task-persistence / Local-only runs stay silent
     def "a clone with no origin attempts no push and stays silent"() {
         given:
         def local = initWorkingRepo(tempDir, 'local')

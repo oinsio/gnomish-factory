@@ -105,6 +105,7 @@ class ServeShutdownDaemonLoopsSpec extends ServeShutdownSpecBase {
 
     // factory-serve "No cleaner run during drain": SIGTERM arrives while a slot is still releasing
     //     within the grace window; no worktree cleaner or sandbox sweep run starts after the stop.
+    // Scenario: serve/factory-serve / No cleaner run during drain
     def "D9: the reaper, the janitor and the sweep tick all stop before the grace wait"() {
         given: 'a slot still occupied, so the shutdown waits out its grace window'
         def ledger = new SlotLedger(1, new VirtualClock())

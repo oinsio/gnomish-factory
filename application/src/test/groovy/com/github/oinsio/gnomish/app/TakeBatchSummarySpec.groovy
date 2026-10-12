@@ -19,6 +19,7 @@ class TakeBatchSummarySpec extends Specification {
 
     // Delta spec scenario "Mixed batch summarized": every one of the three outcomes is named in
     // the summary, in the CLI order they were given.
+    // Scenario: tracker/tracker-take / Mixed batch summarized
     def "names every ref and its outcome, in order"() {
         given:
         def outcomes = [

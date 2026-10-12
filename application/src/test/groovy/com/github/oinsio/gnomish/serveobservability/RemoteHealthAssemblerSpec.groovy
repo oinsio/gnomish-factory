@@ -20,6 +20,7 @@ class RemoteHealthAssemblerSpec extends Specification {
         RemoteHealthAssembler.assemble([]).isEmpty()
     }
 
+    // Scenario: observability/serve-observability / Blocked on the remote is a field
     def "one gate assembles one entry, keyed and populated from its own health"() {
         given:
         def gate = RemoteOutageGates.forServe(BaseRefGit.UNWIRED, Path.of('.'), new ServeProperties(0, null, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> })

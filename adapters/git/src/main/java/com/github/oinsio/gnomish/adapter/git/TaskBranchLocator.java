@@ -40,8 +40,9 @@ import org.slf4j.LoggerFactory;
  * three-way answer is the classification: origin answered and holds no such ref → {@link
  * BranchLocation.NotFound}; origin holds it, or never answered at all → {@link
  * BranchLocation.Unavailable}, retried under {@link GitInfrastructureRetry} and, if it never
- * settles, left for the caller to abort on. Treating every failed fetch as absence is what forked
- * a duplicate branch for a task that already had one, and it is the status quo this replaces. With
+ * settles, left for the caller to stop on (a take releases its claim on it, outside the abort
+ * accounting). Treating every failed fetch as absence is what forked a duplicate branch for a task
+ * that already had one, and it is the status quo this replaces. With
  * no {@code origin} configured there is no one to ask and the clone's own refs are the whole truth,
  * so the local-only run keeps answering {@link BranchLocation.NotFound} exactly as before — but
  * only when the fetch itself ran to its own exit, since "no origin is configured" is read from a

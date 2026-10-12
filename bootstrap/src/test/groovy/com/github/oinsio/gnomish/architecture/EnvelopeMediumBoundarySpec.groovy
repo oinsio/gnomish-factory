@@ -82,6 +82,7 @@ class EnvelopeMediumBoundarySpec extends Specification {
     // FR8, M2: a working copy is the staging area for the next commit, not a read medium — a
     //     filesystem read in these trees is either one of the four non-envelope reads named above
     //     or the defect this change removed.
+    // Scenario: lifecycle/task-branch-contract / A working-copy read on a recovery path fails the build
     def "FR8, M2: only the allowlisted non-envelope readers touch the filesystem in the git adapter and the app package"() {
         given: 'every production source of the owned trees'
         def sources = ownedSources()
@@ -99,6 +100,8 @@ class EnvelopeMediumBoundarySpec extends Specification {
 
     // FR9, M6: three modules spelled these names by hand before this change, and nothing failed
     //     when one of them drifted; the owner is only an owner while no one retypes it.
+    // Scenario: git/git-task-persistence / A hand-typed envelope path fails the build
+    // Scenario: git/git-task-persistence / Every medium addresses the envelope by one spelling
     def "FR9, M6: no production source outside EnvelopePaths spells the envelope's path names"() {
         given: 'every production source of the build except the owner'
         def sources = RepoSourceTree.productionSources { path ->

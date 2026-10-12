@@ -39,6 +39,7 @@ class FilesExistCheckRunnerSpec extends Specification {
         verdict instanceof Verdict.Pass
     }
 
+    // Scenario: cli/manual-run / Missing files enumerated
     def "two of three missing files yields Fail with exactly two findings naming them"() {
         given: 'one existing file and two missing ones configured'
         Files.writeString(tempDir.resolve('present.txt'), 'ok')
@@ -128,6 +129,7 @@ class FilesExistCheckRunnerSpec extends Specification {
         cannotVerify.reason().contains('DirectoryWorkspace')
     }
 
+    // Scenario: cli/manual-run / Workspace escape refused
     def "a path escaping the workspace root yields CannotVerify naming the offending path"() {
         given: 'a configured path that climbs out of the workspace via ..'
         def check = new VerifyCheck.Builtin('files_exist', [files: ['../secret']])

@@ -125,8 +125,39 @@ class TakeCrashAbortSpec extends Specification {
         } | RecoveryCause.INSTANCE_CRASH
     }
 
+    // FR14, FR15, NFR-O2 of harden-task-branch-contract: the repair that spends the last attempt of
+    //     the unified budget quarantines the task for a human with a report that stands alone — the
+    //     shape that could not be converged, what the repair died of, and the attempts consumed
+    // Scenario: lifecycle/task-branch-contract / Exhausted budget quarantines with history
+    def "a failed repair that exhausts the budget parks INFRA naming the shape, the diagnosis and every attempt"() {
+        given: 'two crashed runs already on record, so this failed repair spends the last attempt'
+        def facts = new AbortFacts(THRESHOLD - 1, Instant.parse('2026-07-24T09:00:00Z'), 0)
+        tracker.fetchTask(REF) >> claimedTask(facts)
+        def repairFailure = new BranchRecoveryFailedException(
+                'PROJ-1', new BranchShape.Parked(), new IllegalStateException('park write failed'))
+        String report = null
+
+        when:
+        def result = crashAbort.onCrash(order(claimedTask(facts)), repairFailure)
+
+        then: 'the task moves to the needs-human status, no further abort is recorded'
+        0 * tracker.recordAbort(*_)
+        1 * tracker.park(REF, ParkReason.INFRA, _ as String) >> { TaskRef ref, ParkReason reason, String text ->
+            report = text
+        }
+        result instanceof TakeResult.AwaitingHuman
+
+        and: 'the report names the shape, the diagnosis and the attempts consumed, by category'
+        report.contains('Parked')
+        report.contains('park write failed')
+        report.contains('3 consecutive automatic attempts')
+        report.contains('2 crashed runs')
+        report.contains('1 failed branch repairs')
+    }
+
     // NFR-R2: a dead tracker is itself a plausible crash cause and must never turn the abort into a
     // bare 1 — an abort-facts read that throws is treated as none(), so the crash still aborts.
+    // Scenario: observability/factory-logging / Fabricated default is attributed
     def "a crash whose abort-facts read fails is treated as none and still aborts"() {
         given: 'the abort-facts read itself throws, as a fully dead tracker would'
         tracker.fetchTask(REF) >> {

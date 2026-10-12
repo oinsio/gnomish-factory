@@ -62,17 +62,20 @@ public final class RemoteOutageGates {
 
     /**
      * The task git a serve slot works with: {@code git} with its base-ref port wrapped in {@link
-     * RemoteOutageSignalingBaseRefGit}, so every claim-time base read reports to {@code gate} at
-     * the moment it returns (FR14 of add-base-ref-resolution). The only construction of that
-     * decorator: the serve assembly point fills the slot wiring's {@code git} from here, and the
-     * slot itself never re-decorates (D6 of introduce-slot-wiring).
+     * RemoteOutageSignalingBaseRefGit} and its branch port in {@link
+     * RemoteOutageSignalingTaskBranchGit}, so every claim-time read of origin — the task-branch
+     * lookup, the fresh-claim base refresh and the resume rebind — reports to {@code gate} at the
+     * moment it returns (FR14 of add-base-ref-resolution; finding F88 of tighten-spec-contract).
+     * The only construction of either decorator: the serve assembly point fills the slot wiring's
+     * {@code git} from here, and the slot itself never re-decorates (D6 of introduce-slot-wiring).
      *
      * @param git the undecorated task git; never null
      * @param gate the daemon's one remote outage gate — the SAME instance its feed automaton
      *     consults; never null
-     * @return a copy of {@code git} differing only in its base-ref port; never null
+     * @return a copy of {@code git} differing only in its base-ref and branch ports; never null
      */
     public static TaskGit signaling(TaskGit git, RemoteOutageGate gate) {
-        return git.withBaseRefs(new RemoteOutageSignalingBaseRefGit(git.baseRefs(), gate));
+        return git.withBaseRefs(new RemoteOutageSignalingBaseRefGit(git.baseRefs(), gate))
+                .withBranches(new RemoteOutageSignalingTaskBranchGit(git.branches(), gate));
     }
 }

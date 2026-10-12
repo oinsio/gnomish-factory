@@ -92,6 +92,11 @@ class FooSpec extends Specification {
         repo.init([:])
     }
 
+    // Scenario: build/quality-gates / A variable of the launching process does not reach the test JVM
+    // Scenario: build/quality-gates / The machine's tooling variables survive
+    // Scenario: build/quality-gates / Only the factory's own namespace is removed
+    // Scenario: build/quality-gates / A variable the build sets itself survives
+    // Scenario: build/quality-gates / Every module gets the strip from its test conventions
     def "FR22, M10: a build run with GNOMISH_DECISION_FILE in its environment forks a test JVM that does not see it"() {
         when:
         BuildResult result = withOperatorVariables(repo.runner(':mod-a:test')).build()
@@ -118,6 +123,7 @@ class FooSpec extends Specification {
         reused.task(':mod-a:test').outcome == SUCCESS
     }
 
+    // Scenario: build/quality-gates / PIT minions are stripped the same way
     def "FR22: PIT's minions inherit no GNOMISH_ variable from the build"() {
         when:
         BuildResult result = withOperatorVariables(

@@ -57,6 +57,7 @@ class MidRoundTipObservationSpec extends Specification implements PlumbingCommit
                 new MidRoundPollContext('PROJ-9', BRANCH, suppressor))
     }
 
+    // Scenario: git/git-task-persistence / A failed poll observation is not a change
     def "FR13: a tip the poll cannot resolve changes no harvest decision"() {
         given: 'a round whose tip reads all fail, over a branch that really did move'
         def logs = LogCaptureSupport.attach(MidRoundHarvestListener, Level.DEBUG)

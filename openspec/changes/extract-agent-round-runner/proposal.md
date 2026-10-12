@@ -163,3 +163,7 @@ runner, with the Claude dialect as its first replaceable implementation.
   progress types trimmed; `domain/engine` `JudgeVoting` and `EnginePorts`.
 - Sequencing: after `migrate-verify-to-executor-contract` and `remove-interactive-console`;
   before `harden-verification-integrity`; `add-decision-arbiter` rebases onto role `decision`.
+- Sequenced after `tighten-spec-contract`: its deltas carry the `**Implements**:` lines and the
+  500-character requirement bodies that change introduces; it has no MODIFIED block to layer, and
+  the markers and exemption lines of the scenarios its REMOVED requirements take with them are
+  removed in this change (tasks.md, section 5).

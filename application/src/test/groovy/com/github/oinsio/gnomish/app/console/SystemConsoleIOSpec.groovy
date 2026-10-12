@@ -74,6 +74,8 @@ class SystemConsoleIOSpec extends Specification {
         output.toString('UTF-8') == 'hello there'
     }
 
+    // Scenario: cli/operator-console / A hostile issue title cannot reach the clipboard
+    // Scenario: cli/operator-console / Each control class has its visible form
     def "FR5: the human path shows what a terminal would obey rather than passing it on — #label"() {
         given:
         def output = new ByteArrayOutputStream()
@@ -97,6 +99,7 @@ class SystemConsoleIOSpec extends Specification {
         'plain text' | 'fatal: not a git repository' || 'fatal: not a git repository'
     }
 
+    // Scenario: cli/operator-console / A multi-line report keeps its lines
     def "NFR-S2: the human path keeps the line structure of a multi-line report"() {
         given:
         def output = new ByteArrayOutputStream()

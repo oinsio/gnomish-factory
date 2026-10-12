@@ -52,6 +52,7 @@ class SandboxLifecycleConvergenceSpec extends Specification {
     // NFR-R2: the first pass stops the unowned running box; the second pass sees a stopped box
     // still under the reap age and keeps it. The end state is identical, and — the point of
     // idempotence — the second pass issues no destructive command at all.
+    // Scenario: sandbox/sandbox-lifecycle / Disposal of an already-gone environment is a no-op
     def "a second pass over the state the first one left issues no further action"() {
         given: 'an unowned running main box with its own volume and network'
         host.add('gnomish-box-k1', ObjectKind.CONTAINER, labels('k1'), OLD, true)
@@ -89,6 +90,7 @@ class SandboxLifecycleConvergenceSpec extends Specification {
     // NFR-R2: a crash between the container removal and the volume/network removal leaves exactly
     // the residue this fixture starts from. No special "resume a half-finished dispose" path
     // exists — the remnant rules reclaim it as ordinary container-less objects.
+    // Scenario: sandbox/sandbox-lifecycle / Crash residue converges through the same policy
     def "residue from a dispose that crashed halfway is reclaimed by the next pass with no special casing"() {
         given: 'a dispose that removed the container and died before its volume and network'
         host.add('gnomish-vol-k1', ObjectKind.VOLUME, labels('k1'), OLD)
@@ -117,6 +119,7 @@ class SandboxLifecycleConvergenceSpec extends Specification {
     // NFR-R2 for the aged-reap escalation: running → stopped → disposed is one-way, and each pass
     // advances it by at most one step. Re-running the second pass converges on "gone" rather than
     // re-issuing the removal.
+    // Scenario: sandbox/sandbox-lifecycle / Forgotten kept environment is reaped
     def "the reap escalation advances one step per pass and then converges on gone"() {
         given: 'an unowned box already stopped well past the reap age'
         host.add('gnomish-box-k1', ObjectKind.CONTAINER, labels('k1'), OLD, false, OLD)
@@ -143,6 +146,7 @@ class SandboxLifecycleConvergenceSpec extends Specification {
 
     // NFR-R2 across modes: a manual box past its running-stop threshold follows the same
     // stop-then-keep escalation, and a repeat pass neither re-stops it nor jumps to disposal.
+    // Scenario: sandbox/sandbox-lifecycle / Forgotten manual zombie is eventually stopped
     def "a manual box past its running threshold converges after one stop, exactly as a tracked one does"() {
         given:
         host.add('gnomish-box-m1', ObjectKind.CONTAINER, labels('m1', 'manual'), OLD, true)

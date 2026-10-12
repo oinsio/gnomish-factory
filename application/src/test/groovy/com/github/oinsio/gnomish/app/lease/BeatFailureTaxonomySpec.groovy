@@ -57,6 +57,8 @@ class BeatFailureTaxonomySpec extends Specification {
 
     // FR8: transient outage does not stop work — three consecutive 5xx beats are each caught,
     //     the claim stays held and flagged nothing, and beats resume once the tracker recovers.
+    // Scenario: serve/factory-serve / Outage passes through
+    // Scenario: lifecycle/claim-heartbeat / Transient outage does not stop work
     def "a transient outage does not stop work and beats resume on recovery"() {
         given:
         progressAt(A, 'plan', 0)

@@ -82,6 +82,8 @@ class LeasedEnvironmentCursorWiringSpec extends Specification implements BareGit
 
     // FR6, M4: the position the guard actually holds reaches the state commit THROUGH the leased
     //     view — with the forward missing this read answered Optional.empty() and committed nothing.
+    // Scenario: sandbox/execution-environment / A delegating view forwards the denial surface
+    // Scenario: sandbox/sandbox-egress / The position and its record ride one commit
     def "the cursor read through the leased view lands in the state commit"() {
         given:
         box.denialCursor = COMMITTED
@@ -96,6 +98,7 @@ class LeasedEnvironmentCursorWiringSpec extends Specification implements BareGit
 
     // FR6, M4: the restore half of the round trip, driven through the same view — the offer must
     //     reach the box, and the position it left there must be what the next round commits.
+    // Scenario: sandbox/execution-environment / The cursor round-trip runs through the production delegating view
     def "a cursor restored through the leased view positions the box and is committed by the next round"() {
         when: 'a resuming instance offers the position recorded at the branch tip'
         leased.restoreDenials(DenialRestoration.at(COMMITTED))

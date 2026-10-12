@@ -31,6 +31,7 @@ class InvalidStructuralBatterySpec extends Specification implements InvalidFixtu
         root
     }
 
+    // Scenario: pipeline/pipeline-config / Unsupported schema version is rejected
     def "M2/FR9: schema-version faults each yield exactly the located config.yaml error"() {
         given: 'a valid baseline whose config.yaml the row rewrites'
         writeValidBaseline()
@@ -116,6 +117,7 @@ class InvalidStructuralBatterySpec extends Specification implements InvalidFixtu
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Unknown check type is rejected
     def "M2/FR5: an unknown verify type or input kind discriminator yields exactly its located error"() {
         given:
         writeValidBaseline()

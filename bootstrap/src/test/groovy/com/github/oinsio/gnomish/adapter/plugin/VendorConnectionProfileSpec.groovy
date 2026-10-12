@@ -54,6 +54,9 @@ class VendorConnectionProfileSpec extends Specification {
 
     // FR16, "Two ports share one named profile": one definition, both ports — and the endpoint and
     //     credential each port ends up with are the profile's, with nothing duplicated to drift.
+    // Scenario: tracker/github-tracker / Subsection resolves its connection from a named profile
+    // Scenario: verification/github-external-check / Adapter is constructed from a shared connection profile
+    // Scenario: operator/vendor-connection-profile / Two ports share one named profile
     def "a github tracker and github checks resolve one shared profile"() {
         given: 'a repo-side tracker subsection referencing the same profile the check subsection does'
         writeTree("""\
@@ -87,6 +90,8 @@ tracker:
 
     // FR16, "Mixed-vendor configuration is unaffected": sharing is opt-in per subsection. A second
     //     provider configured inline alongside the profile-referencing one is valid and untouched.
+    // Scenario: plugin/plugin-discovery / Different vendors serve different ports
+    // Scenario: operator/vendor-connection-profile / Mixed-vendor configuration is unaffected
     def "a mixed-vendor configuration still works"() {
         given: 'github by profile, the built-in http provider inline with its own allowlist'
         def check = checkSubsection() + [http: [allowlist: ['sonar.example.com']]]
@@ -104,6 +109,7 @@ tracker:
 
     // FR16, "Undefined profile name is a located error": on the repo side the mistake is a load
     //     error naming the missing profile — never a mid-take failure at first API call.
+    // Scenario: operator/vendor-connection-profile / Undefined profile name is a located error
     def "an undefined profile reference in the tracker subsection is a located load error"() {
         given:
         writeTree('''\
@@ -144,6 +150,7 @@ tracker:
 
     // FR16, "Ambiguous connection declaration is a located error": a subsection declares one form or
     //     the other; inlining a key the profile already carries is the drift profiles exist to stop.
+    // Scenario: verification/github-external-check / An inline key the profile also defines is a load error
     def "declaring both the reference and an inline profile key fails startup"() {
         when:
         new CheckClientConfiguration()
@@ -160,6 +167,8 @@ tracker:
     // FR16, "An inline key the profile also defines is a located error": the check port's twin,
     //     on the repo side — the same per-key verdict reaches the operator as a load error, not a
     //     startup exception, because the offending subsection lives in the target repo's config.
+    // Scenario: tracker/github-tracker / Overlapping inline key alongside a profile reference is a load error
+    // Scenario: operator/vendor-connection-profile / An inline key the profile also defines is a located error
     def "declaring both the reference and an inline profile key in the tracker subsection is a located load error"() {
         given: 'the tracker subsection re-inlines api-url, the very key the profile carries'
         writeTree("""\
@@ -188,6 +197,9 @@ tracker:
     // FR17, "Renamed credential in a profile is still scrubbed": the profile-supplied name enters
     //     the run's declared-credential set through the SPI, so passthrough refuses it exactly as it
     //     refuses a vendor's default constant — no core source names either.
+    // Scenario: tracker/github-tracker / The declared credential name keeps the token out of every allowlist
+    // Scenario: verification/github-external-check / A profile-supplied token name cannot be allowlisted
+    // Scenario: operator/vendor-connection-profile / Renamed credential in a profile is still scrubbed
     def "a profile-renamed credential cannot be admitted into the passthrough allowlist"() {
         given:
         def properties = propertiesWithProfile()

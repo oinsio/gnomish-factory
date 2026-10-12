@@ -55,3 +55,7 @@ are gated on its availability.
 - [ ] 6.3 Orphan reclaim cluster-wide by labels: namespaces, pods, PVCs; age-logged, concurrent-safe (FR10, NFR-R2, NFR-C1, M5)
 - [ ] 6.4 E2E: metadata + direct egress fail, allowlisted via guard passes (M2)
 - [ ] 6.5 Docs: cloud checklist (NetworkPolicy verification, registry policy, RuntimeClass trade-offs, data-residency statement, volume-is-cache rule), prerequisites, RBAC install (UX1, UX2, UX4)
+
+## Follow-ups from tighten-spec-contract
+
+- F64: the scenario `The env/file adapter is the only adapter` of `secrets-provider` keeps its title with a WHEN/THEN narrowed to the default selection; it is renamed (e.g. to `The env/file adapter is the default selection`) by `retire-misnamed-scenarios` + `restore-renamed-scenarios` after this change lands.

@@ -21,6 +21,8 @@ class DependencyVerificationMetadataSpec extends Specification {
 
     // implements the "exemption covers only sources and javadoc" scenario of
     // add-dependency-verification
+    // Scenario: build/dependency-verification / The exemption covers only sources and javadoc
+    // Scenario: build/dependency-verification / IDE sync of a pinned library succeeds
     def "the trusted-artifact exemption matches only sources and javadoc classifiers"() {
         given: 'the trusted-artifacts block of the verification metadata'
         def metadata = Files.readString(metadataFile())

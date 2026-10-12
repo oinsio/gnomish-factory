@@ -109,6 +109,8 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
 
     // FR9, UX2: a parked task is refused with the reason AND the way back. The three park reasons
     // need different return paths, so a single generic message would leave the operator stuck.
+    // Scenario: tracker/tracker-take / Parked task is refused
+    // Scenario: tracker/tracker-port / Parked task returns only through a human
     def "refuses a parked task naming the reason and the way back to ready"() {
         when:
         def result = dispose(taskIn(new TrackerTaskState.AwaitingHuman(reason)))

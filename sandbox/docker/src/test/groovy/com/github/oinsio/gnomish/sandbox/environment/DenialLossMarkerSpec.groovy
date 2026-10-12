@@ -26,6 +26,7 @@ class DenialLossMarkerSpec extends Specification {
         '2026-08-19T10:00:00.000000001Z' || '2026-08-19T10:00:00.000000001Z'
     }
 
+    // Scenario: sandbox/sandbox-egress / A source gone with recorded denials surfaces as loss
     def "FR8: a vanished denial source names both the recorded source and the live one"() {
         expect:
         def marker = DenialLossMarker.sourceGone(KEY, 'sha256:container-gone', live)

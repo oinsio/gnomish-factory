@@ -12,8 +12,10 @@ capability merged. How a change is archived and its deltas merged is defined by
 
 A check before you has already confirmed that the change moved to exactly one correctly
 dated archive directory with every task ticked, that `openspec validate --specs --strict`
-passes, and that only the main specs of capabilities with a delta were touched. Do not
-recount them, and do not run anything.
+passes, that the project's spec-contract check (`./gradlew -q checkSpecContract`: the
+traceability line, the notes, the scenario-to-test links) passes over the merged specs, and
+that only the main specs of capabilities with a delta were touched. Do not recount them, and
+do not run anything.
 
 For every delta spec under the archived change's `specs/`, read the main spec of the same
 capability path under `openspec/specs/` and check:

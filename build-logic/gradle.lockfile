@@ -109,4 +109,5 @@ org.spockframework:spock-bom:2.4-groovy-4.0=functionalTestCompileClasspath,funct
 org.spockframework:spock-core:2.4-groovy-4.0=functionalTestCompileClasspath,functionalTestRuntimeClasspath
 org.tukaani:xz:1.9=runtimeClasspath,testRuntimeClasspath
 org.yaml:snakeyaml:2.5=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+org.yaml:snakeyaml:2.6=functionalTestCompileClasspath,functionalTestRuntimeClasspath
 empty=annotationProcessor,functionalTestAnnotationProcessor,testAnnotationProcessor

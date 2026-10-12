@@ -58,6 +58,7 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
         LogCaptureSupport.capture(OriginReconciliation, Level.DEBUG, emit)
     }
 
+    // Scenario: git/git-task-persistence / A catch-up push says origin was behind
     def "an origin missing the branch entirely is caught up"() {
         given:
         def local = commitOnBranch('one')
@@ -92,6 +93,7 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
         originTip() == Optional.of(local)
     }
 
+    // Scenario: git/git-task-persistence / Up-to-date origin costs one read
     def "an up-to-date origin costs one refs read and no push"() {
         given:
         def local = commitOnBranch('one')
@@ -115,6 +117,8 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
         events.isEmpty()
     }
 
+    // Scenario: git/git-task-persistence / Reconciliation never blocks the run
+    // Scenario: git/git-task-persistence / A failed catch-up push degrades to a warning
     def "an unreachable origin degrades to one WARN without throwing"() {
         given:
         def local = commitOnBranch('one')
@@ -160,6 +164,7 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
         warnings[0].formattedMessage.startsWith(OperatorEvent.ORIGIN_RECONCILIATION_SKIPPED.head() + 'origin reconciliation skipped:')
     }
 
+    // Scenario: git/git-task-persistence / No origin remote makes the check a no-op
     def "a clone with no origin is a silent no-op"() {
         given:
         def local = initWorkingRepo(tempDir, 'local')

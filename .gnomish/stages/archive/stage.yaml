@@ -88,6 +88,16 @@ verify:
         echo "openspec validate --specs --strict must pass - the merge left a main spec invalid; fix the merge, never the delta"
         exit 1
       fi
+  # The merged contract keeps the project's own spec-contract rules (traceability line, notes,
+  # scenario-to-test link). One Gradle task owns every rule (SpecContractCheck, design D5 of
+  # tighten-spec-contract); this check only launches it and holds none.
+  - type: command
+    command: |
+      if ! out=$(./gradlew -q checkSpecContract 2>&1); then
+        printf '%s\n' "$out" | tail -40
+        echo "the spec-contract check failed over the merged specs (file:line, rule and fix above; the whole list is build/reports/spec-contract.txt) - read .claude/rules/traceability.md, .claude/rules/delta-specs.md and .claude/rules/testing.md; a merge that lost or rewrote a line is fixed in the merge, never the delta - anything else escalate through \$GNOMISH_DECISION_FILE"
+        exit 1
+      fi
   # This round moves one change and edits the main specs of the capabilities it has deltas
   # for - nothing else, and no other capability. Measured over this round's working copy.
   - type: command

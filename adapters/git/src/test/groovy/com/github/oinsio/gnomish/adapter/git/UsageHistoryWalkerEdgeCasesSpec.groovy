@@ -43,6 +43,7 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         setupUsageHistoryFixture()
     }
 
+    // Scenario: cli/task-inspection / Service commits are not rounds
     def "FR14: service commits are not rounds — a salvage commit and a cleanup commit produce no usage rows"() {
         given:
         taskRepository().createTask(new TaskContext('PROJ-3', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))

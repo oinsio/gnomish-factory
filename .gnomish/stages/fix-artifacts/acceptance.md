@@ -18,8 +18,10 @@ and one directory holds everything to clean up after the task.
 
 A check before you has already confirmed that every recommendation has exactly one
 entry with its fields, that the change validates under `openspec validate --strict`,
-and that nothing outside the change and the stage reports was touched. Do not
-recount them.
+that the project's spec-contract check (`./gradlew -q checkSpecContract
+-PspecContractChanges=true`: the traceability line, the notes, the scenario-to-test links)
+passes over the main specs and the unarchived deltas, and that nothing outside the change
+and the stage reports was touched. Do not recount them.
 
 Both outcomes can be wrong, and both are judged. An applied recommendation can harm
 the change the whole implementation will be built on; a rejected one can have been a

@@ -80,6 +80,7 @@ tracker:
         tracker.stop()
     }
 
+    // Scenario: operator/project-registry / Relocating the home moves everything
     def "FR9, FR11: run in git mode puts the task's worktree and the log under the project folder"() {
         when: 'a git-mode run starts; the fake agent asks a decision, and the run parks after the worktree exists'
         def result = harness.execute('run', clone, [
@@ -103,6 +104,7 @@ tracker:
         outsideProject() == []
     }
 
+    // Scenario: operator/project-registry / Relocating the home moves everything
     def "FR10, FR11: serve --drain puts the snapshot and the log under the project folder"() {
         given: 'a tracker whose queue is empty, and its token in the project secrets folder'
         tracker.stubFor(any(urlPathMatching('/search/.*')).willReturn(okJson('{"total_count":0,"incomplete_results":false,"items":[]}')).atPriority(1))

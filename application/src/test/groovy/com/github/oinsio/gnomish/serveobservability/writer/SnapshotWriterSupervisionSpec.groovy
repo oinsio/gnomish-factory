@@ -53,6 +53,7 @@ class SnapshotWriterSupervisionSpec extends Specification {
     //     an Error reaches the loop — which the old RuntimeException guard let kill the thread
     //     silently. Now the death is one ERROR line, and the respawned writer writes again after
     //     one backoff on virtual time, with no transition marking it dirty.
+    // Scenario: observability/serve-observability / Writer death is not a dead daemon
     def "a write cycle that throws an Error ends the worker, and the respawned writer writes again after one backoff"() {
         given:
         def calls = new AtomicInteger()
@@ -81,6 +82,7 @@ class SnapshotWriterSupervisionSpec extends Specification {
     // FR5, FR6, D3 (serve-observability "Interrupted writer does not spin"): an interrupt of the
     //     writer's thread with no stop requested is logged once and costs no extra write — after it,
     //     every write is a full timer period after the one before (or after the interrupt itself).
+    // Scenario: observability/serve-observability / Interrupted writer does not spin
     def "a stray interrupt of the writer's thread leaves one write per timer period"() {
         given: 'a writer on a short timer that records when each write happened, and on which thread'
         def interval = Duration.ofMillis(200)

@@ -194,6 +194,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     // receipt, as two separate commits on the branch. The intent carries the pending marker so a
     // pickup that finds it knows the tracker write is still owed; the receipt clears it, so the same
     // pickup afterwards reads a settled park rather than an orphaned one.
+    // Scenario: git/git-task-persistence / Park outcome and marker are one commit
     def "FR10: a container park records its intent with the pending marker, then receipts it"() {
         given:
         def support = support()
@@ -268,6 +269,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     //     needed — an ordering rule on resume is worthless if the park window itself moves the tip,
     //     and a spec that only mocks the repository could not tell, since the property is about the
     //     real branch. So this one drives the real bare-objects writer and reads the ref.
+    // Scenario: sandbox/execution-environment / No factory commit lands behind a kept box's back
     def "FR17: the branch tip stands still while a kept box survives the park"() {
         given: 'a created task and a materialized box, about to be parked and kept'
         def support = support()
@@ -399,6 +401,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     //     round reads denials through. With the offer made by a later step, that box never got it;
     //     with the offer an input of the build, the reattached box already carries it. Red with
     //     the supplier wired to DenialRestoration.none().
+    // Scenario: sandbox/execution-environment / A reattached box carries the recorded position
     def "FR17: a box obtained through reattachFor on a tip with a recorded cursor received the offer"() {
         given: 'a parked task whose tip records the position its last attempt read the guard up to'
         def support = support()
@@ -420,6 +423,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     //     position its drain left behind, and commits it beside the escalation carrying those
     //     denials. Driven through the production bundle, which is what the predecessor's dead
     //     feature proved specs over doubles cannot show.
+    // Scenario: git/git-task-persistence / The drained position is committed with the escalation
     def "FR3: a cannotExecute park commits the leased environment's position beside the escalation"() {
         given: 'a run whose leased round environment has read its guard log up to a known position'
         def support = support()
@@ -446,6 +450,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
 
     // NFR-R1: a park before any stage leased an environment has no source to ask — it records the
     //     escalation cursorless rather than failing, and the resumed run re-reads the guard tail.
+    // Scenario: git/git-task-persistence / An unanswerable cursor never fails the park
     def "NFR-R1: a park with no environment leased records the escalation without a position"() {
         given:
         def support = support()
@@ -470,6 +475,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         gitOutput(cloneDir, 'show', 'gnomish/T-1:.gnomish-task/task.json')
     }
 
+    // Scenario: git/git-task-persistence / A state file written before the cursor existed stays readable
     def "FR5: a branch with no committed cursor leaves the leased box reading from the start"() {
         given: 'a task branch whose state.json predates the cursor field'
         def support = support()
@@ -555,6 +561,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     // FR4 of fix-denial-attribution-durability: the escalation park's position stands past denials
     //     the last attempt's cursor does not cover, so the newer of the two is what a resume
     //     continues from — same source, so the two are that daemon's own totally ordered timestamps
+    // Scenario: git/git-task-persistence / Resume prefers the newest committed position
     def "FR4: the newer escalation position wins over the attempt position at the same tip"() {
         given: 'a tip carrying an attempt cursor and a newer escalation cursor of the same guard'
         def support = support()
@@ -684,6 +691,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
 
     // FR5: a RESUMED commit between the attempt that committed the position and the resume that
     //     reads it back rewrites both envelopes — and must carry the positions through
+    // Scenario: git/git-task-persistence / A lifecycle rewrite preserves the cursor
     def "FR5: a RESUMED commit between the attempt and the restore does not lose the position"() {
         given: 'a tip carrying both positions, then the human answer that rewrites both envelopes'
         def support = support()

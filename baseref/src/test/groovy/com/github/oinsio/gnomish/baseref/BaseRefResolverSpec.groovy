@@ -61,6 +61,11 @@ class BaseRefResolverSpec extends Specification {
     }
 
     // FR4: the whole priority matrix — each row silences every tier above it and exercises one tier
+    // Scenario: tracker/tracker-take / An explicit base outranks the designator
+    // Scenario: tracker/tracker-take / Auto mode resolves without flags
+    // Scenario: git/base-ref-resolution / Explicit base wins over a designator
+    // Scenario: git/base-ref-resolution / Designator wins over the configured default
+    // Scenario: git/base-ref-resolution / Zero configuration resolves to the remote default branch
     def "#scenario resolves '#ref' by #rule"() {
         when:
         def resolution = BaseRefResolver.resolve(request(inputs))
@@ -86,6 +91,8 @@ class BaseRefResolverSpec extends Specification {
     }
 
     // FR4, UX2: an underdetermined designator stops resolution — it never falls through to a default
+    // Scenario: git/base-ref-resolution / No allowed bases with a designator is refused, not resolved
+    // Scenario: git/base-ref-resolution / Two base labels park the task
     def "#scenario is underdetermined by #cause"() {
         when:
         def resolution = BaseRefResolver.resolve(request(inputs))
@@ -119,6 +126,8 @@ class BaseRefResolverSpec extends Specification {
     }
 
     // FR5: the manual tier is the only fallback to the working copy; autonomous refuses instead
+    // Scenario: git/git-task-persistence / Manual run stays offline
+    // Scenario: git/base-ref-resolution / Only a manual run without a base uses the local HEAD
     def "only a manual run falls through to the local HEAD"() {
         given: 'the same inputs but for the mode: nothing names a base, no remote answered'
         def manual = BaseRefResolver.resolve(request(mode: ResolutionMode.MANUAL, allowedBases: AllowedBases.empty()))
@@ -134,6 +143,7 @@ class BaseRefResolverSpec extends Specification {
     }
 
     // FR4: the reason names what was consulted, so a report reads without the code beside it
+    // Scenario: git/base-ref-resolution / The decision explains itself
     def "each tier explains itself"() {
         expect:
         reasonOf(request(explicitBase: 'v1.2.3')) == 'explicit --base argument'
@@ -145,6 +155,7 @@ class BaseRefResolverSpec extends Specification {
     }
 
     // FR10, NFR-C1: deterministic — two instances with the same inputs produce the same decision
+    // Scenario: git/base-ref-resolution / Same inputs, same decision
     def "the same inputs always produce the same decision"() {
         given:
         def inputs = request(designator: BaseDesignator.single(tracker('release/1.18')), defaultBranch: 'trunk')

@@ -101,6 +101,11 @@ class RemoteOutageServeEndToEndSpec extends Specification {
                 new RemoteOutageWiring('origin', suppressor, SUSTAINED_OPEN_THRESHOLD, {}, { ignored -> }))
     }
 
+    // Scenario: serve/factory-serve / Released tasks carry no abort history
+    // Scenario: serve/factory-serve / Recovery needs no operator action
+    // Scenario: serve/factory-serve / At most one claim per slot for the whole outage
+    // Scenario: serve/factory-serve / A probe, not a claim, ends the outage
+    // Scenario: serve/factory-serve / One WARN, one recovery line, roll-ups between
     def "a remote dead for an hour then back: one WARN, one recovery line, zero abort facts, tasks claimable again (M4, G5)"() {
         given: 'a probe that fails until the recovery instant, then succeeds, off the SAME virtual clock the feed runs on'
         BaseRefGit baseRefGit = [probe: { Path p ->
@@ -125,7 +130,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
             allClaimed.await()
             if (clock.instant().isBefore(recoversAt)) {
                 gate.openOnFailure('origin unreachable: connection refused')
-                // The real production release (FreshClaimBaseBinding.release, mirrored here) is a
+                // The real production release (FreshClaimBaseFailures.release, mirrored here) is a
                 // documented no-op on logical state for BOTH shipped adapters (InMemoryTracker only
                 // clears the claim marker; GithubTracker's release does nothing at all) — a claim
                 // left this way stays Working, "in flight" exactly as G5 describes, until the

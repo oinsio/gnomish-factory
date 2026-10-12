@@ -76,6 +76,8 @@ implements AppAssemblyFixture, ApplicationArgumentsFixture, BareGitRepoFixture, 
         harness.seedWorkingWithClaim(tracker, TASK_B, OLD_INSTANCE_ID)
     }
 
+    // Scenario: serve/factory-serve / Restart against an empty queue still recovers
+    // Scenario: lifecycle/claim-heartbeat / A restarted daemon returns its previous life's claims with nothing to claim
     def "a restarted serve never adopts the previous life's claims, and the standing reaper alone returns both to circulation (FR12, UX1)"() {
         given: 'a fresh serve daemon, its own instance id, over the seeded tracker — ready queue empty'
         def command = ServeCommands.of(

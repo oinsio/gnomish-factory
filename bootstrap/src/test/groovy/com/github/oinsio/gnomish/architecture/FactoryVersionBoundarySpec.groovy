@@ -49,6 +49,7 @@ class FactoryVersionBoundarySpec extends Specification {
     // NG3, scenario "Plugin contract is untouched": `ReleaseVersionSpec` proves the plugin reaches
     // only the project applying it, on a miniature build; this pins which real project that is.
     // `verifyPublishedApiVersion` cannot stand in: `0.0.0-dev` is a valid semver it accepts.
+    // Scenario: release/release-distribution / Plugin contract is untouched
     def "NG3: only :bootstrap applies the product version"() {
         given: 'every build script of the main build, the convention plugins excluded'
         def scripts = buildScripts()

@@ -24,6 +24,8 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
 
     // FR3: an external check that reaches a verdict within its timeout passes; the loop
     //      polls once per Running, sleeping exactly the interval between polls
+    // Scenario: pipeline/stage-engine / The engine never submits an external check
+    // Scenario: pipeline/stage-engine / Verdict within timeout
     def "polls an external check to a Pass within the timeout, sleeping the interval between polls"() {
         given: 'a poller that is Running twice then Pass, on a 1s/3s check'
         def interval = Duration.ofSeconds(1)
@@ -51,6 +53,7 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
         clock.instant() == Instant.EPOCH + interval.multipliedBy(2)
     }
 
+    // Scenario: pipeline/stage-engine / A passing poll's run link is recorded
     def "a passing poll's run link is preserved into the recorded check result"() {
         given: 'NFR-O2 of add-sandbox-core: the Pass run URL travels the check-result channel'
         def externalClient = new ScriptedExternalCheckClient([
@@ -66,6 +69,8 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
         result.results[0].verdict == new Verdict.Pass('https://ci.example/runs/42')
     }
 
+    // Scenario: git/git-task-persistence / An undeliverable attempt commit fails an external check as infrastructure
+    // Scenario: pipeline/stage-engine / Undelivered attempt commit never burns an attempt
     def "an undeliverable attempt commit resolves as CannotVerify with no poll issued"() {
         given: 'FR21 of add-sandbox-core: delivery is a verified precondition of the poll loop'
         def externalClient = new ScriptedExternalCheckClient([new PollStatus.Pass()])
@@ -90,6 +95,7 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
         sleeper.slept == []
     }
 
+    // Scenario: pipeline/stage-engine / Delivery is confirmed before the first poll
     def "a delivered attempt commit lets the poll loop run unchanged"() {
         given:
         def externalClient = new ScriptedExternalCheckClient([new PollStatus.Pass()])
@@ -112,6 +118,7 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
     // FR3, NFR-R3: a Running that never resolves times out at the deadline into a quality
     //      Fail carrying a single finding naming the check id and timeout — and stops.
     //      FR9: the undeclared/default timeout class is QUALITY, so this is unchanged.
+    // Scenario: pipeline/stage-engine / Timeout burns the attempt by default
     def "times an unresolved external check out into a quality Fail once the deadline elapses"() {
         given: 'a poller that stays Running past the deadline, on a 1s/3s check with the default timeout class'
         def interval = Duration.ofSeconds(1)
@@ -146,6 +153,8 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
     // FR9: an INFRASTRUCTURE-classed timeout escalates as a CannotVerify naming the elapsed
     //      timeout, rather than a quality Fail — the check adapter is agnostic (add-external-
     //      check-github-actions "Infrastructure-classed timeout burns no attempt")
+    // Scenario: pipeline/stage-engine / Infrastructure-classed timeout burns no attempt
+    // Scenario: pipeline/stage-engine / An external check classifies by its poll
     def "times an unresolved INFRASTRUCTURE-classed external check out into a CannotVerify"() {
         given: 'a poller that stays Running past the deadline, on a 1s/3s check classed INFRASTRUCTURE'
         def interval = Duration.ofSeconds(1)

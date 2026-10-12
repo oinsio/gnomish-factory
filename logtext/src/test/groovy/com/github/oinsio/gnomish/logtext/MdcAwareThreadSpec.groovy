@@ -124,6 +124,7 @@ class MdcAwareThreadSpec extends Specification {
         ran
     }
 
+    // Scenario: observability/factory-logging / A daemon worker's lines carry its component
     def "FR8: a daemon body runs under its component key alone"() {
         given: 'the thread that starts the daemon happens to be working a task'
         MDC.put('taskId', 'T-7')

@@ -64,6 +64,11 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
                 console)
     }
 
+    // Scenario: observability/tracker-board / Tracker resolved from the --dir config root
+    // Scenario: observability/tracker-board / The board never writes to the tracker
+    // F92: text aligned to code (8.15)
+    // Scenario: observability/tracker-board / No per-row fetch beyond the two list calls
+    // Scenario: observability/tracker-board / The ready window defaults to 50
     def "resolves the tracker from --dir's config, minting an InstanceId passed to the factory, and calls only listReady/listOpen"() {
         given:
         def ready = [
@@ -90,6 +95,7 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
         tracker.lastLimit == 50
     }
 
+    // Scenario: observability/tracker-board / The ready window defaults to 50
     def "passes --limit through to listReady"() {
         given:
         def tracker = new RecordingReadOnlyTracker([], [])
@@ -104,6 +110,8 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
 
     // FR3 (task 3.2): truncated is `ready.size() == limit`. A fetch that fills the window exactly
     // is reported truncated; a short fetch is not.
+    // Scenario: observability/tracker-board / Truncated window is honest
+    // Scenario: observability/tracker-board / A full window states no truncation
     def "marks the window truncated only when the fetched ready count equals the limit"() {
         given:
         def ready = (1..readyCount).collect {

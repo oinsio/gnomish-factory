@@ -258,3 +258,6 @@ configs — enabling the depot is a config change, as designed.
   SecretsProvider); strengthens changes B (two-address allowlist) and
   C/D (image-pull path); independent of their implementation order
   beyond A.
+- Sequenced after `tighten-spec-contract`: its deltas carry the
+  `**Implements**:` lines and the 500-character requirement bodies that change
+  introduces (it has no MODIFIED block to layer).

@@ -10,6 +10,7 @@ import spock.lang.Specification
  */
 class ServeArgumentsSpec extends Specification implements RunChainFakes {
 
+    // Scenario: serve/factory-serve / Escalation parks without a prompt
     def "FR13: the slots' run order is the serve clone, non-interactive, with no base, salvaging"() {
         given:
         def definition = pipeline()

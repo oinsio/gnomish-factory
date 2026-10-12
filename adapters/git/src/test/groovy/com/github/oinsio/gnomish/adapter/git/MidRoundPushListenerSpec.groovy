@@ -74,6 +74,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         remoteBranchAbsent()
     }
 
+    // Scenario: git/git-task-persistence / Gnome commit triggers a push
     def "FR11: a gnome commit mid-round triggers a best-effort push on the next event"() {
         given:
         def listener = newListener()
@@ -103,6 +104,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         remoteTip() == baselineHead
     }
 
+    // Scenario: git/git-task-persistence / A host mid-round push checks the branch first
     def "NFR-S1: push is skipped when HEAD moved but is off the expected branch"() {
         given:
         def listener = newListener()
@@ -117,6 +119,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         remoteBranchAbsent()
     }
 
+    // Scenario: git/git-task-persistence / A host mid-round push checks the branch first
     def "NFR-S1: push is skipped when the observed baseline is no longer an ancestor of HEAD"() {
         given: 'an orphan commit replaces branch history after construction, stranding the baseline tip'
         def listener = newListener()
@@ -157,6 +160,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         noExceptionThrown()
     }
 
+    // Scenario: git/git-task-persistence / A failed poll observation is not a change
     def "FR13: an unresolvable HEAD mid-round skips the observation instead of throwing"() {
         given:
         def listener = newListener()

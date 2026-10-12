@@ -19,6 +19,7 @@ class ReleaseDraftCleanupSpec extends Specification {
 
     private static final String PUBLISH = 'Publish the release'
 
+    // Scenario: release/release-distribution / A failed run can be re-run for the same tag
     def "NFR-R2: a leftover draft is removed before the release is published"() {
         given:
         def names = steps().collect { it.path('name').asText() }
@@ -28,6 +29,7 @@ class ReleaseDraftCleanupSpec extends Specification {
         names.indexOf(CLEANUP) == names.indexOf(PUBLISH) - 1
     }
 
+    // Scenario: release/release-distribution / A failed run can be re-run for the same tag
     def "NFR-R2: only a release answering isDraft=true is deleted"() {
         given:
         def run = step(CLEANUP).path('run').asText()

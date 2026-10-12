@@ -68,6 +68,39 @@ public class MiniApi {
 }
 """
 
+    /** The grown surface of FR3, its implementation refactored behind an unchanged signature. */
+    static final String API_REFACTORED = """\
+package com.example.mini;
+
+public class MiniApi {
+    public String greet(String name) {
+        return Greeting.of(name);
+    }
+
+    public int answer() {
+        return 6 * 7;
+    }
+
+    public String farewell(String name) {
+        return "bye " + name;
+    }
+}
+"""
+
+    /** A package-private helper the refactor introduces: an internal, outside the published surface. */
+    static final String INTERNAL_HELPER = """\
+package com.example.mini;
+
+final class Greeting {
+    private Greeting() {
+    }
+
+    static String of(String name) {
+        return "hello " + name;
+    }
+}
+"""
+
     private final Path projectDir
 
     MiniApiProject(Path projectDir) {
@@ -99,6 +132,16 @@ version = '1.0.0'
     /** Replaces the single public api source file. */
     void writeApi(String source) {
         GradleRunnerSupport.writeFile(projectDir, 'src/main/java/com/example/mini/MiniApi.java', source)
+    }
+
+    /** Writes the package-private helper beside the api source. */
+    void writeInternal(String source) {
+        GradleRunnerSupport.writeFile(projectDir, 'src/main/java/com/example/mini/Greeting.java', source)
+    }
+
+    /** The project version the build script declares. */
+    String declaredVersion() {
+        (projectDir.resolve('build.gradle').text =~ /(?m)^version = '([^']+)'/)[0][1]
     }
 
     /** Empties the generated baseline directory without removing it (FR4). */

@@ -100,6 +100,7 @@ class GithubOpenQuerySpec extends Specification {
         wireMock.verify(getRequestedFor(urlEqualTo(NEEDS_HUMAN_URL)))
     }
 
+    // Scenario: tracker/github-tracker / The claim version is the comment id and its update time
     def "FR5: reports a Working task with its holder and a (comment id, updated_at) claim version"() {
         given:
         stubWorkingFeed('[{"number":7}]')
@@ -170,6 +171,7 @@ class GithubOpenQuerySpec extends Specification {
         working.claimVersion() == new ClaimVersion('501', Instant.parse('2026-07-23T10:00:00Z'), new ClaimEpoch(501))
     }
 
+    // Scenario: tracker/github-tracker / Missing live claim keeps the last-known holder
     def "FR5: a Working issue whose live claim comment is missing is reported with an absent claim and the last-known holder"() {
         given: 'a claim voided by a later abort boundary, so no live claim resolves'
         stubWorkingFeed('[{"number":7}]')
@@ -213,6 +215,7 @@ class GithubOpenQuerySpec extends Specification {
     // FR19 of harden-task-branch-contract: the omission rule is gone. A working-labeled issue with
     //     no claim footprint at all is REPORTED with its facts — it is the claim sequence's own kill
     //     window, and dropping it as a human mislabel is what hid that window from every sweep.
+    // Scenario: tracker/github-tracker / Working label with no claim footprint is reported, not omitted
     def "FR19: a working-labeled issue with no claim footprint at all is reported, not omitted"() {
         given:
         stubWorkingFeed('[{"number":7,"labels":[{"name":"gnomish:working"}]}]')
@@ -232,6 +235,8 @@ class GithubOpenQuerySpec extends Specification {
 
     // FR7, NFR-P1, M2 of add-board-command: the title rides the SAME List Issues response body
     //     that named the issue number, for both open states — no issue-detail request is added
+    // Scenario: tracker/tracker-port / Titles cost no extra requests
+    // Scenario: observability/tracker-board / No per-row fetch beyond the two list calls
     def "carries each open task's title from the List Issues response, with no extra request"() {
         given:
         stubWorkingFeed('[{"number":7,"title":"Fix the widget"}]')
@@ -261,6 +266,7 @@ class GithubOpenQuerySpec extends Specification {
         wireMock.verify(0, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/9')))
     }
 
+    // Scenario: tracker/github-tracker / An unchanged open listing is a free 304
     def "NFR-P1: an unchanged poll re-sends If-None-Match and handles 304 as no change"() {
         given: 'the working feed answers 200+ETag once, then 304 on the conditional re-read'
         wireMock.stubFor(get(urlEqualTo(WORKING_URL))

@@ -19,6 +19,7 @@ class ReferenceDumpStringScrubSpec extends Specification {
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
 
+    // Scenario: executor/agent-executor / Paths and session ids stay scrubbed
     def "replaces the workspace absolute path — both plain and JSON-escaped — with /workspace"() {
         given: 'a slash-bearing workspace root appearing both plainly and JSON-escaped in one line'
         String workspaceRoot = '/private/var/folders/xx/workspaceRoot123'
@@ -40,6 +41,7 @@ class ReferenceDumpStringScrubSpec extends Specification {
         tree.get('note').asText() == 'resolved /workspace/out'
     }
 
+    // Scenario: executor/agent-executor / Paths and session ids stay scrubbed
     def "replaces the real session id with the synthetic ref-session-<label>-1 placeholder"() {
         given: 'a line carrying a real CLI-issued session id'
         String rawLine = '{"type":"assistant","session_id":"01JQ7-real-session-xyz",' +
@@ -58,6 +60,7 @@ class ReferenceDumpStringScrubSpec extends Specification {
         tree.get('message').get('note').asText() == 'session ref-session-plain-1 active'
     }
 
+    // Scenario: executor/agent-executor / Home-directory paths lose their username
     def "collapses a stray home-directory prefix outside the workspace to /workspace-scrubbed"() {
         given: 'a line whose path is NOT the workspace root but still embeds a real username'
         String rawLine = '{"type":"assistant","session_id":"sess-abc-123",' +
@@ -76,6 +79,7 @@ class ReferenceDumpStringScrubSpec extends Specification {
         tree.get('home').asText() == '/workspace-scrubbed/log'
     }
 
+    // Scenario: executor/agent-executor / Machine temp paths are collapsed but opaque per-run tokens survive
     def "collapses the macOS temp root and the per-uid claude tmp dir a real recording leaves behind"() {
         given: 'a subagent output_file that survived workspace-literal scrubbing with machine paths intact'
         String rawLine = '{"type":"system","subtype":"task_notification","task_id":"a234e5c3fadc846fe",' +
@@ -101,6 +105,7 @@ class ReferenceDumpStringScrubSpec extends Specification {
         tree.get('output_file').asText().endsWith('a234e5c3fadc846fe.output')
     }
 
+    // Scenario: executor/agent-executor / Machine temp paths are collapsed but opaque per-run tokens survive
     def "collapses the dashed project-dir encoding embedded in a memory_paths value"() {
         given: 'an init memory_paths.auto whose leading path is already /workspace-scrubbed but embeds the dashed temp dir'
         String rawLine = '{"type":"system","subtype":"init",' +

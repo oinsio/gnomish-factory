@@ -69,6 +69,7 @@ class StandingReaperInterruptedStopSpec extends Specification {
 
     // FR12, NFR-O2 of fix-operator-blockers; FR6, D4: a stop while the tick waits on the tracker's
     //     listing leaves the listing uninterrupted; it completes, nothing warns, nothing follows.
+    // Scenario: serve/factory-serve / Stopping an idle daemon is quiet
     def "a stop while the sweep listing waits on the tracker lets it finish quietly"() {
         given: 'a tracker whose open listing blocks until released, recording an interrupt'
         def listing = new CountDownLatch(1)
@@ -153,6 +154,7 @@ class StandingReaperInterruptedStopSpec extends Specification {
 
     // FR4 of fix-reaper-idle-liveness; FR6, D4: a stop during a restart backoff cuts it short and
     //     no thread is respawned — no tick follows the death.
+    // Scenario: lifecycle/claim-heartbeat / A truly dead thread is respawned, an intentional stop is not
     def "a stop during the restart backoff spawns no thread"() {
         given: 'the first sleep is the interval wait, the second the backoff after a death'
         def backoff = new LatchedSleeper()

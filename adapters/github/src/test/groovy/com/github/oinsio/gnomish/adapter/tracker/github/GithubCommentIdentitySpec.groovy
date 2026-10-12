@@ -26,6 +26,7 @@ class GithubCommentIdentitySpec extends Specification {
         identity.intent() == 'park'
     }
 
+    // Scenario: tracker/github-tracker / Content identity names the task and intent, not the account
     def "of drops the non-default host segment so no hostname reaches the wire (NFR-S1)"() {
         when:
         def identity = GithubCommentIdentity.of(taskId('ghe.acme.example'), 'finish')
@@ -35,6 +36,7 @@ class GithubCommentIdentitySpec extends Specification {
         !identity.task().contains('ghe.acme.example')
     }
 
+    // Scenario: tracker/github-tracker / Content identity names the task and intent, not the account
     def "two writes of the same intent for the same task are one identity, a different task is not"() {
         expect:
         GithubCommentIdentity.of(taskId(), 'park') == GithubCommentIdentity.of(taskId(), 'park')

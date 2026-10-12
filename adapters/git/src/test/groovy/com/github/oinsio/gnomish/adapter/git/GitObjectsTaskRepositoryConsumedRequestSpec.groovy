@@ -109,6 +109,8 @@ class GitObjectsTaskRepositoryConsumedRequestSpec extends Specification implemen
         gitOutput(bareDir, 'rev-list', '--count', REF) as int
     }
 
+    // Scenario: git/git-task-persistence / Every visit-opening commit removes the decision requests
+    // Scenario: git/git-task-persistence / The consumed request leaves with the answer
     def "FR14: #kind drops decisions/ from its own commit's tree, the tip before it still carries it"() {
         given:
         parked()
@@ -137,6 +139,7 @@ class GitObjectsTaskRepositoryConsumedRequestSpec extends Specification implemen
         ]
     }
 
+    // Scenario: git/git-task-persistence / Every visit-opening commit removes the decision requests
     def "FR14: #kind over a tip without decisions/ writes unchanged — one commit, the same tree paths"() {
         given:
         parked()

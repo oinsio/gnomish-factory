@@ -107,6 +107,7 @@ class GithubStaleClaimRemovalSpec extends Specification {
                 .willReturn(aResponse().withStatus(201).withBody('{"id":9001,"body":"marker"}')))
     }
 
+    // Scenario: tracker/github-tracker / Removal leaves an audit trail
     def "FR4: a matching observed version removes the claim — marker, delete, label flip — and returns Removed"() {
         given: 'the live claim (id 501, held by the dead instance) matches the observed version'
         stubComments(70, '[' + claimComment(501, 'gnomish-factory-dead', '2026-07-23T10:00:00Z') + ']')
@@ -138,6 +139,7 @@ class GithubStaleClaimRemovalSpec extends Specification {
     // FR5 of harden-logging-observability: a removal retires another instance's tenure, so the one
     // that happens is an anchor an operator can find; the convergences that do nothing are DEBUG,
     // because two reapers meeting is the mechanism working.
+    // Scenario: observability/factory-logging / A destructive cross-instance action is logged
     def "FR5: a removal that acts is an INFO anchor naming the retired holder"() {
         given:
         stubComments(80, '[' + claimComment(510, 'gnomish-factory-dead', '2026-07-23T10:00:00Z') + ']')
@@ -162,6 +164,7 @@ class GithubStaleClaimRemovalSpec extends Specification {
         logs.detach()
     }
 
+    // Scenario: observability/factory-logging / A destructive cross-instance action is logged
     def "FR5: a converge-abort is DEBUG, not an anchor and not a warning (#label)"() {
         given:
         stubComments(issue, thread as String)
@@ -189,6 +192,7 @@ class GithubStaleClaimRemovalSpec extends Specification {
         'no footprint' | 86 | '[]' | new ClaimFacts.None()
     }
 
+    // Scenario: tracker/github-tracker / Beaten claim is not removed
     def "FR5: a beaten claim (updated_at advanced) is a no-op reporting the live version"() {
         given: 'the holder beat the claim between observation and removal — same id, newer updated_at'
         stubComments(71, '[' + claimComment(502, 'gnomish-factory-dead', '2026-07-23T10:30:00Z') + ']')
@@ -206,6 +210,7 @@ class GithubStaleClaimRemovalSpec extends Specification {
         wireMock.findAll(deleteRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/502'))).isEmpty()
     }
 
+    // Scenario: tracker/tracker-port / A claim removed or replaced meanwhile is left alone
     def "FR5: a replaced claim (different comment id) is a no-op reporting the new live version"() {
         given: 'the observed claim is gone and a different one (id 777) now holds the task'
         stubComments(72, '[' + claimComment(777, 'gnomish-factory-new', '2026-07-23T11:00:00Z') + ']')
@@ -219,6 +224,8 @@ class GithubStaleClaimRemovalSpec extends Specification {
                 new ClaimVersion('777', Instant.parse('2026-07-23T11:00:00Z'), new ClaimEpoch(777)))
     }
 
+    // Scenario: tracker/github-tracker / Racing removals converge
+    // Scenario: tracker/tracker-port / A claim removed or replaced meanwhile is left alone
     def "FR4: racing convergence — the claim is already gone, so removal is a no-op reporting a null version"() {
         given: 'a second remover re-reads and finds the claim comment already deleted (only the removal boundary remains)'
         stubComments(73, '''
@@ -238,6 +245,7 @@ class GithubStaleClaimRemovalSpec extends Specification {
         wireMock.findAll(postRequestedFor(urlEqualTo('/repos/acme/widgets/issues/73/comments'))).isEmpty()
     }
 
+    // Scenario: tracker/github-tracker / Racing removals converge
     def "FR4: racing convergence — a 404 on the dead-comment delete is harmless and the removal still completes"() {
         given: 'between our re-check and delete, a racer deleted the same comment — DELETE returns 404'
         stubComments(74, '[' + claimComment(503, 'gnomish-factory-dead', '2026-07-23T10:00:00Z') + ']')
@@ -281,6 +289,7 @@ class GithubStaleClaimRemovalSpec extends Specification {
         thrown(GithubStaleClaimException)
     }
 
+    // Scenario: tracker/github-tracker / Gone issue is a converging no-op
     def "FR4: a 404 on the pre-action re-read means the issue is gone → Mismatch(null) (not an infrastructure failure)"() {
         given: 'the issue itself no longer exists, so re-reading its comments 404s'
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/760/comments?per_page=100'))
@@ -349,6 +358,8 @@ class GithubStaleClaimRemovalSpec extends Specification {
     // FR19 of harden-task-branch-contract: a dead footprint — a thread naming a former holder with
     //     no live claim comment left — is an eligible input, not a filtered-out one. There is no
     //     comment to delete, so the boundary marker and the label flip alone retire the footprint.
+    // Scenario: tracker/github-tracker / A vanished footprint still gets the marker and the flip
+    // Scenario: tracker/tracker-port / Dead footprint is removable without a live version
     def "FR19: a dead footprint is removable without a live version"() {
         given: 'the thread names a former holder but its claim comment is gone, with no boundary after it'
         stubComments(80, '[' + claimComment(600, 'gnomish-factory-dead', '2026-07-23T10:00:00Z')
@@ -374,6 +385,7 @@ class GithubStaleClaimRemovalSpec extends Specification {
 
     // FR19: the dead-footprint removal is guarded by the footprint, so a live claim that appeared
     //     since the observation makes it a converging no-op reporting the live facts.
+    // Scenario: tracker/github-tracker / Dead footprint removal guards on footprint identity
     def "FR19: a dead-footprint removal no-ops once a live claim has appeared since"() {
         given: 'a live claim comment landed between the observation and the removal'
         stubComments(81, '[' + claimComment(601, 'gnomish-factory-new', '2026-07-23T11:00:00Z') + ']')

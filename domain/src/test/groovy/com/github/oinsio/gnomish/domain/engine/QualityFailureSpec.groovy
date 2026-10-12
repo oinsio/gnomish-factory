@@ -114,6 +114,7 @@ class QualityFailureSpec extends Specification {
 
     // FR4 (feedback carries the whole stage history): after two quality failures, the third
     //     executor request's feedback contains the failed check results of BOTH prior attempts.
+    // Scenario: pipeline/stage-engine / Feedback carries the whole stage history
     def "the third executor request feedback carries the failed check results of both prior attempts"() {
         given: 'a stage that fails twice then cannot verify — two burned attempts before a wired terminal'
         def stageDef = stage('build', 5, [builtin('files_exist')])

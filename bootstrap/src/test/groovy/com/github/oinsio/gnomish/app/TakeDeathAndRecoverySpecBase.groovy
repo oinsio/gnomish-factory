@@ -150,6 +150,10 @@ tracker:
                 }, SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 
+    // Scenario: tracker/tracker-take / Long run reaps a neighbor
+    // Scenario: lifecycle/claim-heartbeat / Dead instance's task returns without a human
+    // Scenario: lifecycle/claim-heartbeat / Outcome survives holder death during retries
+    // Scenario: lifecycle/claim-heartbeat / Reconcile costs no tokens
     def "M2: a dead instance's Working claim is reaped by another run and later resumed from its branch"() {
         given: 'instance A delivers X for real, leaving a Completed task branch'
         assert runExitCode(productionCommand(props('instance-a', 'plain-round')), args('take', 'PROJ-1', "--dir=$projectDir")) == 0

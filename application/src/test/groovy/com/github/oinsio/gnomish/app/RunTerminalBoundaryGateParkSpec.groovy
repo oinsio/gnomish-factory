@@ -75,6 +75,7 @@ class RunTerminalBoundaryGateParkSpec extends Specification implements RunChainF
         outcome instanceof TaskOutcome.Paused && outcome.passedStage() == 'build' && outcome.finalState() == gated
     }
 
+    // Scenario: lifecycle/task-branch-contract / The gate's owner re-delivers the park where no tracker exists
     def "FR2, FR11: GitModeRunner records the park of a gate once, renders it and exits by the checkpoint"() {
         given:
         def registered = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), cloneDir)
@@ -127,6 +128,7 @@ class RunTerminalBoundaryGateParkSpec extends Specification implements RunChainF
         io.printed.join('').contains(pausedRender())
     }
 
+    // Scenario: lifecycle/task-branch-contract / The gate's owner re-delivers the park where no tracker exists
     def "FR2, FR11: ContainerTerminalDrive records the park of a gate once, keeps the box and exits by the checkpoint"() {
         given:
         def support = Mock(SandboxRunSupport) {

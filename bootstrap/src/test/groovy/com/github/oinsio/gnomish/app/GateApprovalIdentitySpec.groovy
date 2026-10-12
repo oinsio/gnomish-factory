@@ -34,6 +34,8 @@ class GateApprovalIdentitySpec extends Specification {
     // FR1, FR3, FR4, M1: at a gate or past the approval, never both and never neither; past the gate
     //     iff the outcome is cleared, in the approval's one commit; at the position the pinned
     //     definition names after the gate
+    // Scenario: lifecycle/task-branch-contract / Only the approval write opens a gate
+    // Scenario: lifecycle/task-branch-contract / No tip says continue before the approval
     def "FR3, FR4: after a manual pass and its approval, every tip on #medium is at the gate or carries the approval (#pipeline)"() {
         given: 'a manual pass of "build" parked at its gate, on origin'
         ContinuationMedium m = medium == 'host'

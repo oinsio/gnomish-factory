@@ -22,6 +22,7 @@ class PipelineLoaderExecutorSettingsSpec extends Specification implements Pipeli
     @TempDir
     Path root
 
+    // Scenario: cli/manual-run / Api stage rejected before any dialog
     def "a tree with an api-executor stage fails to load with a located error naming the stage, before any dialog (FR10/UX2/D6)"() {
         given: 'a valid tree except the plan stage declares an api executor'
         write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 2\n')
@@ -47,6 +48,7 @@ advancement: auto
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Agent settings are checked against the executor's schema
     def "an agent-cli stage with an unrecognized settings key fails to load with a located error naming the stage and key (FR11/UX2/D7)"() {
         given: 'a valid tree except the build stage settings carry a typo\'d key'
         write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 2\n')
@@ -75,6 +77,7 @@ advancement: auto
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Agent settings are checked against the executor's schema
     def "a judge check with a malformed maxTurns setting fails to load with a located error naming the check and key (FR11/UX2/D7)"() {
         given: 'a valid api-executor stage whose judge check settings carry a malformed maxTurns'
         write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 2\n')
@@ -108,6 +111,37 @@ advancement: auto
             new ConfigError('stages/plan/stage.yaml', 'verify[0].settings.maxTurns',
             "malformed 'maxTurns': expected a number")
         ]
+    }
+
+    // Scenario: pipeline/pipeline-config / Settings that are not a mapping are rejected
+    def "a stage whose settings is #shape fails to load with an error located at the stage's settings"() {
+        given:
+        write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 2\n')
+        write('pipeline.yaml', 'stages:\n  - build\n')
+        write('stages/build/stage.yaml', """\
+purpose: build
+executor:
+  type: agent-cli
+  model: cli-model
+  settings: ${settings}
+instructions: stages/build/instructions.md
+advancement: auto
+""")
+        write('stages/build/instructions.md', 'build it\n')
+
+        when:
+        def outcome = loadTree()
+
+        then:
+        outcome instanceof LoadOutcome.Invalid
+        (outcome as LoadOutcome.Invalid).errors().any {
+            it.file() == 'stages/build/stage.yaml' && it.where().startsWith('executor.settings')
+        }
+
+        where:
+        shape | settings
+        'a string' | 'fast'
+        'a list' | '[maxTurns, 5]'
     }
 
     def "the aggregated error list is immutable"() {

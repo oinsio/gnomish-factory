@@ -190,6 +190,7 @@ class TrackerWiringSpec extends Specification {
 
     // FR9: the short-ref shapes the parser accepts are expanded by the registered adapter, which is
     //     what supplies the repository coordinates a bare number lacks — and only that adapter is asked.
+    // Scenario: tracker/tracker-take / A hash-prefixed short ref expands like a bare number
     def "resolveRef expands a short ref #shortRef through the adapter registered for the declared type only"() {
         given:
         def expanded = new TaskRef('github:owner/repo#42')

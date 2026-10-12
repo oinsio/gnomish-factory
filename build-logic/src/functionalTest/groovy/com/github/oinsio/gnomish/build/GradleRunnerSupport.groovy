@@ -51,4 +51,13 @@ final class GradleRunnerSupport {
         Files.createDirectories(target.parent)
         target.text = content
     }
+
+    /** The build-logic classes TestKit publishes for the build under test, for a mini build's script classpath. */
+    static List<String> pluginClasspath() {
+        Properties metadata = new Properties()
+        GradleRunnerSupport.classLoader
+                .getResourceAsStream('plugin-under-test-metadata.properties')
+                .withCloseable { metadata.load(it) }
+        metadata.getProperty('implementation-classpath').split(File.pathSeparator).toList()
+    }
 }

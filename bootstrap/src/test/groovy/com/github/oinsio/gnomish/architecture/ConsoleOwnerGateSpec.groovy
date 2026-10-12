@@ -64,6 +64,8 @@ class ConsoleOwnerGateSpec extends Specification {
     /System\s*\.\s*(?:out|err)\s*\.\s*(?:print|println|printf|format|write|append)\s*\(/)
 
     // FR6, M2: the owner is the only survivor of the sweep over production sources
+    // Scenario: cli/operator-console / A hostile issue title cannot reach the clipboard
+    // Scenario: cli/operator-console / The owner is the only survivor
     def "no production class outside the console owner writes to a process stream"() {
         given: 'every production source in the build but the shared fixtures, comments removed'
         def sources = RepoSourceTree.productionSources {
@@ -102,6 +104,7 @@ class ConsoleOwnerGateSpec extends Specification {
     }
 
     // The detector is the gate — a seeded violation must fail it, or a green run means nothing
+    // Scenario: cli/operator-console / A new direct write fails the build
     def "a seeded #shape is detected"() {
         expect:
         writesDirectly(seeded)
@@ -132,6 +135,7 @@ class ConsoleOwnerGateSpec extends Specification {
 
     // FR3, M1 of make-run-headless: run reads no stdin — the takeover confirmation is the one
     //     console read, and every other readLine( in production is a named subprocess reader
+    // Scenario: cli/operator-console / The in-dialog status meta-command takes the same path
     def "FR3, M1: readLine( appears in production only at the allowlisted sites"() {
         given: 'every production source but the shared fixtures, comments removed'
         def sources = RepoSourceTree.productionSources {

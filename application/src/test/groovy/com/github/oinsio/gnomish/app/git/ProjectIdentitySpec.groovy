@@ -62,6 +62,7 @@ class ProjectIdentitySpec extends Specification {
                 ProjectIdentity.resolve(null, Optional.of('https://github.com/acme/gadgets.git'), CLONE)
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / No credential reaches the identity, a label, a log line or an error
     def "NFR-S1: a credential-bearing origin URL never surfaces in the derived identity"() {
         given: 'an HTTPS origin carrying an embedded user and token, the credential-bearing form'
         def url = Optional.of('https://alice:ghp_s3cr3tT0k3n@github.com/acme/widgets.git')
@@ -79,6 +80,7 @@ class ProjectIdentitySpec extends Specification {
         !identity.contains('widgets')
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / An override that could forge a label is refused
     def "an override outside the label-safe alphabet is rejected, naming the property"() {
         when:
         ProjectIdentity.resolve(projectId, Optional.empty(), Path.of('/srv/clone'))
@@ -97,6 +99,7 @@ class ProjectIdentitySpec extends Specification {
         ]
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / An override that could forge a label is refused
     def "a forged override cannot smuggle a second label pair into the parsed label map"() {
         when: 'an override shaped to append its own mode=manual pair to the raw label string'
         ProjectIdentity.resolve('acme,com.github.oinsio.gnomish.mode=manual', Optional.empty(), Path.of('/srv/clone'))
@@ -118,6 +121,7 @@ class ProjectIdentitySpec extends Specification {
         ]
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Two checkouts of one origin-less repository ignore each other
     def "FR8: with no override and no origin, two different clones do not share one sweep scope"() {
         expect:
         ProjectIdentity.resolve(null, Optional.empty(), Path.of('/srv/alpha')) !=
@@ -138,6 +142,7 @@ class ProjectIdentitySpec extends Specification {
 
     // FR1 of normalize-project-identity-url: the digest is of the normalized URL, so every
     // cosmetic and credential variant of one remote resolves to one identity.
+    // Scenario: sandbox/sandbox-lifecycle / Cosmetic URL variants of one remote resolve alike
     def "FR1: cosmetic and credential variants of one remote resolve to one identity: #variant"() {
         expect:
         ProjectIdentity.resolve(null, Optional.of(variant), CLONE) ==
@@ -155,6 +160,7 @@ class ProjectIdentitySpec extends Specification {
     }
 
     // FR2: normalization does not conflate remotes that genuinely differ.
+    // Scenario: sandbox/sandbox-lifecycle / Distinct remotes keep distinct identities
     def "FR2: remotes differing in #difference keep distinct identities"() {
         expect:
         ProjectIdentity.resolve(null, Optional.of(other), CLONE) !=
@@ -169,6 +175,7 @@ class ProjectIdentitySpec extends Specification {
     }
 
     // NFR-R1: an unrecognized remote shape still yields an identity, from the raw string.
+    // Scenario: sandbox/sandbox-lifecycle / An unparseable remote URL does not fail the run
     def "NFR-R1: an unrecognized origin URL still resolves, from the raw string"() {
         expect:
         ProjectIdentity.resolve(null, Optional.of('ext::helper %S widgets'), CLONE) ==~ /[0-9a-f]{12}/
@@ -205,6 +212,7 @@ class ProjectIdentitySpec extends Specification {
     }
 
     // NFR-C1: no alias means no extra listing to pay for.
+    // Scenario: sandbox/sandbox-lifecycle / No extra cost when no legacy identity exists
     def "NFR-C1: no legacy alias exists when #situation"() {
         when:
         def scope = ProjectIdentity.resolveScope(override, originUrl, CLONE)

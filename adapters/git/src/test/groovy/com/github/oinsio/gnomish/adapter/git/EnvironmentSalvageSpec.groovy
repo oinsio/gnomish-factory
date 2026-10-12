@@ -176,6 +176,10 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
     // FR5, design D11 of harden-task-branch-contract: the in-box salvage applies the SAME
     // ownership policy as the host worktree salvage — factory-owned .gnomish-task/ paths come
     // from the in-box HEAD, only gnome-owned work files ride the salvage commit.
+    // Scenario: git/git-task-persistence / A kill mid-write in the box never surfaces a partial file
+    // Scenario: git/git-task-persistence / Factory files come from the tip, not the worktree
+    // Scenario: sandbox/execution-environment / A tampered state file cannot ride a salvage commit
+    // Scenario: executor/agent-executor / A salvage commit carries the request
     def "FR5: salvage() restores factory-owned files from the in-box tip instead of committing them"() {
         given: 'a box whose HEAD carries a recorded state.json'
         def box = materializedBox()
@@ -244,6 +248,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
     // disabled at argv level. `git checkout HEAD -- <paths>` invokes post-checkout (flag=0, a file
     // checkout), so without `-c core.hooksPath=` a gnome-planted hook would execute inside the box
     // during the factory's own salvage restore.
+    // Scenario: sandbox/execution-environment / Factory-invoked in-box git runs without hooks
     def "FR5: the salvage restore checkout runs no gnome-planted hook"() {
         given: 'a box whose HEAD carries a recorded state.json'
         def box = materializedBox()

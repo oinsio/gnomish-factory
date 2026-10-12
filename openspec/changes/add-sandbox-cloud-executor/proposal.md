@@ -66,12 +66,12 @@ adapter — the declaration, its filter, and their tests exist once.
   and harvest over cluster APIs, NetworkPolicy egress, PVC cache
   semantics, RuntimeClass, in-cluster Docker ladder, passport,
   cost-critical orphan cleanup.
-- `secrets-provider`: the Vault-class adapter and OIDC federation for
-  remote executors — short-lived credentials, no static secrets outside
-  the operator's trust boundary.
 
 ### Modified Capabilities
 
+- `secrets-provider`: the Vault-class adapter and OIDC federation for
+  remote executors — short-lived credentials, no static secrets outside
+  the operator's trust boundary; the env/file adapter stays the default.
 - `sandbox-egress`: metadata-endpoint block as a mandatory layer-2 rule
   for cloud environments; self-check metadata probe; node-level image
   pulls under cluster registry policy.
@@ -302,3 +302,6 @@ adapter — the declaration, its filter, and their tests exist once.
   RuntimeClass bindings, registry endpoint.
 - Depends on change A (port, guard, self-check, git transport); composes
   with change B (gateway/virtual keys); independent of changes C and E.
+- Sequenced after `tighten-spec-contract`: its MODIFIED block of
+  `secrets-provider` ("Env/file adapter is the zero-infrastructure default")
+  is layered on that change's text, which must sync first.

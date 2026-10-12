@@ -85,6 +85,15 @@
 - [ ] 6.2 Rewrite the sample module: a sample verdict program (script, `pending` then `poll`)
   passing the conformance kit; update `docs/guides` adapter author guide and
   `docs/community-plugins.md` wording (FR8)
+- Spec contract (`tighten-spec-contract`): this change REMOVES the `stage-engine` requirement
+  "External check poll loop", two `plugin/plugin-api-contract` requirements and seven
+  `verification/check-provider-model` requirements; their 18 scenarios carry 30
+  `// Scenario: <spec-id> / <title>` markers today (17 of the 18 scenarios) and one line in
+  `config/spec-contract-exemptions/plugin-plugin-api-contract.txt` ("Sample check factory
+  compiles against the api alone"). In this same change, every marker of a removed scenario goes
+  with the test it sits on (or is retargeted to a scenario this change adds), and each exemption
+  line naming a removed scenario is deleted, so `checkSpecContract` reports no marker or
+  exemption naming a scenario that no longer exists.
 
 ## 7. Integration
 

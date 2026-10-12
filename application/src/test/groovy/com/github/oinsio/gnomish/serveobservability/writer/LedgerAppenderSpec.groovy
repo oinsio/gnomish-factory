@@ -84,6 +84,7 @@ class LedgerAppenderSpec extends Specification implements LifecycleLineFixture {
     // NFR-R3: slots finish concurrently and share one appender; the synchronized
     // append+flush per line must serialize writers so no two lines' bytes ever
     // interleave — every line read back must be independently valid JSON.
+    // Scenario: observability/serve-observability / Simultaneous finishes
     def "concurrent appends from many threads never interleave or corrupt a line"() {
         given:
         def target = tempDir.resolve('ledger-2026-08-03.jsonl')

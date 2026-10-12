@@ -34,6 +34,7 @@ class UntrustedTextExitIdentitySpec extends Specification {
                 }
     }
 
+    // Scenario: core/untrusted-text / Exits equal the primitives
     def "the log exit is the owner's log composition — #label as #provenance"() {
         given:
         def input = AdversarialCorpus.ENTRIES[label]
@@ -45,6 +46,7 @@ class UntrustedTextExitIdentitySpec extends Specification {
         [label, provenance] << cases()
     }
 
+    // Scenario: core/untrusted-text / Exits equal the primitives
     def "the console exit is the owner's console notation — #label as #provenance"() {
         given:
         def input = AdversarialCorpus.ENTRIES[label]
@@ -56,6 +58,7 @@ class UntrustedTextExitIdentitySpec extends Specification {
         [label, provenance] << cases()
     }
 
+    // Scenario: core/untrusted-text / Exits equal the primitives
     def "the comment exit is the owner's fenced rendering — #label as #provenance"() {
         given:
         def input = AdversarialCorpus.ENTRIES[label]
@@ -67,6 +70,7 @@ class UntrustedTextExitIdentitySpec extends Specification {
         [label, provenance] << cases()
     }
 
+    // Scenario: core/untrusted-text / Exits equal the primitives
     def "the inline comment exit is the owner's inert rendering — #label as #provenance"() {
         given:
         def input = AdversarialCorpus.ENTRIES[label]
@@ -78,6 +82,7 @@ class UntrustedTextExitIdentitySpec extends Specification {
         [label, provenance] << cases()
     }
 
+    // Scenario: core/untrusted-text / Exits equal the primitives
     def "the default rendering equals the log exit — #label as #provenance"() {
         given:
         def input = AdversarialCorpus.ENTRIES[label]

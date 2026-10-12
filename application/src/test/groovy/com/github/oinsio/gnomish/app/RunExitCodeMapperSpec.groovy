@@ -22,6 +22,9 @@ class RunExitCodeMapperSpec extends Specification {
 
     private RunExitCodeMapper mapper = new RunExitCodeMapper()
 
+    // Scenario: cli/manual-run / Retired code is never returned
+    // Scenario: cli/manual-run / Each terminal outcome has its exit code
+    // Scenario: cli/manual-run / Each tool failure has its exit code below 10
     def "getExitCode maps #exception.class.simpleName to #expectedCode"() {
         expect:
         mapper.getExitCode(exception) == expectedCode
@@ -44,6 +47,7 @@ class RunExitCodeMapperSpec extends Specification {
 
     // FR5, FR8 of remove-interactive-console: code 4 is retired — no type maps to it, so the
     // mapper's whole range is the table above plus the fallback.
+    // Scenario: cli/manual-run / Retired code is never returned
     def "the retired code 4 is never returned"() {
         expect:
         [
@@ -53,6 +57,7 @@ class RunExitCodeMapperSpec extends Specification {
         ].every { mapper.getExitCode(it) != 4 }
     }
 
+    // Scenario: cli/manual-run / Each tool failure has its exit code below 10
     def "getExitCode falls back to 1 for an unrecognized Throwable"() {
         expect:
         mapper.getExitCode(new RuntimeException('unexpected')) == 1

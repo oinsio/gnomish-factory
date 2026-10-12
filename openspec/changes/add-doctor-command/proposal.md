@@ -3,6 +3,9 @@
 Sequenced last: after `add-project-registry` (registry, configuration loader),
 `add-release-pipeline` (product version) and `add-sandbox-base-image` (image
 contract label). It reports on what those changes introduce.
+Also sequenced after `tighten-spec-contract`: the MODIFIED blocks of `operator-configuration`
+("Violations stop startup with one complete report") and `git-transfer` ("Git version floor at
+startup") are layered on that change's text, which must sync first.
 
 ## Why
 

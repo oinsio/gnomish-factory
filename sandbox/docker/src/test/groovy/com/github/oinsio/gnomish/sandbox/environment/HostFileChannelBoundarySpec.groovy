@@ -25,6 +25,9 @@ class HostFileChannelBoundarySpec extends Specification {
     @TempDir
     Path workingCopy
 
+    @TempDir
+    Path outsideRoot
+
     private final InstantSource clock = new VirtualClock()
 
     HostTaskExecutionEnvironment env
@@ -64,6 +67,32 @@ class HostFileChannelBoundarySpec extends Specification {
         then: 'the file exists at the working-copy-anchored path and round-trips'
         Files.readAllBytes(workingCopy.resolve('nested/deep/file.txt')) == bytes
         env.readFile('nested/deep/file.txt', 1024).get() == bytes
+    }
+
+    // NFR-S3, FR17: a symlink inside a root that resolves outside both roots refuses the write —
+    //     through an existing link to an outside file, and through a linked parent directory
+    // Scenario: sandbox/execution-environment / Symlink escape on a host write is refused
+    def "putFile through a symlink resolving outside both roots is refused and nothing outside changes"() {
+        given: 'an outside file and an outside directory, each reachable through a symlink in the working copy'
+        def outside = outsideRoot
+        def victim = outside.resolve('victim.txt')
+        Files.writeString(victim, 'original')
+        Files.createSymbolicLink(workingCopy.resolve('to-file'), victim)
+        Files.createSymbolicLink(workingCopy.resolve('to-dir'), outside)
+
+        when: 'the factory writes through the file link'
+        env.putFile('to-file', 'planted'.getBytes(StandardCharsets.UTF_8))
+
+        then: 'refused, and the outside file is unmodified'
+        thrown(PathEscapeException)
+        Files.readString(victim) == 'original'
+
+        when: 'the factory writes a new file under the directory link'
+        env.putFile('to-dir/created.txt', 'planted'.getBytes(StandardCharsets.UTF_8))
+
+        then: 'refused, and no file was created outside the roots'
+        thrown(PathEscapeException)
+        !Files.exists(outside.resolve('created.txt'))
     }
 
     // NFR-S3: a zero cap is a caller bug, refused before any filesystem access

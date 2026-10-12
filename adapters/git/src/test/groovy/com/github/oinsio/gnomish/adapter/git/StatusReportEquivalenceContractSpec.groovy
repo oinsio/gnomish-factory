@@ -68,6 +68,8 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), cloneDir)
     }
 
+    // Scenario: git/git-task-persistence / Equivalence with the live report
+    // Scenario: observability/status-report / Future consumers verify against the same reference files
     def "FR4: StatusReport rendered from state files is identical to the in-memory report, anchored by status-report-v1.reference.json"() {
         given: 'the same task/attempt data that backs the reference fixture, built in memory'
         def taskId = StatusReportReferenceFixture.TASK_ID
@@ -147,6 +149,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
     //     attempt record, so its denials ride the escalation. The equivalence has to hold for
     //     them too — a resuming instance reading task.json must see the same blocked egress the
     //     run reported, and the attempt history must stay untouched by their presence.
+    // Scenario: observability/status-report / State and live renders agree
     def "FR2: a cannotExecute escalation's denials survive task.json and render identically on both sides"() {
         given: 'a task parked after a round was killed on its round timeout, having tried a denied egress'
         def taskId = 'manual-20260716-143502-c1'

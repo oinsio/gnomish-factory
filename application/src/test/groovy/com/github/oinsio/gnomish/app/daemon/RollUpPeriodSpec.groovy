@@ -15,6 +15,7 @@ import spock.lang.Specification
  */
 class RollUpPeriodSpec extends Specification {
 
+    // Scenario: serve/daemon-supervision / The roll-up period outlives the loop's own interval
     def "FR2: the roll-up period outlives the interval of the loop it watches"() {
         expect:
         RollUpPeriod.forInterval(interval) == expected

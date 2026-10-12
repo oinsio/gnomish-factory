@@ -24,6 +24,7 @@ class DockerSeedCloneCommandSpec extends Specification {
     static final String GIT_CONFIG_GLOBAL = 'GIT_CONFIG_GLOBAL'
     static final ObjectOwnership OWNERSHIP = new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')
 
+    // Scenario: sandbox/execution-environment / Every factory object is labelled from creation
     def "seedClone is a throwaway, anonymous, network-less helper with the full ownership label set"() {
         when:
         def argv = DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/clone', 'gnomish/task-x', null, OWNERSHIP)
@@ -101,6 +102,7 @@ class DockerSeedCloneCommandSpec extends Specification {
     // FR7, design D6 of own-git-transfer-argv: the identity claim "the seed script's environment
     //     is the owner's" — the clone line is the SeedPath value rendered, with the branch
     //     placeholder as "$1" and the global file the script writes safe.directory into.
+    // Scenario: git/git-transfer / The seed clone's branch stays a positional parameter
     def "the seed script's clone line is the owner's SeedPath value, rendered with the branch as the shell word \$1"() {
         given: "the owner's value for the helper's fixed paths"
         def owner = GitTransfer.clone(new SeedPath(

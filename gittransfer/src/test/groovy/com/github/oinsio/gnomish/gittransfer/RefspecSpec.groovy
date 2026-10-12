@@ -24,6 +24,7 @@ class RefspecSpec extends Specification {
 
     // FR3: git fetch parses options after the remote name too, so a refspec that looks like an
     //     option is refused here rather than honoured as one.
+    // Scenario: git/git-transfer / A refspec that looks like an option is a refspec
     def "a refspec that looks like an option or names nothing is refused"() {
         when:
         new Refspec(value)

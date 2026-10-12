@@ -87,7 +87,7 @@ final class TakeFreshClaim {
         RegisteredClone clone = wiring.registeredClone();
         // FR13, D14 of add-base-ref-resolution: the task runs under the definition read from ITS
         // resolved base's law binding, never under the startup one.
-        var law = TaskTierLaw.bind(wiring.assembly(), baseBound.lawBinding(), order);
+        var law = TaskTierLaw.bind(wiring.assembly(), baseBound, order);
         if (law instanceof TaskTierLaw.Parked(TakeResult parked)) {
             return parked;
         }

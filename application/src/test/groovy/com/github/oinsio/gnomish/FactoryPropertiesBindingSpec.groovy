@@ -32,6 +32,7 @@ class FactoryPropertiesBindingSpec extends Specification {
     }
 
     // FR7/D2: a malformed grace is a startup error, not a silent default
+    // Scenario: executor/agent-executor / Tail-drain grace is operator-tunable with a safe default
     def "a malformed grace of #description fails binding"() {
         when:
         bind(['factory.agent-cli-tail-drain-grace': malformed])

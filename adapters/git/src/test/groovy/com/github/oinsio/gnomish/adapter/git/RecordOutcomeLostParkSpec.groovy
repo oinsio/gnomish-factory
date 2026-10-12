@@ -59,6 +59,7 @@ class RecordOutcomeLostParkSpec extends Specification implements BareGitRepoFixt
     /** The repository the branch ref is read from — the clone on the host, the bare origin for objects. */
     Path refRepo
 
+    // Scenario: lifecycle/task-branch-contract / A gate with a lost park is re-delivered, never run
     def "FR2, FR11: a lost park at a gate on the #medium medium is recorded in one commit, and re-recording it adds none (#trackerWrite)"() {
         given: 'a tip at the gate whose park was never recorded'
         TaskLifecycleStore repository = repositoryFor(medium)

@@ -71,6 +71,7 @@ class HttpCheckParamsValidatorSpec extends Specification implements HttpCheckFix
     }
 
     // NFR-S1: the manifest is committed, so a literal authorization header would commit a secret.
+    // Scenario: verification/http-check-provider / Secret is injected at request time, never stored in the manifest
     def "an inline authorization header is refused in favour of a named credential"() {
         expect:
         problems([url: URL, headers: [Authorization: 'Bearer hunter2']]).any {
@@ -129,6 +130,7 @@ class HttpCheckParamsValidatorSpec extends Specification implements HttpCheckFix
 
     // NFR-S2, D5: the egress allowlist is operator-owned — a manifest that writes one is an unknown
     //     param, so it cannot widen what the operator permitted.
+    // Scenario: verification/factory-egress-allowlist / Allowlist lives in operator config, not the manifest
     def "a manifest cannot declare an allowlist of its own"() {
         expect:
         problems([url: URL, allowlist: ['evil.example.net']]).any {
@@ -138,6 +140,7 @@ class HttpCheckParamsValidatorSpec extends Specification implements HttpCheckFix
 
     // NFR-S2, D5: interpolation is restricted to the fixed engine-defined allowlist — a manifest
     //     cannot smuggle a secret or attacker-controlled value into a URL or a header.
+    // Scenario: verification/factory-egress-allowlist / Non-whitelisted interpolation is rejected
     def "a non-allowlisted interpolation is a located error naming the variable"() {
         expect:
         problems([url: 'https://ci.example.invalid/${env.SONAR_TOKEN}']) == [

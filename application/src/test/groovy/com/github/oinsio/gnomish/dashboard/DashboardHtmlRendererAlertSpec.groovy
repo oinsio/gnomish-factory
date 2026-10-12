@@ -8,11 +8,14 @@ import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapsh
 import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithOccupiedSlotsDeadHeartbeat
 import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithRemoteGateOpen
 import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.snapshotWithTrackerFailures
+import static com.github.oinsio.gnomish.testsupport.AlertSnapshotFixtures.withSlotsAndVitals
 import static com.github.oinsio.gnomish.testsupport.DashboardPageMarkup.markup
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.emptyHistory
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.neverFetchedBoard
 import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.noSweepData
 
+import com.github.oinsio.gnomish.serveobservability.HeartbeatState
+import com.github.oinsio.gnomish.serveobservability.HeartbeatVital
 import com.github.oinsio.gnomish.serveobservability.ReaperVital
 import com.github.oinsio.gnomish.serveobservability.Snapshot
 import com.github.oinsio.gnomish.serveobservability.SweepCounts
@@ -40,6 +43,8 @@ class DashboardHtmlRendererAlertSpec extends Specification {
     def renderer = new DashboardHtmlRenderer()
 
     @Unroll
+    // Scenario: observability/dashboard-page / Dead daemon reddens the section
+    // Scenario: observability/dashboard-page / Single-snapshot rules raise their own alarm lines
     def "#label alert renders as its own alarm line in the status card"() {
         when:
         def html = renderer.render(view, emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, null)
@@ -56,20 +61,42 @@ class DashboardHtmlRendererAlertSpec extends Specification {
         'reaper degraded' | new DaemonSnapshotView.Fresh(snapshotWithDegradedReaper())
     }
 
-    // NFR-O3, UX6 of add-base-ref-resolution: dynamic content (target, timestamps), so asserted by
-    // substring rather than the fixed-label `where:` matrix above.
-    def "an open remote gate renders its own alarm line naming the target and last error"() {
+    // NFR-O3, UX6 of add-base-ref-resolution: one line names the target, when the gate opened, the
+    //     last error and the next probe — the open duration is stated as its start instant (F89).
+    // Scenario: observability/dashboard-page / Blocked on the remote reads from one place
+    // F89: text aligned to code (8.15)
+    def "an open remote gate renders one alarm line naming the target, its opening, the last error and the next probe"() {
         when:
-        def html = renderer.render(
-                new DaemonSnapshotView.Fresh(snapshotWithRemoteGateOpen()), emptyHistory(), neverFetchedBoard(),
-                noSweepData(), NOW, null)
+        def html = markup(renderer.render(
+                        new DaemonSnapshotView.Fresh(snapshotWithRemoteGateOpen()), emptyHistory(), neverFetchedBoard(),
+                        noSweepData(), NOW, null))
 
         then:
-        html.contains('status__alert')
-        html.contains('origin')
-        html.contains('connection refused')
+        (html =~ /<div class="status__alert">([^<]*)</).collect { it[1] } == [
+            'remote outage, probing: origin open since ' + NOW.minusSeconds(90) +
+            ', last error: connection refused, next probe at ' + NOW.plusSeconds(60)
+        ]
     }
 
+    // Rule 6 of the operator guide needs two consecutive checks; one snapshot cannot give them.
+    // Scenario: observability/dashboard-page / Slot-count desync is left to the external monitor
+    def "held claims that disagree with the slot count raise no alarm line"() {
+        given: 'a fresh snapshot whose heartbeat holds two claims while no slot is occupied'
+        def base = healthySnapshot()
+        def heartbeat = new HeartbeatVital(HeartbeatState.RUNNING, WRITTEN_AT, 2)
+        def snapshot = withSlotsAndVitals(base, base.slots(),
+                new VitalsSnapshot(heartbeat, base.vitals().reaper(), base.vitals().janitor()))
+        assert snapshot.slots().entries().isEmpty()
+
+        when:
+        def html = markup(renderer.render(
+                        new DaemonSnapshotView.Fresh(snapshot), emptyHistory(), neverFetchedBoard(), noSweepData(), NOW, null))
+
+        then:
+        !html.contains('status__alert')
+    }
+
+    // Scenario: observability/dashboard-page / Single-snapshot rules raise their own alarm lines
     def "two simultaneous alerts render as two lines, not just the first one shown"() {
         given: 'tracker failures and a degraded reaper both fire on the same snapshot'
         def base = snapshotWithTrackerFailures()
@@ -89,6 +116,8 @@ class DashboardHtmlRendererAlertSpec extends Specification {
     }
 
     // FR1, FR2 of redesign-dashboard: hygiene alerts moved out of the hygiene block into this card.
+    // Scenario: observability/dashboard-page / Hygiene alert surfaces in the status card
+    // Scenario: observability/dashboard-page / Hygiene alerts stay out of the block
     def "a sandbox-hygiene alert surfaces in the status card, and the hygiene block stays unstyled"() {
         given: 'a sweep whose last tick is far past three times its own cadence'
         def sweep = new SweepVital(NOW.minusSeconds(3600), 300L, new SweepCounts(0, 0, 0, 0, 0, 0), [], 0, 0)
@@ -107,6 +136,8 @@ class DashboardHtmlRendererAlertSpec extends Specification {
         html.contains('<section class="card" id="hygiene">')
     }
 
+    // Scenario: observability/dashboard-page / A snapshot without a remote section raises no line
+    // Scenario: observability/serve-observability / Old snapshots stay readable
     def "a healthy fresh snapshot renders no alarm line at all"() {
         when:
         def html = renderer.render(
@@ -119,6 +150,7 @@ class DashboardHtmlRendererAlertSpec extends Specification {
 
     // FR3 of redesign-dashboard: a dead daemon (layer 1) and a dead renderer (layer 2) stay distinct
     //     surfaces — the alarm line lives in the card, the freshness strip above every card.
+    // Scenario: observability/dashboard-page / Staleness never covers the page
     def "the daemon alarm line and the freshness strip stay separate surfaces"() {
         when: 'a stale-daemon view is rendered in watch mode, engaging both layers'
         def html = renderer.render(

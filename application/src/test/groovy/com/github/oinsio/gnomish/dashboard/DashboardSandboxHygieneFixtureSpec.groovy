@@ -43,6 +43,8 @@ class DashboardSandboxHygieneFixtureSpec extends Specification {
     // M5: the four breakdown groups (cleaned, stopped, checked-and-untouched, skipped-without-
     //     verdict — mapped over all six verdict categories) plus the kept inventory and recent
     //     ledger actions, all read from real files on disk in one render pass.
+    // Scenario: observability/dashboard-page / One glance answers the four questions
+    // Scenario: observability/dashboard-page / No per-object rows on the page
     def "the hygiene section renders all four breakdown groups from a real snapshot, plus recent actions from a real ledger"() {
         given: 'the shared snapshot-v1 reference fixture, whose sweep counts already cover every category'
         def snapshotFile = ObservabilityPaths.snapshotFile(serveDir)
@@ -88,5 +90,32 @@ class DashboardSandboxHygieneFixtureSpec extends Specification {
 
         and: 'the hygiene block itself carries no alert styling at all'
         !html.contains('sandbox-alert')
+    }
+
+    // UX2 of add-serve-sandbox-lifecycle: an orphan stopped under the manual age policy is routine —
+    //     the snapshot's tick counts it among the stops, and the ledger action raises no incident.
+    // Scenario: observability/dashboard-page / A manual age stop is routine
+    def "a manual-mode stop counts in the stopped group and raises no dead-instance alarm"() {
+        given: 'the reference snapshot, whose last tick stopped one orphan'
+        def snapshotFile = ObservabilityPaths.snapshotFile(serveDir)
+        Files.writeString(snapshotFile, readClasspathResource('snapshot-v1.reference.json'), StandardCharsets.UTF_8)
+
+        and: 'the ledger records that stop under the manual ownership mode'
+        Files.writeString(
+                ObservabilityPaths.ledgerFile(serveDir, NOW.atZone(ZoneOffset.UTC).toLocalDate()),
+                '{"version":1,"type":"sweepAction","at":"2026-08-06T08:58:30Z","objectName":"manual-box",' +
+                '"role":"main-box","mode":"manual","taskKey":"task-50","category":"stoppedOrphan",' +
+                '"reason":"aged past the manual stop threshold","ageSeconds":900}\n',
+                StandardCharsets.UTF_8)
+
+        when:
+        def html = renderCycle().render(new BoardSectionView(null, null, null), NOW, null)
+
+        then: 'the stop is counted in the breakdown'
+        html.contains('<span class="row__label">stopped</span><span class="row__count num" title="1">1</span>')
+
+        and: 'no dead-instance alarm names it'
+        !html.contains('an instance died or hung')
+        !html.contains('manual-box')
     }
 }

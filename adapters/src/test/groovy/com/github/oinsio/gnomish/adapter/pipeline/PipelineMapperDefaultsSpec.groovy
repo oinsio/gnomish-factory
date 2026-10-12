@@ -15,6 +15,8 @@ import spock.lang.Specification
  */
 class PipelineMapperDefaultsSpec extends Specification implements PipelineMapperFixtureSupport {
 
+    // Scenario: pipeline/pipeline-config / Stage override wins over default
+    // Scenario: pipeline/pipeline-config / Default applies when no override
     def "resolves the attempt limit #expected from default #defaultLimit and override #override"() {
         given:
         def stage = new StageDto('p', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],

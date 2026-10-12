@@ -30,6 +30,7 @@ class HttpCheckProviderSpec extends Specification {
     } as SecretsProvider
 
     // FR9: discovered through the same pass as github, with no core source naming the class.
+    // Scenario: verification/http-check-provider / http provider resolves like any other
     def "the http provider is discovered through the ordinary ServiceLoader pass"() {
         when:
         def registry = CheckClientDiscovery.discover()
@@ -52,6 +53,7 @@ class HttpCheckProviderSpec extends Specification {
 
     // FR9, D10: the engine port is unchanged — the composite resolves the client by the check's own
     //     provider field, the same way it resolves github's.
+    // Scenario: verification/http-check-provider / http provider resolves like any other
     def "the dispatching composite routes a provider: http check to the http client"() {
         given:
         def registry = CheckClientDiscovery.discover()
@@ -68,6 +70,7 @@ class HttpCheckProviderSpec extends Specification {
 
     // FR15: only law-declared pinPaths pin an http check; the provider contributes none, so a check
     //     declaring none passes the pin guard vacuously.
+    // Scenario: verification/http-check-provider / Only law-declared paths pin an http check
     def "the composite's pin contribution for an http check is empty"() {
         given:
         def composite = new ProviderDispatchingExternalCheckClient(
@@ -79,6 +82,7 @@ class HttpCheckProviderSpec extends Specification {
 
     // FR11, FR17, D11: the manifest half of the credential declaration — asked of the provider, over
     //     params core never interprets.
+    // Scenario: verification/http-check-provider / Secret is injected at request time, never stored in the manifest
     def "a manifest-named http credential joins the declared credential set"() {
         given:
         def registry = CheckClientDiscovery.discover()

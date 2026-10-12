@@ -138,3 +138,8 @@ would silently continue on the wrong pipeline.
   The type-derived tier of the base-ref priority chain (a type→base-default
   column atop both mechanisms) is explicitly deferred there (its NG2) and
   lands in this change or a small follow-up — see design Open Questions.
+- Sequencing after `tighten-spec-contract`: this change's MODIFIED blocks of
+  `pipeline-config` ("Artifact references by identifier", "Semantic validation")
+  are layered on that change's text, which must sync first. `enforce-artifact-contracts`
+  is sequenced after this change: its block of "Artifact references by identifier" is
+  layered on this change's text.

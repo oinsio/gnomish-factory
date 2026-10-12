@@ -131,8 +131,13 @@ record FixtureSeeder(FixtureIssueRegistry registry, String instanceId) {
                 abortFacts.lastAbortAt(), "positive abort count must carry a non-null lastAbortAt");
     }
 
-    /** Posts a marker with the next tick of this seeder's synthetic clock, always earlier than any wall-clock write. */
-    private void postMarker(FixtureIssue issue, GithubMarkerKind kind, String actor, String reason, String humanText) {
+    /**
+     * Posts a marker with the next tick of this seeder's synthetic clock, always earlier than any
+     * wall-clock write — after every comment already on the thread, since the tick is the shared
+     * comment-id sequence. Package-private for the scenario specs that build a thread marker by
+     * marker ({@code reason} is the park reason or recovery category, or {@code null}).
+     */
+    void postMarker(FixtureIssue issue, GithubMarkerKind kind, String actor, String reason, String humanText) {
         postMarker(issue, kind, actor, reason, SEED_CLOCK_BASE.plusSeconds(registry.nextCommentId()), humanText);
     }
 

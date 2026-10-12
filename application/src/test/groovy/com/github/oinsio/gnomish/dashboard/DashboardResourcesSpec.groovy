@@ -27,6 +27,7 @@ class DashboardResourcesSpec extends Specification {
         resources.js().contains('freshness')
     }
 
+    // Scenario: observability/dashboard-page / Missing resource fails fast
     def "a missing classpath resource fails fast instead of rendering an unstyled page"() {
         when:
         DashboardResources.read('/dashboard/does-not-exist.css')
@@ -43,6 +44,7 @@ class DashboardResourcesSpec extends Specification {
     //         guard exists to prevent — an unstyled or scriptless page — so it is refused
     //         at load time on the same terms.
     @Unroll
+    // Scenario: observability/dashboard-page / Blank resource fails fast
     def "a blank resource is refused rather than rendering an unstyled page: #description"() {
         when:
         new DashboardResources(css, js)
@@ -87,6 +89,7 @@ class DashboardResourcesSpec extends Specification {
     }
 
     @Unroll
+    // Scenario: observability/dashboard-page / Content that would close its inline block early is refused
     def "content that would terminate its own inline block early is refused: #description"() {
         when:
         new DashboardResources(css, js)

@@ -80,6 +80,7 @@ class GitModeLawBindingSpec extends Specification implements BareGitRepoFixture,
     // FR19, NFR-S2, D14: in git mode the law is bound from the clone, never re-read from the
     // gnome's worktree — a mid-run rewrite of instructions.md burns an attempt and lands on the
     // gnome branch, yet every attempt's prompt still carries the clone's ORIGINAL law.
+    // Scenario: pipeline/pipeline-config / Gnome edits to the law have no effect
     def "a mid-run gnome edit to the worktree's control file never re-enters the frozen law"() {
         given: 'a captured-stdin file the fake appends each attempt\'s prompt to'
         def captureFile = tempDir.resolve('law-tamper-then-plain.log').toFile()

@@ -19,6 +19,8 @@ class PassAdvanceOneCommitSpec extends PersistenceOrderingSpecBase {
 
     // FR4: the persisted state of a passing round already names the stage that follows — and
     // still carries the round itself, because that commit is the only place it is ever recorded.
+    // Scenario: git/git-task-persistence / Pass and advancement are one commit
+    // Scenario: pipeline/stage-engine / Pass and advancement are one durable transition
     def "the passing round's persisted state carries the advanced position and the round"() {
         given: 'two AUTO stages, the first passing on its only round'
         def build = stage('build', 5, [builtin('files_exist')])
@@ -44,6 +46,9 @@ class PassAdvanceOneCommitSpec extends PersistenceOrderingSpecBase {
 
     // FR4, NFR-C1: the pickup after that write. Resuming from the state the passing round
     // persisted runs the FOLLOWING stage only — the green stage is not executed a second time.
+    // Scenario: git/git-task-persistence / Pass and advancement are one commit
+    // Scenario: pipeline/stage-engine / Resume from a recorded pass starts the following stage
+    // Scenario: pipeline/stage-engine / Pass and advancement are one durable transition
     def "a resume from a recorded pass does not re-run the stage that passed"() {
         given: 'the state a passing round of `build` persisted — position already at `test`'
         def build = stage('build', 5, [builtin('files_exist')])

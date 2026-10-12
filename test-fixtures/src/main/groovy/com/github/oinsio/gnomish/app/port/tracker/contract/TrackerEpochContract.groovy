@@ -18,10 +18,6 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
  * claim comment id, the in-memory reference its own rising sequence — so these properties are
  * stated over order alone and never over the token's structure.
  *
- * <p>Not the last link of the contract chain — {@link TrackerShapeFactsContract} and later links
- * extend it — but both concrete adapter specs instantiate the full chain (via {@link
- * TrackerReleaseContract}), so this suite runs against both (M1).
- *
  * <p>Implements FR13 of harden-task-branch-contract.
  */
 abstract class TrackerEpochContract extends TrackerFinishContract {
@@ -93,8 +89,8 @@ abstract class TrackerEpochContract extends TrackerFinishContract {
 
     /**
      * The task's live claim version, read port-agnostically off {@code listOpen} — the same
-     * reader {@link TrackerReapContract} keeps, repeated here so this most-derived class does not
-     * depend on a sibling link's private method.
+     * reader {@link TrackerReapContract} keeps, repeated here so this link does not depend on
+     * another link's private method.
      */
     private static ClaimVersion claimVersionOf(Tracker adapter, TaskRef ref) {
         OpenTask entry = adapter.listOpen().find { it.ref() == ref }

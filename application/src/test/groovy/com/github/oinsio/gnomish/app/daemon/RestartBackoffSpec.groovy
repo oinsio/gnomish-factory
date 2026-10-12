@@ -124,4 +124,39 @@ class RestartBackoffSpec extends Specification {
         expect:
         backoff.nextJitteredBackoff(BASE, new Random(0), 0.0) == BASE
     }
+
+    /** A jitter source whose every draw is {@code fraction}, so a boundary input is exact. */
+    private static Random drawing(double fraction) {
+        new Random() {
+                    @Override
+                    double nextDouble() {
+                        fraction
+                    }
+                }
+    }
+
+    // FR14, F95: at the cap the jitter is taken off the cap rather than added on top of it, so a
+    // capped interval never exceeds the cap and two draws at the cap still differ.
+    def "nextJitteredBackoff at the cap subtracts the jitter from the cap"() {
+        given:
+        def backoff = new RestartBackoff(BASE)
+
+        expect:
+        backoff.nextJitteredBackoff(BASE, drawing(0.5), 0.20) == Duration.ofSeconds(54)
+        backoff.nextJitteredBackoff(BASE, drawing(0.25), 0.20) == Duration.ofSeconds(57)
+    }
+
+    // FR14, F95: below the cap, a jitter that would carry the interval past the cap is taken off
+    // the cap instead; one that lands exactly on the cap is kept.
+    def "nextJitteredBackoff below the cap keeps a sum up to the cap and folds an overflow below it"() {
+        given:
+        def cap = Duration.ofSeconds(72)
+
+        expect: 'a jitter of 12 s lands exactly on the cap and is kept'
+        new RestartBackoff(cap).nextJitteredBackoff(BASE, drawing(1.0), 0.20) == cap
+
+        and: 'a jitter of 12 s past a 66 s cap is taken off the cap'
+        new RestartBackoff(Duration.ofSeconds(66)).nextJitteredBackoff(BASE, drawing(1.0), 0.20) ==
+                Duration.ofSeconds(54)
+    }
 }

@@ -189,6 +189,7 @@ class TakeParkRetrySpec extends Specification {
     // deferred park. The give-up SHALL emit exactly one ERROR naming the task and its unreconciled
     // ("tracker-write pending") state — the only trace an operator gets when the tracker was down
     // past the ~10-min bound, and the sole channel PIT does not mutate (avoidCallsTo slf4j).
+    // Scenario: tracker/tracker-take / Give-up past the bound names the unreconciled state
     def "escalation park give-up leaves the marker set, logs the unreconciled state, and still returns AwaitingHuman"() {
         given:
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))

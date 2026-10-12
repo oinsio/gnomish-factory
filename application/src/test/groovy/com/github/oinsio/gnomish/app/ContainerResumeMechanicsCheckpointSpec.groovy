@@ -58,6 +58,7 @@ class ContainerResumeMechanicsCheckpointSpec extends Specification implements Ru
 
     // FR3: the gate read off the bare tip is opened by one approval write, after the kept box is
     //      disposed and with no environment materialized; the approved state goes back to the caller
+    // Scenario: git/git-task-persistence / Decision commit precedes materialization
     def "FR3: approveCheckpoint disposes the kept box, then writes the approval once"() {
         when:
         def approved = mechanics().approveCheckpoint(order(), branch())
@@ -113,6 +114,7 @@ class ContainerResumeMechanicsCheckpointSpec extends Specification implements Ru
 
     // FR7: the resumed write hands the reset state to the bare-object repository in one call, after
     //      the kept box is disposed
+    // Scenario: git/git-task-persistence / Decision commit precedes materialization
     def "FR7: resumeFrom disposes the kept box, then writes the reset state once"() {
         given:
         def reset = TaskState.atStageStart('build')

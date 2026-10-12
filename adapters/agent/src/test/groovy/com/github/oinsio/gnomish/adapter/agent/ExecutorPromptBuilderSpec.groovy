@@ -29,6 +29,7 @@ class ExecutorPromptBuilderSpec extends Specification {
     @TempDir
     Path workspaceRoot
 
+    // Scenario: executor/agent-executor / Verify plan is visible to the agent
     def "FR2: prompt lists both a command check and the judge's acceptance criteria text"() {
         given:
         def builder = builderWith([
@@ -51,6 +52,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         prompt.contains('The output must be idempotent.')
     }
 
+    // Scenario: executor/agent-executor / Rework preamble on retry only
     def "FR2: attempt 1 and attempt 2 prompts differ only by the rework preamble"() {
         given:
         def builder = builderWith(['instructions.md': 'Do the thing.'])
@@ -96,6 +98,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         prompt.contains('Fix the widget')
     }
 
+    // Scenario: executor/agent-executor / Unreadable control file stops before spawn
     def "FR13, D14: an unreadable control file throws before any process would spawn"() {
         given:
         def builder = builderWith([:])
@@ -109,6 +112,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         e.message.contains('missing-instructions.md')
     }
 
+    // Scenario: executor/agent-executor / Unreadable criteria in the verify plan stop the round before spawn
     def "FR13, D14: an unreadable judge criteria file throws before any process would spawn"() {
         given:
         def builder = builderWith(['instructions.md': 'Do the thing.'])

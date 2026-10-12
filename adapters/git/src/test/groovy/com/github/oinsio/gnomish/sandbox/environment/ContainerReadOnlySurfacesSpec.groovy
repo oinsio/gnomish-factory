@@ -94,6 +94,7 @@ class ContainerReadOnlySurfacesSpec extends Specification implements BareGitRepo
         handle.waitForExit()
     }
 
+    // Scenario: sandbox/execution-environment / Cage rules cannot be rewritten from inside
     def "FR20: the gnome can write its own working copy but not a root-owned control surface"() {
         expect: 'the gnome owns and can write the working copy'
         run('echo mine > /gnomish/work/mine.txt') == 0

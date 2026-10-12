@@ -243,12 +243,15 @@ class UntrustedTextGateSpec extends Specification {
     JavaClasses seededClasses = new ClassFileImporter().importPackages(SEEDED_PACKAGE)
 
     // FR3: raw text leaves the carrier in one place only — otherwise the exits are advice.
+    // Scenario: core/untrusted-text / The raw text has one accessor, reserved for exit owners
     def "FR3: rule (a): only an annotated exit owner reads the raw text"() {
         expect: 'no other production class calls it'
         rawAccessRule().check(productionClasses)
     }
 
     // D2: the detector is the gate — a rule no seeded violation can fail says nothing when green.
+    // Scenario: observability/factory-logging / Every bypass shape fails the type gate
+    // Scenario: core/untrusted-text / A raw read outside an exit fails the build
     def "FR3: rule (a) fails on a seeded unannotated caller and spares the annotated one"() {
         when: 'the rule runs over the seeded pair'
         rawAccessRule().check(seededClasses)
@@ -262,6 +265,7 @@ class UntrustedTextGateSpec extends Specification {
     // D2: a method reference reaches the same method as a call and launders exactly as well, so a
     //     rule phrased over calls alone would be a gate anyone could step around by writing
     //     `UntrustedText::raw` — two production exits already do (TaskJsonMapper, EscalationMapper).
+    // Scenario: core/untrusted-text / A raw read outside an exit fails the build
     def "FR3: rule (a) fails on a seeded method reference to raw()"() {
         when: 'the rule runs over the seeded pair'
         rawAccessRule().check(seededClasses)
@@ -283,6 +287,9 @@ class UntrustedTextGateSpec extends Specification {
 
     // D2, risk "a machine writer could be misused as a laundering hatch": the allowlist is the
     //     annotation, so the only thing that keeps it honest is noticing when it grows.
+    // Scenario: core/untrusted-text / A machine writer is an exit
+    // Scenario: core/untrusted-text / A parser is not admitted as an exit owner
+    // Scenario: core/untrusted-text / A new exit owner fails the build until acknowledged
     def "FR3: the annotated exit owners are exactly the pinned set"() {
         expect: 'every annotated production class is one design D2 names'
         productionClasses.findAll { it.isAnnotatedWith(UntrustedExit) }
@@ -342,6 +349,8 @@ class UntrustedTextGateSpec extends Specification {
     }
 
     // D11: the detector is the gate — the same seeded pair rule (a) carries, for the other way out.
+    // Scenario: observability/factory-logging / Every bypass shape fails the type gate
+    // Scenario: core/untrusted-text / A new parser fails the build until acknowledged
     def "FR10: rule (a2) fails on a seeded undeclared reader and spares the annotated one"() {
         when: 'the rule runs over the seeded pair'
         parsingAccessRule().check(seededClasses)
@@ -354,6 +363,9 @@ class UntrustedTextGateSpec extends Specification {
 
     // D11, risk "@UntrustedParser becomes the laundering hatch @UntrustedExit was kept from being":
     //     27 classes may read the bytes, so the set is only reviewable if it cannot grow quietly.
+    // Scenario: core/untrusted-text / A parser is not admitted as an exit owner
+    // Scenario: core/untrusted-text / A parser yields a value that is no longer untrusted text
+    // Scenario: core/untrusted-text / A new parser fails the build until acknowledged
     def "FR10: the annotated parsers are exactly the pinned set, each with what it converts to"() {
         expect: 'every annotated production class is one design D11 names'
         productionClasses.findAll { it.isAnnotatedWith(UntrustedParser) }
@@ -366,6 +378,7 @@ class UntrustedTextGateSpec extends Specification {
 
     // D11: membership is by return type — the one half of that criterion a scan can decide is its
     //     exact negation, a "parser" whose method returns the captured text straight back.
+    // Scenario: core/untrusted-text / A parser that hands the text back unchanged fails the gate
     def "FR10: rule (a2): no annotated parser hands the captured text back unchanged"() {
         given: 'every production source, with its comments removed'
         def sources = RepoSourceTree.productionSources()
@@ -384,6 +397,7 @@ class UntrustedTextGateSpec extends Specification {
 
     // D11: and that detector, on the seeded parser written to break it — naming the method, since
     //     the class is a legitimate parser everywhere else the day it gains a second method.
+    // Scenario: core/untrusted-text / A parser that hands the text back unchanged fails the gate
     def "FR10: a seeded parser that returns the captured text is detected, by method"() {
         given: 'the seeded offender, read as the production scan reads a source'
         def seed = RepoSourceTree.repoRoot().resolve(PASS_THROUGH_SEED).toFile()
@@ -413,6 +427,7 @@ class UntrustedTextGateSpec extends Specification {
 
     // FR7: an accessor that still yields a String is a family with no mint — every gate downstream
     //     of the type is vacuous for it, and the family's text reaches sinks as it always did.
+    // Scenario: core/untrusted-text / A capture accessor returning a plain string fails the gate
     def "FR7: rule (b): the #accessor accessor of #owner returns the carrier"() {
         given: 'the record the family is captured into'
         def carrier = productionClasses.find { it.fullName == owner }
@@ -437,6 +452,8 @@ class UntrustedTextGateSpec extends Specification {
 
     // D2: rule (b)'s own detector, on a subject shaped the way the rule wants and one shaped the
     //     way it forbids — a predicate that answered true for everything would look identical.
+    // Scenario: observability/factory-logging / Every bypass shape fails the type gate
+    // Scenario: core/untrusted-text / A capture accessor returning a plain string fails the gate
     def "FR7: rule (b) accepts a carrier and a list of carriers, and nothing else"() {
         given:
         def seed = seededClasses.find {

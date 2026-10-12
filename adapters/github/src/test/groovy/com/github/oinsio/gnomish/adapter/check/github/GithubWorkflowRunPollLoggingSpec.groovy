@@ -169,6 +169,7 @@ class GithubWorkflowRunPollLoggingSpec extends Specification {
         warnings[1].contains('PT6M')
     }
 
+    // Scenario: observability/factory-logging / Recovery is announced
     def "FR4: the recovery is announced with the outage it ended"() {
         given:
         stubUnverifiable()

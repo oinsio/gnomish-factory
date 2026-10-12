@@ -13,12 +13,9 @@ import java.time.Instant
  * {@code fetchTask} fact-set properties of the {@link Tracker} port contract
  * suite (tracker-port spec, "Task facts from fetchTask"; task 2.4, FR1, FR2).
  * Extends {@link TrackerMarkerContract} to reuse its {@code arrange}/{@code
- * seedTask}/{@code seedReply} seams rather than duplicating them; a concrete
- * adapter subclass instantiates THIS class (not {@link TrackerContract} or
- * {@link TrackerMarkerContract} directly) to run the full suite, per M1 — the
- * same suite against every adapter. Kept in a third file because the combined
- * property set of all three classes would exceed the project's per-file line
- * cap.
+ * seedTask}/{@code seedReply} seams rather than duplicating them. Kept in its
+ * own file because the combined property set of the whole chain would exceed
+ * the project's per-file line cap.
  *
  * <p>Covers three spec scenarios: "Full fact set for a working task",
  * an {@code AwaitingHuman(reason)} round-trip counterpart to it, and "Closed

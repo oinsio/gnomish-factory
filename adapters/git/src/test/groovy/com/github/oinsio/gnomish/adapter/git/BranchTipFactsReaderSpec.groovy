@@ -154,6 +154,7 @@ class BranchTipFactsReaderSpec extends Specification {
 
     // FR11 of make-checkpoint-gate-durable: a gate classifies by its position whatever the outcome
     // says — the park lost (no outcome) and the park landed (paused) read the same.
+    // Scenario: lifecycle/task-branch-contract / A gate classifies by its position, not by the park
     def "a tip at a gate reads as AwaitingApproval with #label"() {
         when:
         def facts = reader.read(tip([

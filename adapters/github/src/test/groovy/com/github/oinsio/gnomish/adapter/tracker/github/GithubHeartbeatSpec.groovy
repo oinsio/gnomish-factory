@@ -80,6 +80,9 @@ class GithubHeartbeatSpec extends Specification {
         """{"id":${id},"updated_at":"${updatedAt}","body":"<!-- gnomish {\\"kind\\":\\"claim\\",\\"instance\\":\\"${holder}\\",\\"at\\":\\"2026-07-23T10:00:00Z\\",\\"version\\":1} -->\\n🤖 claimed"}"""
     }
 
+    // Scenario: tracker/github-tracker / Anchor survives the beat
+    // Scenario: lifecycle/claim-heartbeat / Beats continue through a long round
+    // Scenario: lifecycle/claim-heartbeat / No comment spam
     def "FR1: beat PATCHes the resolved claim comment in place and reports the refreshed version"() {
         given: 'the claim comment (id 501) is resolvable; the PATCH returns a fresh updated_at'
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/60/comments?per_page=100'))
@@ -101,6 +104,9 @@ class GithubHeartbeatSpec extends Specification {
                 .withRequestBody(WireMock.matchingJsonPath('$.body', WireMock.containing('stage build, attempt 2, alive 10:05'))))
     }
 
+    // Scenario: tracker/github-tracker / Anchor survives the beat
+    // Scenario: lifecycle/claim-heartbeat / Beats continue through a long round
+    // Scenario: lifecycle/claim-heartbeat / No comment spam
     def "FR1: the anchor comment id is stable across repeated beats"() {
         given: 'two beats against the same claim comment; updated_at advances, the id does not'
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/61/comments?per_page=100'))
@@ -128,6 +134,7 @@ class GithubHeartbeatSpec extends Specification {
         second == new HeartbeatResult.Beaten(new ClaimVersion('777', Instant.parse('2026-07-23T10:10:00Z'), new ClaimEpoch(777)))
     }
 
+    // Scenario: tracker/github-tracker / Deleted comment means claim gone
     def "FR8: a 404 on the beat PATCH means the claim comment is gone, not an infrastructure failure"() {
         given: 'the comment resolves, but a reaper deleted it before the PATCH lands'
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/62/comments?per_page=100'))
@@ -156,6 +163,7 @@ class GithubHeartbeatSpec extends Specification {
         wireMock.findAll(patchRequestedFor(urlPathEqualTo('/repos/acme/widgets/issues/comments/0'))).isEmpty()
     }
 
+    // Scenario: tracker/github-tracker / Other beat failures are infrastructure
     def "FR8: a persistent 5xx on the beat PATCH is an infrastructure failure and throws (never ClaimGone)"() {
         given: 'the client retries the 5xx and, once exhausted, returns it as a non-2xx the beat throws on'
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/64/comments?per_page=100'))
@@ -171,6 +179,7 @@ class GithubHeartbeatSpec extends Specification {
         thrown(GithubHeartbeatException)
     }
 
+    // Scenario: tracker/github-tracker / Other beat failures are infrastructure
     def "FR8: a transport failure on the beat PATCH is an infrastructure failure and throws"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/65/comments?per_page=100'))
@@ -201,6 +210,7 @@ class GithubHeartbeatSpec extends Specification {
         thrown(GithubHeartbeatException)
     }
 
+    // Scenario: tracker/github-tracker / Other beat failures are infrastructure
     def "a transport failure on the comment listing is an infrastructure failure and throws"() {
         given: 'the resolve read itself cannot complete; GithubHttpClient exhausts retries and throws infra'
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/67/comments?per_page=100'))
@@ -225,6 +235,7 @@ class GithubHeartbeatSpec extends Specification {
         thrown(GithubHeartbeatException)
     }
 
+    // Scenario: tracker/github-tracker / Gone issue means claim gone
     def "FR8: a 404 on the comment listing means the issue is gone → ClaimGone (not an infrastructure failure)"() {
         given: 'the issue itself no longer exists, so listing its comments 404s'
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/680/comments?per_page=100'))

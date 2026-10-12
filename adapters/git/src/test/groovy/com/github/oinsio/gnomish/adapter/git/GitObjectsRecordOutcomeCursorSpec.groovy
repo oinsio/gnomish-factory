@@ -56,6 +56,7 @@ class GitObjectsRecordOutcomeCursorSpec extends Specification implements BareGit
 
     // FR9: a carried-over cannotExecute is display history, not a drain this write performed — so
     //     the write asks the environment nothing and the committed position stands
+    // Scenario: git/git-task-persistence / A carried-over escalation does not move the cursor
     def "FR9: a #kind write after a tip carrying cannotExecute reads no cursor and preserves the committed one"() {
         given: 'a tip whose task.json carries a cannotExecute escalation and the position its drain left'
         def parking = repositoryReading({

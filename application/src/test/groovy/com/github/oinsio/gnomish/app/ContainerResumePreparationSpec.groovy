@@ -60,6 +60,7 @@ class ContainerResumePreparationSpec extends Specification {
 
     // FR18, FR6: --discard-work disposes whatever survives instead — no reattach, no salvage — and
     // the snapshot check still runs first, its result still returned.
+    // Scenario: git/git-task-persistence / Deliberate discard
     def "under --discard-work disposes the existing environment, reattaching and salvaging nothing"() {
         given:
         def recorded = snapshot()

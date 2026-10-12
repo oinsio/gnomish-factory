@@ -73,6 +73,7 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
         warnings[0]
     }
 
+    // Scenario: observability/factory-logging / A vote that cannot be cast says so
     def "FR5: a process that cannot start is reported as a vote that cannot be cast"() {
         given:
         logs = LogCaptureSupport.attach(JudgeRoundExecution)

@@ -50,6 +50,9 @@ class StandInOwnerSpec extends Specification {
     'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/testfixtures/standin/StandIn.groovy'
 
     // FR24, M11: no test source or fixture writes a stand-in binary outside the exemptions
+    // Scenario: build/quality-gates / Only three kinds of file are exempt
+    // Scenario: build/quality-gates / A spec that writes its own script fails the gate
+    // Scenario: build/quality-gates / A moved exemption fails instead of widening the allowance
     def "FR24, M11: the files that spell a stand-in binary are exactly the exemptions"() {
         given: 'every test source at any depth and every :test-fixtures source, comments stripped'
         def sources = RepoSourceTree.testSources() + RepoSourceTree.productionSources {
@@ -74,6 +77,7 @@ class StandInOwnerSpec extends Specification {
     }
 
     // The detector is the gate — each shape must be found, and the look-alikes must not
+    // Scenario: build/quality-gates / A spec that writes its own script fails the gate
     def "the detector: #what"() {
         expect:
         StandInRule.shapesIn(code) == shapes

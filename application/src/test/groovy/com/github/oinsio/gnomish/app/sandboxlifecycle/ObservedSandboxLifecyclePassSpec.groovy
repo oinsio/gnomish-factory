@@ -107,6 +107,7 @@ class ObservedSandboxLifecyclePassSpec extends Specification {
 
     // FR6: the caller's own sink joins the fanout — the inherited default would drop it, leaving a
     //     caller that wraps an observed pass silently sinkless.
+    // Scenario: sandbox/sandbox-lifecycle / An extra sink survives the observing decorator
     def "a caller's extra sink receives every verdict beside the tick log and the ledger"() {
         given:
         def emitted = verdict(SweepVerdictCategory.DISPOSED_AGED)
@@ -132,6 +133,7 @@ class ObservedSandboxLifecyclePassSpec extends Specification {
     // NFR-O3: a failed pass completes NO tick — a partial tally published as a finished tick would
     //     read as a healthy sweep that found less work, hiding the very stall the overdue alert
     //     exists to catch.
+    // Scenario: sandbox/sandbox-lifecycle / An unreachable runtime completes no tick
     def "a failing pass completes no tick and publishes no record"() {
         given:
         def delegate = passEmitting { dir, liveness, sink ->

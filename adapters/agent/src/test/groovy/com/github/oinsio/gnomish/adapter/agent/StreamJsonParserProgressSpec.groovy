@@ -25,6 +25,7 @@ class StreamJsonParserProgressSpec extends Specification {
     def clock = new VirtualClock()
 
     // FR7, D10: a plain round emits RoundStarted, one ToolStarted, then RoundFinished, in order
+    // Scenario: executor/agent-executor / Progress observable without logs
     def "emits RoundStarted, ToolStarted, and RoundFinished in order for the plain-round fixture"() {
         given: 'a recording listener'
         def recorded = []
@@ -70,6 +71,7 @@ class StreamJsonParserProgressSpec extends Specification {
     }
 
     // FR7, D10: a throwing listener does not interrupt parsing; parse() still returns every event
+    // Scenario: executor/agent-executor / Broken listener does not break the round
     def "does not let a throwing listener interrupt parsing or propagate"() {
         given: 'a listener that always throws'
         AgentProgressListener throwing = { event ->

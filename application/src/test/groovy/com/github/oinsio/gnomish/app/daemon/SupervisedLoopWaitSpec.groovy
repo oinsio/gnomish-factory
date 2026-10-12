@@ -24,6 +24,7 @@ class SupervisedLoopWaitSpec extends Specification {
 
     // FR1 (daemon-supervision "Wake signals coalesce"): any number of signals during a tick buy
     //     exactly one more tick, and none are left over to shorten the wait after it.
+    // Scenario: serve/daemon-supervision / Wake signals coalesce
     def "signals landing during a tick coalesce into one more tick"() {
         given:
         def wait = new LoopWait.IntervalOrSignal(Duration.ofHours(1))

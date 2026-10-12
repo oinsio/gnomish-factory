@@ -64,6 +64,7 @@ class FactoryApplicationSpec extends Specification {
     }
 
     // FR2: clean boot — the Spring context initializes without errors
+    // Scenario: lifecycle/factory-bootstrap / Clean boot
     def "spring context boots without errors"() {
         expect: 'the context is initialized and injected'
         context != null
@@ -77,6 +78,7 @@ class FactoryApplicationSpec extends Specification {
     }
 
     // FR2: headless runtime — the booted context is a plain annotation-config context
+    // Scenario: lifecycle/factory-bootstrap / Headless outbound-only runtime
     def "the booted context is a plain annotation-config context"() {
         expect: 'the headless default context type was chosen'
         context instanceof AnnotationConfigApplicationContext
@@ -89,6 +91,7 @@ class FactoryApplicationSpec extends Specification {
     // server for in-JVM HTTP stubbing (e.g. WireMock, task 4.4 of
     // add-tracker-port) put jetty/servlet jars on testRuntimeClasspath without
     // that ever reaching the packaged application.
+    // Scenario: lifecycle/factory-bootstrap / Headless outbound-only runtime
     def "bootJar stays headless: no servlet/web-server jar is bundled"() {
         given: 'the packaged application jar built by this test run (dependsOn bootJar)'
         def jarPath = TestTaskProperty.required('e2e.jarPath')
@@ -107,6 +110,7 @@ class FactoryApplicationSpec extends Specification {
 
     // FR6 of add-release-pipeline (design D3): --version is answered before Spring starts — no
     // project is resolved, no configuration is loaded, no log file is opened
+    // Scenario: release/release-distribution / Version outside any project
     def "FR6: the packaged jar prints its version for --version outside any project and exits 0"() {
         given: 'an empty factory home and a working directory that is no registered clone'
         def home = Files.createDirectories(tmp.resolve('version-home'))

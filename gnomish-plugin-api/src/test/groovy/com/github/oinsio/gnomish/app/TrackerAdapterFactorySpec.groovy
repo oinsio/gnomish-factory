@@ -47,6 +47,7 @@ class TrackerAdapterFactorySpec extends Specification {
     }
 
     // FR23: one abstract create, taking the context, and no default overload delegating to another.
+    // Scenario: plugin/plugin-discovery / One create method per factory
     def "FR23: the factory declares exactly one create, abstract, taking the context"() {
         when:
         def creates = TrackerAdapterFactory.declaredMethods.findAll {
@@ -61,6 +62,7 @@ class TrackerAdapterFactorySpec extends Specification {
     }
 
     // FR23: the adapter receives the very context the host built — every collaborator in one value.
+    // Scenario: plugin/plugin-discovery / Factory is created before its dependencies exist
     def "FR23: create hands the adapter the host's context and returns its tracker"() {
         given:
         def factory = new MinimalFactory(Stub(Tracker))

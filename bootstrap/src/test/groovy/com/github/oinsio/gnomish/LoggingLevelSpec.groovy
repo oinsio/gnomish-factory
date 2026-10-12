@@ -69,6 +69,7 @@ class LoggingLevelSpec extends Specification {
     }
 
     // FR4: DEBUG messages appear when the configured level is DEBUG
+    // Scenario: lifecycle/factory-bootstrap / Log level from configuration
     def "a DEBUG event emitted through the SLF4J API reaches the Logback output"() {
         when: 'a DEBUG message is emitted via the SLF4J API'
         List<ILoggingEvent> events = Slf4jDebugProbe.emitDebugAndCapture('debug-enabled-probe')

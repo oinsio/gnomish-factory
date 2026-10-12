@@ -35,6 +35,7 @@ class SupervisedLoopBoundedSpec extends Specification {
     }
 
     // FR3 (daemon-supervision "Bounded policy gives up").
+    // Scenario: serve/daemon-supervision / Bounded policy gives up
     def "a Bounded loop gives up on the sixth death within its window and respawns no more"() {
         given:
         def policy = new RestartPolicy.Bounded(Duration.ofSeconds(1), 5, Duration.ofMinutes(10), clock)

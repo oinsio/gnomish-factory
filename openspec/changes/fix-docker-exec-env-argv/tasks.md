@@ -124,3 +124,7 @@ named in it goes red first. No task commits (`process-invariants.md`).
       `v0.0.1-rc.1` on a fork and deletes it afterwards. Verify the release page holds the four
       assets and, per archive, a provenance and an SBOM attestation, and `gh attestation verify`
       passes for the tar; attach the run link to the task report.
+
+## Follow-ups from tighten-spec-contract
+
+- F69: renumber the planned ADR `docs/adr/0011-secret-channels-to-child-processes.md` — 0011 is taken by `0011-operator-configuration-levels.md`, and `own-git-invocation-policy` plans another 0011 (text-only, before apply).

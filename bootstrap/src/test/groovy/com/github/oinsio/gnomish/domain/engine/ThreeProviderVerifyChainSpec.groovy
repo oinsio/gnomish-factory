@@ -71,6 +71,7 @@ class ThreeProviderVerifyChainSpec extends Specification {
     // M3, FR6: the headline claim. Three checks, three providers, one chain, every one green — and
     //     `size() == 3` explicitly, because the orchestrator stops at the first non-Pass, so a bare
     //     "all passed" would also hold of a chain that ran one check and gave up.
+    // Scenario: verification/check-provider-model / One stage runs external checks from different providers
     def "one stage's verify chain runs a command check, a quality gate over http, and a GitHub Actions run"() {
         when:
         def result = verifyChain([
@@ -91,6 +92,7 @@ class ThreeProviderVerifyChainSpec extends Specification {
 
     // FR6: "each resolved independently" — the two external checks were answered by two different
     //     providers' clients, visible as two different endpoints on two different listeners.
+    // Scenario: verification/check-provider-model / A check client is resolved by its provider
     def "each external check was answered by its own provider's client"() {
         given:
         def listener = new RecordingEventListener()

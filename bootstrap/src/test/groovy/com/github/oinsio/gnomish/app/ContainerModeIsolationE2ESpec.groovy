@@ -89,6 +89,7 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
 
     // M2: the self-check catches broken isolation fail-closed — no gnome process may run in a
     // box whose task network is not internal-only.
+    // Scenario: sandbox/sandbox-egress / Silent protection degradation is caught
     def "a task network without the internal flag fails the self-check before any gnome process"() {
         given: 'a pre-existing task network created WITHOUT --internal (the degradation D5 names)'
         def taskKey = "iso-broken-${System.nanoTime()}"
@@ -107,6 +108,7 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
 
     // M3: the box environment holds no tracker token and no host-inherited variable — only the
     // image ENV plus the factory-set proxy fragment survive into an exec child.
+    // Scenario: lifecycle/claim-heartbeat / The gnome never sees the tracker
     def "the in-box environment contains no tracker token and no host-inherited variables"() {
         given: 'a healthy materialized guarded environment'
         def taskKey = "iso-env-${System.nanoTime()}"

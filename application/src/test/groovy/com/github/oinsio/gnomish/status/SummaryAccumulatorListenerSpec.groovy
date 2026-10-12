@@ -50,6 +50,9 @@ class SummaryAccumulatorListenerSpec extends Specification {
 
     // FR3: every terminal outcome a manual run can reach produces exactly one summary, at the
     // level that outcome warrants, in the shared form.
+    // Scenario: cli/manual-run / Manual run ends with the summary
+    // Scenario: cli/manual-run / The summary uses the shared renderer
+    // Scenario: observability/factory-logging / Manual run gets the same summary
     def "a manual run ends with one summary line for a #outcome terminal"() {
         given:
         def listener = new SummaryAccumulatorListener()

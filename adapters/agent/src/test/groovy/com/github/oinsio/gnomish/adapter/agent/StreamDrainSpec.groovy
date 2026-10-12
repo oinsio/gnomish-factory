@@ -59,6 +59,7 @@ class StreamDrainSpec extends Specification {
     }
 
     // FR2, D2: the tail already in the pipe at exit is what the grace absorbs.
+    // Scenario: executor/agent-executor / The round waits for its drain after exit
     def "await returns the tail written just before the stream closed"() {
         given:
         def sink = new PipedOutputStream()
@@ -83,6 +84,8 @@ class StreamDrainSpec extends Specification {
     }
 
     // FR4, UX1: callbacks fire per line, from the drain thread, while the writer is open.
+    // Scenario: executor/agent-executor / Progress is live, not post-mortem
+    // Scenario: executor/agent-executor / Listeners are invoked from the drain thread
     def "emits progress events live, from the drain thread, before the stream closes"() {
         given: 'a listener recording the event and the thread it arrived on'
         def recorded = [].asSynchronized()
@@ -115,6 +118,7 @@ class StreamDrainSpec extends Specification {
     }
 
     // D4: MDC is thread-local, so the round's log scope is captured and re-applied.
+    // Scenario: executor/agent-executor / The log renderer writes the feed under the attempt's keys
     def "applies the round thread's MDC inside the drain thread"() {
         given: 'the round thread is inside an attempt MDC scope'
         MDC.put('taskId', 'TASK-7')
@@ -179,6 +183,7 @@ class StreamDrainSpec extends Specification {
     // FR2: an interrupted round thread is a different infrastructure failure from an
     // expired grace — the drain may have been about to finish, so the diagnostic must
     // not blame the grace or advise raising it.
+    // Scenario: executor/agent-executor / An interrupted wait is not blamed on the grace
     def "await reports an interrupted round thread as an interruption, not an expired grace"() {
         given: 'a drain that would need far longer than the round thread is willing to wait'
         def released = new AtomicBoolean()

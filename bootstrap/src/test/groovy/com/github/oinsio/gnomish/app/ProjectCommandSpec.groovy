@@ -80,6 +80,7 @@ class ProjectCommandSpec extends Specification implements FactoryPropertiesFixtu
     }
 
     // FR4, NFR-O1, U5: "Where a value came from"
+    // Scenario: operator/project-registry / Where a value came from
     def "show prints the paths and each value with the file and line it came from"() {
         given:
         run('project', 'add', 'widgets', "--dir=$widgets")

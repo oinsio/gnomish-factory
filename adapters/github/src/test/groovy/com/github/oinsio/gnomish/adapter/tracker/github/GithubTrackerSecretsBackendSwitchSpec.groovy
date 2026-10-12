@@ -53,6 +53,8 @@ class GithubTrackerSecretsBackendSwitchSpec extends Specification {
     }
 
     // FR18, NFR-S1: the swap itself — same factory, same config, two backends, one resolved name.
+    // Scenario: tracker/github-tracker / Backend switch requires no adapter change
+    // Scenario: plugin/plugin-api-contract / Adapter obtains secrets only via SecretsProvider
     def "switching the SecretsProvider backend changes neither the resolved name nor the adapter"() {
         given: 'both assemblies see the same repo, whose labels the provisioner creates'
         wireMock.stubFor(get(urlEqualTo(LABELS_PATH))

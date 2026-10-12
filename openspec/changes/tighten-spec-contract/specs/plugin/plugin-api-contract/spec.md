@@ -1,0 +1,198 @@
+# Spec Delta: plugin/plugin-api-contract
+
+## ADDED Requirements
+
+### Requirement: The published jar graph is the compatibility baseline
+The published project jar graph of `gnomish-plugin-api` — and with it the
+committed compatibility baseline — SHALL be `gnomish-plugin-api`, `domain`,
+the `untrustedtext` leaf this module declares, and every JDK-only leaf
+`domain` reaches (today `operatorevent`); a change to that set SHALL be
+re-baselined in the same change even when no signature moves, and the build
+SHALL fail while the committed baseline differs from that set.
+**Implements**: FR4 of split-into-modules; FR5, FR12, FR15, FR17 of add-plugin-architecture; FR1, FR2 of close-plugin-api-compilability-gap; FR3, FR8 of split-logtext-leaves; FR4 of type-untrusted-text; FR4 of tighten-spec-contract
+**Notes**: The version bump that goes with a set change is a review obligation: nothing compares the version across changes, so a re-baseline at an unchanged version passes the build.
+
+#### Scenario: The baseline covers the published jar set
+- **WHEN** the compatibility baseline of `gnomish-plugin-api` is generated
+- **THEN** it covers the `gnomish-plugin-api`, `domain`, `untrustedtext`, and
+  `operatorevent` jars
+
+#### Scenario: A jar-set change is re-baselined with a version bump
+- **WHEN** a jar joins or leaves the published set and no signature moves
+- **THEN** the build fails until the baseline is regenerated in the same
+  change; the api version is bumped beside it, which review checks — a
+  re-baseline at an unchanged version passes the build
+
+## MODIFIED Requirements
+
+### Requirement: Thin plugin-api contract module
+A `gnomish-plugin-api` module SHALL contain exactly the third-party contract
+surface — port interfaces, the tracker and check SPI factories with their
+validator, credential-declaration and pin-contribution members,
+`SecretsProvider`, SPI validator interfaces, the `AttemptCommitWorkspace`
+workspace-capability interface, and the `FindingsSanitizer` contract utility —
+and nothing from `application` or `bootstrap` internals.
+**Implements**: FR4 of split-into-modules; FR5, FR12, FR15, FR17 of add-plugin-architecture; FR1, FR2 of close-plugin-api-compilability-gap; FR3, FR8 of split-logtext-leaves; FR4 of type-untrusted-text
+**Notes**: The untrusted-text primitives the findings sanitizer delegates to stay in the JDK-only `untrustedtext` leaf, which this module declares itself and resolves alongside its own artifact, so the single declared dependency contract is unchanged.
+
+#### Scenario: api artifact excludes application and bootstrap internals
+- **WHEN** dependency-analysis inspects the `gnomish-plugin-api` artifact
+- **THEN** it contains zero imports from `application` or `bootstrap` internals
+- **AND** it exposes the port interfaces, the tracker and check SPI factories,
+  `SecretsProvider`, validator SPIs, `AttemptCommitWorkspace`, and
+  `FindingsSanitizer`
+
+#### Scenario: A third party compiles against a single declared dependency
+- **WHEN** a third-party adapter is compiled with `gnomish-plugin-api` as its
+  only declared dependency (the `domain` and `untrustedtext` types the ports
+  and the sanitizer reference arrive transitively, as does the `operatorevent`
+  jar the domain's own emitters use)
+- **THEN** it can implement any exposed port and its SPI factory — tracker or
+  check — without needing `application` or `bootstrap`
+- **AND** an external-check implementation can read the attempt-commit sha of
+  the round under verification through `AttemptCommitWorkspace` and sanitize
+  its findings through `FindingsSanitizer` using only that dependency
+- **AND** a tracker implementation mints the snapshot's title and body as
+  tracker-provenance untrusted text using only that dependency
+
+#### Scenario: The first-party vendor bundle satisfies the same constraint
+- **WHEN** the production dependency declarations of the github vendor bundle
+  (`api` / `implementation` — the configurations the layering gate walks) are
+  inspected
+- **THEN** no dependency on `application` (or `bootstrap`) appears — the
+  bundle compiles against the published contract exactly as a third-party
+  bundle would
+
+#### Scenario: The SPI factories bear their declared members
+- **WHEN** the contract's SPI factories are inspected
+- **THEN** the tracker SPI factory bears `type()`, `subsectionValidator()`, and
+  the connection-aware credential declaration
+- **AND** the check SPI factory `CheckClientFactory` bears `CheckParamsValidator`,
+  the `ExternalCheckPinContributor` hook, its subsection validator, and both
+  halves of its credential declaration — from the configured connection and,
+  for a provider whose targets are per-check, from a check's own params
+
+### Requirement: Independent semantic versioning of the api
+`gnomish-plugin-api` SHALL be independently versioned by semver; the semver
+surface is the api module plus the `domain` types it exposes transitively.
+Changes to `application` internals or to `domain` types not exposed through the
+api SHALL NOT require an api version bump.
+**Implements**: FR5 of split-into-modules; FR14 of add-plugin-architecture
+**Notes**: The japicmp gate was flipped from report-only to failing once the first external consumer existed, armed against the baseline add-plugin-architecture shipped (the surface including the check SPI and the tracker SPI additions).
+
+#### Scenario: Internal refactor leaves the api version untouched
+- **WHEN** an `application` or unexposed `domain` internal is refactored without
+  changing any type exposed by `gnomish-plugin-api`
+- **THEN** the `gnomish-plugin-api` version is unchanged
+
+#### Scenario: An exposed domain type change surfaces in the japicmp report
+- **WHEN** a `domain` type exposed through the api's ports changes incompatibly
+- **THEN** the japicmp report records the change against the baseline
+
+#### Scenario: An incompatible api change breaks the build
+- **WHEN** a type exposed by `gnomish-plugin-api` — or a `domain` type it
+  exposes transitively — changes incompatibly against the japicmp baseline
+- **THEN** the build fails at the japicmp gate naming the incompatible change,
+  not merely a report entry
+
+### Requirement: Secrets reached only through the api port
+Module boundaries SHALL prevent adapters from reaching secrets internals except
+through the `SecretsProvider` port exposed by `gnomish-plugin-api`; no credentials
+SHALL appear in any module metadata.
+**Implements**: FR4, NFR-S1 of split-into-modules
+
+#### Scenario: Adapter obtains secrets only via SecretsProvider
+- **WHEN** an adapter needs a credential
+- **THEN** it resolves it through the `SecretsProvider` port from
+  `gnomish-plugin-api`
+- **AND** no credential value is present in any module's build metadata
+
+### Requirement: Attempt-commit workspace readable through the contract
+The workspace object the engine hands to sandboxed-mode check runners SHALL be
+readable through the api's `AttemptCommitWorkspace` interface: a check
+implementation SHALL be able to obtain the attempt-commit sha of the round
+under verification by narrowing the received `Workspace` to that api type,
+without referencing any `application` type. Reading the sha before a snapshot
+was recorded SHALL fail with a protocol error, as today.
+**Implements**: FR1 of close-plugin-api-compilability-gap
+
+#### Scenario: External check learns the commit it verifies via the api type
+- **WHEN** the engine invokes a check client with the run's workspace in
+  sandboxed mode
+- **THEN** the client can narrow the `Workspace` to the api's
+  `AttemptCommitWorkspace` and read the current round's attempt-commit sha
+- **AND** the sha it reads is the one the engine's snapshot step recorded for
+  that round
+
+#### Scenario: Reading the sha before any snapshot is a protocol error
+- **WHEN** a check client reads the attempt-commit sha before the engine has
+  recorded a snapshot commit
+- **THEN** the read fails with an explicit protocol-violation error rather than
+  returning an absent or stale value
+
+### Requirement: Findings sanitization available to every plugin
+The api SHALL provide the findings-sanitization utility (control-character /
+ANSI strip, tail cap, and the log-bound `forLog` composition of the two) so
+any check plugin can apply the same
+pre-publication hygiene as first-party adapters; first-party call sites SHALL
+keep enforcing it after the relocation. The utility is a facade over the
+untrusted-text leaf's primitives: it holds no character-class table of its
+own, so it cannot drift from the log-line sanitizer.
+**Implements**: FR2, NFR-S1 of close-plugin-api-compilability-gap; FR3 of split-logtext-leaves
+
+#### Scenario: A hostile CI log is neutralized with api-only means
+- **WHEN** a check implementation depending only on `gnomish-plugin-api`
+  processes a multi-gigabyte log containing ANSI escapes and control characters
+- **THEN** it can strip and tail-cap the text through the api's sanitizer
+  before placing it in a finding
+
+#### Scenario: First-party sanitization is unchanged by the move
+- **WHEN** the existing first-party log-sanitization specs run after the
+  relocation
+- **THEN** they pass unchanged in substance (imports aside): strip and cap
+  behavior is identical
+
+#### Scenario: The facade holds no table of its own
+- **WHEN** the findings sanitizer's source is scanned for escape-character or
+  control-class literals
+- **THEN** none is found — every primitive resolves to the untrusted-text
+  leaf
+
+### Requirement: Sample plugin proves the check authoring path
+The stand-in third-party module SHALL include an external-check SPI factory
+implementation — declared through the same `META-INF/services` mechanism as any
+provider — that reads the attempt-commit sha through the api interface,
+compiled with `gnomish-plugin-api` as its only declared dependency, so the
+"compiles against the api alone" promise covers check authoring by
+construction and regresses as a compile failure.
+**Implements**: FR4, G1 of close-plugin-api-compilability-gap
+
+#### Scenario: Sample check factory compiles against the api alone
+- **WHEN** the sample module is built
+- **THEN** its check SPI factory compiles with `gnomish-plugin-api` as the only
+  declared dependency, and the module declares no test source set — the
+  successful compilation is the assertion
+- **AND** its `layering` declaration still permits only `:domain` and
+  `:gnomish-plugin-api`, so any leak of an `application` type into the check
+  authoring path fails the build here
+
+### Requirement: Surface growth is additive and re-baselined
+The api additions SHALL be backward-compatible for every pre-existing
+`gnomish-plugin-api` type, and the compatibility gate SHALL pass against a
+deliberately regenerated baseline that includes the new surface. A pre-1.0
+breaking move — a re-exposed domain type or the snapshot changing a field's
+type — SHALL be a MINOR bump with the baseline regenerated in the same
+commit and the break named in the module's build script, so a reviewer sees
+the break and the bump together.
+**Implements**: FR5 of close-plugin-api-compilability-gap; FR4 of type-untrusted-text
+
+#### Scenario: Compatibility gate passes on the grown surface
+- **WHEN** the api compatibility check runs after the baseline regeneration
+- **THEN** it passes, and the diff against the previous baseline shows
+  additions only for pre-existing types
+
+#### Scenario: A typed-field break is bumped and re-baselined together
+- **WHEN** the snapshot's title and body and the abort marker's cause change
+  from plain strings to the untrusted-text carrier
+- **THEN** the api version takes a MINOR bump, the baseline is regenerated in
+  the same commit, and the build script names the break

@@ -13,6 +13,7 @@ import spock.lang.Specification
 class MissingResultEventDiagnosticsSpec extends Specification {
 
     // FR5: bytes and event count travel in the message.
+    // Scenario: executor/agent-executor / Diagnostics carry read volume
     def "message carries the bytes and events read"() {
         when:
         def e = new MissingResultEventException(UntrustedText.agent('s-1'), 4096L, 12)
@@ -23,6 +24,7 @@ class MissingResultEventDiagnosticsSpec extends Specification {
     }
 
     // UX2: the observed repro read 65 528 of 65 536 bytes — one buffered line short of the boundary.
+    // Scenario: executor/agent-executor / Truncation is hinted at the buffer boundary
     def "adds the truncation hint when the volume sits at a pipe-buffer boundary: #bytes bytes"() {
         expect:
         new MissingResultEventException(UntrustedText.agent('s-1'), bytes, 3).message.contains('probably truncated')
@@ -63,6 +65,7 @@ class MissingResultEventDiagnosticsSpec extends Specification {
     }
 
     // D5: the extractor is the raise site the drain's accounting flows through.
+    // Scenario: executor/agent-executor / Diagnostics carry read volume
     def "the extractor reports the drain's volume for a result-less event list"() {
         given:
         def events = [

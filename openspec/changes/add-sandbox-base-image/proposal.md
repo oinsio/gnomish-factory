@@ -3,6 +3,9 @@
 Sequenced after `add-release-pipeline` (it adds the image to the release
 workflow and tags it with the product version). `add-doctor-command` follows
 and reads the contract label this change introduces.
+Sequenced after `tighten-spec-contract` too: this change's MODIFIED block of
+`sandbox-egress` ("Image carries the egress plumbing") is layered on that
+change's text, which must sync first.
 
 ## Why
 

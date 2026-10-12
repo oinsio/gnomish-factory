@@ -17,6 +17,7 @@ class GithubWorkflowRunVerdictSpec extends Specification {
         new GithubWorkflowRun(1L, 'abc123', 'ci.yml', 1, 'completed', conclusion, null)
     }
 
+    // Scenario: verification/github-external-check / Unknown conclusion fails closed
     def "maps a matching run's conclusion to the corresponding PollStatus"() {
         given:
         def matchingRun = Optional.of(runWithConclusion(conclusion))
@@ -79,6 +80,7 @@ class GithubWorkflowRunVerdictSpec extends Specification {
         status instanceof PollStatus.Running
     }
 
+    // Scenario: verification/github-external-check / CI has not picked up the push yet
     def "no matching run reads as Running"() {
         when:
         def status = GithubWorkflowRunVerdict.fromMatchingRun(Optional.empty())

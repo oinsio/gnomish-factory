@@ -153,14 +153,12 @@ final class CommitBaseFetch {
      * the question is asked of git's own lookup order rather than of a list of namespaces kept here.
      */
     private boolean namesRef(Path cloneDir, String revision) {
-        return VerifiedTip.read(runner.run(
-                        cloneDir,
-                        "rev-parse",
-                        "--verify",
-                        "--quiet",
-                        "--symbolic-full-name",
-                        "--end-of-options",
-                        revision))
-                .isPresent();
+        GitCommandResult answer = runner.run(
+                cloneDir, "rev-parse", "--verify", "--quiet", "--symbolic-full-name", "--end-of-options", revision);
+        // A yes/no answer, not a tip: the ref name printed is not an object id, so it is never read
+        // through VerifiedTip (F105) and no text leaves the carrier.
+        return answer.termination() == Termination.EXITED
+                && answer.exitCode() == 0
+                && !answer.stdout().isBlank();
     }
 }

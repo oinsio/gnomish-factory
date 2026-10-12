@@ -218,6 +218,7 @@ tracker:
     // FR4, design D6: batch is unconditionally non-interactive — a Working ref is skipped without
     // --takeover even though a TTY prompt exists in ordinary explicit mode; the invocation's own
     // takeoverConfirmation (here a Mock that would fail the test if consulted) is never asked.
+    // Scenario: tracker/tracker-take / Batch never prompts for a held ref
     def "a Working ref is skipped without --takeover, never consulting a TTY confirmation seam"() {
         given:
         def confirmation = Mock(TakeoverConfirmation)
@@ -238,6 +239,7 @@ tracker:
     // takeover for every Working ref in the batch, proceeding past the refusal-without-the-flag
     // path straight to the ordinary claim (here it loses the race, proving it was actually
     // attempted rather than short-circuited to a skip).
+    // Scenario: tracker/tracker-take / Batch never prompts for a held ref
     def "the whole-run --takeover flag authorizes takeover for every Working ref in the batch"() {
         given:
         def holdingId = 'gnomish-other-x1'

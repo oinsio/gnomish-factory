@@ -64,6 +64,7 @@ class ContainerResumeRunnerSpec extends ContainerResumeSpecBase {
 
     // FR6: --discard-work on an interrupted task disposes the surviving environment (container,
     // volume, network) so the next materialize seeds a fresh clone, then continues from the branch.
+    // Scenario: git/git-task-persistence / Deliberate discard
     def "resuming an interrupted task with --discard-work disposes the kept environment"() {
         given: 'an interrupted task (no outcome) whose recorded position is PipelineEnd'
         repository.createTask(context('T-DISC'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))

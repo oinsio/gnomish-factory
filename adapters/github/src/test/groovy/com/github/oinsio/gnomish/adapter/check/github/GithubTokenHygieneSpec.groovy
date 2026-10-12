@@ -66,6 +66,7 @@ class GithubTokenHygieneSpec extends Specification {
                 new RepeatSuppressor(new VirtualClock(Instant.EPOCH), Duration.ofMinutes(5)))
     }
 
+    // Scenario: verification/github-external-check / Token never leaks into findings
     def "a persistent 5xx CannotVerify carries no token material in reason or details"() {
         given:
         wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(503).withBody('service unavailable')))
@@ -79,6 +80,7 @@ class GithubTokenHygieneSpec extends Specification {
         !status.details().contains(SECRET_TOKEN)
     }
 
+    // Scenario: verification/github-external-check / Token never leaks into findings
     def "a network error CannotVerify carries no token material in reason or details"() {
         given:
         def poll = pollFor('http://localhost:1')

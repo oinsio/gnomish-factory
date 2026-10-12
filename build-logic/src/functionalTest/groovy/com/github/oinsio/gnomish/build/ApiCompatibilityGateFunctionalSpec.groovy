@@ -26,8 +26,10 @@ import java.nio.file.Path
  *   1. baseline generated, gate green      (FR6)
  *   2. member removed, gate fails          (FR2)
  *   3. member restored + one added, green  (FR3)
+ *   3a. internals refactored, green on the same baseline (FR14 of add-plugin-architecture)
  *   4. baseline emptied, arming error, re-armed (FR4)
  *   5. outputs invalidated, `check` runs the gate (FR5)
+ *   6. a surface the gate failed is re-baselined, green again (FR6)
  *
  * A TestKit run is a whole Gradle build, so five isolated fixtures would
  * dominate `check` wall-time for no isolation benefit (NFR-P1). Every run is
@@ -48,6 +50,7 @@ class ApiCompatibilityGateFunctionalSpec extends Specification {
         project.write()
     }
 
+    // Scenario: build/build-conventions / The gate is exercisable in isolation
     def "FR6: the baseline task arms the gate from the current surface"() {
         when: 'the baseline is generated from the current api surface'
         BuildResult update = project.build('updateApiCompatibilityBaseline')
@@ -60,6 +63,9 @@ class ApiCompatibilityGateFunctionalSpec extends Specification {
         project.build('japicmpApiGate').task(':japicmpApiGate').outcome.name() == 'SUCCESS'
     }
 
+    // Scenario: build/build-conventions / An incompatible change fails the isolated build
+    // Scenario: plugin/plugin-api-contract / An exposed domain type change surfaces in the japicmp report
+    // Scenario: plugin/plugin-api-contract / An incompatible api change breaks the build
     def "FR2: removing a public method fails the build at the gate"() {
         given: 'the surface loses a public method it was baselined with'
         project.writeApi(MiniApiProject.API_WITHOUT_ANSWER)
@@ -75,6 +81,8 @@ class ApiCompatibilityGateFunctionalSpec extends Specification {
                 "the gate failed without naming a binary incompatibility.\njapicmp report:\n${project.japicmpReport()}"
     }
 
+    // Scenario: build/build-conventions / A compatible addition passes the gate
+    // Scenario: plugin/plugin-api-contract / Compatibility gate passes on the grown surface
     def "FR3: adding a public method passes without re-baselining"() {
         given: 'the removed method is restored and a new one is added'
         project.writeApi(MiniApiProject.API_WITH_ADDITION)
@@ -87,6 +95,23 @@ class ApiCompatibilityGateFunctionalSpec extends Specification {
         result.task(':updateApiCompatibilityBaseline') == null
     }
 
+    // Scenario: plugin/plugin-api-contract / Internal refactor leaves the api version untouched
+    def "FR14: an internal refactor behind unchanged signatures passes on the old baseline, version untouched"() {
+        given: 'the implementation is refactored onto a new package-private helper'
+        def baselineBefore = project.baselineJars()*.toFile()*.bytes
+        project.writeApi(MiniApiProject.API_REFACTORED)
+        project.writeInternal(MiniApiProject.INTERNAL_HELPER)
+
+        when:
+        BuildResult result = project.build('japicmpApiGate')
+
+        then: 'the gate passes against the baseline it already had: nothing to re-baseline, nothing to bump'
+        result.task(':japicmpApiGate').outcome.name() == 'SUCCESS'
+        project.baselineJars()*.toFile()*.bytes == baselineBefore
+        project.declaredVersion() == '1.0.0'
+    }
+
+    // Scenario: build/build-conventions / An absent baseline fails as unarmed, not as passing
     def "FR4: an empty baseline fails as unarmed rather than passing"() {
         given: 'the baseline jars are gone'
         project.emptyBaseline()
@@ -103,6 +128,7 @@ class ApiCompatibilityGateFunctionalSpec extends Specification {
         project.build('updateApiCompatibilityBaseline')
     }
 
+    // Scenario: build/build-conventions / The gate executes as part of check
     def "FR5: check executes the gate rather than skipping it"() {
         given: 'the gate has no up-to-date outputs to coast on'
         project.invalidateGateOutputs()
@@ -112,5 +138,18 @@ class ApiCompatibilityGateFunctionalSpec extends Specification {
 
         then: 'the gate really ran as part of check — not SKIPPED, not UP-TO-DATE, not absent'
         result.task(':japicmpApiGate')?.outcome?.name() == 'SUCCESS'
+    }
+
+    // Scenario: build/build-conventions / The baseline workflow re-arms the gate
+    def "FR6: re-baselining a surface the gate failed arms it on that surface"() {
+        given: 'the gate fails on a surface that lost a method'
+        project.writeApi(MiniApiProject.API_WITHOUT_ANSWER)
+        assert project.buildAndFail('japicmpApiGate').task(':japicmpApiGate').outcome.name() == 'FAILED'
+
+        when: 'the baseline-update task regenerates the baseline from that surface'
+        project.build('updateApiCompatibilityBaseline')
+
+        then: 'the next gate run passes against it'
+        project.build('japicmpApiGate').task(':japicmpApiGate').outcome.name() == 'SUCCESS'
     }
 }

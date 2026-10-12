@@ -86,6 +86,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
         parsed.drain()
     }
 
+    // Scenario: serve/factory-serve / The flag enables the dashboard
     def "FR8: --dashboard turns the dashboard on with the default output path"() {
         when:
         def parsed = parser.parse(args('serve', '--dashboard'), CLONE, false)
@@ -95,6 +96,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
         parsed.dashboardOut() == null
     }
 
+    // Scenario: serve/factory-serve / Property enables the dashboard
     def "FR8: factory.serve.dashboard turns the dashboard on without the flag"() {
         when:
         def parsed = parser.parse(args('serve'), CLONE, true)
@@ -143,6 +145,7 @@ class ServeArgumentsParserSpec extends Specification implements ApplicationArgum
     }
 
     // FR8, scenario "Output path without the dashboard": a usage error before anything is claimed
+    // Scenario: serve/factory-serve / Output path without the dashboard
     def "FR8: --dashboard-out with the dashboard disabled is a usage error"() {
         when:
         parser.parse(args('serve', '--dashboard-out=page.html'), CLONE, false)

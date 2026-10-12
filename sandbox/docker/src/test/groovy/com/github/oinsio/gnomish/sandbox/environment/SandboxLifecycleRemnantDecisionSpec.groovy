@@ -148,6 +148,7 @@ class SandboxLifecycleRemnantDecisionSpec extends SandboxLifecycleDecisionSpecBa
     // The unrecognized object's own name matches no factory pattern, so the environment key's
     // triple belongs to some OTHER object: disposing by key would destroy that one and leave this
     // one running.
+    // Scenario: sandbox/sandbox-lifecycle / An unrecognized object is removed by its own name
     def "an unrecognized object is removed by its own name and kind, never by its environment key"() {
         when:
         decision.decideRemnant(

@@ -20,6 +20,7 @@ class ResumeAbortedRoundSpec extends ResumeMatrixSpecBase {
     //     THROWS -> Aborted at round 1. The last DURABLY persisted state is the one after
     //     round 0. A NEW run from it RE-EXECUTES round 1 (executor called again for attempt
     //     index 1) and the task proceeds as if the aborted round never happened.
+    // Scenario: pipeline/stage-engine / Unpersisted round is safe to lose
     def "a resume from the last persisted state re-executes the unpersisted round"() {
         given: 'a high-limit stage that fails on round 0 then cannot verify on round 1, persist aborting on round 1'
         def stageDef = stage('build', AdvancementMode.AUTO, 9, [builtin('files_exist')])

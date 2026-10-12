@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 class ServeShutdownSpec extends ServeShutdownSpecBase {
 
     // FR11: stopping claims immediately is the very first step, ahead of any flagging or waiting.
+    // Scenario: serve/factory-serve / No orphan gnome
     def "interrupts the feed thread and eventually kills the process tree"() {
         given:
         def ledger = new SlotLedger(1, new VirtualClock())
@@ -106,6 +107,7 @@ class ServeShutdownSpec extends ServeShutdownSpecBase {
 
     // FR11: "tasks whose rounds outlive the grace window need no new mechanism" — the process tree
     //     is still killed once the grace window expires, even with a slot still occupied.
+    // Scenario: serve/factory-serve / No orphan gnome
     def "kills the process tree even when the grace window expires with a slot still occupied"() {
         given:
         def ledger = new SlotLedger(1, new VirtualClock())

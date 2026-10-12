@@ -33,6 +33,7 @@ class CheckRefSpec extends Specification {
     // FR8 (add-plugin-architecture): the identity findings correlate under is the
     // provider + checkId pair — one checkId served by two providers is two identities,
     // so one platform's findings are never attributed to the other
+    // Scenario: verification/check-provider-model / Same checkId under two providers stays distinct
     def "of keeps the same checkId under two providers distinct"() {
         given: 'the same checkId declared under two different providers'
         def onGithub = new VerifyCheck.External('ci/build', 'github', Duration.ofSeconds(10),

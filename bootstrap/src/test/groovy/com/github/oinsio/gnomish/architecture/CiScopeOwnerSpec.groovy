@@ -40,6 +40,7 @@ class CiScopeOwnerSpec extends Specification {
     @TempDir
     Path scratch
 
+    // Scenario: build/quality-gates / Mutation gate is scoped to the diff
     def "M2: no workflow computes a diff or passes a mutation scope other than all"() {
         given:
         def workflows = RepoSourceTree.repoRoot().resolve('.github/workflows')
@@ -51,6 +52,7 @@ class CiScopeOwnerSpec extends Specification {
         violations(workflows).isEmpty()
     }
 
+    // Scenario: build/quality-gates / Mutation gate is scoped to the diff
     def "M2: a planted '#planted' in a copy of ci.yml is reported"() {
         given:
         def workflows = copyOfCi("      - run: ${planted}")

@@ -248,7 +248,13 @@ public enum OperatorEvent {
     // dashboard final render (supervise-daemon-loops-and-embed-dashboard, design D9, NFR-R1): the
     // render on serve's stop path failed; swallowed so the teardown after it still runs, and the
     // page keeps its last render.
-    DASHBOARD_FINAL_RENDER_FAILED("GF157");
+    DASHBOARD_FINAL_RENDER_FAILED("GF157"),
+    // claim-time task-branch lookup (tighten-spec-contract, finding F6): origin never answered
+    // whether the claimed task's branch exists, so the claim is released plain, outside the abort
+    // accounting, as a base-refresh outage is (FR9 of add-base-ref-resolution) — and the release
+    // write itself may fail.
+    TASK_BRANCH_LOOKUP_UNAVAILABLE("GF158"),
+    TASK_BRANCH_LOOKUP_RELEASE_FAILED("GF159");
 
     private final String code;
     private final String head;

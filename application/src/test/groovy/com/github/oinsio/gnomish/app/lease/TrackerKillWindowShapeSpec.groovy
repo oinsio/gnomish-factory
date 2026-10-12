@@ -16,6 +16,9 @@ import spock.lang.Specification
  */
 class TrackerKillWindowShapeSpec extends Specification {
 
+    // Scenario: lifecycle/claim-heartbeat / Killed reap leaves a shape the next tick resolves
+    // Scenario: lifecycle/claim-heartbeat / Kill between claim label and claim comment is repaired
+    // Scenario: lifecycle/claim-heartbeat / An adapter reports every combination as facts
     def "FR19: the frozen window #signature classifies to a named shape, never Foreign"() {
         when:
         def shape = TrackerShapeClassifier.classify(TrackerKillWindows.facts(signature))

@@ -287,6 +287,7 @@ class InMemoryTrackerHarnessSpec extends AbstractInMemoryTrackerSpec {
 
     // FR3 of add-base-ref-resolution: the reference adapter has no labels and no native fields to
     //     derive candidates from, so its test operation sets the port's classified shapes directly
+    // Scenario: tracker/tracker-port / The in-memory adapter sets designators by test operation
     def "seedDesignators sets what fetchTask reports, and an unseeded task names nothing"() {
         given: 'a seeded fixture task'
         def tracker = new InMemoryTracker()

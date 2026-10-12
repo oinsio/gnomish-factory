@@ -66,6 +66,8 @@ class StructuralValidationSpec extends Specification {
 
     // --- stage.yaml: each missing required field / unknown enum ------------
 
+    // Scenario: pipeline/pipeline-config / Missing required field is reported
+    // Scenario: pipeline/pipeline-config / Unknown enum value is reported
     def "each structural stage problem yields its exact located error"() {
         when:
         def errors = StructuralValidation.checkStage('stages/build/stage.yaml', stage)
@@ -121,6 +123,7 @@ class StructuralValidationSpec extends Specification {
 
     // FR14 delta-spec scenario: tightening is accepted — a sandbox declaring
     // needs and requiresFresh, but no binding, is structurally clean
+    // Scenario: pipeline/pipeline-config / Tightening is accepted
     def "a sandbox that only tightens (needs + requiresFresh) is structurally clean"() {
         given: 'a stage whose executor declares a binding-free sandbox'
         def stage = stageWith(executor: exec(sandbox: new SandboxDto(['docker-inside'], true, null)))
@@ -131,6 +134,7 @@ class StructuralValidationSpec extends Specification {
 
     // FR14 delta-spec scenario: a repo asking for host execution or a named
     // adapter binding is rejected — binding lives only in factory config
+    // Scenario: pipeline/pipeline-config / Host request from the repo is rejected
     def "a repo-declared sandbox binding (#binding) is a located tighten-only error"() {
         when:
         def errors = StructuralValidation.checkStage('stages/build/stage.yaml',

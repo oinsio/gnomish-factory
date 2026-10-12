@@ -75,6 +75,7 @@ class NoCallerSidePushGuardSpec extends Specification {
         sites
     }
 
+    // Scenario: git/git-task-persistence / One owner pushes after lifecycle commits
     def "the composition root holds no push beyond the one the design keeps"() {
         expect:
         pushSites() == ALLOWED

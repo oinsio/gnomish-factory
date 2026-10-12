@@ -38,6 +38,7 @@ class BranchDecisionFileSpec extends Specification implements BareGitRepoFixture
         box.materialize('gnomish/PROT-1', null)
     }
 
+    // Scenario: cli/manual-run / Decision requests travel by the mode's own channel
     def "FR23: the env fragment names exactly the boundary check's carved-out path, working-copy-relative"() {
         given:
         def handle = BranchDecisionFile.open(box, KEY, TOKEN)
@@ -65,6 +66,7 @@ class BranchDecisionFileSpec extends Specification implements BareGitRepoFixture
         BranchDecisionFile.open(box, KEY, TOKEN).read().isEmpty()
     }
 
+    // Scenario: executor/agent-executor / Stale request from another round is ignored
     def "FR23: a stale decision file under another stage or attempt name is never read"() {
         given: 'leftovers from other rounds sit in the decisions directory'
         def decisions = box.workingCopy.resolve('.gnomish-task/decisions')
@@ -76,6 +78,9 @@ class BranchDecisionFileSpec extends Specification implements BareGitRepoFixture
         BranchDecisionFile.open(box, KEY, TOKEN).read().isEmpty()
     }
 
+    // Scenario: executor/agent-executor / An answered request is not asked again
+    // Scenario: executor/agent-executor / Stale request from another round is ignored
+    // Scenario: executor/agent-executor / A decision file beside the real one changes nothing
     def "FR13: the read takes exactly the token path, never a same-key file under another token"() {
         given: 'this stage and attempt asked before, in a round that opened on another tip'
         def decisions = box.workingCopy.resolve('.gnomish-task/decisions')

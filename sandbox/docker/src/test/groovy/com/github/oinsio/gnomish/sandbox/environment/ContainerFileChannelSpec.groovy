@@ -68,6 +68,7 @@ class ContainerFileChannelSpec extends Specification {
 
     // FR5, D4 of harden-logging-observability: a truncation is a degraded read, and an operator
     //     running several boxes needs to know which one it happened in
+    // Scenario: sandbox/execution-environment / Oversized protocol file cannot exhaust the factory
     def "FR5: the truncation warning names the environment the over-cap file was read from"() {
         given:
         docker.process.stdout = 'abcdefghijK'.getBytes(StandardCharsets.UTF_8)
@@ -130,6 +131,7 @@ class ContainerFileChannelSpec extends Specification {
     }
 
     // FR11: the same naming on the read path — an interrupted read is never an in-box exit code
+    // Scenario: sandbox/execution-environment / Interruption is not an exit code
     def "an interrupted readFile names the interruption instead of coding it as exit -1"() {
         when:
         Thread.currentThread().interrupt()
@@ -146,6 +148,7 @@ class ContainerFileChannelSpec extends Specification {
 
     // FR17: a path that normalizes outside both the working copy and the scratch root is refused
     // before any docker exec is started — never sent in-box for the exec script to reject.
+    // Scenario: sandbox/execution-environment / File-channel paths resolve under the two roots
     def "a path escaping both the working copy and the scratch root is refused before any docker exec"() {
         when:
         channel().readFile('../../etc/passwd', 10)

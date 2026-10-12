@@ -39,6 +39,7 @@ class DenialRestorationOwnerSpec extends Specification {
     ]
 
     // FR17: the offer is made at build time only; no other component calls it on an environment
+    // Scenario: sandbox/execution-environment / No separate offering step exists
     def "FR17: restoreDenials( appears in production only in the allowlisted files"() {
         given: 'every production source but the test-support fixtures, comments stripped'
         def sources = RepoSourceTree.productionSources { String path ->

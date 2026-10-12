@@ -107,6 +107,7 @@ class TakeOutcomeMapperSpec extends Specification {
     // the record's own toString. A record's toString names its component fields — and for
     // CannotVerify one of those fields is the check's raw output, which reaches a human unfenced
     // and unsanitized that way, past the very fence the renderer puts around it.
+    // Scenario: tracker/tracker-port / Adapter receives rendered text
     def "the park report carries no EscalationReport record toString shape — #kind"() {
         given:
         def outcome = new TaskOutcome.Escalated(STATE, report)

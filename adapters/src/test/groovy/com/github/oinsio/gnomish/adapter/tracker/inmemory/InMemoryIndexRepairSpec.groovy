@@ -53,6 +53,7 @@ class InMemoryIndexRepairSpec extends Specification {
 
     // FR12: the lagging-index completion — the flip the newest boundary implies is finished, and no
     //     recorded work is re-executed.
+    // Scenario: tracker/tracker-port / Index repair completes a marker's transition
     def "a #kind boundary's flip is completed to #expected"() {
         given: 'the truth marker landed while the labels still read working'
         tracker.withLock({
@@ -146,6 +147,7 @@ class InMemoryIndexRepairSpec extends Specification {
 
     // FR19: a dead footprint is an eligible removal input — there is no comment to delete, and the
     //     boundary plus the flip still retire it.
+    // Scenario: tracker/tracker-port / Dead footprint is removable without a live version
     def "a dead footprint is retired by the stale-claim removal"() {
         given: 'the claim marker is gone while the task still reads working'
         harness.returnToReady(REF)

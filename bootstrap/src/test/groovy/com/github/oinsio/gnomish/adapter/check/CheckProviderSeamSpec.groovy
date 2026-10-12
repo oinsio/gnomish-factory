@@ -42,6 +42,7 @@ class CheckProviderSeamSpec extends Specification {
 
     // FR5, task 2.7: a malformed subsection is a LOCATED ConfigError produced by the provider's
     //     own subsectionValidator(), reported under factory.check.<provider>.
+    // Scenario: verification/check-provider-model / Malformed operator subsection is a located load error
     def "a malformed subsection is a located error from the provider's own validator"() {
         when:
         def errors = CheckProviderSeam.validate(FILE, [github: [('api-url'): 'https://api.github.com']], REGISTRY)

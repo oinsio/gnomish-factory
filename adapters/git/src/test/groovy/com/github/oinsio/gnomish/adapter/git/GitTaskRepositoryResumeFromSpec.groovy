@@ -84,6 +84,7 @@ class GitTaskRepositoryResumeFromSpec extends Specification implements BareGitRe
         runner.run(worktree(), 'rev-list', '--count', 'HEAD').stdout().forParsing().trim() as int
     }
 
+    // Scenario: git/git-task-persistence / Resumed write clears the outcome with the reset
     def "FR7: the resumed write is one commit carrying the reset state and the cleared park"() {
         given:
         parked()
@@ -120,6 +121,8 @@ class GitTaskRepositoryResumeFromSpec extends Specification implements BareGitRe
         logs.detach()
     }
 
+    // Scenario: git/git-task-persistence / Resumed write on a cleared outcome refuses
+    // Scenario: lifecycle/task-branch-contract / A stale resumed write refuses
     def "FR7: a resumed write over a tip with no recorded outcome refuses and writes nothing"() {
         given: 'a task mid-visit: started, nothing parked'
         started()
@@ -143,6 +146,7 @@ class GitTaskRepositoryResumeFromSpec extends Specification implements BareGitRe
         logs.detach()
     }
 
+    // Scenario: lifecycle/task-branch-contract / A stale resumed write refuses
     def "NFR-R2: a repeated resumed write finds the tip it already moved and refuses"() {
         given:
         parked()

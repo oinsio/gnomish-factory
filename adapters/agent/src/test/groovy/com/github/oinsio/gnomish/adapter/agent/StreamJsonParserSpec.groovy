@@ -145,6 +145,7 @@ class StreamJsonParserSpec extends Specification {
 
     // FR4, D3: a result-type line missing the result field itself is skipped, never a
     // ResultEvent with a null result — this is the "essential" degradation path (task 3.2)
+    // Scenario: executor/agent-executor / A success line without a result field is still missing
     def "silently skips a result line missing the result field, logging the skip reason"() {
         given: 'a result-type line with no result field'
         def line = '{"type":"result","subtype":"success","session_id":"sess-1",' +
@@ -233,6 +234,7 @@ class StreamJsonParserSpec extends Specification {
     }
 
     // FR4: an unknown event type is silently ignored, parsing continues to subsequent lines
+    // Scenario: executor/agent-executor / Unknown events and fields are ignored
     def "silently ignores an unknown event type and continues to subsequent lines"() {
         given: 'an unknown-type line (with a session_id, so it reaches the "unrecognized type" branch, not the missing-type/session_id one) between two recognized init lines'
         def before = '{"type":"system","subtype":"init","session_id":"sess-1","model":"claude-x"}'
@@ -255,6 +257,7 @@ class StreamJsonParserSpec extends Specification {
     }
 
     // FR4: unknown/extra fields on a known event type are silently ignored, known fields preserved
+    // Scenario: executor/agent-executor / Unknown events and fields are ignored
     def "silently ignores unknown extra fields on a known event type"() {
         given: 'an init line with an extra unrecognized field'
         def line = '{"type":"system","subtype":"init","session_id":"sess-1","model":"claude-x",' +
@@ -409,6 +412,7 @@ class StreamJsonParserSpec extends Specification {
     }
 
     // FR7, D10: every recognized raw AgentEvent is logged at DEBUG, one line each
+    // Scenario: executor/agent-executor / The log renderer writes the feed under the attempt's keys
     def "logs one DEBUG line per recognized raw AgentEvent"() {
         given: 'an init line followed by a result line'
         def init = '{"type":"system","subtype":"init","session_id":"sess-1","model":"claude-x"}'

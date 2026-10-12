@@ -22,6 +22,8 @@ class ConfigurationViolationE2eSpec extends AbstractE2eProcessSpec {
     Path tmp
 
     // FR7, NFR-R1: "Several violations reported together" — through the real process
+    // Scenario: operator/operator-configuration / Several violations reported together
+    // Scenario: operator/operator-configuration / The report exits with code 2 and no stack trace
     def "FR7: a violating configuration exits 2, prints every violation once, and creates no worktree"() {
         given: 'a home whose host file sets a boundary key and misspells another, and a FACTORY_* variable'
         def home = FactoryHome.at(tmp.resolve('home'))
@@ -56,6 +58,7 @@ class ConfigurationViolationE2eSpec extends AbstractE2eProcessSpec {
     }
 
     // UX2: "Unregistered clone is refused with the fix"
+    // Scenario: operator/project-registry / Unregistered clone is refused with the fix
     def "UX2: an unregistered --dir exits 2 with the project add line"() {
         given: 'a home with no project registered'
         def home = Files.createDirectories(tmp.resolve('empty-home'))

@@ -62,6 +62,7 @@ class ServeBackgroundDutiesSpec extends ServeCommandSpecBase {
     //     timeout: it calls tracker.listOpen() on every tick (Reaper#reapOnce), which nothing else
     //     in this run ever calls (the feed loop that would call listReady/claim never runs), so
     //     any listOpen() call can only be the standing reaper.
+    // Scenario: serve/factory-serve / Reaping does not wait on the beat thread
     def "starts the standing reaper as a daemon-lifetime thread ticking independently of the feed automaton (fix-reaper-idle-liveness FR1)"() {
         given:
         writeConfig(GITHUB_TRACKER_SECTION + '  heartbeat-interval: 20ms\n')

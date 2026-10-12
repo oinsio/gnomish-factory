@@ -30,6 +30,7 @@ class SchemaVersionRuleSpec extends Specification {
 
     // FR9 delta-spec scenario: missing schemaVersion (mapper contract: blank
     // string) → located error naming config.yaml and the supported version
+    // Scenario: pipeline/pipeline-config / Missing schema version is rejected
     def "a missing (blank '#version') schema version is a located error naming config.yaml"() {
         expect: 'exactly one error locating config.yaml: schemaVersion, naming the supported version'
         SchemaVersionRule.validate(version) == [
@@ -43,6 +44,7 @@ class SchemaVersionRuleSpec extends Specification {
 
     // FR9 delta-spec scenario: unknown/unsupported schemaVersion → located
     // error naming the offending version and the supported one (UX2)
+    // Scenario: pipeline/pipeline-config / Unsupported schema version is rejected
     def "unknown schema version '#version' is a located error naming the version"() {
         expect: 'exactly one error naming the offending version and the supported one'
         SchemaVersionRule.validate(version) == [

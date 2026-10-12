@@ -116,6 +116,7 @@ class PipelineMapperDurationSpec extends Specification implements PipelineMapper
 
     // FR9: absent timeout-class defaults to quality — unchanged engine behavior
     // (delta-spec scenario "Absent timeout class defaults to quality")
+    // Scenario: pipeline/pipeline-config / Absent timeout class defaults to quality
     def "defaults an absent external timeout-class to quality"() {
         given:
         def stage = apiStage([
@@ -148,6 +149,7 @@ class PipelineMapperDurationSpec extends Specification implements PipelineMapper
     }
 
     // delta-spec scenario "Unknown timeout class is rejected"
+    // Scenario: pipeline/pipeline-config / Unknown timeout class is rejected
     def "reports an unrecognized external timeout-class as a located error"() {
         given:
         def stage = apiStage([

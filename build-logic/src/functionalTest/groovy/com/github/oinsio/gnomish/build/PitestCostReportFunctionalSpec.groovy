@@ -39,6 +39,7 @@ class PitestCostReportFunctionalSpec extends Specification {
         repo.git('checkout', '-q', '-b', 'feat')
     }
 
+    // Scenario: build/quality-gates / Hotspots are listed
     def "FR3: the file lists only the mutants above the threshold, most expensive first, one tab-separated row each"() {
         given: 'three mutants above 100 test executions, two at or below it'
         cannedReport([mutant('mini.A', 'alpha', 10, 'MathMutator', 150, 'mini.ASpec.alpha'),
@@ -60,6 +61,7 @@ class PitestCostReportFunctionalSpec extends Specification {
                           ['mini.E', 'epsilon', '50', 'ConditionalsBoundaryMutator', '101', '-']]*.join('\t')
     }
 
+    // Scenario: build/quality-gates / Hotspots are listed
     def "UX1, FR4: one lifecycle line names the most expensive mutant as class.method:line (mutator) — N tests"() {
         given:
         cannedReport([mutant('mini.A', 'alpha', 10, 'MathMutator', 150, 'mini.ASpec.alpha'),
@@ -77,6 +79,25 @@ class PitestCostReportFunctionalSpec extends Specification {
         costLines[0].endsWith(costFile().toString())
     }
 
+    // Scenario: build/quality-gates / A cheap module reports nothing to look at
+    def "FR3, UX1: with no mutant above the threshold the file says so and the line counts zero"() {
+        given: 'two mutants, one exactly at the threshold'
+        cannedReport([mutant('mini.A', 'alpha', 10, 'MathMutator', 100, 'mini.ASpec.alpha'),
+                      mutant('mini.B', 'beta', 20, 'NegateConditionalsMutator', 3, 'mini.BSpec.beta')])
+
+        when:
+        BuildResult result = repo.runner(TASK, ALL).build()
+
+        then:
+        result.task(TASK).outcome == SUCCESS
+        costFile().readLines().drop(1) == ['0 above threshold: no mutant needed more than 100 test executions.']
+        def costLines = result.output.readLines().findAll { it.startsWith('PIT mutation cost') }
+        costLines.size() == 1
+        costLines[0].startsWith('PIT mutation cost :mod-a: 0 above threshold (100 tests) — ')
+        costLines[0].endsWith(costFile().toString())
+    }
+
+    // Scenario: build/quality-gates / A skipped gate writes no report
     def "FR4: no mutations.xml means no report — the task is skipped, not failed"() {
         when:
         BuildResult result = repo.runner(TASK, ALL).build()
@@ -87,6 +108,7 @@ class PitestCostReportFunctionalSpec extends Specification {
         !result.output.contains('PIT mutation cost')
     }
 
+    // Scenario: build/quality-gates / A skipped gate writes no report
     def "FR4, D5: a module the scope skips is skipped as a whole — a stale mutations.xml is not described as this build's"() {
         given: 'an earlier run left an expensive report behind, and the branch changes nothing'
         cannedReport([mutant('mini.C', 'gamma', 30, 'VoidMethodCallMutator', 675, 'mini.CSpec.gamma')])
@@ -100,6 +122,7 @@ class PitestCostReportFunctionalSpec extends Specification {
         !result.output.contains('PIT mutation cost')
     }
 
+    // Scenario: build/quality-gates / Cost never gates
     def "NG4, NFR-C1: a 10 000-count mutant does not fail the build, and the report task takes well under 5 s"() {
         given:
         cannedReport([mutant('mini.Z', 'zeta', 7, 'MathMutator', 10_000, 'mini.ZSpec.zeta')])

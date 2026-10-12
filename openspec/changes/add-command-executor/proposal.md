@@ -190,3 +190,6 @@ layered child-env allowlist, bounded output capture, and an exit-code contract i
 - `docs/glossary.md` — the Executor entry gains the `command` type, disambiguated from
   the `command` verify check.
 - No new dependencies; no port-family addition; no tracker or git protocol change.
+- Sequencing after `tighten-spec-contract`: this change's MODIFIED block of `pipeline-config`
+  ("Local sanity validation of mechanism and check configs") is layered on that change's text
+  and then on `define-executor-contract`'s, both of which must sync first.

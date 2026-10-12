@@ -55,6 +55,7 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
 
     // FR3, FR4: a finished entry observed in one listReady result is declined exactly once within
     //     that same poll, independent of candidate selection.
+    // Scenario: serve/factory-serve / Reopened finished task is declined within one poll
     def "poll declines a finished entry observed in the feed within one poll"() {
         given:
         def declined = new CopyOnWriteArrayList<TaskRef>()
@@ -110,6 +111,7 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
     //     status was never restored, the entry stays finished in the feed, and statelessness (no
     //     instance-local "already declined" memory) means the following cycle simply observes it
     //     again and declines it, converging without operator action.
+    // Scenario: serve/factory-serve / Decline failure converges on the next cycle
     def "a decline that fails on one poll is retried and succeeds on the next poll"() {
         given:
         def attempts = new CopyOnWriteArrayList<TaskRef>()
@@ -142,6 +144,7 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
     // FR3, NFR-R1: a finished entry present in the feed alongside open fronts does not distort
     //     WIP/open-front accounting — the fresh candidate is still gated purely by the real
     //     openFrontCount (from listOpen), never by the finished entry's presence in listReady.
+    // Scenario: serve/factory-serve / Finished entries do not distort the WIP gate
     def "a finished entry in the feed does not distort WIP accounting for the remaining candidates"() {
         given:
         def declined = new CopyOnWriteArrayList<TaskRef>()

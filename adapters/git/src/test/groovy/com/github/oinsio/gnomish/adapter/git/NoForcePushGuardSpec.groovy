@@ -85,6 +85,10 @@ class NoForcePushGuardSpec extends Specification {
     }
 
     // FR7, D6: no git push in adapter.git may ever force — the non-fast-forward fence must stand.
+    // Scenario: git/git-task-persistence / Non-fast-forward never escalates to force
+    // Scenario: git/git-task-persistence / Push names exactly the task branch
+    // Scenario: git/git-task-persistence / The CAS reset is the only non-fast-forward write
+    // Scenario: lifecycle/task-branch-contract / Origin history is never rewritten
     def "no git push invocation in adapter.git uses a forcing flag or forced refspec"() {
         expect:
         pushInvocations().every { PushCall push ->

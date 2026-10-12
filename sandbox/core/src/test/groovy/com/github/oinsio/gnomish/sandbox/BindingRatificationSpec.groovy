@@ -22,6 +22,7 @@ import spock.lang.Specification
 class BindingRatificationSpec extends Specification {
 
     // FR7/FR10: the happy path — a table entry plus a matching declaration registers the binding
+    // Scenario: plugin/adapter-binding-registry / Ratified provider is accepted
     def "a provider with a table entry and a matching passport is registered"() {
         given: 'a trust table naming one binding and a provider declaring exactly it'
         def table = [vm: CapabilityPassport.container()]
@@ -37,6 +38,8 @@ class BindingRatificationSpec extends Specification {
     }
 
     // FR7/NFR-S1: an id the core does not vouch for never reaches the registry
+    // Scenario: plugin/adapter-binding-registry / Unknown binding id is rejected
+    // Scenario: plugin/github-plugin / The sandbox port is not pluginized
     def "an id absent from the trust table is rejected fail-fast and not registered"() {
         given: 'a provider claiming an id the core vouches for nothing about'
         def rogue = provider('rogue', CapabilityPassport.hostNoIsolation())
@@ -57,6 +60,7 @@ class BindingRatificationSpec extends Specification {
     }
 
     // FR10/NFR-S1: the declaration is a tripwire — a passport that differs is a refusal
+    // Scenario: plugin/adapter-binding-registry / Passport mismatch is rejected
     def "a declared passport differing from the expected one is rejected fail-fast"() {
         given: 'a provider claiming the container binding but declaring the weaker host passport'
         def liar = provider(BindingNames.CONTAINER, CapabilityPassport.hostNoIsolation())

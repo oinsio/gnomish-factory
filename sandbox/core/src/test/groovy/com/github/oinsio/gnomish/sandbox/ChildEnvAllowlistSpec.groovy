@@ -11,6 +11,8 @@ import spock.lang.Specification
  */
 class ChildEnvAllowlistSpec extends Specification {
 
+    // Scenario: sandbox/execution-environment / A credential passthrough name fails startup
+    // Scenario: executor/agent-executor / Credential variable cannot be allowlisted
     def "FR9: a passthrough name declared as a credential is refused at construction, naming the variable"() {
         when:
         ChildEnvAllowlist.of([
@@ -94,9 +96,45 @@ class ChildEnvAllowlistSpec extends Specification {
         ], [GNOMISH_GITHUB_TOKEN: 'leak']) == [PATH: '/usr/bin']
     }
 
+    // FR9, D6: a passthrough entry is a name, never a pattern — no glob, prefix or regex expands
+    // Scenario: sandbox/execution-environment / Passthrough names are exact
+    def "FR9: a passthrough entry matches exactly one variable name, and no pattern is expanded"() {
+        given: 'a factory environment with near-miss names beside the listed one, and pattern-shaped entries'
+        def factoryEnv = [JAVA_HOME: '/jdk', JAVA_HOME_17: '/jdk17', MY_JAVA_HOME: '/other', TOOL_A: 'a', TOOL_B: 'b',
+            'TOOL_*': 'literal']
+        def allowlist = ChildEnvAllowlist.over([
+            'JAVA_HOME',
+            'TOOL_*',
+            'TOOL_.*',
+            'TOOL_?'
+        ], [], {
+            -> factoryEnv
+        })
+
+        expect: 'only the exact names are carried — a pattern-shaped entry matches only a variable spelled exactly so'
+        allowlist.compose([], [:]) == [JAVA_HOME: '/jdk', 'TOOL_*': 'literal']
+    }
+
+    // Scenario: executor/agent-executor / Tracker token is absent from the round
     def "none() composes exactly the base-and-factory-set formula with no passthrough"() {
         expect: 'an empty compose is empty — nothing is inherited implicitly'
         ChildEnvAllowlist.none().compose([], [:]) == [:]
         ChildEnvAllowlist.none().compose([], [GNOMISH_X: 'v']) == [GNOMISH_X: 'v']
+    }
+
+    // FR9, D6: the operator passthrough adds the one variable it names to the base set and the
+    //     factory-set layer, and a name that merely shares its prefix stays behind
+    // Scenario: executor/agent-executor / Passthrough names match exactly
+    def "FR9: a round receives the passthrough variable itself, beside base and factory-set, and no prefix sibling"() {
+        given:
+        def factoryEnv = [PATH: '/usr/bin', HOME: '/home/op', NPM_TOKEN: 'n', NPM_TOKEN_CI: 'ci', NPM_TOKENS: 'ts',
+            UNRELATED: 'u']
+        def allowlist = ChildEnvAllowlist.over(['NPM_TOKEN'], [], {
+            -> factoryEnv
+        })
+
+        expect:
+        allowlist.compose(['PATH', 'HOME'], [GNOMISH_DECISION_FILE: '/d.json']) ==
+        [PATH: '/usr/bin', HOME: '/home/op', NPM_TOKEN: 'n', GNOMISH_DECISION_FILE: '/d.json']
     }
 }

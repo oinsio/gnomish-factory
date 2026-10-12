@@ -46,6 +46,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         ])
     }
 
+    // Scenario: git/git-task-persistence / Host round atomicity
     def "FR2: persisting a round produces exactly one new commit on top of the previous HEAD"() {
         given:
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
@@ -59,6 +60,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         log.stdout().forParsing().trim().readLines().size() == 1
     }
 
+    // Scenario: git/git-task-persistence / Host round atomicity
     def "FR2: the commit contains a round-trippable state.json and the trace file at the correct path"() {
         given:
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
@@ -137,6 +139,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         status.stdout().forParsing().trim().isEmpty()
     }
 
+    // Scenario: git/git-task-persistence / A persist failure aborts the task
     def "NFR-R1: a persist failure throws GitPersistFailedException instead of failing silently"() {
         given: 'a valid task-branch worktree whose git index lock is already held, forcing git add/commit to fail'
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
@@ -150,6 +153,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         e.message.contains('PROJ-1')
     }
 
+    // Scenario: git/git-task-persistence / Fine-grained gnome history is preserved
     def "FR12: gnome commits during the round are preserved and the round-closing commit builds on them"() {
         given:
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
@@ -166,6 +170,8 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         log.stdout().forParsing().trim().readLines().size() == 4
     }
 
+    // Scenario: git/git-task-persistence / A host round boundary checks the worktree
+    // Scenario: git/git-task-persistence / History rewrite aborts
     def "FR12: a history rewrite since the previous round tip aborts persist"() {
         given: 'the adapter remembers HEAD at construction as the previous tip'
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
@@ -185,6 +191,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         thrown(RoundBoundaryViolationException)
     }
 
+    // Scenario: git/git-task-persistence / A host round boundary checks the worktree
     def "FR12: HEAD off the task branch aborts persist"() {
         given:
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
@@ -197,6 +204,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         thrown(RoundBoundaryViolationException)
     }
 
+    // Scenario: git/git-task-persistence / A host round boundary checks the worktree
     def "FR12: a gnome commit touching .gnomish-task/ aborts persist"() {
         given:
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
@@ -241,6 +249,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         remoteHead == localHead
     }
 
+    // Scenario: git/git-task-persistence / Push failure does not stop work
     def "FR11: a push failure does not throw and the local commit still lands"() {
         given: 'origin points at a path that is not a git repository at all, so push fails cleanly'
         def notARepo = tempDir.resolve('not-a-repo')

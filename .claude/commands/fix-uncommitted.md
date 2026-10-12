@@ -101,9 +101,10 @@ Analyze `<relative-path>` for issues. No commits. Route ALL edits through the ID
    message — an unreported skip is the one outcome that makes this whole pass worthless.
    The pre-approved exceptions (`traceability-comment` / `spock-block`), which need no further
    justification:
-   - "Duplicated code fragment" that is a traceability doc-comment (`* Implements FRx of <change-name>`
-     / `# implements FR-X of <change-name>`) — intentionally repeated across artifacts per
-     `.claude/rules/traceability.md`; never extract.
+   - "Duplicated code fragment" that is a traceability line (`* Implements FRx of <change-name>`
+     in a doc comment, the spec requirement's `**Implements**: FR-X of <change-name>` line, or
+     `# implements FR-X of <change-name>` in a YAML-like block) — intentionally repeated across
+     artifacts per `.claude/rules/traceability.md`; never extract.
    - "Duplicated code fragment" that is Spock block scaffolding (`given:` / `when:` / `then:` /
      `expect:` labels and their trivial setup) — cross-spec similarity is inherent to BDD; extracting
      harms test readability.

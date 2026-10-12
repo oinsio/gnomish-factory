@@ -101,6 +101,7 @@ class GitTaskRepositoryConsumedRequestSpec extends Specification implements Bare
         runner.run(worktree(), 'ls-tree', '-r', '--name-only', 'HEAD').stdout().forParsing()
     }
 
+    // Scenario: git/git-task-persistence / Every visit-opening commit removes the decision requests
     def "FR14: #kind removes decisions/ in its own commit, the tip before it still carries it"() {
         given:
         parked()
@@ -131,6 +132,7 @@ class GitTaskRepositoryConsumedRequestSpec extends Specification implements Bare
         ]
     }
 
+    // Scenario: git/git-task-persistence / Every visit-opening commit removes the decision requests
     def "FR14: #kind over a tip without decisions/ writes unchanged — one commit, the same envelope"() {
         given:
         parked()

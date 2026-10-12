@@ -65,6 +65,7 @@ class LiveBoxSpec extends Specification {
         env
     }
 
+    // Scenario: sandbox/execution-environment / One live-box mechanism keeps a box per role and key
     def "FR21: the same key gets the same box with no second materialize"() {
         given:
         def live = liveBox()
@@ -79,6 +80,7 @@ class LiveBoxSpec extends Specification {
         live.current().get().is(first)
     }
 
+    // Scenario: sandbox/execution-environment / One live-box mechanism keeps a box per role and key
     def "FR21: a new key disposes the previous box before building the new one"() {
         given:
         def live = liveBox()
@@ -97,6 +99,7 @@ class LiveBoxSpec extends Specification {
         live.current().get().is(second)
     }
 
+    // Scenario: sandbox/execution-environment / A failed build releases its claim
     def "FR21: a failed materialize throws its own exception, records nothing, and the next call builds again"() {
         given:
         def live = liveBox()

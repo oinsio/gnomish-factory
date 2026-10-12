@@ -26,6 +26,8 @@ class CliEntrypointContractSpec extends Specification implements AppAssemblyFixt
     Path homeDir
 
     // FR8, NFR-O1, M2: every subcommand's unknown option surfaces at the entrypoint, by name
+    // Scenario: cli/cli-arguments / Rejected before side effects
+    // Scenario: cli/task-inspection / The listing takes no sorting or filtering option
     def "FR8: the entrypoint rejects an unknown option of #subcommand, naming it and the subcommand"() {
         given:
         String token = subcommand.name().toLowerCase(Locale.ROOT)
@@ -43,6 +45,7 @@ class CliEntrypointContractSpec extends Specification implements AppAssemblyFixt
     }
 
     // FR8 of fix-operator-blockers, FR12 of add-manual-run: the empty command line reaches no parser
+    // Scenario: cli/cli-arguments / An empty command line stays a no-op
     def "FR8: an empty command line is a no-op that prints nothing"() {
         given:
         def runner = newManualRunRunner(clonePath, homeDir)
@@ -68,6 +71,7 @@ class CliEntrypointContractSpec extends Specification implements AppAssemblyFixt
     }
 
     // FR6 of add-release-pipeline (design D3): a sole --version is answered before any parser runs
+    // Scenario: cli/cli-arguments / A sole `--version` is the other command line that reaches no parser
     def "FR6: a sole --version prints the factory version on one line and reaches no parser"() {
         given:
         def console = new ScriptedConsoleIO()
@@ -85,6 +89,7 @@ class CliEntrypointContractSpec extends Specification implements AppAssemblyFixt
 
     // FR6 of add-release-pipeline, FR8 of fix-operator-blockers: --version beside any other token
     // is no version request; it reaches the run parser and is rejected like any unknown option
+    // Scenario: cli/cli-arguments / `--version` with any other token is parsed as usual
     def "FR6: --version with another token (#tokens) reaches the run parser and is rejected"() {
         given:
         def console = new ScriptedConsoleIO()

@@ -16,6 +16,8 @@ import spock.lang.Specification
  */
 class PipelineMapperSandboxSpec extends Specification implements PipelineMapperFixtureSupport {
 
+    // Scenario: pipeline/pipeline-config / Declarations load into the typed model
+    // Scenario: pipeline/pipeline-config / Declared pin paths load into the typed model
     def "maps sandbox declarations, verify-in, and external pin paths into the typed model"() {
         given: 'a stage declaring a sandbox, a fresh-box command, and a pinned external'
         def dto = new StageDto('Build it', [new ArtifactInputDto.Source()], [new ArtifactOutputDto('o')],

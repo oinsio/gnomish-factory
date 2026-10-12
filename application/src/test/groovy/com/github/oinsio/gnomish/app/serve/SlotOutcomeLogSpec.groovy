@@ -85,6 +85,7 @@ class SlotOutcomeLogSpec extends Specification {
     // by the layer that decided to release it (FreshClaimBaseBinding / ResumeLawBinding) and by the
     // remote outage gate's own transition line, so the slot's detail line is DEBUG and carries no
     // code — GF144 is retired. Skipped, which no other layer announces, keeps its WARN.
+    // Scenario: serve/factory-serve / The outage release is its own outcome kind
     def "a released-for-infrastructure task is DEBUG detail, not a second WARN for the same fault"() {
         given:
         def capture = LogCaptureSupport.attach(SlotOutcomeLogSpec, Level.DEBUG)
@@ -162,6 +163,7 @@ class SlotOutcomeLogSpec extends Specification {
 
     // FR9: a slot dying because the daemon is stopping is not a fault of the slot's — one WARN
     // naming the exception type, and no stack, since the stack would describe the stop.
+    // Scenario: serve/factory-serve / Shutdown-caused death is not an alarm
     def "a crash during the shutdown phase is a WARN naming the type and carrying no stack"() {
         given:
         def capture = LogCaptureSupport.attach(SlotOutcomeLogSpec)

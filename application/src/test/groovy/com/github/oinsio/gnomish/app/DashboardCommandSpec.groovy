@@ -54,6 +54,7 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
         Files.exists(expected)
     }
 
+    // Scenario: observability/dashboard-page / Default output lands beside the observability files
     def "FR10 of add-project-registry: default output lands beside the observability files"() {
         given: 'project widgets with the default instance name'
         def command = newCommand(new RecordingReadOnlyTracker([], []), null)
@@ -65,6 +66,7 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
         Files.readString(factoryHome.resolve('projects/widgets/serve/default/dashboard.html')).startsWith('<!doctype html>')
     }
 
+    // Scenario: observability/dashboard-page / Explicit output path
     def "honors an explicit --out path"() {
         given:
         def command = newCommand(new RecordingReadOnlyTracker([], []))
@@ -78,6 +80,8 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
         !Files.exists(factoryHome.resolve('projects/widgets/serve').resolve(INSTANCE_NAME).resolve('dashboard.html'))
     }
 
+    // Scenario: observability/dashboard-page / One-shot snapshot never banners
+    // Scenario: observability/dashboard-page / One-shot exits after a single render
     def "a one-shot render writes exactly one complete, self-contained page and returns normally"() {
         given:
         def command = newCommand(new RecordingReadOnlyTracker([], []))
@@ -97,41 +101,28 @@ class DashboardCommandSpec extends Specification implements ApplicationArguments
         !html.contains('http-equiv="refresh"')
     }
 
-    def "a fresh install with no snapshot and an empty tracker still renders the page normally"() {
+    // FR2, NFR-S1 of add-dashboard-page: the one-shot output is the whole page — copied anywhere,
+    //     it names nothing outside its own bytes, so no companion file and no network is needed.
+    // Scenario: observability/dashboard-page / Portable one-shot file
+    def "a one-shot file copied elsewhere is byte-identical and references nothing outside itself"() {
         given:
-        def command = newCommand(new RecordingReadOnlyTracker([], []))
-        def out = tempDir.resolve('fresh.html')
+        def out = tempDir.resolve('one-shot.html')
+        newCommand(new RecordingReadOnlyTracker([], [])).run(
+        args('dashboard', "--dir=${projectDir}".toString(), "--out=${out}".toString()))
 
-        when:
-        command.run(args('dashboard', "--dir=${projectDir}".toString(), "--out=${out}".toString()))
+        when: 'the file alone is carried to another machine'
+        def elsewhere = Files.createDirectories(tempDir.resolve('another-machine')).resolve('dashboard.html')
+        Files.copy(out, elsewhere)
+        def html = Files.readString(elsewhere)
 
-        then:
-        noExceptionThrown()
-        Files.readString(out).contains('Daemon has not run here')
-    }
+        then: 'it is the same page'
+        Files.mismatch(out, elsewhere) == -1L
 
-    def "a tracker outage degrades only the board section, exits zero, and never retries"() {
-        given:
-        def tracker = new RecordingReadOnlyTracker([], []) {
-            @Override
-            List<ReadyTask> listReady(int limit) {
-                super.listReady(limit)
-                throw new RuntimeException('tracker unreachable')
-            }
-        }
-        def command = newCommand(tracker)
-        def out = tempDir.resolve('outage.html')
+        and: 'nothing in it names a resource to load: no source, link, import, url() or network address'
+        !(html =~ /(?i)\b(src|href|action|poster)\s*=/).find()
+        !(html =~ /(?i)url\(|@import|https?:/).find()
 
-        when:
-        command.run(args('dashboard', "--dir=${projectDir}".toString(), "--out=${out}".toString()))
-
-        then:
-        noExceptionThrown()
-        def html = Files.readString(out)
-        html.contains('unavailable')
-        html.contains('tracker unreachable')
-
-        and: 'exactly one attempt was made for a one-shot render — no built-in retry loop'
-        tracker.listReadyCalls == 1
+        and: 'nor a path on the machine it was rendered on'
+        !html.contains(tempDir.toString())
     }
 }

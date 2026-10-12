@@ -43,6 +43,7 @@ class TokenUsageMapperSpec extends Specification {
     }
 
     // FR5, D4: modelUsage present with TWO model keys — proves modelUsage (not the flat usage sum) is authoritative
+    // Scenario: executor/agent-executor / Multi-model round preserved
     def "maps the subagent-round fixture's modelUsage to a two-entry tokensByModel, not the flat usage sum"() {
         given: 'the subagent-round fixture parsed into events'
         def events = parser.parse(FakeAgentScenarioReader.readerOf('subagent-round'))
@@ -68,6 +69,7 @@ class TokenUsageMapperSpec extends Specification {
     }
 
     // FR5, D4: another single-model modelUsage fixture
+    // Scenario: executor/agent-executor / Vote tokens keyed by model
     def "maps the judge-verdict-pass fixture's modelUsage to a single-entry tokensByModel"() {
         given: 'the judge-verdict-pass fixture parsed into events'
         def events = parser.parse(FakeAgentScenarioReader.readerOf('judge-verdict-pass'))
@@ -90,6 +92,7 @@ class TokenUsageMapperSpec extends Specification {
     }
 
     // FR5, D4: modelUsage entirely absent (older CLI) — fall back to flat usage keyed by the init event's model
+    // Scenario: executor/agent-executor / Old CLI fallback
     def "falls back to the flat usage object keyed by the init event's model when modelUsage is absent"() {
         given: 'a synthetic result event with usage present but modelUsage null (key omitted from the wire)'
         def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-fallback-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
@@ -118,6 +121,7 @@ class TokenUsageMapperSpec extends Specification {
     // FR5 of harden-logging-observability: a round whose whole usage extraction comes back empty
     // has lost its cost to the budget and the summary, and reads as "unreported" — the same as a
     // round that genuinely spent nothing. The per-entry skips stay DEBUG; this one is a WARN.
+    // Scenario: observability/factory-logging / A reader that drops data says so
     def "FR5: an extraction that yields nothing at all warns that the round's cost is unreported"() {
         given:
         def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-empty-2'), 'success', UntrustedText.agent('done'), null, null)

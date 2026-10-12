@@ -152,6 +152,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         !Files.exists(clone.resolve('.git/FETCH_HEAD'))
     }
 
+    // Scenario: tracker/tracker-take / Confirmed-missing ref routes fresh
     def "FR13: branch absent everywhere is reported as not-found, not a crash"() {
         given: 'a clone pointed at a bare origin that has no branches at all'
         def bare = initBareRepo(tempDir, 'origin5.git')
@@ -229,6 +230,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
                         VirtualTimeEquipment.waitingOn({ Duration ignored -> } as Sleeper), GitInfrastructureRetry.DEFAULT_ATTEMPTS, Duration.ofMillis(1)))
     }
 
+    // Scenario: tracker/tracker-take / Every non-confirming locate failure is infrastructure
     def "FR6: an unreachable origin is unavailable, never absent — no fresh branch may be forked from it"() {
         given: 'a clone whose origin URL points nowhere, so neither the fetch nor the probe gets an answer'
         def clone = initWorkingRepo(tempDir, 'clone-unreachable')
@@ -243,6 +245,8 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         (location as BranchLocation.Unavailable).reason().contains('origin did not answer whether gnomish/PROJ-8')
     }
 
+    // Scenario: tracker/tracker-take / Every non-confirming locate failure is infrastructure
+    // Scenario: tracker/tracker-take / Fetch failure never forks a duplicate branch
     def "FR6: a branch origin confirms it carries but the fetch could not deliver is unavailable"() {
         given: 'a git that answers the branch probe but fails every fetch'
         def git = fetchRefused()
@@ -276,6 +280,8 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         (location as BranchLocation.Unavailable).reason().contains('origin carries gnomish/PROJ-13')
     }
 
+    // Scenario: tracker/tracker-take / Fetch failure never forks a duplicate branch
+    // Scenario: tracker/tracker-take / The locate retry spends its own budget
     def "FR6: the unsettled lookup is re-attempted under the infrastructure budget before giving up"() {
         given:
         def git = fetchRefused()
@@ -290,6 +296,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
     // FR6 of harden-task-branch-contract: "this clone has no origin" is itself the answer of a git
     //     invocation, so a fetch cut off on its deadline must not be followed by a configuration
     //     read whose own silence is then spent as a second vote for absence.
+    // Scenario: tracker/tracker-take / Every non-confirming locate failure is infrastructure
     def "FR6: a fetch cut off on its deadline is unavailable even when the origin read fails too"() {
         given: 'a git that stalls on every network command and denies having an origin at all'
         def cutOff = GitCommandResult.of(143, '', '', Termination.TIMED_OUT)

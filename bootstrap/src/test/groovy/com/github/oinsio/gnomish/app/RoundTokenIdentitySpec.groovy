@@ -78,6 +78,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
 
     // FR13, FR15, M5: the request's file name, the snapshot subject and the open tip are one token;
     //     after the answer the next round is handed a path the tip does not hold
+    // Scenario: git/git-task-persistence / The request is named by its round
     def "live: a round that asked names one token three times, and the answered round's path is not reused"() {
         given: 'a round source over a box, sharing the run\'s round cell with the persistence'
         def rounds = new CurrentRound()
@@ -115,6 +116,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
 
     // FR15, M5: a kill between the snapshot and the state commit — another instance's pickup
     //     restores the round from the snapshot's record, and its state commit lands on it
+    // Scenario: git/git-task-persistence / A resumed round is checked against its recorded token
     def "resumed: the pickup's state commit lands, judged by the token the snapshot recorded"() {
         given: 'a round that asked, its snapshot pushed, killed before its state commit'
         def box = new LocalBoxEnvironment(clone, Files.createDirectories(tempDir.resolve('box')))

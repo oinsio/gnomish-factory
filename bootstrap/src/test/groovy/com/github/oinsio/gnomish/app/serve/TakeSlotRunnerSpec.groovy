@@ -148,7 +148,7 @@ tracker:
                 tracker, INSTANCE)
     }
 
-    // Scenario: slot body unchanged — a pre-claimed fresh task dispatches through
+    // Slot body unchanged — a pre-claimed fresh task dispatches through
     // TakeClaimAndWork#dispatchAfterClaim exactly as a single explicit `take` would: the branch is
     // created and the engine runs to a terminal Delivered result.
     def "runs a pre-claimed fresh task through the same take cycle as an explicit take"() {
@@ -168,6 +168,7 @@ tracker:
     //     the spec's own origin — reaches the remote outage gate through the slot's own TaskGit,
     //     proven on the gate's observable state: it records the refresh as the remote's last
     //     successful contact. The slot's terminal result plays no part in it.
+    // Scenario: serve/factory-serve / Slot signals come from the base read, not the outcome
     def "a slot's real base refresh is reported to the remote outage gate"() {
         given:
         tracker.fetchTask(new TaskRef('PROJ-1')) >> workingTask('PROJ-1')
@@ -182,7 +183,7 @@ tracker:
         !remoteOutageGate.isOpen()
     }
 
-    // Scenario: MDC is set to the claimed ref's id for the duration of the run and cleared once it
+    // MDC is set to the claimed ref's id for the duration of the run and cleared once it
     // terminates — the success path.
     def "sets and clears the taskId MDC key around a successful slot"() {
         given:
@@ -395,7 +396,7 @@ tracker:
         return appender.list
     }
 
-    // Scenario: a Tracker failure (fetchTask throwing) is caught, logged, and does not propagate
+    // A Tracker failure (fetchTask throwing) is caught, logged, and does not propagate
     // out of run(TaskRef) — the deliberate exception-swallowing boundary a slot crash must respect
     // so it never takes down the daemon or another slot; MDC is still cleared afterward.
     def "swallows an exception from fetchTask and still clears MDC"() {
@@ -415,6 +416,7 @@ tracker:
 
     // FR9 of harden-logging-observability: outside a stop, a slot dying uncaught is exactly what
     // ERROR is for — work was lost and nobody asked for it.
+    // Scenario: serve/factory-serve / A death outside the shutdown phase keeps ERROR
     def "FR9: a crash outside the shutdown phase stays an ERROR with its stack"() {
         given:
         ShutdownPhase.reset()

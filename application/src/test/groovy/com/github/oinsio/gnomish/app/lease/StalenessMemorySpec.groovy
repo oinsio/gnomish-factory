@@ -62,6 +62,8 @@ class StalenessMemorySpec extends Specification {
     // FR2 grace period by construction: a fresh observer meeting a claim whose SERVER
     //     timestamp is already ancient does not treat it as stale before TTL elapses on
     //     its OWN clock from its first sighting.
+    // Scenario: lifecycle/claim-heartbeat / Grace period by construction
+    // Scenario: sandbox/sandbox-lifecycle / Fresh observer grants a grace period
     def "a freshly observed claim with an ancient server timestamp is not stale until TTL elapses locally"() {
         given:
         def v = version()
@@ -106,6 +108,7 @@ class StalenessMemorySpec extends Specification {
     // FR2 beaten claim never goes stale: the version changes within every TTL window, so
     //     the first-seen timer resets each beat and the claim is never classified stale
     //     across many TTLs.
+    // Scenario: lifecycle/claim-heartbeat / Beaten claim never goes stale
     def "a claim beaten every interval never goes stale across many TTLs"() {
         given: 'a beat interval well under TTL (5m vs 15m), watched for 12 intervals (4 TTLs)'
         def interval = Duration.ofMinutes(5)
@@ -201,6 +204,7 @@ class StalenessMemorySpec extends Specification {
     // FR19 of harden-task-branch-contract: the eligibility filter is gone. A parked task is a
     //     steady shape and is never released; a working task with no claim footprint is the claim
     //     sequence's own frozen window, released for repair once its grace has stood.
+    // Scenario: lifecycle/claim-heartbeat / Absent version does not hide a task from observation
     def "a parked task is never released while a claimless working task is, after its grace"() {
         given: 'a parked task and a working task whose claim marker never landed'
         def entries = [

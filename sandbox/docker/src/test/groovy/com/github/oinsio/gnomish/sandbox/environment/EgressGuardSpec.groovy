@@ -329,6 +329,7 @@ class EgressGuardSpec extends Specification {
     // FR2, UX1, M2 of polish-sandbox-forensics: an operator whose guard will not start pastes the
     // guard container's name into `docker logs` straight from the exception message — asserted at
     // each of the three sites that can throw it, which is what M2 counts.
+    // Scenario: sandbox/execution-environment / Guard failure names the guard container
     def "FR2: every guard-unavailable failure names the guard container ready-to-paste"() {
         given:
         docker.onRun = daemon(refuse)
@@ -381,6 +382,7 @@ class EgressGuardSpec extends Specification {
         noExceptionThrown()
     }
 
+    // Scenario: sandbox/sandbox-egress / The read stays bounded by the tail cap
     def "NFR-O1: denial findings are parsed from a bounded guard log tail"() {
         given:
         docker.onRun = daemon { List<String> args ->
@@ -410,6 +412,7 @@ class EgressGuardSpec extends Specification {
 
     // D3 of fix-denial-report-attachment: the guard container outlives a lease's rounds, so a
     // round's read must be the delta — an earlier round's denial never lands on a later attempt
+    // Scenario: sandbox/sandbox-egress / A denial is reported once while the position holds
     def "D3: two reads around a new denial return it exactly once"() {
         given: 'a daemon whose log grows by one denial between the reads, honoring --since'
         def log = [
@@ -481,6 +484,10 @@ class EgressGuardSpec extends Specification {
     //     environment, whose log still holds every denial of every earlier round. Those rounds
     //     already committed their own denial lists, so the restored cursor — committed with the
     //     last attempt — is what keeps the resumed round's report free of them.
+    // Scenario: git/git-task-persistence / Resume continues the delta instead of replaying it
+    // Scenario: sandbox/execution-environment / A resumed lease reports only its own rounds' denials
+    // Scenario: sandbox/sandbox-egress / Resume by another instance does not re-report past denials
+    // Scenario: sandbox/sandbox-egress / A denial is reported once while the position holds
     def "FR5: a restored cursor keeps a resumed lease from replaying earlier rounds"() {
         given: 'a guard container whose log holds two already-reported rounds'
         def log = [
@@ -519,6 +526,8 @@ class EgressGuardSpec extends Specification {
     //     to carry its denials — they were drained onto a cannotExecute escalation, and the
     //     position that drain advanced to rode the park's own commit. A second factory process
     //     resuming over the surviving container must report neither those nor the attempts'.
+    // Scenario: git/git-task-persistence / Resume prefers the newest committed position
+    // Scenario: sandbox/sandbox-egress / Resume by another instance does not re-report past denials
     def "M2: a resume after a cannotExecute park replays neither the attempts' nor the escalation's denials"() {
         given: 'a guard container whose log holds the denial of a round that closed normally'
         def log = [
@@ -563,6 +572,8 @@ class EgressGuardSpec extends Specification {
     // FR5: the committed position is a daemon timestamp of the container it was read from. On
     //     another machine — or onto a recreated container — that log is a different one, whose
     //     clock the position does not describe; applying it there could filter out real denials.
+    // Scenario: sandbox/execution-environment / A cursor from another denial source is ignored
+    // Scenario: sandbox/sandbox-egress / A position lives only as long as its guard log
     def "FR5: a cursor from another guard container is ignored, not applied"() {
         given: 'a cursor committed against a container this machine does not have'
         def foreign = new DenialCursor('sha256:container-elsewhere', '2026-08-19T10:05:00.000000001Z')
@@ -983,6 +994,7 @@ class EgressGuardSpec extends Specification {
     // FR7, M2 of fix-denial-attribution-durability: the position is an optimization, the identity
     //     is the correctness. A resume that lost its position but knows what the branch already
     //     records re-reads the whole tail and attaches nothing that is already there.
+    // Scenario: sandbox/sandbox-egress / A fallback re-read records no duplicates
     def "FR7: a resume that lost its position but kept the identities records no duplicates"() {
         given: 'a guard whose log holds two denials the first process already recorded'
         def log = [
@@ -1007,6 +1019,7 @@ class EgressGuardSpec extends Specification {
     }
 
     // FR7: the merge is reported, so a reviewer can tell a recovered tail from a quiet one
+    // Scenario: sandbox/sandbox-egress / A merge that dropped denials says how many
     def "FR7: a merged re-read says how many were already present and how many were recovered"() {
         given: 'a guard log the branch records only the first half of'
         def log = [
@@ -1039,6 +1052,7 @@ class EgressGuardSpec extends Specification {
     }
 
     // FR7: an unstamped denial matches nothing, so it is kept — duplicates over silence (D3)
+    // Scenario: sandbox/sandbox-egress / Records written before identities existed still merge
     def "FR7: a denial with no identity is never merged away"() {
         given: 'a guard whose daemon stamped no line, so nothing can be recognized again'
         def log = [
@@ -1063,6 +1077,7 @@ class EgressGuardSpec extends Specification {
 
     // FR8, D6: a read that fills its tail window lost older lines of that window permanently —
     //     the report must be able to say "no data" rather than imply "no denials"
+    // Scenario: sandbox/sandbox-egress / A saturated tail cap surfaces as loss
     def "FR8: a saturated tail window is reported as a loss marker beside the denials"() {
         given: 'a guard log longer than the tail window the read asks for'
         def log = (1..1000).collect {
@@ -1088,6 +1103,7 @@ class EgressGuardSpec extends Specification {
     }
 
     // FR8: the other visible loss — the source that recorded what the branch holds is gone
+    // Scenario: sandbox/sandbox-egress / A source gone with recorded denials surfaces as loss
     def "FR8: a recorded source that is no longer the live guard is reported as a loss marker"() {
         given: 'a branch recording denials of a guard container this box no longer runs'
         def log = [
@@ -1118,6 +1134,7 @@ class EgressGuardSpec extends Specification {
     }
 
     // FR8: "no denials" and "no data" are different answers, and a quiet task gives the first
+    // Scenario: sandbox/sandbox-egress / A quiet task shows nothing
     def "FR8: a quiet task emits neither a denial nor a loss marker"() {
         given: 'a guard that blocked nothing, resumed with a position of its own live container'
         docker.onRun = daemon { List<String> args ->
@@ -1135,6 +1152,7 @@ class EgressGuardSpec extends Specification {
     // M2, NFR-O2 of fix-denial-attribution-durability: losing BOTH the position and the identities
     //     is the one case that still duplicates — and it must never be the case that goes quiet.
     //     The report repeats, and the reason it repeats is on the record (design D3).
+    // Scenario: sandbox/sandbox-egress / A lost read position prefers duplicates over silence
     def "FR4: a resume that lost position and identities alike duplicates, and says why"() {
         given: 'a guard whose log still holds the denial the previous process recorded'
         def log = [

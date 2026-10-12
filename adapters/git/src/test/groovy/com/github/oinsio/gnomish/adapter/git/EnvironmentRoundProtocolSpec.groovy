@@ -83,6 +83,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
     }
 
+    // Scenario: git/git-task-persistence / Sandboxed round closes as snapshot plus state
     def "FR21: a sandboxed round closes as a snapshot commit plus a state commit on the factory branch"() {
         given:
         gnomeWork()
@@ -109,6 +110,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
     // FR5 of fix-denial-report-attachment: the position delimiting this round's denials is
     //     committed with the round itself, so a resuming instance continues the delta from it
     //     instead of replaying the guard container's whole surviving log onto its first round
+    // Scenario: git/git-task-persistence / The cursor is committed with the attempt it delimits
     def "FR5: the state commit carries the environment's denial cursor"() {
         given: 'a box whose denial source is at a known position'
         box.denialCursor = new DenialCursor('sha256:guard-container', '2026-08-19T10:00:00.000000001Z')
@@ -124,6 +126,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         committed.egressCursor().position() == '2026-08-19T10:00:00.000000001Z'
     }
 
+    // Scenario: git/git-task-persistence / A writer with no denial source records no cursor
     def "FR5: a round whose environment has no denial source records no cursor"() {
         when:
         snapshotStep.snapshot(TASK, 'implement', 1)
@@ -148,6 +151,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         gitOutput(cloneDir, 'log', '-1', '--format=%s', attempt) == 'gnomish: snapshot implement#1 ' + openTip
     }
 
+    // Scenario: git/git-task-persistence / Fine-grained gnome history is preserved
     def "FR21: the gnome's own commits are preserved under the snapshot"() {
         given:
         gnomeWork('a.txt', 'one')
@@ -164,6 +168,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         ]
     }
 
+    // Scenario: git/git-task-persistence / Daemon-inserted commit is caught by the parent-check
     def "FR22: a commit inserted in-box between snapshot and state commit aborts as a boundary violation"() {
         given:
         gnomeWork()
@@ -201,6 +206,8 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         ex.message.contains('has a second parent')
     }
 
+    // Scenario: git/git-task-persistence / A kill mid-write in the box never surfaces a partial file
+    // Scenario: git/git-task-persistence / Tampered state file is caught by read-back
     def "FR22: in-box tampering with state.json between putFile and commit aborts by read-back"() {
         given: 'a box whose file channel is compromised: written bytes are altered in place'
         def tamperingBox = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('tbox'))) {
@@ -226,6 +233,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         ex.message.contains('differs from what the factory wrote')
     }
 
+    // Scenario: git/git-task-persistence / A tampered round trace is caught by read-back
     def "FR22: in-box tampering with the trace file between putFile and commit aborts by its own read-back"() {
         given: 'a box whose file channel tampers only the trace file, leaving state.json untouched'
         def tamperingBox = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('tbox3'))) {
@@ -284,6 +292,8 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         ex.message.contains('state.json')
     }
 
+    // Scenario: git/git-task-persistence / Decision file keeps the one-writer rule
+    // Scenario: git/git-task-persistence / Decision request is the one permitted state-directory write
     def "FR23: the current round's decision file is the one permitted state-directory write"() {
         given: 'the gnome leaves a decision request for exactly this stage, attempt and round token'
         gnomeWork()
@@ -300,6 +310,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         gitOutput(cloneDir, 'show', attempt + ":.gnomish-task/decisions/implement-a1-${token}.json").contains('which db?')
     }
 
+    // Scenario: git/git-task-persistence / A request under another round's name is a violation
     def "FR23: a stale-named decision file is still a violation"() {
         given: 'a decision file for some other attempt'
         def decisions = new File(box.workingCopy.toFile(), '.gnomish-task/decisions')
@@ -315,6 +326,8 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         ex.message.contains('implement-a9.json')
     }
 
+    // Scenario: git/git-task-persistence / Decision file keeps the one-writer rule
+    // Scenario: git/git-task-persistence / Decision request is the one permitted state-directory write
     def "FR23: any other gnome write under .gnomish-task/ aborts"() {
         given:
         def stateDir = new File(box.workingCopy.toFile(), '.gnomish-task')
@@ -329,6 +342,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         thrown(RoundBoundaryViolationException)
     }
 
+    // Scenario: git/git-task-persistence / Interrupted verification resumes without burning an attempt
     def "FR21: a snapshot without a state commit classifies as interrupted verification, no attempt burned"() {
         given:
         gnomeWork()
@@ -350,6 +364,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         check.inspect(TASK).isEmpty()
     }
 
+    // Scenario: git/git-task-persistence / Sandboxed boundary verification runs on harvested refs
     def "FR22: a rewritten in-box history is refused at the state-commit harvest too"() {
         given:
         gnomeWork()

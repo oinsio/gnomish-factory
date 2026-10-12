@@ -50,6 +50,7 @@ class LivenessOracleSpec extends Specification {
     // Task 2.1: the live key set is computed FORWARD via TaskIdSanitizer, recomputed every call
     //     — no reverse key-to-task mapping. Weird-but-valid task ids sanitize the same way the
     //     Docker labels already do.
+    // Scenario: sandbox/sandbox-lifecycle / The live key set is recomputed on every evaluation
     def "evaluate computes the live key set forward via the sanitizer from the shared listing"() {
         given:
         tracker.listOpen() >> [
@@ -73,6 +74,8 @@ class LivenessOracleSpec extends Specification {
 
     // Task 2.1: re-evaluating after the listing changes recomputes the set — no caching beyond
     //     "most recent tick".
+    // Scenario: sandbox/sandbox-lifecycle / The live key set is recomputed on every evaluation
+    // Scenario: sandbox/sandbox-lifecycle / One evaluation costs at most one open-task listing
     def "evaluate recomputes on every call as the underlying listing changes"() {
         when:
         reaper.reapOnce([])
@@ -98,6 +101,7 @@ class LivenessOracleSpec extends Specification {
 
     // Task 2.2, NFR-R1: a fresh oracle before any tick — or one whose only tick was an outage —
     //     yields NoVerdict, categorically distinct from a real empty listing.
+    // Scenario: sandbox/sandbox-lifecycle / Empty claim list is a real verdict
     def "yields NoVerdict before any successful tick, distinct from an empty listing"() {
         expect: 'no tick has ever run'
         oracle.evaluate() instanceof LivenessVerdict.NoVerdict
@@ -116,6 +120,7 @@ class LivenessOracleSpec extends Specification {
 
     // Task 2.2, design D4 "geometry row 1": tracker unreachable from the sweeper itself — a
     //     prior successful listing is superseded by NoVerdict, not left stale-and-trusted.
+    // Scenario: sandbox/sandbox-lifecycle / Tracker outage removes nothing
     def "a listOpen outage yields NoVerdict even after a prior successful listing"() {
         when: 'a successful tick establishes a live listing'
         reaper.reapOnce([])
@@ -165,6 +170,8 @@ class LivenessOracleSpec extends Specification {
 
     // Task 2.3, FR3: a stale-claim task's objects classify unowned exactly when the takeover
     //     license applies — asserted directly against the reaper's own emitted StaleClaim.
+    // Scenario: sandbox/sandbox-lifecycle / Stale claim means dead owner
+    // Scenario: sandbox/sandbox-lifecycle / Fresh observer grants a grace period
     def "a task classifies unowned exactly when its claim is emitted stale by the same memory the reaper acts on"() {
         given:
         def v = version()

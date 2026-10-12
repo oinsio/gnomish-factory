@@ -186,3 +186,12 @@ weakening any verification gate.
   yes (each consult spends budget) — revisit if it under-asks in practice.
 - Sequencing: after `define-executor-contract` (the participant usage shape and the
   usage snapshot this change renders are defined there).
+- Sequencing after `tighten-spec-contract`: that change's text is the base of every
+  requirement this change touches. Its five former `MODIFIED` headings named no existing
+  requirement (finding F65 of `tighten-spec-contract`, settled there): the `agent-executor`
+  structured request and the two `git-task-persistence` decision-record requirements are `ADDED`
+  (new behavior; the `Decision-file protocol` they extended is removed by
+  `extract-agent-round-runner`, sequenced before this change, whose answer-file transport they
+  build on); the two `stage-engine` blocks are `MODIFIED` blocks of `Gnome-initiated decision
+  escalation` and `Human decisions as pass-through context`, the requirements they rewrite,
+  layered on `tighten-spec-contract`'s text.

@@ -41,6 +41,7 @@ class HttpCheckClientFactorySpec extends Specification implements HttpCheckFixtu
 
     // FR15: the provider contributes nothing, so a check declaring no pinPaths passes the pin guard
     //     vacuously — the empty-union rule of verification-hardening.
+    // Scenario: verification/verification-hardening / Interactive client with nothing declared passes the pin
     def "contributes no pin paths, whatever the check declares"() {
         given:
         def factory = new HttpCheckClientFactory()

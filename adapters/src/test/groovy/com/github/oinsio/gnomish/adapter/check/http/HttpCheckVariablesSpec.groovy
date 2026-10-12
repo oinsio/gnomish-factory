@@ -31,6 +31,7 @@ class HttpCheckVariablesSpec extends Specification {
     }
 
     // NFR-S2: the run's own values reach the request — a branch-scoped result is addressable.
+    // Scenario: verification/factory-egress-allowlist / Whitelisted run variables address a branch-scoped result
     def "every allowlisted reference resolves to this run's value"() {
         given:
         def variables = HttpCheckVariables.of(contextOf(RUN), 'c0ffee')

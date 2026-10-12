@@ -141,6 +141,7 @@ class EnvironmentSelfCheckSpec extends Specification {
         }
     }
 
+    // Scenario: sandbox/sandbox-egress / A root-running image is refused
     def "D16: a root-running image fails the non-root probe before any network probe"() {
         given: 'the image default user is root — id -u reports uid 0'
         def check = selfCheck()
@@ -172,6 +173,8 @@ class EnvironmentSelfCheckSpec extends Specification {
         failure.probe() == 'non-root'
     }
 
+    // Scenario: sandbox/sandbox-egress / Ignoring proxy settings goes nowhere
+    // Scenario: sandbox/sandbox-egress / Silent protection degradation is caught
     def "FR8: direct egress unexpectedly succeeding fails the direct-egress probe"() {
         given: 'the box can reach the world without the proxy — broken isolation'
         def check = selfCheck()

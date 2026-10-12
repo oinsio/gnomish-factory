@@ -16,9 +16,9 @@ import java.io.Serial;
  * finished branch.
  *
  * <p>The same refusal covers a read that <em>did</em> run and still established nothing: a
- * resolution that exited non-zero, or exited cleanly with no ref on stdout, yields the empty
- * string — which travels on as a commit unless it is refused here (FR13 of
- * harden-logging-observability). A blank tip recorded into an attempt record outlives the process;
+ * resolution that exited non-zero, or exited cleanly with no full object id on stdout, yields
+ * the empty string or a malformed one — which travels on as a commit unless it is refused here
+ * (FR13 of harden-logging-observability; F105 of tighten-spec-contract). A blank tip recorded into an attempt record outlives the process;
  * a blank tip compared against the last observed one reports movement that never happened.
  *
  * <p>Not a defect and not a usage error: the take aborts through its crash-abort protocol, which
@@ -46,11 +46,11 @@ public final class BranchTipUnavailableException extends RuntimeException {
     /**
      * @param revision the ref or revision the read was made at; never blank
      * @param command the git subcommand that ran but established no tip; never blank
-     * @param exitCode the command's exit code; {@code 0} when it exited cleanly with no ref
+     * @param exitCode the command's exit code; {@code 0} when it exited cleanly with no full object id
      * @param detail the command's captured stderr, as the evidence for the failure; may be blank
      */
     public BranchTipUnavailableException(String revision, String command, int exitCode, String detail) {
         super("could not read the task branch tip at " + revision + ": git " + command + " exited " + exitCode
-                + " without printing a ref; refusing to record or compare a blank tip: " + detail);
+                + " without printing a full object id; refusing to record or compare it as a tip: " + detail);
     }
 }

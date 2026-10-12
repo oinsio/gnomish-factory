@@ -225,6 +225,8 @@ tracker:
     // reconcile to the configured binding is refused (exit 15) BEFORE fetchTask ever runs — the
     // foreign repo is never touched. Proves TakeCommand wires refuseForeignRef into the explicit
     // path (the refusal message itself is the GitHub adapter's concern, covered by its own spec).
+    // Scenario: tracker/tracker-take / Every refusal and skip exits 15
+    // Scenario: tracker/tracker-take / Foreign canonical id is refused
     def "explicit mode refuses a foreign canonical id (exit 15) before fetching the task"() {
         given:
         writeConfig('''
@@ -263,6 +265,7 @@ tracker:
         0 * tracker.fetchTask(_)
     }
 
+    // Scenario: tracker/tracker-take / Empty queue exits clean
     def "bare mode with an empty ready queue dispatches to TakeBareAuto and exits 0 (EmptyQueue)"() {
         given:
         writeConfig('''
@@ -345,6 +348,8 @@ tracker:
     // FR9 of add-tracker-port (task 5.14): explicit mode with a short ref ('42') calls into the
     // registered factory's expandRef, proving TakeCommand's wiring end to end without touching the
     // real GitHub adapter (a fake TrackerAdapterFactory stands in for it)
+    // Scenario: tracker/tracker-take / Every refusal and skip exits 15
+    // Scenario: tracker/tracker-take / Short ref expansion
     def "explicit mode with a short ref expands via the registered factory's expandRef"() {
         given:
         writeConfig('''

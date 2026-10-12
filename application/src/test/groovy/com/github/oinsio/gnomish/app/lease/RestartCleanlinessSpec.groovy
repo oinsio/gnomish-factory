@@ -48,6 +48,8 @@ class RestartCleanlinessSpec extends Specification {
     private final InMemoryTracker tracker = new InMemoryTracker()
     private final InMemoryTrackerHarness harness = new InMemoryTrackerHarness(tracker)
 
+    // Scenario: serve/factory-serve / Claims of the previous life
+    // Scenario: lifecycle/claim-heartbeat / A restarted daemon returns its previous life's claims with nothing to claim
     def "claims of the previous life are not adopted, go stale, and return via the reaper"() {
         given: 'a previous instance life held two claims, now dead — no process survives it'
         String oldInstanceId = InstanceId.generate('gnomish-factory').value()

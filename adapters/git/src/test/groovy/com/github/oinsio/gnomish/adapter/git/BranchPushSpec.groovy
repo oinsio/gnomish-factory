@@ -75,6 +75,7 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
         remoteHead == currentHead(repo)
     }
 
+    // Scenario: git/git-task-persistence / Non-fast-forward never escalates to force
     def "a non-fast-forward push rejection just WARNs, no force retry"() {
         given: 'the remote already has a commit the local branch does not, so the push is rejected'
         def otherClone = tempDir.resolve('other-clone')

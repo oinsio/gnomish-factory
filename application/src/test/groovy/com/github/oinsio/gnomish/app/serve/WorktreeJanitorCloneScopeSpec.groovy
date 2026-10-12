@@ -54,6 +54,7 @@ class WorktreeJanitorCloneScopeSpec extends Specification {
         dir
     }
 
+    // Scenario: git/git-task-persistence / Janitor stays in its clone
     def "FR9, NFR-R2 of add-project-registry: the janitor stays in its clone's folder"() {
         given: 'project widgets registers clones widgets and widgets-demo, each with an aged worktree'
         def widgets = clone('widgets', 'widgets')
@@ -72,6 +73,7 @@ class WorktreeJanitorCloneScopeSpec extends Specification {
         Files.isDirectory(demoWorktree)
     }
 
+    // Scenario: git/git-task-persistence / Janitor stays in its clone
     def "FR9 of add-project-registry: a same-named clone of another project is not swept"() {
         given: 'clone api of billing and clone api of gateway, each with an aged worktree'
         def billing = clone('billing', 'api')

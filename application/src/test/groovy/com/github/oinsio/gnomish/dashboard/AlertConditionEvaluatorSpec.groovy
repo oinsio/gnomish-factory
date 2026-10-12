@@ -111,6 +111,7 @@ class AlertConditionEvaluatorSpec extends Specification {
     }
 
     // NFR-O3, UX6 of add-base-ref-resolution.
+    // Scenario: observability/dashboard-page / Closed gate is quiet
     def "an open remote gate is flagged, a closed one is quiet, and an absent section raises nothing"() {
         given:
         def open = snapshotWithRemote([origin: new RemoteHealth(
@@ -130,6 +131,7 @@ class AlertConditionEvaluatorSpec extends Specification {
                 .any { it instanceof AlertCondition.RemoteGateOpen }
     }
 
+    // Scenario: observability/dashboard-page / A sustained outage escalates the wording
     def "a gate open past the sustained-open threshold flags sustainedOpen"() {
         given:
         def justOpened = snapshotWithRemote([origin: new RemoteHealth(

@@ -77,6 +77,8 @@ class TypedExceptionMessageSpec extends Specification {
         declared.toSorted() == tabledExceptions()
     }
 
+    // Scenario: observability/factory-logging / An exception built from subprocess output is inert by type
+    // Scenario: core/untrusted-text / An exception carrying subprocess output renders safely
     def "FR5: #exception renders its carrier through the log exit, never raw"() {
         given: 'the detail as it was captured'
         def carried = mint.call(HOSTILE) as UntrustedText

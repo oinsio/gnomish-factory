@@ -80,6 +80,7 @@ class EngineSpec extends Specification {
 
     // FR9: an AtStage position naming a stage absent from the pipeline escalates as a
     //      PipelineMismatch before any execution or persistence port call
+    // Scenario: pipeline/stage-engine / Stale position
     def "escalates a stale AtStage position as PipelineMismatch"() {
         given: 'a state at a stage the pipeline no longer declares'
         def state = TaskState.atStageStart('gone')
@@ -105,6 +106,7 @@ class EngineSpec extends Specification {
 
     // FR5: attemptsUsed already at the resolved limit on entry escalates as
     //      AttemptsExhausted carrying that limit, before any port work
+    // Scenario: pipeline/stage-engine / Stops without a recorded round are unchanged
     def "escalates AttemptsExhausted when attemptsUsed is at the limit on entry"() {
         given: 'a state at a 2-attempt stage with both attempts already burned'
         def state = new TaskState(new Position.AtStage('build'), 2, [], ExecutorUsage.none())
@@ -151,6 +153,7 @@ class EngineSpec extends Specification {
 
     // FR1 of make-checkpoint-gate-durable: the MANUAL arm returns exactly the state the passing
     //      round persisted — held at the gate, the passing round still recorded — no advance
+    // Scenario: pipeline/stage-engine / The gate position rides the passing round's commit
     def "a passing manual stage pauses with the persisted state unchanged"() {
         given: 'a single manual stage with a vacuously-passing verify chain'
         def manual = new StageDefinition('build', 'purpose', [], [],

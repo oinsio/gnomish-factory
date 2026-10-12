@@ -88,6 +88,46 @@ Every module `pitest` run, `check` included, also writes a mutation-cost report 
 
 Formatting is applied automatically: a Claude Code hook formats files as the agent edits them, and a git pre-commit hook (installed into `.git/hooks/` by any `./gradlew check` run) formats staged files as a safety net. Manual fallback: `./gradlew spotlessApply`.
 
+### The spec-contract gate
+
+<!-- implements FR5, FR6, FR7, UX1 of tighten-spec-contract -->
+
+OpenSpec checks the shape of a spec; the project adds its own rules on top — the **spec contract** (see the [glossary](../glossary.md#build-verification)). Every requirement in `openspec/specs/` carries one `**Implements**:` line, its `**Notes**:` lines only explain, and every `#### Scenario:` is linked to the test that exercises it by a `// Scenario: <spec-id> / <title>` comment above the Spock feature. The rules themselves live in [`traceability.md`](../../.claude/rules/traceability.md), [`delta-specs.md`](../../.claude/rules/delta-specs.md) and [`testing.md`](../../.claude/rules/testing.md) ("Every scenario has a test"); this section is how to run the gate and answer it.
+
+One Gradle task checks all of them, `checkSpecContract`, and it runs inside `./gradlew check`. The fix-artifacts and archive stages of the factory's own pipeline run the same task. It reads files only — no git, no OpenSpec, no network — so it takes seconds. To run it alone:
+
+```bash
+./scripts/check-spec-contract.sh                 # main specs and the scenario links
+./scripts/check-spec-contract.sh --changes       # also the deltas of unarchived changes
+./scripts/check-spec-contract.sh --change=<name> # also the deltas of this one change only
+./scripts/check-spec-contract.sh --spec=a,b      # only these spec ids
+```
+
+The script only passes its arguments to `./gradlew -q checkSpecContract`. The same choices exist as Gradle properties: `-PspecContractChanges=true`, `-PspecContractChange=<name>`, `-PspecContractScope=<spec-id,…>`, and `-PspecContractSpecsDir=<dir>` to judge another spec tree in place of `openspec/specs` (a preview). With `--changes`, a delta is judged for its `**Implements**:` and `**Notes**:` lines only; its scenarios are linked once the change is archived and they reach `openspec/specs/`. `--change=<name>` judges the main specs and that one change's deltas, never another change's: the fix-artifacts stage passes the change its task works on, so a defect in another unarchived change cannot fail the round. A name that is no unarchived change directory fails the run rather than judging nothing.
+
+Each finding prints as `<file>:<line>: [<rule>] <what was found>`, then a `fix:` line; the run ends with one summary line, `Spec contract: N scenario(s) checked, N linked, N exempt`. The whole report is also written to `build/reports/spec-contract.txt`. What to write for each rule:
+
+| Rule in the finding                | What to write                                                                                                                                            |
+|------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `traceability line`                | One `**Implements**: <ids> of <change-name>` line after the requirement text, before its first scenario; several changes joined by `; ` in that one line |
+| `retired comment form`             | Delete the `<!-- implements … -->` comment and carry its ids in the requirement's `**Implements**:` line                                                 |
+| `notes`                            | A note never says `SHALL` or `MUST`: state the obligation as a scenario of the requirement, or as a requirement of its own                               |
+| `wrapped note`                     | Join the text to the metadata line above it as one physical line, or move it into the requirement text before the metadata lines                         |
+| `scenario link: unlinked scenario` | `// Scenario: <spec-id> / <title>` above the feature that exercises it — or, when no test can, an exemption (below)                                      |
+| `scenario link: dangling marker`   | The marker names no scenario (usually a renamed heading): point it at the scenario the `fix:` line names as nearest, or remove it                        |
+| `scenario link: malformed marker`  | Write the marker as `// Scenario: <spec-id> / <title>`, the title copied verbatim, or reword the comment so it does not start with the marker            |
+| `scenario link: exemption`         | Fix the exemption file at the named line: name a real scenario, give it a verifier, remove a stale or duplicate line, or match the file name to `spec:`  |
+
+**Exempting a scenario.** A scenario that something other than a test verifies — a CI workflow, a release script — is listed in its capability's file under `config/spec-contract-exemptions/`, named by the spec id with `/` replaced by `-` (`build/ci` → `build-ci.txt`). The first line declares the capability; each further line is one scenario; blank lines and `#` comments are allowed:
+
+```text
+spec: build/ci
+A reusable-workflow job is exempt from the timeout => .github/workflows/ci.yml
+Some scenario whose test comes later => pending-test: <change-name>
+```
+
+The mechanism after `=>` names the verifier precisely; "hard to test" is not one. `pending-test: <change-name>` is allowed only for a scenario sorted, at a decision point, to a named later change that will write its test. The list is checked in both directions: a line that names no scenario of its capability is stale and fails the gate, and so does a file whose name does not match its `spec:` line. The bar for an exemption is in `testing.md`.
+
 ## Dependency locking and verification
 
 <!-- implements FR1-FR5, NFR-R1, NFR-O1, NFR-S1, UX1, UX2 of add-dependency-verification -->

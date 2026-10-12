@@ -16,6 +16,8 @@ class ProcessSupervisorStallSpec extends Specification implements FakeBinaries {
     @TempDir
     Path dir
 
+    // Scenario: lifecycle/subprocess-supervision / A stalled child cannot outlive its deadline
+    // Scenario: lifecycle/subprocess-supervision / The outcome names how the invocation ended
     def "FR3, NFR-R1, M1: a child that stalls holding its output open cannot outlive its deadline"() {
         given: 'a binary that produces no exit and holds stdout open'
         Path binary = fakeBinary('stall')
@@ -42,6 +44,7 @@ class ProcessSupervisorStallSpec extends Specification implements FakeBinaries {
         killQuietly(process.toHandle())
     }
 
+    // Scenario: lifecycle/subprocess-supervision / The outcome names how the invocation ended
     def "FR6: a command that exits on its own is untouched by the deadline"() {
         given: 'a binary that exits promptly, well inside the deadline'
         Path binary = fakeBinary('quick')

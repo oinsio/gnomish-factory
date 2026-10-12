@@ -1,24 +1,15 @@
 package com.github.oinsio.gnomish.adapter.tracker.github
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.app.port.tracker.AbortRecord
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerReleaseContract
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.tomakehurst.wiremock.WireMockServer
-import com.github.tomakehurst.wiremock.core.WireMockConfiguration
-import io.github.resilience4j.core.IntervalFunction
-import io.github.resilience4j.retry.RetryConfig
-import java.net.http.HttpResponse
-import java.time.Duration
+import com.github.oinsio.gnomish.app.port.tracker.contract.TrackerCirculationContract
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
-import java.time.InstantSource
 
 /**
  * Wires the REAL production {@link GithubTracker} (composing the real {@link
@@ -26,7 +17,7 @@ import java.time.InstantSource
  * {@link GithubStateWrites}, {@link GithubCorrespondence}, {@link
  * GithubDecisions} — every one of them unmodified) against a WireMock server
  * into the full port contract suite (task 4.16 / task 3.5 / 1.2 of
- * add-factory-serve, FR4, M1, M2): {@link TrackerReleaseContract} — the
+ * add-factory-serve, FR4, M1, M2): {@link TrackerCirculationContract} — the
  * most-derived link in the chain — transitively runs every property from
  * {@code TrackerContract}, {@code TrackerMarkerContract}, {@code
  * TrackerFetchContract}, {@code TrackerLeaseContract}, {@code
@@ -53,103 +44,38 @@ import java.time.InstantSource
  * this suite verifies, and only the fixture-ref mismatch is absorbed in
  * test-only glue that never ships.
  *
- * <p>The dynamic transformer is also what makes the 12-way concurrent
- * {@code claim} race (5 repetitions x 12 callers each, on distinct issues)
- * correct: every racing caller's claim-comment POST and verify-read GET goes
- * through the SAME {@link FixtureIssueRegistry}, whose comment ids are
- * minted from one shared, atomically-incrementing sequence — exactly
- * mirroring GitHub's own global, per-repository comment-id total order that
- * the real {@link GithubClaimLease} relies on to decide "earliest id wins".
- *
- * <p>The lease suite always models the adapter under test AS the claim holder
- * {@code instance-a} (every {@code seedWorkingWithClaim} call uses that holder):
- * a beat is performed BY the holder, and GitHub's {@code heartbeat} rewrites the
- * claim comment with the BEATING instance's id, which {@code fetchTask} then reads
- * back as the holder. So {@link GithubHeartbeat} is wired with {@link
- * #HOLDER_INSTANCE_ID} — the suite's holder — for the post-beat holder to
- * round-trip; this is fixture wiring, not a property exemption, and touches only
- * the beat (no currently-green property invokes {@code heartbeat}). The other
- * collaborators keep the neutral {@link #INSTANCE_ID}, whose markers (park/finish
- * reports, progress, notes) no property asserts by author.
+ * <p>The wiring of the real adapter, and the out-of-band edits a human makes in the tracker UI,
+ * live in {@link GithubContractTracker}; this spec binds the contract's seams to them.
  *
  * <p>Implements FR4, NFR-R1 of add-tracker-port; FR1, FR4, FR5, FR8, NFR-R2,
  * M1 of add-claim-heartbeat (the extended contract passes on the GitHub adapter).
  */
-class GithubTrackerContractSpec extends TrackerReleaseContract {
+// Scenario: tracker/github-tracker / Decline comment is derivation-neutral
+// Scenario: tracker/github-tracker / Abort facts read back on any instance
+// Scenario: tracker/github-tracker / Ready issue with a live claim is visible to the sweep
+// Scenario: tracker/tracker-port / Suite passes on both adapters
+// Scenario: tracker/tracker-port / The suite covers the open listing and its facts
+// Scenario: tracker/tracker-port / The suite covers the heartbeat
+// Scenario: tracker/tracker-port / Finish-reopen property is adapter-equivalent
+// Scenario: tracker/tracker-port / The suite covers the decline operation
+// Scenario: tracker/tracker-port / The suite binds the open-front count to the open listing
+// Scenario: tracker/tracker-port / Contract suite binds title propagation
+// Scenario: tracker/tracker-port / Conflict lists every value
+// Scenario: tracker/tracker-port / The contract suite covers every designator shape
+// Scenario: tracker/tracker-port / The suite covers stale-claim removal
+// Scenario: tracker/tracker-port / The suite covers index repair
+class GithubTrackerContractSpec extends TrackerCirculationContract {
 
-    private static final String OWNER = 'acme'
-    private static final String REPO = 'widgets'
-    private static final String INSTANCE_ID = 'gnomish-factory-contract'
-    private static final String HOLDER_INSTANCE_ID = 'instance-a'
-    /**
-     * The configured {@code tracker.github.designators.base} rule the contract suite runs the real
-     * adapter with (FR3 of add-base-ref-resolution). The optional {@code -<n>} suffix is what lets a
-     * single issue present the same candidate value twice — GitHub refuses a duplicate label name —
-     * so the "equal duplicates collapse" property has a fixture a real issue could actually hold.
-     */
-    private static final String DESIGNATOR_RULE = 'base(?:-[0-9]+)?:(.+)'
-
-    /**
-     * The tracker's "now": virtual time that moves one second per read, so successive writes carry
-     * distinct stamps the way a live tracker's do, without real time (FR18, FR20 of
-     * supervise-daemon-loops-and-embed-dashboard).
-     */
-    private static final VirtualClock CLOCK = new VirtualClock(Instant.parse('2026-07-20T12:00:00Z'))
-    private static final InstantSource TICKING = {
-        -> CLOCK.advance(Duration.ofSeconds(1)); CLOCK.instant()
-    } as InstantSource
-
-    private WireMockServer wireMock
+    private GithubContractTracker github
     private GithubTrackerFixtureAdapter fixtureAdapter
 
     def setup() {
-        def LABELS = new GithubStateLabels(FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL,
-                FixtureSeeder.NEEDS_HUMAN_LABEL, FixtureSeeder.DELIVERED_LABEL)
-        def registry = new FixtureIssueRegistry()
-        wireMock = new WireMockServer(WireMockConfiguration.options()
-                .dynamicPort()
-                .extensions(new FixtureGithubTransformer(registry)))
-        wireMock.start()
-
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'contract-test-token', fastRetryConfig())
-        def cache = new GithubConditionalRequestCache(httpClient)
-        def labelOps = new GithubLabelOps(httpClient)
-
-        def realTracker = new GithubTracker(
-                new GithubFeedQuery(cache, OWNER, REPO, FixtureSeeder.READY_LABEL),
-                new GithubTaskFetcher(cache, FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
-                FixtureSeeder.DELIVERED_LABEL, GithubDesignatorRules.from([designators: [base: DESIGNATOR_RULE]])),
-                new GithubClaimLease(httpClient, labelOps, FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL, TICKING),
-                new GithubStateWrites(httpClient, labelOps, markerWriter(httpClient, INSTANCE_ID),
-                FixtureSeeder.WORKING_LABEL, FixtureSeeder.NEEDS_HUMAN_LABEL,
-                FixtureSeeder.DELIVERED_LABEL, FixtureSeeder.READY_LABEL),
-                new GithubCorrespondence(markerWriter(httpClient, INSTANCE_ID)),
-                new GithubDecisions(httpClient, markerWriter(httpClient, INSTANCE_ID), TICKING),
-                new GithubHeartbeat(httpClient, HOLDER_INSTANCE_ID, TICKING),
-                new GithubOpenQuery(cache, OWNER, REPO, LABELS),
-                new GithubStaleClaimRemoval(httpClient, labelOps, markerWriter(httpClient, INSTANCE_ID),
-                FixtureSeeder.WORKING_LABEL, FixtureSeeder.READY_LABEL, TICKING),
-                new GithubIndexRepair(httpClient, labelOps, markerWriter(httpClient, INSTANCE_ID), LABELS, TICKING))
-
-        fixtureAdapter = new GithubTrackerFixtureAdapter(
-                realTracker, registry, wireMock.baseUrl(), OWNER, REPO, INSTANCE_ID)
+        github = new GithubContractTracker()
+        fixtureAdapter = github.adapter
     }
 
     def cleanup() {
-        wireMock.stop()
-    }
-
-    private static RetryConfig fastRetryConfig() {
-        RetryConfig.custom()
-                .maxAttempts(2)
-                .intervalFunction(IntervalFunction.of(10))
-                // Matches everything rather than naming the adapter's package-private
-                // GithubHttpUncheckedIOException (illegal cross-package access from this spec's
-                // package, see FeedAutomatonOutageIntegrationSpec) -- harmless here since the only
-                // exception this predicate ever actually sees is a real transport failure.
-                .retryOnException({ true })
-                .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
-                .build()
+        github.stop()
     }
 
     @Override
@@ -178,6 +104,20 @@ class GithubTrackerContractSpec extends TrackerReleaseContract {
     }
 
     @Override
+    protected void seedWorkingWithDeadClaim(Tracker adapter, TaskRef ref, String holder) {
+        // A GitHub dead footprint is a claim comment a later boundary marker voided: the real
+        // adapter's own abort write posts that marker, and the rewind puts the working label back.
+        fixtureAdapter.seedWorkingWithClaim(ref, holder)
+        adapter.recordAbort(ref, new AbortRecord(UntrustedText.subprocess('lost'), holder, Instant.parse('2026-07-20T10:00:00Z')))
+        github.rewindIndexToWorking(ref)
+    }
+
+    @Override
+    protected void rewindIndexToWorking(Tracker adapter, TaskRef ref) {
+        github.rewindIndexToWorking(ref)
+    }
+
+    @Override
     protected void returnToReady(Tracker adapter, TaskRef ref) {
         fixtureAdapter.returnToReady(ref)
     }
@@ -195,9 +135,5 @@ class GithubTrackerContractSpec extends TrackerReleaseContract {
     @Override
     protected void seedDesignatorCandidates(Tracker adapter, TaskRef ref, String kind, List<String> values) {
         fixtureAdapter.seedDesignatorCandidates(ref, kind, values)
-    }
-
-    private static GithubMarkerWriter markerWriter(GithubHttpClient httpClient, String instanceId) {
-        new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, instanceId, TICKING)
     }
 }

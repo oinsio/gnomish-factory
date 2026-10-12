@@ -39,6 +39,7 @@ class SandboxBindingProviderSpec extends Specification {
     }
 
     // FR3: the host binding is contributed from the port module itself, with its honest passport
+    // Scenario: plugin/adapter-binding-registry / Host binding is contributed from core
     def "the host provider declares the host binding with the no-isolation passport"() {
         given: 'the core-contributed host provider'
         def provider = new HostBindingProvider()
@@ -50,6 +51,7 @@ class SandboxBindingProviderSpec extends Specification {
 
     // FR2/D5: the descriptor holds no live adapter — it has no state at all to hold one in,
     // which is what keeps binding enumeration and reconciliation daemon-free
+    // Scenario: plugin/adapter-binding-registry / Passport enumerated without a running backend
     def "the host provider carries no state, so it can hold no live adapter"() {
         expect: 'the provider declares no field of its own'
         HostBindingProvider.declaredFields.findAll { !it.synthetic }.isEmpty()

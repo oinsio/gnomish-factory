@@ -89,6 +89,7 @@ class SlotEntryAssemblerSpec extends Specification {
         entries[0].attempt() == 4
     }
 
+    // Scenario: observability/serve-observability / Occupancy at a glance
     def "multiple occupied slots each produce their own entry"() {
         given:
         def ledger = new SlotLedger(2, clock)

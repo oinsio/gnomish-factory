@@ -54,6 +54,7 @@ class RemoteDefaultBranchSpec extends Specification implements BareGitRepoFixtur
         discovery().discover(clone) == new DefaultBranchDiscovery.Discovered(new DefaultBranch('main'))
     }
 
+    // Scenario: git/base-ref-resolution / Renamed default branch is honored
     def "FR5: a renamed default branch is followed with no configuration change"() {
         given: 'a remote whose default was moved off main'
         def clone = cloneOfRemoteDefaulting('renamed', 'develop')
@@ -74,6 +75,7 @@ class RemoteDefaultBranchSpec extends Specification implements BareGitRepoFixtur
         discovery().discover(clone) == new DefaultBranchDiscovery.Discovered(new DefaultBranch('develop'))
     }
 
+    // Scenario: git/base-ref-resolution / Autonomous mode refuses without a remote
     def "FR5: a clone with no origin refuses instead of guessing a name"() {
         given:
         def clone = initWorkingRepo(tempDir, 'no-origin')

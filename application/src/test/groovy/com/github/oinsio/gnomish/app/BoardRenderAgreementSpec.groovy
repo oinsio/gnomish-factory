@@ -23,6 +23,7 @@ class BoardRenderAgreementSpec extends Specification {
     def text = renderer.render(model)
     def json = mapper.toDto(model)
 
+    // Scenario: observability/tracker-board / Text and JSON agree
     def "every Ready row's id and title appear on both surfaces"() {
         expect:
         model.readyRows().every { row ->
@@ -74,6 +75,7 @@ class BoardRenderAgreementSpec extends Specification {
         text.contains("${returnedRow.id()} - ${returnedRow.title()} (returned)")
     }
 
+    // Scenario: observability/tracker-board / Text and JSON agree
     def "Ready summary counts match between the JSON ready object and the text summary line"() {
         given:
         def readyDto = json.ready()

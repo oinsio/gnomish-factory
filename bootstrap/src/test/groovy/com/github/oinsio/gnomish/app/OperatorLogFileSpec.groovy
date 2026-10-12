@@ -32,6 +32,7 @@ class OperatorLogFileSpec extends Specification {
     }
 
     // FR11, UX3: manual-run "Two projects keep separate logs"
+    // Scenario: cli/manual-run / Two projects keep separate logs
     def "FR11: take for widgets and serve for gateway log to their own project's file"() {
         when:
         def take = harness.load([

@@ -15,6 +15,8 @@ class StandInSpec extends Specification {
     @TempDir
     Path tempDir
 
+    // Scenario: build/quality-gates / A spec selects a preset
+    // Scenario: build/quality-gates / A plain selection is one link per JVM, a scenario with a name one per run
     def "FR24: a preset is handed out by one link per JVM, made outside the library, its answers by reference"() {
         given:
         Path git = StandIn.git('action-answer')
@@ -30,6 +32,7 @@ class StandInSpec extends Specification {
         StandIn.data('stderr#warn') == 'warn\n'
     }
 
+    // Scenario: build/quality-gates / A plain selection is one link per JVM, a scenario with a name one per run
     def "FR24: a preset that records, reads per-run files or takes its link's name is not handed out by its own link"() {
         when:
         StandIn.git(preset)
@@ -73,6 +76,7 @@ class StandInSpec extends Specification {
         e.message.contains("has no answer 'common#nope'")
     }
 
+    // Scenario: build/quality-gates / A recording scenario gets one link, not one script
     def "FR24: recording twice in one directory is two links to the preset, so two logs"() {
         when:
         Path first = StandIn.recording(tempDir, 'action-record')

@@ -74,6 +74,7 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())
     }
 
+    // Scenario: git/git-task-persistence / Completed and Aborted outcomes run no fence
     def "a #outcome run runs no delivery fence"() {
         given: 'a round journal that decides whether the run delivers or aborts'
         journal = roundJournal

@@ -34,6 +34,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         verdict == new Verdict.Pass()
     }
 
+    // Scenario: executor/agent-executor / Fenced verdict accepted
     def "fenced failing verdict with findings yields Fail with mapped findings"() {
         given: 'the "Fenced verdict accepted" scenario of spec.md'
         def message = '''
@@ -103,6 +104,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         ((Verdict.Fail) verdict).findings().isEmpty()
     }
 
+    // Scenario: executor/agent-executor / No verdict is never a pass
     def "garbage text with no JSON yields CannotVerify and logs raw message at WARN"() {
         given:
         def message = 'the agent rambled without ever producing a verdict'
@@ -161,6 +163,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         verdict instanceof Verdict.CannotVerify
     }
 
+    // Scenario: verification/verification-hardening / Malformed judge verdict burns no attempt
     def "malformed JSON object yields CannotVerify and logs at WARN"() {
         given:
         def message = '{"passed": true, "findings": [oops}'

@@ -39,6 +39,7 @@ class RemoteOutageGateSpec extends Specification {
 
     // FR14: "the gate is process-local: a restart forgets it" — a freshly constructed gate is
     //     closed, i.e. claims are allowed, with no prior failure observed.
+    // Scenario: serve/factory-serve / A restart forgets the gate
     def "a fresh gate starts closed"() {
         expect:
         !gate(BaseRefGit.UNWIRED).isOpen()
@@ -90,6 +91,7 @@ class RemoteOutageGateSpec extends Specification {
 
     // NFR-O1: health reports the next scheduled probe instant only while open; once closed there
     //     is no scheduled probe to report.
+    // Scenario: observability/serve-observability / Recovery clears the section
     def "health reports the next probe instant while open, and none once closed"() {
         given:
         def open = true
@@ -118,6 +120,8 @@ class RemoteOutageGateSpec extends Specification {
     }
 
     // FR14, NFR-O1: closing clears the consecutive-failure count back to zero (RemoteOutageCounters#closed()).
+    // Scenario: observability/serve-observability / Recovery clears the section
+    // Scenario: observability/serve-observability / A closed gate counts no failures
     def "closing resets the health's consecutive-failure count to zero"() {
         given:
         def open = true
@@ -179,6 +183,8 @@ class RemoteOutageGateSpec extends Specification {
     }
 
     // FR14: the first successful probe closes the gate.
+    // Scenario: serve/factory-serve / A probe, not a claim, ends the outage
+    // Scenario: serve/factory-serve / Probes make no tracker call
     def "the first successful probe closes the gate"() {
         given:
         def baseRefGit = [probe: { Path p -> true }] as BaseRefGit
@@ -229,6 +235,7 @@ class RemoteOutageGateSpec extends Specification {
 
     // FR14: recovery is confirmed by a probe, never by claiming a task — onSuccessfulRefresh alone
     //     never closes the gate.
+    // Scenario: serve/factory-serve / A probe, not a claim, ends the outage
     def "onSuccessfulRefresh alone never closes the gate"() {
         given:
         def g = gate(BaseRefGit.UNWIRED)
@@ -282,6 +289,7 @@ class RemoteOutageGateSpec extends Specification {
     //     immediate refresh failure (no onSuccessfulRefresh call), reopen with a LONGER interval
     //     than the idle one: the probe right after the reopen does not fire at +idle alone, only
     //     once the doubled interval elapses.
+    // Scenario: serve/factory-serve / A flapping remote does not restart the interval
     def "flapping remote: close, refresh fails, reopen requires more than the idle interval to probe again"() {
         given:
         def probes = new AtomicInteger()
@@ -322,6 +330,7 @@ class RemoteOutageGateSpec extends Specification {
 
     // FR14: the first successful refresh after a close resets the interval — proven by requiring
     //     only the idle interval (not a grown one) before the NEXT probe after a subsequent reopen.
+    // Scenario: serve/factory-serve / A flapping remote does not restart the interval
     def "the first successful refresh after a close resets the interval to idle"() {
         given:
         def probes = new AtomicInteger()

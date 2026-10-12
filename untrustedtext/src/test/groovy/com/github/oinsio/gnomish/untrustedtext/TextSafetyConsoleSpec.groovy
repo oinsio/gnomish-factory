@@ -34,16 +34,20 @@ class TextSafetyConsoleSpec extends Specification {
         ]
     }
 
+    // Scenario: cli/operator-console / Each control class has its visible form
+    // Scenario: core/untrusted-text / Each exit renders for its consumer
     def "FR5: ESC is shown in caret notation rather than obeyed"() {
         expect:
         TextSafety.forConsole("before${ESC}[2Jafter") == 'before^[[2Jafter'
     }
 
+    // Scenario: cli/operator-console / A hostile issue title cannot reach the clipboard
     def "UX2: an OSC 52 clipboard write arrives as text, not as a clipboard write"() {
         expect: 'the whole sequence is legible — the operator can see what was attempted'
         TextSafety.forConsole("title${ESC}]52;c;cGF5bG9hZA==${ch(0x07)}") == 'title^[]52;c;cGF5bG9hZA==^G'
     }
 
+    // Scenario: cli/operator-console / Each control class has its visible form
     def "FR5: every other C0 control is shown in caret notation — #label"() {
         expect:
         TextSafety.forConsole("a${ch(codePoint)}b") == "a${expected}b"
@@ -58,16 +62,19 @@ class TextSafetyConsoleSpec extends Specification {
         'unit separator, C0 upper edge' | 0x1F || '^_'
     }
 
+    // Scenario: cli/operator-console / Each control class has its visible form
     def "FR5: DEL is shown as caret-question"() {
         expect:
         TextSafety.forConsole("a${ch(0x7F)}b") == 'a^?b'
     }
 
+    // Scenario: cli/operator-console / Each control class has its visible form
     def "FR5: carriage return is shown as a literal escape, so no line is overwritten"() {
         expect: 'CR cannot return the cursor to column 0 and rewrite what the operator just read'
         TextSafety.forConsole('all tests pass\rHIDDEN') == 'all tests pass\\rHIDDEN'
     }
 
+    // Scenario: cli/operator-console / Each control class has its visible form
     def "FR5: the line feed is kept as itself"() {
         expect: 'line structure is the console plane\'s whole difference from the log plane'
         TextSafety.forConsole('first\nsecond\nthird') == 'first\nsecond\nthird'
@@ -76,12 +83,15 @@ class TextSafetyConsoleSpec extends Specification {
     // FR5: the table names the hostile characters, and the tab is not one of them — the log plane
     // keeps it too. Caret notation here would print every stack-trace frame the operator is shown
     // as `^Iat com.example…`, costing the indentation the diagnosis is read by.
+    // Scenario: cli/operator-console / Each control class has its visible form
     def "FR5: the tab is kept as itself, as the character table says it is not neutralized"() {
         expect:
         TextSafety.forConsole('frame:\n\tat com.example.Stage.run(Stage.java:1)') ==
                 'frame:\n\tat com.example.Stage.run(Stage.java:1)'
     }
 
+    // Scenario: cli/operator-console / A multi-line report keeps its lines
+    // Scenario: core/untrusted-text / Each exit renders for its consumer
     def "NFR-S2: a forty-line report is printed as forty lines"() {
         given:
         def report = (1..40).collect { "line ${it}" }.join('\n')
@@ -91,6 +101,7 @@ class TextSafetyConsoleSpec extends Specification {
         TextSafety.forConsole(report).split('\n', -1).length == 40
     }
 
+    // Scenario: cli/operator-console / Each control class has its visible form
     def "FR5: characters with no width are shown as their backslash-u escape — #label"() {
         expect:
         TextSafety.forConsole("a${ch(codePoint)}b") == "a${expected}b"

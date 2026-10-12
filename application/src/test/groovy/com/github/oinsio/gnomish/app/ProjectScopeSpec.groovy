@@ -39,6 +39,7 @@ class ProjectScopeSpec extends Specification {
 
     // FR10 of add-project-registry (serve-observability, "begin with the project name"): the id is
     // <project>-<instance>-<suffix>, so a tracker comment names the project
+    // Scenario: observability/serve-observability / The instance id names the project
     def "FR10 of add-project-registry: the minted instance id begins with <project>-<instance>-"() {
         when:
         def id = RegisteredCloneFixture.scope(CLONE, 'laptop').mintInstanceId()

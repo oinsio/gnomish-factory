@@ -54,6 +54,7 @@ class HttpCheckTimeoutClassSpec extends Specification {
     // FR9: a stuck http check burns an attempt as a quality Fail by default, and escalates as
     //     CannotVerify when the operator declared the timeout infrastructural — the same two
     //     classifications the github provider's checks get, from the same shared poll loop.
+    // Scenario: pipeline/stage-engine / Timeout burns the attempt by default
     def "a stuck http check times out and classifies per its declared timeoutClass"() {
         given:
         def check = platform.stuckQualityGate(timeoutClass)

@@ -41,6 +41,7 @@ class TrackerHealthTrackerSpec extends Specification {
         tracker.consecutiveFailures() == 0
     }
 
+    // Scenario: observability/serve-observability / Outage visible without logs
     def "a failing call increments consecutiveFailures and rethrows the original exception unchanged"() {
         given:
         def failure = new IllegalStateException('tracker unreachable')
@@ -56,6 +57,7 @@ class TrackerHealthTrackerSpec extends Specification {
         tracker.lastSuccessAt() == null
     }
 
+    // Scenario: observability/serve-observability / Outage visible without logs
     def "consecutive failures accumulate across calls until a success resets them"() {
         given:
         delegate.listOpen() >> { throw new RuntimeException('boom') }

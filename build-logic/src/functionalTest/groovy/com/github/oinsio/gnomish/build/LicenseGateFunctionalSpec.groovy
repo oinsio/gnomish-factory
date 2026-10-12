@@ -32,6 +32,8 @@ class LicenseGateFunctionalSpec extends Specification {
         project.write()
     }
 
+    // Scenario: build/quality-gates / Copyleft-only dependency fails CI
+    // Scenario: build/quality-gates / Functional test pins the semantics
     def "FR8: a module declaring only LGPL fails the gate, named with its license"() {
         given:
         project.bootstrapDependsOn('lgpl-only')
@@ -47,6 +49,8 @@ class LicenseGateFunctionalSpec extends Specification {
         failed.output.contains('GNU LESSER GENERAL PUBLIC LICENSE, Version 2.1')
     }
 
+    // Scenario: build/quality-gates / Dual-licensed dependency passes without an exception
+    // Scenario: build/quality-gates / Functional test pins the semantics
     def "FR8: a module declaring EPL-2.0 and LGPL-2.1 passes on its permissive option"() {
         given:
         project.bootstrapDependsOn('dual-epl-lgpl')
@@ -55,6 +59,8 @@ class LicenseGateFunctionalSpec extends Specification {
         project.checkLicense().task(':checkLicense').outcome.name() == 'SUCCESS'
     }
 
+    // Scenario: build/quality-gates / Spelling variant is not a violation
+    // Scenario: build/quality-gates / Functional test pins the semantics
     def "FR8: an Apache spelling variant is normalized and passes"() {
         given:
         project.bootstrapDependsOn('apache-variant')

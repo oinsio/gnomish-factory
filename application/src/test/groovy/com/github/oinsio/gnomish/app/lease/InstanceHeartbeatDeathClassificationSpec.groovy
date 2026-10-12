@@ -81,6 +81,7 @@ class InstanceHeartbeatDeathClassificationSpec extends Specification {
         }
     }
 
+    // Scenario: serve/factory-serve / A death outside the shutdown phase keeps ERROR
     def "FR9: a death nobody asked for stays an ERROR"() {
         given:
         def messages = []
@@ -94,6 +95,7 @@ class InstanceHeartbeatDeathClassificationSpec extends Specification {
         messages[0].contains('died; held claims will go stale and be reaped')
     }
 
+    // Scenario: serve/factory-serve / Shutdown-caused death is not an alarm
     def "FR9: a death the stop caused is one WARN naming the shutdown"() {
         given:
         def messages = []

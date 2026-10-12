@@ -61,6 +61,9 @@ None.
   already MODIFIES). The allowlist requirement is also MODIFIED by the active
   `add-subprocess-access-log`; this change is sequenced **before** it, so that delta re-layers
   over this change's text (see `delta-specs.md`, overlapping MODIFIED).
+- Sequenced after `tighten-spec-contract`: the MODIFIED block of *Layered positive environment
+  allowlist* is layered on that change's text (its three-layer body and scenarios), which must sync
+  first; `add-subprocess-access-log`'s block already carries this change's argv text verbatim.
 
 ## Goals
 

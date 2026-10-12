@@ -97,6 +97,10 @@ class EnginePreflightRecordedStopSpec extends Specification {
 
     // FR6: a lost park after a stop — the round commit landed, the park did not — re-raises the
     //      very escalation the live loop produced, from the persisted state alone, reaching no port
+    // Scenario: git/git-task-persistence / Stop and round are one commit
+    // Scenario: pipeline/stage-engine / Resume from a recorded stop runs nothing
+    // Scenario: pipeline/stage-engine / A lost park re-raises the question from the record
+    // Scenario: pipeline/stage-engine / A lost park re-raises CannotVerify from the record
     def "a lost park after a #kind round re-escalates from the record with identical content"() {
         given: 'a live run whose round ends in the stop and persists its round commit'
         script.call(this)
@@ -137,6 +141,8 @@ class EnginePreflightRecordedStopSpec extends Specification {
 
     // FR6: a consumed stop — the history emptied by resetAttempts(), or a later round without a
     //      stop — is not re-raised: the stage runs from the recorded history
+    // Scenario: pipeline/stage-engine / A consumed stop is not re-raised
+    // Scenario: pipeline/stage-engine / Stops without a recorded round are unchanged
     def "a state whose last round carries no stop runs the stage: #history"() {
         given: 'the stage will pass on its next round'
         executor.scripted << completed()

@@ -107,6 +107,7 @@ class GitObjectsTaskRepositoryResumeFromSpec extends Specification implements Ba
         gitOutput(work, 'push', 'origin', 'HEAD:' + REF)
     }
 
+    // Scenario: git/git-task-persistence / Resumed write clears the outcome with the reset
     def "FR7: the resumed write is one commit carrying the reset state and the cleared park"() {
         given:
         parked()
@@ -142,6 +143,7 @@ class GitObjectsTaskRepositoryResumeFromSpec extends Specification implements Ba
         logs.detach()
     }
 
+    // Scenario: git/git-task-persistence / Resumed write on a cleared outcome refuses
     def "FR7: a resumed write over a tip with no recorded outcome refuses and writes nothing"() {
         given: 'a task mid-visit: started, nothing parked'
         started()
@@ -182,6 +184,7 @@ class GitObjectsTaskRepositoryResumeFromSpec extends Specification implements Ba
 
     // FR5 of fix-denial-attribution-durability: the resumed write reads no denial source, so the
     //     position the last sandboxed round committed rides into the regenerated state.json.
+    // Scenario: git/git-task-persistence / A lifecycle rewrite preserves the cursor
     def "FR7: the resumed write carries the tip's committed denial cursor forward"() {
         given:
         parked()

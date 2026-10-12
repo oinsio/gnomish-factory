@@ -84,6 +84,9 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         inBox(e, 'git rev-parse HEAD')
     }
 
+    // Scenario: git/git-task-persistence / No push machinery inside the box
+    // Scenario: git/git-task-persistence / No shared objects with the factory clone
+    // Scenario: git/git-task-persistence / The box holds no way to the server
     def "FR3: the in-box clone shares no hardlinked objects and holds no remote or server address"() {
         given:
         def source = factoryClone()
@@ -125,6 +128,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
     // FR6 of own-git-transfer-argv: the harvest is the owner's Container transfer, so a tag the gnome
     //     creates inside the real box — pointing into the very history the harvest delivers — never
     //     auto-follows into the factory clone, and the harvest leaves no FETCH_HEAD behind.
+    // Scenario: git/git-task-persistence / A box-authored tag does not cross the boundary
     def "FR6: a tag created in the box does not appear in the factory clone after harvest"() {
         given: 'a gnome commit in the box, tagged there'
         def source = factoryClone()
@@ -143,6 +147,8 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         !new File(source.toFile(), '.git/FETCH_HEAD').exists()
     }
 
+    // Scenario: git/git-task-persistence / History rewrite aborts
+    // Scenario: git/git-task-persistence / Rewritten history is refused at the boundary
     def "FR5: rewritten history inside the box is refused by the harvest itself and the factory ref is unchanged"() {
         given: 'one harvested commit, then an in-box amend of that same tip'
         def source = factoryClone()
@@ -160,6 +166,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         gitOutput(source, 'rev-parse', 'refs/heads/' + BRANCH) == harvested
     }
 
+    // Scenario: git/git-task-persistence / Hooks do not cross the boundary
     def "FR5: hooks installed inside the box never become active in the factory clone"() {
         given: 'a poison pre-commit hook installed in the in-box clone'
         def source = factoryClone()
@@ -175,6 +182,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         !new File(source.toFile(), '.git/hooks/pre-commit').exists()
     }
 
+    // Scenario: git/git-task-persistence / Volume survives a dead container
     def "FR6: a surviving stopped container is reattached and its leftovers salvaged onto the branch"() {
         given: 'uncommitted in-box work, then the container stops (kept environment / dead process)'
         def source = factoryClone()
@@ -194,6 +202,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         gitOutput(source, 'log', '-1', '--format=%s', BRANCH) == 'gnomish: salvage'
     }
 
+    // Scenario: git/git-task-persistence / Environment lost entirely
     def "FR6: a fully lost environment degrades salvage to a no-op and resume materializes fresh from the branch"() {
         given: 'harvested work, then container and volume vanish behind the adapter'
         def source = factoryClone()
@@ -223,6 +232,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         inBox(e2, 'test ! -f lost.txt && echo gone') == 'gone'
     }
 
+    // Scenario: git/git-task-persistence / Another instance resumes from origin
     def "M4: a second factory instance resumes from the branch alone via origin"() {
         given: 'instance A harvests gnome work and pushes to a bare origin'
         def origin = initBareRepo(tempDir, 'origin.git')

@@ -47,8 +47,8 @@ final class TakeWorkRouter {
         // One classification decides the route (FR2 of harden-task-branch-contract): the branch is
         // read once, named once, and every path below — fresh, resume, reconcile — is a case of
         // that one name rather than a predicate of its own. A lookup that could not reach origin
-        // throws from here (FR6), aborting the take through the crash-abort protocol, which
-        // releases the claim rather than forking a second branch for a task that already has one.
+        // throws from here (FR6) rather than forking a second branch for a task that already has
+        // one; TakeClaimAndWork releases the claim on it outside the abort accounting (F6).
         BranchShape shape = wiring.git().branches().classifyShape(order.run().cloneDir(), taskId);
         if (shape instanceof BranchShape.Bare) {
             return freshClaim(order);

@@ -67,6 +67,7 @@ class OperatorLogIsolationSpec extends Specification {
     }
 
     // FR11: a booted Spring context routes the suite's lines to the build directory
+    // Scenario: observability/factory-logging / Test suite leaves the operator log untouched
     def "a line logged from a booted context lands in the build directory, not the operator's log"() {
         given: 'a marker no other run can have written'
         String marker = "operator-log-isolation-${UUID.randomUUID()}"
@@ -85,6 +86,7 @@ class OperatorLogIsolationSpec extends Specification {
     // The repository under test is exempt: a factory that builds itself checks this repository out
     // into a worktree under its own home, so the suite's build directory lives there too — and it
     // is the suite's own output, not a file of the operator's.
+    // Scenario: observability/factory-logging / Test suite leaves the operator log untouched
     def "no appender attached to the booted root logger writes under the operator's .gnomish directory"() {
         given:
         Path repository = RepoSourceTree.repoRoot().toAbsolutePath().normalize()

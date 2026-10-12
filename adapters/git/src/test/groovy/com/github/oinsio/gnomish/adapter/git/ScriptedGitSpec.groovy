@@ -59,6 +59,7 @@ class ScriptedGitSpec extends Specification {
         thrown(AssertionError)
     }
 
+    // Scenario: build/quality-gates / The fake is as strict as the table was
     def "FR27: an invocation no row matches throws, naming its argv, and is still logged"() {
         given:
         def git = new ScriptedGit().answer(['fetch'], 0)

@@ -37,6 +37,7 @@ class RemoteOutageLedgerWriterSpec extends Specification implements RotatingLedg
         Files.exists(file) ? Files.readAllLines(file) : []
     }
 
+    // Scenario: observability/serve-observability / One line per outage
     def "one remoteOutage line is appended per closed outage"() {
         given:
         def outage = new RemoteOutageClosedOutage(

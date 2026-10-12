@@ -144,6 +144,7 @@ class FeedAutomatonViewSpec extends Specification {
         view.since() == expectedTransitionAt
     }
 
+    // Scenario: observability/serve-observability / Full state without poll freshness
     def "the view reports FULL while the automaton is blocked waiting for a free slot"() {
         given: 'a single-slot ledger already fully occupied before the automaton ever runs'
         def busy = new TaskRef('github:o/r#busy')

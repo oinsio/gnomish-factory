@@ -52,6 +52,7 @@ class SweepLedgerWriterSpec extends Specification implements RotatingLedgerAppen
     }
 
     // NFR-O2: every stop and dispose becomes one line carrying object, role, task, reason, age.
+    // Scenario: observability/serve-observability / History answers "what was cleaned yesterday"
     def "an acting verdict becomes one sweepAction line"() {
         when:
         writer().onVerdict(verdict(SweepVerdictCategory.STOPPED_ORPHAN))
@@ -83,6 +84,7 @@ class SweepLedgerWriterSpec extends Specification implements RotatingLedgerAppen
 
     // NFR-O2: "untouched objects SHALL never be itemized in the ledger" — an hourly sweep over a
     //     busy host must cost one line per tick, not one per container.
+    // Scenario: observability/serve-observability / Hourly ticks do not flood the ledger
     def "an untouched verdict writes nothing"() {
         when:
         writer().onVerdict(verdict(category))
@@ -99,6 +101,8 @@ class SweepLedgerWriterSpec extends Specification implements RotatingLedgerAppen
     }
 
     // NFR-O2: the tick line carries ALL six counts, including the untouched ones.
+    // Scenario: observability/serve-observability / History answers "what was cleaned yesterday"
+    // Scenario: observability/serve-observability / Hourly ticks do not flood the ledger
     def "a completed tick becomes one sweepTick line carrying every count"() {
         given:
         def record = new SweepTickRecord(

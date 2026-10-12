@@ -293,3 +293,7 @@ function and checked against a recorded snapshot.
   and takes its usage shape from here (its own usage accounting is withdrawn).
   `supervise-daemon-loops-and-embed-dashboard` is sequenced before this change (its
   `stage-engine` delta is the base the telemetry requirement here is layered on).
+- Sequenced after `tighten-spec-contract`: every MODIFIED block (`pipeline-config`,
+  `git-task-persistence`, `stage-engine`, `status-report`, `task-inspection`) is layered on that
+  change's text, which must sync first; `add-command-executor`'s `pipeline-config` block is
+  layered on this change's.

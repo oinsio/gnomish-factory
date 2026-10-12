@@ -87,6 +87,8 @@ class DecisionNeededSpec extends Specification {
     // FR6: an executor DecisionNeeded escalates as Escalated(DecisionNeeded) carrying the
     //     question and options verbatim, WITHOUT burning an attempt (attemptsUsed unchanged),
     //     while the round IS recorded (its executor usage, no check results — FR13).
+    // Scenario: pipeline/stage-engine / Undecidable choice
+    // Scenario: pipeline/stage-engine / Round result is explicit
     def "a DecisionNeeded round escalates without burning an attempt and records the round"() {
         given: 'a stage whose executor asks a human instead of completing'
         def stageDef = stage('build', 5, [builtin('files_exist')])

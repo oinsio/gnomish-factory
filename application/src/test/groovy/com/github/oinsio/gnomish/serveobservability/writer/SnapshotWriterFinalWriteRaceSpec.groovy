@@ -100,6 +100,7 @@ class SnapshotWriterFinalWriteRaceSpec extends Specification {
 
     // FR7, M5 (serve-observability "Death racing the final write"): a stop that cuts the backoff
     //     short leaves the final write the last one, and returns without waiting the backoff out.
+    // Scenario: observability/serve-observability / Death racing the final write
     def "FR7, M5: a final write during a respawn backoff the stop cuts short is the last write"() {
         given: 'a writer whose thread died and whose respawn waits in a backoff a stop can cut short'
         def target = tempDir.resolve('snapshot.json')
@@ -127,6 +128,7 @@ class SnapshotWriterFinalWriteRaceSpec extends Specification {
 
     // FR7, M5 (design D4, D5): the backoff runs to its end after the stop began — the handler's
     //     phase 3 must see the stop — and the final write waits for the dead thread's handler first.
+    // Scenario: observability/serve-observability / Death racing the final write
     def "FR7, M5: a final write racing a backoff that outlives the stop is still the last write"() {
         given: 'a writer whose thread died and whose respawn waits in a backoff no stop can cut short'
         def target = tempDir.resolve('snapshot.json')
@@ -159,6 +161,7 @@ class SnapshotWriterFinalWriteRaceSpec extends Specification {
     //     run is one interval (Unbounded(interval), capped at MAX_BACKOFF), so the respawned worker's
     //     startup write lands within two intervals of the death on the writer's own virtual clock,
     //     and the dashboard classifies the snapshot as fresh at that moment.
+    // Scenario: observability/serve-observability / Writer death is not a dead daemon
     def "FR7: a single writer death is followed by a write within two intervals on virtual time"() {
         given: 'a writer on a virtual clock that only the respawn backoff advances'
         def target = tempDir.resolve('snapshot.json')

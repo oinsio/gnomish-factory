@@ -86,6 +86,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
     // FR13, M3: status against a branch not yet fetched locally exercises the narrow-fetch path
     // and mutates nothing else in the clone.
+    // Scenario: cli/task-inspection / Narrow fetch only
     def "M3, FR13: gnomish status on a not-yet-fetched task branch only creates the tracking ref"() {
         given:
         assert !trackingRefExists()
@@ -111,6 +112,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
     }
 
     // FR14, M3: same guarantee for usage.
+    // Scenario: cli/task-inspection / Narrow fetch only
     def "M3, FR14: gnomish usage on a not-yet-fetched task branch only creates the tracking ref"() {
         given:
         assert !trackingRefExists()

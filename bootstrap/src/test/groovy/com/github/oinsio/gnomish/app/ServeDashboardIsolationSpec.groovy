@@ -87,6 +87,7 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
     }
 
     // FR10, NFR-R1 (factory-serve "Board outage is not a daemon tracker failure"), D11.
+    // Scenario: serve/factory-serve / Board outage is not a daemon tracker failure
     def "NFR-R1: board reads failing for the whole run leave the daemon's tracker health clean while it delivers"() {
         given: 'a board reader whose every read fails'
         def boardFailures = new AtomicInteger()
@@ -129,6 +130,7 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
     }
 
     // FR10, NFR-R1, UX4 (factory-serve "Disabled dashboard, working daemon"), D7: Bounded 5 in 10 min.
+    // Scenario: serve/factory-serve / Disabled dashboard, working daemon
     def "NFR-R1, UX4: a dashboard disabled by tick Errors leaves the daemon claiming and completing tasks"() {
         given: 'a board reader whose reads throw an Error, which the loop\'s guard lets through, so each kills the worker'
         def boardReads = new AtomicInteger()

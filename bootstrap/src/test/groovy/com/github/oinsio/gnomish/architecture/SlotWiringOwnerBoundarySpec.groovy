@@ -13,9 +13,11 @@ import spock.lang.Specification
  *       collapse-composition-roots), which {@code take} calls once per invocation and {@code serve}
  *       once per daemon, each right after its run's heartbeat exists. A second site would assemble
  *       the wiring from members that are not the run's.
- *   <li>{@code RemoteOutageSignalingBaseRefGit} — built only by {@code RemoteOutageGates.signaling}.
- *       The record is package-private, but {@code TakeSlotRunner} shares its package, so the
- *       slot re-decorating its own git (the old way D6 removed) would still compile.
+ *   <li>{@code RemoteOutageSignalingBaseRefGit} and {@code RemoteOutageSignalingTaskBranchGit} —
+ *       built only by {@code RemoteOutageGates.signaling}, the one owner of the slot's gate
+ *       signals (finding F88 of tighten-spec-contract added the second). The records are
+ *       package-private, but {@code TakeSlotRunner} shares their package, so the slot
+ *       re-decorating its own git (the old way D6 removed) would still compile.
  *   <li>{@code ClaimTenure} — built only by {@code TakeHeartbeat.tenure()}, which pairs the beat
  *       with the SAME flag wired as its lost-claim sink; a tenure from any other flag detaches the
  *       round-boundary consult from the beat. Specs may build their own, so only production is
@@ -35,6 +37,9 @@ class SlotWiringOwnerBoundarySpec extends Specification {
             APP + 'SlotWiringFactory.java',
         ],
         'RemoteOutageSignalingBaseRefGit': [
+            APP + 'serve/RemoteOutageGates.java',
+        ],
+        'RemoteOutageSignalingTaskBranchGit': [
             APP + 'serve/RemoteOutageGates.java',
         ],
         'ClaimTenure': [
@@ -76,6 +81,8 @@ class SlotWiringOwnerBoundarySpec extends Specification {
         'a constructor reference' | 'ClaimTenure' | 'return pairs.map(ClaimTenure::new);' || true
         'the slot re-decorating' | 'RemoteOutageSignalingBaseRefGit' |
                 'git.withBaseRefs(new RemoteOutageSignalingBaseRefGit(git.baseRefs(), gate));' || true
+        'the slot re-decorating its lookup' | 'RemoteOutageSignalingTaskBranchGit' |
+                'git.withBranches(new RemoteOutageSignalingTaskBranchGit(git.branches(), gate));' || true
         'the owner accessor' | 'ClaimTenure' | 'var tenure = heartbeat.tenure();' || false
         'a longer type name' | 'SlotWiring' | 'var parts = new SlotWiringParts(a, b);' || false
         'a javadoc mention' | 'SlotWiring' | ' * Never {@code new SlotWiring(...)} in a constructor.' || false

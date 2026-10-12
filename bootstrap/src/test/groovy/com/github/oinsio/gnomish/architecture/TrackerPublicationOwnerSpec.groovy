@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.architecture
 
 import com.github.oinsio.gnomish.testsupport.CarrierAccessors
 import com.github.oinsio.gnomish.testsupport.CarrierArguments
+import com.github.oinsio.gnomish.testsupport.CarrierSinkScan
 import com.github.oinsio.gnomish.testsupport.JavaCallSites
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import com.tngtech.archunit.core.domain.JavaClasses
@@ -55,7 +56,7 @@ class TrackerPublicationOwnerSpec extends Specification {
     /**
      * The tracker port's text-carrying writes; {@code heartbeat} carries a machine document.
      *
-     * <p>Kept in sync with {@link UntrustedTextSinkGateSpec}: both declare the same regex over
+     * <p>Kept in sync with {@link CarrierSinkScan#TRACKER}: both declare the same regex over
      * the tracker port's text-carrying write method names.
      */
     private static final Pattern TRACKER_WRITE =
@@ -95,6 +96,7 @@ class TrackerPublicationOwnerSpec extends Specification {
     Set<String> carrierAccessors = CarrierAccessors.namesIn(productionClasses)
 
     // FR8: the tracker plane has one exit, and a write that took another one is inert but wrong.
+    // Scenario: verification/verification-hardening / Every tracker write uses the exit
     def "FR8: every tracker publication renders through the comment exit and nothing else"() {
         given: 'every production source, with its comments removed'
         def sources = RepoSourceTree.productionSources()
@@ -117,6 +119,7 @@ class TrackerPublicationOwnerSpec extends Specification {
     }
 
     // D7: the detector is the gate — a green scan by a detector that sees nothing looks identical.
+    // Scenario: verification/verification-hardening / Every tracker write uses the exit
     def "FR8: a seeded #shape is detected"() {
         expect:
         violations("UntrustedText report = capture();\n${code}", 'Seeded.java', ['stderr'] as Set) ==

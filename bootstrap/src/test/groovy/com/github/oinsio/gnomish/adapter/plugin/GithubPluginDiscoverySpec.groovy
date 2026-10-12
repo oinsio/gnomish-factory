@@ -30,6 +30,7 @@ class GithubPluginDiscoverySpec extends Specification {
 
     // FR12: "the github tracker and check providers are discovered through ServiceLoader" — from
     //     the general registry, keyed by the discriminator each declares for itself.
+    // Scenario: plugin/github-plugin / GitHub is discovered like any third-party plugin
     def "both github providers arrive in the discovered registry under their own discriminator"() {
         when:
         def trackers = TrackerAdapterDiscovery.discover()
@@ -46,6 +47,7 @@ class GithubPluginDiscoverySpec extends Specification {
 
     // FR12: what makes them discoverable is a service file inside the github artifact itself —
     //     the registration a third-party jar carries, in the same place, under the same SPI name.
+    // Scenario: plugin/github-plugin / GitHub is discovered like any third-party plugin
     def "the #spi registration comes from the github artifact, as a plugin jar's would"() {
         when: 'every registration of this SPI visible on the classpath'
         def registrations = getClass().classLoader.getResources('META-INF/services/' + spi.name).toList()

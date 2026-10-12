@@ -14,7 +14,7 @@ An executor run SHALL be requested in exactly one role: `transform` (change the 
 the branch; vocabulary reserved, not executed in this change). The request SHALL carry role,
 workspace, abstract policy, role inputs, settings, bounds, prior feedback and an optional
 continuation; role inputs differ, everything else is common.
-<!-- implements FR1, FR11 of define-executor-contract -->
+**Implements**: FR1, FR11 of define-executor-contract
 
 #### Scenario: Role selects the inputs, not the shape
 - **WHEN** a `verdict` request and a `transform` request are serialized for the same executor
@@ -29,7 +29,7 @@ continuation; role inputs differ, everything else is common.
 Every result SHALL carry one status: `completed`; `failed` with class `quality`,
 `infrastructure` or `limit`; or `pending` with an opaque key. No other status token SHALL be
 accepted, and an unknown token SHALL be read as `failed/infrastructure` naming the token.
-<!-- implements FR2, NFR-R3 of define-executor-contract -->
+**Implements**: FR2, NFR-R3 of define-executor-contract
 
 #### Scenario: Status tokens round-trip
 - **WHEN** every status and class constant is written to the wire and read back
@@ -48,7 +48,7 @@ A result MAY carry one answer: `verdict` (SARIF 2.1.0 `runs[].results[]`; pass/f
 the engine from result levels against the check's threshold), `select` (`chosen`, optional
 `ranking`, `rationale`), or `decision-request` (`question`, at least two `options`, optional
 continuation key). A malformed answer SHALL never be read as a pass.
-<!-- implements FR3, NFR-S2 of define-executor-contract -->
+**Implements**: FR3, NFR-S2 of define-executor-contract
 
 #### Scenario: Verdict pass is derived, not declared
 - **WHEN** a `verdict` answer carries only `warning`-level results and the check's threshold is
@@ -70,7 +70,7 @@ supported roles, capabilities (`poll`, `cancel`, `streams_progress`, `resumable`
 Schema for its settings, credential variable names, egress hosts, its config-directory
 variable, the flags that disable repo-local policy sources, and its policy enforcement level
 (`OS_SANDBOX`, `TOOL_GATE`, `AGENT_ASKS`, `PROMPT_ONLY`).
-<!-- implements FR4, FR13 of define-executor-contract -->
+**Implements**: FR4, FR13 of define-executor-contract
 
 #### Scenario: Version mismatch is a load error
 - **WHEN** an executor describes `protocolVersion: 2` and the factory speaks only `1`
@@ -87,7 +87,7 @@ variable, the flags that disable repo-local policy sources, and its policy enfor
 ### Requirement: Additive evolution
 Both sides SHALL ignore unknown fields; a field SHALL never be renamed, retyped or removed
 within a protocol version; every enum SHALL document its unknown-token arm.
-<!-- implements FR4, NFR-R3 of define-executor-contract -->
+**Implements**: FR4, NFR-R3 of define-executor-contract
 
 #### Scenario: Older executor survives a new optional field
 - **WHEN** the factory adds an optional request field and an executor built before it runs
@@ -102,7 +102,7 @@ The request policy SHALL be one of `readOnly`, `writeExactly(path)`, `workspaceW
 executor compiles it to its own mechanism. After a `verdict` or `decision` run the factory
 SHALL verify the working copy is unchanged; a change SHALL resolve the run as
 `failed/infrastructure` naming the violated policy.
-<!-- implements FR11, NFR-S4 of define-executor-contract -->
+**Implements**: FR11, NFR-S4 of define-executor-contract
 
 #### Scenario: Judge that wrote a file is refused
 - **WHEN** a `verdict` run leaves a modified file in the working copy
@@ -116,7 +116,7 @@ SHALL verify the working copy is unchanged; a change SHALL resolve the run as
 Usage SHALL carry provenance `REPORTED` or `ABSENT`; absent SHALL never render as zero. Bounds
 (turns, tokens, money, three time bounds) SHALL be passed in the request as hints; the factory
 enforces time bounds itself and the ledger enforces budget after the round.
-<!-- implements NFR-O1, NFR-R2, NFR-C1 of define-executor-contract -->
+**Implements**: NFR-O1, NFR-R2, NFR-C1 of define-executor-contract
 
 #### Scenario: Absent usage under a money bound
 - **WHEN** a stage with a money bound names an executor whose describe reports no usage

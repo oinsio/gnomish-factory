@@ -48,6 +48,7 @@ class AgentRoundResultExtractorSpec extends Specification {
     }
 
     // FR6, D3: the subagent-round fixture's tools aggregate reflects only the top-level Task call
+    // Scenario: executor/agent-executor / Subagent internals excluded
     def "aggregates only the top-level tool call from the subagent-round fixture"() {
         given: 'the subagent-round fixture parsed into timestamped events'
         def events = parser.parse(FakeAgentScenarioReader.readerOf('subagent-round'))
@@ -63,6 +64,7 @@ class AgentRoundResultExtractorSpec extends Specification {
     }
 
     // FR6, D3: an orphaned top-level tool_use (process died) gets duration to the supplied roundEnd
+    // Scenario: executor/agent-executor / Orphaned call gets a real duration
     def "computes an orphaned top-level tool call's duration to the supplied roundEnd"() {
         given: 'the premature-death fixture parsed into timestamped events (no tool_result, no result event)'
         def events = parser.parse(FakeAgentScenarioReader.readerOf('premature-death'))
@@ -83,6 +85,7 @@ class AgentRoundResultExtractorSpec extends Specification {
     }
 
     // FR4, NFR-R1, D3: no result event in the stream is an infrastructure failure
+    // Scenario: executor/agent-executor / A success line without a result field is still missing
     def "throws MissingResultEventException for the missing-result-event fixture"() {
         given: 'the missing-result-event fixture parsed into events (stream ends without a result)'
         def events = parser.parse(FakeAgentScenarioReader.readerOf('missing-result-event'))

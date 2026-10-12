@@ -70,6 +70,7 @@ class ConfigLevelsSpec extends Specification {
     }
 
     // FR6: a source's spelling is matched as Spring binds it; subtrees cover the keys below
+    // Scenario: operator/operator-configuration / A plugin subtree takes its root's level
     def "a property is found under relaxed names and below a subtree"() {
         expect:
         levels.find(property).map { it.toString() }.orElse(null) == key
@@ -100,6 +101,7 @@ class ConfigLevelsSpec extends Specification {
     }
 
     // M2, FR6: a key without a level cannot be placed
+    // Scenario: operator/operator-configuration / A key's level is declared beside its definition
     def "a component without a level is refused naming the key"() {
         when:
         ConfigLevels.of([Unlevelled])

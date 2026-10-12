@@ -66,6 +66,7 @@ class DashboardCommandWatchSpec extends Specification implements ApplicationArgu
     }
 
     @Timeout(5)
+    // Scenario: observability/dashboard-page / Standalone renderer gives up
     def "FR9: a --watch whose loop gives up ends the command with exit status 1"() {
         given: 'every render-cadence wait kills the loop thread and every backoff returns, so the Bounded policy gives up'
         def command = newCommand(DashboardCommandFixture.givingUpSleeper())

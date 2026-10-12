@@ -38,6 +38,7 @@ class GithubRetryVisibilitySpec extends Specification {
         wireMock.stop()
     }
 
+    // Scenario: observability/factory-logging / Retry storm is visible
     def "FR5: every retry of a rate-limited call names its attempt and its wait"() {
         given:
         wireMock.stubFor(get(urlEqualTo(PATH)).willReturn(aResponse().withStatus(429).withBody('{}')))
@@ -70,6 +71,7 @@ class GithubRetryVisibilitySpec extends Specification {
         response.statusCode() == 503
     }
 
+    // Scenario: observability/factory-logging / Retry storm is visible
     def "FR5: a transport failure the budget cannot outlast names what it gave up on"() {
         given: 'a server that is not there at all — every attempt is a connect failure'
         def deadUrl = wireMock.baseUrl()

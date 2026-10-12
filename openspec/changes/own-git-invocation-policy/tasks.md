@@ -200,3 +200,9 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 - [ ] 7.4 Integration check: root `./gradlew check` green; the `openspec validate
       own-git-invocation-policy` result is clean; an FR/NFR/UX grep shows every proposal ID
       referenced by at least one spec or code unit (`traceability.md`).
+
+## Follow-ups from tighten-spec-contract
+
+- F68: the edge `:gitobjects` → `:gittransfer` forces reach entries in every module that reaches `:gitobjects` (`:application`, the adapters, `:bootstrap`), not only `:gitobjects`' own (task 2.2); rewrite the enumerations of `A transitive leaf is listed by every module that reaches it` and `A reach entry names the edge it arrives through` from the build files when this change lands.
+- F69: renumber the planned ADR `docs/adr/0011-git-invocation-policy.md` — 0011 is taken by `0011-operator-configuration-levels.md`, and `fix-docker-exec-env-argv` plans another 0011 (text-only, before apply).
+- F70: narrow task 7.3's first hand-off to the note that argv records carry the policy pairs — `add-subprocess-access-log` no longer carries a `module-layering` delta (F63), so there is nothing for its re-layering to keep.

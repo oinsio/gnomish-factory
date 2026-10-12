@@ -49,6 +49,7 @@ class DashboardBoardCacheSpec extends Specification {
         cache.dueFor(T0.plus(Duration.ofSeconds(60)), CADENCE)
     }
 
+    // Scenario: observability/dashboard-page / Render cycles between board refreshes reuse the cache
     def "cached() reuses the last model and fetch time with no failure notice between refreshes"() {
         given:
         def cache = new DashboardBoardCache()
@@ -87,6 +88,8 @@ class DashboardBoardCacheSpec extends Specification {
         events[0].throwableProxy.message == 'tracker unreachable'
     }
 
+    // Scenario: observability/dashboard-page / Tracker failure keeps the cached board
+    // Scenario: observability/dashboard-page / Outage during the wall display
     def "a refresh failure after a prior success keeps the cached model, fetch time, and the new failure"() {
         given:
         def cache = new DashboardBoardCache()

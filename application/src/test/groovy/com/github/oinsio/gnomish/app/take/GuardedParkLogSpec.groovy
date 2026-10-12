@@ -85,6 +85,7 @@ class GuardedParkLogSpec extends Specification {
         logs.detach()
     }
 
+    // Scenario: lifecycle/claim-heartbeat / Zombie park is stopped by the pre-write check
     def "a claim held by another instance leaves a coded WARN and skips both the park and its receipt"() {
         given:
         def receipts = 0

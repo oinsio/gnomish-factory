@@ -85,6 +85,7 @@ class Slf4jSweepVerdictListenerSpec extends Specification {
 
     // FR12: the level is the verdict's own category, decided once — a data-driven table so a new
     //     category cannot be added without a row here saying what an operator should do about it.
+    // Scenario: sandbox/sandbox-lifecycle / Sweep actions log at INFO
     def "FR12: #category logs at #expected"() {
         when:
         def events = capture {
@@ -107,6 +108,7 @@ class Slf4jSweepVerdictListenerSpec extends Specification {
 
     // sandbox-lifecycle "Quiet tick, loud degradation": the whole point of the grading is that one
     //     bad object in an otherwise healthy tick is the only thing the operator plane shows.
+    // Scenario: sandbox/sandbox-lifecycle / Quiet tick, loud degradation
     def "FR12: a quiet tick stays off the console while its one degradation does not"() {
         when: 'a tick over three living, young objects and one the sweep could not read'
         def events = capture(Level.INFO) {

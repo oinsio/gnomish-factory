@@ -51,6 +51,7 @@ class SupervisedLoopStopConcurrencySpec extends Specification {
     }
 
     // FR4, NFR-R2 (daemon-supervision "Stop during a respawn backoff").
+    // Scenario: serve/daemon-supervision / Stop during a respawn backoff
     def "a stop during a respawn backoff cuts it short and spawns no thread"() {
         given:
         def backoff = new LatchedSleeper(true)
@@ -72,6 +73,7 @@ class SupervisedLoopStopConcurrencySpec extends Specification {
 
     // FR4, NFR-R2 (daemon-supervision "Waiters are not blocked by a backoff"): even a backoff no
     //     stop can cut short holds no lock a stopping thread needs, and phase 3 still sees the stop.
+    // Scenario: serve/daemon-supervision / Waiters are not blocked by a backoff
     def "a stop returns promptly while the death handler sits in a latched backoff"() {
         given:
         def backoff = new LatchedSleeper(false)
@@ -93,6 +95,7 @@ class SupervisedLoopStopConcurrencySpec extends Specification {
     }
 
     // FR4, NFR-R2 (daemon-supervision "Joining stop waits for the respawned thread").
+    // Scenario: serve/daemon-supervision / Joining stop waits for the respawned thread
     def "a joining stop returns only after the respawned thread exits"() {
         given:
         def backoff = new LatchedSleeper(true)
@@ -129,6 +132,7 @@ class SupervisedLoopStopConcurrencySpec extends Specification {
 
     // FR4, NFR-R2: released backoff and joining stop start together; whichever wins, the call
     //     returns with every thread the loop started dead, and no tick runs after it returns.
+    // Scenario: serve/daemon-supervision / Joining stop waits for the respawned thread
     def "a joining stop racing a respawn leaves no thread alive and no tick after it"() {
         expect:
         (1..RACES).every { raceOnce() }

@@ -36,6 +36,7 @@ class SupervisedLoopStopRunConcurrencySpec extends Specification {
     }
 
     // FR4, NFR-R2 (daemon-supervision "Stop during a run lets the run finish without a warning").
+    // Scenario: serve/daemon-supervision / Stop during a run lets the run finish without a warning
     def "a stop during a tick blocked on a latch lets it finish uninterrupted, quietly, as the last"() {
         given:
         def wait = new LatchedSleeper(true)

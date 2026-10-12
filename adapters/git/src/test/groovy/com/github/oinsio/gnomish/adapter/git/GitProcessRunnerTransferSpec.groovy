@@ -50,6 +50,8 @@ class GitProcessRunnerTransferSpec extends Specification {
         Files.deleteIfExists(StandIn.log(recordingGit))
     }
 
+    // Scenario: git/git-task-persistence / The refresh runs under the network bounds and the clone lock
+    // Scenario: git/git-transfer / An owned transfer runs
     def "FR8: the typed entry runs the owner's fetch through the bounded, stall-detected path"() {
         given:
         def transfer = GitTransfer.fetch(TransferSource.ORIGIN, new Refspec(REFSPEC))
@@ -62,6 +64,7 @@ class GitProcessRunnerTransferSpec extends Specification {
         recorded('argv') == '-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 ' + transfer.argv().join(' ')
     }
 
+    // Scenario: git/git-transfer / Inherited environment cannot inject configuration
     def "FR6, NFR-S2: the allowlist reaches the child and the inherited per-process configuration does not"() {
         given: 'the test JVM itself carries an inherited per-process configuration (the build sets it)'
         assert System.getenv('GIT_CONFIG_COUNT') == '1'
@@ -136,6 +139,7 @@ class GitProcessRunnerTransferSpec extends Specification {
         environment == [GIT_ALLOW_PROTOCOL: 'ext', UNRELATED: 'kept', GIT_CONFIG_GLOBAL: '/dev/null']
     }
 
+    // Scenario: git/git-transfer / A hand-built fetch is refused before it runs
     def "FR8: the untyped entry refuses #args before any process is launched"() {
         when:
         recordingRunner().run(tempDir, args as String[])

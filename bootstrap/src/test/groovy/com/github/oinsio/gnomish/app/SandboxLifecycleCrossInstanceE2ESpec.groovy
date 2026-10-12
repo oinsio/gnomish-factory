@@ -93,6 +93,8 @@ class SandboxLifecycleCrossInstanceE2ESpec extends Specification implements Bare
     // FR8, M3: the cross-instance guard is the oracle, not the listing. Instance A's sweep lists
     // instance B's box (same project identity, same Docker host) and spares it solely because the
     // verdict names B's claim as fresh.
+    // Scenario: serve/factory-serve / Dead sibling reclaimed without its reboot
+    // Scenario: sandbox/sandbox-lifecycle / Freshly claimed task is protected
     def "a sibling instance's claimed box survives this instance's sweep, and is stopped once the claim is gone"() {
         given: 'instance B has a running box for a task it claims, on the shared project identity'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')

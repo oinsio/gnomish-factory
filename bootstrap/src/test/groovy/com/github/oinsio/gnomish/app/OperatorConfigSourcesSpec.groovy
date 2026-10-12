@@ -34,6 +34,7 @@ class OperatorConfigSourcesSpec extends Specification {
     }
 
     // FR5: "Project overrides host"
+    // Scenario: operator/operator-configuration / Project overrides host
     def "FR5: the project file overrides the host file"() {
         given:
         harness.hostConfig('factory:\n  git-network-timeout: 5m\n')
@@ -59,6 +60,7 @@ class OperatorConfigSourcesSpec extends Specification {
     }
 
     // FR5: "Command line overrides the project for a permitted key"
+    // Scenario: operator/operator-configuration / Command line overrides the project for a permitted key
     def "FR5: the command line overrides the project file, #form"() {
         given:
         harness.projectConfig('widgets', 'factory:\n  serve:\n    slots: 2\n')
@@ -77,6 +79,7 @@ class OperatorConfigSourcesSpec extends Specification {
     }
 
     // NFR-P1: "Configuration assembly reads each file once"
+    // Scenario: operator/operator-configuration / Configuration assembly reads each file once
     def "NFR-P1: the host file and every project file are read exactly once"() {
         given: 'a host file and three registered projects'
         harness.hostConfig('factory:\n  git-network-timeout: 5m\n')

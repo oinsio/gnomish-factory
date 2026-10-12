@@ -68,6 +68,7 @@ class JvmProxyEgressE2ESpec extends Specification implements BareGitRepoFixture 
         }
     }
 
+    // Scenario: sandbox/sandbox-egress / Gradle build flows through the guard
     def "FR7: a JVM ignoring proxy env vars still reaches an allowlisted host through the guard"() {
         when: 'the box JVM GETs the allowlisted target — routed only by the baked -Dhttp.proxyHost'
         def out = probe("http://${targetIp}/")
@@ -76,6 +77,7 @@ class JvmProxyEgressE2ESpec extends Specification implements BareGitRepoFixture 
         out.contains('HTTP 200')
     }
 
+    // Scenario: sandbox/sandbox-egress / Non-allowlisted host is denied
     def "FR7: the same JVM is denied a non-allowlisted host by the guard's own 403"() {
         when: 'the box JVM GETs a non-allowlisted host'
         def out = probe("http://${EnvironmentSelfCheck.DENIED_PROBE_HOST}/")

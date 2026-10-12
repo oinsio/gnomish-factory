@@ -38,6 +38,7 @@ class PipelineMapperSpec extends Specification implements PipelineMapperFixtureS
 
     // A representative full mapping: schemaVersion, both input kinds, all four
     // verify-check types, opaque settings, default+override resolution, order
+    // Scenario: pipeline/pipeline-config / Valid configuration loads
     def "maps a full config into a field-by-field equal PipelineDefinition"() {
         given: 'a config with a default attempt limit and two ordered stages'
         def cfg = config('1', 3)

@@ -51,6 +51,7 @@ class FetchRefusalOutcomeSpec extends Specification implements BareGitRepoFixtur
         new BaseRefresh(refusingRunner(), VirtualTimeGitRetries.gitInfrastructure())
     }
 
+    // Scenario: git/git-task-persistence / A base object failing validation parks the task
     def "FR5: a #kind base whose fetch fails validation is refused, naming the object, with no probe"() {
         given: 'the clone is behind origin, so the refresh has to fetch'
         assert gitExitCode(clone, 'tag', '-d', 'v1.0') == 0

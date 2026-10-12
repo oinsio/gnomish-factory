@@ -114,6 +114,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         !Files.exists(env.clone.resolve('.git/FETCH_HEAD'))
     }
 
+    // Scenario: lifecycle/task-branch-contract / Local-ahead is kept, local-behind fast-forwards
     def "local behind origin fast-forwards the worktree and discards uncommitted leftovers"() {
         given: 'a worktree at the old tip, plus another instance pushing a new commit to origin'
         def env = setUpClonedBranch()
@@ -136,6 +137,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         !Files.exists(env.worktree.resolve('leftover.txt'))
     }
 
+    // Scenario: lifecycle/task-branch-contract / Local-ahead is kept, local-behind fast-forwards
     def "local ahead of origin (unpushed commits) reports AHEAD and leaves the worktree untouched"() {
         given: 'the worktree has a local commit that never reached origin'
         def env = setUpClonedBranch()
@@ -153,6 +155,9 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         Files.exists(env.worktree.resolve('c.txt'))
     }
 
+    // Scenario: git/git-task-persistence / Diverged histories resolve automatically under the claim
+    // Scenario: tracker/tracker-take / Stale local branch is discarded and work continues
+    // Scenario: lifecycle/task-branch-contract / Divergence resolves automatically under the lease
     def "FR8: diverged histories discard the local line automatically and continue from origin"() {
         given: 'local and origin each gained an independent commit since their common ancestor'
         def env = setUpClonedBranch()
@@ -178,6 +183,8 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
     // legitimate lease holders — so it is gated on that protocol being in force for this task. On a
     // claimless path (gnomish run --resume: no tracker, no claim) the premise does not hold and the
     // local line may be the operator's only copy, so the reconciler fails closed.
+    // Scenario: git/git-task-persistence / A claimless resume refuses the discard
+    // Scenario: lifecycle/task-branch-contract / A diverged pair with no live claim is not discarded
     def "FR8: a diverged pair with no tenure on the task refuses instead of discarding the local line"() {
         given: 'local and origin each gained an independent commit since their common ancestor'
         def env = setUpClonedBranch()
@@ -203,6 +210,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         !Files.exists(env.worktree.resolve('origin-only.txt'))
     }
 
+    // Scenario: git/git-task-persistence / A claimless resume refuses the discard
     def "FR8: container mode is gated the same way — no tenure, no ref-only discard"() {
         given: 'the clone holds the diverged branch as a ref only, with no host worktree'
         def env = setUpClonedBranch()
@@ -265,6 +273,9 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         discard.formattedMessage.contains('epoch=7')
     }
 
+    // Scenario: git/git-task-persistence / The CAS reset is the only non-fast-forward write
+    // Scenario: git/git-task-persistence / The reset never touches origin
+    // Scenario: lifecycle/task-branch-contract / Origin history is never rewritten
     def "NFR-R3: the discard never touches origin — only the local ref moves"() {
         given:
         def env = setUpClonedBranch()
@@ -318,6 +329,9 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         .answer(['rev-parse'], 0, 'a' * 40 + '\n')
     }
 
+    // Scenario: git/git-task-persistence / A moved tip fails the CAS reset
+    // Scenario: tracker/tracker-take / The discard is a compare-and-swap on the local ref
+    // Scenario: lifecycle/task-branch-contract / Divergence resolves automatically under the lease
     def "FR8: a local tip that keeps moving loses the compare-and-swap and is never overwritten blindly"() {
         given: 'a git whose ref swap always loses, standing in for a second writer on the branch'
         def losingSwapGit = diverged(new ScriptedGit().answer(['update-ref'], 1, '', CANNOT_LOCK_REF + '\n'))

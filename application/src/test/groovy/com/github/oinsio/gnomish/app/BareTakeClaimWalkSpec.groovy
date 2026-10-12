@@ -73,9 +73,49 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
 
     // FR10, D2: an empty feed is an EmptyQueue — the daemon's "nothing to do, idle" signal, which
     // must not be confused with any of the blocked cases below.
+    // F76: the no-op names its reason in one INFO line, since EmptyQueue itself carries none.
     def "reports an empty queue when the feed has nothing at all"() {
+        given:
+        def capture = LogCaptureSupport.attach(BareTakeClaimWalk, Level.INFO)
+
         expect:
         resolve(walk(), []) instanceof TakeResult.EmptyQueue
+
+        and: 'one INFO line names the reason: the ready queue is empty'
+        capture.list*.level == [Level.INFO]
+        capture.list*.formattedMessage == [
+            'bare take: nothing eligible: the ready queue is empty'
+        ]
+
+        cleanup:
+        capture?.detach()
+    }
+
+    // FR10, F76: every ready task is inside its abort backoff — the same EmptyQueue, but the INFO line
+    // tells it apart from a structurally empty queue and counts the hidden tasks.
+    def "reports an empty queue naming the backoff when every ready task is backed off"() {
+        given:
+        def capture = LogCaptureSupport.attach(BareTakeClaimWalk, Level.INFO)
+        def backedOff = new AbortFacts(1, NOW - Duration.ofSeconds(30))
+
+        when:
+        def result = resolve(walk(), [
+            new ReadyTask(new TaskRef('github:o/r#1'), backedOff, false, false, UntrustedText.tracker('t')),
+            new ReadyTask(new TaskRef('github:o/r#2'), backedOff, true, false, UntrustedText.tracker('t'))
+        ])
+
+        then:
+        result instanceof TakeResult.EmptyQueue
+        capture.list*.level == [Level.INFO]
+        capture.list*.formattedMessage == [
+            'bare take: nothing eligible: every one of 2 ready task(s) is inside its abort backoff'
+        ]
+
+        and: 'nothing was claimed'
+        0 * tracker.claim(_, _)
+
+        cleanup:
+        capture?.detach()
     }
 
     // FR6, D2: tasks exist and are backoff-eligible, but the open front is at the WIP limit, so none
@@ -134,6 +174,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
     // FR2 of harden-logging-observability, scenario "Claim is the first correlated line": the
     // second claim path emits the same anchor form the serve feed does, before it dispatches the
     // work — here observable because the dispatch is stopped at its first git call.
+    // Scenario: observability/factory-logging / Claim is the first correlated line
     def "emits the claim anchor before dispatching the claimed task"() {
         given: 'the claim chain is stopped at its first git call, as above'
         def store = Stub(TaskStoreGit) {

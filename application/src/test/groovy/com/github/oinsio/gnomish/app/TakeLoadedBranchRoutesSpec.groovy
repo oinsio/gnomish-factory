@@ -98,6 +98,7 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
     }
 
     // FR9, D3, D12: only an Escalated outcome whose report is an ESCALATION kind is a decision park.
+    // Scenario: git/git-task-persistence / The last escalation outlives the visit and drives no recovery
     def "#label is a decision park: #decision"() {
         expect:
         TakeLoadedBranchRoutes.isEscalationDecision(outcome, report) == decision
@@ -118,6 +119,7 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
 
     // FR4: a returned checkpoint — the gate's own park recorded, its marker cleared — is opened by
     //      the approval write BEFORE the engine runs, and the run continues from the approved state
+    // Scenario: tracker/tracker-take / Returned checkpoint is approved before the run continues
     def "FR4: a returned gate is approved, then continued from the approved state"() {
         given:
         def approved = TaskState.atStageStart('test')
@@ -144,6 +146,8 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
     // FR4, FR11, D8: a gate whose park was never recorded is parked, not run — the owed Paused
     //      outcome is recorded (with its marker), delivered on the tracker as a checkpoint, and the
     //      marker cleared on receipt; nothing is approved, consumed or run
+    // Scenario: tracker/tracker-take / A gate killed before its park is delivered, not run
+    // Scenario: lifecycle/task-branch-contract / A gate with a lost park is re-delivered, never run
     def "FR11: a gate whose park was lost (#label) delivers the park and runs nothing"() {
         given:
         def gated = CheckpointMechanicsFixtures.gatedAt('build')
@@ -180,6 +184,7 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
 
     // FR7, D4: an INFRA-kind return is consumed by the resumed write, carrying the attempt reset,
     //      before the engine runs — and the engine runs from exactly that reset state
+    // Scenario: tracker/tracker-take / A returned infrastructure park is reset before any stage
     def "FR7: an infrastructure return lands the resumed write with the reset, then continues"() {
         given:
         def exhausted = exhaustedAt('build')
@@ -225,6 +230,7 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
 
     // FR7: a bare return of an exhausted stage lands the reset through the resumed write before
     //      the decided resume runs — the reset is never handed over in memory alone
+    // Scenario: tracker/tracker-take / Bare return of an exhausted stage resets once
     def "FR7: a bare AttemptsExhausted return writes the reset before resuming"() {
         given:
         def exhausted = exhaustedAt('build')

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.architecture
 import com.github.oinsio.gnomish.testsupport.CarrierAccessors
 import com.github.oinsio.gnomish.testsupport.CarrierArguments
 import com.github.oinsio.gnomish.testsupport.CarrierConstructors
+import com.github.oinsio.gnomish.testsupport.CarrierSinkScan
 import com.github.oinsio.gnomish.testsupport.JavaCallSites
 import com.github.oinsio.gnomish.testsupport.LogCallSites
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
@@ -11,7 +12,6 @@ import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
 import java.lang.reflect.Modifier
-import java.util.regex.Pattern
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -53,34 +53,8 @@ import spock.lang.Specification
  */
 class UntrustedTextSinkGateSpec extends Specification {
 
-    /** A throwable's own constructor: the message it is built with is a sink like any other. */
-    private static final Pattern THROWABLE = Pattern.compile('new\\s+\\w*(?:Exception|Error|Throwable)\\s*\\(')
-
-    /** The operator's terminal: {@code ConsoleIO.print} and {@code printMachine}. */
-    private static final Pattern CONSOLE = Pattern.compile('\\.print\\w*\\s*\\(')
-
     /**
-     * The tracker port's text-carrying writes.
-     *
-     * <p>Kept in sync with {@link TrackerPublicationOwnerSpec}: both declare the same regex over
-     * the tracker port's text-carrying write method names.
-     */
-    private static final Pattern TRACKER =
-    Pattern.compile('\\.(?:park|finish|declineFinished|acknowledgeDecision|postNote)\\s*\\(')
-
-    /**
-     * Floors on each sink shape, so a broken pattern reports the same empty violation list as a
-     * clean tree. Measured on the tree this gate landed on: 615 throwable constructions, 46
-     * console prints, 39 tracker writes.
-     */
-    private static final Map<Pattern, Integer> SINKS = [
-        (THROWABLE): 400,
-        (CONSOLE): 30,
-        (TRACKER): 25,
-    ]
-
-    /**
-     * Production throwables {@link #THROWABLE} cannot match, each listed with the reason its
+     * Production throwables {@link CarrierSinkScan#THROWABLE} cannot match, each listed with the reason its
      * construction is not a text sink at all. {@code ExecutorFailure} wraps a cause and a denial
      * list — its constructor takes no text, so there is nothing for a carrier to be laundered
      * through. A throwable that carries text must wear one of the three suffixes instead of
@@ -114,6 +88,7 @@ class UntrustedTextSinkGateSpec extends Specification {
     Set<String> carrierThrowables = CarrierConstructors.throwableTypeNamesIn(productionClasses)
 
     // FR7: a carrier handed straight to a sink is the laundering the type exists to make visible.
+    // Scenario: core/untrusted-text / A carrier passed straight to a logger fails the gate
     def "FR7: rule (c): no sink takes a carrier without an exit"() {
         given: 'every production source, with its comments removed'
         def sources = RepoSourceTree.productionSources()
@@ -144,7 +119,7 @@ class UntrustedTextSinkGateSpec extends Specification {
         ])
 
         and: 'and reached every other sink shape too'
-        SINKS.every { shape, floor ->
+        CarrierSinkScan.SINKS.every { shape, floor ->
             JavaCallSites.productionCallsOf(shape).size() >= floor
         }
 
@@ -164,6 +139,7 @@ class UntrustedTextSinkGateSpec extends Specification {
 
     // D2: the detector is the gate — a green scan over a tree with no carriers in it yet would
     //     look identical to a green scan by a detector that cannot see one.
+    // Scenario: core/untrusted-text / A carrier passed straight to a logger fails the gate
     def "FR7: a seeded carrier at a #sink is detected"() {
         expect: 'the site is named — the carrier arrives as an accessor result or as a local'
         violations("UntrustedText detail = capture();\n${code}", 'Seeded.java', ['stderr'] as Set) ==
@@ -395,39 +371,17 @@ class UntrustedTextSinkGateSpec extends Specification {
 
         and: 'and a construction of each is matched, unless the type carries no text to launder'
         throwables.findAll {
-            !THROWABLE.matcher("new ${it}(").find() && !TEXTLESS_THROWABLES.contains(it)
+            !CarrierSinkScan.THROWABLE.matcher("new ${it}(").find() && !TEXTLESS_THROWABLES.contains(it)
         }.toSorted() == []
     }
 
-    /** Whether this call constructs a throwable that declares its detail as untrusted text. */
-    private static boolean declaresCarrierDetail(String call, Set<String> typedThrowables) {
-        def construction = THROWABLE.matcher(call)
-        construction.find() && typedThrowables.contains(construction.group().replaceFirst('^new\\s+', '').trim()[0..-2].trim())
-    }
-
-    /** Every sink call in one already comment-stripped source that takes a carrier as itself. */
+    /** Rule (c) on one already comment-stripped source: {@link CarrierSinkScan#violations}. */
     private static List<String> violations(
             String code,
             String path,
             Set<String> accessors,
             Set<String> typedThrowables = [] as Set,
             Set<String> qualified = [] as Set) {
-        def declared = CarrierArguments.declaredNames(code)
-        def receivers = CarrierArguments.declaredTypes(code)
-        def logged = LogCallSites.inSource(code, path).findAll { call ->
-            JavaCallSites.chainArguments(call.text).any {
-                CarrierArguments.isCarrier(it, accessors, declared, qualified, receivers)
-            }
-        }
-        def written = SINKS.keySet().collectMany {
-            JavaCallSites.callsOf(code, path, it)
-        }.findAll { call ->
-            !declaresCarrierDetail(call.text, typedThrowables) && call.arguments.any {
-                CarrierArguments.isCarrier(it, accessors, declared, qualified, receivers)
-            }
-        }
-        (logged + written).collect {
-            "${it.path}:${it.line}".toString()
-        }.unique().sort()
+        CarrierSinkScan.violations(code, path, accessors, typedThrowables, qualified)
     }
 }

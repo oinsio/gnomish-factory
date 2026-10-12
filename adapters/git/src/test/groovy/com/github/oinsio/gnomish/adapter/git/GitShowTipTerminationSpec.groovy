@@ -47,6 +47,7 @@ class GitShowTipTerminationSpec extends Specification implements StalledReadGit 
         new GitShowTip(stallingGit(tempDir), tempDir, 'gnomish/PROJ-1')
     }
 
+    // Scenario: git/git-task-persistence / Absence and unavailability are distinct answers
     def "FR6: an interrupted file read is unavailability, never an absent file"() {
         when:
         def thrown = interruptDuring {

@@ -75,6 +75,7 @@ class PipelineMapperTrackerSpec extends Specification {
     }
 
     // FR6 of add-factory-serve, delta-spec scenario "Default applies" (design D3)
+    // Scenario: pipeline/pipeline-config / Default applies
     def "defaults the wip limit to 10 when the tracker section omits it"() {
         given:
         def cfg = new ConfigDto('1', null, new TrackerDto('github', null))

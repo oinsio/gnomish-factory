@@ -28,6 +28,7 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
         setupUsageHistoryFixture()
     }
 
+    // Scenario: cli/task-inspection / Failed rounds are visible cost
     def "FR14: a stage that fails round 1 then passes round 2 — both rounds appear with usage and count toward totals"() {
         given:
         taskRepository().createTask(new TaskContext('PROJ-1', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -113,6 +114,7 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
         found.rows()*.stage() == ['implement', 'release']
     }
 
+    // Scenario: git/git-task-persistence / History of past stages lives in git
     def "FR14: advancing to a new stage starts a fresh round history and still yields one row for the new stage's first round"() {
         given:
         taskRepository().createTask(new TaskContext('PROJ-2', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))

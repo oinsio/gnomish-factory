@@ -96,6 +96,7 @@ class GithubDecisionsSpec extends Specification {
         ]
     }
 
+    // Scenario: tracker/github-tracker / Decisions are collected only after the last ack
     def "ack consumes decisions: only replies after the latest ack are returned"() {
         given:
         stubComments(wireMock, 31, '''
@@ -172,6 +173,7 @@ class GithubDecisionsSpec extends Specification {
                         '$.body', WireMock.containing('acting on decision: Use approach B.'))))
     }
 
+    // Scenario: tracker/github-tracker / Each answered decision gets its own acknowledge
     def "acknowledging two different decisions posts two acks, so no answered decision is collected twice"() {
         given: 'the thread already carries this tenure\'s ack of the first decision'
         def existing = GithubMarker.render(GithubMarkerKind.ACK, 'gnomish-factory-x7k2q1',
@@ -192,6 +194,7 @@ class GithubDecisionsSpec extends Specification {
                         urlEqualTo('/repos/acme/widgets/issues/comments/7'))).isEmpty()
     }
 
+    // Scenario: tracker/github-tracker / Each answered decision gets its own acknowledge
     def "re-driving the same acknowledgment updates its own comment instead of duplicating (UX3)"() {
         given:
         def identity = GithubCommentIdentity.of(new GithubTaskId('', 'acme', 'widgets', 36),

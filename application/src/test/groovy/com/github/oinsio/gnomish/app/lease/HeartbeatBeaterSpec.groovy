@@ -36,6 +36,7 @@ class HeartbeatBeaterSpec extends Specification {
     }
 
     // FR12, NFR-O2: the interrupted beat is unconfirmed, quiet, and leaves the interrupt set.
+    // Scenario: serve/factory-serve / Interrupted beat is not a beat failure
     def "a beat that fails on an interrupted thread is unconfirmed, with no warning and the interrupt kept"() {
         given:
         tracker.heartbeat(_, _) >> {

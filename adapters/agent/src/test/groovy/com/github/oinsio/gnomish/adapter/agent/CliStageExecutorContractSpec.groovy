@@ -22,6 +22,8 @@ import java.nio.file.Files
  * and a real instructions file before calling the actual adapter, so the
  * suite still exercises {@link CliStageExecutor#execute} itself, not a stub.
  */
+// Scenario: executor/agent-executor / One suite, real machinery
+// Scenario: cli/manual-run / One suite, many adapters
 class CliStageExecutorContractSpec extends StageExecutorContract {
 
     @Override

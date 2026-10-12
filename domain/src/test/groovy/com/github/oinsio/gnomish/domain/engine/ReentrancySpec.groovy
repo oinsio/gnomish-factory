@@ -121,6 +121,7 @@ class ReentrancySpec extends Specification {
     // NFR-R1/NFR-R2: two runs sharing one Engine, provably concurrent (each blocked on a
     //     shared two-party barrier inside its verify chain), finish isolated and identical
     //     to a solo run, each port called exactly once — no shared state, no retry.
+    // Scenario: pipeline/stage-engine / Concurrent runs stay isolated
     def "two concurrent runs on one Engine stay isolated and never retry a port"() {
         given: 'one shared engine and two runs with independent fakes and distinct task ids'
         def engine = new Engine()

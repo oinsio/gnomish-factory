@@ -83,6 +83,8 @@ class DeadHeartbeatReapingSpec extends Specification {
     // "TTL elapsed while alive: never reaped" and "TTL elapsed after death: reaped" makes the
     // shielding-then-loss-of-shielding causality explicit, not just a restatement of the
     // idle-instance case.
+    // Scenario: lifecycle/claim-heartbeat / A dead heartbeat stops shielding its instance's claims
+    // Scenario: serve/daemon-supervision / Heartbeat death is still not resurrected
     def "a dead heartbeat's still-held claim is no longer shielded and is reaped by the standing reaper"() {
         given: 'the claim registers and the real worker thread starts beating it'
         heartbeat.register(OWN)
@@ -145,5 +147,10 @@ class DeadHeartbeatReapingSpec extends Specification {
             workingBy(OWN, SELF_INSTANCE, v)
         ]
         1 * tracker.removeStaleClaim(OWN, claimBy(SELF_INSTANCE, v)) >> new RemoveStaleClaimResult.Removed()
+
+        and: 'FR6 of supervise-daemon-loops-and-embed-dashboard: nothing respawned the worker — the same dead thread, no beat since'
+        heartbeat.worker().is(worker)
+        !worker.isAlive()
+        0 * tracker.heartbeat(_, _)
     }
 }

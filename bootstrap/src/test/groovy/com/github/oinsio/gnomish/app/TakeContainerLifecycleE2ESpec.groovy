@@ -142,6 +142,7 @@ tracker:
     // factory-side push to a real remote -> Finished on the tracker -> disposed environment. The
     // same lifecycle TakeLifecycleReadyToDeliveredSpecBase proves for host mode, now over the
     // container assembly.
+    // Scenario: tracker/tracker-take / Tracker task completes in a container
     def "a container-mode take completes a real tracker task end to end and disposes its environment"() {
         given: 'a Ready task seeded in a real (in-memory) tracker, and a fake-agent-backed stage'
         def tracker = new InMemoryTracker()

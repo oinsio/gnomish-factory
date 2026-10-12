@@ -95,6 +95,9 @@ class CliArgumentsContractSpec extends Specification implements ApplicationArgum
     }
 
     // FR8: dotted Spring properties and Spring Boot's own switches reach configuration untouched
+    // Scenario: cli/cli-arguments / Property options pass through
+    // Scenario: cli/cli-arguments / Spring Boot's own switches pass through
+    // Scenario: cli/cli-arguments / Every dotted option passes through
     def "FR8: #subcommand lets #option pass through"() {
         when:
         parse(subcommand, option)
@@ -116,6 +119,7 @@ class CliArgumentsContractSpec extends Specification implements ApplicationArgum
     }
 
     // FR8, UX2: status tells the operator the task id is positional
+    // Scenario: cli/cli-arguments / A mistyped task flag fails loudly
     def "FR8, UX2: status --task is rejected with a hint that the task id is positional"() {
         when:
         parse(Subcommand.STATUS, '--task=github:acme/widgets#7')
@@ -147,6 +151,7 @@ class CliArgumentsContractSpec extends Specification implements ApplicationArgum
     // with "cannot start a git-mode task in .: it is not a git repository". GitExec launches git
     // with the git dir as its working directory AND passes --git-dir=<the same path>, so a relative
     // ./.git resolves to ./.git/.git, HEAD peels to nothing, and ManualRunLawBinding refuses.
+    // Scenario: cli/cli-arguments / Parent-relative directory is normalized
     def "FR7: #resolver resolves a relative --dir against the working directory"() {
         when:
         Path dir = resolve.call(args('status', '--dir=widgets/./src/..'))
@@ -174,6 +179,8 @@ class CliArgumentsContractSpec extends Specification implements ApplicationArgum
     }
 
     // FR7: status and usage keep refusing an absent --dir, as before
+    // Scenario: cli/cli-arguments / Status still requires the directory
+    // Scenario: cli/cli-arguments / Usage still requires the directory
     def "FR7: requiredProjectDir refuses an absent --dir for #token"() {
         when:
         ArgumentsParsingSupport.requiredProjectDir(args(token), token)

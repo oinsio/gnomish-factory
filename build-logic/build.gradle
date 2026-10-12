@@ -50,10 +50,20 @@ testing {
                 implementation gradleTestKit()
                 implementation libs.groovy
                 implementation libs.spock.core
+                implementation libs.snakeyaml // the stage manifests' verify commands (D5 of tighten-spec-contract)
                 runtimeOnly libs.junit.platform.launcher
             }
         }
     }
+}
+
+// The plain readers in src/main (SpecContractReader, ScenarioMarkerReader; FR1, FR2, FR5 of
+// tighten-spec-contract) are specified directly, without TestKit. Their classes are added as
+// files, not as `implementation project()`: a project dependency would pull the plugin jars of
+// `main` into the locked functionalTest configurations, which need none of them.
+sourceSets.named('functionalTest') {
+    compileClasspath += sourceSets.main.output
+    runtimeClasspath += sourceSets.main.output
 }
 
 // Injects the precompiled convention plugins into `withPluginClasspath()` builds.
@@ -129,4 +139,33 @@ tasks.named('functionalTest') {
     inputs.file(versionCatalog).withPropertyName('versionCatalog').withPathSensitivity(PathSensitivity.NONE)
     systemProperty 'gnomish.buildChecksDir', buildChecksDir.asFile.absolutePath
     systemProperty 'gnomish.versionCatalog', versionCatalog.asFile.absolutePath
+}
+
+// FR6, design D5 of tighten-spec-contract: "the manual launcher is the same gate" runs the
+// command the REAL `scripts/check-spec-contract.sh` spells against the mini tree, so a launcher
+// that grows a rule of its own, or stops passing its arguments through, turns the scenario red.
+def specContractLauncher = layout.projectDirectory.file('../scripts/check-spec-contract.sh')
+tasks.named('functionalTest') {
+    inputs.file(specContractLauncher).withPropertyName('specContractLauncher').withPathSensitivity(PathSensitivity.NONE)
+    systemProperty 'gnomish.specContractLauncher', specContractLauncher.asFile.absolutePath
+}
+
+// FR6, design D5 of tighten-spec-contract: the same scenario runs the verify command of the REAL
+// fix-artifacts and archive stage manifests, read with a YAML parser, so a stage launcher that
+// holds a rule of its own, or calls something other than the task, turns it red.
+def fixArtifactsStage = layout.projectDirectory.file('../.gnomish/stages/fix-artifacts/stage.yaml')
+def archiveStage = layout.projectDirectory.file('../.gnomish/stages/archive/stage.yaml')
+tasks.named('functionalTest') {
+    inputs.file(fixArtifactsStage).withPropertyName('fixArtifactsStage').withPathSensitivity(PathSensitivity.NONE)
+    inputs.file(archiveStage).withPropertyName('archiveStage').withPathSensitivity(PathSensitivity.NONE)
+    systemProperty 'gnomish.fixArtifactsStage', fixArtifactsStage.asFile.absolutePath
+    systemProperty 'gnomish.archiveStage', archiveStage.asFile.absolutePath
+}
+
+// FR7, UX3 of tighten-spec-contract: the example the REAL `.claude/rules/delta-specs.md` shows an
+// author is run through `checkSpecContract`, so a template that drifts from the gate turns red.
+def deltaSpecsRule = layout.projectDirectory.file('../.claude/rules/delta-specs.md')
+tasks.named('functionalTest') {
+    inputs.file(deltaSpecsRule).withPropertyName('deltaSpecsRule').withPathSensitivity(PathSensitivity.NONE)
+    systemProperty 'gnomish.deltaSpecsRule', deltaSpecsRule.asFile.absolutePath
 }

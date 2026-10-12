@@ -17,6 +17,7 @@ import spock.lang.Specification
 class PipelineMapperHeartbeatSpec extends Specification implements PipelineMapperFixtureSupport {
 
     // delta-spec scenario "Defaults apply"
+    // Scenario: pipeline/pipeline-config / Defaults apply
     def "defaults the heartbeat interval to 5 minutes and the multiplier to 3 when omitted"() {
         given:
         def cfg = new ConfigDto('1', null, new TrackerDto('github', 3))
@@ -63,6 +64,7 @@ class PipelineMapperHeartbeatSpec extends Specification implements PipelineMappe
     }
 
     // delta-spec scenario "Heartbeat errors aggregate": stage errors first, then the tracker error
+    // Scenario: pipeline/pipeline-config / Heartbeat errors aggregate
     def "aggregates a malformed heartbeat interval with an unrelated duration error"() {
         given:
         def stage = ioLessStage([

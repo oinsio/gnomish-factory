@@ -14,7 +14,7 @@ print one line per case with pass or fail and the first offending detail, exitin
 any failure. Cases SHALL cover: describe validity, settings-schema rejection, each declared
 role, cancel, oversized output, stderr noise, non-JSON stdout, pending then poll, unknown
 request fields, malformed answer handling.
-<!-- implements FR12, UX2 of define-executor-contract -->
+**Implements**: FR12, UX2 of define-executor-contract
 
 #### Scenario: Reference executor passes every case
 - **WHEN** the kit runs against the reference executor
@@ -32,7 +32,7 @@ request fields, malformed answer handling.
 A reference executor (a script with no factory dependency) SHALL pass the kit and SHALL be the
 executor the factory's own end-to-end specs run; a fake with scripted misbehaviours SHALL exist
 for negative specs. Both SHALL live outside production modules.
-<!-- implements FR12, M1 of define-executor-contract -->
+**Implements**: FR12, M1 of define-executor-contract
 
 #### Scenario: Factory end-to-end uses the reference executor
 - **WHEN** the packaged-jar end-to-end suite runs a `program` stage
@@ -46,7 +46,7 @@ for negative specs. Both SHALL live outside production modules.
 The request, result, answer and describe schemas SHALL live as files in the repository; Java
 wire types SHALL round-trip against them in a spec, and the kit SHALL validate candidate output
 against the same files.
-<!-- implements FR1, NFR-R3 of define-executor-contract -->
+**Implements**: FR1, NFR-R3 of define-executor-contract
 
 #### Scenario: Drift between DTO and schema is red
 - **WHEN** a wire type gains a field the schema file does not declare

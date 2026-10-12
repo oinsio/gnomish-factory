@@ -49,6 +49,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
 
     // FR5: a check resolves the provider's client from the registry and reads its verdict back —
     //     the engine sees one port, the composite decides who answers.
+    // Scenario: verification/check-provider-model / A check client is resolved by its provider
     def "a check is answered by the client of the provider it selects"() {
         given:
         def plugin = new PluginStandInCheckClientFactory(scripted: new PollStatus.Running())
@@ -112,6 +113,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
 
     // FR6: "one stage runs external checks from different providers" — each check resolves its own
     //     provider independently, within the one verify chain.
+    // Scenario: verification/check-provider-model / One stage runs external checks from different providers
     def "two checks in one chain reach two different providers"() {
         given:
         def first = new PluginStandInCheckClientFactory(scripted: new PollStatus.Pass())
@@ -128,6 +130,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
 
     // FR3: a configured provider no check ever selects is never constructed, so its credential is
     //     never resolved — dormant providers stay entirely unexercised.
+    // Scenario: plugin/plugin-discovery / Dormant providers are not exercised
     def "a dormant provider's client is never built and its credential never resolved"() {
         given:
         def resolved = []
@@ -166,6 +169,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
     // FR15: the pin contribution dispatches the same way the poll does, so the guard wrapping this
     //     seam unions the SELECTED provider's paths — for a discovered plugin exactly as for a
     //     bundled provider.
+    // Scenario: verification/check-provider-model / A discovered provider's pin contribution reaches the guard
     def "the pin contribution follows the same dispatch"() {
         given:
         def dispatcher = new ProviderDispatchingExternalCheckClient(
@@ -222,6 +226,7 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
 
     // FR5: a check naming a provider no discovered jar serves fails naming the check, the provider
     //     and the discovered set — never a silent pass or an arbitrary substitute.
+    // Scenario: plugin/plugin-discovery / Unknown provider fails with a named error
     def "a check naming an undiscovered provider fails naming it and the discovered set"() {
         given:
         def dispatcher = new ProviderDispatchingExternalCheckClient(

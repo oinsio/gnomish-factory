@@ -53,6 +53,7 @@ class CheckClientFactorySpec extends Specification {
     // FR23 of supervise-daemon-loops-and-embed-dashboard: one abstract create, taking the context,
     //     and no default overload delegating to another — the run context and the time equipment
     //     ride the context rather than a second signature.
+    // Scenario: plugin/plugin-discovery / One create method per factory
     def "FR23: the factory declares exactly one create, abstract, taking the context"() {
         when:
         def creates = CheckClientFactory.declaredMethods.findAll {
@@ -68,12 +69,14 @@ class CheckClientFactorySpec extends Specification {
 
     // FR6: a provider defining no per-check params grades none — the loader asks and is told so
     //     explicitly, rather than having to distinguish "no validator" from "null".
+    // Scenario: plugin/plugin-api-contract / The SPI factories bear their declared members
     def "params validation defaults to none"() {
         expect:
         factory.paramsValidator().isEmpty()
     }
 
     // FR4: a provider whose operator subsection is opaque grades no content.
+    // Scenario: plugin/plugin-api-contract / The SPI factories bear their declared members
     def "subsection validation defaults to none"() {
         expect:
         factory.subsectionValidator().isEmpty()
@@ -81,6 +84,7 @@ class CheckClientFactorySpec extends Specification {
 
     // FR17, D11: a provider reading no credential from the environment declares an empty list, so
     //     the composition root's union over every provider needs no null handling.
+    // Scenario: plugin/plugin-api-contract / The SPI factories bear their declared members
     def "the credential declaration defaults to empty rather than null"() {
         when:
         def declared = factory.credentialEnvVars([('api-url'): 'https://example.invalid'])
@@ -92,6 +96,7 @@ class CheckClientFactorySpec extends Specification {
 
     // FR15: the default pin contribution is a real contributor contributing nothing — the pin-check
     //     guard unions it unconditionally, so a null here would break every pinless provider.
+    // Scenario: plugin/plugin-api-contract / The SPI factories bear their declared members
     def "the pin contribution defaults to a real, empty contributor"() {
         when:
         def contributor = factory.pinContributor()

@@ -32,6 +32,7 @@ class UsageTextRendererSpec extends Specification {
         cannotVerify: 'CANNOT_VERIFY',
         decisionNeeded: 'DECISION_NEEDED']
 
+    // Scenario: cli/task-inspection / Text usage is a stage and round table with totals
     def "FR14: renders one row per round with summed tokens and wall time, plus a totals line"() {
         given:
         def row0 = new UsageRow('implement', attempt(0, 'qualityFailure', 1000,

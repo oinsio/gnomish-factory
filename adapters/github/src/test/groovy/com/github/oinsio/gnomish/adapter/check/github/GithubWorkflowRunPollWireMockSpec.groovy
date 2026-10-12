@@ -50,6 +50,7 @@ class GithubWorkflowRunPollWireMockSpec extends Specification {
         !cannotVerify.details().isBlank()
     }
 
+    // Scenario: verification/github-external-check / Platform outage is not a red build
     def "a persistent 5xx that exhausts the retry budget classifies as CannotVerify"() {
         given:
         wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(503).withBody('service unavailable')))
@@ -79,6 +80,8 @@ class GithubWorkflowRunPollWireMockSpec extends Specification {
         !(status as PollStatus.CannotVerify).reason().isBlank()
     }
 
+    // Scenario: verification/github-external-check / A mistyped checkId is diagnosed, not silently polled
+    // Scenario: verification/github-external-check / An expired token escalates immediately
     def "a client-side rejection classifies as CannotVerify with a status-specific, actionable reason"() {
         given:
         wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(httpStatus).withBody('{"message":"nope"}')))

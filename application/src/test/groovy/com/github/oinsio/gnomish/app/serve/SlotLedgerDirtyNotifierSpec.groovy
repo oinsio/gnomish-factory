@@ -17,6 +17,7 @@ class SlotLedgerDirtyNotifierSpec extends Specification {
 
     private static final TaskRef A = new TaskRef('github:o/r#1')
 
+    // Scenario: observability/serve-observability / Transition triggers an immediate write
     def "assign wakes the dirty notifier"() {
         given:
         def notifier = Mock(DirtyNotifier)

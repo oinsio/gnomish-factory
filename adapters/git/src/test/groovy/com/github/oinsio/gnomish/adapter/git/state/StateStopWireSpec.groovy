@@ -79,6 +79,7 @@ class StateStopWireSpec extends Specification {
     }
 
     // FR10: no hand-listed subset — every permitted subclass has a sample and comes back equal
+    // Scenario: git/git-task-persistence / Every position and stop variant round-trips
     def "the #variant.simpleName stop survives the state.json write and read"() {
         given:
         def sample = SAMPLES[variant]
@@ -95,6 +96,7 @@ class StateStopWireSpec extends Specification {
     }
 
     // FR10, D5: the stop is written on every attempt, with its fields named as the contract states
+    // Scenario: git/git-task-persistence / Stop and round are one commit
     def "the stop is written as a typed object on the attempt, at version 1"() {
         when:
         def none = TaskStateJson.mapper().readTree(write(stateWith(AttemptRecord.Result.PASSED, Stop.none())))
@@ -111,6 +113,7 @@ class StateStopWireSpec extends Specification {
     }
 
     // FR10: a document written before the field existed reads as a round that raised no stop
+    // Scenario: git/git-task-persistence / An attempt without a stop reads as none
     def "an attempt with no stop field reads as none"() {
         expect:
         read(documentWithStop('')).attempts()[0].stop() == Stop.none()

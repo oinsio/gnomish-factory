@@ -49,6 +49,7 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
         worktreeManager.ensureWorktree(taskId, branchName)
     }
 
+    // Scenario: git/git-task-persistence / Completion removes the working copy and keeps the branch
     def "FR6: Completed removes the worktree but leaves the branch intact"() {
         given:
         def path = setUpWorktree('PROJ-1')
@@ -69,6 +70,7 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
         branches.stdout().forParsing().contains('gnomish/PROJ-1')
     }
 
+    // Scenario: git/git-task-persistence / A parked task keeps its working copy
     def "FR6: Paused keeps the worktree untouched"() {
         given:
         def path = setUpWorktree('PROJ-2')
@@ -84,6 +86,7 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
         marker.text == 'still here'
     }
 
+    // Scenario: git/git-task-persistence / A parked task keeps its working copy
     def "FR6: Escalated keeps the worktree untouched"() {
         given:
         def path = setUpWorktree('PROJ-3')
@@ -100,6 +103,7 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
         marker.text == 'still here'
     }
 
+    // Scenario: git/git-task-persistence / Aborted keeps the evidence
     def "FR6: Aborted always keeps the worktree, even unconditionally"() {
         given:
         def path = setUpWorktree('PROJ-4')

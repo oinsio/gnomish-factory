@@ -36,6 +36,7 @@ class SafeMessageConverterSpec extends Specification {
     }
 
     // FR1: a forged record prefix arrives as visible text on the one line, never as a second record
+    // Scenario: observability/factory-logging / The sink renders a line break as the log exit does
     def "a forged record prefix cannot open a second record"() {
         when:
         String rendered = converter.convert(event('stage failed\n2026-08-31 12:00:00 ERROR [main] compromised'))
@@ -46,6 +47,7 @@ class SafeMessageConverterSpec extends Specification {
 
     // FR2, G3: the sink is invisible to a call site that used the choke point — no second escaping
     // of the visible newline marker, no second cap below the first
+    // Scenario: observability/factory-logging / Choke-point output passes the sink unchanged
     def "choke-point output renders byte-identically: #shape"() {
         given:
         String prepared = LogText.forLog(hostile)
@@ -65,6 +67,7 @@ class SafeMessageConverterSpec extends Specification {
     }
 
     // NFR-R1: the sink never loses a record — a failing neutralization degrades to a placeholder
+    // Scenario: observability/factory-logging / The sink never drops a record
     def "a neutralization failure degrades to a bounded, control-free placeholder: #failure"() {
         given:
         def broken = new SafeMessageConverter({

@@ -27,6 +27,8 @@ class GitResumeDecisionSpec extends GitResumeSpecBase {
     // FR5, FR8, UX2; FR3, NFR-R1 of make-run-headless: outcome escalated with --decision appends
     // the decision and resets the attempts in ONE commit — the first commit after the park — pushed
     // to the bare origin, then continues to completion. No prompt is printed, nothing is read.
+    // Scenario: cli/manual-run / Resume of an escalated task
+    // Scenario: pipeline/stage-engine / Decision and reset are inseparable
     def "run() with outcome escalated and --decision lands the decision and the reset in one commit, then continues to completion"() {
         given: 'a task branch on a real origin, escalated after one persisted round'
         def bare = initBareRepo(tempDir, 'origin.git')

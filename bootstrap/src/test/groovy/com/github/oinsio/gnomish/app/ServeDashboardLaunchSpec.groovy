@@ -52,6 +52,8 @@ class ServeDashboardLaunchSpec extends ServeCommandSpecBase {
 
     // UX1, NFR-O2, FR9: the default page is dashboard.html in the instance's serve directory; the
     //     operator reads its absolute path on the console, and the anchor records the same path.
+    // Scenario: serve/factory-serve / The flag enables the dashboard
+    // Scenario: serve/factory-serve / Default path
     def "UX1: serve --dashboard prints the page's absolute path and records it in the start anchor"() {
         given:
         writeConfig(GITHUB_TRACKER_SECTION)
@@ -108,6 +110,7 @@ class ServeDashboardLaunchSpec extends ServeCommandSpecBase {
     }
 
     // NFR-O2, FR9: off by default — no line, no page, and the anchor says the dashboard is off.
+    // Scenario: serve/factory-serve / The dashboard is off by default
     def "NFR-O2: without --dashboard nothing is printed and the anchor records the dashboard as off"() {
         given:
         writeConfig(GITHUB_TRACKER_SECTION)

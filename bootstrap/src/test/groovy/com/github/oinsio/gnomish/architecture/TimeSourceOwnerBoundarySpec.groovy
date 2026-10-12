@@ -77,6 +77,9 @@ class TimeSourceOwnerBoundarySpec extends Specification {
     }
 
     // FR18, D17, D20: real time spelled anywhere but the root's one file is a hidden clock or sleeper.
+    // Scenario: core/time-source / A hidden clock fails the build
+    // Scenario: core/time-source / The root is the one source
+    // Scenario: core/time-source / No component holds two clocks
     def "FR18: real time is constructed only in the composition root's one file"() {
         given: 'every factory production source'
         def sources = factorySources()
@@ -140,6 +143,8 @@ class TimeSourceOwnerBoundarySpec extends Specification {
 
     // Over a clean tree the scans find nothing but the owners, so only seeded sources tell a
     //     working detector from a broken one; a declaration or a comment must not count.
+    // Scenario: core/time-source / A hidden clock fails the build
+    // Scenario: core/time-source / The gate does not mistake a declaration for a read
     def "the detector finds a seeded real-time read and leaves look-alikes alone: #shape"() {
         expect:
         realTimeLiterals(source) == expected as Set

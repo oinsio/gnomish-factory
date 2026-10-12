@@ -109,6 +109,8 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
     // PAT as its username and the subprocess has no terminal to read the password from — real git
     // cannot be made to emit it without a live HTTP server issuing a 401, and, on a machine that
     // does have a controlling terminal, would block on the prompt instead of failing.
+    // Scenario: git/git-task-persistence / A token-in-URL origin cannot leak through a push failure
+    // Scenario: git/git-task-persistence / Captured stdout is not scrubbed
     def "NFR-S2: git stderr carrying a remote URL's userinfo is scrubbed before any caller sees it"() {
         given: 'a git stand-in whose stderr echoes a PAT-in-URL exactly as git 2.55 does'
         def fakeGit = StandIn.git('leak-credentials')
@@ -130,6 +132,7 @@ class GitProcessRunnerSpec extends Specification implements BareGitRepoFixture {
     // effect on its own) rather than indirectly through run()'s locking behavior, so the exact
     // args.length boundary and the worktree subcommand's && short-circuit are pinned down without
     // depending on timing-sensitive concurrency assertions elsewhere in this package.
+    // Scenario: git/git-task-persistence / The refresh runs under the network bounds and the clone lock
     def "D8: isRepoLevelMutating classifies fetch/push/worktree add|remove|prune as mutating, everything else as not"() {
         given:
         def method = GitProcessRunner.getDeclaredMethod('isRepoLevelMutating', String[])

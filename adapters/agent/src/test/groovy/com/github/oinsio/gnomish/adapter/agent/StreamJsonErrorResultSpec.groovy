@@ -20,6 +20,8 @@ class StreamJsonErrorResultSpec extends Specification {
     def extractor = new AgentRoundResultExtractor()
 
     @Unroll
+    // Scenario: executor/agent-executor / Limit-ended round carries its result event
+    // Scenario: executor/agent-executor / Every error subtype keeps its result event
     def "FR4: an #subtype result line without a result field parses into a ResultEvent with empty text"() {
         given: 'a limit-ended result line, shaped as the CLI writes it'
         def line = '{"type":"result","subtype":"' + subtype + '","is_error":true,"num_turns":31,' +
@@ -44,6 +46,7 @@ class StreamJsonErrorResultSpec extends Specification {
         ]
     }
 
+    // Scenario: executor/agent-executor / Limit-ended round carries its result event
     def "FR4: a round ended on the turn limit extracts a result instead of throwing MissingResultEventException"() {
         given: 'an init line and the turn-limit result line'
         def events = parser.parse(readerOf(

@@ -35,6 +35,7 @@ class TerminalRenderOwnerSpec extends Specification {
     ]
 
     // FR1, FR2, FR8: each literal has exactly one production home, the owner — take included
+    // Scenario: cli/manual-run / Every stop path renders through one component
     def "FR1, FR2, FR8: '#literal' is spelled in production only by TerminalOutcomeRender"() {
         given: 'every production source of the build, comments removed'
         def sources = RepoSourceTree.productionSources()

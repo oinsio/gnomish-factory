@@ -37,6 +37,7 @@ class EnvFileSecretsProviderSpec extends Specification {
     }
 
     // FR18: a direct env var resolves by name
+    // Scenario: operator/secrets-provider / Works out of the box
     def "resolves a secret from a direct environment variable"() {
         given: 'GNOMISH_GITHUB_TOKEN present in the environment'
         def provider = providerFor([GNOMISH_GITHUB_TOKEN: 'ghp_secret'])
@@ -64,6 +65,8 @@ class EnvFileSecretsProviderSpec extends Specification {
     }
 
     // FR18: the <name>_FILE indirection reads the value from a file, stripped
+    // Scenario: operator/secrets-provider / Works out of the box
+    // Scenario: operator/secrets-provider / A secret file's value is its trimmed content
     def "resolves a secret from the <name>_FILE indirection, stripping surrounding whitespace"() {
         given: 'a secret file with a trailing newline and the _FILE var pointing at it'
         def secretFile = tempDir.resolve('token')
@@ -97,6 +100,7 @@ class EnvFileSecretsProviderSpec extends Specification {
 
     // FR5, NFR-S1 of harden-logging-observability: the warning names the variable that pointed at
     // the unreadable file — the only fact that makes it fixable — and never the secret's value.
+    // Scenario: observability/factory-logging / A degradation warning names its subject, never a secret
     def "an unreadable secret file warns naming the variable, never the value"() {
         given: 'a secret file that exists but whose path is a directory, so the read fails'
         def unreadable = Files.createDirectory(tempDir.resolve('not-a-file'))

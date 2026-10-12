@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.subprocess.Termination
+import com.github.oinsio.gnomish.untrustedtext.Provenance
 import com.github.oinsio.gnomish.untrustedtext.TextSafety
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
@@ -62,6 +63,7 @@ class GitCommandResultDetailSpec extends Specification {
     // GitProcessRunner scrubbing stderr at capture, and both scrub again where the text enters a
     // message — a result built anywhere else (a spec, a future runner) cannot leak a token
     // through one detail and not the other.
+    // Scenario: git/git-task-persistence / A token-in-URL origin cannot leak through a push failure
     def "NFR-S2: a credential-bearing URL in stderr is masked in both details"() {
         given:
         def result = GitCommandResult.of(128, '',
@@ -107,6 +109,7 @@ class GitCommandResultDetailSpec extends Specification {
     //     was reserved against the *input* to the flattening. A stderr of nothing but line
     //     separators renders six characters per one, fills the log cap by itself, and the exit's
     //     tail-keeping cut then drops exactly the head this constant exists to protect.
+    // Scenario: observability/factory-logging / A caller-bounded excerpt keeps the caller's words under the record cap
     def "M7: a stderr that expands when rendered still leaves the detail's opening in the record"() {
         given: 'a capture of nothing but line separators, at the detail\'s own bound'
         def separators = Character.toString(0x2028) * 1_400
@@ -136,5 +139,23 @@ class GitCommandResultDetailSpec extends Specification {
         rendered.startsWith('origin carries the branch')
         rendered.contains('the boundary could not be verified')
         rendered.contains('xxxx')
+    }
+
+    // FR1 of type-untrusted-text: a sentence the factory composed is filed under the factory only
+    //     because git's words entered it through an exit (the excerpt) — so the capture's escape
+    //     and line break are already inert inside it. The raw half, a sentence interpolating a
+    //     capture raw minted in the capture's family, is WorkingTreeLawSourceSpec's.
+    // Scenario: core/untrusted-text / A sentence interpolating a capture raw keeps the capture's family
+    def "FR1: the failure sentence is factory prose because it quotes git's stderr through an exit"() {
+        when:
+        def detail = GitCommandResult.of(128, '', HOSTILE).failureDetail('fetch')
+
+        then:
+        detail.provenance() == Provenance.FACTORY
+
+        and: 'what it quotes left the capture through the exit: inert in the sentence itself, but still there'
+        !detail.contains(ESC)
+        !detail.contains('\n')
+        detail.contains('forged record')
     }
 }

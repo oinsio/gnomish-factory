@@ -43,6 +43,7 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
         validator.validate(FILE, WHERE, subsection) == []
     }
 
+    // Scenario: tracker/github-tracker / Missing api-url is a load error
     def "missing api-url is a located load error, no built-in default applied"() {
         given:
         def subsection = [repo: 'acme/widgets']
@@ -274,6 +275,8 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
 
     // FR3 of add-base-ref-resolution: the designators map is graded on this same seam, and its
     //     problems aggregate with every other subsection problem in one pass
+    // Scenario: tracker/github-tracker / Designator rule without exactly one capture group is a load error
+    // Scenario: tracker/tracker-port / GitHub designator rules live in the adapter's subsection
     def "a malformed designator rule aggregates with the other subsection problems"() {
         given:
         def subsection = [
@@ -292,6 +295,7 @@ class GithubTrackerSubsectionValidatorSpec extends Specification {
     }
 
     // FR3: a well-formed designators map is accepted alongside the mandatory keys
+    // Scenario: tracker/tracker-port / GitHub designator rules live in the adapter's subsection
     def "a well-formed designators map loads clean"() {
         given:
         def subsection = [

@@ -40,7 +40,7 @@ class TestTimeInjectionCheckFunctionalSpec extends Specification {
 // build script's own classpath instead.
 buildscript {
     dependencies {
-        classpath files(${pluginClasspath().collect { "'" + it + "'" }.join(', ')})
+        classpath files(${GradleRunnerSupport.pluginClasspath().collect { "'" + it + "'" }.join(', ')})
     }
 }
 
@@ -93,22 +93,24 @@ tasks.register('checkTestTimeInjection', TestTimeInjectionCheck) {
     }
 
     // FR21 of supervise-daemon-loops-and-embed-dashboard: the gate bans the same real-time literal
-    //     set as the production gate, not only the system() factories.
+    //     set as the production gate, not only the system() factories, and names the file and line.
+    // Scenario: core/time-source / A real clock in a spec fails the build
     def "a spec building real time fails the gate: #shape"() {
         given:
         writeSpec(body)
 
-        expect:
-        buildAndFail().output.contains(named)
+        expect: 'the finding is the source file, the body\'s own line (line 5 of the mini spec) and the call'
+        buildAndFail().output.contains('MiniSpec.groovy:5: ' + body)
 
         where:
-        shape | body || named
-        'the system clock' | 'def clock = Clock.systemUTC()' || 'Clock.systemUTC()'
-        'the system zone clock' | 'def zone = Clock.systemDefaultZone()' || 'Clock.systemDefaultZone()'
-        'the JDK instant source' | 'def source = InstantSource.system()' || 'InstantSource.system()'
-        'a direct read' | 'def at = Instant.now()' || 'Instant.now()'
-        'the real sleeper' | 'def sleeper = new ThreadSleeper()' || 'new ThreadSleeper()'
-        'the deleted adapter' | 'def clock = new SystemClock()' || 'new SystemClock()'
+        shape | body
+        'the system clock' | 'def clock = Clock.systemUTC()'
+        'the system zone clock' | 'def zone = Clock.systemDefaultZone()'
+        'the JDK instant source' | 'def source = InstantSource.system()'
+        'a direct read' | 'def at = Instant.now()'
+        'the real sleeper' | 'def sleeper = new ThreadSleeper()'
+        'the deleted adapter' | 'def clock = new SystemClock()'
+        'a system-wired component' | 'def retry = GitInfrastructureRetry.system()'
     }
 
     def "a look-alike of a real-time read is not a violation"() {
@@ -121,6 +123,7 @@ tasks.register('checkTestTimeInjection', TestTimeInjectionCheck) {
         build().task(':checkTestTimeInjection').outcome.name() == 'SUCCESS'
     }
 
+    // Scenario: core/time-source / A justified real clock passes
     def "the marker excuses a real clock in a fixture that assembles the shipped composition"() {
         given:
         writeSpec("""// ${MARKER} the shipped composition's one time equipment; time is not the subject.
@@ -180,15 +183,6 @@ class MiniSpec {
 
     private GradleRunner runner() {
         GradleRunnerSupport.runner(projectDir, 'checkTestTimeInjection')
-    }
-
-    /** The build-logic classes TestKit publishes for the build under test. */
-    private static List<String> pluginClasspath() {
-        Properties metadata = new Properties()
-        TestTimeInjectionCheckFunctionalSpec.classLoader
-                .getResourceAsStream('plugin-under-test-metadata.properties')
-                .withCloseable { metadata.load(it) }
-        metadata.getProperty('implementation-classpath').split(File.pathSeparator).toList()
     }
 
     private void write(String relativePath, String content) {

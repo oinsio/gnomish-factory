@@ -49,6 +49,12 @@ class GithubKillWindowSpec extends Specification {
         world.close()
     }
 
+    // Scenario: tracker/github-tracker / Kill after the claim comment freezes a dead-holder claim
+    // Scenario: tracker/github-tracker / Kill between abort marker and ready flip
+    // Scenario: tracker/github-tracker / Kill between finish marker and delivered flip keeps terminality
+    // Scenario: tracker/github-tracker / Kill between park marker and label flip keeps the report
+    // Scenario: tracker/tracker-port / Non-atomic adapter covers its kill windows
+    // Scenario: lifecycle/claim-heartbeat / Every window shape stays in the sweep universe
     def "FR19: every kill window of the #sequence sequence freezes a sweep-visible named shape"() {
         given: 'the sequence run once undisturbed, to learn how many writes it makes'
         int writes = countWrites(seed, act)

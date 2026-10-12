@@ -27,6 +27,7 @@ class GithubDesignatorsValidatorSpec extends Specification {
     }
 
     // FR3: exactly one capture group -- none and two are both located errors naming the kind
+    // Scenario: tracker/github-tracker / Designator rule without exactly one capture group is a load error
     def "a rule without exactly one capture group is a located error: #why"() {
         when:
         def errors = validate([base: rule])
@@ -44,6 +45,7 @@ class GithubDesignatorsValidatorSpec extends Specification {
     }
 
     // FR3: a rule that does not compile is a located error naming the kind, not an adapter crash
+    // Scenario: tracker/github-tracker / A designator rule that does not compile or has a blank kind is a load error
     def "a rule that does not compile is a located error"() {
         when:
         def errors = validate([base: 'base:('])
@@ -82,6 +84,7 @@ class GithubDesignatorsValidatorSpec extends Specification {
     }
 
     // FR3: kinds are open names, but a blank one names nothing
+    // Scenario: tracker/github-tracker / A designator rule that does not compile or has a blank kind is a load error
     def "a blank kind name is a located error"() {
         when:
         def errors = validate(['  ': 'base:(.+)'])

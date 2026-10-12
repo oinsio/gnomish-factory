@@ -70,6 +70,8 @@ class ContainerSupportsSpec extends Specification implements BareGitRepoFixture,
 
     // FR19, FR20: one environment factory per mode, holding the installation's own settings, and
     // each mode's factory stamps its own label on the objects its runs create.
+    // Scenario: sandbox/execution-environment / One factory per ownership mode serves every run
+    // Scenario: sandbox/execution-environment / A per-run caller cannot pass installation settings
     def "each mode holds its own environment factory over the installation's settings and stamps its own label"() {
         given:
         def supports = newSupports()

@@ -52,6 +52,7 @@ class ManualRunRunnerContainerOwnershipSpec extends Specification implements Bar
     }
 
     // FR2: the two entry points differ in exactly this label, and nothing else about the bundle.
+    // Scenario: tracker/tracker-take / Take labels its objects tracked
     def "the composition root labels run's objects manual and take/serve's objects tracked"() {
         given:
         def supports = newSupports()

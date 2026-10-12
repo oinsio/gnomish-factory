@@ -214,7 +214,7 @@ account pinning is the real defense).
   self-check" (keep-on-failed-self-check semantics); this change's own
   MODIFIED delta of the same requirement predates it] → ordering is
   fixed: `polish-sandbox-forensics` archives first, and this change's
-  `specs/sandbox-egress/spec.md` MODIFIED text must be rebased on the
+  `specs/sandbox/sandbox-egress/spec.md` MODIFIED text must be rebased on the
   then-current stable requirement (keep semantics included) before this
   change archives. Recorded on both sides.
 

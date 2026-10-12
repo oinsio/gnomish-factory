@@ -53,6 +53,7 @@ class ProcessEnvironmentOwnerSpec extends Specification {
     ]
 
     // FR22, M10: no test child is composed on top of the inherited environment outside the exemptions
+    // Scenario: sandbox/execution-environment / Every test spawner composes over a cleared environment
     def "FR22, M10: every child-environment write in test sources and fixtures follows a clearing step, or is exempt"() {
         given: 'every test source at any depth and every :test-fixtures source, comments stripped'
         def sources = RepoSourceTree.testSources() + RepoSourceTree.productionSources {

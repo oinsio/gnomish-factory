@@ -35,6 +35,7 @@ class TextSafetyRecordCapSpec extends Specification {
         TextSafety.capRecord(atCap) == atCap
     }
 
+    // Scenario: observability/factory-logging / The sink marks a truncated record
     def "FR1: an over-cap record keeps its head and names what was dropped"() {
         given:
         def flood = 'HEAD-' + 'x' * (TextSafety.RECORD_CAP_CHARS * 4)

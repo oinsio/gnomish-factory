@@ -31,6 +31,12 @@ import spock.lang.Specification
  * same seams without duplicating them — kept in a second file because the
  * combined property set would exceed the project's per-file line cap.
  *
+ * <p>The suite is a chain: each link extends the one before it, and the concrete adapter specs
+ * extend the last link, {@link TrackerCirculationContract}, so the same whole suite runs against
+ * every adapter (M1). Only this class and the last link say which link is last; every other link
+ * names the class it extends and nothing further down the chain, so adding a link edits one
+ * javadoc, not all of them.
+ *
  * <p>This property covers the "Feed filtering property" scenario: {@code
  * listReady} returns only {@code Ready} tasks — never {@code Working}, {@code
  * AwaitingHuman}, {@code Finished}, or {@code Gone} — including a {@code

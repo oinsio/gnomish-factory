@@ -236,6 +236,8 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
     // read from ITS law binding — an invalid load there parks the task instead of creating
     // anything, the same way TaskTierLawSpec proves for TaskTierLaw.bind directly, but exercised
     // here through the fresh-claim call site that has to route that outcome (TakeFreshClaim.claimAt).
+    // Scenario: tracker/tracker-take / A task-tier law load error parks the task
+    // Scenario: serve/factory-serve / A broken task base is parked, never released
     def "parks the task when the resolved base's own law fails to load, creating nothing"() {
         given:
         def tracker = Mock(Tracker)

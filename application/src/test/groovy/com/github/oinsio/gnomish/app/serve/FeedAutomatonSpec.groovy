@@ -95,6 +95,7 @@ class FeedAutomatonSpec extends Specification {
     // FR5: Full is SlotLedger's own acquire() block — while every slot is occupied, a step()
     //     in flight sends zero tracker calls; the moment a slot frees, it proceeds without
     //     waiting for the idle timer (no sleeper invocation at all on this path).
+    // Scenario: serve/factory-serve / Full does not poll
     def "Full sends no tracker polls while occupied and unblocks immediately on release"() {
         given: 'a single-slot ledger already fully occupied'
         def busy = new TaskRef('github:o/r#busy')
@@ -200,6 +201,8 @@ class FeedAutomatonSpec extends Specification {
 
     // FR5: Idle-empty — a free slot exists but the queue holds nothing backoff-eligible; the
     //     single idle interval is slept, jittered by up to +20% (design D4).
+    // Scenario: serve/factory-serve / Idle polls on the timer
+    // Scenario: serve/factory-serve / One interval drives both idle states
     def "Idle-empty polls, finds nothing, and sleeps the jittered idle interval"() {
         given:
         def ledger = new SlotLedger(1, new VirtualClock())
@@ -221,6 +224,7 @@ class FeedAutomatonSpec extends Specification {
     // FR5, FR6: Idle-blocked — backoff-eligible entries exist but are all fresh tasks blocked
     //     by the WIP limit (open fronts >= W) and no returned task is ready; still one shared
     //     idle interval.
+    // Scenario: serve/factory-serve / One interval drives both idle states
     def "Idle-blocked polls, finds only WIP-blocked fresh tasks, and sleeps the same idle interval"() {
         given:
         def ledger = new SlotLedger(1, new VirtualClock())
@@ -245,6 +249,7 @@ class FeedAutomatonSpec extends Specification {
 
     // Design D4: idle jitter adds a uniform 0-20% to the interval; assert the bound holds
     //     across several seeded draws rather than trusting a single fixed pick.
+    // Scenario: serve/factory-serve / Poll phases are jittered
     def "idle jitter stays within the configured 0-20% window across seeds"() {
         given:
         Tracker tracker = [
@@ -271,6 +276,7 @@ class FeedAutomatonSpec extends Specification {
     //     to stopping (no idle sleep, no re-poll); with N=2 slots and 3 eligible tasks (mirroring
     //     the "Nightly drain" scenario) every task still gets claimed and run before drain()
     //     returns, proving occupied slots finish even after claiming has already stopped.
+    // Scenario: serve/factory-serve / Nightly drain
     def "drain claims and runs every eligible task, then returns once all slots empty, with no sleep"() {
         given:
         def ledger = new SlotLedger(2, new VirtualClock())
@@ -371,6 +377,7 @@ class FeedAutomatonSpec extends Specification {
     // NFR-O1: the WIP-blocked case must name the bottleneck explicitly — a concrete open-front
     //     count and the "not starting fresh work" framing — at a level an operator watching the
     //     daemon log actually sees (INFO), not DEBUG.
+    // Scenario: serve/factory-serve / Limit reached blocks fresh work
     def "Idle-blocked logs an INFO line naming the open-front count and that fresh work is not starting"() {
         given:
         def ledger = new SlotLedger(1, new VirtualClock())

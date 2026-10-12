@@ -141,6 +141,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
 
     // FR7 of make-checkpoint-gate-durable (M3): an INFRA-kind park returned without a reply is
     // consumed by ONE resumed commit — outcome null, attempts reset — before the first round runs.
+    // Scenario: git/git-task-persistence / A reply-less return clears the park
     def "an infrastructure return lands the resumed commit, outcome cleared and attempts reset, before any round"() {
         given: 'a CannotVerify park recorded on a real branch, its marker cleared by the landed park'
         def taskId = 'PROJ-5'

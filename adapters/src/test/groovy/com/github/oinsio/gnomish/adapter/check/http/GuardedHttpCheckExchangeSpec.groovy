@@ -51,6 +51,7 @@ class GuardedHttpCheckExchangeSpec extends Specification {
     }
 
     // NFR-S2: refused before any socket opens — the delegate is never handed the request.
+    // Scenario: verification/factory-egress-allowlist / Non-permitted destination is refused before connecting
     def "a refused first hop is never sent"() {
         given:
         def delegate = new Hops(new HttpCheckExchange.Response(200, 'ok'))
@@ -79,6 +80,7 @@ class GuardedHttpCheckExchangeSpec extends Specification {
     }
 
     // NFR-S2: a redirect is a target the manifest never declared, so it is judged like any other.
+    // Scenario: verification/factory-egress-allowlist / A redirect cannot escape into a blocked class
     def "a redirect into a blocked address class is refused, and the hop is never sent"() {
         given:
         def resolver = { host ->
@@ -103,6 +105,7 @@ class GuardedHttpCheckExchangeSpec extends Specification {
         delegate.seen.size() == 1
     }
 
+    // Scenario: verification/factory-egress-allowlist / Plain http is refused
     def "a redirect to plain http is refused"() {
         given:
         def exchange = new GuardedHttpCheckExchange(
@@ -117,6 +120,7 @@ class GuardedHttpCheckExchangeSpec extends Specification {
     }
 
     // NFR-S2: bounded — the chain stops at MAX_REDIRECTS rather than running forever.
+    // Scenario: verification/factory-egress-allowlist / A redirect cannot escape into a blocked class
     def "a redirect loop is refused once the bound is reached"() {
         given:
         def delegate = new Hops(redirect('https://sonar.example.com/again'))

@@ -44,6 +44,7 @@ class BaseReportSanitizingSpec extends Specification {
      */
     private static final String LABEL = 'Untrusted machine output:'
 
+    // Scenario: core/untrusted-text / A report the factory assembled is published unfenced
     def "the underdetermined report renders every designator value it names inert"() {
         when:
         def report = FreshClaimBaseReport.underdetermined(
@@ -93,6 +94,7 @@ class BaseReportSanitizingSpec extends Specification {
         !report.contains(FORGED)
     }
 
+    // Scenario: verification/verification-hardening / A park report quoting git output is fenced
     def "the refused report fences the refresh detail and leaves the resolved ref plain"() {
         when:
         def report = FreshClaimBaseReport.refused(

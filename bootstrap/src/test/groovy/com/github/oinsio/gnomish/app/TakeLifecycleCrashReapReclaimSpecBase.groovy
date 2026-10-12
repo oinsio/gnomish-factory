@@ -80,6 +80,10 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
         relaxTheStage()
     }
 
+    // Scenario: lifecycle/task-branch-contract / A tip stamped by an earlier tenure classifies by its content
+    // Scenario: lifecycle/task-branch-contract / Stale-epoch artifact is its own shape
+    // Scenario: lifecycle/task-branch-contract / A test assembly stamps like production
+    // Scenario: lifecycle/task-branch-contract / Crashed, reaped, reclaimed
     def "crashed mid-round -> salvaged tip -> reaped -> reclaimed by a different instance -> delivered"() {
         given: 'instance A claims the task for real: the tracker issues its tenure epoch'
         def claimedByA = tracker.claim(REF, 'instance-a')

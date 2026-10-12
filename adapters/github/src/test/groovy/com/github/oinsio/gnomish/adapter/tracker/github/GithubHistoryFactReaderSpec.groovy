@@ -36,6 +36,7 @@ class GithubHistoryFactReaderSpec extends Specification {
         !GithubHistoryFactReader.deriveFinished(markers)
     }
 
+    // Scenario: tracker/github-tracker / Finish marker is not returned
     def "a FINISH marker yields finished=true, returned=false (finish-then-reopen)"() {
         given: 'a task that was finished, then a human reopened the issue — no new marker is written on reopen'
         def markers = [
@@ -68,6 +69,7 @@ class GithubHistoryFactReaderSpec extends Specification {
         GithubHistoryFactReader.deriveFinished(markers)
     }
 
+    // Scenario: tracker/github-tracker / Never-finished issue does not report finished
     def "a CLAIM/ABORT/PROGRESS-only thread yields both facts false"() {
         given:
         def markers = [

@@ -17,6 +17,7 @@ class StatusReconstructionSpec extends StatusReconstructionSpecBase {
     // NFR-O2: a single AUTO stage with one check that Fails-then-Passes (a real retry) —
     //     the status view rebuilt from the event stream alone equals the run's final state:
     //     position, attemptsUsed, per-round check verdicts and executor usage all match.
+    // Scenario: pipeline/stage-engine / Status reconstructed from events alone
     def "reconstructs the full status view of a retry run from the event stream alone"() {
         given: 'a single AUTO stage whose check fails once (burns an attempt) then passes'
         def stageDef = stage('build', AdvancementMode.AUTO, [builtin('files_exist')])

@@ -57,6 +57,7 @@ class LogExpectationGateSpec extends Specification {
     }
 
     // FR17: the defect is a degrade line nobody watched, so the watch cannot be keyed on emitters.
+    // Scenario: observability/factory-logging / Every unwatched operator line is reported
     @AllowsUnexpectedLogEvents(reason = 'the feature deliberately emits the unwatched line the gate exists to catch')
     def "an operator line no capture was watching is unwatched"() {
         given:
@@ -129,6 +130,7 @@ class LogExpectationGateSpec extends Specification {
     }
 
     // FR17: a line emitted in silence is the defect, so the report names it whatever the verdict is.
+    // Scenario: observability/factory-logging / Every unwatched operator line is reported
     def "the report names the feature and the line it emitted"() {
         expect:
         with(LogExpectationGate.complaint('SomeSpec.some feature', [

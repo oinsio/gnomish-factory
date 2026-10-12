@@ -39,6 +39,7 @@ class HeartbeatOutageSuppressionSpec extends Specification {
     RepeatSuppressor suppressor = new RepeatSuppressor(clock, BEAT.multipliedBy(6))
 
     // FR4: an outage spanning many beats is announced once, reminded periodically, and closed once.
+    // Scenario: lifecycle/claim-heartbeat / Transient outage does not stop work
     def "a sustained beat outage is edges, not one WARN per beat"() {
         given:
         def tracker = Stub(Tracker)
@@ -259,6 +260,8 @@ class HeartbeatOutageSuppressionSpec extends Specification {
     //     streak would span a few real milliseconds: no roll-up, and a recovery over ~PT0S. The
     //     beater holds no clock (task 3.9): the tick hands it the instant it read, so the
     //     heartbeat's one source is the only one a beat or its suppressor can reach.
+    // Scenario: serve/daemon-supervision / Heartbeat suppression runs on the heartbeat's own time source
+    // Scenario: core/time-source / Heartbeat suppression follows the heartbeat's time
     def "the assembled heartbeat's suppression runs on the heartbeat's own time source"() {
         given: 'a tracker down for the first twelve beats, then answering'
         def payloads = []

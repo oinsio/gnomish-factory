@@ -83,6 +83,7 @@ class BoardModelSpec extends Specification {
     }
 
     // FR4: the Working column preserves listOpen's original order, routing only Working entries
+    // Scenario: observability/tracker-board / The column invents no holder
     def "preserves the open list's order in the Working column and routes only Working entries"() {
         given: 'an open list mixing Working and AwaitingHuman entries in a specific order'
         def openTasks = [
@@ -126,6 +127,7 @@ class BoardModelSpec extends Specification {
     }
 
     // FR4: a Working row carries the holder and the claim version through unchanged, including a null (missing marker) version
+    // Scenario: observability/tracker-board / The column invents no holder
     def "carries holder and claim version through on a Working row"() {
         given: 'a Working task with a live claim version'
         def version = new ClaimVersion('marker-1', Instant.parse('2026-08-05T08:30:00Z'), new ClaimEpoch(1))

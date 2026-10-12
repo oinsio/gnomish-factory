@@ -40,6 +40,7 @@ class DashboardStatusCardSpec extends Specification {
     private static final Instant GENERATED_AT = Instant.parse('2026-08-06T09:00:00Z')
 
     @Unroll
+    // Scenario: observability/dashboard-page / Clean stop is not an alert
     def "status line: #description"() {
         when:
         def html = renderer.render(view, emptyHistory(), neverFetchedBoard(), noSweepData(), GENERATED_AT, null)
@@ -60,6 +61,7 @@ class DashboardStatusCardSpec extends Specification {
     //     the stopped state"): the page serve renders right after its final snapshot reads that
     //     snapshot as stopped, with its reason and the stopped dot — and vitals frozen at the stop
     //     raise no alarm, though the same failure count on a running daemon would.
+    // Scenario: observability/dashboard-page / Fresh stopped snapshot shows the stopped state
     def "FR11: a fresh stopped snapshot read from disk shows the stopped state, its reason, and no alarm"() {
         given: 'a stopped snapshot written a minute ago, carrying a failure count that alarms a running daemon'
         def base = snapshotWithTrackerFailures()
@@ -78,6 +80,7 @@ class DashboardStatusCardSpec extends Specification {
         !markup(html).contains('class="status__alert"')
     }
 
+    // Scenario: observability/dashboard-page / Observation times are explicit
     def "a snapshot carries the instance, its writtenAt as a time element, and both stats"() {
         when:
         def html = renderer.render(

@@ -25,10 +25,23 @@ class ModuleBuildFile {
 
     /** The build file text of one module of the main build, comments removed. */
     static String textOf(String module) {
+        RepoSourceTree.code(fileOf(module))
+    }
+
+    /** The build file of one module of the main build. */
+    static File fileOf(String module) {
         def relative = module.replaceFirst(/^:/, '').replace(':', File.separator)
         def file = RepoSourceTree.repoRoot().resolve(relative).resolve('build.gradle').toFile()
         assert file.isFile(): "no build.gradle for module '${module}'"
-        RepoSourceTree.code(file)
+        file
+    }
+
+    /** The project paths the main build's {@code settings.gradle} includes, comments stripped. */
+    static List<String> includedProjects() {
+        def settings = RepoSourceTree.code(RepoSourceTree.repoRoot().resolve('settings.gradle').toFile())
+        (settings =~ /(?m)^include '([\w:-]+)'/).collect {
+            ":${it[1]}".toString()
+        }
     }
 
     /**

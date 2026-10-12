@@ -75,6 +75,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     // --takeover is a modifier meaningful only for 'take <ref>' — the bare form rejects it exactly
     // as it rejects --base (spec "Headless takeover needs the flag" applies to explicit mode only).
+    // Scenario: tracker/tracker-take / Flag validation
     def "bare take rejects --takeover"() {
         when:
         parser.parse(args('take', '--takeover'), CLONE)
@@ -85,6 +86,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     // FR1 of remove-interactive-console: explicit take accepts no --interactive in any form; the
     // token is refused the way any unknown option is, before the tracker is touched.
+    // Scenario: tracker/tracker-take / Flag validation
     def "FR1 of remove-interactive-console: explicit take rejects #flag as an unknown option"() {
         when:
         parser.parse(args('take', '42', flag), CLONE)
@@ -104,6 +106,8 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     // Flag validation scenario: take is always git mode, has no ad-hoc task source, no --resume,
     // and no --from-stage — each rejected before the tracker is ever touched.
     @Unroll
+    // Scenario: tracker/tracker-take / Every retired flag is a usage error
+    // Scenario: tracker/tracker-take / Flag validation
     def "explicit take rejects --#flag before touching the tracker"(String flag) {
         when:
         List<String> tokens = [
@@ -128,6 +132,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     }
 
     @Unroll
+    // Scenario: tracker/tracker-take / Every retired flag is a usage error
     def "bare take rejects --#flag before touching the tracker"(String flag) {
         when:
         List<String> tokens = [
@@ -159,6 +164,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
     }
 
     // Spec requirement text: "the bare form SHALL reject start modifiers (--base)".
+    // Scenario: tracker/tracker-take / Flag validation
     def "bare take rejects --base"() {
         when:
         parser.parse(args('take', '--base=main'), CLONE)
@@ -205,6 +211,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     // Scenario "Batch rejects interactivity": take 42 43 --interactive fails validation before
     // touching the tracker, as for any unknown flag (FR1 of remove-interactive-console).
+    // Scenario: tracker/tracker-take / Batch rejects interactivity
     def "batch take rejects --interactive"() {
         when:
         parser.parse(args('take', '42', '43', '--interactive'), CLONE)
@@ -223,6 +230,7 @@ class TakeArgumentsParserSpec extends Specification implements ApplicationArgume
 
     // FR3 of add-factory-serve: --base is a start modifier for a single fresh explicit-mode claim,
     // meaningless once two or more refs are being worked.
+    // Scenario: tracker/tracker-take / Batch rejects a base
     def "batch take rejects --base"() {
         when:
         parser.parse(args('take', '42', '43', '--base=main'), CLONE)

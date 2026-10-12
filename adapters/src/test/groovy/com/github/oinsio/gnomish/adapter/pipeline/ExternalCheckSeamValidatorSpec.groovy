@@ -38,6 +38,7 @@ class ExternalCheckSeamValidatorSpec extends Specification {
     }
 
     // FR6/UX1: an unknown provider is a load error naming what was selected and what exists.
+    // Scenario: pipeline/pipeline-config / Unknown provider is a located load error
     def "a check naming an undiscovered provider is a located error naming it and the discovered set"() {
         when:
         def errors = ExternalCheckSeamValidator.validate(
@@ -55,6 +56,7 @@ class ExternalCheckSeamValidatorSpec extends Specification {
 
     // FR13/M2: the defaulted github is graded like any other selection, so a classpath without the
     //     github jar reports the same located error rather than failing mid-run.
+    // Scenario: pipeline/pipeline-config / Defaulted github provider absent from the registry is a located error
     def "the defaulted github provider is reported the same way when no jar serves it"() {
         when: 'the loader-defaulted github selection meets an empty discovered set'
         def errors = ExternalCheckSeamValidator.validate([
@@ -82,6 +84,7 @@ class ExternalCheckSeamValidatorSpec extends Specification {
     }
 
     // FR6: the provider owns its params; the seam only locates the delegation.
+    // Scenario: pipeline/pipeline-config / External check provider defaults to github and validates its params
     def "a served provider grades its own params and its problems come back located"() {
         given: 'a provider rejecting any params it is handed'
         def rejecting = { String file, String where, Map params ->
@@ -108,6 +111,7 @@ class ExternalCheckSeamValidatorSpec extends Specification {
 
     // FR6: "a provider with no matching validator selection is never asked to validate another
     //     provider's params" — dispatch is by the check's own discriminator.
+    // Scenario: verification/check-provider-model / Provider validates its own params
     def "no provider is asked about another provider's params"() {
         given:
         def asked = []

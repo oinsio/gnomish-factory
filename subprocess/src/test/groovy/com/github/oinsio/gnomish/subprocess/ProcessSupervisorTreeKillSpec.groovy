@@ -18,6 +18,8 @@ class ProcessSupervisorTreeKillSpec extends Specification implements FakeBinarie
     @TempDir
     Path dir
 
+    // Scenario: git/git-task-persistence / No process outlives the deadline
+    // Scenario: lifecycle/subprocess-supervision / The whole tree dies with the invocation
     def "FR3, NFR-R2, G5, M2: neither the child nor its descendants survive a deadline kill"() {
         given: 'a binary that ignores the cooperative signal and forks a child that ignores it too'
         Path pidFile = dir.resolve('child.pid')
@@ -60,6 +62,7 @@ class ProcessSupervisorTreeKillSpec extends Specification implements FakeBinarie
         grandchildren.each { killQuietly(it) }
     }
 
+    // Scenario: lifecycle/subprocess-supervision / A child ignoring the terminate is killed after the grace
     def "design D3: a child forked while the tree is being killed is caught by the re-snapshot"() {
         given: 'a binary that answers the cooperative signal by forking a fresh child and carrying on'
         Path latePidFile = dir.resolve('late.pid')

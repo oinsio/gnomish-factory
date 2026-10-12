@@ -44,6 +44,7 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
         new GitProcessRunner(gitFailingOn(tempDir, 'rev-parse').toString())
     }
 
+    // Scenario: git/git-task-persistence / A blank tip is never recorded
     def "FR13: a snapshot whose tip cannot be resolved records no attempt commit"() {
         given:
         def snapshotStep = new EnvironmentRoundSnapshot(box, blindToTips(), cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))

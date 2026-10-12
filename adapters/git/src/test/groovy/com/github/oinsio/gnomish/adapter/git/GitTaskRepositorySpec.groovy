@@ -56,6 +56,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         runner.run(worktreeFor(taskId), 'show', "${ref}:.gnomish-task/task.json").stdout()
     }
 
+    // Scenario: git/git-task-persistence / Start creates the branch with the task context
     def "FR1: createTask creates the branch and commits task.json with the STARTED message"() {
         given:
         def context = sampleContext()
@@ -108,6 +109,8 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // FR3 of harden-task-branch-contract: the STARTED commit carries the initial state.json
     // beside task.json. One commit, not two — a run that dies before its first round completes
     // still leaves a branch the next resume can read, which is the crash loop FR3 closes.
+    // Scenario: git/git-task-persistence / A first-round crash resumes from the initial state
+    // Scenario: git/git-task-persistence / Start creates the branch with the task context
     def "FR3: the STARTED commit carries the initial state.json beside task.json"() {
         when:
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -129,6 +132,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // FR4 of harden-task-branch-contract: the decision and the attempt-counter reset it implies
     // are one transition, so they are ONE commit — no tip ever reads "answered, but still
     // exhausted", which a resume would turn straight back into an escalation.
+    // Scenario: git/git-task-persistence / Decision and attempt reset are one commit
     def "FR4: the decision commit carries the attempt-counter reset"() {
         given: 'a task whose stage burned an attempt before parking, recorded on the branch'
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -178,6 +182,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
 
     // FR7 of add-base-ref-resolution: createTask pins the REAL rule that produced the ref, not a
     // stand-in — the ref and the rule land in the STARTED commit's task.json.
+    // Scenario: git/git-task-persistence / Creation commit carries the pin
     def "FR7: createTask pins the resolved ref and its rule in the STARTED commit"() {
         when:
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.DESIGNATOR), TaskState.atStageStart('implement'))
@@ -300,6 +305,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         readBack.forParsing() == written.forParsing()
     }
 
+    // Scenario: git/git-task-persistence / Parking records the outcome
     def "FR1: recordOutcome for Escalated populates lastEscalation"() {
         given:
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -316,6 +322,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         content.lastEscalation() == report
     }
 
+    // Scenario: git/git-task-persistence / Parked and interrupted are distinguishable
     def "FR5: parked and interrupted tasks are distinguishable by outcome, side by side"() {
         given: 'two tasks escalated with a question, both resumed by a decision'
         repository.createTask(sampleContext('PROJ-PARKED'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -367,6 +374,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // FR10 of harden-task-branch-contract: running the destructive step twice equals running it once.
     // FR5 of harden-logging-observability: the second run writes nothing, so only a DEBUG line
     // distinguishes "already done" from "never ran".
+    // Scenario: git/git-task-persistence / A tip without the state directory is a cleanup no-op
     def "FR10: finishCleanup on an already-cleaned tip changes nothing"() {
         given:
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -395,6 +403,8 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // between `git rm -r` and the commit leaves the removal staged in the worktree over a tip that
     // still carries the envelope; the next pickup on that same worktree must land the removal
     // rather than mistake a dirty worktree for a cleaned branch.
+    // Scenario: git/git-task-persistence / A converged staged removal is visible in the log
+    // Scenario: git/git-task-persistence / Kill between the staged removal and its commit converges on the same worktree
     def "FR3: finishCleanup converges a removal a killed predecessor already staged"() {
         given: 'a completed task whose tip still carries the envelope'
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -452,6 +462,8 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         }
     }
 
+    // Scenario: git/git-task-persistence / Clean tip, full history
+    // Scenario: git/git-task-persistence / The cleanup commit is built per mode
     def "FR15/M4: finishCleanup adds the cleanup commit removing .gnomish-task/ from the tip, full history preserved"() {
         given: 'a task with at least one round commit before completion, to prove earlier history stays reachable'
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -611,6 +623,8 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
     // FR5, D8 of fix-denial-attribution-durability: host mode has no egress guard and so mints no
     //     position of its own — but a branch whose earlier rounds ran in a box carries one, and a
     //     host-side lifecycle rewrite must not be what erases it (the mirrored half of task 4.7)
+    // Scenario: git/git-task-persistence / A decision append preserves the cursor
+    // Scenario: git/git-task-persistence / A lifecycle rewrite preserves the cursor
     def "FR5: host lifecycle rewrites carry both envelopes' committed cursors forward"() {
         given: 'a task branch whose envelopes carry the positions a container-mode run committed'
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
@@ -675,6 +689,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         !TaskJsonMapper.fromDto(committed).trackerWritePending()
     }
 
+    // Scenario: git/git-task-persistence / A half-written worktree file is never carried forward
     def "FR2: the cursor carry-forward reads the tip's state.json, never the worktree's"() {
         given: 'a branch whose tip carries a container-mode position in state.json'
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))

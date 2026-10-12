@@ -15,6 +15,7 @@ class SweepCountsSpec extends Specification {
     }
 
     // NFR-O1: every category lands in its own field, with no cross-talk.
+    // Scenario: observability/serve-observability / Skip is visible as its own count
     def "of maps each category onto its own field"() {
         expect:
         SweepCounts.of([(category): 7]) == expected

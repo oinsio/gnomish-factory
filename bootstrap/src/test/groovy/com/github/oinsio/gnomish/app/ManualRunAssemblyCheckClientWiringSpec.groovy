@@ -95,6 +95,7 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
     // FR5, FR6, D10 of add-plugin-architecture: with a factory.check.<provider> subsection
     //     configured, the seam behind the guard is the provider-dispatching composite — the engine
     //     port is unchanged, and which provider answers is decided per check rather than at wiring.
+    // Scenario: verification/github-external-check / Operator enables the adapter with config alone
     def "a configured check provider puts the dispatching composite behind the guard"() {
         given:
         def assembly = newAssembly(githubCheckProperties())
@@ -147,6 +148,9 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
     // FR17, D11 of add-plugin-architecture: the credential names come from the configured
     //     providers' own SPI declarations, so listing one as child-env passthrough fails the
     //     assembly naming the variable — with no core source naming that variable.
+    // Scenario: sandbox/execution-environment / A credential passthrough name fails startup
+    // Scenario: verification/github-external-check / External-check token cannot be allowlisted
+    // Scenario: verification/check-provider-model / Declared check credential cannot be allowlisted
     def "a discovered provider's declared credential cannot be allowlisted as passthrough"() {
         given: 'an assembly whose operator passthrough lists the check provider\'s credential name'
         def time = VirtualTimeEquipment.create()

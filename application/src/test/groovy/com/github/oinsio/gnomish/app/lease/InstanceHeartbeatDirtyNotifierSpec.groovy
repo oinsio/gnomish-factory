@@ -59,6 +59,7 @@ class InstanceHeartbeatDirtyNotifierSpec extends Specification {
     // FR7: the worker's abnormal death — the death handler firing — is an immediate write trigger.
     //     Isolated from the earlier worker-start signal by resetting the counter once the worker is
     //     parked in its first sleep, so the count proves the DIED transition alone woke the writer.
+    // Scenario: observability/serve-observability / Heartbeat death is a field
     def "an abnormal worker death fires the state listener"() {
         given: 'a sleeper that throws on its second call, mimicking an adapter Error'
         def base = new BlockingSleeper()

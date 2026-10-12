@@ -31,6 +31,7 @@ class InvalidIoBatterySpec extends Specification implements InvalidFixtureSuppor
         root
     }
 
+    // Scenario: pipeline/pipeline-config / Pipeline stage without a manifest is rejected
     def "M2/FR6: a pipeline stage without a manifest yields exactly its located consistency error"() {
         given: 'pipeline lists plan and build, but only plan has a manifest directory'
         writeValidBaseline()
@@ -45,6 +46,7 @@ class InvalidIoBatterySpec extends Specification implements InvalidFixtureSuppor
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Dangling stage directory is rejected
     def "M2/FR6: a dangling stage directory yields exactly its located consistency error"() {
         given: 'pipeline lists only plan, but a structurally-clean orphan directory also exists'
         writeValidBaseline()
@@ -67,6 +69,7 @@ advancement: auto
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Missing referenced file is rejected
     def "M2/FR6: a missing instructions.md yields exactly its located existence error"() {
         given: 'a structurally clean plan whose instructions file is absent'
         write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 2\n')
@@ -82,6 +85,7 @@ advancement: auto
         ]
     }
 
+    // Scenario: pipeline/pipeline-config / Missing referenced file is rejected
     def "M2/FR6: a missing judge acceptance-criteria file yields exactly its located existence error"() {
         given: 'a judge check pointing at an absent acceptance file; instructions exists'
         writeJudge('stages/plan/accept.md')
@@ -152,6 +156,8 @@ advancement: auto
         write('stages/plan/instructions.md', 'plan it\n')
     }
 
+    // Scenario: pipeline/pipeline-config / All problems reported in one pass
+    // Scenario: pipeline/pipeline-config / Validation failure is data, not an exception
     def "M2/UX1/FR8: three independent problems across tiers are all reported in one pass"() {
         given: 'a missing schemaVersion (domain), an unknown advancement (structural),'
         and: 'and a dangling orphan directory (consistency) — all model-independent of each other'

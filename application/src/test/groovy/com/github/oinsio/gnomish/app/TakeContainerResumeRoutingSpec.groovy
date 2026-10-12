@@ -138,6 +138,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
     // delivered while the tracker finish never landed. The deferred finish is posted from the
     // branch's own delivered history with ZERO engine rounds and no environment touched at all.
     // This is the route container mode lacked before the routing table was unified (design D8).
+    // Scenario: tracker/tracker-take / A delivered container task with a pending finish reconciles by ref
     def "a delivered-and-cleaned branch posts the deferred finish with zero engine rounds"() {
         given:
         def branches = Mock(TaskBranchGit) {
@@ -191,6 +192,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
     // a terminal Completed/Delivered result. FR18 of make-checkpoint-gate-durable: the box is
     // prepared by the shared ContainerResumePreparation (its own spec covers the branches) before
     // the drive starts.
+    // Scenario: tracker/tracker-take / Takeover salvages from the kept box
     def "an interrupted (null-outcome) resume prepares the box, then finishes on the tracker"() {
         given:
         def branches = Mock(TaskBranchGit) {
@@ -254,6 +256,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
     // FR4 of make-checkpoint-gate-durable: a returned checkpoint is approved over bare objects —
     // the kept box disposed first — before the run continues from the approved position.
+    // Scenario: tracker/tracker-take / Returned checkpoint is approved before the run continues
     def "a returned gate is approved before the run continues"() {
         given:
         def gated = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
@@ -455,6 +458,9 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
     // same name: the fetched task names a CONFLICTING base designator (unresolvable — reading it
     // could only park), the base-ref fake throws on every fresh-claim read, and the resume chain
     // takes no TrustedBaseContext; the one base read is the re-resolution of the pinned ref name.
+    // Scenario: git/git-task-persistence / Resume re-resolves only the pinned ref
+    // Scenario: git/base-ref-resolution / Retargeting a pinned task has no effect
+    // Scenario: git/base-ref-resolution / A configuration change does not reach a pinned task
     def "FR7: resume re-resolves only the pinned ref — the task's conflicting base designator is never read"() {
         given:
         def resolved = []
@@ -534,6 +540,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
     // FR12, FR13: a DecisionNeeded escalation with NO pending reply re-parks, restating the
     // question, instead of resuming (the distinct-from-AttemptsExhausted branch of the same switch).
+    // Scenario: tracker/tracker-take / Returned without an answer
     def "a DecisionNeeded escalation with no pending reply re-parks restating the question"() {
         given:
         def branches = Mock(TaskBranchGit) {

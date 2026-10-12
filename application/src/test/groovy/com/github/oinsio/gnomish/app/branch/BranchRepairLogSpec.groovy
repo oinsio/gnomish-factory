@@ -23,6 +23,7 @@ class BranchRepairLogSpec extends Specification {
     }
 
     // NFR-O1: one line, naming shape, task, epoch, owner and action.
+    // Scenario: lifecycle/task-branch-contract / Repairs are observable
     def "a repair logs one line naming the shape, task, epoch and action"() {
         when:
         def events = capture {
@@ -60,6 +61,7 @@ class BranchRepairLogSpec extends Specification {
     }
 
     // NFR-O1: "repeated" is judged against the task's persisted recovery accounting, not a clock.
+    // Scenario: lifecycle/task-branch-contract / Repairs are observable
     def "a repair with prior attempts recorded warns"() {
         when:
         def events = capture {

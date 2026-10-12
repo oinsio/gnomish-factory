@@ -131,6 +131,7 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
     // URL — exactly what a pre-normalization factory stamped — and then swept by a factory that
     // derives the normalized identity. Without the legacy alias the sweep's listing would not
     // return it at all, and it would run forever with no pass able to reclaim it.
+    // Scenario: sandbox/sandbox-lifecycle / Objects labelled before normalization stay in scope
     def "a box stamped with the legacy identity is found and acted on by a sweep under the normalized one"() {
         given: 'a clone whose origin carries an embedded token, so raw and normalized digests differ'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
@@ -162,6 +163,7 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
     // Both passes keep the box alive under the same oracle; what is being asserted is that the
     // second pass still SEES it — under a pre-normalization factory it would have vanished from
     // the listing the moment the token changed.
+    // Scenario: sandbox/sandbox-lifecycle / A rotated credential keeps the project identity
     def "rotating the origin credential between two passes changes neither the identity nor the verdicts"() {
         given:
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')

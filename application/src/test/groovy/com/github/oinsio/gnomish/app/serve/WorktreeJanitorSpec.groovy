@@ -63,6 +63,8 @@ class WorktreeJanitorSpec extends Specification {
 
     // FR14, D10: an environment past the age threshold, held by no slot of this instance, is
     //     disposed through the seam by its directory key.
+    // Scenario: serve/factory-serve / Aged environment removed
+    // Scenario: serve/factory-serve / The cleaner consults no tracker status
     def "disposes an unheld environment older than the age threshold"() {
         given:
         environment('task-a', NOW - AGE_THRESHOLD - Duration.ofDays(1))
@@ -78,6 +80,7 @@ class WorktreeJanitorSpec extends Specification {
     //     per-task decision — and everything the disposal seam logs beneath it — names the task in
     //     the MDC. Without it a disposal is invisible to `grep taskId=<id>`, the filter an operator
     //     uses to ask what happened to a task.
+    // Scenario: observability/factory-logging / A daemon's per-task decision runs under the task's id
     def "FR8: a disposal decision is findable by taskId, and its scope covers the disposal itself"() {
         given:
         environment('task-a', NOW - AGE_THRESHOLD - Duration.ofDays(1))
@@ -136,6 +139,7 @@ class WorktreeJanitorSpec extends Specification {
     }
 
     // FR14, D10: a task this instance currently holds is never touched, regardless of age.
+    // Scenario: serve/factory-serve / Working task untouched
     def "never disposes an environment currently held by this instance"() {
         given:
         environment('task-c', NOW - AGE_THRESHOLD - Duration.ofDays(30))

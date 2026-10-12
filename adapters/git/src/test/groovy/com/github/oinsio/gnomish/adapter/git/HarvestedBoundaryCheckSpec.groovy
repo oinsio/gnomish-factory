@@ -59,6 +59,7 @@ class HarvestedBoundaryCheckSpec extends Specification implements BareGitRepoFix
         noExceptionThrown()
     }
 
+    // Scenario: git/git-task-persistence / A request under another round's name is a violation
     def "FR16: a same-key decision file under another token is a violation: #description"() {
         given:
         def openTip = head()

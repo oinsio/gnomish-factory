@@ -109,6 +109,8 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
     // between the outcome commit and the tracker finish. The deferred finish is written and the
     // cleanup commit and worktree disposal follow it, with no engine round paid for work already
     // delivered.
+    // Scenario: git/git-task-persistence / Kill between outcome and cleanup does not re-run the final stage
+    // Scenario: tracker/tracker-take / Kill between Completed and cleanup costs no re-run
     def "FR9: a CompletedUncleaned tip finishes and cleans up without re-entering the engine"() {
         given:
         record = recordWith(new RecordedOutcome.Completed())
@@ -161,6 +163,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
     // FR9, FR15: the cleanup commit deletes .gnomish-task/ from the worktree, so the final state
     // must be read BEFORE it — a read after the delete finds nothing and falls back to the
     // pre-contract fabrication, handing disposal a first-stage state for a delivered task.
+    // Scenario: tracker/tracker-take / Delivered state is read at the tip while the envelope is still there
     def "FR9: the disposal outcome carries the state recorded on the tip, read before cleanup deletes it"() {
         given: 'a tip whose recorded state is past the first stage, and a store that loses it on cleanup'
         record = recordWith(new RecordedOutcome.Completed())

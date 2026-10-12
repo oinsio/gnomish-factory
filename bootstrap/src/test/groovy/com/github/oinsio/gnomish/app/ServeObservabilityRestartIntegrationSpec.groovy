@@ -65,6 +65,7 @@ implements AppAssemblyFixture, ServeObservabilityFixture, BareGitRepoFixture {
     }
 
     @Timeout(10)
+    // Scenario: observability/serve-observability / Restart keeps the paths
     def "a restart against the same instance name keeps both paths and writes a new suffix into the data (M3)"() {
         given: 'two ServeCommand instances over the SAME project/instance name, simulating two process lifetimes'
         def firstRun = newCommand()

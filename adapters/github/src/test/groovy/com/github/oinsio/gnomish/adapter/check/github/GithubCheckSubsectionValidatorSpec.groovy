@@ -27,6 +27,7 @@ class GithubCheckSubsectionValidatorSpec extends Specification {
 
     // FR5, task 2.7: half a connection is a configuration mistake, never a silently disabled
     //     provider — and it is a LOCATED error naming the missing key, not a thrown exception.
+    // Scenario: verification/check-provider-model / Malformed operator subsection is a located load error
     def "a subsection declaring only #present is a located error naming the missing key"() {
         when:
         def errors = validate(subsection)

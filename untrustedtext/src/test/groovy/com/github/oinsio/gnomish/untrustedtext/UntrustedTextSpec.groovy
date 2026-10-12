@@ -27,6 +27,7 @@ class UntrustedTextSpec extends Specification {
     /** The bound the excerpt scenario below asks for, and the bound GitCommandResult quotes under. */
     private static final int CAP = 1_400
 
+    // Scenario: core/untrusted-text / Provenance travels with the value
     def "each capture family has its own mint, and the provenance travels with the text — #family"() {
         expect:
         carrier.raw() == TEXT
@@ -46,6 +47,7 @@ class UntrustedTextSpec extends Specification {
 
     // FR4, design D3: the factory's own sentences are a carrier because the field is one, and the
     //     family says so — the alternative files factory prose under a source that did not write it.
+    // Scenario: core/untrusted-text / A factory-composed sentence is not filed under the capture it quotes
     def "a sentence the factory composed is minted in its own family, not in the one it quotes"() {
         given: 'captured output, and the sentence a report builds around it'
         def captured = UntrustedText.subprocess(TEXT)
@@ -64,6 +66,7 @@ class UntrustedTextSpec extends Specification {
         sentence.toString() == sentence.forLog()
     }
 
+    // Scenario: core/untrusted-text / Provenance travels with the value
     def "every provenance names itself in words a report can print — #provenance"() {
         expect: 'a report three calls away needs no other source to say where the text came from'
         !provenance.description().isBlank()
@@ -87,6 +90,8 @@ class UntrustedTextSpec extends Specification {
 
     // D1 (revised 2026-09-17), FR4: the round trip this change owes — a cause captured from a
     //     subprocess, written to task.json and read back as a branch document — is the same value.
+    // Scenario: core/untrusted-text / A value read back from a document equals the value written
+    // Scenario: core/untrusted-text / Provenance is never part of the identity
     def "the same text under two provenances is one value, so a document round trip preserves it"() {
         given: 'the carrier a writer held, and the one its reader minted off the branch'
         def written = UntrustedText.subprocess(TEXT)
@@ -115,6 +120,7 @@ class UntrustedTextSpec extends Specification {
         UntrustedText.subprocess(TEXT) != (TEXT as Object)
     }
 
+    // Scenario: core/untrusted-text / Concatenation is safe by default
     def "the default rendering is the log exit, byte for byte — #label"() {
         given:
         def carrier = UntrustedText.subprocess(input)
@@ -224,6 +230,8 @@ class UntrustedTextSpec extends Specification {
         input << AdversarialCorpus.ENTRIES.values()
     }
 
+    // Scenario: core/untrusted-text / A question about the text needs no annotation
+    // Scenario: core/untrusted-text / The length of the text needs no annotation
     def "FR10: a question about the text is answered without rendering it"() {
         given: 'output whose only interesting property is a marker in it'
         def carrier = UntrustedText.subprocess("before${AdversarialCorpus.ESC}[2Jalready exists")

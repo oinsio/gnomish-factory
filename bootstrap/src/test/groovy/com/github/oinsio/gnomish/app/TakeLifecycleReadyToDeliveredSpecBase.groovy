@@ -136,6 +136,8 @@ tracker:
                 new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 
+    // Scenario: tracker/tracker-take / Full delivery
+    // Scenario: tracker/tracker-take / Host-mode take is unchanged
     def "ready -> claim -> work -> delivered with a final report, told end to end by the tracker's own thread"() {
         given: 'a Ready task seeded directly in a real tracker, and a fake-agent-backed stage'
         def command = newCommand(fakeAgent())

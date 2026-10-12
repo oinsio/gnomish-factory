@@ -56,6 +56,8 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         gitOutput(work, 'rev-parse', 'HEAD')
     }
 
+    // Scenario: git/git-task-persistence / A fetched success says origin was contacted
+    // Scenario: git/git-task-persistence / Fresh base at claim
     def "FR6: a branch base is refreshed to origin's current tip"() {
         given: 'origin has moved past what the clone fetched at clone time'
         Path log = tempDir.resolve('branch.log')
@@ -73,6 +75,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         recordedSubcommands(log).count('fetch') == 1
     }
 
+    // Scenario: git/git-task-persistence / Tag base lands in refs/tags without force
     def "FR6: a tag base lands in refs/tags and reports the commit, not the tag object"() {
         given: 'a clone that does not yet hold the tag'
         Path log = tempDir.resolve('tag.log')
@@ -93,6 +96,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         recordedSubcommands(log).count('fetch') == 1
     }
 
+    // Scenario: git/git-task-persistence / Diverging local tag parks the task
     def "FR6: a local tag diverging from origin's refuses without moving it, naming both commits"() {
         given: 'the clone holds v1.0 pointing somewhere else entirely'
         def originCommit = gitOutput(clone, 'rev-parse', 'refs/tags/v1.0')
@@ -112,6 +116,8 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         gitOutput(clone, 'rev-parse', 'refs/tags/v1.0') == elsewhere
     }
 
+    // Scenario: git/git-task-persistence / A clone-served success says origin was not contacted
+    // Scenario: git/git-task-persistence / SHA base already present needs no network
     def "FR8: a commit base the clone already holds costs no network at all"() {
         given:
         Path log = tempDir.resolve('sha-present.log')
@@ -181,6 +187,9 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         (outcome as BaseRefreshOutcome.Refreshed).contact() == OriginContact.CLONE_ONLY
     }
 
+    // Scenario: git/git-task-persistence / A fetched success says origin was contacted
+    // Scenario: git/git-task-persistence / Absent SHA is fetched as objects only
+    // Scenario: git/git-task-persistence / The refresh writes no FETCH_HEAD
     def "FR6: a commit base the clone lacks is fetched as objects only, with no ref written"() {
         given: 'a commit published to origin after this clone was made'
         Path log = tempDir.resolve('sha-absent.log')
@@ -203,6 +212,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         recordedSubcommands(log).count('fetch') == 1
     }
 
+    // Scenario: git/git-task-persistence / A name origin holds as both a branch and a tag parks the task
     def "D11a: a name origin holds as both a branch and a tag parks the task, fetching neither"() {
         given: 'origin carries hotfix in both namespaces'
         def branchCommit = gitOutput(work, 'rev-parse', 'develop')
@@ -224,6 +234,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         !recordedSubcommands(log).contains('fetch')
     }
 
+    // Scenario: git/git-task-persistence / A ref origin holds in neither namespace parks the task
     def "FR6: a ref origin holds in neither namespace parks the task"() {
         when:
         def outcome = refresh().refresh(clone, 'no-such-base')
@@ -233,6 +244,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         (outcome as BaseRefreshOutcome.Refused).report().contains('no-such-base')
     }
 
+    // Scenario: git/git-task-persistence / Unreachable remote creates no branch
     def "FR9: an unreachable origin is unavailable, never a refusal, and no ref moves"() {
         given:
         assert gitExitCode(clone, 'remote', 'set-url', 'origin', tempDir.resolve('gone.git').toString()) == 0
@@ -261,6 +273,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         (outcome as BaseRefreshOutcome.Refused).report().contains("no 'origin' remote")
     }
 
+    // Scenario: git/git-task-persistence / The refresh runs under the network bounds and the clone lock
     def "FR9: only the unanswered arm is re-asked, and the budget is bounded"() {
         given: 'a git whose refs read always fails, counting the invocations'
         Path gitBinary = StandIn.recording(tempDir, 'refuse-ls-remote-recorded')
@@ -376,6 +389,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         base << ['develop', 'v1.0']
     }
 
+    // Scenario: git/git-task-persistence / A remote refusing fetch-by-SHA parks the task
     def "FR9: a commit origin is reachable but will not serve is a task-level refusal"() {
         given: 'a commit this clone lacks, and a git whose fetch fails while ls-remote answers'
         def advanced = advance('develop', 'g.txt')
@@ -418,6 +432,9 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         (outcome as BaseRefreshOutcome.Unavailable).reason().contains('left no refs/remotes/origin/feature/late')
     }
 
+    // Scenario: git/git-task-persistence / A branch base force-updates its remote-tracking ref
+    // Scenario: git/git-task-persistence / A populated submodule does not widen the refresh
+    // Scenario: git/git-task-persistence / The refresh writes no FETCH_HEAD
     def "FR6: every refresh fetch carries the flags that keep it narrow"() {
         given:
         Path log = tempDir.resolve("flags-${base}.log")

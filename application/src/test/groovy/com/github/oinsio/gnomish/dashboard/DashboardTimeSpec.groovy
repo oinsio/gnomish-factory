@@ -68,6 +68,7 @@ class DashboardTimeSpec extends Specification {
     }
 
     // NFR-R2: nothing here may be left for the script to compute — the absolute value is complete.
+    // Scenario: observability/dashboard-page / No-JS reader sees absolute time
     def "the absolute text alone identifies the instant with no script involved"() {
         given:
         def out = new StringBuilder()

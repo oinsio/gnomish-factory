@@ -46,6 +46,10 @@ class ReaperRepairSpec extends Specification {
 
     // FR12: the claim sequence's kill window — working label, no claim comment — is rolled back to
     //     ready by the index repair, but only after the window grace has stood.
+    // Scenario: tracker/github-tracker / Kill between label transition and claim comment is swept
+    // Scenario: lifecycle/claim-heartbeat / Each non-steady shape is repaired by its own operation
+    // Scenario: lifecycle/claim-heartbeat / Kill between claim label and claim comment is repaired
+    // Scenario: lifecycle/claim-heartbeat / A working label with no claim footprint is ClaimPending
     def "a claim-pending window is repaired to ready after the grace, not before"() {
         given:
         tracker.listReady(_) >> []
@@ -77,6 +81,11 @@ class ReaperRepairSpec extends Specification {
 
     // FR12: a boundary marker under a still-working label is the truth waiting for its index — it
     //     is repaired on classification, with no grace to wait out.
+    // Scenario: lifecycle/claim-heartbeat / An index lag is repaired without a grace
+    // Scenario: lifecycle/claim-heartbeat / Each non-steady shape is repaired by its own operation
+    // Scenario: lifecycle/claim-heartbeat / A boundary marker completes its own flip
+    // Scenario: lifecycle/claim-heartbeat / A boundary newer than the labels is IndexLagging
+    // Scenario: lifecycle/claim-heartbeat / Killed reap leaves a shape the next tick resolves
     def "a lagging index is repaired on the tick that classifies it"() {
         when:
         tracker.listReady(_) >> []
@@ -91,6 +100,9 @@ class ReaperRepairSpec extends Specification {
 
     // FR19: an abandoned footprint on a working task goes through the stale-claim removal, the same
     //     operation a dead tenure does — the port retires the footprint either way.
+    // Scenario: lifecycle/claim-heartbeat / Absent version does not hide a task from observation
+    // Scenario: lifecycle/claim-heartbeat / Each non-steady shape is repaired by its own operation
+    // Scenario: lifecycle/claim-heartbeat / A footprint no working tenure backs is ClaimAbandoned
     def "an abandoned footprint is retired through the stale-claim removal after its grace"() {
         given:
         tracker.listReady(_) >> []
@@ -113,6 +125,8 @@ class ReaperRepairSpec extends Specification {
 
     // FR19: the ghost claim that landed on a task already rolled back to ready reaches the sweep
     //     through the READY feed — the listing the old open-only sweep never looked at.
+    // Scenario: tracker/github-tracker / Ready issue with a live claim is visible to the sweep
+    // Scenario: lifecycle/claim-heartbeat / Suspension leftover is swept off a ready task
     def "a ghost claim on a ready-labeled task is swept through the ready feed and retired"() {
         given:
         def ghost = new ClaimFacts.Live('inst-1', VERSION)
@@ -138,6 +152,7 @@ class ReaperRepairSpec extends Specification {
 
     // FR19, design D14: a repair that fails is re-armed, so the same unchanged shape is retried on
     //     a later tick instead of staying frozen until its facts change.
+    // Scenario: lifecycle/claim-heartbeat / A failed index repair is retried, not silently dropped
     def "a failed index repair is re-armed for the next tick"() {
         given: 'the same frozen window on every tick of this scenario'
         tracker.listReady(_) >> []
@@ -226,6 +241,7 @@ class ReaperRepairSpec extends Specification {
     // FR19: an adapter never omits a combination it cannot interpret, so a Foreign task really
     //     reaches the sweep. No recovery owner claims it, which makes surfacing it the sweep's
     //     whole duty — silence would leave an out-of-protocol task invisible to the operator.
+    // Scenario: lifecycle/claim-heartbeat / Any other combination is Foreign
     def "a foreign shape is surfaced with its diagnosis, and never repaired"() {
         given:
         tracker.listReady(_) >> []
@@ -331,6 +347,7 @@ class ReaperRepairSpec extends Specification {
     //     decision would otherwise be unreachable from `grep taskId=<id>` — the one filter an
     //     operator reconstructing a task's story has. Every per-task line it writes carries the
     //     subject in the MDC, including the ones whose message already names it.
+    // Scenario: observability/factory-logging / A daemon's per-task decision runs under the task's id
     def "FR8: every per-task reap line is findable by taskId"() {
         given:
         tracker.listReady(_) >> []
@@ -352,6 +369,7 @@ class ReaperRepairSpec extends Specification {
 
     // FR8, UX2: the delta's own scenario — a stale-claim removal is the reap an operator asks
     //     about, and its converging no-op is the line that explains why nothing changed
+    // Scenario: observability/factory-logging / Reaper decisions join the task's story
     def "FR8: a stale-claim removal's line is findable by taskId"() {
         given:
         tracker.listReady(_) >> []

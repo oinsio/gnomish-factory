@@ -30,6 +30,7 @@ class BindingResolverSpec extends Specification {
     }
 
     // D13/G2/FR4: with no default configured, every stage binds the container adapter — never host
+    // Scenario: plugin/adapter-binding-registry / Unset default resolves to container
     def "the default binding is container when the operator configures none"() {
         given: 'a resolver with no configured default and no overrides'
         def resolver = resolver(null, [:])
@@ -59,6 +60,7 @@ class BindingResolverSpec extends Specification {
     }
 
     // FR5/UX1: an unknown default binding name fails at construction, listing what was discovered
+    // Scenario: plugin/adapter-binding-registry / Unknown binding name lists discovered options
     def "an unknown default binding name is rejected at construction naming the discovered options"() {
         when: 'a resolver is built with an unknown default binding'
         resolver('vm', [:])
@@ -81,6 +83,7 @@ class BindingResolverSpec extends Specification {
     }
 
     // FR4/M3/D4: the unset default needs the container binding to exist — never fall through to host
+    // Scenario: plugin/adapter-binding-registry / Absent container module fails fast, never host
     def "an unset default with the container backend absent fails naming the options and both ways out"() {
         when: 'a resolver is built against a registry the container module never reached'
         resolver(null, [:], hostOnly())
@@ -93,6 +96,7 @@ class BindingResolverSpec extends Specification {
     }
 
     // FR4/D4: the default is resolved eagerly — explicit host stage bindings do not mask its absence
+    // Scenario: plugin/adapter-binding-registry / Eager default — explicit host bindings do not mask the absence
     def "the absent container default fails even when every stage explicitly binds host"() {
         when: 'every stage binds host explicitly but no default is configured'
         resolver(null, [plan: 'host', build: 'host'], hostOnly())

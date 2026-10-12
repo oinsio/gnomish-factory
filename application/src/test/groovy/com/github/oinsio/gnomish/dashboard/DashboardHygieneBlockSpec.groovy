@@ -8,6 +8,7 @@ import static com.github.oinsio.gnomish.testsupport.DashboardSectionFixtures.noS
 import com.github.oinsio.gnomish.serveobservability.SweepCounts
 import com.github.oinsio.gnomish.serveobservability.SweepVital
 import java.time.Instant
+import spock.lang.PendingFeature
 import spock.lang.Specification
 
 /**
@@ -24,6 +25,7 @@ class DashboardHygieneBlockSpec extends Specification {
 
     private static final Instant GENERATED_AT = Instant.parse('2026-08-06T09:00:00Z')
 
+    // Scenario: observability/dashboard-page / Observation times are explicit
     def "a completed tick renders the four groups as the quietest block"() {
         given:
         def sweep = new SweepVital(GENERATED_AT, 300L, new SweepCounts(1, 0, 0, 2, 0, 0), [], 0, 0)
@@ -51,6 +53,8 @@ class DashboardHygieneBlockSpec extends Specification {
 
     // FR2: no data renders as the dashed footnote element, never as an empty card
     //      that would read as a sweep reporting nothing.
+    // Scenario: observability/dashboard-page / No sweep data renders a footnote
+    // Scenario: observability/dashboard-page / The footnote says the sweep has not run
     def "no sweep data renders the dashed-border footnote, not an empty card"() {
         when:
         def html = renderer.render(
@@ -63,5 +67,30 @@ class DashboardHygieneBlockSpec extends Specification {
 
         and: 'the footnote replaces the card element entirely'
         !markup(html).contains('<section class="card" id="hygiene">')
+    }
+
+    // NFR-O3 of add-serve-sandbox-lifecycle: a run of no-verdict ticks is a stall, not a quiet host —
+    //     the alarm says cleanup is not running and names the source whose verdicts failed (a
+    //     tracker or runtime error, per the sandbox-lifecycle capability). The snapshot carries no
+    //     source to name, so the line cannot (F90).
+    // Scenario: observability/dashboard-page / Silent stall becomes loud
+    @PendingFeature(reason = 'F90 (surface-check-urls-and-sweep-sources): the sweep vital carries no verdict source, so the stall alarm cannot name it')
+    def "three consecutive no-verdict ticks raise a stall alarm naming the failing verdict source"() {
+        given:
+        def sweep = new SweepVital(GENERATED_AT, 300L, new SweepCounts(0, 0, 0, 0, 0, 2), [], 0, 3)
+
+        when:
+        def html = markup(renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(),
+                new SandboxHygieneView(sweep, []), GENERATED_AT, null))
+        def alarms = (html =~ /<div class="status__alert">([^<]*)</).collect {
+            it[1]
+        }
+
+        then: 'one alarm says cleanup is not actually running'
+        alarms.size() == 1
+        alarms[0].startsWith('sandbox cleanup stalled')
+
+        and: 'it names the failing verdict source'
+        alarms[0] =~ /tracker|runtime/
     }
 }

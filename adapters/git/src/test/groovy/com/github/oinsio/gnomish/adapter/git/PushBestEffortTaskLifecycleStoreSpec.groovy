@@ -35,6 +35,7 @@ class PushBestEffortTaskLifecycleStoreSpec extends Specification implements Life
         new PushBestEffortTaskLifecycleStore(delegate, git, cloneDir, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
     }
 
+    // Scenario: git/git-task-persistence / Each lifecycle operation pushes once
     def "the confirm-terminal-write commit reaches origin"() {
         given:
         def delegate = Mock(TaskLifecycleStore)
@@ -74,6 +75,7 @@ class PushBestEffortTaskLifecycleStoreSpec extends Specification implements Life
         events[0].formattedMessage.contains('event=TRACKER_WRITE_CONFIRMED')
     }
 
+    // Scenario: git/git-task-persistence / Each lifecycle operation pushes once
     def "the base lifecycle writes push exactly as the narrower port's decorator does"() {
         given:
         def delegate = Mock(TaskLifecycleStore)

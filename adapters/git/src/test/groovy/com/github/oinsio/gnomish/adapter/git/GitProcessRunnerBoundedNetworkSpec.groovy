@@ -25,6 +25,7 @@ class GitProcessRunnerBoundedNetworkSpec extends Specification implements BareGi
     @TempDir
     Path tempDir
 
+    // Scenario: git/git-task-persistence / A silent remote does not hang the run
     def "FR1, NFR-R1, M1: a network command against a silent remote ends on its deadline, not on the remote"() {
         given: 'a git that answers rev-parse instantly and then stalls on push'
         def runner = new GitProcessRunner(stallingGit().toString(), Duration.ofSeconds(2))
@@ -41,6 +42,7 @@ class GitProcessRunnerBoundedNetworkSpec extends Specification implements BareGi
         elapsed <Duration.ofSeconds(4)
     }
 
+    // Scenario: git/git-task-persistence / Local commands are untouched
     def "FR1, NG3: a local command against the same stalling binary is not bounded"() {
         given: 'a deadline far shorter than the local command takes to answer'
         def runner = new GitProcessRunner(stallingGit().toString(), Duration.ofMillis(200))
@@ -54,6 +56,7 @@ class GitProcessRunnerBoundedNetworkSpec extends Specification implements BareGi
         result.stdout().forParsing().trim() == 'local done'
     }
 
+    // Scenario: git/git-task-persistence / Local commands are untouched
     def "NFR-R3: a network command that answers normally is byte-identical to before, and EXITED"() {
         given: 'a real bare repo reachable over a local path, so ls-remote is a genuine network-class command'
         def origin = initBareRepo(tempDir)
@@ -68,6 +71,8 @@ class GitProcessRunnerBoundedNetworkSpec extends Specification implements BareGi
         result.stdout().forParsing().isEmpty()
     }
 
+    // Scenario: git/git-task-persistence / A timed-out outcome carries the captured output
+    // Scenario: git/git-task-persistence / Partial output of a killed process is still scrubbed
     def "FR3, NFR-S2: the partial stderr of a killed network command is still scrubbed"() {
         given: 'a git that prints a PAT-bearing remote URL to stderr and then never exits'
         def fakeGit = StallingGit.git('leak-credentials-then-stall')
@@ -84,6 +89,7 @@ class GitProcessRunnerBoundedNetworkSpec extends Specification implements BareGi
     // NFR-O1 of bound-subprocess-commands: only the runner knows both numbers, so the WARN that
     //     carries them is the runner's (moved here from PushTerminationLoggingSpec, whose push points
     //     now run over the runner's port — design D27 of supervise-daemon-loops-and-embed-dashboard).
+    // Scenario: git/git-task-persistence / A timed-out push reads as a dead remote
     def "NFR-O1: the runner names the command class, the elapsed time and the configured deadline"() {
         when:
         def events = LogCaptureSupport.capture(GitProcessRunner, Level.INFO) {

@@ -73,6 +73,7 @@ class GithubFeedQuerySpec extends Specification {
                         '/repos/acme/widgets/issues?state=open&labels=gnomish%3Aready&sort=created&direction=asc&per_page=100')))
     }
 
+    // Scenario: tracker/github-tracker / PR wearing the ready label is not a task
     def "filters out entries carrying a pull_request field"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
@@ -128,6 +129,9 @@ class GithubFeedQuerySpec extends Specification {
         wireMock.allServeEvents.every { it.request.method == RequestMethod.GET }
     }
 
+    // Scenario: tracker/github-tracker / Feed reader resets on progress
+    // Scenario: tracker/tracker-port / Progress before an abort resets the count to one
+    // Scenario: tracker/tracker-port / Aborts before progress are excluded
     def "counts only abort markers strictly after the latest PROGRESS marker (FR3, D3 of fix-abort-progress-reset)"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
@@ -171,6 +175,7 @@ class GithubFeedQuerySpec extends Specification {
 
     // FR7, NFR-P1: a PARK marker (park report) anywhere in the thread sets returned = true,
     //     derived from the SAME comments fetch used for abort facts — no extra API call
+    // Scenario: tracker/github-tracker / Human-returned issue
     def "reports returned = true when the thread carries a PARK marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
@@ -238,6 +243,7 @@ class GithubFeedQuerySpec extends Specification {
     // FR1, NFR-P1 of enforce-finish-terminality: a FINISH marker anywhere in the thread sets
     //     finished = true, derived from the SAME comments fetch used for abort/returned facts —
     //     no extra API call
+    // Scenario: tracker/github-tracker / Reopened Delivered issue reports finished
     def "reports finished = true when the thread carries a FINISH marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
@@ -262,6 +268,7 @@ class GithubFeedQuerySpec extends Specification {
 
     // FR1: a PARK marker alone (no FINISH) is a returned task, not a finished one — the two
     //     facts are independent
+    // Scenario: tracker/github-tracker / Never-finished issue does not report finished
     def "reports finished = false and returned = true when the thread carries only a PARK marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
@@ -304,6 +311,8 @@ class GithubFeedQuerySpec extends Specification {
     // FR7, NFR-P1, M2 of add-board-command: the title rides the SAME List Issues response body
     //     that named the issue number — enriching the entry with a title adds no issue-detail
     //     request beyond the pre-enrichment shape (one feed call, one comments call per issue)
+    // Scenario: tracker/tracker-port / Titles cost no extra requests
+    // Scenario: observability/tracker-board / No per-row fetch beyond the two list calls
     def "carries each ready task's title from the List Issues response, with no extra request"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
@@ -358,6 +367,7 @@ class GithubFeedQuerySpec extends Specification {
         wireMock.verify(0, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/3/comments?per_page=100')))
     }
 
+    // Scenario: tracker/github-tracker / Returned-fact listing reads are conditional
     def "reuses the conditional-request cache across repeated polls of the feed"() {
         given:
         wireMock.stubFor(get(urlEqualTo(

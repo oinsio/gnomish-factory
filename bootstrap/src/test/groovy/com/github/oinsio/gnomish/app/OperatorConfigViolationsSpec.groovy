@@ -104,6 +104,8 @@ class OperatorConfigViolationsSpec extends Specification {
     }
 
     // UX1: "A boundary key in the host file"
+    // Scenario: operator/operator-configuration / A boundary key in the host file
+    // Scenario: operator/operator-configuration / A violation names its location, key, reason and fix
     def "UX1: a boundary key in the host file names the file, line and the project files it belongs in"() {
         given:
         harness.hostConfig('factory:\n  sandbox:\n    egress-allowlist:\n      - example.com\n')
@@ -117,6 +119,8 @@ class OperatorConfigViolationsSpec extends Specification {
     }
 
     // FR6: "A boundary key on the command line"
+    // Scenario: plugin/adapter-binding-registry / Command-line default is refused
+    // Scenario: operator/operator-configuration / A boundary key on the command line
     def "FR6: a boundary key on the command line (#form) is read only from the resolved project's file"() {
         expect:
         violations([
@@ -137,6 +141,8 @@ class OperatorConfigViolationsSpec extends Specification {
     }
 
     // FR6: "A host key in a project file"
+    // Scenario: operator/operator-configuration / A host key in a project file
+    // Scenario: operator/operator-configuration / A violation names its location, key, reason and fix
     def "FR6: a host key in a project file names factory.yaml and the command line"() {
         given:
         harness.projectConfig('widgets', 'factory:\n  docker-command-timeout: 1m\n')
@@ -154,6 +160,8 @@ class OperatorConfigViolationsSpec extends Specification {
     }
 
     // FR7: "Several violations reported together"; printed once, exit code 2
+    // Scenario: operator/operator-configuration / Several violations reported together
+    // Scenario: operator/operator-configuration / The report exits with code 2 and no stack trace
     def "FR7: every violation is reported in one report, printed once to standard error"() {
         given:
         harness.hostConfig('factory:\n  sandbox:\n    image: img:1\n  git-netwrok-timeout: 5m\n')
@@ -175,6 +183,7 @@ class OperatorConfigViolationsSpec extends Specification {
     }
 
     // FR7: "Environment variable is refused with the equivalent line"
+    // Scenario: operator/operator-configuration / Environment variable is refused with the equivalent line
     def "FR7: a FACTORY_* variable is refused with the equivalent file line and command-line form"() {
         expect:
         violations([

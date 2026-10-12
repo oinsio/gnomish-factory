@@ -71,6 +71,7 @@ class StandInLibrarySpec extends Specification {
         preset << presets()
     }
 
+    // Scenario: build/quality-gates / The library holds no link
     def "FR26: the library holds no link — a preset is a section, and no preset has two"() {
         given:
         List<String> sections = StandIn.tables().sections().values().flatten() as List<String>
@@ -232,6 +233,7 @@ class StandInLibrarySpec extends Specification {
         process.descendants().count() == 0
     }
 
+    // Scenario: build/quality-gates / A recording scenario gets one link, not one script
     def "FR24: a record row appends one block per invocation beside the per-run link, and an answered one none"() {
         given:
         Path git = StandIn.recording(tempDir, 'action-record')
@@ -320,6 +322,7 @@ class StandInLibrarySpec extends Specification {
         answer(git, 'ls-remote', 'origin') == [exit: 2, stdout: 'abc\trefs/heads/main\n']
     }
 
+    // Scenario: build/quality-gates / A refusal that differs only in its text is one preset
     def "FR26: a #@name answer is the one the per-run link is named after, refused through the preset's own link"() {
         given:
         Path git = StandIn.link(tempDir.resolve('fetch-fsck-refusal'), 'action-answer-by-name')
@@ -408,6 +411,7 @@ class StandInLibrarySpec extends Specification {
         !Files.exists(StandIn.log(own))
     }
 
+    // Scenario: build/quality-gates / The second test starts the stand-in in milliseconds
     def "NFR-P2: after the script's first run, a preset starts in milliseconds through a fresh link"() {
         given: 'one untimed run: the script\'s own first-run assessment (macOS), paid once per checkout'
         run(StandIn.git('action-answer'), 'version')

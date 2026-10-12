@@ -23,19 +23,8 @@ import java.util.concurrent.TimeUnit
  * {@link TrackerHeartbeatContract} to reuse its {@code arrange}/{@code
  * seedTask}/{@code seedWorkingWithClaim} seams rather than duplicating them.
  *
- * <p>This is the MOST-DERIVED contract class in the lease chain
- * ({@code TrackerContract → TrackerMarkerContract → TrackerFetchContract →
- * TrackerLeaseContract → TrackerHeartbeatContract → TrackerReapContract}): a
- * concrete adapter subclass instantiates THIS class — the in-memory reference in
- * task 2.4 and the GitHub adapter in task 3.5 — so the SAME whole suite runs
- * against every adapter, per M1. Kept in a sixth file because the combined
- * property set of the whole chain would exceed the project's per-file line cap.
- *
- * <p>No concrete adapter spec extends this class yet: it is wired once the
- * adapters implement {@code removeStaleClaim} and the {@code seedWorkingWithClaim}
- * seam. Until then this abstract spec is never instantiated and therefore does
- * not run — intentional, and it keeps the build green for both adapters between
- * tasks.
+ * Kept in its own file because the combined property set of the whole chain would
+ * exceed the project's per-file line cap.
  *
  * <p>"Transition marker recoverable" is asserted port-agnostically, by its
  * observable effect rather than by reaching into an adapter's marker storage: the
@@ -189,8 +178,8 @@ abstract class TrackerReapContract extends TrackerHeartbeatContract {
      * listOpen} — the same fact any other instance observes — so these properties
      * never construct a version literal but always read one through the port, per
      * {@link ClaimVersion}'s opaque contract. A private counterpart to {@link
-     * TrackerHeartbeatContract}'s reader, kept local so this most-derived class
-     * does not rely on calling a sibling link's private method.
+     * TrackerHeartbeatContract}'s reader, kept local so this link does not rely on
+     * calling another link's private method.
      */
     private static ClaimVersion claimVersionOf(Tracker adapter, TaskRef ref) {
         OpenTask entry = adapter.listOpen().find { it.ref() == ref }

@@ -106,6 +106,7 @@ class StageSanityRuleSpec extends Specification {
     // FR11/FR7: a pinned non-blank model and a resolved limit >= 1 are sane
     // for both executor types; limit 1 is the FR7 boundary and is valid. The
     // model is any non-blank string — reality is never checked (NG7)
+    // Scenario: pipeline/pipeline-config / Target liveness is not validated
     def "a pinned model with attempt limit #limit produces no errors for #type"() {
         expect: 'validating the stage yields an empty error list'
         StageSanityRule.validate([
@@ -120,6 +121,7 @@ class StageSanityRuleSpec extends Specification {
 
     // FR11 delta-spec scenario: model absent (blank, per the mapper contract)
     // or whitespace-only → located error, whatever the executor type
+    // Scenario: pipeline/pipeline-config / Missing model is rejected
     def "a blank model (#label) is a located error for #type"() {
         expect: 'exactly one error locating executor.model in the stage manifest'
         StageSanityRule.validate([
@@ -135,6 +137,7 @@ class StageSanityRuleSpec extends Specification {
 
     // FR11 delta-spec AND-clause (Q1/D5a): settings present as a mapping are
     // accepted as an opaque pass-through — no key, value, or range inspection
+    // Scenario: pipeline/pipeline-config / Missing model is rejected
     def "arbitrary executor settings are accepted without inspection"() {
         expect: 'weird keys, negative numbers, and nesting produce no errors'
         StageSanityRule.validate([
@@ -146,6 +149,7 @@ class StageSanityRuleSpec extends Specification {
 
     // FR7 delta-spec scenario: a resolved limit below 1 (default or override
     // — resolution happened before this rule) → located error naming the value
+    // Scenario: pipeline/pipeline-config / Non-positive attempt limit is rejected
     def "a non-positive resolved attempt limit #limit is a located error"() {
         expect: 'exactly one error locating attempts in the stage manifest'
         StageSanityRule.validate([
@@ -161,6 +165,7 @@ class StageSanityRuleSpec extends Specification {
     // FR11 external clause: positive interval, positive timeout, interval <=
     // timeout (equal is valid — the boundary), non-blank checkId → no errors.
     // Builtin and Command checks alongside carry no FR11 rule (no creep)
+    // Scenario: pipeline/pipeline-config / External check timing is sane
     def "sane external and non-external checks produce no errors (interval #interval, timeout #timeout)"() {
         expect: 'validating the stage yields an empty error list'
         StageSanityRule.validate([
@@ -180,6 +185,7 @@ class StageSanityRuleSpec extends Specification {
     // FR11 external clause: a non-positive interval/timeout or interval >
     // timeout, or a blank checkId, is a located error naming the offending
     // check by its verify-list index and field
+    // Scenario: pipeline/pipeline-config / External check timing is sane
     def "an unsane external check (#label) is a located error"() {
         expect: 'exactly the expected located error(s) for the external check'
         StageSanityRule.validate([
@@ -211,6 +217,7 @@ class StageSanityRuleSpec extends Specification {
 
     // FR11 external clause: field-order determinism within one check — a blank
     // checkId, then interval faults, then timeout faults, in that field order
+    // Scenario: pipeline/pipeline-config / External check without an identifier is rejected
     def "multiple faults in one external check are ordered checkId, interval, timeout"() {
         expect: 'all three located errors in field order'
         StageSanityRule.validate([
@@ -227,6 +234,7 @@ class StageSanityRuleSpec extends Specification {
     // FR16 (add-sandbox-core) pin-path clause: normalized relative pin paths —
     // including ones pointing outside `.gnomish/`, their normal use — are
     // accepted; the loader never reads them, only their lexical form matters
+    // Scenario: pipeline/pipeline-config / Pin path outside `.gnomish/` is accepted
     def "normalized relative pin paths produce no errors"() {
         expect: 'validating the external check yields an empty error list'
         StageSanityRule.validate([
@@ -253,6 +261,8 @@ class StageSanityRuleSpec extends Specification {
     // FR16 (add-sandbox-core) delta-spec scenario: a pin path that is absolute
     // or contains `.`/`..` segments (or is blank) can never match a repo object
     // and is a located error naming the offending check and path index
+    // Scenario: pipeline/pipeline-config / Absolute or root-escaping pin path is rejected
+    // Scenario: pipeline/pipeline-config / A pin path with a dot segment is rejected
     def "a non-normalized pin path (#label) is a located error"() {
         expect: 'exactly one located error naming the offending pin path'
         StageSanityRule.validate([
@@ -327,6 +337,7 @@ class StageSanityRuleSpec extends Specification {
 
     // FR11 judge clause: votes < 1 or even is a located error; boundaries
     // 0 (invalid), 2 (invalid even), -1 (invalid) are all covered
+    // Scenario: pipeline/pipeline-config / Judge vote count must be positive and odd
     def "a judge vote count of #votes is a located error"() {
         expect: 'exactly one error locating the judge votes'
         StageSanityRule.validate([

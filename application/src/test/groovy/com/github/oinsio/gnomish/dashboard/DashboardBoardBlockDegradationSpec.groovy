@@ -17,6 +17,7 @@ import spock.lang.Unroll
  */
 class DashboardBoardBlockDegradationSpec extends Specification {
 
+    // Scenario: observability/dashboard-page / Observation times are explicit
     def "each board-fed block carries its own heading and its own board timestamp"() {
         when:
         def html = render(new BoardSectionView(boardModel(), FETCHED_AT, null))
@@ -40,6 +41,7 @@ class DashboardBoardBlockDegradationSpec extends Specification {
     }
 
     @Unroll
+    // Scenario: observability/dashboard-page / Tracker failure keeps the cached board
     def "both board-fed blocks degrade together: #description"() {
         when:
         def html = render(boardView)

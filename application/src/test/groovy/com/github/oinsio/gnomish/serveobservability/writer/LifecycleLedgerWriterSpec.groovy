@@ -45,6 +45,7 @@ class LifecycleLedgerWriterSpec extends Specification implements RotatingLedgerA
         return ledgerFileFor(serveDir(), now)
     }
 
+    // Scenario: observability/serve-observability / Crash loop visible in history
     def "writeStarted appends exactly one started lifecycle line with no reason"() {
         given:
         def now = Instant.parse('2026-08-03T10:00:00Z')

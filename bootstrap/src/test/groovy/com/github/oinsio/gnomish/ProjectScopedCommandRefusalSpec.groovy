@@ -36,6 +36,8 @@ class ProjectScopedCommandRefusalSpec extends Specification {
         operatorHome.close()
     }
 
+    // Scenario: operator/project-registry / Unregistered clone is refused with the fix
+    // Scenario: operator/project-registry / A resolution refusal exits with code 2
     def "FR3, UX2: #command refuses an unregistered --dir before it runs, naming the fix"() {
         given: 'a git working tree no project names'
         def unregistered = gitTree('newproj')
@@ -71,6 +73,29 @@ class ProjectScopedCommandRefusalSpec extends Specification {
             ['dashboard'],
             ['project', 'show'],
         ]
+    }
+
+    // Scenario: operator/project-registry / A resolution refusal exits with code 2
+    def "FR3, UX2: a --dir inside a registered clone is refused before the command runs, with exit code 2"() {
+        given: 'a folder inside the registered clone widgets'
+        def widgets = tmp.resolve('clones').resolve('widgets')
+        def app = Files.createDirectories(widgets.resolve('app'))
+        def homeBefore = listing(operatorHome.home.root())
+
+        when:
+        FactoryBoot.boot([:], [
+            'status',
+            "--dir=$app".toString()
+        ] as String[]).close()
+
+        then: 'startup stops with the usage-error exit code, naming the clone to use'
+        def refused = thrown(ConfigurationViolationsException)
+        refused.exitCode == 2
+        refused.violations().size() == 1
+        refused.violations()[0].contains("run with --dir=$widgets")
+
+        and:
+        listing(operatorHome.home.root()) == homeBefore
     }
 
     private Path gitTree(String name) {

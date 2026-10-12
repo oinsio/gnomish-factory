@@ -55,6 +55,7 @@ class PluginApiSurfaceSpec extends Specification {
 
     // FR12: "the gnomish-plugin-api surface contains no github HTTP-client, rate-limit, cache, or
     //     retry type" — no such class lives there ...
+    // Scenario: plugin/github-plugin / The plugin's private core is not in the public api
     def "no api class is a github type"() {
         given:
         def rule = noClasses().should().haveSimpleNameContaining('Github')
@@ -65,6 +66,7 @@ class PluginApiSurfaceSpec extends Specification {
 
     // ... and none is reachable from there either: a signature, field or call naming one would put
     //     the vendor core back on the contract without moving a class into it.
+    // Scenario: plugin/github-plugin / The plugin's private core is not in the public api
     def "no api class depends on a github type"() {
         // The bundle's three packages are named exactly: a `..github..` pattern would also match
         // the project's own `com.github.oinsio` root, and the rule would fail over every class.

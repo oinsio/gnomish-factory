@@ -36,6 +36,7 @@ class SupervisedLoopRestartSpec extends Specification {
     }
 
     // FR3 (daemon-supervision "Unbounded policy respawns with growing backoff").
+    // Scenario: serve/daemon-supervision / Unbounded policy respawns with growing backoff
     def "an Unbounded loop respawns after a doubling backoff with a rising restart count"() {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
@@ -62,6 +63,7 @@ class SupervisedLoopRestartSpec extends Specification {
     }
 
     // FR3 (daemon-supervision "A clean run resets the backoff").
+    // Scenario: serve/daemon-supervision / A clean run resets the backoff
     def "a clean tick resets the backoff while the restart count keeps rising"() {
         given:
         rig.build(LoopOrder.TICK_THEN_WAIT, rig.fixedWait(), { n ->
@@ -115,6 +117,7 @@ class SupervisedLoopRestartSpec extends Specification {
     }
 
     // FR4, NFR-R2 (daemon-supervision "Stop during a respawn backoff").
+    // Scenario: serve/daemon-supervision / Stop during a respawn backoff
     def "a stop during the respawn backoff spawns no worker"() {
         given:
         def stoppingSleeper = { Duration d -> rig.stopHere() } as Sleeper

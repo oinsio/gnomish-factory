@@ -13,6 +13,7 @@ import spock.lang.Specification
  */
 class CredentialScrubSpec extends Specification {
 
+    // Scenario: git/git-task-persistence / Scrubbing keeps the failure diagnosable
     def "NFR-S2: #description"() {
         expect:
         CredentialScrub.scrub(raw) == scrubbed

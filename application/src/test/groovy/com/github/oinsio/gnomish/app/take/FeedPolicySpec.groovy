@@ -64,6 +64,7 @@ class FeedPolicySpec extends Specification {
     }
 
     // FR6: returned tasks are ordered ahead of fresh tasks
+    // Scenario: serve/factory-serve / Returned task bypasses the limit
     def "returned tasks are ordered ahead of fresh tasks"() {
         given: 'fresh listed first in adapter queue order, returned listed after'
         def tasks = [
@@ -81,6 +82,7 @@ class FeedPolicySpec extends Specification {
     }
 
     // FR6: a fresh task is excluded once open fronts reach the WIP limit
+    // Scenario: serve/factory-serve / Limit reached blocks fresh work
     def "a fresh task is excluded when openFrontCount reaches the WIP limit"() {
         given:
         def tasks = [fresh('F1')]
@@ -93,6 +95,8 @@ class FeedPolicySpec extends Specification {
     }
 
     // FR6: a returned task remains eligible regardless of the WIP state
+    // Scenario: tracker/tracker-take / Returned task claimable at the WIP limit
+    // Scenario: serve/factory-serve / Returned task bypasses the limit
     def "a returned task is included regardless of the WIP state"() {
         given:
         def tasks = [returned('R1')]
@@ -167,6 +171,7 @@ class FeedPolicySpec extends Specification {
     }
 
     // Edge case: WIP limit blocks every fresh task, only returned tasks remain
+    // Scenario: tracker/tracker-take / Returned task claimable at the WIP limit
     def "when all fresh tasks are WIP-blocked only returned tasks remain"() {
         given:
         def tasks = [

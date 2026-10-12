@@ -75,6 +75,7 @@ class SandboxHygieneAlertEvaluatorSpec extends Specification {
     }
 
     // UX2: a tracked stopped-orphan reads as "an instance died or hung", naming object and task.
+    // Scenario: observability/dashboard-page / Zombie stop reads as an incident
     def "a tracked stopped-orphan raises a named incident"() {
         given:
         def view = new SandboxHygieneView(vital(), [

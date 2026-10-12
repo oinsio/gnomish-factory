@@ -85,6 +85,7 @@ class DeclaredVolumeOverridesSpec extends Specification {
         '{"/gnomish/work":{}}' | [WORKING_COPY] || []
     }
 
+    // Scenario: sandbox/execution-environment / Declared-volume read failure is an infrastructure failure
     def "NFR-R1: a refused inspect fails the caller and names the image and the runtime's answer"() {
         given:
         def docker = new RecordingDockerCli()
@@ -102,6 +103,7 @@ class DeclaredVolumeOverridesSpec extends Specification {
         e.message == 'docker image inspect for gnomish/img:1 failed: No such image: gnomish/img:1\\n'
     }
 
+    // Scenario: sandbox/execution-environment / Declared-volume read failure is an infrastructure failure
     def "NFR-R1: an answer of shape #answer is refused, never read as an empty override set"() {
         when:
         DeclaredVolumeOverrides.resolve(answering(answer), IMAGE, [] as Set)
@@ -120,6 +122,7 @@ class DeclaredVolumeOverridesSpec extends Specification {
         ]
     }
 
+    // Scenario: sandbox/execution-environment / The override is a pure function of image and explicit mounts
     def "NFR-R2: two resolutions over the same answer and destinations are equal and render the same argv"() {
         given:
         def answer = '{"/var/lib/tool":{},"/cache":{},"/gnomish/work":{}}'

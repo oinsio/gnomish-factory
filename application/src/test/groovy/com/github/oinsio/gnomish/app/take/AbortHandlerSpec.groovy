@@ -41,6 +41,7 @@ class AbortHandlerSpec extends Specification {
 
     // FR14, NFR-R2: below the fuse, recordAbort is called with the correct
     // AbortRecord, park is never called, and the result is Aborted
+    // Scenario: tracker/tracker-take / Abort below the fuse
     def "an abort below the fuse records the abort and returns Aborted"() {
         given: 'a prior count two below the threshold of 3'
         def facts = new AbortFacts(0, null)
@@ -145,6 +146,7 @@ class AbortHandlerSpec extends Specification {
     // FR14: the fuse report carries the abort history, not just the last cause —
     // the count/threshold streak, the previous abort's timestamp from AbortFacts,
     // and a pointer to the per-abort entries where every cause is recorded
+    // Scenario: tracker/tracker-take / Fuse trips at K
     def "the fuse report narrates the abort history, not only the last cause"() {
         given: 'a prior abort recorded an hour earlier, reaching the threshold once incremented'
         def previousAbortAt = Instant.parse('2026-07-17T09:00:00Z')
@@ -191,6 +193,7 @@ class AbortHandlerSpec extends Specification {
 
     // FR14, NFR-O2 of harden-task-branch-contract: both categories spend the one counter and trip
     // the one threshold, and the report attributes the streak to the two causes distinctly
+    // Scenario: tracker/tracker-take / Exhausted recovery budget quarantines with history
     def "a failed repair spends the same counter and is reported as its own category"() {
         given: 'two crashes already on record, so this attempt reaches the threshold'
         def facts = new AbortFacts(THRESHOLD - 1, Instant.parse('2026-07-17T09:00:00Z'), 0)

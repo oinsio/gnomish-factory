@@ -19,6 +19,7 @@ class ReferenceDumpScrubberSpec extends Specification {
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
 
+    // Scenario: executor/agent-executor / Money is stripped
     def "strips all cost fields from a result line while preserving every model's token and cache counts"() {
         given: 'a real-shaped result line carrying total_cost_usd plus per-model costUSD and token counts'
         String rawLine = '{"type":"result","subtype":"success","is_error":false,' +
@@ -61,6 +62,7 @@ class ReferenceDumpScrubberSpec extends Specification {
         opus.get('cacheCreationInputTokens').asInt() == 7395
     }
 
+    // Scenario: executor/agent-executor / Raw tool inputs and identifiers are stripped
     def "removes the entire permission_denials block, including its echoed raw tool inputs"() {
         given: 'a result line whose populated permission_denials echo raw sensitive tool inputs'
         String rawLine = '{"type":"result","subtype":"success","is_error":false,' +
@@ -84,6 +86,7 @@ class ReferenceDumpScrubberSpec extends Specification {
         !MAPPER.readTree(scrubbed).has('permission_denials')
     }
 
+    // Scenario: executor/agent-executor / Raw tool inputs and identifiers are stripped
     def "removes every per-event uuid and request_id, recursively by field name"() {
         given: 'a real-shaped assistant line carrying a top-level uuid, a request_id, and a nested uuid'
         String rawLine = '{"type":"assistant","session_id":"sess-abc-123",' +
@@ -115,6 +118,7 @@ class ReferenceDumpScrubberSpec extends Specification {
         tree.get('message').get('usage').get('input_tokens').asInt() == 4099
     }
 
+    // Scenario: executor/agent-executor / Deterministic zero-cost refresh
     def "scrubbing an already-scrubbed line a second time is a byte-identical no-op"() {
         given: 'a result line carrying every deny-listed field so the first pass transforms it'
         String raw = '{"type":"result","session_id":"sess-abc-123","total_cost_usd":0.16,' +
@@ -140,5 +144,23 @@ class ReferenceDumpScrubberSpec extends Specification {
         !scrubbed.contains('01JQ7-real-session-xyz')
         scrubbed.contains('/workspace-scrubbed/secret')
         !scrubbed.contains('/Users/alice')
+    }
+
+    // FR3, FR4: the deny-list names fields, so an API message id and a tool-use id, which pair a
+    //     tool call with its result in the fixture, are not identifiers it strips
+    // Scenario: executor/agent-executor / API message and tool-use ids survive
+    def "keeps the API msg_ and toolu_ ids of a captured line unchanged"() {
+        given:
+        String rawLine = '{"type":"assistant","session_id":"sess-abc-123","uuid":"3d3be167-0ace-4b42-a7a0-ca4a227aac66",' +
+                '"message":{"id":"msg_01ABCdef","content":[{"type":"tool_use","id":"toolu_01XYZ","name":"Read",' +
+                '"input":{"file_path":"a.txt"}}]}}'
+
+        when:
+        JsonNode tree = MAPPER.readTree(ReferenceDumpScrubber.scrub(rawLine, '/private/workspace', 'sess-abc-123', 'plain'))
+
+        then:
+        tree.get('message').get('id').asText() == 'msg_01ABCdef'
+        tree.get('message').get('content').get(0).get('id').asText() == 'toolu_01XYZ'
+        !tree.has('uuid')
     }
 }

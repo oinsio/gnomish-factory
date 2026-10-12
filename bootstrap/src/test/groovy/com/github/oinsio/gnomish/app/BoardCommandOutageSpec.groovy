@@ -68,6 +68,7 @@ tracker:
     // NFR-R1: the tracker outage message ("gnomish run failed: <adapter message>") reaches stderr
     // as a single line, and the exception propagates unchanged so RunExitCodeMapper's own spec can
     // map it to a non-zero exit code (out of scope to re-prove that mapping here).
+    // Scenario: observability/tracker-board / Unreachable tracker
     def "gnomish board prints one clear tracker-outage line to stderr and exits non-zero, with no retry"() {
         given: 'a tracker whose listReady fails as if the tracker endpoint refuses connections'
         def tracker = new OutageTracker()

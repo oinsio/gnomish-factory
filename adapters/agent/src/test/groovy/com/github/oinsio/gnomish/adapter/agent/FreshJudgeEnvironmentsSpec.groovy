@@ -33,6 +33,9 @@ class FreshJudgeEnvironmentsSpec extends Specification {
         new RecordedAttemptCommitWorkspace(ref)
     }
 
+    // Scenario: git/git-task-persistence / Every check reads the attempt commit its own way
+    // Scenario: git/git-task-persistence / Verification judges the attempt commit
+    // Scenario: verification/verification-hardening / Poisoned round box cannot grade itself
     def "a vote's environment is fresh and materialized from the attempt commit"() {
         given:
         def environments = source()

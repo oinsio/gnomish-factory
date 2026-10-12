@@ -14,6 +14,7 @@ class JudgeVotingCannotVerifySpec extends JudgeVotingSpecBase {
     // FR3: a single CannotVerify vote taints the whole check to CannotVerify regardless
     //      of the other votes' verdicts (Pass then CannotVerify — the running Pass tally
     //      does not save the check)
+    // Scenario: pipeline/stage-engine / One vote unobtainable
     def "fails the whole check as CannotVerify on a single CannotVerify vote"() {
         given: 'a 3-vote check: Pass, CannotVerify, then a Fail that must never be requested'
         def voter = new ScriptedJudgeVoter([

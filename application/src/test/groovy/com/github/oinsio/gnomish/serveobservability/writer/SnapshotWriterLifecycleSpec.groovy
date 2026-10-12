@@ -62,6 +62,7 @@ class SnapshotWriterLifecycleSpec extends Specification {
     // FR1, D4: with no dirty trigger at all, the timer beat alone keeps producing
     // writes on its own — a short interval proves the beat, not just the startup
     // write.
+    // Scenario: observability/serve-observability / Timer beat
     def "the timer beat alone produces further writes with no dirty trigger"() {
         given:
         def calls = new AtomicInteger()
@@ -88,6 +89,7 @@ class SnapshotWriterLifecycleSpec extends Specification {
     // timer — proven by a deliberately long interval (far longer than the test
     // timeout) so any write beyond the startup one can only be explained by the
     // dirty-flag wake.
+    // Scenario: observability/serve-observability / Transition triggers an immediate write
     def "markDirty triggers a prompt write without waiting for the timer"() {
         given:
         def calls = new AtomicInteger()

@@ -38,6 +38,7 @@ class HostExecHandleTreeKillSpec extends Specification {
     }
 
     // FR11, G5, M2: the timeout kill is a tree kill — the CLI's children do not outlive the round
+    // Scenario: sandbox/execution-environment / A timed-out round leaves no orphaned agent children
     def "FR11, G5: a timed-out round leaves no orphaned agent children"() {
         given: 'a fake agent CLI that forks a child of its own and then outlives any round budget'
         def pidFile = tempDir.resolve('child.pid')
@@ -63,6 +64,7 @@ class HostExecHandleTreeKillSpec extends Specification {
     }
 
     // FR6, FR11: an interrupted wait is a named outcome, and it kills the same tree
+    // Scenario: sandbox/execution-environment / Interruption is not an exit code
     def "FR6, FR11: an interrupted wait is named, not coded, and still kills the tree"() {
         given: 'a process that would far outlive the round'
         process = new ProcessBuilder('sleep', '600').start()

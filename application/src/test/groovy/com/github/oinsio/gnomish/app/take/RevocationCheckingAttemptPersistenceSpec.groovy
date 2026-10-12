@@ -144,6 +144,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
         0 * tracker.fetchTask(*_)
     }
 
+    // Scenario: tracker/tracker-take / First durable round records progress
     def "the first persist call records progress exactly once"() {
         given:
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
@@ -155,6 +156,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
         1 * tracker.recordProgress(REF)
     }
 
+    // Scenario: tracker/tracker-take / Later rounds do not re-emit within the same claim
     def "a second and third persist call do not re-emit progress"() {
         given:
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
@@ -232,6 +234,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
         guarded.revocation().isEmpty()
     }
 
+    // Scenario: tracker/tracker-take / A progress-record failure never fails the run
     def "a recordProgress throw is swallowed and the round proceeds as if it succeeded"() {
         given:
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))

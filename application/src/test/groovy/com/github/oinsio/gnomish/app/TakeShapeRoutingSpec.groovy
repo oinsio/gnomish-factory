@@ -29,6 +29,9 @@ class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
     // All three shapes are non-clean, so each verdict is raised inside the repair boundary of
     // resumeExisting: the assertion below is also FR15's "a quarantine keeps its own
     // classification" — it is a decision about the branch, never a failed repair to be retried.
+    // Scenario: git/git-task-persistence / Unknown version refuses resume
+    // Scenario: tracker/tracker-take / Corrupt branch parks once, not per pickup
+    // Scenario: tracker/tracker-take / Unsupported version is a shape, not a crash
     def "FR15: #description is quarantined, never resumed"() {
         when:
         route(shape)

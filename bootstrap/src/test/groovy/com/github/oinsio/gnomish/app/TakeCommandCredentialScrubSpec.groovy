@@ -150,6 +150,8 @@ tracker:
     // NFR-S1, D17: a fresh claim actually spawns the agent-cli stage executor's subprocess
     // (no console fallback) — the strongest available proof that the
     // declared credential never reaches the gnome, since this drives the real launcher.
+    // Scenario: tracker/github-tracker / Token stays out of the gnome
+    // Scenario: executor/agent-executor / Tracker token is absent from the round
     def "a fresh take claim never lets the declared tracker credential reach the spawned agent process"() {
         given: 'a Ready task, claimable, with no branch yet — a genuine fresh TakeFreshClaim run'
         String claimedBy = null

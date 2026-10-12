@@ -120,6 +120,8 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
 
     // M2: clone into the box, round in the box, harvest, verification against the attempt
     // commit, factory-side push — end to end against a real HTTP-auth remote.
+    // Scenario: sandbox/execution-environment / Command check runs in the box
+    // Scenario: executor/agent-executor / Round in a container speaks the same protocol
     def "a container-mode run completes: rounds in the box, harvest, outside push, disposed environment"() {
         given: 'a container-mode runner over the fake-agent sandbox image'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')

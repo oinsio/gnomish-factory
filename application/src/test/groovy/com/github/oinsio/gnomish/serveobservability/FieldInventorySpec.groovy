@@ -156,6 +156,8 @@ class FieldInventorySpec extends Specification {
     static final SHORT_TOKEN = ~/^[A-Za-z0-9][A-Za-z0-9._\-]{0,63}$/
     static final SHORT_PHRASE = ~/^[A-Za-z0-9][A-Za-z0-9._\-, ]{0,79}$/
 
+    // Scenario: observability/serve-observability / Pointers instead of payloads
+    // Scenario: observability/serve-observability / Field inventory stays leak-free
     def "snapshot reference document: every field is an identifier, state, counter, timestamp, token count, or short phrase"() {
         given:
         def root = SnapshotJson.mapper().readTree(resourceStream('snapshot-v1.reference.json'))
@@ -164,6 +166,7 @@ class FieldInventorySpec extends Specification {
         assertSubtree('$', root, false)
     }
 
+    // Scenario: observability/serve-observability / Field inventory stays leak-free
     def "ledger reference document: every field of every line is an identifier, state, counter, timestamp, token count, or short phrase"() {
         given:
         def lines = resourceText('ledger-v1.reference.jsonl').readLines().findAll {

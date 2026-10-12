@@ -41,6 +41,7 @@ class LawSourceContractSpec extends Specification implements GitObjectsFixture {
     @TempDir
     Path tempDir
 
+    // Scenario: pipeline/pipeline-config / A reference that validates at load reads at run
     def "FR11: a law file is read by its root-relative path (#kind)"() {
         given:
         def source = source(kind)
@@ -89,6 +90,7 @@ class LawSourceContractSpec extends Specification implements GitObjectsFixture {
         kind << ['working tree', 'git objects']
     }
 
+    // Scenario: pipeline/pipeline-config / An absolute law reference is refused in every medium
     def "FR11, D12: a path escaping the root is refused before anything outside is touched (#kind, #ref)"() {
         given:
         def source = source(kind)
@@ -109,6 +111,7 @@ class LawSourceContractSpec extends Specification implements GitObjectsFixture {
         ].combinations()
     }
 
+    // Scenario: pipeline/pipeline-config / Symlinked law file is refused in every medium
     def "FR11, D12: a symlink entry under the law root is refused in every medium (#kind, #ref)"() {
         given:
         def source = source(kind)
@@ -128,6 +131,7 @@ class LawSourceContractSpec extends Specification implements GitObjectsFixture {
     // D12 (revised after the 5.4 review): a symlinked directory is REFUSED at the linked segment in
     //     both media — not "absent" in git objects, where plain ls-tree cannot see through a 120000
     //     entry and would report a missing tree, indistinguishable from a deleted directory.
+    // Scenario: pipeline/pipeline-config / Symlinked law file is refused in every medium
     def "FR11, D12: a symlinked directory is refused at the linked segment in every medium (#kind)"() {
         given:
         def source = source(kind)

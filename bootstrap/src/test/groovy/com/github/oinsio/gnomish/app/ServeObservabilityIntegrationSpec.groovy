@@ -69,6 +69,7 @@ implements AppAssemblyFixture, ServeObservabilityFixture, BareGitRepoFixture {
     }
 
     @Timeout(10)
+    // Scenario: observability/serve-observability / Line self-identifies its writer
     def "a full drain pass writes a snapshot and ledger with consistent instance identity (FR9)"() {
         given:
         def command = newCommand()
@@ -110,6 +111,8 @@ implements AppAssemblyFixture, ServeObservabilityFixture, BareGitRepoFixture {
     }
 
     @Timeout(20)
+    // Scenario: observability/serve-observability / Two projects on one host keep separate state
+    // Scenario: observability/serve-observability / The instance id names the project
     def "FR10 of add-project-registry: two projects on one host keep separate state"() {
         given: 'a second project, gateway, with its own clone and origin'
         def gatewayDir = initWorkingRepo(tempDir, 'gateway')

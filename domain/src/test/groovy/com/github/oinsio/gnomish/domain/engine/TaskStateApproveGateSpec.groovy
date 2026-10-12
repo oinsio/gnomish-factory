@@ -78,6 +78,7 @@ class TaskStateApproveGateSpec extends Specification {
 
     // FR1, FR12: at a gate the passing round belongs to the stage the position names, so a pickup's
     //      normalization keeps it; once approved, the same normalization drops it as for any advance
+    // Scenario: pipeline/stage-engine / Approval opens the gate once
     def "startOfStage keeps the gate's passing round and drops it once the gate is approved"() {
         given: 'a state held at the gate of a stage whose passing round is recorded'
         def gate = gateAt('build')

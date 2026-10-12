@@ -25,6 +25,7 @@ class TrackerObservationSpec extends Specification {
     private static final ClaimFacts LIVE = new ClaimFacts.Live(
     'inst-1', new ClaimVersion('m-1', Instant.EPOCH, new ClaimEpoch(1)))
 
+    // Scenario: lifecycle/claim-heartbeat / The sweep enumerates both listings
     def "the sweep is the union of both listings, ready entries first"() {
         given:
         def ready = [

@@ -77,6 +77,7 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
         delivery().ensureDelivered(workspaceAt(sha)) == new AttemptDelivery.Outcome.Delivered()
     }
 
+    // Scenario: pipeline/stage-engine / Delivery is confirmed before the first poll
     def "an unpushed attempt commit is delivered by the re-attempted push"() {
         given:
         def sha = commitChange('one')
@@ -134,6 +135,8 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
         Files.exists(origin.resolve('rejected-once'))
     }
 
+    // Scenario: git/git-task-persistence / An undeliverable attempt commit fails an external check as infrastructure
+    // Scenario: pipeline/stage-engine / Undelivered attempt commit never burns an attempt
     def "a commit that cannot be delivered is Undeliverable, never a silent pass"() {
         given: 'the origin URL points at a path that no longer exists'
         def sha = commitChange('one')

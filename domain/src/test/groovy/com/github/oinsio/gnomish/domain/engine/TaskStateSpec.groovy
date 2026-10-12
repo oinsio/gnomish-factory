@@ -122,6 +122,7 @@ class TaskStateSpec extends Specification {
     }
 
     // FR8, FR14: a normal advance moves to the next stage and resets the history
+    // Scenario: git/git-task-persistence / History of past stages lives in git
     def "advanceTo a next stage moves the position and resets attempts and attemptsUsed"() {
         given: 'a state with recorded rounds and a burned attempt'
         def state = TaskState.atStageStart('build')
@@ -310,6 +311,7 @@ class TaskStateSpec extends Specification {
 
     // FR13, NFR-C1, D5: "Cumulative totals survive advancement" — advanceTo resets attempts
     // and attemptsUsed but PRESERVES the whole-task totals accumulated so far
+    // Scenario: pipeline/stage-engine / Cumulative totals survive advancement
     def "advanceTo resets history but preserves the cumulative totals"() {
         given: 'a state that has accumulated usage over a couple of rounds'
         def state = TaskState.atStageStart('build')

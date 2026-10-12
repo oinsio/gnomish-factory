@@ -51,6 +51,7 @@ class StandingReaperResilienceSpec extends Specification {
     //     worker and the restart policy takes over"; M4): an Error from the duty ends the thread
     //     — no tick-failed WARN — its death is logged at ERROR with component=reaper, and after one
     //     backoff the respawned reaper waits its interval and reaps again.
+    // Scenario: lifecycle/claim-heartbeat / An Error on one tick does not end reaping
     def "an Error from the duty ends the thread, and the respawned reaper reaps again after one backoff"() {
         given:
         rig.build(INTERVAL, { n ->
@@ -79,6 +80,8 @@ class StandingReaperResilienceSpec extends Specification {
 
     // FR3 of fix-reaper-idle-liveness, FR6: a throwing sleeper is the loop's failure too — logged
     //     with component=reaper — and the loop still reaches its tick.
+    // Scenario: lifecycle/claim-heartbeat / A throwing sleeper does not end reaping
+    // Scenario: lifecycle/claim-heartbeat / Reaper faults are logged by severity
     def "a throwing sleeper is logged with the loop's code and component, and the loop still ticks"() {
         given:
         rig.build(INTERVAL, { n -> rig.stopHere() }, { n, d ->
@@ -98,6 +101,8 @@ class StandingReaperResilienceSpec extends Specification {
 
     // FR4 of fix-reaper-idle-liveness, FR6: a dead thread is respawned after a backoff of the
     //     reaper's interval, logging the loop's ERROR with component=reaper and restart #1.
+    // Scenario: lifecycle/claim-heartbeat / A truly dead thread is respawned, an intentional stop is not
+    // Scenario: lifecycle/claim-heartbeat / The reaper is restarted without limit
     def "a dead reaper thread is respawned after an interval's backoff"() {
         given:
         rig.build(INTERVAL, { n ->

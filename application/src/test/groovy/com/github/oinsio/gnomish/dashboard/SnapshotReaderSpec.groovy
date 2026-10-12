@@ -41,6 +41,7 @@ class SnapshotReaderSpec extends Specification {
     // FR5 of harden-logging-observability: missing and malformed render identically, which is
     // exactly why they must not read alike in the log — a daemon that IS writing a snapshot this
     // reader cannot parse is a defect; a snapshot that was never written usually is not.
+    // Scenario: observability/factory-logging / A reader that drops data says so
     def "a missing snapshot file degrades to Absent without throwing, at DEBUG"() {
         given:
         def missing = tempDir.resolve('snapshot.json')
@@ -60,6 +61,7 @@ class SnapshotReaderSpec extends Specification {
         events[0].formattedMessage.contains('no daemon snapshot at')
     }
 
+    // Scenario: observability/factory-logging / A reader that drops data says so
     def "malformed JSON degrades to Absent without throwing, at WARN"() {
         given:
         def file = writeText(tempDir, '{not valid json')
@@ -96,6 +98,9 @@ class SnapshotReaderSpec extends Specification {
     }
 
     @Unroll
+    // Scenario: observability/dashboard-page / Dead daemon reddens the section
+    // Scenario: observability/serve-observability / Staleness computed from the file alone
+    // Scenario: observability/serve-observability / Crash is distinguishable from stop
     def "a stale snapshot with lifecycle #lifecycle renders DeadDaemon"() {
         given:
         def file = writeSnapshot(SnapshotJsonMapperSpec.snapshotWithLifecycle(lifecycle))
@@ -124,6 +129,8 @@ class SnapshotReaderSpec extends Specification {
         reader.read(file, atThreshold) instanceof DaemonSnapshotView.Fresh
     }
 
+    // Scenario: observability/dashboard-page / Clean stop is not an alert
+    // Scenario: observability/serve-observability / Crash is distinguishable from stop
     def "a stale snapshot last in Stopped renders Stopped, not DeadDaemon"() {
         given:
         def stopped = new LifecycleState.Stopped('drainComplete')
@@ -140,6 +147,7 @@ class SnapshotReaderSpec extends Specification {
     // FR11 of supervise-daemon-loops-and-embed-dashboard (dashboard-page "Fresh stopped snapshot
     //     shows the stopped state"): stopped is terminal, so its age adds nothing — the page serve
     //     renders right after its final snapshot must not read "running".
+    // Scenario: observability/dashboard-page / Fresh stopped snapshot shows the stopped state
     def "FR11: a fresh snapshot last in Stopped renders Stopped, not Fresh"() {
         given:
         def stopped = new LifecycleState.Stopped('signal')

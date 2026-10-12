@@ -31,6 +31,7 @@ class SlotPolicyProducerBoundarySpec extends Specification {
     }
 
     // FR18, D22: a second construction site of a root-built policy is a second owner.
+    // Scenario: core/time-source / A policy built on real time has one producer
     def "FR18, D22: #literal is constructed only in its one producer"() {
         given:
         def sources = TimeSourceOwnerBoundarySpec.factorySources()
@@ -52,6 +53,7 @@ class SlotPolicyProducerBoundarySpec extends Specification {
     }
 
     // A second producer spelled as a constructor reference or with a space is still a construction.
+    // Scenario: core/time-source / A policy built on real time has one producer
     def "FR18, D22: the producer detector finds #shape and leaves the bare name alone"() {
         expect:
         constructs('TerminalWriteRetry', source) == found

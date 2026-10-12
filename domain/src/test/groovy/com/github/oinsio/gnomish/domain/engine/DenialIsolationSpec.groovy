@@ -78,6 +78,8 @@ class DenialIsolationSpec extends Specification {
 
     // FR2, NFR-O1: the scenario the old model could not express — a denied round whose checks
     //     all passed. The attempt stays PASSED and the denial is still on the record.
+    // Scenario: sandbox/sandbox-egress / A denial changes no verdict, outcome or retry feedback
+    // Scenario: sandbox/sandbox-egress / Denied exfiltration attempt reaches the report on a passing attempt
     def "FR2: a denied round with all-pass checks records PASSED and keeps the denial"() {
         given: 'a passing check and a round whose environment recorded one denial'
         builtinRunner.scripted << new Verdict.Pass()
@@ -134,6 +136,8 @@ class DenialIsolationSpec extends Specification {
 
     // FR2: the retry's feedback is assembled from checkResults only — a denial is not a finding
     //     the gnome is asked to fix, and feeding it back would put the guard in the loop
+    // Scenario: git/git-task-persistence / Denials never feed retries
+    // Scenario: sandbox/sandbox-egress / A denial changes no verdict, outcome or retry feedback
     def "FR2: denials never enter the prior-failure feedback of a retry"() {
         given: 'a first round that denies AND fails its check, then a passing retry'
         builtinRunner.scripted << new Verdict.Fail([
@@ -154,6 +158,31 @@ class DenialIsolationSpec extends Specification {
 
         and: 'the denial still rode the first attempt into the record (FR3)'
         recordedAttempts().first().denials() == [DENIAL]
+    }
+
+    // FR8 of fix-denial-attribution-durability: a marker is an unidentified denial, so it gates nothing
+    // Scenario: sandbox/sandbox-egress / A loss marker gates nothing
+    def "FR8: a loss marker changes no verdict, no outcome and no retry feedback"() {
+        given: 'two rounds that each record a loss marker; the first fails its check, the retry passes'
+        def marker = Denial.unidentified(new Finding(
+                        'egress denial log truncated: the read filled its 1000-line window', 'gnomish-TASK-1', 'since start'))
+        builtinRunner.scripted << new Verdict.Fail([
+            new Finding('the real check finding', null, null)
+        ])
+        builtinRunner.scripted << new Verdict.Pass()
+        executor.scripted << completed([marker])
+        executor.scripted << completed([marker])
+
+        when:
+        def outcome = new Engine().run(pipeline(), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
+
+        then: 'the stage passed on its retry and each attempt kept the verdict its check gave'
+        outcome instanceof TaskOutcome.Completed
+        recordedAttempts()*.result()*.name() == ['QUALITY_FAILURE', 'PASSED']
+
+        and: 'the retry was fed the check finding only, and both records carry the marker'
+        executor.requests.last().feedback()*.verdict()*.findings().flatten()*.message() == ['the real check finding']
+        recordedAttempts()*.denials() == [[marker], [marker]]
     }
 
     private static PipelineDefinition pipeline() {

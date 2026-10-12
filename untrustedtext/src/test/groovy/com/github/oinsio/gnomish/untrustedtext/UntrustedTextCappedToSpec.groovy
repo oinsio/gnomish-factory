@@ -57,6 +57,7 @@ class UntrustedTextCappedToSpec extends Specification {
     //     after it was written — were the two whose truncation nothing asserted. The mint switch is
     //     UntrustedTextExitIdentitySpec's, reused rather than copied, so one exhaustive switch in
     //     this package fails to compile when a ninth family arrives.
+    // Scenario: core/untrusted-text / A transformation inside the carrier needs no annotation
     def "the capped text is still a carrier of the same provenance — #provenance"() {
         given:
         def carrier = UntrustedTextExitIdentitySpec.mint('z' * (CAP * 2), provenance as Provenance)
@@ -68,6 +69,7 @@ class UntrustedTextCappedToSpec extends Specification {
         provenance << Provenance.values()
     }
 
+    // Scenario: core/untrusted-text / A transformation inside the carrier needs no annotation
     def "an over-bound text keeps head and tail and names the omitted count"() {
         given: 'a capture well past the bound, with a marker at each end'
         def head = 'HEAD-MARKER\n'

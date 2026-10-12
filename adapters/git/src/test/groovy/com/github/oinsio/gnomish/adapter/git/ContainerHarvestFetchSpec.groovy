@@ -27,6 +27,7 @@ class ContainerHarvestFetchSpec extends Specification {
     // The runner prefixes its own stall-detection options onto a fetch (FR4 of
     // bound-subprocess-commands), pinned by the runner's own specs; what this spec pins is the
     // caller's half of the argv, exactly as the fetch hands it to the runner.
+    // Scenario: git/git-task-persistence / The harvest admits only the container transport
     def "FR5, FR4, FR6: fetch runs the owner's container argv — common set, ext transport, unforced refspec"() {
         given: 'a git whose fetch succeeds'
         def git = new ScriptedGit().answer(['fetch'], 0)
@@ -81,6 +82,8 @@ class ContainerHarvestFetchSpec extends Specification {
     // FR5, NFR-R1, UX3 of own-git-transfer-argv (design D4): asked before the daemon and
     //     non-fast-forward reads, and mapped to the same boundary violation as a rewrite, with the
     //     report naming the message id and the object.
+    // Scenario: git/git-task-persistence / A malformed object is refused with the rewrite's report shape
+    // Scenario: git/git-transfer / A malformed .gitmodules from the box is refused
     def "FR5: an object refused by validation is a boundary violation naming the object, never a plain failure"() {
         given:
         def git = refusing(FetchRefusalSpec.FETCH_REFUSAL)
@@ -97,6 +100,7 @@ class ContainerHarvestFetchSpec extends Specification {
         !ex.message.contains('history was rewritten')
     }
 
+    // Scenario: git/git-task-persistence / Rewritten history is refused at the boundary
     def "FR5: a non-fast-forward refusal surfaces as the history-rewrite violation"() {
         given:
         def git = refusing(REWRITE)

@@ -46,6 +46,7 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
         salvage.hasLeftovers()
     }
 
+    // Scenario: git/git-task-persistence / Salvage feeds the QC loop
     def "salvage() commits leftovers as-is with the fixed salvage message"() {
         given:
         def repo = initWorkingRepo(tempDir, 'salvage-me')
@@ -71,6 +72,8 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
     // stale or half-applied state.json behind. Salvage commits the gnome's work files and restores
     // the factory's own files from the tip — the branch, not the dirty worktree, says what the
     // recorded rounds are.
+    // Scenario: git/git-task-persistence / Factory files come from the tip, not the worktree
+    // Scenario: executor/agent-executor / A salvage commit carries the request
     def "salvage() restores factory-owned files from the tip instead of committing them"() {
         given: 'a task branch carrying committed factory files, plus a dying round\'s dirt'
         def repo = initWorkingRepo(tempDir, 'factory-owned')

@@ -81,6 +81,7 @@ tracker:
         ex.message.contains('tracker')
     }
 
+    // Scenario: serve/factory-serve / Startup smoke test
     def "unreachable tracker binding fails startup with exit code 1 before claiming anything"() {
         given:
         writeConfig(GITHUB_TRACKER_SECTION)

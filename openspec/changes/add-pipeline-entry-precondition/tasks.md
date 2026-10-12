@@ -116,3 +116,7 @@ TDD per `.claude/rules/testing.md`: every task's spec is written red first.
       `fix-denial-attribution-durability` (reference JSON / version-gate bumps
       land once, by the change that applies last); verify the state-file contract
       spec and `status-report-v1.reference.json` equivalence spec stay green
+
+## Follow-ups from tighten-spec-contract
+
+- F58: the scenario `state.json has two writers in disjoint windows` of `State directory with one writer per file` keeps its title with a narrowed WHEN; it is retired and re-added under a writer-neutral title by `retire-misnamed-scenarios` + `restore-renamed-scenarios` after this change lands.

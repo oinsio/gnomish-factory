@@ -11,6 +11,7 @@ class FindingsSanitizerSpec extends Specification {
 
     private static final String ESC = '\u001B'
 
+    // Scenario: plugin/plugin-api-contract / First-party sanitization is unchanged by the move
     def "CSI color and cursor sequences are stripped"() {
         expect:
         FindingsSanitizer.strip("${ESC}[31mred${ESC}[0m and ${ESC}[2Jcleared") == 'red and cleared'
@@ -199,6 +200,7 @@ class FindingsSanitizerSpec extends Specification {
         FindingsSanitizer.capTail('x' * 10, 10) == 'x' * 10
     }
 
+    // Scenario: plugin/plugin-api-contract / A hostile CI log is neutralized with api-only means
     def "capTail keeps the tail and notes what was dropped"() {
         when:
         def capped = FindingsSanitizer.capTail('a' * 5 + 'b' * 10, 10)
@@ -265,6 +267,7 @@ class FindingsSanitizerSpec extends Specification {
         cap << [0, -1]
     }
 
+    // Scenario: plugin/plugin-api-contract / A hostile CI log is neutralized with api-only means
     def "forLog strips and caps in one call"() {
         given: 'a hostile oversized colored output'
         def text = "${ESC}[31m" + 'x' * 3000

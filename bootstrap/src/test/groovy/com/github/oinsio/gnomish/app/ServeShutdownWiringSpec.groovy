@@ -237,6 +237,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     // FR4, FR12, FR13 of add-serve-observability (task 5.1): runDrain drives the SAME observability
     // wiring through draining -> stopping -> stopped(drainComplete), and writes the drain run's
     // runSummary line — proving the ledger writer is genuinely reached, not merely constructed.
+    // Scenario: observability/serve-observability / Drain boundary gets a summary
     def "runDrain writes a runSummary line and a stopped(drainComplete) lifecycle line"() {
         given:
         def slotRunner = newSlotRunner()
@@ -429,6 +430,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     // FR4, FR12 of add-serve-observability (task 5.1): the SIGTERM hook drives observability
     // through draining -> stopping -> stopped(signal) and appends the stopped ledger line —
     // exactly the sequence the class Javadoc describes for the forever-loop path.
+    // Scenario: observability/serve-observability / Graceful stop leaves a stopped snapshot
     def "runForever's shutdown hook moves observability through draining, stopping, and stopped(signal)"() {
         given:
         def slotRunner = newSlotRunner()
@@ -575,6 +577,8 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     // M5: a terminal slot line written while the daemon drains is exactly the line an operator
     // reads to find out how the run ended — and it sits in the async appender's queue, so it
     // survives only if the logging stop comes AFTER the drain. This drives the real hook body.
+    // Scenario: serve/factory-serve / One shutdown sequence for signal and normal exit
+    // Scenario: observability/factory-logging / Signal does not eat the tail
     def "FR9, M5: a line logged during the drain is in the log file after the sequence"() {
         given:
         def logFile = tempDir.resolve('drain.log')
@@ -634,6 +638,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     // that opens it, and the terminal summary of what was in flight when it arrived — the latter
     // greppable by the task's own id. Before the ordering fix, the framework's concurrent hook
     // could stop logging first and drop every one of them.
+    // Scenario: serve/factory-serve / Drain outcome survives the signal
     def "M5: a signal landing mid-drain leaves the stopping anchor and the in-flight task's summary in the log file"() {
         given: "the operator's file, fed through the production async appender"
         def logFile = tempDir.resolve('kill-during-drain.log')
@@ -757,6 +762,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
 
     // NFR-R1: the JVM fires the hook on every exit, including the one that follows a drain that
     // already ran the whole sequence. A second pass must add nothing and fail nothing.
+    // Scenario: serve/factory-serve / Second pass is a no-op
     def "NFR-R1: a second pass of the drain hook changes nothing"() {
         given:
         def steps = []
@@ -827,6 +833,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
 
     // FR11, UX2, D9 of supervise-daemon-loops-and-embed-dashboard: the signal path renders the page
     //     in its hook, and a second pass of that hook changes nothing.
+    // Scenario: serve/factory-serve / Page after Ctrl-C
     def "FR11: the signal hook renders the page, and a second pass leaves it byte-identical"() {
         given:
         def clock = new VirtualClock()
@@ -852,6 +859,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
     // FR9: two JVM shutdown hooks run concurrently, and only one may close the context. Serve
     // claims the stop when it REGISTERS its hook, so the composition root's generic signal hook is
     // already stood down before any signal can arrive.
+    // Scenario: serve/factory-serve / One shutdown sequence for signal and normal exit
     def "FR9: registering the serve hook stands the generic signal hook down"() {
         given:
         def steps = []

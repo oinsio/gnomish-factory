@@ -119,6 +119,7 @@ class DiscoveredRegistryOnlySpec extends Specification {
     // M1, verbatim: "zero hardwired Map.of(...) provider registries remain". Comments are stripped
     //     first — TrackerAdapterConfiguration's own javadoc says the words while describing what it
     //     no longer does, and prose is not a registry.
+    // Scenario: plugin/plugin-discovery / No hardwired registry remains
     def "no production source declares a Map.of provider registry"() {
         given:
         def sources = RepoSourceTree.productionSources()

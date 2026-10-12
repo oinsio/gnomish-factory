@@ -41,10 +41,11 @@ import org.slf4j.MDC;
  * swallows it — a failed slot must not take down the daemon. Implements FR1, M2 of add-factory-serve.
  *
  * <p><b>Remote outage gate (task 7.3 of add-base-ref-resolution, FR14).</b> The slot signals the
- * shared {@link RemoteOutageGate} from its base reads themselves, not from its terminal {@link
- * TakeResult}: the {@link com.github.oinsio.gnomish.app.port.git.BaseRefGit} inside the wiring's
- * {@link com.github.oinsio.gnomish.app.port.git.TaskGit} is already wrapped in {@link
- * RemoteOutageSignalingBaseRefGit} by the serve assembly point, through {@link
+ * shared {@link RemoteOutageGate} from its reads of origin themselves, not from its terminal
+ * {@link TakeResult}: the {@link com.github.oinsio.gnomish.app.port.git.BaseRefGit} and the task
+ * branch port inside the wiring's {@link com.github.oinsio.gnomish.app.port.git.TaskGit} are
+ * already wrapped in {@link RemoteOutageSignalingBaseRefGit} and {@link
+ * RemoteOutageSignalingTaskBranchGit} by the serve assembly point, through {@link
  * RemoteOutageGates#signaling} (D6 of introduce-slot-wiring) — the slot reads through it without
  * knowing it and never decorates its own equipment. An outage opens the gate and a refresh
  * confirms recovery at the instant either happens — a terminal result arrives hours after the

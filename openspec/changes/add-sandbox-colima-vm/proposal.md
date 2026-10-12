@@ -282,3 +282,6 @@ privileged), #43 (silent isolation degradation, the vz→QEMU class).
   its passport are contributed through the first-party registry SPI (plus
   its trust-ratification entry in core), and the run-path generalization
   deferred there lands here.
+- Sequenced after `tighten-spec-contract`: its deltas carry the
+  `**Implements**:` lines and the 500-character requirement bodies that change
+  introduces (it has no MODIFIED block to layer).

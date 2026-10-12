@@ -600,7 +600,7 @@ classification function — do not invent a second mechanism per kind.
   canonical id can go stale. The adapter tolerates this by resolving the id's
   repo with one `GET /repos/{owner}/{repo}` call and following GitHub's own
   rename redirect: if the redirect target equals the configured binding, the
-  operation proceeds with a WARN log; otherwise it refuses with an error
+  operation proceeds with an INFO log; otherwise it refuses with an error
   naming both repos. An alternative was considered and explicitly rejected:
   using GitHub's immutable internal `node_id` as a surrogate key instead of
   the human-readable `owner/repo#number` form. It was rejected because it

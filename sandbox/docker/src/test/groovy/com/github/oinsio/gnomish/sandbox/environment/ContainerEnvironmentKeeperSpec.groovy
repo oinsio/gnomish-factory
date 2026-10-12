@@ -64,6 +64,7 @@ class ContainerEnvironmentKeeperSpec extends Specification {
     // FR2, NFR-O1, UX1, M2 of polish-sandbox-forensics: this line, not the caller's, is where the
     // operator reads what survived a park, an abort or a rejected self-check — with a name that
     // goes straight into `docker logs`.
+    // Scenario: sandbox/execution-environment / Keep notice names the kept box
     def "FR2: a successful keep announces the kept container by name"() {
         given:
         def capture = LogCaptureSupport.attach(ContainerEnvironmentKeeper)

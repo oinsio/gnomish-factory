@@ -35,6 +35,7 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
         return runner.run(worktree, 'rev-parse', 'HEAD').stdout().forParsing().trim()
     }
 
+    // Scenario: cli/task-inspection / Unreadable historical commit is skipped, not fatal
     def "FR16: an unreadable mid-history commit is skipped with a warning naming it, and the walk still renders"() {
         given: 'a first readable round'
         taskRepository().createTask(new TaskContext('PROJ-20', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))

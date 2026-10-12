@@ -16,9 +16,10 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * run happened for any other reason, e.g. every eligible candidate lost its claim
  * race (later tasks); {@link InfrastructureUnavailable} — a configured dependency the claim needs
  * before any engine run could start never answered, so the claim was released plain with no
- * penalty (FR9 of add-base-ref-resolution; produced by the claim's base-refresh step in both its
- * shapes — a fresh claim's resolution and a resume's pinned-ref refresh — and the type task 7.3's
- * remote outage gate consults to learn a slot hit an infrastructure failure).
+ * penalty (FR9 of add-base-ref-resolution; produced by every claim-time fetch origin never
+ * answered — a fresh claim's base resolution, a resume's pinned-ref refresh, and the task-branch
+ * lookup (finding F6 of tighten-spec-contract) — and the type task 7.3's remote outage gate
+ * consults to learn a slot hit an infrastructure failure).
  *
  * <p>This is deliberately a runner-level type, not a {@code TaskOutcome} variant
  * (design D2): the engine knows nothing about trackers, claims, or revocation: those

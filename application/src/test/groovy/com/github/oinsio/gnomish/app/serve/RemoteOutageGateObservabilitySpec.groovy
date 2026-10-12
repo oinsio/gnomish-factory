@@ -52,6 +52,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
                 new RemoteOutageWiring(target, suppressor, SUSTAINED_OPEN, onTransition, onClosedOutage))
     }
 
+    // Scenario: serve/factory-serve / One WARN, one recovery line, roll-ups between
     def "opening logs exactly one WARN naming the target and cause"() {
         given:
         def logs = LogCaptureSupport.attach(RemoteOutageGate)
@@ -107,6 +108,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
         logs.detach()
     }
 
+    // Scenario: serve/factory-serve / One WARN, one recovery line, roll-ups between
     def "a failed probe after open logs DEBUG only, never a second WARN"() {
         given:
         def logs = LogCaptureSupport.attach(RemoteOutageGate, Level.DEBUG)
@@ -127,6 +129,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
         logs.detach()
     }
 
+    // Scenario: serve/factory-serve / One WARN, one recovery line, roll-ups between
     def "closing logs one INFO recovery line with duration and probe count"() {
         given:
         def logs = LogCaptureSupport.attach(RemoteOutageGate)
@@ -153,6 +156,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
         logs.detach()
     }
 
+    // Scenario: serve/factory-serve / One WARN, one recovery line, roll-ups between
     def "an outage past the sustained-open threshold logs exactly one ERROR"() {
         given:
         def logs = LogCaptureSupport.attach(RemoteOutageGate)
@@ -205,6 +209,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
         logs.detach()
     }
 
+    // Scenario: observability/serve-observability / A gate transition writes the snapshot at once
     def "onTransition fires on open and close, never on a mere failed probe"() {
         given:
         def transitions = 0
@@ -235,6 +240,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
         transitions == 2
     }
 
+    // Scenario: observability/serve-observability / One line per outage
     def "onClosedOutage receives the outage summary exactly once, with the probe count and last error"() {
         given:
         def received = new AtomicReference<RemoteOutageClosedOutage>()

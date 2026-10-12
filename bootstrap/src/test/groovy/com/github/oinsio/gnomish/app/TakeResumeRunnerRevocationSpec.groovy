@@ -27,6 +27,8 @@ class TakeResumeRunnerRevocationSpec extends TakeResumeSpecBase {
     // (caught inside the engine and turned into Aborted), the take tail sees revocation() is
     // present on the decorator and routes to RevocationHandler instead of AbortHandler, and the
     // result is Revoked.
+    // Scenario: lifecycle/claim-heartbeat / Lost claim ends the run at the boundary
+    // Scenario: lifecycle/task-branch-contract / The round-boundary check stops a holder whose claim is gone
     def "resumeWithoutDecision returns Revoked when the tracker reports the claim lost mid-run, and skips outcome recording"() {
         given: 'a single-stage AUTO pipeline — one round completes the whole task in one persist'
         def taskId = 'PROJ-1'
@@ -64,6 +66,7 @@ class TakeResumeRunnerRevocationSpec extends TakeResumeSpecBase {
     // (salvage/push/release, never park/finish/recordAbort) — even though the tracker's own
     // fetchTask still reports the claim as ours (workingHolder stays this instance). This proves the
     // flag is live end to end, not write-only.
+    // Scenario: lifecycle/task-branch-contract / The round-boundary check stops a holder whose claim is gone
     def "resumeWithoutDecision reacts to a set claim-loss flag as a revocation, even while fetchTask still reports the claim ours"() {
         given: 'a single-stage AUTO pipeline and a flag the beat has already set for this task'
         def taskId = 'PROJ-1'

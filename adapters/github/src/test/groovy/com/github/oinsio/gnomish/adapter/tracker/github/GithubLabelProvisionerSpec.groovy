@@ -81,6 +81,7 @@ class GithubLabelProvisionerSpec extends Specification {
         }
     }
 
+    // Scenario: tracker/github-tracker / Second start changes nothing
     def "second start against the same repo issues no label mutations"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/labels?per_page=100'))
@@ -101,6 +102,7 @@ class GithubLabelProvisionerSpec extends Specification {
         wireMock.verify(0, postRequestedFor(urlEqualTo('/repos/acme/widgets/labels')))
     }
 
+    // Scenario: tracker/github-tracker / Operator recolored a label
     def "an existing label with a different color than configured is left untouched"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/labels?per_page=100'))
@@ -147,6 +149,7 @@ class GithubLabelProvisionerSpec extends Specification {
                 .withRequestBody(equalToJson('{"name":"gnomish:delivered","color":"8250df","description":"Gnomish factory: task delivered"}')))
     }
 
+    // Scenario: tracker/github-tracker / Fork with stale binding dies at startup
     def "a 404 on label creation (fork with a stale binding) fails startup naming the repo"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/labels?per_page=100'))

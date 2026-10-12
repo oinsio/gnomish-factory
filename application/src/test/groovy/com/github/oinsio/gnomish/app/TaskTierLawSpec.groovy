@@ -1,12 +1,15 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -37,6 +40,13 @@ class TaskTierLawSpec extends Specification {
     private static final Path ROOT = Paths.get('/repo')
     private static final ObjectId LAW_COMMIT = new ObjectId('a' * 40)
 
+    // F99: production binds the law at the refreshed commit and holds the resolved ref name only in
+    // the pin — the fixture mirrors that, so a report that took its base ref from the binding names
+    // the SHA and fails here.
+    private static final LawBinding BINDING = LawBinding.atRevision(ROOT, LAW_COMMIT.hex())
+    private static final FreshClaimBaseBinding.Bound BASE = new FreshClaimBaseBinding.Bound(
+    BINDING, new BasePin('release/1.18', BaseRefKind.BRANCH, BaseRule.DESIGNATOR))
+
     private RunAssembly assembly = Mock()
     private Tracker tracker = Mock()
 
@@ -52,13 +62,14 @@ class TaskTierLawSpec extends Specification {
     // FR13, D14, FR15: a task tier that loads cleanly binds the task to the peeled law commit
     // itself — kept typed, so the branch's start point, the frozen law and the pin are one SHA by
     // construction and no string revision survives to be resolved a second time — and never parks.
+    // Scenario: pipeline/pipeline-config / The task tier binds from the base's law commit
     def "binds to the peeled law commit when the task tier loads cleanly"() {
         given:
-        def binding = LawBinding.atRevision(ROOT, 'release/1.18')
+        def binding = BINDING
         def definition = pipeline()
 
         when:
-        def outcome = TaskTierLaw.bind(assembly, binding, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
+        def outcome = TaskTierLaw.bind(assembly, BASE, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
 
         then:
         1 * assembly.bindTaskTier(binding) >> new BoundTaskTier(new LoadOutcome.Loaded(definition), LAW_COMMIT)
@@ -79,16 +90,17 @@ class TaskTierLawSpec extends Specification {
     // FR13, UX5, D14: a base that fails to load parks the task with a report naming the ref, the
     // law commit and every located error — INFRA, not ESCALATION, since fixing .gnomish/ and
     // returning the task needs no decision reply.
+    // Scenario: pipeline/pipeline-config / A broken base's report names its law commit and burns no attempt
     def "parks INFRA with a report naming the ref, law commit and located errors on a load error"() {
         given:
-        def binding = LawBinding.atRevision(ROOT, 'release/1.18')
+        def binding = BINDING
         def errors = [
             new ConfigError('stage.yaml', 'mechanism.executor', 'unknown executor \'foo\'')
         ]
         def logs = LogCaptureSupport.attach(TaskTierLaw)
 
         when:
-        def outcome = TaskTierLaw.bind(assembly, binding, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
+        def outcome = TaskTierLaw.bind(assembly, BASE, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
 
         then:
         1 * assembly.bindTaskTier(binding) >> new BoundTaskTier(new LoadOutcome.Invalid(errors), LAW_COMMIT)
@@ -96,8 +108,8 @@ class TaskTierLawSpec extends Specification {
         and:
         1 * tracker.park(REF, ParkReason.INFRA, { String report ->
             report.contains('PROJ-1') &&
-            report.contains('release/1.18') &&
-            report.contains(LAW_COMMIT.hex()) &&
+            report.contains('Base ref: release/1.18\n') &&
+            report.contains('Law commit: ' + LAW_COMMIT.hex()) &&
             report.contains('unknown executor')
         })
 
@@ -121,6 +133,7 @@ class TaskTierLawSpec extends Specification {
         event != null
         event.level == Level.ERROR
         event.formattedMessage.contains('PROJ-1')
+        event.formattedMessage.contains('at base release/1.18 (law commit ' + LAW_COMMIT.hex() + ')')
 
         cleanup:
         logs.detach()
@@ -130,7 +143,7 @@ class TaskTierLawSpec extends Specification {
     // escaping exception — the task still parks, and the failed write itself is a coded ERROR.
     def "a park failure is swallowed, logs GF133, and still returns AwaitingHuman(INFRA)"() {
         given:
-        def binding = LawBinding.atRevision(ROOT, 'release/1.18')
+        def binding = BINDING
         def errors = [
             new ConfigError('stage.yaml', 'mechanism.executor', 'unknown executor \'foo\'')
         ]
@@ -141,7 +154,7 @@ class TaskTierLawSpec extends Specification {
         def logs = LogCaptureSupport.attach(TaskTierLaw)
 
         when:
-        def outcome = TaskTierLaw.bind(assembly, binding, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
+        def outcome = TaskTierLaw.bind(assembly, BASE, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
 
         then:
         noExceptionThrown()
@@ -166,16 +179,17 @@ class TaskTierLawSpec extends Specification {
     // classifies — never a validation problem this class parks on its own.
     def "an I/O fault reading the law propagates as UncheckedIOException and is never parked"() {
         given:
-        def binding = LawBinding.atRevision(ROOT, 'release/1.18')
+        def binding = BINDING
         assembly.bindTaskTier(binding) >> {
             throw new IOException('git objects unreadable')
         }
 
         when:
-        TaskTierLaw.bind(assembly, binding, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
+        TaskTierLaw.bind(assembly, BASE, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()))
 
-        then:
-        thrown(UncheckedIOException)
+        then: 'the fault names the revision the law was read at'
+        def fault = thrown(UncheckedIOException)
+        fault.message == 'cannot read the pipeline law at ' + LAW_COMMIT.hex()
 
         and: 'an unreadable law is never classified as a config problem to park'
         0 * tracker.park(*_)

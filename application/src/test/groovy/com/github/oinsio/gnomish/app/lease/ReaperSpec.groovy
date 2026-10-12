@@ -54,6 +54,7 @@ class ReaperSpec extends Specification {
 
     // FR4: a claim whose version stood unchanged for TTL is removed with the observed
     //     version; a claim first seen this tick is not stale and is left alone.
+    // Scenario: lifecycle/claim-heartbeat / Each non-steady shape is repaired by its own operation
     def "reaps a claim gone stale with its observed version, leaving a fresh claim untouched"() {
         given:
         def v = version()
@@ -80,6 +81,7 @@ class ReaperSpec extends Specification {
 
     // FR4, D4: the reaper NEVER claims a reaped task for itself — removal alone returns
     //     it to the ordinary queue.
+    // Scenario: lifecycle/claim-heartbeat / Dead instance's task returns without a human
     def "the reaper never claims a reaped task for itself"() {
         given:
         def v = version()
@@ -102,6 +104,7 @@ class ReaperSpec extends Specification {
 
     // FR4, NFR-R2: a Mismatch (a racing reaper or a live beat changed the claim since the
     //     observation) is a safe no-op, never an error — the reaper converges and reaps on.
+    // Scenario: lifecycle/claim-heartbeat / Double reap converges
     def "a Mismatch on one stale claim is not an error and the other is still reaped"() {
         given:
         def v1 = version('m1')
@@ -243,6 +246,8 @@ class ReaperSpec extends Specification {
     //     (the holder also lost access and has not yet re-beaten). Because every outage tick
     //     forgot the windows, the claim is first-seen again and is NOT reaped; the holder
     //     then resumes beating and stays live across further ticks. No live claim is reaped.
+    // Scenario: serve/factory-serve / Outage passes through
+    // Scenario: lifecycle/claim-heartbeat / Long outage, no casualties
     def "a live holder survives a multi-TTL outage even if its first recovery version is unchanged"() {
         given:
         def before = version('m1', '2000-01-01T00:00:00Z')
@@ -296,6 +301,7 @@ class ReaperSpec extends Specification {
     //     claim's version has stood unchanged past the TTL (its beats were failing while listOpen
     //     kept working). Own claims are excluded before observation, so only a foreign observer
     //     could reap this instance; a foreign stale claim in the same listing is still reaped.
+    // Scenario: lifecycle/claim-heartbeat / An instance never reaps its own claim
     def "the reaper never removes a claim held by its own instance"() {
         given:
         def ownRef = new TaskRef('T-own')
@@ -326,6 +332,7 @@ class ReaperSpec extends Specification {
     // FR4, D14: an infrastructure failure removing a stale claim must NOT silence it — the
     //     once-per-version latch is re-armed so the SAME unchanged version is retried on the
     //     next tick, rather than staying Working and un-emitted until the version changes.
+    // Scenario: lifecycle/claim-heartbeat / A failed removal is retried, not silently dropped
     def "an infrastructure failure removing a stale claim re-arms it for retry next tick"() {
         given:
         def v = version()

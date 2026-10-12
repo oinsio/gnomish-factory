@@ -31,6 +31,7 @@ class SweepTickLogSpec extends Specification {
     }
 
     // NFR-O1: the published counts describe exactly one pass.
+    // Scenario: observability/serve-observability / Skip is visible as its own count
     def "endTick publishes this tick's per-category counts and its completion instant"() {
         given:
         log.beginTick()
@@ -88,6 +89,7 @@ class SweepTickLogSpec extends Specification {
     // NFR-O1: the inventory answers "what waits for resume, and for how much longer" — ordered
     //     oldest first, as SweepTickRecord's own contract states, so the row closest to reaping
     //     is the first one read regardless of the order the listing named the objects in.
+    // Scenario: observability/serve-observability / Kept inventory shows what waits for resume
     def "kept verdicts become inventory entries with the reap margin, oldest first"() {
         given:
         log.beginTick()
@@ -207,6 +209,7 @@ class SweepTickLogSpec extends Specification {
     }
 
     // NFR-O3: consecutive skipped ticks are the "cleanup silently stalled" signal.
+    // Scenario: sandbox/sandbox-lifecycle / A skipped sweep blocks nothing and is retried on the next pass
     def "consecutive skipped ticks accumulate and reset on the first tick that reaches verdicts"() {
         when: 'two ticks in a row cannot reach a verdict'
         2.times {

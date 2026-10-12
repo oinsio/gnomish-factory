@@ -189,6 +189,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     // FR8, FR10: no recorded outcome means the branch was interrupted mid-round. The leftovers are
     // SALVAGED by default — committed as-is so the next round's gnome sees the half-done work and
     // the QC loop judges it — and the engine continues from the recorded position.
+    // Scenario: git/git-task-persistence / Salvage feeds the QC loop
     def "salvages the interrupted round's leftovers and continues from the recorded position"() {
         when:
         resume()
@@ -204,6 +205,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
 
     // FR8: --discard-work resets to HEAD instead, so the loop replays the round clean. The two are
     // mutually exclusive: doing both would commit the leftovers and then throw them away.
+    // Scenario: git/git-task-persistence / Discard replays only the interrupted round
     def "discards the leftovers instead under --discard-work"() {
         when:
         resume(null, true)
@@ -350,6 +352,8 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     // nor continued as an interrupted run nor routed to a decision. The resume IS the approval: one
     // approval commit — the tip's gate, the state past it in the pinned definition — before the
     // engine runs from the approved state (here the pipeline end of a one-stage pipeline: Completed).
+    // Scenario: cli/manual-run / Resume of a checkpoint approves it
+    // Scenario: cli/manual-run / Resume of a gate whose park was lost
     def "approves a tip at a gate in one commit and continues when its outcome is #label"() {
         given:
         record = recorded == null ? freshRecord() : recordWith(recorded, report)
@@ -401,6 +405,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     // FR9 of make-run-headless: a --decision answers an escalation; over any other recorded outcome
     // it is a usage error naming the conflict, raised after task.json is read and before any branch
     // write or salvage.
+    // Scenario: cli/manual-run / Decision without a question is a usage error
     def "refuses a --decision over a task whose recorded outcome is #label, writing nothing"() {
         given:
         record = recorded == null ? freshRecord() : recordWith(recorded, recorded instanceof RecordedOutcome.Escalated ? recorded.report() : null)

@@ -45,6 +45,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
     private static final Pattern EXTERNAL_ATTR_REF =
     Pattern.compile('(?i)(src|href)\\s*=\\s*["\']?\\s*((https?:)?//)')
 
+    // Scenario: observability/dashboard-page / No external references in the output
     def "no external references anywhere in a fully-composed page"() {
         given:
         def html = renderer.render(fullDaemonView(), fullHistory(), fullBoard(), noSweepData(), GENERATED_AT, null)
@@ -55,6 +56,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
         !EXTERNAL_ATTR_REF.matcher(html).find()
     }
 
+    // Scenario: observability/dashboard-page / Output stays a single file
     def "no <script src=...> or <link href=...> tags — all styling and scripting stays inline"() {
         given:
         def html = renderer.render(fullDaemonView(), fullHistory(), fullBoard(), noSweepData(), GENERATED_AT, null)
@@ -66,6 +68,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
         html.contains('<style>')
     }
 
+    // Scenario: observability/dashboard-page / Content stays within the composed surfaces
     def "no credential- or secret-looking substrings leak into the page"() {
         given:
         def html = renderer.render(fullDaemonView(), fullHistory(), fullBoard(), noSweepData(), GENERATED_AT, null)
@@ -78,6 +81,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
         !lower.contains('token=')
     }
 
+    // Scenario: observability/dashboard-page / Content stays within the composed surfaces
     def "a composed-surface title carrying a credential-shaped string is rendered verbatim, escaped, exactly once"() {
         given: 'a task title that looks like it might be a leaked secret, injected deliberately as fixture data'
         def canary = 'password=hunter2 <script>alert(1)</script>'

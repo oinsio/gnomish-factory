@@ -54,6 +54,7 @@ class TakeQuarantineParkSpec extends Specification {
 
     // FR15: the park happens on the first classification and burns no cycle — recordAbort is never
     // called, so the task never returns to Ready to be claimed and re-classified identically
+    // Scenario: lifecycle/task-branch-contract / Non-recoverable shape parks once with a diagnosis
     def "parks INFRA with the diagnosis and records no abort"() {
         given: 'a task with three attempts already on record, one of them a failed repair'
         def facts = new AbortFacts(3, Instant.parse('2026-08-20T10:00:00Z'), 1)

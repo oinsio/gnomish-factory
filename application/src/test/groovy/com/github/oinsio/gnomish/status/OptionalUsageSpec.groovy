@@ -45,6 +45,7 @@ class OptionalUsageSpec extends Specification {
         totals.tools() == []
     }
 
+    // Scenario: observability/status-report / Human-only run validates
     def "FR-NFR-C1: Human-only run validates -- a manual run with zero token usage renders contract-valid JSON with null tokens and empty byTool/perVote, wall time present"() {
         given: "an entirely human-executed round: real measured wallTime, empty tools, unreported tokens, no judge"
         def humanRound = new ExecutorUsage(Duration.ofMillis(183_000), [], [:])

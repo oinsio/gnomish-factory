@@ -148,6 +148,7 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
         events[0].formattedMessage.contains(previousTip)
     }
 
+    // Scenario: git/git-task-persistence / Non-fast-forward never escalates to force
     def "NFR-S1: a non-fast-forward push rejection just WARNs, no force retry"() {
         given: 'the remote already has a commit the local branch does not, so the push is rejected'
         def otherClone = tempDir.resolve('other-clone')

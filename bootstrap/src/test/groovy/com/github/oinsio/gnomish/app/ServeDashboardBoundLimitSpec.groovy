@@ -43,6 +43,7 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
     }
 
     // FR10 (D11, single-owner row 4; factory-serve "Checkout differs from origin").
+    // Scenario: serve/factory-serve / Checkout differs from origin
     def "FR10: serve --dashboard renders origin's wip-limit #originLimit, not the checkout's #checkoutLimit"() {
         given: "origin's default branch declares one limit"
         projectDir = initWorkingRepo(tempDir, 'project')

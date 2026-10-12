@@ -75,6 +75,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
         LogCaptureSupport.capture(OriginReconciliation, Level.DEBUG, emit)
     }
 
+    // Scenario: git/git-task-persistence / A missed terminal push is healed on resume
     def "a terminal commit that never reached origin is delivered by the next touchpoint"() {
         given: 'an instance crashed after committing the park, before its push landed'
         driveWithoutPushing()
@@ -103,6 +104,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
         originTip() == Optional.of(localTip())
     }
 
+    // Scenario: git/git-task-persistence / Reconciliation never blocks the run
     def "an unreachable origin degrades to a WARN and blocks nothing"() {
         given:
         driveWithoutPushing()

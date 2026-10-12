@@ -28,6 +28,18 @@ final class ParkPipelines {
         ])
     }
 
+    /**
+     * One stage whose only check is a command the shell cannot find: every round's verification
+     * ends, and the run parks, on a {@code CannotVerify} escalation.
+     */
+    static PipelineDefinition cannotVerifying(String stageName = 'build') {
+        new PipelineDefinition('1', new AutonomyLimits(1), [
+            stage(stageName, AdvancementMode.AUTO, [
+                new VerifyCheck.Command('exit 127')
+            ])
+        ])
+    }
+
     /** Two manual checkpoints, so a resume past the first stops at the second. */
     static PipelineDefinition pausing(String first = 'build', String second = 'deploy') {
         new PipelineDefinition('1', new AutonomyLimits(1), [

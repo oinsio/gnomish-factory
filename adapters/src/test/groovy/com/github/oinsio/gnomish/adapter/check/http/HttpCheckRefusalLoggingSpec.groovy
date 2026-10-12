@@ -31,6 +31,7 @@ class HttpCheckRefusalLoggingSpec extends Specification implements HttpCheckFixt
         warnings[0].formattedMessage
     }
 
+    // Scenario: observability/factory-logging / An egress refusal in a guarded check is logged
     def "FR5: a target the allowlist refuses is logged once, naming the check and the rule"() {
         given:
         def refusal = new EgressRefusal(

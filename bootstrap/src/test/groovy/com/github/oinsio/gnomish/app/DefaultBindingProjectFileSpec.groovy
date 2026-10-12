@@ -47,6 +47,7 @@ class DefaultBindingProjectFileSpec extends Specification {
     }
 
     // "Project file default binds host"
+    // Scenario: plugin/adapter-binding-registry / Project file default binds host
     def "FR6: the project file's factory.bindings.default: host plans every stage on the host binding"() {
         given:
         harness.projectConfig('widgets', HOST_DEFAULT)
@@ -60,6 +61,7 @@ class DefaultBindingProjectFileSpec extends Specification {
     }
 
     // "The error message's advice works as written"
+    // Scenario: plugin/adapter-binding-registry / The error message's advice works as written
     def "FR6, NFR-S1: following the missing-image refusal into the file it names starts the run in host mode"() {
         when: 'the container default is planned with no sandbox image'
         plan(load())

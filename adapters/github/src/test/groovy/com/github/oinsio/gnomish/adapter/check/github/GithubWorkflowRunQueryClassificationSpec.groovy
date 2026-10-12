@@ -77,6 +77,7 @@ class GithubWorkflowRunQueryClassificationSpec extends Specification {
         ex.statusCode() == 403
     }
 
+    // Scenario: verification/github-external-check / An error body is never read as a runs listing
     def "a client-side rejection is classified as unverifiable, not parsed as an empty runs listing"() {
         given:
         def query = queryReturning(aResponse().withStatus(status).withBody(body))

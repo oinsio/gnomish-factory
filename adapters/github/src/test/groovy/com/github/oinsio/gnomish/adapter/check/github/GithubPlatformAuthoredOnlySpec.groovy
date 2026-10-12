@@ -70,6 +70,7 @@ class GithubPlatformAuthoredOnlySpec extends Specification {
         new GithubWorkflowRunQuery(cache, 'acme', 'widgets')
     }
 
+    // Scenario: verification/github-external-check / Forged status is ignored
     def "a forged token-created success status alongside a red run conclusion yields Fail, and the status endpoint is never queried"() {
         given: 'the real workflow run concludes failure'
         wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(200).withBody('''

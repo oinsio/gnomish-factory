@@ -95,6 +95,7 @@ class BaseStartPointRegressionSpec extends Specification implements BareGitRepoF
     // FR15, NFR-S1: the clone's own refs/heads/<default> is a commit behind origin. Before the peel,
     //     `rev-parse <default>` answered with the stale local branch while the refresh had just
     //     fetched origin's tip — law and branch naming two commits.
+    // Scenario: git/git-task-persistence / A stale local branch does not redirect the base
     def "FR15: a local branch behind origin does not become the start point"() {
         when:
         def refreshed = createTaskFrom(defaultBranch, 'PROJ-1')
@@ -111,6 +112,7 @@ class BaseStartPointRegressionSpec extends Specification implements BareGitRepoF
     // FR15: a release branch that exists only on origin. Before the peel this failed createTask
     //     outright after a successful fetch — the fetch lands in refs/remotes/origin/<n>, which a
     //     bare name never reaches.
+    // Scenario: git/git-task-persistence / An origin-only branch starts the task
     def "FR15: a base existing only on origin resolves and becomes the start point"() {
         given: 'origin gains a branch this clone has never had'
         Path seed = tempDir.resolve('seed')
@@ -132,6 +134,7 @@ class BaseStartPointRegressionSpec extends Specification implements BareGitRepoF
     // FR15, NFR-S1: a local tag carrying the base's name. Git resolves an unqualified name to the
     //     tag before the branch, so this posture silently redirected the task branch onto whatever
     //     commit the tag named — the security half of the defect.
+    // Scenario: git/git-task-persistence / A planted local tag does not redirect the base
     def "FR15: a planted local tag carrying the base's name cannot redirect the start point"() {
         given: 'a local tag named exactly like the base, pointing at the clone stale commit'
         def stale = gitOutput(clone, 'rev-parse', 'HEAD')
@@ -151,6 +154,7 @@ class BaseStartPointRegressionSpec extends Specification implements BareGitRepoF
 
     // FR15, NFR-S1: nothing the operator owns moves. The refresh may write refs/remotes/origin/* and
     //     the creation writes its own task branch; every other ref, every tag and HEAD stay put.
+    // Scenario: git/git-task-persistence / The refresh leaves the operator's checkout untouched
     def "NFR-S1: creating the task leaves the clone's own branches, tags and HEAD unchanged"() {
         given:
         assert runner.run(clone, 'tag', 'v9', 'HEAD').exitCode() == 0

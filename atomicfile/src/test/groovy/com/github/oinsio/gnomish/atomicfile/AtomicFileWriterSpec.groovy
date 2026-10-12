@@ -103,6 +103,9 @@ class AtomicFileWriterSpec extends Specification {
     // full, self-consistent JSON documents while a foreground reader repeatedly reads
     // the target and parses it; a reader must never observe a truncated or malformed
     // document — only ever one writer's complete "before" or complete "after" content.
+    // Scenario: git/git-task-persistence / A kill mid-write on the host leaves a whole file
+    // Scenario: observability/dashboard-page / Reload during a render
+    // Scenario: observability/serve-observability / Reader never observes a partial file
     def "concurrent writes never let a reader observe a partial file"() {
         given:
         def target = tempDir.resolve('snapshot.json')

@@ -1,15 +1,9 @@
 package com.github.oinsio.gnomish.adapter.tracker
 
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.CorrespondenceEntry
-import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
-import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.TakeHeartbeatLifecycleSpecBase
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * The concrete {@code InMemoryTracker} instantiation of {@link TakeHeartbeatLifecycleSpecBase}
@@ -26,20 +20,11 @@ class InMemoryTakeHeartbeatLifecycleSpec extends TakeHeartbeatLifecycleSpecBase 
 
     @Override
     List seededReadyTrackerAndFactory(TaskRef ref, String title, String body) {
-        InMemoryTracker tracker = new InMemoryTracker()
-        new InMemoryTrackerHarness(tracker).seed(
-                ref, new TaskSnapshot(ref.id(), UntrustedText.tracker(title), UntrustedText.tracker(body)), new TrackerTaskState.Ready(), AbortFacts.none())
-        [
-            tracker,
-            new FixedTrackerAdapterFactory({ tracker })
-        ]
+        InMemoryHeartbeatSeams.seededReady(ref, title, body)
     }
 
     @Override
     int heartbeatCount(Tracker tracker, TaskRef ref) {
-        def harness = new InMemoryTrackerHarness(tracker as InMemoryTracker)
-        harness.thread(ref).count {
-            it.kind() == CorrespondenceEntry.Kind.HEARTBEAT
-        }
+        InMemoryHeartbeatSeams.count(tracker, ref, CorrespondenceEntry.Kind.HEARTBEAT)
     }
 }

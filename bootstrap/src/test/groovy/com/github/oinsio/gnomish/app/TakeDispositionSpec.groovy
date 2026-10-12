@@ -71,7 +71,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         new TrackerTask(REF, new TaskSnapshot(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body')), state, AbortFacts.none(), finished)
     }
 
-    // Scenario: Mandate overrides readiness and backoff — a Ready task with no prior branch is
+    // Mandate overrides readiness and backoff — a Ready task with no prior branch is
     // claimed and worked from scratch (fresh claim path). FR8 of add-factory-serve: the explicit
     // mandate pierces the abort-backoff filter and the WIP limit for this Ready target — neither
     // is ever consulted on this path.
@@ -94,6 +94,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // terminal tracker write left it unstamped, i.e. outside the fence a zombie's late cleanup
     // commit is supposed to be caught by. The tracker is wrapped exactly as production wraps it
     // (EpochRecordingTracker over the live port), so the book follows the claim on its own.
+    // Scenario: git/git-task-persistence / Cleanup follows every constructive receipt
     def "FR13: the cleanup commit behind a confirmed finish carries the tenure's epoch"() {
         given:
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(7))
@@ -143,6 +144,8 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // 12 or 13, never a bare 1": an uncaught RuntimeException of the post-claim run — here a tracker
     // write itself failing — funnels into the abort protocol rather than escaping as a bare exit 1,
     // so the abort is recorded (claim released back to Ready) and the run exits 12.
+    // Scenario: tracker/tracker-take / An uncaught exception never exits a bare 1
+    // Scenario: tracker/tracker-take / Runner crash is an abort
     def "an uncaught exception during the claimed run aborts and exits 12, not a bare 1"() {
         given: 'a fresh Ready claim whose terminal tracker write blows up mid-run'
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
@@ -217,6 +220,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // FR15, UX2 of harden-task-branch-contract: a branch whose state envelope cannot be read is
     // parked for a human on the FIRST classification — with the diagnosis in the report and no
     // abort recorded, so the task never returns to Ready to be claimed and re-read identically.
+    // Scenario: tracker/tracker-take / Corrupt branch parks once, not per pickup
     def "FR15: an unreadable state envelope parks the task once, burning no attempt"() {
         given: 'a claimed task whose branch carries an unreadable state.json'
         def taskId = 'PROJ-23'
@@ -248,6 +252,8 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // FR8 of harden-task-branch-contract: divergence on a claimed resume is no longer an
     // operator-actionable outcome at all — the reconciler discards the local line under the claim
     // and the run proceeds, so nothing is aborted and nothing is parked for a human.
+    // Scenario: tracker/tracker-take / A diverged resume asks the operator for nothing
+    // Scenario: tracker/tracker-take / Stale local branch is discarded and work continues
     def "FR8: divergence during a resumed run resolves under the claim instead of stopping it"() {
         given: 'a task branch pushed to a real origin, then diverged from a peer push'
         // setup() already wired a real 'origin' remote (FR5, FR13 of add-base-ref-resolution) with
@@ -291,7 +297,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         gitExitCode(cloneDir, 'merge-base', '--is-ancestor', originTip, 'refs/heads/gnomish/PROJ-22') == 0
     }
 
-    // Scenario: resuming from the branch outcome when one is recorded — Ready, but a branch
+    // Resuming from the branch outcome when one is recorded — Ready, but a branch
     // already exists from a prior visit (e.g. after a K-fuse park was force-flipped back to
     // Ready), resumes instead of re-creating the branch.
     def "Ready with an existing branch resumes it instead of creating a new one"() {
@@ -312,6 +318,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
     // Ready + existing branch + a recorded ESCALATION-kind outcome (DecisionNeeded) with no
     // pending reply re-parks restating the question rather than blindly resuming.
+    // Scenario: tracker/tracker-take / The mandate resumes from the recorded outcome
     def "Ready with an existing branch and a DecisionNeeded outcome re-parks restating the question"() {
         given:
         def taskId = 'PROJ-3'
@@ -353,6 +360,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // FR9, FR10 of harden-task-branch-contract: the CompletedUncleaned shape — the outcome commit
     // landed, the tracker finish did not, so the envelope is still at the tip. The pickup finishes
     // what is left (probe, write, cleanup commit) and never re-enters the engine.
+    // Scenario: tracker/tracker-take / Deferred finish is delivered, not re-run
     def "Ready with an existing branch recorded Completed reconciles the deferred finish, zero engine rounds"() {
         given: 'a delivered branch whose finish never reached the tracker'
         def taskId = 'PROJ-4'
@@ -385,6 +393,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // the return alone from the last durable state.json position rather than refusing — "any other
     // recorded outcome continues on the return alone" (FR9, D12). Contrast manual-run
     // GitResumeRunner, which refuses; refusing here would strand every below-K abort forever.
+    // Scenario: tracker/tracker-take / The mandate resumes from the recorded outcome
     def "Ready with an existing branch recorded Aborted resumes it on the return alone"() {
         given:
         def taskId = 'PROJ-5'
@@ -403,7 +412,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         result instanceof TakeResult.Delivered
     }
 
-    // Scenario: Held task is refused — claim race lost between fetch and claim.
+    // Held task is refused — claim race lost between fetch and claim.
     def "Ready but claim race lost refuses naming the winning instance, no branch created"() {
         given:
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Held('gnomish-other-x1y2z3')
@@ -422,6 +431,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // the holder and last-beat age and asks; declining leaves the tracker untouched and exits as a
     // refusal naming the holder. The confirmation seam is the "prints facts + asks" surface — here a
     // Mock verifying it was asked with the holder and the computed age (47m), answering DECLINED.
+    // Scenario: tracker/tracker-take / Held task shows facts and asks
     def "Working with a TTY shows holder and last-beat age, declining refuses untouched"() {
         given:
         def confirmation = Mock(TakeoverConfirmation)
@@ -486,6 +496,8 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
 
     // Scenario "Headless takeover needs the flag" (FR6): no TTY (confirmation UNAVAILABLE) and no
     // --takeover flag → refuse, naming the holder AND mentioning the flag; nothing is mutated.
+    // Scenario: tracker/tracker-take / Headless takeover needs the flag
+    // Scenario: tracker/tracker-take / Refusal exit
     def "Working headless without the flag refuses naming the holder and the --takeover flag"() {
         given:
         openFronts = [
@@ -511,6 +523,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // is removed via removeStaleClaim, the run claims by the ordinary lease and resumes from the
     // existing branch. Uses a real branch (like the Ready-resume test) so the confirmed path is the
     // SAME claimAndWork/resume the Ready case runs.
+    // Scenario: tracker/tracker-take / Confirmed takeover resumes the task
     def "Working confirmed via TTY removes the stale claim, claims ordinarily, and resumes to Delivered"() {
         given: 'an existing branch for the held task, resumable from its last durable round'
         def taskId = 'PROJ-1'
@@ -540,6 +553,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     // Scenario "Headless takeover needs the flag" — with the flag (FR6): no TTY, but --takeover
     // authorizes it, so it proceeds exactly as a confirmed takeover (removeStaleClaim + claim +
     // resume) without ever consulting the confirmation seam.
+    // Scenario: tracker/tracker-take / Headless takeover needs the flag
     def "Working headless with --takeover proceeds as a confirmed takeover, bypassing the seam"() {
         given:
         def taskId = 'PROJ-1'
@@ -608,7 +622,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         (result as TakeResult.Skipped).reason().contains('gnomish-live-x2')
     }
 
-    // Scenario: Parked task is refused — every ParkReason names the reason and a return path,
+    // Parked task is refused — every ParkReason names the reason and a return path,
     // without inventing report content (the port has no "read current report" op).
     def "AwaitingHuman(ESCALATION) refuses naming the reason and the reply-and-return path"() {
         given:
@@ -656,7 +670,9 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         0 * tracker.claim(*_)
     }
 
-    // Scenario: Finished task is skipped — reports "already done", no resume, no tracker mutation.
+    // Finished task is skipped — reports "already done", no resume, no tracker mutation.
+    // Scenario: tracker/tracker-take / Finished task is skipped
+    // Scenario: tracker/tracker-take / Full delivery
     def "Finished is skipped as already done, no tracker mutation"() {
         given:
         def disposition = newDisposition()
@@ -671,9 +687,10 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         0 * tracker.finish(*_)
     }
 
-    // Scenario: Ready but finished (a human reopened a previously-finished task) refuses the
+    // Ready but finished (a human reopened a previously-finished task) refuses the
     // mandate rather than claiming it — the decline protocol runs instead (FR5 of
     // enforce-finish-terminality).
+    // Scenario: tracker/tracker-take / Reopened finished task is declined, not worked
     def "Ready but finished refuses the mandate, declines, and does not claim"() {
         given:
         def disposition = newDisposition()
@@ -707,6 +724,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
     }
 
     // Gone (closed or nonexistent) is skipped with a clear error, no tracker mutation.
+    // Scenario: tracker/tracker-take / Closed or nonexistent task is skipped
     def "Gone is skipped with a clear closed-or-nonexistent error, no tracker mutation"() {
         given:
         def disposition = newDisposition()

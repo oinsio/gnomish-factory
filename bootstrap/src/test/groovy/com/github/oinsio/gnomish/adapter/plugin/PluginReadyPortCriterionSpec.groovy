@@ -50,6 +50,7 @@ class PluginReadyPortCriterionSpec extends Specification {
     // FR4 (a): the discriminator is declared by the SPI itself, so discovery never has to know a
     //     provider's name from anywhere else — and FR2's half of the same point, since a factory
     //     ServiceLoader cannot instantiate is not a plugin whatever it declares.
+    // Scenario: plugin/plugin-discovery / Tracker and check ports each meet all four points
     def "the #port SPI declares a #discriminator discriminator every provider answers"() {
         given:
         def method = spi.getMethod(discriminator)
@@ -73,6 +74,7 @@ class PluginReadyPortCriterionSpec extends Specification {
 
     // FR4 (b): the registry is the ServiceLoader scan — every entry traces back to a line some jar
     //     wrote in META-INF/services, and no entry exists that no jar declared.
+    // Scenario: plugin/plugin-discovery / Tracker and check ports each meet all four points
     def "the #port registry holds exactly the providers META-INF/services declares"() {
         given:
         def registry = discover(getClass().classLoader)
@@ -90,6 +92,7 @@ class PluginReadyPortCriterionSpec extends Specification {
 
     // FR4 (c): each port has an operator/repo config subsection whose content is graded by the
     //     provider's OWN validator, obtained from the discovered factory, and reported located.
+    // Scenario: plugin/plugin-discovery / Tracker and check ports each meet all four points
     def "each port delegates its config subsection to the selected provider's validator"() {
         given: 'a github subsection on each port, empty enough for the provider to object'
         def trackers = TrackerAdapterDiscovery.discover(getClass().classLoader)
@@ -112,6 +115,8 @@ class PluginReadyPortCriterionSpec extends Specification {
 
     // FR4 (d), NFR-R1: selection is by discriminator, and a discriminator no discovered provider
     //     serves fails by name on both ports — never a silent fallback to some default vendor.
+    // Scenario: plugin/plugin-discovery / Unknown provider fails with a named error
+    // Scenario: plugin/plugin-discovery / Tracker and check ports each meet all four points
     def "each port selects by discriminator and names a discriminator nobody serves"() {
         given:
         def trackers = TrackerAdapterDiscovery.discover(getClass().classLoader)

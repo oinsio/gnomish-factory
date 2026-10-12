@@ -137,6 +137,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture {
 
     // FR3: the STARTED commit carries the initial state.json beside task.json, so a tip read
     // right after branch creation already answers the classifier's state question.
+    // Scenario: git/git-task-persistence / A first-round crash resumes from the initial state
     def "every medium reads the initial state.json the STARTED commit carries"() {
         expect:
         allSources().every {

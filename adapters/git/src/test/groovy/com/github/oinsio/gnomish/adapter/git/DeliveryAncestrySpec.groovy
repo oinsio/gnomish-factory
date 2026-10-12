@@ -71,6 +71,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
         assert merge.exitCode() == 0
     }
 
+    // Scenario: lifecycle/task-branch-contract / A cleanup commit inherited from the base does not deliver a live task
     def "FR1: a live task forked from a base that holds an earlier task's cleanup is not delivered"() {
         given: 'an earlier task delivered and merged into the base with its history'
         deliverAndMergeEarlierTask()
@@ -83,6 +84,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
         new GitShowTip(runner, cloneDir, 'gnomish/PROJ-2').cleanupCommit().isEmpty()
     }
 
+    // Scenario: lifecycle/task-branch-contract / A base merged into a live task after it started does not deliver it
     def "FR1: a base with an earlier task's cleanup merged into a live task branch does not deliver it"() {
         given: 'a live task, and an earlier task delivered and merged into the base afterwards'
         create('PROJ-2')
@@ -98,6 +100,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
         !new RefTipSource(runner, cloneDir, 'gnomish/PROJ-2').cleanupCommitInHistory()
     }
 
+    // Scenario: lifecycle/task-branch-contract / A branch ref with no STARTED commit is Bare
     def "FR1: a branch with no STARTED commit of its own is not delivered by its base"() {
         given: 'an earlier task delivered and merged into the base'
         deliverAndMergeEarlierTask()
@@ -124,7 +127,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
     // Known defect, not closed by FR14: delivery is still read from a commit message the gnome can
     // write on its own branch — even the exact subject. Closing it needs delivery bound to
     // something only the factory writes; this feature turns red the day that lands.
-    @PendingFeature(reason = 'a gnome commit carrying the cleanup subject reads as delivery')
+    @PendingFeature(reason = 'F122 (bind-delivery-to-factory-record): a gnome commit carrying the cleanup subject reads as delivery')
     def "a gnome commit carrying the cleanup subject does not deliver the task (#message)"() {
         given: 'a live task'
         create('PROJ-2')

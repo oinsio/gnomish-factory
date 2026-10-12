@@ -28,6 +28,7 @@ class UsageReportJsonMapperSpec extends Specification {
     def mapper = new UsageReportJsonMapper()
     def reader = new ObjectMapper()
 
+    // Scenario: cli/task-inspection / JSON usage carries full granularity under its own version
     def "FR14, NFR-C1: the envelope carries its own version:1 and full per-model/per-vote granularity"() {
         given:
         def checks = [

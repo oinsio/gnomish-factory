@@ -131,6 +131,8 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
     // rides the snapshot commit to the remote; instance two resumes from the branch alone,
     // reattaches the kept (stopped) box, salvages a leftover planted after the death, and
     // completes.
+    // Scenario: executor/agent-executor / Pending decision survives factory death
+    // Scenario: executor/agent-executor / Round in a container speaks the same protocol
     def "a second instance resumes a killed task: kept box reattached, leftovers salvaged, decision on the branch"() {
         given:
         taskId = "CTN-RES-${System.nanoTime() % 100000}"
@@ -220,6 +222,8 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
     // FR21/D15: killed between the snapshot and state commits — resume classifies the tip as an
     // interrupted verification, re-verifies exactly that attempt commit with NO agent re-run
     // (the baked scenario would poison the run if the agent executed), and burns no attempt.
+    // Scenario: git/git-task-persistence / Interrupted verification resumes without burning an attempt
+    // Scenario: executor/agent-executor / Pending decision survives factory death
     def "a task killed between snapshot and state commit re-verifies without an agent re-run"() {
         given: 'a created task whose round completed in-box up to the snapshot, but never recorded state'
         taskId = "CTN-SNAP-${System.nanoTime() % 100000}"
@@ -286,6 +290,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
     //     dead run — reads its denial log from the committed cursor, never from the start. Every
     //     materialize runs the self-check, whose denied-host probe is a real guard denial: round 0
     //     records its own; the resumed round must not report it again.
+    // Scenario: git/git-task-persistence / Resume continues the delta instead of replaying it
     def "resume onto a surviving guard with a recorded cursor reports no denial twice"() {
         given: 'a gnome whose first round produces nothing (files_exist fails) and whose second completes'
         taskId = "CTN-DEN-${System.nanoTime() % 100000}"

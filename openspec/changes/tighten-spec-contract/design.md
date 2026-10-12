@@ -81,12 +81,14 @@ could carry one, but shell and functional-test fixtures could not.
 
 **D5 — One checker class, three callers.** `SpecContractCheck` in `build-logic`, a cacheable
 task whose inputs are `openspec/specs/**`, the unarchived deltas when `--changes` is set, and
-the test trees; root `check` depends on it; `scripts/check-spec-contract.sh` is
+the test trees and the exemption files; root `check` depends on it; `scripts/check-spec-contract.sh` is
 `./gradlew -q checkSpecContract` with its arguments passed through; the fix-artifacts and
-archive stages call the task in their verification (FR6). The exemption list is configured on the
-task in the root build file, each entry a scenario and the mechanism that verifies it, asserted
-reached. *Rationale:* the operator's decision — one logic, two launchers; the build file is where
-a reviewer reads every other gate's exemptions. *Alternative rejected:* a standalone shell or
+archive stages call the task in their verification (FR6). The exemption list is data, one file
+per capability under `config/spec-contract-exemptions/` (header `spec: <spec-id>`, then
+`<scenario title> => <mechanism>` lines), each entry a scenario and the mechanism that verifies
+it, asserted reached; it is not in the root build file because several hundred `pending-test:`
+entries would break that file's 200-line cap (task 5.2b). *Rationale:* the operator's decision —
+one logic, two launchers. *Alternative rejected:* a standalone shell or
 Python script the build execs — two runtimes to keep installed, and the project's checks are
 Groovy with functional specs; a second copy in the stage YAML — the sync pair the rule forbids.
 
@@ -133,7 +135,22 @@ bounds a change at four weeks; a finding fixed on the way is an edit nobody revi
 dropped is the silent gap this change exists to close. *Alternative rejected:* a flat non-goal
 ("no production code, no queue scenarios") — it decides before the evidence exists and loses
 the list; writing tests and fixes until time runs out — unbounded, with no record of what is
-left.
+left. *Revised 2026-10-12 (operator):* a scenario whose only gap is its missing test is not
+moved out — group 8 writes it here; the six area changes decided at 5.2 are withdrawn.
+
+**D10 — Regroup by `git mv`, after the generator is gone and before the gate (FR12).** One
+mapping table old → new is the single source; one script applies it to the main specs, the
+deltas of every unarchived change (this change's 50 included, with their `# Spec Delta:` lines),
+the markers (anchored on `Scenario: <old> /`) and the exemption files. It runs after 7.2 removed
+`generate-spec-deltas.sh` and its sidecars, so no hash is recomputed and the generator's
+`verify` need not survive the move, and before 7.4, so the one whole-tree `check` proves it. D3
+governs content, not path: a rename is byte-identical and is not an edit of `openspec/specs/`
+by hand. *Alternative rejected:* a separate change after archive — `c926b70b` deferred 18
+specs "as their active changes archive" and the queue has since grown to 26, so the deferral
+never ends; and OpenSpec has no operation that moves a capability, so a later change would
+still be a `git mv`. *Alternative rejected:* renaming leaves to drop repeated prefixes
+(`sandbox/sandbox-egress` → `sandbox/egress`) — the marker edit stops being mechanical and
+every id in prose, findings and follow-up proposals stops matching.
 
 **Sync surfaces.** `scripts/check-spec-contract.sh` and the two stage YAML verification commands
 are launchers only (one line each invoking the task); no rule lives in them. The twenty informal
@@ -151,7 +168,7 @@ a rule that exists elsewhere, and no declared pair of `manual-sync-pairs.md` is 
 |---------------------------------|----------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
 | The `**Implements**:` line (D1) | the requirement's traceability ids, as one metadata line | every requirement under `openspec/specs/`; every requirement in `openspec/changes/<unarchived>/specs/`; `traceability.md`, `delta-specs.md`, `rules.specs` (the three places that tell an author the form) | `<!-- implements … -->` in Requirement/Scenario specs, deleted outside the archive by the generated deltas (D3) and the queue rework (D8); the YAML-like `# implements` form is not replaced — it lives in blocks OpenSpec does not measure | `SpecContractCheck`: a comment-form hit in the scanned trees is a failure; a requirement with zero or two lines is a failure |
 | The scenario title (D4)         | the identity of a scenario, as `<spec-id> / <title>`     | the spec's `#### Scenario:` heading; the `// Scenario:` marker in the test that exercises it; the exemption list entry for a scenario verified elsewhere                                                   | the informal `// Scenario:` comments in `TakeBareAutoSpec`, `TakeDispositionSpec` and `TakeSlotRunnerSpec` (converted; a malformed `// Scenario:` line is a finding); the implicit "the FR id covers it" link (kept for FR traceability, no longer the only link)                                                                         | `SpecContractCheck` in both directions, exemption list asserted reached                                                      |
-| `SpecContractCheck` (D5)        | the verdict on the project's spec-contract rules         | root `check`; `scripts/check-spec-contract.sh`; the fix-artifacts and archive stage verification commands                                                                                                  | none existed; the launchers are forbidden to hold a rule by the functional spec, which runs the script and the stage command against the same fixture tree and expects the same findings                                                    | `SpecContractCheckFunctionalSpec`                                                                                            |
+| `SpecContractCheck` (D5)        | the verdict on the project's spec-contract rules         | root `check`; `scripts/check-spec-contract.sh`; the fix-artifacts and archive stage verification commands                                                                                                  | none existed; the launchers are forbidden to hold a rule by the functional spec, which runs the script and the stage command against the same fixture tree and expects the same findings                                                    | `SpecContractCheckFunctionalSpec`, `SpecContractScenarioLinkFunctionalSpec`, `SpecContractLauncherFunctionalSpec`, `StageSpecContractCommandSpec`, `SpecContractRuleExampleFunctionalSpec` (the `delta-specs.md` example passes the gate) (split for file size) |
 
 ## Risks / Trade-offs
 
@@ -166,7 +183,8 @@ a rule that exists elsewhere, and no declared pair of `manual-sync-pairs.md` is 
   reviewable by `diff`, not by reading.
 - [Missing tests or revealed defects outnumber what one change can carry] → D9: the decision
   points at 5.2 and 6.8; the `pending-test` exemption and the `@PendingFeature` test carry what
-  moves out, so the record is complete and the gate is honest.
+  moves out, so the record is complete and the gate is honest; for missing tests the operator
+  chose to carry all 302 here, cut per capability (NFR-C2) into group 8.
 - [A finding gets fixed on the way because it looked small] → every production edit cites a
   finding id sorted into this change; `/audit-implementation` reads the Decisions heading
   against the diff.
@@ -181,5 +199,7 @@ a rule that exists elsewhere, and no declared pair of `manual-sync-pairs.md` is 
 1. Checker and functional spec (group 1), unwired. 2. Rules and guides (group 2). 3. Generated
 deltas, id set proven (group 3). 4. Editorial pass per capability (group 4). 5. Inventory,
 decision point, markers, tests (group 5). 6. Queue rework (group 6). 7. Scratch-worktree sync,
-strict validation, wiring into `check`, full `check` once (group 7). Rollback before archive is
+strict validation, wiring into `check`, regroup of `openspec/specs/` by D10 (7.3a–7.3d), full
+`check` once (group 7). 8. Tests for the scenarios carried by `pending-test` (group 8),
+decision point, whole-tree `check` once more. Rollback before archive is
 deleting the change; after archive, the comment form is gone and a rollback is a new change.

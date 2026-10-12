@@ -39,6 +39,7 @@ class TrackerPortBoundarySpec extends Specification {
     .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
     .importPackages('com.github.oinsio.gnomish')
 
+    // Scenario: tracker/tracker-port / Core compiles against the port alone
     def "FR1: no core class depends on adapter.tracker"() {
         given: 'the boundary rule forbidding core -> adapter.tracker dependencies'
         def rule = noClasses()

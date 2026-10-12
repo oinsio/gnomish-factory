@@ -21,6 +21,7 @@ class SandboxLifecycleFailedActionSpec extends SandboxLifecycleDecisionSpecBase 
         }
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / A refused removal is not reported as a removal
     def "a failed stop of an unowned running main box is reported as skipped, never as stopped"() {
         when:
         decision.decideContainer(
@@ -32,6 +33,7 @@ class SandboxLifecycleFailedActionSpec extends SandboxLifecycleDecisionSpecBase 
         verdicts[0].reason() == 'stop failed: unowned running main-box'
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / A refused removal is not reported as a removal
     def "a failed removal of an unowned guard is reported as skipped, never as disposed"() {
         when:
         decision.decideContainer(
@@ -77,6 +79,7 @@ class SandboxLifecycleFailedActionSpec extends SandboxLifecycleDecisionSpecBase 
 
     // The same throw on an object the runtime nevertheless removed: the verdict follows the object,
     // not the exception — a dispose that took is reported as a disposal even when the port blew up.
+    // Scenario: sandbox/sandbox-lifecycle / Disposal of an already-gone environment is a no-op
     def "a disposal port that throws after the object is gone still reports the disposal"() {
         given:
         disposal.dispose(_) >> {

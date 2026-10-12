@@ -244,6 +244,7 @@ class GithubTaskFetcherSpec extends Specification {
 
     // FR1, NFR-P1 of enforce-finish-terminality: fetchTask derives finished from the same
     //     comments fetch already made for the state/abort facts — no extra API call
+    // Scenario: tracker/tracker-port / fetchTask agrees
     def "reports finished = true on a Ready issue whose thread carries a FINISH marker"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/18'))
@@ -308,6 +309,7 @@ class GithubTaskFetcherSpec extends Specification {
         wireMock.verify(0, getRequestedFor(urlEqualTo('/repos/acme/widgets/issues/12/comments?per_page=100')))
     }
 
+    // Scenario: tracker/github-tracker / A closed issue is a revocation carrying its state reason
     def "reports Gone for a closed issue, carrying state_reason as the closure reason (revocation context)"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/10'))
@@ -378,6 +380,7 @@ class GithubTaskFetcherSpec extends Specification {
         result.abortFacts().lastAbortAt() == Instant.parse('2026-07-20T11:00:00Z')
     }
 
+    // Scenario: tracker/github-tracker / Unchanged poll is free
     def "re-reading an unchanged task at a round boundary sends If-None-Match and treats 304 as no change"() {
         given: 'the issue and its comments each answer 200+ETag once, then 304 on the conditional re-read'
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/12'))
@@ -420,6 +423,7 @@ class GithubTaskFetcherSpec extends Specification {
 
     // FR3 of add-base-ref-resolution: fetchTask carries the task's designators, derived from the
     //     very labels it already read for the logical state -- the state label plays no part
+    // Scenario: tracker/tracker-port / Single designator reported
     def "fetchTask carries the base designator extracted from the issue labels"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/issues/31'))

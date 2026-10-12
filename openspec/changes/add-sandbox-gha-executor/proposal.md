@@ -245,3 +245,6 @@ plainly documented where not.
   minutes (NFR-C1 visibility).
 - Depends on change A (port, findings funnel, external-check integrity
   precedents); composes with B (unchanged); independent of C and D.
+- Sequenced after `tighten-spec-contract`: its deltas carry the
+  `**Implements**:` lines and the 500-character requirement bodies that change
+  introduces (it has no MODIFIED block to layer).

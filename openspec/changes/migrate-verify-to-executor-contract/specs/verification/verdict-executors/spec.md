@@ -12,7 +12,7 @@ findings as SARIF, no verdict constructed by the executor, credentials only in a
 A verify check SHALL resolve to a named executor supporting role `verdict`. The manifest tokens
 `builtin`, `command` and `external` SHALL map to the built-in names `files-exist`, `shell` and
 the declared provider name; an explicit `executor:` form SHALL be accepted beside them.
-<!-- implements FR1 of migrate-verify-to-executor-contract -->
+**Implements**: FR1 of migrate-verify-to-executor-contract
 
 #### Scenario: Legacy manifest loads unchanged
 - **WHEN** a stage declares `- type: command` and `- type: external, provider: github`
@@ -26,7 +26,7 @@ the declared provider name; an explicit `executor:` form SHALL be accepted besid
 A verdict executor SHALL report status and a SARIF answer only; pass or fail SHALL be derived
 by the engine from the answer's result levels against the check's threshold (default `error`).
 A shell exit code SHALL carry no verdict meaning.
-<!-- implements FR5, FR7 of migrate-verify-to-executor-contract -->
+**Implements**: FR5, FR7 of migrate-verify-to-executor-contract
 
 #### Scenario: Warnings pass under the default threshold
 - **WHEN** the `shell` executor exits 1 and its answer carries only `warning` results
@@ -41,7 +41,7 @@ The `scm-status` built-in SHALL read named verdicts on the attempt SHA from the 
 GitHub Checks and Commit Statuses, Gitea statuses — SHALL require an `expected` contexts list,
 SHALL return `pending` while any expected context is absent or running, SHALL take the latest
 verdict per context, and SHALL fail with findings naming each failed context.
-<!-- implements FR4, FR9, NFR-R2 of migrate-verify-to-executor-contract -->
+**Implements**: FR4, FR9, NFR-R2 of migrate-verify-to-executor-contract
 
 #### Scenario: Absent context stays pending
 - **WHEN** two contexts are expected and only one has reported success
@@ -63,7 +63,7 @@ verdict per context, and SHALL fail with findings naming each failed context.
 The `github-actions` and `http` built-ins SHALL preserve the observable behavior of the former
 check providers — workflow-run lookup by commit with job-log findings, pin contribution of the
 workflow file; status-code probe with conditions — expressed as `start`/`poll` over the contract.
-<!-- implements FR6 of migrate-verify-to-executor-contract -->
+**Implements**: FR6 of migrate-verify-to-executor-contract
 
 #### Scenario: GitHub Actions findings unchanged
 - **WHEN** a workflow run on the attempt commit fails with two red jobs
@@ -77,7 +77,7 @@ workflow file; status-code probe with conditions — expressed as `start`/`poll`
 A verdict executor whose describe declares credentials SHALL run in `FRESH_BOX` with an egress
 allowlist derived from its declared hosts; a `SAME_BOX` declaration on such a check SHALL be a
 located load error.
-<!-- implements NFR-S1 of migrate-verify-to-executor-contract -->
+**Implements**: NFR-S1 of migrate-verify-to-executor-contract
 
 #### Scenario: Secret never enters the gnome's box
 - **WHEN** a check names an executor declaring `SONAR_TOKEN`

@@ -25,6 +25,7 @@ class GuardDenialLogSpec extends Specification {
         GuardDenialLog.denials(KEY, null, guardStdout)*.finding()
     }
 
+    // Scenario: sandbox/sandbox-egress / A denied request is captured as a structured finding
     def "NFR-O1: a CONNECT denial parses into a finding with host and port"() {
         given:
         def log = 'GNOMISH-EGRESS-DENY {"kind":"connect","host":"evil.example.com","port":443}\n'
@@ -39,6 +40,7 @@ class GuardDenialLogSpec extends Specification {
         findings[0].details() == 'kind=connect'
     }
 
+    // Scenario: sandbox/sandbox-egress / A denied request is captured as a structured finding
     def "UX3: a plain-HTTP denial carries method and path so the operator sees what was attempted"() {
         given:
         def log = 'GNOMISH-EGRESS-DENY {"kind":"http","host":"evil.example.com","port":80,' +
@@ -56,6 +58,7 @@ class GuardDenialLogSpec extends Specification {
     // NFR-S1 of fix-denial-report-attachment: the query string is gnome-chosen payload, not
     //     destination metadata — the denied request's own exfiltration attempt must not ride the
     //     finding into the committed report, so the path is cut at the first '?'
+    // Scenario: sandbox/sandbox-egress / A denied request's query string never enters the finding
     def "NFR-S1: the query string is stripped from the denied path"() {
         given: 'a denial whose query string carries the very data the guard blocked'
         def log = 'GNOMISH-EGRESS-DENY {"kind":"http","host":"evil.example.com","port":80,' +
@@ -318,6 +321,7 @@ class GuardDenialLogSpec extends Specification {
 
     // FR7: two denials to the same destination are two events — identity comes from the source's
     //     coordinates, never from the finding's content, because repeats ARE the signal
+    // Scenario: sandbox/sandbox-egress / Repeated denials to the same destination are counted, not collapsed
     def "FR7: repeated denials to one destination get distinct identities"() {
         given:
         def event = 'GNOMISH-EGRESS-DENY {"kind":"connect","host":"evil.example.com","port":443}'

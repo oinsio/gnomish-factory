@@ -100,6 +100,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
         new GithubTrackerAdapterFactory().subsectionValidator().get() instanceof GithubTrackerSubsectionValidator
     }
 
+    // Scenario: operator/secrets-provider / Missing secret refuses loudly
     def "missing GNOMISH_GITHUB_TOKEN refuses clearly without touching the network"() {
         given: 'a SecretsProvider that resolves no token (fail-closed) — FR18, NFR-S1 of add-sandbox-core'
         def factory = new GithubTrackerAdapterFactory()
@@ -119,6 +120,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
     //     comes from the host"): the adapter built through the public create reads its token, its
     //     instance id and its time from the context — a context on a virtual instant makes the stamp
     //     of a marker the adapter writes read that instant, not the wall clock.
+    // Scenario: plugin/plugin-discovery / The plugin's time comes from the host
     def "FR23: a marker written by the adapter built from a context is stamped with the context's virtual instant"() {
         given: 'labels already provisioned, an empty thread, and a comment endpoint accepting the write'
         wireMock.stubFor(get(urlEqualTo("/repos/$OWNER/$REPO/labels?per_page=100"))
@@ -269,6 +271,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
                         '{"name":"gnomish:working","color":"1f6feb","description":"Gnomish factory: currently being worked"}')))
     }
 
+    // Scenario: tracker/tracker-take / Short ref expansion
     def "expandRef delegates the parsed issue number to GithubRefExpander"() {
         given:
         def factory = new GithubTrackerAdapterFactory()
@@ -280,6 +283,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
         ref == new TaskRef(GithubTaskId.build(wireMock.baseUrl(), OWNER, REPO, 42).canonicalId())
     }
 
+    // Scenario: tracker/tracker-take / A hash-prefixed short ref expands like a bare number
     def "expandRef strips a leading hash before parsing the issue number"() {
         given:
         def factory = new GithubTrackerAdapterFactory()
@@ -293,6 +297,8 @@ class GithubTrackerAdapterFactorySpec extends Specification {
 
     // FR3 of add-base-ref-resolution: the factory reports exactly the declared kinds, so core can
     //     hold task-branch.base.allowed against them without reading any GitHub key itself
+    // Scenario: tracker/github-tracker / Only the declared kinds are reported
+    // Scenario: tracker/tracker-port / Configured kinds are reported through the seam
     def "configuredDesignatorKinds reports the declared kinds and nothing else"() {
         given:
         def config = configFor(subsection() + [designators: ['base': 'base:(.+)', 'type': 'type:(.+)']])
@@ -302,6 +308,7 @@ class GithubTrackerAdapterFactorySpec extends Specification {
     }
 
     // FR3: a kind with no rule is never reported -- an adapter with no designators map declares none
+    // Scenario: tracker/tracker-port / Configured kinds are reported through the seam
     def "configuredDesignatorKinds reports none when no rule is declared"() {
         expect:
         new GithubTrackerAdapterFactory().configuredDesignatorKinds(configFor(subsection())).isEmpty()

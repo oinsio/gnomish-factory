@@ -53,6 +53,7 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
         handler = new RevocationHandler(tracker, worktreeSalvage, branchPush)
     }
 
+    // Scenario: tracker/tracker-take / Revocation is a runner result, not an engine outcome
     def "handle salvages leftovers, pushes, posts a note, releases, and returns Revoked"() {
         given: 'an interrupted round left an uncommitted leftover in the worktree'
         Files.writeString(repo.resolve('leftover.txt'), 'half-done work')

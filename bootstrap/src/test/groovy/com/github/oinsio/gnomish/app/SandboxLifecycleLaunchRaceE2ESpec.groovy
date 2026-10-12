@@ -89,6 +89,8 @@ class SandboxLifecycleLaunchRaceE2ESpec extends Specification implements BareGit
     // M2: a slot launch (box materialized, labelled from birth) races a sweep tick whose liveness
     // verdict has not yet observed this task's claim — the real minimum-age default (2m) protects
     // it regardless, so the launching environment is never lost to a concurrent tick.
+    // Scenario: serve/factory-serve / Sweep tick coexists with launching slots
+    // Scenario: sandbox/sandbox-lifecycle / Concurrent launch survives a sweep tick
     def "a just-launched box under the default minimum age survives a sweep tick that has not observed its claim yet"() {
         given: 'a box is materialized for a task the oracle has not observed yet — the launch race'
         taskId = "CTN-RACE-${System.nanoTime() % 100000}"

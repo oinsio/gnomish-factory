@@ -6,7 +6,7 @@
 The stand-in third-party module SHALL include a sample verdict program — a script with no
 factory dependency — that passes the executor conformance kit in role `verdict` with `poll`.
 Check authoring is proven by the kit, not by compiling a factory against `gnomish-plugin-api`.
-<!-- implements FR8 of migrate-verify-to-executor-contract -->
+**Implements**: FR8 of migrate-verify-to-executor-contract
 
 #### Scenario: Sample verdict program passes the kit
 - **WHEN** the conformance kit runs against the sample verdict program

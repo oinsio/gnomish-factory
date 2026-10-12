@@ -31,6 +31,7 @@ class TaskJsonMapperBasePinSpec extends Specification {
 
     // FR7: a pinned document's ref and rule round-trip through toDto's wire tokens and back
     // through fromDto onto TaskRecord unchanged.
+    // Scenario: git/git-task-persistence / Pin round-trips the wire
     def "toDto/fromDto round-trip a pinned BasePin"() {
         given:
         def pin = new BasePin("origin/release", BaseRefKind.BRANCH, BaseRule.DESIGNATOR)
@@ -53,6 +54,7 @@ class TaskJsonMapperBasePinSpec extends Specification {
     // FR7, D7 (revised 2026-09-10): every kind constant survives the wire round-trip, and an
     // unrecognized token reads as "no kind" — the documented forward-compatibility arm, which
     // degrades to classifying the name at resume time exactly as a pre-kind pin does.
+    // Scenario: git/git-task-persistence / Pin round-trips the wire
     def "every BaseRefKind round-trips through the wire token (#kind)"() {
         expect:
         BaseRefKind.fromWire((kind as BaseRefKind).wireValue()) == kind
@@ -61,6 +63,7 @@ class TaskJsonMapperBasePinSpec extends Specification {
         kind << BaseRefKind.values()
     }
 
+    // Scenario: git/git-task-persistence / An unknown pin token reads forward-compatibly
     def "an unrecognized or absent baseKind token reads as no kind (#token)"() {
         expect:
         BaseRefKind.fromWire(token) == null
@@ -76,6 +79,7 @@ class TaskJsonMapperBasePinSpec extends Specification {
 
     // FR7, D7: the manual tier classifies nothing, so its pin carries a ref and a rule without a
     // kind — written as an absent field and read back absent.
+    // Scenario: git/git-task-persistence / A pin without a kind reads with the kind absent
     def "a pin with no kind writes and reads no baseKind"() {
         given:
         def pin = new BasePin("release/1.18", null, BaseRule.EXPLICIT_ARGUMENT)
@@ -110,6 +114,8 @@ class TaskJsonMapperBasePinSpec extends Specification {
 
     // FR7: a task.json written before the pin existed carries baseCommit alone; it reads as
     // unpinned rather than inventing a rule, mirroring the egressCursor legacy-read test above it.
+    // Scenario: git/git-task-persistence / A pin without a kind reads with the kind absent
+    // Scenario: git/git-task-persistence / Legacy task file reads as unpinned
     def "readDto parses a task.json written before the base pin existed"() {
         given: 'a version-1 document with no baseRef/baseRule fields'
         def json = '''
@@ -136,6 +142,7 @@ class TaskJsonMapperBasePinSpec extends Specification {
 
     // FR7: an unrecognized rule token — a pin written by a newer build — folds to UNKNOWN rather
     // than failing to parse, so an older build stays able to read the document.
+    // Scenario: git/git-task-persistence / An unknown pin token reads forward-compatibly
     def "readDto folds an unrecognized baseRule token to UNKNOWN"() {
         given:
         def json = '''

@@ -11,8 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
  * Plain-release properties of the {@link Tracker} port contract suite (tracker-port spec,
  * {@code release}: "drops the caller's claim without otherwise changing the task's logical
  * state"; FR15, D2 of add-tracker-port). Extends {@link TrackerDesignatorContract} to reuse the
- * {@code arrange}/{@code seedWorkingWithClaim} seams; a concrete adapter subclass instantiates
- * THIS class to run the full suite, per M1 of add-tracker-port.
+ * {@code arrange}/{@code seedWorkingWithClaim} seams.
  *
  * <p>What these properties pin is the half of {@code release} that every caller outside the
  * revocation path had started to assume the other way round: a released task is <em>not</em>

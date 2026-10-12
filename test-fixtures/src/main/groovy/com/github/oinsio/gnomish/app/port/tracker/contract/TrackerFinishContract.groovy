@@ -9,13 +9,10 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 /**
  * The finish-reopen and decline-protocol properties of the {@link Tracker}
  * port contract suite (enforce-finish-terminality; FR2, FR4, FR6, NFR-R1,
- * NFR-R2, NFR-O1, UX2). Extends {@link TrackerReturnedFactContract} — the
- * previously most-derived link in the chain — to reuse every seam it
- * accumulates ({@code arrange}, {@code seedTask}, {@code seedReply}, {@code
- * seedWorkingWithClaim}, {@code returnToReady}) rather than duplicating them;
- * a concrete adapter subclass instantiates THIS class (not {@link
- * TrackerReturnedFactContract} or any earlier link directly) to run the full
- * suite, per M1 — the same suite against every adapter. Kept in its own file
+ * NFR-R2, NFR-O1, UX2). Extends {@link TrackerReturnedFactContract} to reuse
+ * every seam it accumulates ({@code arrange}, {@code seedTask}, {@code
+ * seedReply}, {@code seedWorkingWithClaim}, {@code returnToReady}) rather than
+ * duplicating them. Kept in its own file
  * because the combined property set of the whole chain would exceed the
  * project's per-file line cap.
  *

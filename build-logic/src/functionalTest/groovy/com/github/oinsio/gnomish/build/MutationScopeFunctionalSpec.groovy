@@ -34,6 +34,8 @@ class MutationScopeFunctionalSpec extends Specification {
         repo = new MiniScopeRepository(projectDir, home)
     }
 
+    // Scenario: build/quality-gates / Default run mutates the branch's changed classes
+    // Scenario: build/quality-gates / Feature branch diffs against its merge base
     def "FR1: a production class committed on the branch is the scope, against the merge base"() {
         given:
         branched().write(FOO, 'class Foo { int edited }').commit('edit Foo')
@@ -49,6 +51,7 @@ class MutationScopeFunctionalSpec extends Specification {
         scope.widened == [:]
     }
 
+    // Scenario: build/quality-gates / Default run mutates the branch's changed classes
     def "FR1, D2: staged, unstaged and untracked work is in the scope without any commit"() {
         given:
         branched().write(FOO, 'class Foo { int unstaged }').write(BAZ).write(QUX, 'class Qux { int staged }')
@@ -58,6 +61,7 @@ class MutationScopeFunctionalSpec extends Specification {
         repo.scope().changedClasses == [':mod-a': ['com.x.Baz', 'com.x.Foo'], ':mod-b': ['com.y.Qux']]
     }
 
+    // Scenario: build/quality-gates / Feature branch diffs against its merge base
     def "FR2: a class changed only on main after the fork is not scoped"() {
         given:
         branched().write(FOO, 'class Foo { int branch }').commit('branch edit')
@@ -69,6 +73,7 @@ class MutationScopeFunctionalSpec extends Specification {
         repo.scope().changedClasses == [':mod-a': ['com.x.Foo']]
     }
 
+    // Scenario: build/quality-gates / The default branch diffs against its first parent
     def "FR2, M4: on main itself the first parent is the base, so the merge commit's own change is mutated"() {
         given:
         repo.init(BASELINE, BAR).write(FOO, 'class Foo { int squashed }').commit('squash merge')
@@ -82,6 +87,7 @@ class MutationScopeFunctionalSpec extends Specification {
         scope.changedClasses == [':mod-a': ['com.x.Foo']]
     }
 
+    // Scenario: build/quality-gates / A fresh branch scopes only its uncommitted work
     def "FR2, D3: a fresh branch with no commits of its own scopes only its uncommitted work"() {
         given: "a branch at main's tip, whose last commit edited Bar, with Foo edited in the tree"
         branched().write(FOO, 'class Foo { int unstaged }')
@@ -95,6 +101,8 @@ class MutationScopeFunctionalSpec extends Specification {
         scope.changedClasses == [':mod-a': ['com.x.Foo']]
     }
 
+    // Scenario: build/quality-gates / No resolvable base preserves full-project mutation
+    // Scenario: build/quality-gates / No resolvable base widens to the whole tree
     def "FR2, NFR-R1: no resolvable base widens to the whole tree with the reason (#situation)"() {
         given:
         arrange(repo)
@@ -113,6 +121,7 @@ class MutationScopeFunctionalSpec extends Specification {
         'not a git checkout'    | { MiniScopeRepository r -> r.write(FOO) }
     }
 
+    // Scenario: build/quality-gates / A shared fixture change mutates everything
     def "FR3, M3: a test change widens its module, a shared fixture change widens every module (#situation)"() {
         given:
         branched()
@@ -146,6 +155,7 @@ class MutationScopeFunctionalSpec extends Specification {
         'a nested spec edited'  | 'mod-a/inner/src/test/groovy/com/n/NSpec.groovy' || [:]                          | [':mod-a:inner': 'test change']
     }
 
+    // Scenario: build/quality-gates / A deleted class contributes nothing
     def "FR3: a deleted production file and a package-info contribute no class"() {
         given:
         branched().write('mod-a/src/main/java/com/x/package-info.java', 'package com.x;')
@@ -156,6 +166,8 @@ class MutationScopeFunctionalSpec extends Specification {
         repo.scope().changedClasses == [:]
     }
 
+    // Scenario: build/quality-gates / Whole tree on request
+    // Scenario: build/quality-gates / Property narrows the mutation scope
     def "FR4, D5: the property and the pitestAll task choose the mode (#arguments)"() {
         given:
         branched().write(FOO, 'class Foo { int edited }')
@@ -178,6 +190,7 @@ class MutationScopeFunctionalSpec extends Specification {
         ['pitestAll']                                   || 'ALL'      | 'pitestAll requested' | []
     }
 
+    // Scenario: build/quality-gates / A property that names no glob is refused
     def "FR4, NFR-R1: a pitScope that is set but names no glob fails the build rather than skipping every module (#value)"() {
         given:
         branched().write(FOO, 'class Foo { int edited }')
@@ -192,6 +205,7 @@ class MutationScopeFunctionalSpec extends Specification {
         value << ['', ' , ']
     }
 
+    // Scenario: build/quality-gates / The operator's git configuration cannot narrow the scope
     def "NFR-R4: a non-ASCII path is mapped to its class, committed and untracked alike"() {
         given:
         branched().write('mod-a/src/main/java/com/x/Ünïcode.java').commit('non-ASCII')
@@ -201,6 +215,7 @@ class MutationScopeFunctionalSpec extends Specification {
         repo.scope().changedClasses == [':mod-a': ['com.x.Ünïcode'], ':mod-b': ['com.y.Ärger']]
     }
 
+    // Scenario: build/quality-gates / An edit between two builds re-resolves the scope
     def "NFR-R2: an unchanged tree reuses the cached configuration, an edit re-resolves the scope"() {
         given:
         branched().write(FOO, 'class Foo { int edited }').commit('edit Foo')
@@ -222,6 +237,7 @@ class MutationScopeFunctionalSpec extends Specification {
         third.changedClasses == [':mod-a': ['com.x.Bar', 'com.x.Foo']]
     }
 
+    // Scenario: build/quality-gates / The operator's git configuration cannot narrow the scope
     def "NFR-R4, NFR-R1: the operator's global ignore list cannot hide an untracked class"() {
         given: 'a global configuration, switched on after the baseline is committed, that ignores every Java file'
         branched().write(BAZ)
@@ -235,6 +251,7 @@ class MutationScopeFunctionalSpec extends Specification {
         repo.scope().changedClasses == [':mod-a': ['com.x.Baz']]
     }
 
+    // Scenario: build/quality-gates / The operator's git configuration cannot narrow the scope
     def "NFR-R4: a held index lock does not stop the scope, and no git process takes optional locks"() {
         given:
         branched().write(FOO, 'class Foo { int unstaged }')
@@ -246,6 +263,7 @@ class MutationScopeFunctionalSpec extends Specification {
         repo.invocations().every { it.startsWith('0 ') }
     }
 
+    // Scenario: build/quality-gates / Scope computation is git-only
     def "NFR-P1: branch mode runs three git processes, four when only origin/main exists (#situation)"() {
         given:
         branched().write(FOO, 'class Foo { int edited }').commit('edit Foo')

@@ -88,6 +88,8 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
     }
 
     // FR13: the fresh box materializes the attempt commit and is disposed on release.
+    // Scenario: git/git-task-persistence / Every check reads the attempt commit its own way
+    // Scenario: sandbox/execution-environment / fresh-box verification proves branch self-sufficiency
     def "fresh-box checks run in a freshly materialized environment, disposed on close()"() {
         given:
         def fresh = Mock(TaskExecutionEnvironment)

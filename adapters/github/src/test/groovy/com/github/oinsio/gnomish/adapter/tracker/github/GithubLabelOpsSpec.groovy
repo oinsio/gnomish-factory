@@ -121,6 +121,7 @@ class GithubLabelOpsSpec extends Specification {
         thrown(GithubLabelOpsException)
     }
 
+    // Scenario: tracker/github-tracker / Exclusive transition
     def "transition performs exactly one add and one remove, never a whole-set PUT, leaving unrelated labels untouched"() {
         given:
         wireMock.stubFor(post(urlEqualTo('/repos/acme/widgets/issues/42/labels'))

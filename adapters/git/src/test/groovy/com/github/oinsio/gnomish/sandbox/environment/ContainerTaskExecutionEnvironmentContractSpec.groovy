@@ -30,6 +30,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR3, FR4, NFR-S3, NFR-R2, M1 of add-sandbox-core.
  */
+// Scenario: sandbox/execution-environment / Contract suite runs against any adapter
 @IgnoreIf({
     !GiteaAvailability.dockerAvailable()
 })
@@ -74,6 +75,7 @@ class ContainerTaskExecutionEnvironmentContractSpec extends TaskExecutionEnviron
     //     helper image, so the operator's tags stay out of the box; and the image's git meets the
     //     floor the seed clone's local-clone protections depend on (an image requirement, asserted
     //     once here rather than at startup, where only the factory host's git is checked).
+    // Scenario: git/git-task-persistence / Operator tags do not enter the box
     def "seed: the box holds no tag after materialize, and the helper image's git is at or above the floor"() {
         given: 'a materialized environment whose factory clone carries a tag on the task branch'
         def e = materialized()

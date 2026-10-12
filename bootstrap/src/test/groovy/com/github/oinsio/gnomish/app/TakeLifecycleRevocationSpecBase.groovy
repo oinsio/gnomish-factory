@@ -138,6 +138,8 @@ tracker:
                 new TrackerWiring([github: trackerFactory], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()), SandboxLifecyclePass.NONE, ContainerTakeSupportFixture.hostOnly())
     }
 
+    // Scenario: tracker/tracker-take / Issue closed under a working gnome
+    // Scenario: tracker/tracker-take / Revoked host task keeps its worktree
     def "ready -> claim -> work -> human closes mid-run -> revoked: salvage, push, note, release; branch and worktree kept"() {
         given: 'a Ready task seeded directly in a real tracker, and a two-stage fake-agent-backed pipeline'
         def factoryProperties = FakeAgentSupport.propertiesFor('plain-round')

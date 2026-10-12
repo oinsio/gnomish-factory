@@ -189,7 +189,10 @@ BEFORE the first agent round, and route a red baseline to the project owner.
   versioned task mapper — never as a flat `baseCommit`), `make-checkpoint-gate-durable`
   (sequenced before this change: both MODIFY `git-task-persistence`'s "State directory
   with one writer per file"; this change's delta is layered on that one's — round-token
-  decision path, attempt `stop` field — and must sync after it), `add-pipeline-routing` (the declaration is part of the pinned
+  decision path, attempt `stop` field — and must sync after it), `tighten-spec-contract`
+  (sequenced before this change: its MODIFIED block of "State directory with one writer
+  per file" is layered on that change's text, which splits the requirement into scenarios),
+  `add-pipeline-routing` (the declaration is part of the pinned
   per-pipeline definition and its content hash; `state.json`/`task.json` fields land
   in the same region), `add-stage-iteration` and `harden-task-branch-contract`
   (additive `state.json` fields under contract v1 — apply order decides version-gate

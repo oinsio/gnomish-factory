@@ -25,6 +25,7 @@ class DistributionTermsScriptSpec extends Specification {
     Path root
 
     // FR1: the "License file missing" scenario — the job fails naming the missing file
+    // Scenario: release/project-licensing / License file missing
     def "FR1: presence fails naming #missing when it is absent from the root"() {
         given: 'a root holding only the other file'
         writeRootTerms()
@@ -42,6 +43,7 @@ class DistributionTermsScriptSpec extends Specification {
     }
 
     // FR1: the happy path, so the red features above are not passing on a broken script
+    // Scenario: release/project-licensing / License file present
     def "FR1: presence passes when both files are present"() {
         given:
         writeRootTerms()
@@ -51,6 +53,8 @@ class DistributionTermsScriptSpec extends Specification {
     }
 
     // FR3: both jars carry the root bytes
+    // Scenario: release/project-licensing / Boot jar carries the terms
+    // Scenario: release/project-licensing / Plugin-contract jar carries the terms
     def "FR3: identity passes when every jar carries the root files byte for byte"() {
         given:
         writeRootTerms()
@@ -62,6 +66,8 @@ class DistributionTermsScriptSpec extends Specification {
     }
 
     // FR3: the "A jar entry drifts from the root file" scenario, plus a missing entry
+    // Scenario: release/project-licensing / A jar entry drifts from the root file
+    // Scenario: release/project-licensing / The identity checks compare bytes, not names
     def "FR3: identity fails naming the jar and #entry when the entry #how"() {
         given: 'a healthy jar and one whose entry drifts'
         writeRootTerms()
@@ -101,6 +107,8 @@ class DistributionTermsScriptSpec extends Specification {
     }
 
     // FR7: the job runs both checks through this script, so the features above test what CI runs
+    // Scenario: release/project-licensing / Boot jar carries the terms
+    // Scenario: release/project-licensing / Plugin-contract jar carries the terms
     def "FR7: the license workflow runs both checks through the script"() {
         given:
         def workflow = Files.readString(RepoSourceTree.repoRoot().resolve('.github/workflows/license-gate.yml'))
@@ -111,6 +119,7 @@ class DistributionTermsScriptSpec extends Specification {
     }
 
     // NFR-S2 of add-release-pipeline: an unpacked archive whose copies equal the root files
+    // Scenario: release/project-licensing / Distribution archive carries the terms
     def "NFR-S2: archive passes when the unpacked folder and its jar carry the root files"() {
         given:
         writeRootTerms()
@@ -121,6 +130,9 @@ class DistributionTermsScriptSpec extends Specification {
     }
 
     // NFR-S2: the "An archive copy drifts from the root file" scenario
+    // Scenario: release/project-licensing / An archive copy drifts from the root file
+    // Scenario: release/project-licensing / The identity checks compare bytes, not names
+    // Scenario: release/release-distribution / Distribution terms are checked before publishing
     def "NFR-S2: archive fails naming gnomish-1.0.0/#file when the copy #how"() {
         given:
         writeRootTerms()
@@ -156,6 +168,8 @@ class DistributionTermsScriptSpec extends Specification {
     }
 
     // NFR-S2: the release runs the archive mode through this script (design D6, step 6)
+    // Scenario: release/release-distribution / Distribution terms are checked before publishing
+    // Scenario: release/project-licensing / Distribution archive carries the terms
     def "NFR-S2: the release workflow checks the unpacked archive through the script"() {
         expect:
         Files.readString(RepoSourceTree.repoRoot().resolve('.github/workflows/release.yml'))

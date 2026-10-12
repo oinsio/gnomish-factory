@@ -12,7 +12,7 @@ The agent round runner SHALL execute `transform`, `verdict` and `decision` reque
 code path: argv from the dialect, launch through the environment seam, concurrent capped
 drains, three bounds, result and answer through the shared result-file reader, denials from
 the environment, and the post-hoc working-copy check for `verdict` and `decision`.
-<!-- implements FR1, NFR-S2 of extract-agent-round-runner -->
+**Implements**: FR1, NFR-S2 of extract-agent-round-runner
 
 #### Scenario: Three roles, one runner
 - **WHEN** a `transform`, a `verdict` and a `decision` request run with the fake dialect
@@ -28,7 +28,7 @@ A dialect SHALL provide describe fields, argv rendering for a request (compiled 
 bounds, answer schema, session resume), event parsing into progress and usage, final-answer
 extraction, exit-code mapping to status with `limit` for turn or budget stops, and
 continuation-key extraction. The runner SHALL depend on nothing else from the vendor.
-<!-- implements FR2, FR8, G1 of extract-agent-round-runner -->
+**Implements**: FR2, FR8, G1 of extract-agent-round-runner
 
 #### Scenario: Second dialect needs no runner change
 - **WHEN** a fake dialect with a different event format is registered in test fixtures
@@ -46,7 +46,7 @@ continuation-key extraction. The runner SHALL depend on nothing else from the ve
 Stdout and stderr SHALL be drained concurrently from launch with byte and line caps; the
 startup-read, silence and overall bounds SHALL be applied; expiry SHALL kill the process tree
 and report `failed/infrastructure` naming the bound.
-<!-- implements FR1, FR8, NFR-R1 of extract-agent-round-runner -->
+**Implements**: FR1, FR8, NFR-R1 of extract-agent-round-runner
 
 #### Scenario: Oversized stdout does not grow the heap
 - **WHEN** the CLI emits events past the byte cap
@@ -60,7 +60,7 @@ and report `failed/infrastructure` naming the bound.
 A `decision-request` answer SHALL carry the dialect's session id as the continuation key; a
 later `start` carrying the continuation and the answer SHALL resume that session; a session
 the CLI no longer knows SHALL fall back to a fresh start with the answer in feedback, logged.
-<!-- implements FR9, NFR-R2 of extract-agent-round-runner -->
+**Implements**: FR9, NFR-R2 of extract-agent-round-runner
 
 #### Scenario: Answered question continues the session
 - **WHEN** a round ends with a decision request and the answer arrives
@@ -74,7 +74,7 @@ the CLI no longer knows SHALL fall back to a fresh start with the answer in feed
 ### Requirement: Vendor-neutral progress
 Progress events SHALL carry model, tool name, final summary and usage only; no vendor field
 (result subtype, session id) SHALL appear in an event type outside the dialect package.
-<!-- implements FR6 of extract-agent-round-runner -->
+**Implements**: FR6 of extract-agent-round-runner
 
 #### Scenario: Listener sees no vendor field
 - **WHEN** a recording listener subscribes to a Claude round

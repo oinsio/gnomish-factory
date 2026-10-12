@@ -13,6 +13,7 @@ import java.time.Duration
  */
 class SandboxLifecycleManualDecisionSpec extends SandboxLifecycleDecisionSpecBase {
 
+    // Scenario: sandbox/sandbox-lifecycle / Live manual debugging session is invisible to the daemon
     def "a manual running box within the threshold is untouched"() {
         when:
         decision.decideContainer(
@@ -29,6 +30,8 @@ class SandboxLifecycleManualDecisionSpec extends SandboxLifecycleDecisionSpecBas
         docker.runs.isEmpty()
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / Forgotten manual zombie is eventually stopped
+    // Scenario: sandbox/sandbox-lifecycle / A manual age stop is a stopped-orphan with mode manual
     def "a manual running box past the threshold is stopped, emitting mode manual"() {
         when:
         decision.decideContainer(

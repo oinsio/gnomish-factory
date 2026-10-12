@@ -69,6 +69,7 @@ class StatusInterruptedHonestySpec extends Specification implements SeededCloneF
         !output.toLowerCase().contains('escalated')
     }
 
+    // Scenario: cli/task-inspection / Interrupted task reported honestly
     def "NFR-R2: --json status of an interrupted task carries a null outcome alongside the visible round"() {
         given:
         recordInterruptedRound('PROJ-INT-2')

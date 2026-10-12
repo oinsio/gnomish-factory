@@ -61,6 +61,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
                         new AttemptKey('T-1', 'work', 1), []), [])
     }
 
+    // Scenario: executor/agent-executor / A snapshot without a request resumes as Completed
     def "FR21, FR13: the matching round skips the agent, restores the recorded round, and completes with empty telemetry"() {
         given:
         def delegate = Mock(StageExecutor)
@@ -146,6 +147,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         result.is(delegateResult)
     }
 
+    // Scenario: executor/agent-executor / Pending decision survives factory death
     def "FR15: a pending verification carrying a request re-raises its question with empty telemetry, no agent round"() {
         given:
         def delegate = Mock(StageExecutor)
@@ -174,6 +176,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         needed.denials().isEmpty()
     }
 
+    // Scenario: executor/agent-executor / A garbage request in a snapshot is re-raised as raw text
     def "FR15: an unparseable request still re-raises, its raw content as the question"() {
         given:
         def executor = new ResumeVerificationStageExecutor(

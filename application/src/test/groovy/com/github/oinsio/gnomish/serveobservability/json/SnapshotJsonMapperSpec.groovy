@@ -33,6 +33,7 @@ class SnapshotJsonMapperSpec extends Specification {
 
     def mapper = new SnapshotJsonMapper()
 
+    // Scenario: observability/serve-observability / The remote section keeps version 1
     def "reference anchor: serializing the deterministic sample is byte-identical to snapshot-v1.reference.json"() {
         given:
         def referenceText = getClass().getResourceAsStream('/snapshot-v1.reference.json').getText('UTF-8')
@@ -41,11 +42,13 @@ class SnapshotJsonMapperSpec extends Specification {
         mapper.serialize(referenceSnapshot()) == referenceText
     }
 
+    // Scenario: observability/serve-observability / The remote section keeps version 1
     def "version is always 1"() {
         expect:
         mapper.toDto(referenceSnapshot()).version() == 1
     }
 
+    // Scenario: observability/serve-observability / Staleness computed from the file alone
     def "writtenAt and intervalSeconds render for self-describing staleness computation"() {
         given:
         def dto = mapper.toDto(referenceSnapshot())
@@ -103,6 +106,8 @@ class SnapshotJsonMapperSpec extends Specification {
                 new FeedDto("filling", "2026-08-02T08:59:50Z", "2026-08-02T08:59:55Z", 2, 3)
     }
 
+    // Scenario: observability/serve-observability / Pointers instead of payloads
+    // Scenario: observability/serve-observability / Occupancy at a glance
     def "slots section renders capacity and one entry per occupied slot"() {
         given:
         def dto = mapper.toDto(referenceSnapshot()).slots()
@@ -209,6 +214,9 @@ class SnapshotJsonMapperSpec extends Specification {
                 [origin: new RemoteDto("closed", null, null, null, 0, "2026-08-02T08:59:50Z")]
     }
 
+    // Scenario: serve/factory-serve / Blocked on the remote is readable without logs
+    // Scenario: observability/serve-observability / Blocked on the remote is a field
+    // Scenario: observability/serve-observability / Remote section names targets, not tasks
     def "an open gate renders openSince, lastError, and nextProbeAt"() {
         given:
         def snapshot = referenceSnapshot()

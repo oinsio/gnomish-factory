@@ -11,6 +11,7 @@ import spock.lang.Specification
  */
 class FactoryDockerLabelsSpec extends Specification {
 
+    // Scenario: sandbox/execution-environment / Every factory object is labelled from creation
     def "FR2: ownershipLabelArgs carries exactly the four ownership labels, in order"() {
         given:
         def ownership = new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')
@@ -37,6 +38,7 @@ class FactoryDockerLabelsSpec extends Specification {
                 ])
     }
 
+    // Scenario: sandbox/sandbox-lifecycle / No secret material in labels
     def "NFR-S1 of add-serve-sandbox-lifecycle: label values come only from the key, the mode and the project id"() {
         given: 'the sanitized environment key, the mode, and a digest-shaped project identity'
         def ownership = new ObjectOwnership(OwnershipMode.TRACKED, 'a1b2c3d4e5f6')

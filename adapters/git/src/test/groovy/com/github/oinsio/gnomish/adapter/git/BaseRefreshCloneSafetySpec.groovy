@@ -58,6 +58,7 @@ class BaseRefreshCloneSafetySpec extends Specification implements BareGitRepoFix
         ]
     }
 
+    // Scenario: git/git-task-persistence / The refresh leaves the operator's checkout untouched
     def "FR6: refreshing a branch moves its tracking ref and nothing else in the operator's clone"() {
         given:
         def before = untouchable()
@@ -91,6 +92,7 @@ class BaseRefreshCloneSafetySpec extends Specification implements BareGitRepoFix
         gitExitCode(clone, 'rev-parse', '--verify', '--quiet', 'refs/heads/develop') != 0
     }
 
+    // Scenario: git/git-task-persistence / Tag base lands in refs/tags without force
     def "FR6: a tag refresh writes only its own tag and auto-follows no others"() {
         given: 'origin carries two tags, only one of which is the base'
         gitOutput(work, 'checkout', 'develop')

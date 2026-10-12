@@ -83,6 +83,8 @@ class GithubMarkerWriterSpec extends Specification {
         new ObjectMapper().readTree(request.bodyAsString).get('body').asText()
     }
 
+    // Scenario: tracker/github-tracker / Every marker of a tenure carries its epoch
+    // Scenario: lifecycle/claim-heartbeat / Epoch is available for stamping
     def "stamps the tenure's claim epoch into the marker it writes (FR13)"() {
         given:
         stubThread([])
@@ -97,6 +99,7 @@ class GithubMarkerWriterSpec extends Specification {
         parsed.reason() == 'escalation'
     }
 
+    // Scenario: tracker/github-tracker / Crash-retry updates instead of duplicating
     def "a re-driven write of the same tenure updates its own comment, adding no duplicate (UX3)"() {
         given: 'the tenure already parked once and the instance is re-driving that same park'
         def writer = writerHolding(new ClaimEpoch(1234))
@@ -115,6 +118,7 @@ class GithubMarkerWriterSpec extends Specification {
         wireMock.verify(patchRequestedFor(urlEqualTo('/repos/acme/widgets/issues/comments/9')))
     }
 
+    // Scenario: tracker/github-tracker / A later tenure's boundary marker is a new comment
     def "the next tenure's write is a new comment, so a boundary marker never moves backwards"() {
         given: 'the previous tenure parked; this instance now holds a later tenure'
         stubThread([
@@ -132,6 +136,8 @@ class GithubMarkerWriterSpec extends Specification {
         GithubMarker.parse(postedBody(wireMock, COMMENTS)).get().identity().intent() == 'park@9999'
     }
 
+    // Scenario: tracker/github-tracker / Claimless correspondence is keyed by its text
+    // Scenario: tracker/tracker-port / A claimless writer stamps no epoch and still writes
     def "a claimless write scopes its identity by its own text and stamps no epoch"() {
         given:
         stubThread([])
@@ -146,6 +152,7 @@ class GithubMarkerWriterSpec extends Specification {
         parsed.identity().intent() != 'note@'
     }
 
+    // Scenario: tracker/github-tracker / Claimless correspondence is keyed by its text
     def "two different claimless notes are two different comments, the same note is one"() {
         given:
         def writer = writerHolding(null)

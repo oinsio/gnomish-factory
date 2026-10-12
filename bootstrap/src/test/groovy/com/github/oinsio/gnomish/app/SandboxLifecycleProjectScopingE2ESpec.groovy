@@ -120,6 +120,7 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
     // FR8, M3: two projects, one Docker host — project A's sweep never sees project B's zombie,
     // because project scoping filters at LISTING time, not by a post-hoc ownership check. Both
     // boxes are equally "unowned & running"; only A's is even visible to A's sweep.
+    // Scenario: sandbox/sandbox-lifecycle / Two projects share one Docker host
     def "a sweep scoped to project A never touches project B's unowned running box"() {
         given: 'two projects on one host, each with its own origin remote (and so its own project identity)'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
@@ -148,6 +149,8 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
     // FR7: a manual-mode object (gnomish run's own labelling) is governed by age alone, so a
     // tracked-mode sweep evaluation — even one whose oracle omits every task — never stops it: the
     // running-stop threshold, not the oracle, is what protects it.
+    // Scenario: cli/manual-run / Manual session beside a daemon
+    // Scenario: sandbox/sandbox-lifecycle / Live manual debugging session is invisible to the daemon
     def "a manual-mode box survives a sweep tick under its own running-stop threshold, oracle notwithstanding"() {
         given: 'a manual-mode box (as gnomish run creates), well under the default 24h running-stop age'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')

@@ -47,6 +47,11 @@ archunit = "1.5.0"
 # NFR-R2 of add-tracker-port). 3.13.2 is the latest stable line on Maven Central (2026-07-28);
 # 4.0.0 is still beta. Plain JDK artifact, so no JDK-version-specific classifier is needed.
 wiremock = "3.13.2"
+# SnakeYAML for build-logic's functional specs only (FR6, design D5 of tighten-spec-contract):
+# the "launcher is the same gate" scenario reads the stage manifests' verify commands with a real
+# YAML parser. 2.6 is the version the main build already resolves (Spring Boot BOM), so no new
+# artifact enters the verification metadata.
+snakeyaml = "2.6"
 # WireMock 3.13.1's embedded Jetty stack (test scope). Pinned to the latest
 # Maven Central release of the EOL Jetty 11 line and applied via an
 # enforcedPlatform in build.gradle so WireMock gets one internally consistent
@@ -72,6 +77,9 @@ resilience4j = "2.4.0"
 # 2.22.3 is the latest stable jackson-bom release on Maven Central (2026-10-01;
 # 2.22.1 carried GHSA-gx83-3vf8-gh7j, GHSA-q4xh-88c3-wmh7, GHSA-wjgm-6hv5-3cvf;
 # 2.22.2 carried GHSA-cxp5-3px4-pw24, GHSA-wv8q-qhhj-9h54) and stays on the fixed line.
+# Production scope (NFR-S1): the osv-scanner.toml entries for these advisories suppress only
+# the superseded 2.21.4 candidates' metadata in gradle/verification-metadata.xml, never a
+# resolved jar; no committed lockfile resolves 2.21.4.
 jackson = "2.22.3"
 # logback: GHSA-jhq6-gfmj-v8fx (logback-core HardenedObjectInputStream Proxy
 # injection, CVSS 2.9); fixed in 1.5.35. 1.6.1 is the latest stable release on
@@ -92,7 +100,7 @@ httpcore5 = "5.4.3"
 # Drop once a Boot 4.1.x upgrade manages 5.6.3+.
 httpclient5 = "5.6.3"
 # log4j: GHSA-qv9r-c865-cp47 (CVSS 6.3) on log4j-api 2.25.4, fixed in 2.25.5.
-# The ONE production-scope override here: log4j-to-slf4j (Boot's logging bridge)
+# Production scope, like jackson and logback above: log4j-to-slf4j (Boot's logging bridge)
 # and its api sit on :bootstrap's runtimeClasspath/productionRuntimeClasspath,
 # so NFR-S1 forbids suppressing it — it is pinned instead. Both artifacts must
 # move together. Minimal patch on the line Boot 4.1.0 already manages rather
@@ -203,6 +211,7 @@ jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations
 jackson-core = { module = "com.fasterxml.jackson.core:jackson-core" }
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind" }
 jackson-dataformat-yaml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

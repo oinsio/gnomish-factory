@@ -51,12 +51,14 @@ class BaseHeadDefaultBoundarySpec extends Specification {
         'application/src/main/java/com/github/oinsio/gnomish/app/TakeBareAuto.java',
         'application/src/main/java/com/github/oinsio/gnomish/app/TakeDisposition.java',
         'application/src/main/java/com/github/oinsio/gnomish/app/FreshClaimBaseBinding.java',
+        'application/src/main/java/com/github/oinsio/gnomish/app/FreshClaimBaseFailures.java',
     ]
 
     // FR4, FR10, M2: a "HEAD" literal reappearing anywhere on this path is the pre-6.1 bug
     //     returning — one of the two duplicated defaults this task deleted, or a stand-in trusted
     //     tier handing the autonomous resolver the local HEAD under the default-branch tier's name.
     //     The second of those is now unconstructible rather than merely unscanned; see the javadoc.
+    // Scenario: git/git-task-persistence / One start-point owner
     def "FR4, FR10, M2: no HEAD literal survives in the autonomous-tier base wiring"() {
         given: 'the autonomous-tier base wiring, comments stripped — a javadoc may still name the old default'
         def sources = RepoSourceTree.productionSources { path ->

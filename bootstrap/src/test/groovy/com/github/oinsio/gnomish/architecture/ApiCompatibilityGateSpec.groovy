@@ -45,6 +45,8 @@ class ApiCompatibilityGateSpec extends Specification {
 
     // FR14: the baseline is committed, so the gate is armed on a fresh clone and in CI — not only on
     //     a machine that happens to have published the artifact locally.
+    // Scenario: plugin/plugin-api-contract / An exposed domain type change surfaces in the japicmp report
+    // Scenario: plugin/plugin-api-contract / An incompatible api change breaks the build
     def "the committed baseline carries both halves of the semver surface"() {
         given:
         def jars = baselineJars()
@@ -59,6 +61,7 @@ class ApiCompatibilityGateSpec extends Specification {
 
     // FR14, design D9: "armed against the baseline this change ships" — the SPI added across groups
     //     1-7 must be IN the baseline, or the gate would be guarding a surface that no longer exists.
+    // Scenario: plugin/plugin-api-contract / The SPI factories bear their declared members
     def "the baseline contains this change's SPI surface"() {
         given:
         def apiJar = baselineJars().find {
@@ -85,6 +88,29 @@ class ApiCompatibilityGateSpec extends Specification {
 
         expect:
         buildFile =~ /id 'published-api-conventions'/
+    }
+
+    // FR4 of split-into-modules: the baseline is the published jar graph at the declared version —
+    //     a jar joining or leaving the graph, or a version bump, fails here until the baseline is
+    //     regenerated in the same change
+    // Scenario: plugin/plugin-api-contract / A jar-set change is re-baselined with a version bump
+    // F110: text aligned to code (8.15)
+    def "the committed baseline is the published jar graph, at the version the module declares"() {
+        given: 'the module itself and every project its layering gate admits into its jar graph'
+        def buildFile = publishedApiBuildFile().text
+        def layering = (buildFile =~ /(?s)layering \{\s*allowedProjects = \[(.*?)\n\s*\]/)[0][1]
+        def published = ['gnomish-plugin-api'] + (layering =~ /'\:([\w-]+)'/).collect {
+            it[1]
+        }
+        def version = (buildFile =~ /(?m)^version = '([^']+)'/)[0][1]
+
+        expect: 'the baseline holds one jar per published module, no more, no fewer'
+        baselineJars()*.name.collect {
+            (it =~ /^(.+?)-\d.*\.jar$/)[0][1]
+        }.toSorted() == published.toSorted()
+
+        and: 'the api jar in it was generated at the declared version'
+        baselineJars()*.name.contains("gnomish-plugin-api-${version}.jar".toString())
     }
 
     private static List<File> baselineJars() {

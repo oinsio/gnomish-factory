@@ -15,6 +15,7 @@ class JudgeVotingSpec extends JudgeVotingSpecBase {
 
     // FR3: a majority of failing votes fails the whole check, carrying every failing
     //      vote's findings aggregated in vote order (Fail, Pass, Fail on a 3-vote check)
+    // Scenario: pipeline/stage-engine / Majority verdict with aggregated findings
     def "fails on a majority of failing votes, aggregating both failing votes' findings"() {
         given: 'a 3-vote check: Fail(f1), Pass, Fail(f2)'
         def f1 = new Finding('first problem', null, null)
@@ -38,6 +39,7 @@ class JudgeVotingSpec extends JudgeVotingSpecBase {
 
     // FR3, NFR-C1: two failing votes reach the majority of a 3-vote check, so the third
     //              vote is never requested
+    // Scenario: pipeline/stage-engine / Early majority stops voting
     def "stops requesting votes once a failing majority is reached"() {
         given: 'a 3-vote check whose first two votes fail'
         def f1 = new Finding('a', null, null)
@@ -118,6 +120,7 @@ class JudgeVotingSpec extends JudgeVotingSpecBase {
 
     // FR3: an even vote count that ties (Pass, Fail — neither reaches majority=2) falls
     //      through to the defensive after-loop tie resolution, resolved by pass >= fail
+    // Scenario: pipeline/stage-engine / Even-count tie resolves to Pass
     def "resolves an even-votes tie to Pass via the after-loop path"() {
         given: 'a 2-vote check: one Pass then one Fail — a tie, majority is 2'
         def voter = new ScriptedJudgeVoter([

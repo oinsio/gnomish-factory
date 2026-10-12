@@ -79,23 +79,28 @@ public final class RestartBackoff {
     }
 
     /**
-     * As {@link #nextBackoff}, plus a uniform {@code [0, jitterMaxFraction]} jitter on top of the
+     * As {@link #nextBackoff}, plus a uniform {@code [0, jitterMaxFraction]} jitter of the
      * doubled-and-capped result (the same shape {@code IdleTiming#jittered} applies to the feed's
      * own idle interval) — the remote outage gate's probe schedule (FR14 of
      * add-base-ref-resolution): a jittered interval that grows from the idle interval to this
-     * instance's configured cap.
+     * instance's configured cap and never exceeds it.
+     *
+     * <p>The jitter is added while the sum stays within the cap; where it would pass the cap it is
+     * taken off the cap instead, so the result is clamped to the cap after the jitter, not before
+     * it, and intervals at the cap still differ from one another (F95 of tighten-spec-contract).
      *
      * @param baseInterval the first backoff, i.e. the idle interval; never null
      * @param random the jitter source; never null
      * @param jitterMaxFraction the jitter ceiling as a fraction of the backoff, e.g. {@code 0.20}
-     *     for up to +20%; not negative
-     * @return the jittered backoff duration; never null
+     *     for up to 20%; not negative
+     * @return the jittered backoff duration, at most this instance's cap; never null
      */
     public Duration nextJitteredBackoff(Duration baseInterval, Random random, double jitterMaxFraction) {
         Duration backoff = nextBackoff(baseInterval);
         double jitterFraction = random.nextDouble() * jitterMaxFraction;
         long jitterNanos = (long) (backoff.toNanos() * jitterFraction);
-        return backoff.plusNanos(jitterNanos);
+        Duration raised = backoff.plusNanos(jitterNanos);
+        return raised.compareTo(cap) <= 0 ? raised : cap.minusNanos(jitterNanos);
     }
 
     // PIT M4 documented exception (build.gradle has the full rationale style, mirrors

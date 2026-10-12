@@ -35,6 +35,7 @@ class LogTextSpec extends Specification {
     /** Past the record cap, so capRecord has something to do rather than returning its argument. */
     static final String OVERLONG = 'HEAD-' + 'x' * (TextSafety.RECORD_CAP_CHARS * 2)
 
+    // Scenario: observability/factory-logging / Newline forgery is neutralized
     def "FR6: a forged log record renders as one line with the break escaped"() {
         given: 'agent output that tries to open a record of its own'
         def forged = 'stage failed\n2026-08-31 12:00:00 ERROR [main] the factory was compromised'

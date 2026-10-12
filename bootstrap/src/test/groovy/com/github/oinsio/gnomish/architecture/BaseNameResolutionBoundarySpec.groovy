@@ -33,6 +33,7 @@ class BaseNameResolutionBoundarySpec extends Specification {
 
     // FR15: the branch creator and both lifecycle stores take an already-peeled commit, so the
     //     rev-parse each of them used to run on a base name has nothing left to resolve.
+    // Scenario: git/git-task-persistence / One start-point owner
     def "FR15: the start-point consumers run no rev-parse at all"() {
         given:
         def sources = RepoSourceTree.productionSources { path ->

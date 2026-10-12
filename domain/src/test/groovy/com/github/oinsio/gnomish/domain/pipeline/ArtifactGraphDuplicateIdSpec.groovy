@@ -50,6 +50,7 @@ class ArtifactGraphDuplicateIdSpec extends Specification {
     // FR6 delta-spec scenario: duplicate output id → one located error naming
     // the duplicated id and every declaring stage (both stages across the
     // pipeline, or the same stage twice), with the occurrence count
+    // Scenario: pipeline/pipeline-config / Duplicate output id is rejected
     def "duplicate output ids (#label) are reported once naming all declaring stages"() {
         expect: 'exactly one error per duplicated id, naming every declaring stage'
         ArtifactGraphRule.validate(stages) == expected

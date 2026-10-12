@@ -52,6 +52,7 @@ class TerminalWriteRetrySpec extends Specification {
     }
 
     // FR10, NFR-R3: an outage retries with backoff and confirms once the tracker returns — no real sleep.
+    // Scenario: tracker/tracker-take / Finish lands after the outage
     def "retries an outage with backoff and confirms once the write finally lands"() {
         given: 'the write throws an outage on the first #failures attempts, then succeeds'
         def attempts = new AtomicInteger()
@@ -76,6 +77,7 @@ class TerminalWriteRetrySpec extends Specification {
     //     ~10 min. The clock self-advances on each read (independently of the sleeper) so the bound
     //     is reached even when a mutant drops the sleep — the loop terminates and DEFERRED is asserted
     //     rather than the run hanging; the exact backoff schedule is pinned by the sequence spec below.
+    // Scenario: tracker/tracker-take / Give-up past the bound names the unreconciled state
     def "gives up as DEFERRED once the bound elapses with the tracker still down"() {
         given: 'a clock that ticks forward two minutes each read, so the bound is reached in a bounded number of polls'
         def ticking = new AtomicReference<Instant>(Instant.parse('2026-01-01T00:00:00Z'))

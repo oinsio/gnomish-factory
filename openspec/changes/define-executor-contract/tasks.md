@@ -200,3 +200,7 @@
 - [ ] 9.2 Produce the sweep report: the greps of 3.3, 4.3 and 5.10 with every hit and its disposition
   (routed, deleted, exempt with follow-up name); verify the exemption list equals D10
 - [ ] 9.3 Recommend a commit message (no commit) referencing define-executor-contract FR ids
+
+## Follow-ups from tighten-spec-contract
+
+- F66: add a MODIFIED block of `git-task-persistence` / `State directory with one writer per file`, layered on `tighten-spec-contract`'s text, rewording the scenario `state.json carries the position and the current attempts` to `attempts[] {taskId, stage, roundToken, round, result, startedAt, stop, checks[], denials[], usage}` and `totals` as the usage snapshot (text-only).

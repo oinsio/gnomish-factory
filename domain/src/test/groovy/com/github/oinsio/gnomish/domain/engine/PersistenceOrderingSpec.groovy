@@ -18,6 +18,7 @@ class PersistenceOrderingSpec extends PersistenceOrderingSpecBase {
     // FR11 (ordering invariant): a single CannotVerify round persists then emits AttemptFinished,
     //     and the persisted state is the round's new state — the recorded stream shows persist
     //     completing before the AttemptFinished event.
+    // Scenario: pipeline/stage-engine / Ordering invariant
     def "persists the round before emitting AttemptFinished"() {
         given: 'a stage whose single check cannot be verified'
         def stageDef = stage('build', 5, [builtin('files_exist')])
@@ -47,6 +48,7 @@ class PersistenceOrderingSpec extends PersistenceOrderingSpecBase {
     // FR11: the ordering is enforced per round — for a multi-round run (Fail then CannotVerify)
     //     each round's AttemptStarted precedes its persist, which precedes its AttemptFinished,
     //     and round 1's AttemptStarted only appears after round 0 was persisted and finished.
+    // Scenario: pipeline/stage-engine / Ordering invariant
     def "orders persist and events per round across a multi-round run"() {
         given: 'a stage that fails once (burning an attempt and retrying) then cannot verify'
         def stageDef = stage('build', 5, [builtin('files_exist')])

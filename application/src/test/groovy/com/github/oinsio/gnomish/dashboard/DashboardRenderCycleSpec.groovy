@@ -36,6 +36,7 @@ class DashboardRenderCycleSpec extends Specification {
         new DashboardRenderCycle(serveDir)
     }
 
+    // Scenario: observability/dashboard-page / A malformed earlier line empties the history
     def "a malformed non-tail ledger line degrades the history section to empty rather than failing the render"() {
         given: 'a non-last line that is not valid JSON at all -- a genuine error per the reader contract'
         def file = ObservabilityPaths.ledgerFile(serveDir, NOW.atZone(ZoneOffset.UTC).toLocalDate())
@@ -71,6 +72,7 @@ class DashboardRenderCycleSpec extends Specification {
 
     // NFR-O3 of add-serve-sandbox-lifecycle: the hygiene section reads the ledger's sweep actions
     //     even when no snapshot exists at all, and the daemon section still degrades on its own.
+    // Scenario: observability/dashboard-page / Zombie stop reads as an incident
     def "sweep actions from the ledger reach the hygiene section without any snapshot"() {
         given:
         def file = ObservabilityPaths.ledgerFile(

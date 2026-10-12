@@ -25,6 +25,7 @@ class SupervisedLoopInterruptSpec extends Specification {
 
     // FR5 (daemon-supervision "Stray interrupt"): an interrupt during a tick is cleared and logged
     //     once, and the wait after the tick runs with the flag clear, in full.
+    // Scenario: serve/daemon-supervision / Stray interrupt
     def "a stray interrupt during a tick is logged once and the next tick still follows a full wait"() {
         given:
         def flagAtWait = []
@@ -96,6 +97,7 @@ class SupervisedLoopInterruptSpec extends Specification {
 
     // FR4, FR5 (daemon-supervision "Interrupt from a stop is quiet"): a stop arriving during the
     //     wait interrupts it, and the loop ends without a stray-interrupt WARN or another tick.
+    // Scenario: serve/daemon-supervision / Interrupt from a stop is quiet
     def "a stop requested during the wait ends the loop with no warning"() {
         given:
         rig.build(LoopOrder.WAIT_THEN_TICK, rig.fixedWait {

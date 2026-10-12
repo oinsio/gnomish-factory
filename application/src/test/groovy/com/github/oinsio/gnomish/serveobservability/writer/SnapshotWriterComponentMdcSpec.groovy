@@ -35,6 +35,7 @@ class SnapshotWriterComponentMdcSpec extends Specification {
     @TempDir
     Path tempDir
 
+    // Scenario: observability/factory-logging / A daemon worker's lines carry its component
     def "a line emitted from the started writer's own thread carries component=snapshot"() {
         given: 'a writer whose supplier always fails, so its loop logs from inside the frame'
         def capture = LogCaptureSupport.attach(SnapshotWriteCycle)

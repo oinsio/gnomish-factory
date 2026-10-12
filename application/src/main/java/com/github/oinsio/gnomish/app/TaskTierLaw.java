@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,7 +34,8 @@ import org.slf4j.LoggerFactory;
  * human fix followed by a bare retry, exactly the {@code CannotVerify}/{@code CannotExecute}/
  * {@code PipelineMismatch} shape {@link TakeEscalationExit} already parks that way — never {@link
  * ParkReason#ESCALATION}, which promises a decision reply this park neither expects nor consumes.
- * The report names the base ref, the law commit and every located error, exactly the shape a
+ * The report names the resolved base ref (the pin's name, never the commit), the law commit on its
+ * own line, and every located error, exactly the shape a
  * startup load failure prints. The park is best-effort in the shape of
  * {@link com.github.oinsio.gnomish.app.take.TakeQuarantinePark}: a tracker that cannot be written
  * must not turn a classified stop into an escaping exception, and the report travels back in the
@@ -89,7 +91,8 @@ final class TaskTierLaw {
      * Reads the task tier at {@code binding} and either binds the task to it or parks the task.
      *
      * @param assembly the run assembly carrying the invocation's pipeline source; never null
-     * @param binding which repository and revision the task's law is read from; never null
+     * @param base the task's resolved and refreshed base: its law binding (which repository and
+     *     commit the law is read from) and the resolved ref name a park report names; never null
      * @param order the take order of the claimed task, still carrying the startup definition —
      *     whose first stage names the last structurally-known position a parked task reports, a
      *     park here never entered a stage — and the tracker for the best-effort park; never null
@@ -97,7 +100,8 @@ final class TaskTierLaw {
      * @throws UncheckedIOException if the law cannot be read at all — an I/O fault, which the
      *     caller's crash arm classifies, never a validation problem
      */
-    static Outcome bind(RunAssembly assembly, LawBinding binding, TakeOrder order) {
+    static Outcome bind(RunAssembly assembly, FreshClaimBaseBinding.Bound base, TakeOrder order) {
+        LawBinding binding = base.lawBinding();
         BoundTaskTier taskTier;
         try {
             taskTier = assembly.bindTaskTier(binding);
@@ -108,13 +112,12 @@ final class TaskTierLaw {
             case LoadOutcome.Loaded(var definition) ->
                 new Bound(definition, binding.repositoryRoot(), taskTier.lawCommit());
             case LoadOutcome.Invalid(List<ConfigError> errors) ->
-                new Parked(park(binding, taskTier.lawCommit(), errors, order));
+                new Parked(park(baseRefOf(base), taskTier.lawCommit(), errors, order));
         };
     }
 
-    private static TakeResult park(LawBinding binding, ObjectId lawCommit, List<ConfigError> errors, TakeOrder order) {
+    private static TakeResult park(String baseRef, ObjectId lawCommit, List<ConfigError> errors, TakeOrder order) {
         TaskRef ref = order.ref();
-        String baseRef = revisionOf(binding);
         String report = BaseLawReport.of(order.taskId(), baseRef, lawCommit, errors);
         log.error(
                 OperatorEvent.TASK_BASE_LAW_INVALID.head()
@@ -143,7 +146,17 @@ final class TaskTierLaw {
         }
     }
 
-    /** The base ref a report names: the revision a binding was stated with, or the tree it reads. */
+    /**
+     * The resolved base ref a park report names (F99 of tighten-spec-contract): the pin's ref, the
+     * one place the resolved name is held — the law binding carries only the refreshed commit, so
+     * naming the base from it would print the SHA twice. A fresh claim's pin is always built from
+     * the resolver's decision, so its ref is never absent here.
+     */
+    private static String baseRefOf(FreshClaimBaseBinding.Bound base) {
+        return Objects.requireNonNull(base.pin().ref(), "a fresh claim's base pin always names its ref");
+    }
+
+    /** The revision an I/O fault names: the one a binding was stated with, or the tree it reads. */
     private static String revisionOf(LawBinding binding) {
         return switch (binding) {
             case LawBinding.AtRevision atRevision -> atRevision.revision();

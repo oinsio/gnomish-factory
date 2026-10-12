@@ -104,6 +104,8 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
         e.message.contains("factory.bindings.default: host in ${PROJECT_FILE}")
     }
 
+    // Scenario: sandbox/execution-environment / Mismatch refuses fail-closed
+    // Scenario: plugin/adapter-binding-registry / Unmet need is refused fail-closed
     def "FR14/UX2: an unmet stage need refuses fail-closed naming the stage and the need"() {
         given: 'a host-bound stage declaring a need only the container passport satisfies'
         def needy = stage('a', new Sandbox(['egress-control'], false))
@@ -172,6 +174,7 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
     }
 
     // D13, G2: an unreachable Docker runtime refuses naming both ways out — never a host fallback.
+    // Scenario: sandbox/execution-environment / No silent weakening
     def "D13: an unreachable Docker runtime refuses naming both ways out"() {
         when:
         plan(
@@ -187,6 +190,7 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
     // FR6 of open-adapter-binding-registry: reconciliation is unchanged by the registry — the
     // passport it checks against is now the registry-resolved one, and an unmet need is still
     // refused fail-closed before the stage runs, naming exactly what was unmet.
+    // Scenario: plugin/adapter-binding-registry / Unmet need is refused fail-closed
     def "FR6: an unmet need is refused fail-closed against the registry-resolved passport"() {
         given: 'a container-bound stage declaring the one need the container passport does not satisfy'
         def needy = stage('a', new Sandbox(['docker-inside'], false))
@@ -206,6 +210,7 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
     // M3/FR4/D4 of open-adapter-binding-registry: with the container backend module stripped from
     // the distribution, the container default is unsatisfiable — refused with the discovered
     // options and both ways out named, never a silent fallback to host.
+    // Scenario: plugin/adapter-binding-registry / Absent container module fails fast, never host
     def "M3: the container default with the backend module absent refuses naming the options"() {
         when: 'a registry without the container binding is planned against'
         plan(

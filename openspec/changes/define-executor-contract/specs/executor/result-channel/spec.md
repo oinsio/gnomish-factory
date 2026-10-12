@@ -13,7 +13,7 @@ An external executor SHALL receive its request as one JSON document on stdin and
 its result, and any answer payload, to paths the factory chose and handed over as `GNOMISH_*`
 environment variables. The factory SHALL spawn the executor only through the task execution
 environment seam, inside the box when the stage runs in one.
-<!-- implements FR5, NFR-S3 of define-executor-contract -->
+**Implements**: FR5, NFR-S3 of define-executor-contract
 
 #### Scenario: Result path is factory-chosen
 - **WHEN** an executor run starts
@@ -30,7 +30,7 @@ Stdout and stderr SHALL be drained concurrently from launch, capped in bytes and
 with the run's correlation id, and never parsed for a result. The one exception is NDJSON
 progress on stdout from an executor whose describe declared `streams_progress`; a non-JSON
 line there SHALL be logged as a contract violation and skipped.
-<!-- implements FR5, NFR-O2 of define-executor-contract -->
+**Implements**: FR5, NFR-O2 of define-executor-contract
 
 #### Scenario: Verbose executor does not deadlock the factory
 - **WHEN** an executor writes more than the pipe buffer to stderr before exiting
@@ -44,7 +44,7 @@ line there SHALL be logged as a contract violation and skipped.
 Every read of a factory-named result path SHALL go through one reader that enforces a size cap
 with a truncation marker, treats bytes as inert data, wraps every text field as untrusted text,
 and reports a parse failure as a typed outcome. No other component SHALL read such a path.
-<!-- implements FR6, NFR-R1, NFR-S2 of define-executor-contract -->
+**Implements**: FR6, NFR-R1, NFR-S2 of define-executor-contract
 
 #### Scenario: Oversized result is truncated, not fatal to the factory
 - **WHEN** a result file exceeds the cap
@@ -63,7 +63,7 @@ and reports a parse failure as a typed outcome. No other component SHALL read su
 The agent executor's decision file and the command check's findings file SHALL be read through
 the shared result reader with the same cap and untrusted-text posture; their tolerant fallbacks
 (raw text as question, synthetic finding) SHALL be preserved.
-<!-- implements FR6 of define-executor-contract -->
+**Implements**: FR6 of define-executor-contract
 
 #### Scenario: Garbage decision file keeps its fallback
 - **WHEN** the decision file contains unparseable text
@@ -74,7 +74,7 @@ the shared result reader with the same cap and untrusted-text posture; their tol
 Credential names an executor declared SHALL be resolved through the secrets port and delivered
 only to that executor's process, by the environment seam's credential channel; they SHALL
 appear in no argv, no log line, and no other process's environment.
-<!-- implements NFR-S1 of define-executor-contract -->
+**Implements**: NFR-S1 of define-executor-contract
 
 #### Scenario: Declared credential reaches only its executor
 - **WHEN** executor A declares `ACME_API_KEY` and a `command` check runs in the same stage

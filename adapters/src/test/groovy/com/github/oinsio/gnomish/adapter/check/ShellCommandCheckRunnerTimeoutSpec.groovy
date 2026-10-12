@@ -25,6 +25,7 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
 
     def runner = new ShellCommandCheckRunner(new VirtualClock()).withCheckTimeout(SHORT_TIMEOUT)
 
+    // Scenario: verification/check-provider-model / A hung check fails instead of hanging the run
     @Timeout(30)
     def "FR12, UX4: a check that never exits is a quality failure carrying the tail captured so far"() {
         given: 'a command that prints a distinctive line and then never exits'
@@ -80,6 +81,7 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         throw new AssertionError("the check's child never recorded its pid in ${pidFile}" as Object)
     }
 
+    // Scenario: verification/check-provider-model / A timed-out check is logged with its bound
     @Timeout(30)
     def "NFR-O1: the expiry logs one WARN naming the check, the elapsed time and the configured deadline"() {
         given:
@@ -139,6 +141,7 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         !warnings[0].formattedMessage.contains('deadline=')
     }
 
+    // Scenario: verification/check-provider-model / A check that finishes in time is untouched
     def "NFR-R3: a check that finishes in time keeps its exit code, tail and classification"() {
         given:
         def check = command('echo fine-output; exit 3')

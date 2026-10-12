@@ -31,6 +31,7 @@ class ContainerEnvironmentDisposalSpec extends Specification {
 
     // FR2 of harden-logging-observability: disposal closes the container environment's lifecycle,
     // so it gets the same INFO anchor its creation and reattachment do.
+    // Scenario: observability/factory-logging / Container lifecycle is reconstructible
     def "FR2: a disposal logs one INFO anchor naming the environment"() {
         given:
         def capture = LogCaptureSupport.attach(ContainerEnvironmentDisposal)
@@ -69,6 +70,8 @@ class ContainerEnvironmentDisposalSpec extends Specification {
     // step names which step it was and which environment it was for — "a dispose step failed" is
     // unactionable when the sweep is disposing a dozen environments at once — and carries the
     // throwable so the cause chain survives.
+    // Scenario: observability/factory-logging / Container lifecycle is reconstructible
+    // Scenario: observability/factory-logging / A failed best-effort cleanup is logged
     def "FR5: a swallowed dispose step names the step, the environment and its cause"() {
         given:
         def capture = LogCaptureSupport.attach(ContainerEnvironmentDisposal, Level.DEBUG)

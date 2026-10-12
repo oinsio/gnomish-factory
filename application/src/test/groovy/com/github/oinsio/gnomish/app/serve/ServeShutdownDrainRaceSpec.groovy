@@ -31,6 +31,7 @@ class ServeShutdownDrainRaceSpec extends ServeShutdownSpecBase {
     //     "claiming stops immediately" is directly observable. No real sleep stands in for
     //     production timing — the grace window itself is short (300ms) and every wait here is a
     //     bounded latch/join, not a fixed delay.
+    // Scenario: serve/factory-serve / A round outliving grace is left to the lease
     def "a slot reaching its round boundary within grace is released; one that does not is left alone, and claiming stops immediately"() {
         given: 'two occupied slots'
         def ledger = new SlotLedger(2, new VirtualClock())

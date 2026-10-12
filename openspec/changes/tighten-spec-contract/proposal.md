@@ -47,6 +47,11 @@ specs hold today.
   the new format, their `MODIFIED` requirements layered on this change's text
   (`delta-specs.md`, "Overlapping MODIFIED requirements"), and their long `ADDED` requirements
   shortened by the same rules.
+- **MODIFIED** — the layout of `openspec/specs/`: every capability lives under one
+  bounded-context directory (the five existing groups plus `cli/`, `core/`, `executor/`, `git/`,
+  `operator/`, `pipeline/`, `release/`, `sandbox/`, `serve/`, `tracker/`); the spec id is the
+  path, and the main spec, every unarchived delta, every marker and every exemption file follow
+  it.
 
 ## Goals
 
@@ -69,7 +74,9 @@ specs hold today.
   does not own.
 - **NG3** — No edit under `openspec/changes/archive/`; archived deltas keep the comment form.
 - **NG4** — No rewording of existing scenarios and no renaming of existing requirement
-  headings: both are the identities other artifacts and the queued deltas reference.
+  headings: both are the identities other artifacts and the queued deltas reference. One
+  exception, decided by the operator at task 5.2: a scenario proven wrong against the code and
+  its tests (a finding sorted into this change) is reworded or renamed, citing the finding id.
 - **NG5** — No undecided production code change. A production edit happens in this change only
   for a finding the operator sorted into it at a decision point (FR11); nothing is fixed on
   the way, and nothing found is dropped.
@@ -152,6 +159,12 @@ specs hold today.
   operator sorts every open finding into "this change" or "new change `<name>`"; the sorted
   list, with its reasons, is the record, and nothing is left unsorted when the change is
   archived.
+- **FR12 — Spec directory layout.** Every main spec under `openspec/specs/` lives in exactly one
+  group directory; the spec id is the path relative to `openspec/specs/`. A main spec and the
+  deltas of every unarchived change that modify it share that path, so an archive merges into
+  one file. Test markers and exemption files carry the same id. The move changes no content:
+  `git` reports every moved spec as a 100% rename. New capabilities of queued changes are placed
+  into a group in the same task.
 
 ### Non-Functional — Reliability
 
@@ -207,6 +220,11 @@ specs hold today.
 - **M5** — All 26 queued changes pass `openspec validate <change> --strict` and
   `checkSpecContract --changes` (baseline 2 of 26 pass strict).
 - **M6** — The checker's wall time over the whole tree is under five seconds.
+- **M7** — An anchored grep for every pre-move spec id (`Scenario: <old> /`, `specs/<old>/`,
+  `spec: <old>`) outside `openspec/changes/archive/` returns nothing.
+- **M8** — `pending-test:` entries name only a queued change that delivers the behavior
+  (baseline 2026-10-12: 302 entries naming six test-only changes, 3 naming
+  `add-subprocess-access-log`); after group 8: 3.
 
 ## Open Questions
 
@@ -216,7 +234,9 @@ specs hold today.
   FR ids today, not scenarios. The missing tests and every other finding (FR11) are sorted at
   the decision points: what stays here is done here; what goes to a new change is carried
   meanwhile by a `pending-test: <change>` exemption or a pending-marked test, so the gate is
-  green without hiding the gap. The operator decides at tasks 5.2 and 6.8.
+  green without hiding the gap. The operator decides at tasks 5.2 and 6.8. Revised 2026-10-12:
+  the operator folded the six area follow-ups back into this change (group 8); `pending-test:`
+  is kept only for a scenario whose behavior a queued change still delivers.
 - **Q3 — Where the inventory tables live.** Decided: under `temporary-docs/tighten-spec-contract/`
   (one directory for every task of the change, so the decision points see every row), as
   working documents of the tasks; nothing durable references them.
@@ -245,7 +265,7 @@ and by the functional spec of the checker.
 ## Impact
 
 - `build-logic/src/main/groovy/com/github/oinsio/gnomish/build/` — `SpecContractCheck` and its
-  reader; `build-logic/src/functionalTest` — its functional spec; the root `build.gradle` wires
+  reader; `build-logic/src/functionalTest` — its functional spec; the `spec-contract-conventions` plugin, applied by the root build, wires
   the task into `check`.
 - `scripts/check-spec-contract.sh` — the manual launcher; `scripts/generate-spec-deltas.sh` —
   the migration generator, removed in the last task once the deltas exist.
@@ -255,6 +275,9 @@ and by the functional spec of the checker.
   `openspec/config.yaml`; `docs/guides/developer-guide.md`; `docs/glossary.md`.
 - `openspec/changes/tighten-spec-contract/specs/` — 50 deltas; `openspec/changes/*/specs/` — the
   26 queued changes' deltas.
+- `openspec/specs/**` — 33 directories moved and 18 new capabilities of queued changes placed
+  into groups (FR12, task 7.3a); `config/spec-contract-exemptions/` — 33 files renamed; about
+  2 000 markers re-prefixed.
 - Every test tree (FR5) — markers above features; new specs where a scenario had no test.
 - No production Java; no dependency change.
 - Sequenced **first** in the queue: until it is archived, the archive stage is red for every

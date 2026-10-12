@@ -98,6 +98,9 @@ class GithubWorkflowRunQuerySpec extends Specification {
         result.get().conclusion() == 'success'
     }
 
+    // Scenario: git/git-task-persistence / Every check reads the attempt commit its own way
+    // Scenario: git/git-task-persistence / Verification judges the attempt commit
+    // Scenario: verification/github-external-check / The adapter consumes the engine workspace type
     def "excludes a run whose head_sha does not match the attempt commit"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
@@ -118,6 +121,7 @@ class GithubWorkflowRunQuerySpec extends Specification {
         result.isEmpty()
     }
 
+    // Scenario: verification/github-external-check / Unrelated workflows do not gate the stage
     def "excludes a run whose path is a different workflow than the queried workflow"() {
         given:
         wireMock.stubFor(get(urlEqualTo(
@@ -138,6 +142,7 @@ class GithubWorkflowRunQuerySpec extends Specification {
         result.isEmpty()
     }
 
+    // Scenario: verification/github-external-check / Re-run supersedes the first attempt
     def "the newest run_attempt supersedes earlier attempts for the same head_sha"() {
         given:
         wireMock.stubFor(get(urlEqualTo(

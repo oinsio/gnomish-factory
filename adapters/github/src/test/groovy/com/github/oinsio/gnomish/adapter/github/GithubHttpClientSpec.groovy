@@ -154,6 +154,8 @@ class GithubHttpClientSpec extends Specification {
 
     // FR11, NFR-R3 of fix-operator-blockers: the interrupt arrives while GitHub has not answered —
     //     the stop of the calling thread, not a network fault to retry or to report as one.
+    // Scenario: tracker/github-tracker / One attempt, then a cancellation
+    // Scenario: tracker/github-tracker / No message calls a cancellation a failure after retries
     def "an interrupt mid-request is a cancellation: one request, its own failure, the interrupt kept"() {
         given:
         wireMock.stubFor(post(urlEqualTo('/slow'))
@@ -179,6 +181,7 @@ class GithubHttpClientSpec extends Specification {
 
     // FR11 of fix-operator-blockers, control row: a connection reset on a thread nobody
     //     interrupted is a transport failure and keeps the whole retry budget.
+    // Scenario: tracker/github-tracker / A real transport failure keeps its retries
     def "a connection reset on an uninterrupted thread keeps its retries"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/reset'))

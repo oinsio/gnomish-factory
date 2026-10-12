@@ -99,6 +99,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
     // FR13, D12, D19: a fresh Escalated outcome (a gnome-initiated decision) keeps the environment
     // stopped and parks the tracker for real with ESCALATION.
+    // Scenario: serve/factory-serve / Slot end leaves a kept environment
     def "an Escalated outcome keeps the environment stopped and parks the tracker"() {
         given:
         def tracker = Mock(Tracker)
@@ -134,6 +135,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
     // FR13, FR18, D12, D19: a fresh Paused (manual checkpoint) outcome keeps the environment
     // stopped and parks the tracker for real with CHECKPOINT.
+    // Scenario: serve/factory-serve / Slot end leaves a kept environment
     def "a Paused checkpoint outcome keeps the environment stopped and parks the tracker"() {
         given:
         def tracker = Mock(Tracker)
@@ -195,6 +197,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
     // FR15, D2, D3: a round-boundary "no longer ours" check short-circuits the terminal boundary
     // entirely — salvage+push, a tracker note, and release, never dispose/keep/abort.
+    // Scenario: tracker/tracker-take / Revocation is a runner result, not an engine outcome
     def "a revoked claim salvages and pushes instead of settling any terminal boundary"() {
         given:
         def tracker = Mock(Tracker)

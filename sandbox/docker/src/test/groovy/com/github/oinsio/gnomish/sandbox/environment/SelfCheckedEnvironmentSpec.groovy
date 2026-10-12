@@ -24,6 +24,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
     def docker = new RecordingDockerCli()
     def guard = new EgressGuard(docker, 'k1', 'mitm:12', [], Path.of('/tmp/guard-k1'), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
 
+    // Scenario: sandbox/sandbox-egress / Fresh judge environment is self-checked too
     def "FR8: materialize delegates and then self-checks — a failing probe propagates and no process ran"() {
         given: 'a self-check that fails at its first probe (guard cannot come up)'
         docker.onRun = { args -> DockerResult.of(1, '', 'no daemon') }
@@ -43,6 +44,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
     // FR3, UX3 of polish-sandbox-forensics: a failed self-check is the failure whose evidence
     // lives inside the box, so the box is stopped and kept — never disposed — and the operator
     // reads its concrete name from the keep notice at the failure site.
+    // Scenario: sandbox/sandbox-egress / The failed box is kept for inspection
     def "FR3: a rejected box is stopped and kept, and the rejection propagates untouched"() {
         given: 'the guard is up, but the in-box user is root — the first probe fails closed'
         docker.onRun = runningGuard
@@ -72,6 +74,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
     }
 
     // NFR-R1: forensics never mask the failure they are collecting evidence for.
+    // Scenario: sandbox/sandbox-egress / A failed keep-stop does not mask the self-check failure
     def "NFR-R1: a keep-stop the runtime refuses is warned about, and still does not mask the rejection"() {
         given: 'the guard is up, the probe fails, and the stop is refused by the daemon'
         docker.onRun = { List<String> args ->
@@ -164,6 +167,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
 
     // FR1 of fix-denial-report-attachment: the guard is reachable ONLY through the port contract —
     // a consumer holding the port type gets the denials without knowing this adapter exists
+    // Scenario: sandbox/execution-environment / Sandboxed environment surfaces its guard denials
     def "FR1: readDenials surfaces the guard's denials through the port type"() {
         given: 'a guard whose log holds one denied destination'
         docker.onRun = { List<String> args ->
@@ -182,6 +186,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
 
     // FR5 of fix-denial-report-attachment: the cursor delimiting a round's denials reaches the
     // factory — and comes back on resume — through the port, never by naming the guard
+    // Scenario: sandbox/execution-environment / A delegating view forwards the denial surface
     def "FR5: the denial cursor is read and restored through the port type"() {
         given: 'a guard container with a known identity and one denial'
         docker.onRun = { List<String> args ->
@@ -257,6 +262,7 @@ class SelfCheckedEnvironmentSpec extends Specification {
     }
 
     // NFR-R1: denial observability never takes a healthy round down
+    // Scenario: sandbox/execution-environment / Unreadable denial log degrades to empty
     def "NFR-R1: an unreadable guard log degrades to an empty list, never a failure"() {
         given: 'the guard container is gone'
         docker.onRun = { List<String> args ->

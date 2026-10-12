@@ -10,6 +10,8 @@ class ReportedFailureExceptionReporterSpec extends Specification {
 
     def reporter = new ReportedFailureExceptionReporter()
 
+    // Scenario: cli/cli-arguments / A usage error is one line
+    // Scenario: cli/cli-arguments / A completed take is not an unhandled failure
     def "FR16: claims a failure the runner already reported (#failure.class.simpleName)"() {
         expect:
         reporter.reportException(failure)
@@ -29,6 +31,8 @@ class ReportedFailureExceptionReporterSpec extends Specification {
         ]
     }
 
+    // Scenario: cli/cli-arguments / An unclassified fault keeps its trace
+    // Scenario: cli/cli-arguments / A failure before any command keeps the framework's report
     def "FR16: leaves an unclassified fault to Spring Boot's own record"() {
         expect:
         !reporter.reportException(new IllegalStateException('boom'))

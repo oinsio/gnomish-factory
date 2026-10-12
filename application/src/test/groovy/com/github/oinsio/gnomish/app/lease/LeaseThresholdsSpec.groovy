@@ -17,6 +17,7 @@ class LeaseThresholdsSpec extends Specification {
 
     // FR13: the holder stops writing strictly before any reaper could hand the task to another
     //     instance — for every interval and every multiplier the config rule admits
+    // Scenario: lifecycle/claim-heartbeat / Fencing wins the race against reassignment
     def "lost detection is strictly earlier than reassignment (interval #interval, multiplier #multiplier)"() {
         given:
         def resolved = config(interval, multiplier)

@@ -33,6 +33,7 @@ class StateJsonMapperSpec extends Specification {
 
     def startedAt = Instant.parse("2026-07-18T09:00:00Z")
 
+    // Scenario: git/git-task-persistence / state.json carries the position and the current attempts
     def "toDto maps version, position, attemptsUsed"() {
         given:
         def state = new TaskState(new Position.AtStage("implement"), 2, [], ExecutorUsage.none())
@@ -108,6 +109,7 @@ class StateJsonMapperSpec extends Specification {
         new Verdict.CannotVerify(UntrustedText.subprocess("timeout"), UntrustedText.subprocess("network blip")) | "cannotVerify" | [] | "timeout" | "network blip" | null
     }
 
+    // Scenario: git/git-task-persistence / state.json carries the position and the current attempts
     def "round-trip: full TaskState with multiple attempts, checks, tokens, tools survives toDto/fromDto"() {
         given:
         def tokens = ["claude-sonnet": new TokenUsage(100, 50, 10, 5)]
@@ -165,6 +167,7 @@ class StateJsonMapperSpec extends Specification {
     //     check's own words in raw and the reader lifts them back out — but what comes back is a
     //     BRANCH_DOCUMENT carrier whatever medium first produced it, because the branch is what the
     //     next instance read it from. So the round trip is byte-identical and provenance-normalizing.
+    // Scenario: core/untrusted-text / A machine writer is an exit
     def "round-trip: CannotVerify verdict survives with reason and details, re-minted as branch text"() {
         given: 'a verdict whose words were captured from a subprocess'
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("external:ci")),
@@ -291,6 +294,7 @@ class StateJsonMapperSpec extends Specification {
     // FR5 of fix-denial-report-attachment: the cursor delimiting an attempt's denials is committed
     //     with that attempt, so a resuming instance continues the delta instead of replaying the
     //     guard container's whole surviving log onto its first round
+    // Scenario: git/git-task-persistence / The cursor is committed with the attempt it delimits
     def "FR5: toDto carries the environment's denial cursor into the document"() {
         given:
         def state = TaskState.atStageStart("implement")
@@ -303,11 +307,13 @@ class StateJsonMapperSpec extends Specification {
         StateJsonMapper.readDto(UntrustedText.branchDocument(json)).egressCursor() == cursor
     }
 
+    // Scenario: git/git-task-persistence / A writer with no denial source records no cursor
     def "FR5: a writer with no denial source records no cursor"() {
         expect:
         StateJsonMapper.toDto(TaskState.atStageStart("implement")).egressCursor() == null
     }
 
+    // Scenario: git/git-task-persistence / A state file written before the cursor existed stays readable
     def "FR5: a state file written before the cursor existed still parses, with no cursor"() {
         given: 'a pre-cursor document — the field is additive under contract v1'
         def json = '''
@@ -324,6 +330,7 @@ class StateJsonMapperSpec extends Specification {
         StateJsonMapper.readDto(UntrustedText.branchDocument(json)).egressCursor() == null
     }
 
+    // Scenario: git/git-task-persistence / Unknown version refuses resume
     def "readDto refuses an unsupported version before attempting to bind the DTO shape"() {
         given:
         // shape is incompatible with StateJsonDto (no position/attempts/totals) to
@@ -371,6 +378,7 @@ class StateJsonMapperSpec extends Specification {
 
     // FR4, M1 of fix-denial-report-attachment: the scenario the pre-change contract could not
     //     hold — a PASSING attempt carrying a denial, separate from its (all-pass) checks
+    // Scenario: git/git-task-persistence / Denials persist with the attempt
     def "FR4: a passing attempt's denials survive the round-trip and serialize with the finding shape"() {
         given: 'a passing round whose environment denied one egress attempt'
         def denial = new Finding(
@@ -408,6 +416,8 @@ class StateJsonMapperSpec extends Specification {
 
     // FR4, D5: additive under contract v1 — a state file written before the field existed
     //     must keep parsing, with denials read as empty rather than null
+    // Scenario: git/git-task-persistence / Pre-existing state files stay readable
+    // Scenario: observability/status-report / An attempt without the denials field reads as empty
     def "FR4: a state file written before denials existed still parses, with denials empty"() {
         given: 'a v1 attempt document with no denials field at all'
         def json = '''
@@ -436,6 +446,8 @@ class StateJsonMapperSpec extends Specification {
 
     // FR7 of fix-denial-attribution-durability: the identity is what makes a re-read a merge
     //     rather than a doubled report, so it must survive the same round-trip the finding does
+    // Scenario: git/git-task-persistence / A denial's identity is kept when known and when unknown
+    // Scenario: git/git-task-persistence / Denials persist with the attempt
     def "FR7: an attempt denial's identity survives the state-file round-trip"() {
         given: 'a round whose denial the guard stamped with its own source and event time'
         def denial = new Denial(
@@ -457,6 +469,7 @@ class StateJsonMapperSpec extends Specification {
 
     // FR7: additive under contract v1 — "unknown, keep": an entry written before identities
     //     existed matches nothing on a merge and is therefore re-read rather than dropped
+    // Scenario: git/git-task-persistence / A denial's identity is kept when known and when unknown
     def "FR7: a denial entry written before identities existed reads as unidentified"() {
         given: 'a v1 attempt whose denial carries the finding fields only'
         def json = '''

@@ -49,6 +49,7 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
     //     two recorded failed rounds) — obtained from a REAL prior run whose 3rd-round persist
     //     is aborted — resumes at attempt 2 with BOTH prior failures still in feedback, then
     //     terminates deterministically. The counter and feedback continue across the resume.
+    // Scenario: pipeline/stage-engine / Mid-retry resume
     def "a mid-retry resume continues the attempt counter and feedback"() {
         given: 'a high-limit stage that fails twice then aborts persistence on the third round'
         def stageDef = stage('build', AdvancementMode.AUTO, 9, [builtin('files_exist')])

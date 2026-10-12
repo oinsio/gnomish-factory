@@ -38,6 +38,8 @@ class GithubWorkflowFailureFindingsWireMockSpec extends Specification {
         wireMock.stop()
     }
 
+    // Scenario: verification/github-external-check / The gnome sees why CI failed
+    // Scenario: verification/verification-hardening / Gigabyte log does not exhaust the factory
     def "a failing run's findings name failed jobs/steps, carry capped log tails and the run URL"() {
         given:
         wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(200).withBody("""

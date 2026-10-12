@@ -64,6 +64,7 @@ class SandboxLifecycleLegacyScopeSpec extends SandboxLifecycleSweepSpecBase {
 
     // FR3: an object stamped before normalization is classified and acted on exactly as one
     //     carrying the current identity — the no-orphan guarantee, at the unit level.
+    // Scenario: sandbox/sandbox-lifecycle / Objects labelled before normalization stay in scope
     def "FR3: a legacy-labelled object is listed, classified and acted on"() {
         given: 'the only factory volume on the host carries the pre-normalization label'
         listings(Map.of(
@@ -81,6 +82,7 @@ class SandboxLifecycleLegacyScopeSpec extends SandboxLifecycleSweepSpecBase {
     }
 
     // FR3: the per-kind listing runs once per identity in the scope, and the results merge.
+    // Scenario: sandbox/sandbox-lifecycle / A legacy identity costs one extra listing per object kind
     def "FR3: each kind is listed once per identity and the results merge"() {
         given:
         listings(Map.of(
@@ -129,6 +131,7 @@ class SandboxLifecycleLegacyScopeSpec extends SandboxLifecycleSweepSpecBase {
 
     // NFR-R2 (design D5): fail-closed is per listing, not per scope — a legacy listing that cannot
     //     be obtained aborts the pass, because a silent empty is indistinguishable from "none".
+    // Scenario: sandbox/sandbox-lifecycle / A legacy listing failure yields no verdicts
     def "NFR-R2: a failed legacy listing aborts the pass with no verdicts"() {
         given: 'the stamped listing succeeds and finds work; the legacy listing fails'
         docker.onRun = { List<String> args ->
@@ -182,6 +185,7 @@ class SandboxLifecycleLegacyScopeSpec extends SandboxLifecycleSweepSpecBase {
     }
 
     // NFR-C1: with no legacy identity the pass costs exactly what it did before this change.
+    // Scenario: sandbox/sandbox-lifecycle / No extra cost when no legacy identity exists
     def "NFR-C1: a scope without a legacy identity issues no additional listing"() {
         given:
         listings([:])

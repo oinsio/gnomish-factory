@@ -1,0 +1,47 @@
+import com.github.oinsio.gnomish.build.SpecContractCheck
+
+plugins {
+    id 'base'
+}
+
+// The spec-contract gate (design D5 of tighten-spec-contract): one task, `checkSpecContract`,
+// that root `check`, `scripts/check-spec-contract.sh` and the fix-artifacts and archive stages
+// all run. Applied to the root project only. A convention plugin rather than a block in the root
+// build file, which `ModuleBuildFileSpec` holds under 200 lines. The exemptions are data, one file
+// per capability under `config/spec-contract-exemptions/` (task 5.2b), read by the task itself.
+//
+// A dependency of root `check` (D7, task 7.2), wired here beside the task as
+// `log-expectation-conventions` wires its gate, so the mini repository of the functional specs runs
+// the same wiring the root build does. Every module's mutation tasks must run after it: the gate
+// reads files only and fails in seconds, so a spec-contract violation stops `check` before any
+// module's PIT run is started rather than after an hour of mutation.
+//
+// The four Gradle properties are how the launchers and the later tasks steer it without editing
+// a build file:
+//   -PspecContractChanges=true   also judge the unarchived deltas (the same as `--changes`)
+//   -PspecContractChange=<name>  judge only this unarchived change's deltas (`--change=<name>`);
+//                                implies the deltas are judged, the main specs are judged as ever
+//   -PspecContractScope=a,b      judge only these spec ids (the same as `--spec=a,b`)
+//   -PspecContractSpecsDir=<dir> read this spec tree instead of `openspec/specs` (a preview)
+//
+// Implements FR6 of tighten-spec-contract.
+def specsTree = providers.gradleProperty('specContractSpecsDir')
+
+tasks.register('checkSpecContract', SpecContractCheck) {
+    group = 'verification'
+    description = 'Fails on a spec-contract violation: traceability line, notes, scenario-to-test link.'
+    changes = providers.gradleProperty('specContractChanges').map { it.toBoolean() }.orElse(false)
+    change = providers.gradleProperty('specContractChange').orElse('')
+    spec = providers.gradleProperty('specContractScope').orElse('')
+    specsDir.fileProvider(specsTree.map { file(it) }.orElse(file('openspec/specs')))
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('checkSpecContract')
+}
+
+subprojects {
+    tasks.matching { it.name.startsWith('pitest') }.configureEach {
+        mustRunAfter rootProject.tasks.named('checkSpecContract')
+    }
+}

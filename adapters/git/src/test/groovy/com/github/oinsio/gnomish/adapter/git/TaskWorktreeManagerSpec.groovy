@@ -75,6 +75,7 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         branchName == 'gnomish/PROJ-42-fix-it'
     }
 
+    // Scenario: serve/factory-serve / Aged environment removed
     def "FR8: resume without a local worktree materializes it at the standard location"() {
         given: 'a first call creates the worktree, simulating an earlier run'
         def branchName = createTaskBranch(cloneDir, 'PROJ-2')
@@ -95,6 +96,7 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         head.stdout().forParsing().trim() == branchName
     }
 
+    // Scenario: serve/factory-serve / Resume reuses a still-present worktree
     def "FR6: reuse — calling ensureWorktree twice does not error and returns the same path"() {
         given:
         def branchName = createTaskBranch(cloneDir, 'PROJ-3')
@@ -164,6 +166,7 @@ class TaskWorktreeManagerSpec extends Specification implements BareGitRepoFixtur
         path == deepClone.worktrees().resolve('PROJ-5')
     }
 
+    // Scenario: git/git-task-persistence / Same-named clones of different projects do not collide
     def "FR9, NFR-R2 of add-project-registry: same-named clones of different projects do not collide"() {
         given: '~/work/api registered to billing and ~/oss/api to gateway — two clones with one folder name'
         def work = seededClone(tempDir.resolve('work'), 'api')

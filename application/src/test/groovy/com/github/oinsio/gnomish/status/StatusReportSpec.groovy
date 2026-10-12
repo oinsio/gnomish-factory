@@ -50,6 +50,7 @@ class StatusReportSpec extends Specification {
     }
 
     // FR11: currentStage is null at pipelineEnd
+    // Scenario: observability/status-report / No current stage at the pipeline end
     def "produces a null currentStage for a task at pipelineEnd"() {
         given: 'a state advanced to the pipeline end'
         def state = TaskState.atStageStart('implement').advanceTo(new Position.PipelineEnd())
@@ -64,6 +65,7 @@ class StatusReportSpec extends Specification {
     // FR11: attemptsUsed, attempts, decisions, totals pass through faithfully from TaskState/TaskContext
     // FR12, UX1 of make-checkpoint-gate-durable: at a gate the report names the gate as its position
     //     and describes the stage that passed, its passing round last
+    // Scenario: observability/status-report / A gate renders as awaiting approval
     def "describes the stage that passed for a task held at a gate"() {
         given: 'a state at the gate of release, its passing round recorded'
         def state = new TaskState(new Position.AwaitingApproval('release'), 0, [passedRound()], ExecutorUsage.none())
@@ -103,6 +105,7 @@ class StatusReportSpec extends Specification {
     }
 
     // FR11: lastDecision resolves to the last element of context.decisions()
+    // Scenario: observability/status-report / The last escalation and the last decision
     def "resolves lastDecision to the last recorded decision"() {
         given: 'a context with two chronological decisions'
         def first = new Decision('first', null, null, null)
@@ -117,6 +120,7 @@ class StatusReportSpec extends Specification {
     }
 
     // FR11: lastDecision is null when no decisions were recorded
+    // Scenario: observability/status-report / The last escalation and the last decision
     def "resolves lastDecision to null when decisions is empty"() {
         when: 'a report is built with no decisions'
         def report = StatusReport.build(context(), TaskState.atStageStart('implement'), null, null)

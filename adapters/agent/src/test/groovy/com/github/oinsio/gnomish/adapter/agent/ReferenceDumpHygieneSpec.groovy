@@ -52,6 +52,7 @@ class ReferenceDumpHygieneSpec extends Specification {
     // sources; run explicitly via -DrescrubReferenceDumps=true. Empty path/session args make the
     // path/session replacements no-ops (scrubber guards empty needles); only JSON deny-list pruning runs.
     @Requires({ System.getProperty('rescrubReferenceDumps') })
+    // Scenario: executor/agent-executor / Deterministic zero-cost refresh
     def "re-scrubs every committed fixture in place (gated on -DrescrubReferenceDumps)"() {
         expect: 'each committed fixture is re-scrubbed line by line and written back in place'
         FIXTURE_NAMES.each { name ->

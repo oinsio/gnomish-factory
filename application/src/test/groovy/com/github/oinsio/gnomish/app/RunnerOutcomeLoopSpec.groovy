@@ -80,6 +80,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
                 persistence, VirtualTimeEquipment.on(clock))
     }
 
+    // Scenario: cli/manual-run / A completed run ends with its final status
     def "dispatch returns Completed and prints a final status summary"() {
         given:
         def outcome = new TaskOutcome.Completed(STATE)
@@ -91,6 +92,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         io.printed.any { it.contains(CONTEXT.taskId()) }
     }
 
+    // Scenario: cli/manual-run / A checkpoint ends the process with its resume command
     def "FR2: dispatch returns a Paused stop after printing the checkpoint line and the return path"() {
         given: 'a state already advanced past the passed stage'
         def outcome = new TaskOutcome.Paused(new TaskState(new Position.AtStage('deploy'), 2, [], ExecutorUsage.none()), 'build')
@@ -118,6 +120,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         ]
     }
 
+    // Scenario: cli/manual-run / An in-place stop records nothing
     def "an in-place stop prints its render without a return path"() {
         given:
         def outcome = new TaskOutcome.Paused(STATE, 'build')
@@ -148,6 +151,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         io.printed.isEmpty()
     }
 
+    // Scenario: cli/manual-run / Persistence failure is Aborted
     def "dispatch throws AbortedException carrying the full outcome after reporting it to stderr only"() {
         given: 'a burned-attempts state that never reached durable storage'
         def unpersistedState = new TaskState(new Position.AtStage('build'), 2, [], ExecutorUsage.none())
@@ -178,6 +182,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         System.err = originalErr
     }
 
+    // Scenario: cli/manual-run / Escalation ends the process with its return path on stdout
     def "FR1, FR7: run returns the escalation a real engine stopped on, without reading the console"() {
         given: 'a one-attempt stage whose single builtin check fails'
         def pipeline = new PipelineDefinition('1', new AutonomyLimits(3), [
@@ -229,6 +234,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         loop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports(new ScriptedExecutor([completed()]), [new Verdict.Pass()]), RETURN_PATH) instanceof TaskOutcome.Completed
     }
 
+    // Scenario: cli/manual-run / Persistence failure is Aborted
     def "run reports to stderr and stops after a breaking persistence fake aborts the engine"() {
         given: 'a persistence port that throws on its first call'
         def pipeline = new PipelineDefinition('1', new AutonomyLimits(3), [

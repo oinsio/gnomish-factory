@@ -91,6 +91,7 @@ class LiveBoxConcurrencySpec extends Specification {
     }
 
     // FR21, M9: a reader never waits out a materialize — the build runs with the monitor released
+    // Scenario: sandbox/execution-environment / A reader never waits on a materialize in flight
     def "current() returns promptly, and empty, while a build blocks"() {
         given:
         buildInFlight()
@@ -105,6 +106,7 @@ class LiveBoxConcurrencySpec extends Specification {
     }
 
     // FR21: a second request for the key in flight joins the one build — one materialize
+    // Scenario: sandbox/execution-environment / Two requests for one key share one build
     def "a same-key request joins the build in flight"() {
         given:
         def owner = buildInFlight()
@@ -120,6 +122,7 @@ class LiveBoxConcurrencySpec extends Specification {
     }
 
     // FR21: a failed build clears its claim and releases every waiter with its own failure
+    // Scenario: sandbox/execution-environment / A failed build releases its claim
     def "a failed build releases every waiter with the failure: #kind"() {
         given:
         buildFailure = failure

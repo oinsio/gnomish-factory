@@ -32,6 +32,8 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
     'egress denied: pastebin.example.org:443', 'pastebin.example.org:443/api', 'kind=http method=POST')
 
     // FR3, D1: the drain is what advances the guard's delta cursor past the failed round
+    // Scenario: pipeline/stage-engine / A round killed before its close reports its denials
+    // Scenario: sandbox/sandbox-egress / Denied exfiltration attempt of a hung round reaches the report
     def "a timed-out round drains its environment's denials"() {
         given:
         def source = scriptedSource([[HUNG_ROUND_DENIAL]])

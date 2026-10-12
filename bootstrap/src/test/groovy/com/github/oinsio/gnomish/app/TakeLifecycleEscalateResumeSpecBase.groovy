@@ -71,6 +71,14 @@ abstract class TakeLifecycleEscalateResumeSpecBase extends Specification impleme
         writeTwoInstanceProjectFixture()
     }
 
+    // Scenario: tracker/tracker-take / Cross-instance resume
+    // Scenario: lifecycle/claim-heartbeat / An earlier tenure's artifact is not stale to its reader
+    // Scenario: lifecycle/task-branch-contract / A tip stamped by an earlier tenure classifies by its content
+    // Scenario: lifecycle/task-branch-contract / Stale-epoch artifact is its own shape
+    // Scenario: lifecycle/task-branch-contract / Reclaim increases the epoch
+    // Scenario: lifecycle/task-branch-contract / Every commit of a tenure carries its epoch
+    // Scenario: lifecycle/task-branch-contract / A test assembly stamps like production
+    // Scenario: lifecycle/task-branch-contract / Escalated, returned, reclaimed
     def "ready -> claim -> escalate -> human reply and return -> resume by a different instance -> delivered"() {
         given: 'instance A claims the seeded Ready task via its own, independently built TakeCommand'
         def instanceA = newCommand('instance-a')

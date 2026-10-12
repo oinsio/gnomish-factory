@@ -29,6 +29,7 @@ class TaskIdSanitizerSpec extends Specification {
     }
 
     @Unroll
+    // Scenario: git/git-task-persistence / Unsafe characters sanitized deterministically
     def "FR2: branchName(#taskId) == #expected"() {
         expect:
         TaskIdSanitizer.branchName(taskId) == expected

@@ -43,6 +43,7 @@ class TrackerConfigRuleSpec extends Specification {
 
     // FR17 delta-spec "positive integer": a declared 0 or negative abort-threshold
     // is a located error naming config.yaml and the tracker.abort-threshold field
+    // Scenario: pipeline/pipeline-config / Non-positive threshold
     def "a non-positive abort-threshold #threshold is a located error naming config.yaml"() {
         expect: 'exactly one error locating config.yaml: tracker.abort-threshold'
         TrackerConfigRule.validate(new TrackerConfig('github', threshold)) == [
@@ -65,6 +66,7 @@ class TrackerConfigRuleSpec extends Specification {
 
     // FR6 delta-spec scenario "Zero limit is a load error": a declared 0 or negative wip-limit is a
     // located error naming config.yaml and the minimum of 1
+    // Scenario: pipeline/pipeline-config / Zero limit is a load error
     def "a non-positive wip-limit #limit is a located error naming the minimum of 1"() {
         expect: 'exactly one error locating config.yaml: tracker.wip-limit'
         TrackerConfigRule.validate(tracker(3, Duration.ofMinutes(5), 3, limit)) == [
@@ -101,6 +103,7 @@ class TrackerConfigRuleSpec extends Specification {
     // FR3 delta-spec scenario "Multiplier below the floor is a load error": a
     // declared multiplier < 3 is a located error naming config.yaml and the
     // minimum of 3
+    // Scenario: pipeline/pipeline-config / Multiplier below the floor is a load error
     def "a heartbeat-ttl-multiplier #multiplier below the floor is a located error naming the minimum of 3"() {
         expect: 'exactly one error locating config.yaml: tracker.heartbeat-ttl-multiplier'
         TrackerConfigRule.validate(tracker(3, Duration.ofMinutes(5), multiplier)) == [

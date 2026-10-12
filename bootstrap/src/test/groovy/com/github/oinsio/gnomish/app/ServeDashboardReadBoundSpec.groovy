@@ -33,6 +33,8 @@ class ServeDashboardReadBoundSpec extends ServeCommandSpecBase {
     private static final Duration RUN = Duration.ofHours(1)
 
     // FR10, NFR-P1 (factory-serve "Tracker reads bounded").
+    // Scenario: observability/dashboard-page / Tracker reads bounded by the board cadence
+    // Scenario: serve/factory-serve / Tracker reads bounded
     def "NFR-P1: an hour of serve --dashboard costs the tracker one listReady and one listOpen per board interval"() {
         given: "a board reader that records the virtual instant of each read"
         def clock = new VirtualClock(START)

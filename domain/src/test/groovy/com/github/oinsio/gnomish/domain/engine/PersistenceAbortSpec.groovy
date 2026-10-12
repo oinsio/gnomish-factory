@@ -20,6 +20,8 @@ class PersistenceAbortSpec extends PersistenceOrderingSpecBase {
     // FR11 (persistence failure aborts): persist throwing on the round ends the run as
     //     Aborted(failedAt, cause) with the round's key and a non-blank cause; no AttemptFinished
     //     for that round and no further executor call.
+    // Scenario: git/git-task-persistence / A persist failure aborts the task
+    // Scenario: pipeline/stage-engine / Persistence failure aborts
     def "aborts the run when persist throws on the round"() {
         given: 'a CannotVerify round whose persist throws on the first call'
         def stageDef = stage('build', 5, [builtin('files_exist')])
@@ -45,6 +47,7 @@ class PersistenceAbortSpec extends PersistenceOrderingSpecBase {
 
     // FR11 (persist failure aborts mid-retry): persist throwing on round N ends the run at that
     //     round; the prior round persisted normally and no further attempt starts.
+    // Scenario: pipeline/stage-engine / Persistence failure aborts
     def "aborts on a later round without starting the next attempt"() {
         given: 'a stage that fails once then cannot verify, with persist failing on the second call'
         def stageDef = stage('build', 5, [builtin('files_exist')])

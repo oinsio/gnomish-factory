@@ -77,7 +77,13 @@ naturally joins.
   `module-layering` delta therefore predates `split-logtext-leaves` and the
   stable text: before it is synced or archived it must be re-layered on the
   stable spec as it then stands, so that neither the leaf split nor the
-  `:gittransfer` sentences are lost to a replace-only sync.
+  `:gittransfer` sentences are lost to a replace-only sync. Resolved at the
+  re-layering on `tighten-spec-contract` (its task 6.2): the stable text
+  already carries every edit this change made to the two requirements, so the
+  change no longer carries a `module-layering` delta and no longer overlaps
+  `own-git-invocation-policy` there; the three scenarios that describe this
+  change's emitter and observer hook stay its to test (finding F29 of
+  `tighten-spec-contract`).
 - `execution-environment`: secret-free container exec argv, probes through
   the decorated seam, honest and gate-enforced sole-seam wording.
 - `subprocess-supervision`: bounded file-channel/probe/in-box-git waits,
@@ -85,7 +91,10 @@ naturally joins.
   clients.
 - `factory-logging`: the findings sanitizer barred from log-line text outside
   the findings funnel; the untrusted-log-text gate extended to the
-  local-string shape.
+  local-string shape. The stable "Untrusted text enters logs only sanitized"
+  already states both (with this change's FR16 on its traceability line), so
+  at the re-layering on `tighten-spec-contract` the change's `factory-logging`
+  delta was dropped rather than restated.
 
 ## Goals
 
@@ -336,6 +345,14 @@ only budgets this change touches); no separate cost requirement.
 - **Dependencies**: no new external dependencies; `:logtext` stays
   slf4j-api-only (JSON lines are composed by hand, no Jackson below the
   application layer).
+- **Sequencing after `tighten-spec-contract`**: this change's MODIFIED blocks
+  of `execution-environment` ("All gnome-product processes go through the
+  port", "Layered positive environment allowlist") and
+  `lifecycle/subprocess-supervision` ("Supervised subprocess invocations") are
+  layered on that change's text, which must sync first. "Layered positive
+  environment allowlist" is further layered on `fix-docker-exec-env-argv`, which
+  must also sync first; the block carries that change's argv text verbatim in
+  place of this change's own argv sentence.
 - **Sequencing**: after `harden-logging-observability` (this change's emitter
   home is that change's `:logtext` module and its Logback hardening is the
   config this change extends). References that change; duplicates nothing

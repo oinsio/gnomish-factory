@@ -112,6 +112,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
     // a mutant that drops either println still leaves the other one, so both are asserted. The
     // banner goes out through the console owner bound to System.out (not the injected dialog
     // console), so — like GitModeRunnerSpec's own banner test — this redirects System.out itself.
+    // Scenario: cli/manual-run / Sandboxed run prints the environment, not a host path
     def "run() prints both the branch and environment banner lines before driving the pipeline"() {
         given:
         def originalOut = System.out
@@ -126,6 +127,10 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
         def text = captured.toString('UTF-8')
         text.contains('container mode: branch gnomish/T-BANNER')
         text.contains('container mode: environment T-BANNER')
+
+        and: 'no host path of a working copy is printed: neither the clone nor anything under it'
+        !text.contains(tempDir.toString())
+        !text.contains('worktree')
 
         cleanup:
         System.out = originalOut

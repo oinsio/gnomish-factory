@@ -92,12 +92,14 @@ class DaemonLoopOwnerBoundarySpec extends Specification {
     ] as Set
 
     // FR16, M1, D1: a thread started outside the owner is a daemon loop nobody supervises.
+    // Scenario: serve/daemon-supervision / A hand-written daemon loop fails the build
     def "FR16, M1: only the supervised loop and the four finite-thread owners create a thread"() {
         expect: 'the scan reached every allowlisted file, each still creates a thread, and no other file does'
         detecting(THREAD_CREATION) == THREAD_OWNERS.keySet()
     }
 
     // FR16, D1: a scheduled task that throws is cancelled without a trace — the silent death.
+    // Scenario: serve/daemon-supervision / A scheduled executor fails the build
     def "FR16, D1: no scheduler matches #token in application"() {
         expect: 'the scan reached the tree'
         unreached(THREAD_OWNERS.keySet()).isEmpty()
@@ -132,6 +134,8 @@ class DaemonLoopOwnerBoundarySpec extends Specification {
 
     // Over a clean tree the scan finds only the owners, so only seeded sources tell a working
     //     detector from one a new spelling walks past.
+    // Scenario: serve/daemon-supervision / A hand-written daemon loop fails the build
+    // Scenario: serve/daemon-supervision / A scheduled executor fails the build
     def "FR16, D1: the detector finds a seeded thread or scheduler: #shape"() {
         expect:
         startsThreads(source)

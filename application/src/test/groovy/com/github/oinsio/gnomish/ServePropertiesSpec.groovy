@@ -59,6 +59,7 @@ class ServePropertiesSpec extends Specification {
     }
 
     // FR5/D3: idle-poll-interval defaults to 30s when unset
+    // Scenario: serve/factory-serve / One interval drives both idle states
     def "idle-poll-interval defaults to 30 seconds when unset"() {
         when: 'a properties record is created without an explicit idle-poll-interval'
         def properties = new ServeProperties(0, null, null, null, null, null, null, null, null, null)

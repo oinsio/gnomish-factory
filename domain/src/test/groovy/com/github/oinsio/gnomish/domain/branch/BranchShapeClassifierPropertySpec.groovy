@@ -54,6 +54,7 @@ class BranchShapeClassifierPropertySpec extends Specification {
     def classifier = new BranchShapeClassifier()
 
     // M2: every generated tip yields exactly one shape, and no input throws.
+    // Scenario: lifecycle/task-branch-contract / Every generated tip classifies to exactly one shape
     def "every generated tip classifies to exactly one shape without throwing"() {
         given:
         def tips = everyTip()

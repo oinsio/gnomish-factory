@@ -22,6 +22,7 @@ import spock.lang.Specification
 class FactoryPropertiesSpec extends Specification {
 
     // FR3: valid configuration binds — the record exposes the constructor value
+    // Scenario: lifecycle/factory-bootstrap / Valid configuration binds
     def "explicit instance-name is exposed by the record accessor"() {
         when: 'a properties record is created with an explicit instance-name'
         def properties = new FactoryProperties('factory-01', 'claude', null, null)
@@ -40,6 +41,7 @@ class FactoryPropertiesSpec extends Specification {
     }
 
     // FR3/D5: an explicitly blank instance-name is still a configuration mistake
+    // Scenario: lifecycle/factory-bootstrap / Invalid configuration fails fast
     def "instance-name of #description is rejected with the property name in the message"() {
         when: 'a properties record is created with a blank instance-name'
         new FactoryProperties(blankInstanceName, 'claude', null, null)
@@ -56,6 +58,7 @@ class FactoryPropertiesSpec extends Specification {
     }
 
     // FR11/D7: CLI binary path defaults to "claude" from PATH when unset
+    // Scenario: executor/agent-executor / The binary defaults to claude on the PATH
     def "agent-cli-binary defaults to claude when null"() {
         when: 'a properties record is created without an explicit agent-cli-binary'
         def properties = new FactoryProperties('factory-01', null, null, null)
@@ -74,6 +77,7 @@ class FactoryPropertiesSpec extends Specification {
     }
 
     // FR3: the properties type is an immutable record without setters
+    // Scenario: lifecycle/factory-bootstrap / Valid configuration binds
     def "the properties type is an immutable record without setter methods"() {
         given: 'the FactoryProperties class'
         def type = FactoryProperties

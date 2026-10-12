@@ -73,6 +73,9 @@ dependencies {
     // Shared fakes (FR7, design D8), test scope only — `FakeAgentBinary` and
     // the scenario library the round specs drive instead of a real CLI.
     testImplementation project(':test-fixtures')
+    // The executor result types (`ExecutorUsage`) the round specs assert on, such as the wall
+    // time a telemetry failure keeps (finding F86 of tighten-spec-contract).
+    testImplementation project(':gnomish-plugin-api')
     // Logback's ListAppender backs the specs asserting on log output.
     testImplementation libs.logback.classic
     // The sibling-reach gate (task 10.2, D5/M4): ArchUnit holds this module's

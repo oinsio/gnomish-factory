@@ -123,7 +123,7 @@ exec '${realGit()}' "\$@"
 // owner's classes go on the build script's own classpath straight off TestKit's plugin classpath.
 buildscript {
     dependencies {
-        classpath files(${pluginClasspath().collect { "'" + GradleRunnerSupport.quotedPath(it) + "'" }.join(', ')})
+        classpath files(${GradleRunnerSupport.pluginClasspath().collect { "'" + GradleRunnerSupport.quotedPath(it) + "'" }.join(', ')})
     }
 }
 
@@ -150,15 +150,6 @@ tasks.register('pitestAll') {
     dependsOn 'printScope'
 }
 """)
-    }
-
-    /** The build-logic classes TestKit publishes for the build under test. */
-    private static List<String> pluginClasspath() {
-        Properties metadata = new Properties()
-        MiniScopeRepository.classLoader
-                .getResourceAsStream('plugin-under-test-metadata.properties')
-                .withCloseable { metadata.load(it) }
-        metadata.getProperty('implementation-classpath').split(File.pathSeparator).toList()
     }
 
     /** The {@code git} the wrapper delegates to — resolved before the wrapper is on any PATH. */

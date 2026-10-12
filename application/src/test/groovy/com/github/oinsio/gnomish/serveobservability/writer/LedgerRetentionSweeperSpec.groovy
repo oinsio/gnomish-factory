@@ -32,6 +32,7 @@ class LedgerRetentionSweeperSpec extends Specification {
     // "today" per the sweeper's clock, fixed at UTC noon so date arithmetic is unambiguous.
     def clock = Clock.fixed(Instant.parse('2026-08-03T12:00:00Z'), ZoneOffset.UTC)
 
+    // Scenario: observability/serve-observability / Old ledgers expire
     def "deletes ledger files whose encoded date is more than the retention days in the past"() {
         given:
         def stale = dir.resolve('ledger-2026-06-01.jsonl')

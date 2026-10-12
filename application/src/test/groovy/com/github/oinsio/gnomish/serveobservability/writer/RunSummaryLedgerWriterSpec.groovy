@@ -53,6 +53,7 @@ class RunSummaryLedgerWriterSpec extends Specification implements RotatingLedger
         return new TaskState(new Position.AtStage('build'), 0, [], new ExecutorUsage(null, [], tokensByModel))
     }
 
+    // Scenario: observability/serve-observability / Drain boundary gets a summary
     def "write appends exactly one runSummary line aggregating the accumulator's totals"() {
         given:
         def startedAt = Instant.parse('2026-08-03T10:00:00Z')

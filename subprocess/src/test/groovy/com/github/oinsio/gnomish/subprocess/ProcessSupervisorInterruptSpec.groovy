@@ -23,6 +23,7 @@ class ProcessSupervisorInterruptSpec extends Specification implements FakeBinari
         Thread.interrupted()
     }
 
+    // Scenario: lifecycle/subprocess-supervision / The whole tree dies with the invocation
     def "FR6: an interrupted wait names interruption, restores the flag, and kills the tree"() {
         given: 'a long-lived child that ignores the cooperative signal, standing in for a wedged push'
         // It sleeps in a loop rather than waiting on one child, so that killing what it spawned is
@@ -53,6 +54,7 @@ class ProcessSupervisorInterruptSpec extends Specification implements FakeBinari
         killQuietly(process.toHandle())
     }
 
+    // Scenario: lifecycle/subprocess-supervision / The outcome names how the invocation ended
     def "FR6: an interrupted capture returns the named outcome with what it had captured"() {
         given: 'a binary that speaks once, leaks a holder of its stdout, and stalls'
         Path pidFile = dir.resolve('holder.pid')

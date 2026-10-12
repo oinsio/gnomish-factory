@@ -229,6 +229,7 @@ class SlotLedgerSpec extends Specification {
     //     is ever assigned to two slots at once. Many virtual threads race a small pool of task
     //     refs; SlotLedger's own guards (the semaphore bound and the assign() occupancy check)
     //     are the mechanism under test, observed here through an independent running-count tally.
+    // Scenario: serve/factory-serve / No double assignment
     def "claim attempts never exceed free slots and no task is ever double-assigned under randomized interleaving"() {
         given:
         int slots = 4

@@ -83,6 +83,8 @@ class DecisionCarryingResumeSpec extends Specification {
     //      caller freshly appended to answer an earlier DecisionNeeded — reaches the executor
     //      request VERBATIM: same list, same chronological order, byte-for-byte, nothing
     //      reordered, dropped, or mutated; and execution proceeds from the RECORDED stage.
+    // Scenario: cli/manual-run / Decision-carrying resume
+    // Scenario: pipeline/stage-engine / Decision-carrying resume
     def "the full decisions list reaches the executor request verbatim and from the recorded stage"() {
         given: 'a context whose decisions carry two prior answers plus one the caller just appended'
         def older = new Decision('use postgres', 'design', 'alice', Instant.parse('2026-07-10T00:00:00Z'))
@@ -120,6 +122,7 @@ class DecisionCarryingResumeSpec extends Specification {
     //      that WOULD escalate AttemptsExhausted on entry (attemptsUsed == limit) does exactly
     //      that; the same run supplied a caller-reset counter (below the limit) proceeds and
     //      executes instead. The engine acts on the caller's state manipulation, never its own.
+    // Scenario: pipeline/stage-engine / Decision-carrying resume
     def "a caller-reset counter is what lets the run proceed instead of escalating"() {
         given: 'a 2-attempt stage and a context carrying one decision'
         def decision = new Decision('proceed', null, null, null)

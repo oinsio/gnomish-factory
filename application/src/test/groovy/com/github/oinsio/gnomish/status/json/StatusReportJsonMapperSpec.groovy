@@ -41,6 +41,12 @@ class StatusReportJsonMapperSpec extends Specification {
     // byTool (a fabricated zero entry would be wrong; the empty-map/list case
     // for unreported usage is covered separately, e.g. "byTool maps each
     // ToolUsage's...")
+    // Scenario: observability/status-report / Canonical document
+    // Scenario: observability/status-report / The task and position sections
+    // Scenario: observability/status-report / An attempt carries its round record
+    // Scenario: observability/status-report / Totals carry the task's executor usage
+    // Scenario: observability/status-report / Contract drift caught
+    // Scenario: observability/status-report / Pre-release amendment stays v1
     def "reference anchor: serializing the deterministic sample is byte-identical to status-report-v1.reference.json"() {
         given:
         def referenceText = getClass().getResourceAsStream('/status-report-v1.reference.json').getText('UTF-8')
@@ -53,6 +59,7 @@ class StatusReportJsonMapperSpec extends Specification {
     //     lastEscalation slot can pin exactly one kind, so every kind gets a compact line
     //     of its own here — including the denials this change adds to cannotExecute, whose
     //     serialized form has no other place to be pinned byte-exactly.
+    // Scenario: observability/status-report / Every escalation kind is pinned byte-exactly
     def "reference anchor: each escalation kind is byte-identical to its line in status-report-v1.escalations.reference.jsonl"() {
         given:
         def referenceLines = corpusLines()
@@ -68,6 +75,7 @@ class StatusReportJsonMapperSpec extends Specification {
     //     EscalationReport variant fails here until it has a committed line, so a new kind
     //     cannot ship with its wire form unpinned (the rule testing.md states for wire
     //     vocabularies: iterate the variants, never a hand-listed subset).
+    // Scenario: observability/status-report / A new escalation kind cannot ship unpinned
     def "the escalation corpus pins every EscalationReport kind"() {
         given:
         def kinds = EscalationReport.permittedSubclasses.length
@@ -96,6 +104,7 @@ class StatusReportJsonMapperSpec extends Specification {
 
     // FR12 of make-checkpoint-gate-durable: a gate is its own position token, and currentStage
     //     describes the stage that passed rather than being withdrawn as at pipelineEnd
+    // Scenario: observability/status-report / A gate renders as awaiting approval
     def "position renders awaitingApproval with the gate's stage"() {
         given:
         def report = idleReport(new Position.AwaitingApproval("release"))
@@ -109,6 +118,7 @@ class StatusReportJsonMapperSpec extends Specification {
     // FR6 of make-run-headless: the live-only fields are withdrawn from contract v1 — no
     //     document carries an activity section, and currentStage carries attemptsUsed and
     //     attempts alone (the "Withdrawn live fields are absent" scenario)
+    // Scenario: observability/status-report / Withdrawn live fields are absent
     def "FR6: no document carries an activity key or a currentStage attemptLimit"() {
         given:
         def tree = StatusJson.mapper().readTree(mapper.serialize(report))
@@ -172,6 +182,7 @@ class StatusReportJsonMapperSpec extends Specification {
                 new CheckDto("builtin:files_exist", "pass", [], 3L, null, null, null)
     }
 
+    // Scenario: observability/status-report / Findings are carried in full
     def "verdict fail renders findings in full"() {
         given:
         def finding = new Finding("command exited with 1", null, "…output tail…")
@@ -203,6 +214,7 @@ class StatusReportJsonMapperSpec extends Specification {
                 new EscalationDto.AttemptsExhausted("attemptsExhausted", null, null, 3)
     }
 
+    // Scenario: observability/status-report / The last escalation and the last decision
     def "escalation decisionNeeded renders question and options"() {
         expect:
         EscalationMapper.toDto(new EscalationReport.DecisionNeeded(UntrustedText.agent("Refactor or patch?"), [
@@ -236,6 +248,7 @@ class StatusReportJsonMapperSpec extends Specification {
     // FR2, NFR-S1 of fix-denial-attribution-durability: the round that could not execute
     //     left no attempt record, so its denials ride the escalation — through the same
     //     finding shape a check's findings use, structured metadata only.
+    // Scenario: observability/status-report / The last escalation and the last decision
     def "escalation cannotExecute carries the denials of the round that could not execute"() {
         given:
         def denial = new Finding(
@@ -271,6 +284,7 @@ class StatusReportJsonMapperSpec extends Specification {
         mapper.toDto(referenceReport()).lastDecision().at() == "2026-07-16T14:21:30Z"
     }
 
+    // Scenario: observability/status-report / A usage object carries wall time, tools and tokens by model
     def "human-only run: empty tokensByModel map, empty byTool/perVote, wall time present"() {
         given:
         def report = idleReport(new Position.AtStage("implement"))
@@ -283,6 +297,7 @@ class StatusReportJsonMapperSpec extends Specification {
         dto.totals().byTool() == []
     }
 
+    // Scenario: observability/status-report / A usage object carries wall time, tools and tokens by model
     def "byTool maps each ToolUsage's name, calls and duration-in-millis"() {
         given: 'totals reporting a per-tool breakdown with two distinct tools'
         def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
@@ -310,6 +325,7 @@ class StatusReportJsonMapperSpec extends Specification {
     }
 
     // FR9, D12 of add-agent-executor: perVote maps each vote's per-model token map
+    // Scenario: observability/status-report / Totals carry the task's executor usage
     def "an attempt's judgeUsage.perVote maps each vote's tokensByModel in vote order"() {
         given: 'an attempt whose judge usage carries two cast votes'
         def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
@@ -362,6 +378,8 @@ class StatusReportJsonMapperSpec extends Specification {
     // FR4, NFR-O1, NFR-S1, M1 of fix-denial-report-attachment: the whole point of the change —
     //     a blocked exfiltration attempt during an OTHERWISE PASSING attempt is visible to the
     //     reviewer, and visible as a finding rather than as a changed outcome
+    // Scenario: observability/status-report / Passing attempt shows its denial
+    // Scenario: sandbox/sandbox-egress / Denied exfiltration attempt reaches the report on a passing attempt
     def "M1: a passing attempt shows its denial while staying passed"() {
         given: 'a round that passed every check and denied one egress attempt'
         def denial = new Finding(
@@ -385,6 +403,7 @@ class StatusReportJsonMapperSpec extends Specification {
     }
 
     // UX2: a task that never denied reports an empty array, not a fabricated or omitted one
+    // Scenario: observability/status-report / Quiet task reports no noise
     def "UX2: an attempt with no denials renders an empty array"() {
         given:
         def attempt = new AttemptRecord(

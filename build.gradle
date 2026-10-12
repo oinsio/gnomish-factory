@@ -59,6 +59,8 @@ plugins {
     id 'license-gate-conventions'
     // The release SBOM: applied here, never in `:bootstrap` (FR7, D7 of add-release-pipeline).
     id 'sbom-conventions'
+    // `checkSpecContract`, wired into `check` by the plugin (D5, D7 of tighten-spec-contract).
+    id 'spec-contract-conventions'
     // dependency-analysis is applied build-wide from settings.gradle (FR10,
     // design D8); only its configuration and `check` wiring live here.
 }

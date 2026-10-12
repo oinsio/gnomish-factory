@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.BlockingSleeper
 import com.github.oinsio.gnomish.app.lease.HeartbeatStateListener
+import com.github.oinsio.gnomish.app.lease.VirtualMonotonicTime
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -55,6 +56,29 @@ class TakeHeartbeatSpec extends Specification {
         then:
         tenure.lossFlag().is(heartbeat.flag())
         tenure.beat().is(heartbeat.instance())
+    }
+
+    // FR5, NFR-S1 of fix-reaper-idle-liveness: the standing reaper waits the beat interval of the
+    //     config it was built from — the factory clone's, loaded once (HeartbeatConstantsSourceSpec)
+    //     — so no other input can stretch or shrink the reaper's cadence
+    // Scenario: lifecycle/claim-heartbeat / The reaper ticks on the beat interval from the factory's clone
+    @Timeout(10)
+    def "the standing reaper waits the configured beat interval between its ticks"() {
+        given: 'a config whose beat interval is not the default'
+        def config = new TrackerConfig('fixture', 3, Duration.ofMinutes(7), 4, Map.of())
+        def reaperSleeper = new BlockingSleeper()
+        def heartbeat = TakeHeartbeat.forRun(Stub(Tracker), config,
+                VirtualTimeEquipment.on(new VirtualClock(), { Duration d -> } as Sleeper), reaperSleeper, new VirtualMonotonicTime())
+
+        when:
+        heartbeat.standingReaper().start()
+
+        then: 'its wait is the configured interval'
+        reaperSleeper.awaitEntered() == Duration.ofMinutes(7)
+
+        cleanup:
+        heartbeat.standingReaper().stop()
+        reaperSleeper.releaseOne()
     }
 
     // FR1, FR7 of add-serve-observability: the serve overload wires the state listener into the

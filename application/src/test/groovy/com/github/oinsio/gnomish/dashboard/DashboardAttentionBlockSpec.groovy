@@ -26,6 +26,7 @@ import spock.lang.Unroll
 class DashboardAttentionBlockSpec extends Specification {
 
     // FR4: when at least one task waits, its block is the most prominent element on the page.
+    // Scenario: observability/dashboard-page / Escalated task dominates the page
     def "a parked task makes the block the loudest element"() {
         when:
         def html = render(new BoardSectionView(boardModel(), FETCHED_AT, null))
@@ -59,6 +60,7 @@ class DashboardAttentionBlockSpec extends Specification {
 
     // FR4: the glyph distinguishes the park reason category before the row's text is read.
     @Unroll
+    // Scenario: observability/dashboard-page / Awaiting entries feed the waiting block
     def "a #reason row carries its own park-reason glyph and label"() {
         given:
         def rows = [
@@ -82,6 +84,7 @@ class DashboardAttentionBlockSpec extends Specification {
 
     // FR4, Q1: the port exposes no escalation reason text and no escalation instant today, so the
     //     row drops both rather than filling them with a placeholder.
+    // Scenario: observability/dashboard-page / Missing field shortens the row
     def "fields the tracker does not expose are dropped, never placeheld"() {
         when:
         def html = render(new BoardSectionView(boardModel(), FETCHED_AT, null))
@@ -93,6 +96,8 @@ class DashboardAttentionBlockSpec extends Specification {
     }
 
     // UX1: an empty queue is the good outcome and must read that way.
+    // Scenario: observability/dashboard-page / Empty queue keeps its block
+    // Scenario: observability/dashboard-page / Empty waiting block is calm
     def "an empty queue keeps its block and reads as a deliberate all-clear"() {
         when:
         def html = render(new BoardSectionView(emptyModel(), FETCHED_AT, null))

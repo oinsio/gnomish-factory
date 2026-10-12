@@ -19,6 +19,8 @@ import spock.lang.Unroll
 class DashboardCompactNumberSpec extends Specification {
 
     @Unroll
+    // Scenario: observability/dashboard-page / Compact count with exact hover
+    // Scenario: observability/dashboard-page / Trailing zero is dropped
     def "#value renders as #expected"() {
         expect:
         DashboardCompactNumber.format(value) == expected

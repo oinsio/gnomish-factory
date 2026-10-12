@@ -1,15 +1,12 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.branch.BranchQuarantineException;
 import com.github.oinsio.gnomish.app.lease.ClaimBeat;
-import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.TakeCrashAbort;
-import com.github.oinsio.gnomish.app.take.TakeQuarantinePark;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
@@ -38,9 +35,10 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * stay package-private: no caller outside {@code app} claims fresh itself or holds an order built
  * elsewhere.
  *
- * <p>This class owns the claim, heartbeat and crash-abort lifecycle only; WHERE the work runs —
- * fresh claim or resume, host or container — is {@link TakeWorkRouter}'s job, an instance this
- * class builds once from the slot's {@link SlotWiring} and holds (D2 of introduce-slot-wiring).
+ * <p>This class owns the claim, heartbeat and tenure lifecycle only; WHERE the work runs —
+ * fresh claim or resume, host or container — is {@link TakeWorkRouter}'s job, and where a failure
+ * of the claimed run goes is {@link ClaimedRunFailureDispatch}'s; both are instances this class
+ * builds once from the slot's {@link SlotWiring} and holds (D2 of introduce-slot-wiring).
  *
  * <p>Implements FR9, FR10, D3 of add-tracker-port. Implements FR1, M2 of add-factory-serve.
  * Implements FR4, FR5 of introduce-slot-wiring.
@@ -49,14 +47,14 @@ public final class TakeClaimAndWork {
 
     private final TaskGit git;
     private final ClaimBeat heartbeat;
-    private final TakeCrashAbort crashAbort;
+    private final ClaimedRunFailureDispatch failures;
     private final TakeWorkRouter router;
 
     TakeClaimAndWork(
             SlotWiring wiring, TakeResumeRunner resumeRunner, TakeContainerResumeRunner containerResumeRunner) {
         this.git = wiring.git();
         this.heartbeat = wiring.tenure().beat();
-        this.crashAbort = new TakeCrashAbort(wiring.abort());
+        this.failures = new ClaimedRunFailureDispatch(new TakeCrashAbort(wiring.abort()));
         this.router = new TakeWorkRouter(wiring, resumeRunner, containerResumeRunner);
     }
 
@@ -105,20 +103,11 @@ public final class TakeClaimAndWork {
      * javadoc for when to call this directly instead).
      *
      * <p>Because a claim is already held here, any uncaught {@link RuntimeException} of the work
-     * this dispatches — a fresh-claim git operation, a resume/salvage step, or a tracker write
-     * itself — is a runner crash of a claimed run, so it funnels into the same best-effort abort
-     * protocol as an engine {@code Aborted} via {@link TakeCrashAbort} (FR14 "Runner crash is an
-     * abort", D16 "an uncaught exception runs the abort protocol and exits 12 or 13, never a bare
-     * 1"). Deliberate, dedicated-exit-code control flow is exempt and rethrown unchanged: {@link
-     * UsageException} keeps exit 2 and {@link DivergedBranchException} keeps exit 5 (D16: codes
-     * shared with {@code run} keep their meaning). The latter reaches here only when the tenure was
-     * dropped mid-run — a beat reported the claim gone — so the diverged branch is no longer this
-     * instance's to repair: reporting it beats spending a crash-fuse cycle on it (FR8 of
-     * harden-task-branch-contract) — but
-     * the claim is still dropped first (see
-     * {@link #releaseBestEffort}), so a refusal never leaves the task hanging {@code Working}. A
-     * claim that never succeeds is a pre-claim failure handled one layer up (exit 1) and never
-     * reaches this method.
+     * this dispatches is a failure of a claimed run; where it goes — rethrown after a release,
+     * parked, released on an outage, or funnelled into the abort protocol — is decided by {@link
+     * ClaimedRunFailureDispatch} (FR14, D16 of add-tracker-port; FR15 of
+     * harden-task-branch-contract; FR9 of add-base-ref-resolution). A claim that never succeeds is
+     * a pre-claim failure handled one layer up (exit 1) and never reaches this method.
      *
      * <p>The instance heartbeat lifecycle is anchored here (task 6.1 of add-claim-heartbeat, FR1):
      * this is the single choke point every claim-holding path reaches — explicit {@code Ready} via
@@ -137,27 +126,16 @@ public final class TakeClaimAndWork {
      * ends a tenure early on the two events that mean the claim is genuinely no longer ours: a
      * {@code release}, and a beat reporting the claim gone.
      *
-     * <p>One classified failure leaves before the crash arm: a branch that classifies to a
-     * non-recoverable shape stops at {@link TakeQuarantinePark} instead, parking the task for a
-     * human on the first classification and spending no attempt of the unified recovery accounting
-     * — retrying a branch whose next read is identical only buries the diagnosis under K aborts
-     * (FR15 of harden-task-branch-contract).
-     *
      * <p>Implements FR9, FR10, FR14, D3, D16 of add-tracker-port; FR1 of add-claim-heartbeat; FR1
-     * of add-factory-serve; FR15 of harden-task-branch-contract.
+     * of add-factory-serve; FR15 of harden-task-branch-contract; FR9 of add-base-ref-resolution.
      */
     TakeResult dispatchAfterClaim(TakeOrder order) {
         TaskRef ref = order.ref();
         heartbeat.register(ref);
         try {
             return router.locateAndWork(order);
-        } catch (UsageException | DivergedBranchException deliberate) {
-            releaseBestEffort(order.tracker(), ref, deliberate);
-            throw deliberate;
-        } catch (BranchQuarantineException quarantine) {
-            return TakeQuarantinePark.onQuarantine(order, quarantine);
-        } catch (RuntimeException crash) {
-            return crashAbort.onCrash(order, crash);
+        } catch (RuntimeException failure) {
+            return failures.onFailure(order, failure);
         } finally {
             heartbeat.unregister(ref);
             // FR13 of harden-task-branch-contract: the tenure ends HERE, not at the terminal
@@ -166,32 +144,6 @@ public final class TakeClaimAndWork {
             // commit of every tenure without the provenance naming who wrote it. Beats and tenure
             // end together: past this point nothing more is written under this claim.
             git.epochs().ended(ref.id());
-        }
-    }
-
-    /**
-     * Drops this instance's claim on {@code ref} before a deliberate, dedicated-exit-code failure
-     * ends the invocation. The exit code is the whole point of rethrowing those two unchanged — but
-     * the process is leaving with no further tracker write for this ref, so without this the task
-     * sits {@code Working} behind a runner that is already gone until its lease expires, exactly
-     * the hanging claim the crash arm ({@link TakeCrashAbort}) exists to prevent. {@link
-     * Tracker#release} is the right verb rather than {@code recordAbort} or {@code park}: nothing
-     * infrastructural failed, so the task's logical state is left untouched. The release does not
-     * return the task to {@code Ready} by itself — the working label stays and the reaper of the
-     * {@code claim-heartbeat} capability restores the queue once the claim is stale; what the
-     * release buys is the heartbeat stopping cleanly so that staleness is reached, not a shorter
-     * wait. The fenced immediate return is {@code add-claim-return}'s verb.
-     *
-     * <p>Best-effort, in the same shape as {@link com.github.oinsio.gnomish.app.take.AbortHandler}'s
-     * tracker writes (NFR-R2): an unreachable tracker is itself a plausible reason a run is bailing
-     * out, and it must not replace the operator-facing usage error with a tracker stack trace — the
-     * failed release is logged as suppressed on the original exception instead.
-     */
-    private static void releaseBestEffort(Tracker tracker, TaskRef ref, RuntimeException deliberate) {
-        try {
-            tracker.release(ref);
-        } catch (RuntimeException unreleased) {
-            deliberate.addSuppressed(unreleased);
         }
     }
 

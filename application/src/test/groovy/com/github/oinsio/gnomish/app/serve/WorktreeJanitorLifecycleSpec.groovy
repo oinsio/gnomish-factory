@@ -215,6 +215,7 @@ class WorktreeJanitorLifecycleSpec extends Specification {
     //     is respawned after an Error"; M4): a run that throws an Error — which the janitor's old
     //     RuntimeException catch let kill its thread silently — ends the worker with one ERROR line
     //     as the janitor, and after one backoff the respawned cleaner runs again and disposes.
+    // Scenario: serve/daemon-supervision / The worktree cleaner is respawned after an Error
     def "the worktree cleaner is respawned after an Error and runs again after one backoff"() {
         given: 'an aged environment whose first disposal throws an Error'
         agedEnvironment('task-aged')

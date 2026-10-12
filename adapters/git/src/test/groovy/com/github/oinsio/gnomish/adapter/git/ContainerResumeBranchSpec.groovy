@@ -71,6 +71,7 @@ class ContainerResumeBranchSpec extends Specification implements PlumbingCommitF
         !resume().ensureLocalBranch(clone, TASK)
     }
 
+    // Scenario: observability/factory-logging / Adopting another instance's work is logged
     def "FR6: a remote-tracking-only branch becomes a local ref at the tracking tip"() {
         given: 'the branch lives on origin only'
         setOriginBranch(base)
@@ -136,6 +137,7 @@ class ContainerResumeBranchSpec extends Specification implements PlumbingCommitF
 
     // FR8: the discard's justification is the claim protocol, so the claimless container resume
     // (gnomish run --resume, which carries no tracker) stops and reports instead.
+    // Scenario: lifecycle/task-branch-contract / A diverged pair with no live claim is not discarded
     def "FR8: diverged tips with no tenure on the task stop the resume and keep the local line"() {
         given:
         def localSide = plumbCommit(clone, base, 'local line')

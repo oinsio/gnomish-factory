@@ -19,6 +19,8 @@ import spock.lang.Specification
 class SafeMdcConverterSpec extends Specification {
 
     // FR4: a hostile manifest stage name renders on one line with nothing left to execute
+    // Scenario: observability/factory-logging / A hostile stage name in the MDC is inert
+    // Scenario: observability/factory-logging / Every MDC value renders single-line and inert
     def "a hostile MDC value renders inertly and single-line: #shape"() {
         when:
         String rendered = converter('stage').convert(event(stage: hostile))

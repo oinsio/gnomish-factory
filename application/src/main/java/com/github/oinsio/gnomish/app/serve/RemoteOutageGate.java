@@ -27,8 +27,10 @@ import org.jspecify.annotations.Nullable;
  *
  * <p><b>Signal source.</b> Both slot-side signals — {@link #openOnFailure} and {@link
  * #onSuccessfulRefresh} — arrive from {@link RemoteOutageSignalingBaseRefGit}, the base-ref
- * decoration every serve slot reads through, at the instant the underlying git read returns; no
- * terminal slot result is interpreted as a signal, since it would report a fact hours old.
+ * decoration every serve slot reads through, and {@link #openOnFailure} also from {@link
+ * RemoteOutageSignalingTaskBranchGit}, the decoration of the task-branch lookup (finding F88 of
+ * tighten-spec-contract), each at the instant the underlying git read returns; no terminal slot
+ * result is interpreted as a signal, since it would report a fact hours old.
  *
  * <p><b>The rule FR14's two events keep apart.</b> A probe closes the gate but never resets the
  * interval — only the first successful refresh after a close does ({@link #onSuccessfulRefresh()})

@@ -71,6 +71,45 @@ class ResumedKilledStatusSpec extends Specification implements StdoutCaptureFixt
         report.lastEscalation != null
     }
 
+    // FR7 of make-checkpoint-gate-durable: the reset lands as one commit before any round, and the
+    //     continuation after a kill finds the park consumed, so it is granted no second reset
+    // Scenario: cli/manual-run / Resume without a decision writes the reset
+    def "FR7: resume without a decision of a #report park lands one reset commit, and a kill after it grants no second"() {
+        given: 'a task parked on the escalation, on origin'
+        def medium = new HostContinuationMedium(tempDir)
+        medium.park(TASK, definition, 'plain-round')
+        def history = new BranchHistory(medium.origin(), TASK)
+        String park = history.tip()
+        assert history.outcome(park).report().getClass().simpleName == report
+
+        when: 'run --resume without a decision dies right after its first write'
+        medium.resume(TASK, definition, 'plain-round', null, killedAfterResumedWrite(TaskGitFixture.real()))
+
+        then: 'that write is the one commit on top of the park: outcome null, attempts reset, no round yet'
+        thrown(RunKills.SimulatedKill)
+        history.after(park).size() == 1
+        history.outcome(history.tip()) == null
+        history.state(history.tip()).attemptsUsed() == 0
+        history.state(history.tip()).attempts().isEmpty()
+        String resumed = history.tip()
+
+        when: 'the operator resumes again'
+        medium.resume(TASK, definition, 'plain-round', null)
+
+        then: 'the consumed park is continued, not reset again: no second resumed commit, and the one attempt runs out'
+        history.after(resumed).every {
+            history.subject(it) != history.subject(resumed)
+        }
+        history.outcome(history.tip()) != null
+        history.state(history.tip()).attempts().size() == 1
+        history.state(history.tip()).attemptsUsed() == burned
+
+        where:
+        report | definition || burned
+        'AttemptsExhausted' | ParkPipelines.escalating() || 1
+        'CannotVerify' | ParkPipelines.cannotVerifying() || 0
+    }
+
     /** {@code git} whose lifecycle store dies right after a resumed write lands; nothing else changes. */
     private static TaskGit killedAfterResumedWrite(TaskGit git) {
         new TaskGit(new KillAfterResumeStoreGit(git.store()), git.branches(), git.worktrees(), git.midRoundPush(),

@@ -46,6 +46,8 @@ class SelfFencingBoundarySpec extends Specification {
 
     // FR13: connectivity returned and the claim is still ours — the freeze lifts and the round is
     //     written normally, so an outage that ends costs the run nothing
+    // Scenario: lifecycle/claim-heartbeat / Unconfirmed heartbeat freezes writes at the boundary
+    // Scenario: lifecycle/claim-heartbeat / Holder recovers within the grace window
     def "a re-verified claim lifts the freeze and the round is written"() {
         given:
         flag.claimUnconfirmed(REF)
@@ -64,6 +66,8 @@ class SelfFencingBoundarySpec extends Specification {
 
     // FR13: the write the fence exists to prevent — a superseded holder must not commit or push a
     //     round for a task another instance now holds
+    // Scenario: lifecycle/claim-heartbeat / Unconfirmed heartbeat freezes writes at the boundary
+    // Scenario: lifecycle/task-branch-contract / Unconfirmed heartbeat self-fences
     def "a claim that moved freezes the round: nothing is written"() {
         given:
         flag.claimUnconfirmed(REF)
@@ -97,6 +101,8 @@ class SelfFencingBoundarySpec extends Specification {
 
     // FR8: a claim already proved gone takes the lost path, and it does so without writing the
     //     round — the lost check runs after the delegate, so the freeze is what stops the write here
+    // Scenario: lifecycle/claim-heartbeat / Unconfirmed heartbeat freezes writes at the boundary
+    // Scenario: lifecycle/task-branch-contract / Unconfirmed heartbeat self-fences
     def "a claim both unconfirmed and gone writes nothing"() {
         given:
         flag.claimUnconfirmed(REF)

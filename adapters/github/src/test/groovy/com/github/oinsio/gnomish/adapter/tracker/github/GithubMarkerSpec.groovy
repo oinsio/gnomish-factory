@@ -33,6 +33,7 @@ class GithubMarkerSpec extends Specification {
                 '🤖 gnomish: claimed by gnomish-factory-x7k2q1'
     }
 
+    // Scenario: tracker/github-tracker / Markers are invisible to humans, visible to machines
     def "render output starts with the HTML comment delimiter and the human text is plain outside it"() {
         given:
         def at = Instant.parse('2026-07-20T12:00:00Z')
@@ -48,6 +49,8 @@ class GithubMarkerSpec extends Specification {
         !lines[1].contains('<!--')
     }
 
+    // Scenario: tracker/github-tracker / Markers are invisible to humans, visible to machines
+    // Scenario: tracker/github-tracker / Park and finish are structurally distinct
     def "round-trip: render then parse recovers kind, instance, at, v, and human text exactly (#kind)"() {
         given:
         def at = Instant.parse('2026-07-20T12:00:00Z')
@@ -184,12 +187,14 @@ class GithubMarkerSpec extends Specification {
         !events[0].formattedMessage.contains('\n')
     }
 
+    // Scenario: tracker/github-tracker / Progress marker is a recognized kind
     def "GithubMarkerKind.PROGRESS round-trips its wire value ('progress')"() {
         expect:
         GithubMarkerKind.PROGRESS.wireValue() == 'progress'
         GithubMarkerKind.fromWireValue('progress') == GithubMarkerKind.PROGRESS
     }
 
+    // Scenario: tracker/github-tracker / The retired report kind is not recognized
     def "GithubMarkerKind.fromWireValue rejects the retired 'report' wire value"() {
         when:
         GithubMarkerKind.fromWireValue('report')

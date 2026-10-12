@@ -93,6 +93,7 @@ class TakeOutcomeDispatchSpec extends Specification {
         ] == [0, 0, 0, 0]
     }
 
+    // Scenario: serve/factory-serve / Escalation parks without a prompt
     def "an Escalated outcome is parked for escalation through the park transition"() {
         when:
         def result = dispatch(new TaskOutcome.Escalated(STATE, new EscalationReport.AttemptsExhausted(3)))

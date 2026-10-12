@@ -45,6 +45,7 @@ class ToolTraceBuilderSpec extends Specification {
     }
 
     // FR6, D3: subagent-round fixture — only the top-level Task call enters the trace, nested Grep excluded
+    // Scenario: executor/agent-executor / Subagent internals excluded
     def "excludes nested subagent tool calls, keeping only the top-level Task call"() {
         given: 'the subagent-round fixture parsed into timestamped events'
         def events = parser.parse(FakeAgentScenarioReader.readerOf('subagent-round'))
@@ -59,6 +60,7 @@ class ToolTraceBuilderSpec extends Specification {
     }
 
     // FR6, D3: premature-death fixture — an orphaned top-level tool_use gets duration to roundEnd, no exception
+    // Scenario: executor/agent-executor / Orphaned call gets a real duration
     def "computes an orphaned top-level tool call's duration to the supplied roundEnd"() {
         given: 'the premature-death fixture parsed into timestamped events (no tool_result ever arrives)'
         def events = parser.parse(FakeAgentScenarioReader.readerOf('premature-death'))

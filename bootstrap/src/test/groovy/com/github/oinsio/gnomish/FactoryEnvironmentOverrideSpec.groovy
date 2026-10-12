@@ -38,6 +38,7 @@ class FactoryEnvironmentOverrideSpec extends Specification {
     }
 
     // FR7: "Environment variable is refused with the equivalent line"
+    // Scenario: lifecycle/factory-bootstrap / Environment override
     def "FACTORY_INSTANCE_NAME stops startup and names the equivalent file line"() {
         given:
         def environment = new StandardEnvironment()

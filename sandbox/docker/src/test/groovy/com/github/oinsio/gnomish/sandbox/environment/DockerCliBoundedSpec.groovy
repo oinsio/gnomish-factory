@@ -50,6 +50,7 @@ class DockerCliBoundedSpec extends Specification {
     }
 
     // FR10, NFR-R1, M4: the wedged registry case — the command ends on its deadline, not on docker
+    // Scenario: sandbox/execution-environment / Expiry is a timed-out outcome, not an exit code
     def "FR10, M4: a management command that never answers ends on its deadline with a named timeout"() {
         given: 'a docker that accepts the command and then stalls far past any deadline'
         def cli = cliBackedBy('docker-stall', Duration.ofSeconds(2))

@@ -55,6 +55,7 @@ class DenialSurfaceSpec extends Specification {
         }
     }
 
+    // Scenario: sandbox/execution-environment / Guard-less environment reports no denials
     def "FR3: an environment with no denial source reads nothing and offers no position"() {
         given:
         def environment = new GuardlessEnvironment()
@@ -68,6 +69,7 @@ class DenialSurfaceSpec extends Specification {
         read.positionAfter().isEmpty()
     }
 
+    // Scenario: sandbox/execution-environment / Guard-less environment has no cursor
     def "FR3: its current position is empty, and asking does not consume anything"() {
         given:
         def environment = new GuardlessEnvironment()
@@ -77,6 +79,7 @@ class DenialSurfaceSpec extends Specification {
         environment.readDenials().denials().isEmpty()
     }
 
+    // Scenario: sandbox/execution-environment / Guard-less environment has no cursor
     def "FR7: a restoration offered to it is ignored rather than refused"() {
         given:
         def environment = new GuardlessEnvironment()

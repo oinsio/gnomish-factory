@@ -108,6 +108,7 @@ class RunParkKillPointSpec extends Specification implements BareGitRepoFixture, 
         'paused' | ParkPipelines.pausing() | TaskOutcomeDto.Paused | 'AwaitingApproval'
     }
 
+    // Scenario: cli/manual-run / Kill between the round commit and the park record of an exhausted stage
     def "NFR-R3: an AttemptsExhausted escalation killed before its outcome commit freezes the interrupted-run shape; the resume reproduces the park"() {
         given:
         def order = new RunOrder(cloneDir, null, ParkPipelines.escalating(), false)

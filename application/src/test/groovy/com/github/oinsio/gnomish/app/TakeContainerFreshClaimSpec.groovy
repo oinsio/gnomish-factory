@@ -153,6 +153,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
     // FR13 of add-base-ref-resolution: mirrors TakeFreshClaimSpec's equivalent row — once the base
     // is resolved and refreshed, an invalid law at that base parks the task instead of creating
     // anything, exercised here through TakeContainerFreshClaim's own claimAt call site.
+    // Scenario: tracker/tracker-take / A task-tier law load error parks the task
     def "parks the task when the resolved base's own law fails to load, creating nothing"() {
         given:
         def tracker = Mock(Tracker)

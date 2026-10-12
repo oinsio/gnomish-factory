@@ -60,6 +60,7 @@ class LauncherScriptSpec extends Specification {
     }
 
     // FR5, UX2: "Old Java is refused plainly"
+    // Scenario: release/release-distribution / Old Java is refused plainly
     def "UX2: Java #feature on PATH is refused, naming the binary found and its version"() {
         given:
         def java = fakeJava('path-java', feature, version)
@@ -83,6 +84,7 @@ class LauncherScriptSpec extends Specification {
     }
 
     // FR5: "Newer Java is accepted" — the floor itself and a version above it
+    // Scenario: release/release-distribution / Newer Java is accepted
     def "FR5: Java #feature is accepted and the factory is started"() {
         given:
         def java = fakeJava('path-java', feature, "${feature}.0.1")
@@ -103,6 +105,7 @@ class LauncherScriptSpec extends Specification {
     }
 
     // FR5: "Arguments pass through unchanged" — no factory option injected, nothing re-split
+    // Scenario: release/release-distribution / Arguments pass through unchanged
     def "FR5: every argument reaches the factory unchanged and in order, and no option is added"() {
         given:
         def java = fakeJava('path-java', '25', '25.0.1')
@@ -127,6 +130,7 @@ class LauncherScriptSpec extends Specification {
     }
 
     // FR5: GNOMISH_JAVA_OPTS reaches the JVM, split on whitespace, before -jar and never globbed
+    // Scenario: release/release-distribution / The launcher adds GNOMISH_JAVA_OPTS
     def "FR5: GNOMISH_JAVA_OPTS are JVM options placed before -jar"() {
         given:
         def java = fakeJava('path-java', '25', '25.0.1')
@@ -147,6 +151,7 @@ class LauncherScriptSpec extends Specification {
     }
 
     // FR5: JAVA_HOME wins over PATH
+    // Scenario: release/release-distribution / The launcher prefers JAVA_HOME to PATH
     def "FR5: JAVA_HOME is preferred to the java on PATH"() {
         given: 'an old java on PATH and a current one under JAVA_HOME'
         def onPath = fakeJava('path-java', '21', '21.0.4')

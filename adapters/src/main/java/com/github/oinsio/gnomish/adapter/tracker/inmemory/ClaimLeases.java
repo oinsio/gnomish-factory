@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import java.time.Instant;
+import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -22,7 +23,11 @@ import org.jspecify.annotations.Nullable;
  * marker, state, and correspondence thread exactly as the surrounding tracker
  * method would inline (design D15, class javadoc of {@link InMemoryTracker}).
  *
- * <p>Implements FR4, FR5, FR8 of add-claim-heartbeat.
+ * <p>Kept in sync with {@code GithubIndexRepair#observedShape} in {@code :adapters:github} (no shared
+ * classpath, so the link is by name): both repair markers name the observed shape in the same phrase —
+ * {@code claim pending} with no boundary, {@code index lagging behind the <boundary> marker} otherwise.
+ *
+ * <p>Implements FR4, FR5, FR8 of add-claim-heartbeat; FR12 of harden-task-branch-contract.
  */
 final class ClaimLeases {
 
@@ -100,12 +105,23 @@ final class ClaimLeases {
         if (!current.equals(observed)) {
             return new RepairIndexResult.Unchanged(current);
         }
-        task.note(CorrespondenceEntry.Kind.INDEX_REPAIR, "index repaired from " + current);
+        task.note(CorrespondenceEntry.Kind.INDEX_REPAIR, "index repaired — observed " + observedShape(observed));
         // No claim is cleared here: the two repairable shapes are a working task with no footprint
         // and one whose newest boundary already voided its claim, so a live marker cannot survive
         // into a repair — clearing one would be a call that never fires.
         task.state(impliedState(task, observed.latestBoundary()));
         return new RepairIndexResult.Repaired(TrackedTaskFacts.facts(task));
+    }
+
+    /**
+     * The shape the repair observed, in the GitHub adapter's phrase: no boundary after the newest
+     * claim is a pending claim, a boundary is an index lagging behind that marker.
+     */
+    private static String observedShape(TrackerFacts observed) {
+        BoundaryKind boundary = observed.latestBoundary();
+        return boundary == null
+                ? "claim pending"
+                : "index lagging behind the " + boundary.name().toLowerCase(Locale.ROOT) + " marker";
     }
 
     /**

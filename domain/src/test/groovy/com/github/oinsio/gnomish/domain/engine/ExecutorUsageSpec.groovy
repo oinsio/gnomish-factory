@@ -15,6 +15,7 @@ import spock.lang.Specification
 class ExecutorUsageSpec extends Specification {
 
     // FR5, D4: executor usage exposes wallTime, tools and tokensByModel as constructed
+    // Scenario: pipeline/stage-engine / Round metrics carry wall time, tool aggregates and per-model tokens
     def "exposes wallTime, tools and tokensByModel as constructed"() {
         given: 'per-tool aggregates and a per-model token map'
         def tools = [
@@ -174,6 +175,7 @@ class ExecutorUsageSpec extends Specification {
     }
 
     // FR5, NFR-C1, D4: plus unions token map keys and sums the four counts per shared key
+    // Scenario: pipeline/stage-engine / Per-model grain survives merging
     def "plus unions tokensByModel keys and sums per-model counts"() {
         given: 'two usages reporting overlapping and distinct model ids'
         def a = new ExecutorUsage(null, [], [
@@ -197,6 +199,7 @@ class ExecutorUsageSpec extends Specification {
     }
 
     // FR5, NFR-C1, D4: an empty operand map leaves the other operand's entries untouched
+    // Scenario: pipeline/stage-engine / Unreported tokens stay distinguishable from zero
     def "plus leaves tokensByModel untouched when the other operand reports nothing"() {
         given: 'a usage with reported tokens and one that reports none'
         def reported = new ExecutorUsage(null, [], ['model-a': new TokenUsage(10L, 2L, 0L, 0L)])
@@ -265,6 +268,7 @@ class ExecutorUsageSpec extends Specification {
 
     // NFR-C1: a display-total helper derives the total across all models rather
     // than storing a redundant field (design D4)
+    // Scenario: pipeline/stage-engine / No display total is stored
     def "totalTokens derives the field-wise sum across all reported models"() {
         given: 'a usage reporting two models'
         def usage = new ExecutorUsage(null, [], [

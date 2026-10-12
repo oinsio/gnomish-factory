@@ -63,6 +63,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
         guarded.delegate().is(delegate)
     }
 
+    // Scenario: verification/verification-hardening / Rewritten workflow is caught before the adapter is invoked
     def "a rewritten adapter-contributed definition file fails before the adapter is invoked"() {
         given: 'the "Rewritten workflow is caught before the adapter is invoked" scenario'
         def attempt = attemptCommitWith([
@@ -100,6 +101,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
         logs.detach()
     }
 
+    // Scenario: pipeline/pipeline-config / Pin paths are addressed from the repository root
     def "a modified law-declared pin path fails even when the adapter file is untouched"() {
         given:
         def attempt = attemptCommitWith([
@@ -163,6 +165,8 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
         delegate.pollCount == 1
     }
 
+    // Scenario: verification/verification-hardening / Interactive client with nothing declared passes the pin
+    // Scenario: verification/http-check-provider / Only law-declared paths pin an http check
     def "an empty union passes vacuously without touching git"() {
         given: 'the "Interactive client with nothing declared passes the pin" scenario'
         def workspace = AttemptCommitWorkspaces.empty()
@@ -175,6 +179,8 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
         delegate.pollCount == 1
     }
 
+    // Scenario: verification/github-external-check / Early substitution is caught at the point of use
+    // Scenario: verification/verification-hardening / Early substitution is caught at the point of use
     def "early substitution is caught at the point of use against the base branch"() {
         given: 'a definition rewritten at an earlier stage: several commits separate it from the tip'
         def stage1 = attemptCommitWith([
@@ -232,6 +238,8 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
     // M5, D12 of add-base-ref-resolution: the guard compares against the typed commit it was
     //     handed and re-resolves nothing — so the base branch moving on after the law was bound
     //     changes no verdict, and law and pin stay one SHA.
+    // Scenario: git/git-task-persistence / The law and the pin guard bind from the pinned SHA
+    // Scenario: git/base-ref-resolution / Pin guard and law share one commit
     def "the guard compares against the bound commit, not the base branch's later tip"() {
         given: 'an attempt cut from the bound commit that leaves every pinned file untouched'
         def attempt = attemptCommitWith([
@@ -255,6 +263,7 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
         delegate.pollCount == 1
     }
 
+    // Scenario: verification/check-provider-model / A discovered provider's pin contribution reaches the guard
     def "law-declared and adapter-contributed paths are one union — the same path is compared once"() {
         given: 'the workflow file is both law-declared and adapter-contributed, and differs'
         def attempt = attemptCommitWith([

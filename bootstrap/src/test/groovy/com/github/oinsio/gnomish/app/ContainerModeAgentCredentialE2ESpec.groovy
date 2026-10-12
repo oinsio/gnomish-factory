@@ -102,6 +102,8 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
 
     // FR5, NFR-S3: spec scenarios "Subscription token reaches the box…" and "Agent credential
     //     stays out of command checks", for both names at once.
+    // Scenario: executor/agent-executor / Subscription token reaches the box with no passthrough
+    // Scenario: executor/agent-executor / Agent credential stays out of command checks
     def "FR5, NFR-S3: agent credentials reach the round in the box without passthrough and stay out of command checks"() {
         given: 'placeholder credentials in the factory environment (set by the test task)'
         def factoryValues = CREDENTIAL_NAMES.collectEntries {

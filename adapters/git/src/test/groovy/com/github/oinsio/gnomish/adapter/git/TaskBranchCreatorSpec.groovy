@@ -56,6 +56,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
 
     // FR15, NFR-S1: a local branch and a local tag both carrying the base's name are exactly what
     //     git's bare-name lookup would answer with. The commit input cannot see either of them.
+    // Scenario: git/git-task-persistence / A stale local branch does not redirect the base
     def "FR15: a local branch and a local tag under the base's name cannot redirect the start point"() {
         given:
         def repo = initWorkingRepo(tempDir)
@@ -72,6 +73,7 @@ class TaskBranchCreatorSpec extends Specification implements BareGitRepoFixture 
         runner.run(repo, 'rev-parse', 'gnomish/PROJ-6').stdout().forParsing().trim() == intended
     }
 
+    // Scenario: git/git-task-persistence / Unsafe characters sanitized deterministically
     def "FR2: branch name is sanitized via TaskIdSanitizer"() {
         given:
         def repo = initWorkingRepo(tempDir)

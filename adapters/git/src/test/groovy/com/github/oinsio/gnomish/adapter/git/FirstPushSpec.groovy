@@ -91,6 +91,8 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         noExceptionThrown()
     }
 
+    // Scenario: git/git-task-persistence / First push of a new branch is load-bearing
+    // Scenario: build/quality-gates / A first-push spec runs no process
     def "FR7: a push origin never received aborts after the budget, so no round starts on it"() {
         given: 'a git whose pushes fail and whose origin demonstrably lacks the branch'
         def git = pushAbsent()
@@ -187,6 +189,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         logs.detach()
     }
 
+    // Scenario: git/git-task-persistence / A timed-out first push that landed counts as success
     def "FR7: a push whose outcome was never established but which landed is success, not a re-push"() {
         given: 'a git whose push reports failure while origin already carries the local tip'
         def git = pushLanded('gnomish/PROJ-7')

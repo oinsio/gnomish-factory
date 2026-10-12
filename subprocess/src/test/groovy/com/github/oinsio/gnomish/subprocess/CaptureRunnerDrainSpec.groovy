@@ -23,6 +23,8 @@ class CaptureRunnerDrainSpec extends Specification implements FakeBinaries {
     @TempDir
     Path dir
 
+    // Scenario: git/git-task-persistence / A full output pipe does not hide the deadline
+    // Scenario: lifecycle/subprocess-supervision / Full pipes never deadlock the wait
     def "FR2, design D2: more than a pipe buffer on both streams completes with both captured in full"() {
         given: 'a binary writing ~150 KiB to each stream — well past any OS pipe buffer'
         Path binary = fakeBinary('noisy')
@@ -41,6 +43,9 @@ class CaptureRunnerDrainSpec extends Specification implements FakeBinaries {
         captured.stderr().length() == LINES * (LINE.length() + 1)
     }
 
+    // Scenario: git/git-task-persistence / A full output pipe does not hide the deadline
+    // Scenario: lifecycle/subprocess-supervision / An inherited pipe cannot block the return
+    // Scenario: lifecycle/subprocess-supervision / A stalled child cannot outlive its deadline
     def "design D2: on the kill path a straggler holding the pipe does not block the return"() {
         given: 'a binary that leaks a holder of its stdout out of its own process tree before stalling'
         Path pidFile = dir.resolve('holder.pid')

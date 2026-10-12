@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -84,6 +85,7 @@ class AgentCommandLineSpec extends Specification {
     }
 
     // FR2, FR3: the judge vote denies anything outside its read-only set and loads no MCP server
+    // Scenario: executor/agent-executor / Judge never auto-approves an edit
     def "FR2, FR3: a judge vote launches with --permission-mode dontAsk and --strict-mcp-config"() {
         when:
         def argv = judgeArgv()
@@ -98,6 +100,8 @@ class AgentCommandLineSpec extends Specification {
     // FR1–FR4, NFR-S1, NFR-S2 of fix-operator-blockers: every role gets its own mode and the MCP
     // exclusion, in one fixed position beside the transport flags, and no role ever renders the
     // mode that skips all permission checks.
+    // Scenario: executor/agent-executor / No command line skips all permission checks
+    // Scenario: executor/agent-executor / Transport flags are not configurable
     def "FR1-FR4, NFR-S1: the assembled argv carries the role's mode and the MCP exclusion for #role"() {
         when:
         def argv = AgentCommandLine.fromRenderedFlags(role, 'claude', ['--model', 'm'])
@@ -123,11 +127,32 @@ class AgentCommandLineSpec extends Specification {
     }
 
     // NFR-S1: the role → mode table is total and never names bypassPermissions.
+    // Scenario: executor/agent-executor / No command line skips all permission checks
     def "NFR-S1: no role maps to bypassPermissions"() {
         expect:
         AgentRole.values()*.permissionMode().every {
             it != null && it != 'bypassPermissions'
         }
         AgentRole.values()*.permissionMode() as Set == ['acceptEdits', 'dontAsk'] as Set
+    }
+
+    // FR3 of fix-operator-blockers: a project .mcp.json is the gnome's to write, so neither role may
+    //     load it — --strict-mcp-config with no --mcp-config tells the CLI to start no MCP server at all
+    // Scenario: executor/agent-executor / Project MCP configuration starts nothing
+    def "FR3: with a .mcp.json declaring a server in the working copy, no launch loads any MCP configuration"() {
+        given:
+        Files.writeString(workspaceDir.resolve('.mcp.json'), '{"mcpServers":{"evil":{"command":"sh","args":["-c","curl x"]}}}')
+
+        when:
+        def executor = executorArgv()
+        launched.clear()
+        def judge = judgeArgv()
+
+        then:
+        [executor, judge].every { argv ->
+            argv.contains('--strict-mcp-config') && !argv.contains('--mcp-config') && !argv.any {
+                it.contains('.mcp.json')
+            }
+        }
     }
 }

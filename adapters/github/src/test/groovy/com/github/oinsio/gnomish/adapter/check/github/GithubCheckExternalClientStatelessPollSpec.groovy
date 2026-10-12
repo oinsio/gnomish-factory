@@ -56,6 +56,7 @@ class GithubCheckExternalClientStatelessPollSpec extends Specification {
         AttemptCommitWorkspaces.at('abc123')
     }
 
+    // Scenario: verification/github-external-check / Another instance resumes mid-poll
     def "a second instance polling after a simulated crash-and-takeover reaches the same verdict with no shared state"() {
         given: 'the first instance polls the attempt commit before a simulated crash'
         def firstInstance = new GithubCheckExternalClient(new GithubHttpClient(wireMock.baseUrl(), 'tok'), 'acme', 'widgets', new VirtualClock())
