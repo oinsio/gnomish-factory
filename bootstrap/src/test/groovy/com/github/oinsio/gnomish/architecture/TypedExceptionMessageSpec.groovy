@@ -265,7 +265,7 @@ class TypedExceptionMessageSpec extends Specification {
                 'GitVersionRefusedException',
                 { String raw -> UntrustedText.subprocess(raw) },
                 { UntrustedText carried ->
-                    new GitVersionRefusedException('2.45.1', carried, 'why')
+                    new GitVersionRefusedException('2.51.0', carried, 'why')
                 }
             ],
             [
@@ -274,7 +274,7 @@ class TypedExceptionMessageSpec extends Specification {
                 'BoxGitVersionRefusedException',
                 { String raw -> UntrustedText.container(raw) },
                 { UntrustedText carried ->
-                    new BoxGitVersionRefusedException('img:1', '2.45.1', carried, 'why')
+                    new BoxGitVersionRefusedException('img:1', '2.51.0', carried, 'why')
                 }
             ],
             [

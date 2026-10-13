@@ -51,8 +51,10 @@ final class AdversarialGitConfig {
 
     /**
      * The ref backend every repository the test build creates is initialised on, handed to git
-     * through {@code GIT_DEFAULT_REF_FORMAT} (git 2.45, the project's floor — the config key
-     * {@code init.defaultRefFormat} would need 2.48, which no CI runner promises): the factory
+     * through {@code GIT_DEFAULT_REF_FORMAT} (since git 2.45; the config key
+     * {@code init.defaultRefFormat}, since 2.48, would do as well — both sit below the project's
+     * floor of 2.51 — but the variable keeps the backend in the environment this class sets,
+     * out of the adversarial file): the factory
      * clone must be on reftable and the factory refuses any other (design D13 of
      * tighten-spec-contract, as amended 2026-10-13), so every spec runs on the store production
      * runs on. Not adversarial; it rides here because this is where the test build's git

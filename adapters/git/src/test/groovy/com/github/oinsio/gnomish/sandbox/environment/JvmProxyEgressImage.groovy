@@ -21,7 +21,7 @@ package com.github.oinsio.gnomish.sandbox.environment
  *
  * <p>The base is {@code eclipse-temurin:21-jdk-resolute} (a real JDK, ~450 MB) —
  * the same base the reference recipe defaults to, on Ubuntu 26.04 whose archive git (2.53) meets
- * the box's git floor: the seed clone runs the image's git against the reftable factory clone
+ * the box's git floor (2.51.0, the factory's own): the seed clone runs the image's git against the reftable factory clone
  * (design D13 of tighten-spec-contract, as amended 2026-10-13), which noble's 2.43 cannot open; the image builds on demand
  * and the spec is Docker-gated, so an offline machine skips it cleanly.
  */
@@ -44,7 +44,7 @@ class JvmProxyEgressImage {
             # NO HTTP_PROXY env var: a routed request proves the system property.
             ENV JAVA_TOOL_OPTIONS="-Dhttp.proxyHost=${alias} -Dhttp.proxyPort=${port} -Dhttps.proxyHost=${alias} -Dhttps.proxyPort=${port}"
             # git is the container adapter's image contract — the seed clone runs it in-box;
-            # the distro's git meets the box floor (2.45.1).
+            # the distro's git meets the box floor (2.51.0).
             RUN apt-get update \\
              && apt-get install -y --no-install-recommends git \\
              && rm -rf /var/lib/apt/lists/*

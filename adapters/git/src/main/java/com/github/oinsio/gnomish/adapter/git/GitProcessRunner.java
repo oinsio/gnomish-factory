@@ -183,7 +183,14 @@ public final class GitProcessRunner implements GitRunner {
      * Runs one ref transaction — {@code git update-ref --stdin} with the transaction's script on
      * standard input, under the same environment as every other local command and unbounded like
      * them (design D13 of tighten-spec-contract, amended 2026-10-13). Not a repo-level mutation in
-     * this runner's sense: like a single {@code update-ref}, it takes git's own per-ref locks.
+     * this runner's sense, and deliberately not serialized under {@code CloneMutationLock}: the
+     * factory clone is on the reftable backend, which takes one lock for the whole ref store
+     * ({@code tables.list.lock}), so a transaction contends with every other ref writer of the
+     * clone — another slot's fetch or push, a gnome's {@code git commit} in a sibling worktree.
+     * Concurrency with those writers rests on git's own retry of that lock
+     * ({@code reftable.lockTimeout}, since git 2.47, below {@link
+     * com.github.oinsio.gnomish.gittransfer.GitVersion#FLOOR}); a JVM lock could not cover the
+     * gnome's commits, and would hold a closing commit for a whole fetch.
      *
      * @param cwd the working directory: the clone, or a worktree of it
      * @param transaction the owner's value

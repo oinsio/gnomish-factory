@@ -163,7 +163,11 @@ autonomy:
 
     // FR14: the 'usage' subcommand routes to UsageCommand, not the run flow
     def "run() dispatches a 'usage' subcommand to UsageCommand"() {
+        // A real clone: since task 9.13g of tighten-spec-contract the touchpoint fetch requires the
+        // clone's ref backend before it writes, so an uninitialized directory is refused as not a
+        // reftable clone — which would make this routing spec red for the wrong reason.
         given:
+        makeProjectRootAGitClone(projectRoot)
         def runner = newRunner()
         def args = new DefaultApplicationArguments('usage', "--dir=${projectRoot}".toString(), 'task-1')
 
@@ -178,7 +182,11 @@ autonomy:
     // failure — run() rethrows TaskNotFoundException silently: no extra System.err line beyond the
     // command's own calm message on System.out, no WARN log, no stack trace.
     def "run() rethrows TaskNotFoundException from a subcommand without any extra stderr output"() {
+        // A real clone: since task 9.13g of tighten-spec-contract the touchpoint fetch requires the
+        // clone's ref backend before it writes, so an uninitialized directory is refused as not a
+        // reftable clone — which would make this routing spec red for the wrong reason.
         given:
+        makeProjectRootAGitClone(projectRoot)
         def runner = newRunner()
         def args = new DefaultApplicationArguments('usage', "--dir=${projectRoot}".toString(), 'task-1')
         def originalErr = System.err

@@ -622,7 +622,7 @@ finding names.
       tracking ref or register is written), the `ScriptedGit` specs of the touchpoint over
       `ScriptedGit.reftableClone()`, `GitModeRunnerFreshRunSpec` and `TakeFreshClaimSpec` (order
       harden → prune) green; scoped PIT 100% (`:adapters:git` 7/7, `:application` 23/23).
-- [ ] 9.13h F122, F135 — the git floor 2.51 and the atomic touchpoint fetch (D13 as amended
+- [x] 9.13h F122, F135 — the git floor 2.51 and the atomic touchpoint fetch (D13 as amended
       2026-10-13, check-issue on the 9.13f implementation): `GitVersion.FLOOR` 2.51.0 and
       `FLOOR_REASON` naming the local-clone protections, reftable lock retry (2.47) and batched
       fetch ref updates (2.51); `BoxGitFloor.REASON` follows; `GitTransfer.fetch` for `Origin`

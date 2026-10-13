@@ -16,7 +16,8 @@ import org.slf4j.LoggerFactory;
  * as amended 2026-10-13). The seed clone runs in a one-shot helper on the sandbox image, with the
  * image's own git, and reads the factory clone — which is on the reftable ref backend, so a git
  * older than 2.45 cannot even open it, and which the clone reads over the local transport whose
- * hook protections {@link GitVersion#FLOOR} stands for. An image below the floor is refused here,
+ * hook protections {@link GitVersion#FLOOR} stands for. The box shares the factory's one floor
+ * (2.51) rather than keeping a lower one of its own: one owner, one number. An image below the floor is refused here,
  * before any network, volume or container exists, with a reason naming the image and the remedy,
  * instead of failing later as an opaque seed-clone error.
  *
@@ -38,7 +39,7 @@ final class BoxGitFloor {
 
     /** Why the box needs the floor: the factory clone's ref store, then the host floor's reason. */
     static final String REASON =
-            "it opens the factory clone's reftable ref store (git 2.45) and " + GitVersion.FLOOR_REASON;
+            "it opens the factory clone's reftable ref store (readable since git 2.45), and " + GitVersion.FLOOR_REASON;
 
     private final DockerCli docker;
     private final String key;

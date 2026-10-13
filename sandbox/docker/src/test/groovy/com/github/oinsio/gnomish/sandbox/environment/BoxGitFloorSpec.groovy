@@ -64,8 +64,8 @@ class BoxGitFloorSpec extends Specification {
 
         where:
         line << [
-            'git version 2.45.1',
-            'git version 2.47.3'
+            'git version 2.51.0',
+            'git version 2.53.0'
         ]
     }
 
@@ -95,7 +95,8 @@ class BoxGitFloorSpec extends Specification {
         where:
         line << [
             'git version 2.43.0',
-            'git version 2.45.0',
+            'git version 2.45.1',
+            'git version 2.50.1',
             'not a version line'
         ]
     }

@@ -2,10 +2,10 @@
 # Implements UX4, FR20 of add-sandbox-core (design D7).
 #
 # The factory's image contract (what the container adapter and self-check assume):
-#   - git 2.45.1 or newer and curl on PATH: the seed clone runs the image's git
-#     against the factory clone, which is on the reftable ref backend (git 2.45),
-#     and the factory refuses an older git before seeding; curl runs the egress
-#     self-check probes (FR8)
+#   - git 2.51.0 or newer and curl on PATH: the seed clone runs the image's git
+#     against the factory clone, which is on the reftable ref backend, under the
+#     factory's own git floor (2.51.0), and the factory refuses an older git
+#     before seeding; curl runs the egress self-check probes (FR8)
 #   - a non-root user with uid 1000 named `gnome` owning /gnomish/** — every
 #     exec, including the seed clone, runs as this user, never root
 #   - injection-persistence surfaces (agent-CLI policy, proxy/CA/build configs)
@@ -14,7 +14,8 @@
 # Registry endpoints and the proxy address are build parameters, never
 # hardcoded (D7): a future artifact depot or a private mirror is a --build-arg,
 # not an image edit.
-# Ubuntu 26.04: its archive git (2.53) meets the floor; noble's 2.43 does not.
+# Ubuntu 26.04: its archive git (2.53) meets the floor; noble's 2.43 does not
+# (a noble-based image needs the git-core PPA).
 ARG BASE_IMAGE=eclipse-temurin:21-jdk-resolute
 FROM ${BASE_IMAGE}
 
@@ -26,7 +27,7 @@ ARG AGENT_CLI_PACKAGE=@anthropic-ai/claude-code
 ARG PROXY_HOST=gnomish-guard
 ARG PROXY_PORT=8080
 
-# Toolchain: git (>= 2.45.1, from the base's own archive) + curl are the image
+# Toolchain: git (>= 2.51.0, from the base's own archive) + curl are the image
 # contract; node runs the agent CLI.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git curl ca-certificates nodejs npm \

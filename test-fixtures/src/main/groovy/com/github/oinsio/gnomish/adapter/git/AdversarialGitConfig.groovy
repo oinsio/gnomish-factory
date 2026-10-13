@@ -89,7 +89,9 @@ final class AdversarialGitConfig {
      * The variable the build sets beside {@link #VARIABLE} so every repository the test build creates
      * is on {@link #REF_FORMAT} — the backend production's factory clone must be on (design D13 of
      * tighten-spec-contract, as amended 2026-10-13). An environment variable rather than the file's
-     * {@code init.defaultRefFormat}: the variable needs git 2.45, the project's floor; the key, 2.48.
+     * {@code init.defaultRefFormat}: both sit below the project's floor of 2.51 (the variable since
+     * git 2.45, the key since 2.48), and the variable keeps the backend beside {@link #VARIABLE} in
+     * the environment the build sets, out of a file whose keys are adversarial by design.
      */
     static final String REF_FORMAT_VARIABLE = 'GIT_DEFAULT_REF_FORMAT'
 

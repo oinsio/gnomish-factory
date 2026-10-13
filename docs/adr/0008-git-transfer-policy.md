@@ -240,13 +240,24 @@ cannot run.
 ### A git version floor, checked once at startup
 
 The factory reads `git --version` once per process, before any transfer and
-before any tracker write, and refuses to run below 2.45.1 with a report
+before any tracker write, and refuses to run below the floor — 2.45.1 as accepted, 2.51.0 since the amendment below — with a report
 naming the floor, the installed version, and the reason: the seed clone
 relies on git's local-clone hook protections, closed in 2.39.4 and 2.45.1
 (FR10, NFR-R2, UX2). A git that cannot report its version is refused the same
 way. Every flag the owner uses sits below the floor — `--end-of-options`
 (2.24), `--no-write-fetch-head` (2.29), `GIT_CONFIG_GLOBAL` (2.32) — so one
-floor covers the whole argv. A passing check logs one INFO line with the
+floor covers the whole argv.
+
+*Amended 2026-10-13 (`tighten-spec-contract`, design D13):* the floor is now
+2.51.0. The factory clone moved to the reftable ref backend, which takes one
+lock for the whole ref store; git retries that lock only since 2.47, so below
+it two concurrent ref writes to one clone — a slot's closing transaction
+against another slot's fetch, or a gnome's commit in a sibling worktree —
+fail. Since 2.51 a fetch writes its ref updates in one transaction, which the
+touchpoint fetch of the task branch and its factory register relies on; that
+fetch also passes `--atomic`, since the unforced branch refspec can be
+rejected while the forced register lands. The 2.45.1 reason above stands
+and is part of the new floor's reason. A passing check logs one INFO line with the
 detected version and the floor; a refusal is one ERROR line with the same
 two values and the reason (NFR-O1). The seed helper image needs the same
 floor, since it runs the clone.
@@ -343,7 +354,8 @@ isolation, so a run outside the build fails rather than passing vacuously.
   local-clone CVE class.
 - An operator whose `origin` is `git://`, or who relies on a custom remote
   helper for `origin`, is refused by the allowlist with git's own message.
-- An operator on a git below 2.45.1 is refused at startup with a
+- An operator on a git below the floor (2.45.1 when this ADR was accepted,
+  2.51.0 since the amendment above) is refused at startup with a
   precondition report instead of running with a silently weaker seed clone.
 - Every developer's `~/.gitconfig` is out of the test build; the committed
   file supplies a fixture committer identity in its place (git cannot guess one

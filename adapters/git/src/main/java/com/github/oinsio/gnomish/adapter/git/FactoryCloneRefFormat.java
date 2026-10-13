@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * the first ref every task touchpoint writes, including the take router's classification and the
  * {@code status}/{@code usage} reads that never harden. A worktree shares its clone's ref store, so checking the clone
  * covers every worktree of it. {@code git rev-parse --show-ref-format} exists since git 2.45, below
- * the factory's floor ({@code GitVersionCheck}).
+ * the factory's floor of 2.51 ({@code GitVersionCheck}).
  *
  * <p>The one ERROR of this failure class is logged here; the command that ends on the exception
  * prints its message and nothing else, so the operator reads a precondition.

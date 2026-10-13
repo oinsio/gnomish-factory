@@ -15,14 +15,14 @@ class GitVersionRefusedExceptionSpec extends Specification {
 
     def "FR10, UX2: a version below the floor is reported as a requirement, the installed version and the reason"() {
         expect:
-        new GitVersionRefusedException('2.45.1', '2.44.0', REASON).message ==
-                'gnomish requires git 2.45.1 or newer: the installed git is 2.44.0; ' + REASON
+        new GitVersionRefusedException('2.51.0', '2.50.1', REASON).message ==
+                'gnomish requires git 2.51.0 or newer: the installed git is 2.50.1; ' + REASON
     }
 
     def "FR10, UX2: an unreported version is reported as a requirement, what git printed and the reason"() {
         expect:
-        new GitVersionRefusedException('2.45.1', UntrustedText.subprocess('git: command not found'), REASON).message ==
-                'gnomish requires git 2.45.1 or newer: the installed git did not report a version ' +
+        new GitVersionRefusedException('2.51.0', UntrustedText.subprocess('git: command not found'), REASON).message ==
+                'gnomish requires git 2.51.0 or newer: the installed git did not report a version ' +
                 '(git --version printed: git: command not found); ' + REASON
     }
 }

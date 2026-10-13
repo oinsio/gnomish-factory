@@ -130,7 +130,8 @@ command-scope value `/dev/null`. The doctor check for the stale line (UX2) must 
   `config.lock`). Its only effect would be to retry a write this change deletes. It masks the
   race instead of removing it, it does nothing for the read side (hooks, signing, replace refs),
   and it forces every operator onto a very recent git: distribution LTS releases ship older
-  ones. The floor stays 2.45.1.
+  ones. The floor stays where `tighten-spec-contract` put it (2.51.0, design D13 as amended
+  2026-10-13).
 
 **D5 — `ContainerResumeBranch` keeps its code; a spec pins the corrected behavior.** With
 `branch.autoSetupMerge=false` the creation writes no configuration, so the "ref created, exit 1"

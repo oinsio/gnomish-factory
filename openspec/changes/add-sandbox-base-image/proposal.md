@@ -181,8 +181,8 @@ are recorded here without a decision.
 
 - **Q1 — The base's git is below the factory's floor.** The box's seed clone
   reads the factory clone with the image's own git, and the factory clone is
-  on the reftable ref backend, so the image's git must be at least 2.45.1
-  (`GitVersion.FLOOR`; `BoxGitFloor` refuses an image below it before any seed
+  on the reftable ref backend, so the image's git must be at least 2.51.0
+  (`GitVersion.FLOOR`, raised from 2.45.1 by task 9.13h of `tighten-spec-contract`; `BoxGitFloor` refuses an image below it before any seed
   clone). Ubuntu 24.04 packages git 2.43, which cannot open a reftable store
   (`unknown repository extension found: refstorage`; both features of
   `JvmProxyEgressE2ESpec` failed this way on a noble-based image). The base as

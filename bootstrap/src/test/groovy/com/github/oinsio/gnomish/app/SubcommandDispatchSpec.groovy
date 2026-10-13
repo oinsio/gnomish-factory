@@ -127,7 +127,11 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
     // (TaskNotFoundException, never thrown by StatusCommand's list mode) — and reports the
     // invocation as handled.
     def "dispatchNonRun() routes to UsageCommand for the 'usage' subcommand and returns true"() {
-        given:
+        // A real (if empty) clone: since task 9.13g of tighten-spec-contract the touchpoint fetch
+        // requires the clone's ref backend before it writes, so an uninitialized directory is
+        // refused as not a reftable clone — which would make this routing spec red for the wrong reason.
+        given: 'a clone with no task branches in it'
+        assert gitExitCode(projectDir, 'init') == 0
         def args = new DefaultApplicationArguments('usage', "--dir=${projectDir}".toString(), 'task-1')
 
         when:

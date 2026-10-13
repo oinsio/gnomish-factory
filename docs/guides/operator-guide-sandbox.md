@@ -39,8 +39,9 @@ factory:
 
 Build the image from the reference recipe in
 `docs/examples/sandbox-image/` — it bakes the image contract the factory
-assumes (git 2.45.1 or newer, curl, a non-root `gnome` user owning `/gnomish/**`,
+assumes (git 2.51.0 or newer, curl, a non-root `gnome` user owning `/gnomish/**`,
 root-owned control surfaces) plus your project's toolchain. The git floor is
+the factory's own (2.51.0) and is
 checked before every seed clone: the seed clone reads the factory clone, which is
 on the reftable ref backend, with the image's own git, and an image whose git is
 older is refused with a `[GF163]` line naming it. Without Docker the factory

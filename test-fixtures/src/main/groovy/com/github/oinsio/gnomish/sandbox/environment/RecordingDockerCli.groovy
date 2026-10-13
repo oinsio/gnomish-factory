@@ -26,7 +26,7 @@ class RecordingDockerCli extends DockerCli {
      * the floor by default, so a scenario that is not about the floor never meets it; a scenario
      * that is sets an older line, or {@code null} to hand the probe to {@link #onRun}.
      */
-    String boxGitVersion = 'git version 2.47.0'
+    String boxGitVersion = 'git version 2.53.0'
 
     RecordingDockerCli() {
         super('docker')
@@ -38,7 +38,7 @@ class RecordingDockerCli extends DockerCli {
      *
      * @return the scripted result, or {@code null} when this argv is not the probe
      */
-    static DockerResult answerBoxGitVersion(List<String> args, String line = 'git version 2.47.0') {
+    static DockerResult answerBoxGitVersion(List<String> args, String line = 'git version 2.53.0') {
         args[0] == 'run' && args.takeRight(2) == ['git', '--version'] ? DockerResult.of(0, line + '\n', '') : null
     }
 

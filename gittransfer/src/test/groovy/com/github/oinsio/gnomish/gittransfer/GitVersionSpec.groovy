@@ -10,13 +10,16 @@ import spock.lang.Specification
  */
 class GitVersionSpec extends Specification {
 
-    // FR10: the floor is the release whose local-clone protections the seed clone depends on.
-    def "the floor is 2.45.1 with its reason"() {
+    // FR10, NFR-S2 of tighten-spec-contract: the floor carries the local-clone protections the
+    //     seed clone depends on, reftable lock retry and fetch ref updates in one transaction.
+    def "the floor is 2.51.0 with its reason"() {
         expect:
-        GitVersion.FLOOR == new GitVersion(2, 45, 1)
-        GitVersion.FLOOR.toString() == '2.45.1'
+        GitVersion.FLOOR == new GitVersion(2, 51, 0)
+        GitVersion.FLOOR.toString() == '2.51.0'
         GitVersion.FLOOR_REASON.contains('local-clone')
         GitVersion.FLOOR_REASON.contains('2.45.1')
+        GitVersion.FLOOR_REASON.contains('lock retry (2.47)')
+        GitVersion.FLOOR_REASON.contains('one transaction (2.51)')
     }
 
     // FR10: lenient parse — the three numbers after `git version`, anything after them ignored.

@@ -93,7 +93,11 @@ public record GitTransfer(List<String> argv, SequencedMap<String, Optional<Strin
      * A {@code git fetch} of exactly {@code refspec} — and of each of {@code more}, in one transfer,
      * so every ref it moves reflects one advertisement of the source — from {@code origin} into the
      * clone the runner executes it in. A touchpoint fetch names the task branch and the factory
-     * register together this way (FR13 of tighten-spec-contract).
+     * register together this way (FR13 of tighten-spec-contract). A fetch of more than one refspec
+     * passes {@code --atomic}: the branch refspec is unforced and can be rejected as a
+     * non-fast-forward while a forced register lands, and {@code --atomic} makes every ref of the
+     * transfer land together or none (design D13 of tighten-spec-contract, as amended 2026-10-13).
+     * A fetch of one refspec has nothing to pair and keeps the plain form.
      *
      * @param source the named remote; never null
      * @param refspec the first refspec to move; never null
@@ -105,7 +109,7 @@ public record GitTransfer(List<String> argv, SequencedMap<String, Optional<Strin
         Objects.requireNonNull(refspec, "refspec");
         List<Refspec> refspecs = new ArrayList<>(List.of(more));
         refspecs.addFirst(refspec);
-        return fetchFrom(source, refspecs);
+        return fetchFrom(source, refspecs, refspecs.size() > 1);
     }
 
     /**
@@ -122,15 +126,18 @@ public record GitTransfer(List<String> argv, SequencedMap<String, Optional<Strin
     public static GitTransfer harvest(Container source, String boxBranch, QuarantineRef quarantine) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(quarantine, "quarantine");
-        return fetchFrom(source, List.of(quarantine.harvestRefspec(boxBranch)));
+        return fetchFrom(source, List.of(quarantine.harvestRefspec(boxBranch)), false);
     }
 
-    private static GitTransfer fetchFrom(FetchSource source, List<Refspec> refspecs) {
+    private static GitTransfer fetchFrom(FetchSource source, List<Refspec> refspecs, boolean atomic) {
         List<String> argv = configPairs();
         argv.add("fetch");
         argv.add("--no-tags");
         argv.add("--no-recurse-submodules");
         argv.add("--no-write-fetch-head");
+        if (atomic) {
+            argv.add("--atomic");
+        }
         String remote =
                 switch (source) {
                     case Origin _ -> {

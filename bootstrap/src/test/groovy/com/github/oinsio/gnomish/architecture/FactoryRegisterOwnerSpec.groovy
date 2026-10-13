@@ -34,7 +34,8 @@ import spock.lang.Specification
  *   <li>the register's namespace is spelled in {@code RegisterRef} alone, and a register value is
  *       made from a task id in {@code FactoryRegister} alone;
  *   <li>the ref backend those transactions are atomic on is spelled, and read, in
- *       {@code FactoryCloneRefFormat} alone, reached through {@code GitTaskBranches#harden}; the
+ *       {@code FactoryCloneRefFormat} alone, reached through {@code GitTaskBranches#harden} and
+ *       {@code TouchpointFetch} (the first write of every task touchpoint, task 9.13g); the
  *       factory creates no clone, so {@code --ref-format} is spelled only in the refusal's remedy.
  * </ul>
  *
@@ -112,7 +113,10 @@ class FactoryRegisterOwnerSpec extends Specification {
         '.harvestRefspec(' | [LOCAL_BOX_FIXTURE]
         '"reftable"' | ['FactoryCloneRefFormat.java']
         '"--show-ref-format"' | ['FactoryCloneRefFormat.java']
-        'new FactoryCloneRefFormat(' | ['GitTaskBranches.java']
+        'new FactoryCloneRefFormat(' | [
+            'GitTaskBranches.java',
+            'TouchpointFetch.java'
+        ]
         '--ref-format' | [
             'application/src/main/java/com/github/oinsio/gnomish/app/port/git/CloneRefFormatRefusedException.java'
         ]

@@ -70,7 +70,7 @@ class ClaimedRunFailureDispatchSpec extends Specification implements RunChainFak
             new CloneRefFormatRefusedException('/clones/x', 'reftable', UntrustedText.subprocess('files'))
         } | CloneRefFormatRefusedException
         'refused sandbox image' | {
-            new BoxGitVersionRefusedException('img:1', '2.45.1', UntrustedText.container('git version 2.43.0'), 'why')
+            new BoxGitVersionRefusedException('img:1', '2.51.0', UntrustedText.container('git version 2.43.0'), 'why')
         } | BoxGitVersionRefusedException
     }
 

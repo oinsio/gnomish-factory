@@ -8,10 +8,16 @@ import java.util.regex.Pattern;
 
 /**
  * An installed git's version as three numbers, with the floor the factory refuses to run below.
- * The floor is {@code 2.45.1}: the release that closed the local-clone class of CVE-2024-32002 and
- * its siblings, whose protections the seed clone relies on — and every flag the owner uses
+ * The floor is {@code 2.51.0}, for three reasons. The seed clone relies on the protections that
+ * closed the local-clone class of CVE-2024-32002 and its siblings (2.39.4/2.45.1, design D8 of
+ * own-git-transfer-argv). The factory clone is on the reftable ref backend, which takes one lock for
+ * the whole ref store; git retries it only since 2.47, so below that two concurrent ref writes to one
+ * clone — a slot's closing transaction against another slot's fetch, or a gnome's commit in a
+ * sibling worktree — fail. And since 2.51 a fetch writes its ref updates as one transaction, so the
+ * touchpoint fetch cannot leave the branch moved and the register not (design D13 of
+ * tighten-spec-contract, as amended 2026-10-13). Every flag the owner uses
  * ({@code --no-write-fetch-head} 2.29, {@code --end-of-options} 2.24, {@code GIT_CONFIG_GLOBAL}
- * 2.32) sits below it, so one floor covers the whole argv (design D8 of own-git-transfer-argv).
+ * 2.32, {@code --ref-format} 2.45) sits below it, so one floor covers the whole argv.
  *
  * <p>{@link #parse} is lenient on purpose: it reads the three numbers after {@code git version}
  * and ignores whatever follows — {@code (Apple Git-200)}, {@code .windows.1}, {@code -rc1} — so a
@@ -20,7 +26,7 @@ import java.util.regex.Pattern;
  * below the floor (NFR-R2). The line is a subprocess's stdout; the adapter that captures it holds
  * the parser warrant, this type only converts.
  *
- * <p>Implements FR10, NFR-R2 of own-git-transfer-argv.
+ * <p>Implements FR10, NFR-R2 of own-git-transfer-argv; NFR-S2 of tighten-spec-contract.
  *
  * @param major the first number
  * @param minor the second number
@@ -29,11 +35,13 @@ import java.util.regex.Pattern;
 public record GitVersion(int major, int minor, int patch) implements Comparable<GitVersion> {
 
     /** The lowest git the factory runs with. */
-    public static final GitVersion FLOOR = new GitVersion(2, 45, 1);
+    public static final GitVersion FLOOR = new GitVersion(2, 51, 0);
 
     /** Why the floor is where it is, phrased for the startup refusal. */
     public static final String FLOOR_REASON =
-            "the seed clone relies on git's local-clone hook protections (2.39.4/2.45.1)";
+            "the seed clone relies on git's local-clone hook protections (2.39.4/2.45.1), the factory"
+                    + " clone's concurrent ref writes on reftable lock retry (2.47), and the touchpoint fetch"
+                    + " on writing its ref updates in one transaction (2.51)";
 
     /** {@code git --version}'s one line: the prefix, then two or three dotted numbers. */
     private static final Pattern VERSION_LINE =

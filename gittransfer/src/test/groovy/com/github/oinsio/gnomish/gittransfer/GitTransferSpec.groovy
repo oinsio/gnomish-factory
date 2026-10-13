@@ -76,9 +76,10 @@ class GitTransferSpec extends Specification {
     }
 
     // FR13 of tighten-spec-contract: a touchpoint fetch moves the task branch and the factory
-    //     register in one transfer, so both reflect one advertisement of origin; the refspecs
-    //     follow the terminator in the order given.
-    def "an origin fetch of several refspecs places them all after the terminator, in order"() {
+    //     register in one atomic transfer (D13 as amended 2026-10-13), so both reflect one
+    //     advertisement of origin and land together or not at all; the refspecs follow the
+    //     terminator in the order given.
+    def "an origin fetch of several refspecs is atomic and places them all after the terminator, in order"() {
         when:
         def transfer = GitTransfer.fetch(
                 TransferSource.ORIGIN,
@@ -86,7 +87,13 @@ class GitTransferSpec extends Specification {
                 new Refspec('+refs/gnomish-factory/T-1:refs/gnomish-factory/T-1'))
 
         then:
-        transfer.argv().drop(transfer.argv().indexOf('--end-of-options')) == [
+        transfer.argv() == CONFIG_PAIRS + [
+            'fetch',
+            '--no-tags',
+            '--no-recurse-submodules',
+            '--no-write-fetch-head',
+            '--atomic',
+            '--refmap=',
             '--end-of-options',
             'origin',
             'gnomish/T-1:refs/remotes/origin/gnomish/T-1',
