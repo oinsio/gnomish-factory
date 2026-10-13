@@ -25,6 +25,9 @@ fatal: could not read Password for 'https://ghp_FAKETOKEN1234567890@github.com':
 [password-prompt-leak]
 fatal: could not read Password for 'https://ghp_FAKETOKEN1234567890@github.com'
 
+[register-refused]
+the factory register may not move
+
 [stand-in-refuses]
 fatal: stand-in git refuses
 

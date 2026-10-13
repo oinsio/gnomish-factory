@@ -12,7 +12,9 @@ import org.jspecify.annotations.Nullable;
 /**
  * The plumbing chain behind {@link GitObjects#commit}: verify the compare-and-swap precondition,
  * read the parent tree into a private temporary index, apply the tree edits, {@code write-tree} +
- * {@code commit-tree}, then advance the ref with git's atomic {@code update-ref} (design D19). The
+ * {@code commit-tree}, then advance the ref with git's atomic {@code update-ref} (design D19) —
+ * together with the request's {@code alongside} ref in one {@code update-ref --stdin} transaction
+ * when it names one (design D13 of tighten-spec-contract, amended 2026-10-13). The
  * temp index is the only disk artifact and is removed in a {@code finally} — no working copy, no
  * checkout, no hooks.
  *
@@ -124,12 +126,36 @@ final class CommitBuilder {
     }
 
     private void advanceRef(CommitRequest request, String newCommit) {
-        String oldValue = request.expectedTip().map(ObjectId::hex).orElse("");
-        GitExec.Result result = exec.run(List.of("update-ref", request.ref(), newCommit, oldValue), null, Map.of(), -1);
+        GitExec.Result result = request.alongside().isPresent()
+                ? exec.run(List.of("update-ref", "--stdin"), transaction(request, newCommit), Map.of(), -1)
+                : exec.run(
+                        List.of(
+                                "update-ref",
+                                request.ref(),
+                                newCommit,
+                                request.expectedTip().map(ObjectId::hex).orElse("")),
+                        null,
+                        Map.of(),
+                        -1);
         if (result.exitCode() != 0) {
             throw new StaleTipException("update-ref " + request.ref() + " rejected (tip moved concurrently): "
                     + result.stderr().strip());
         }
+    }
+
+    /**
+     * The one ref transaction that moves {@code ref} under its compare-and-swap and the {@code
+     * alongside} ref with it: {@code create} for a branch that must not exist yet, {@code update}
+     * against the expected tip otherwise. {@code prepare} locks both refs and checks every
+     * precondition before {@code commit} writes either, so a refused precondition moves nothing.
+     */
+    private static byte[] transaction(CommitRequest request, String newCommit) {
+        String head = request.expectedTip()
+                .map(tip -> "update " + request.ref() + " " + newCommit + " " + tip.hex())
+                .orElse("create " + request.ref() + " " + newCommit);
+        String script = "start\n" + head + "\nupdate " + request.alongside().orElseThrow() + " " + newCommit
+                + "\nprepare\ncommit\n";
+        return script.getBytes(StandardCharsets.UTF_8);
     }
 
     private Path allocateIndex() {

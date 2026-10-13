@@ -73,7 +73,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readTaskRecord(_) >> Optional.of(freshRecord())
+            readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
         tracker.fetchTask(_) >> heldByUs()
         def attached = []
@@ -104,7 +104,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
             taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             // Scripted, not defaulted: the port returns a record, which Spock cannot invent.
-            readTaskRecord(_) >> Optional.of(freshRecord())
+            readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
         def executor = new ScriptedExecutor([completedRound()])
         def definition = completingPipeline()
@@ -153,7 +153,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> Mock(TaskLifecycleStore)
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readTaskRecord(_) >> Optional.of(freshRecord())
+            readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
         def executor = new ScriptedExecutor([completedRound()])
         tracker.fetchTask(_) >> heldByUs()
@@ -181,7 +181,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
             taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
             // Scripted, not defaulted: the port returns a record, which Spock cannot invent.
-            readTaskRecord(_) >> Optional.of(freshRecord())
+            readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
 
         and:
@@ -214,7 +214,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> Mock(TaskLifecycleStore)
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readTaskRecord(_) >> Optional.empty()
+            readTaskRecord(_, _) >> Optional.empty()
         }
         tracker.fetchTask(_) >> heldByUs()
         def git = new TaskGit(

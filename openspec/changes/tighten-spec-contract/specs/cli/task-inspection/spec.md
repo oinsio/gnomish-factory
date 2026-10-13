@@ -3,8 +3,12 @@
 ## MODIFIED Requirements
 
 ### Requirement: External status reader
-`gnomish status --dir <clone> <task> [--json]` SHALL read `.gnomish-task/` files directly from the task branch (`git show`) — no worktree, no checkout, no local branch creation; branch lookup: local → remote-tracking → narrow fetch of exactly `gnomish/<task>` → "task not found".
-**Implements**: FR13, NFR-O1 of add-git-workflow; FR16 of harden-task-branch-contract; FR2 of harden-task-branch-contract; FR6 of make-run-headless
+`gnomish status --dir <clone> <task> [--json]` SHALL read `.gnomish-task/` files directly from the task branch (`git show`) — no worktree, no checkout, no local branch creation; branch lookup: local → touchpoint fetch of exactly `gnomish/<task>` and its register → a remote-tracking ref already present, only when origin cannot deliver → "task not found".
+**Implements**: FR13, NFR-O1 of add-git-workflow; FR16 of harden-task-branch-contract; FR2 of harden-task-branch-contract; FR6 of make-run-headless; FR13 of tighten-spec-contract
+
+#### Scenario: Status of a branch the clone holds only as a tracking ref
+- **WHEN** `gnomish status <task>` targets a task whose branch the clone holds only as a remote-tracking ref, with no register
+- **THEN** the lookup fetches branch and register from origin and renders the recorded state, creating no local branch
 
 #### Scenario: Status of a running task from another terminal
 - **WHEN** `gnomish status` runs against a task another process is executing

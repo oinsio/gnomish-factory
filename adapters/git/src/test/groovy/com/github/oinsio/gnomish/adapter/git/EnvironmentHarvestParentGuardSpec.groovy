@@ -40,6 +40,8 @@ class EnvironmentHarvestParentGuardSpec extends Specification implements BareGit
         new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
         commitAll(cloneDir)
         gitOutput(cloneDir, 'branch', BRANCH)
+        // The branch starts at a registered closing commit, as STARTED leaves it (design D13).
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + BRANCH.substring('gnomish/'.length()), 'refs/heads/' + BRANCH)
     }
 
     /** Points the factory branch at a fresh parentless commit, as a corrupted harvest would. */
@@ -47,17 +49,17 @@ class EnvironmentHarvestParentGuardSpec extends Specification implements BareGit
         def tree = gitOutput(cloneDir, 'rev-parse', 'HEAD^{tree}')
         def orphan = gitOutput(cloneDir, '-c', 'user.email=d@e.f', '-c', 'user.name=d',
                 'commit-tree', tree, '-m', 'orphan')
-        gitOutput(cloneDir, 'update-ref', 'refs/heads/' + BRANCH, orphan)
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-quarantine/' + TASK, orphan)
     }
 
     def "FR22: a harvested state commit with no readable parent aborts as a boundary violation"() {
-        given: 'a box whose state-commit harvest leaves the branch at a parentless commit'
+        given: 'a box whose state-commit harvest lands a parentless commit in the quarantine'
         def box = new HijackedHarvestBox(cloneDir, Files.createDirectories(tempDir.resolve('box')))
         box.materialize(BRANCH, null)
         def rounds = new CurrentRound()
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
-        def snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))
-        def persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
+        def snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
+        def persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
         snapshotStep.snapshot(TASK, 'implement', 1)
         box.hijack = { setBranchToOrphan() }

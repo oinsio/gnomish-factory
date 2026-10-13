@@ -61,7 +61,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
         def epochs = new ClaimEpochBook()
         Path gitStandIn = recordingGit(root.resolve('git-invocations.log'))
         def runner = new GitProcessRunner(gitStandIn.toString())
-        def store = new GitTaskRepository(runner, registered, epochs, new VirtualClock())
+        def store = RegisteringStore.of(new GitTaskRepository(runner, registered, epochs, new VirtualClock()), runner, clone)
         def world = seed(clone, store, epochs, 'HEAD', registered.worktrees().resolve(TASK_ID))
         world.gitStandIn = gitStandIn
         world.runner = runner
@@ -89,8 +89,10 @@ trait KillPointWorlds implements BareGitRepoFixture {
         Path index = root.resolve('index')
         Files.createDirectories(index)
         def epochs = new ClaimEpochBook()
-        seed(bare, new GitObjectsTaskRepository(GitObjects.open(bare, index), new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), epochs, cursors), epochs, 'base', null)
+        def strict = new GitObjectsTaskRepository(GitObjects.open(bare, index), new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), epochs, cursors)
+        seed(bare, RegisteringStore.of(strict, new GitProcessRunner(), bare), epochs, 'base', null)
     }
+
 
     /**
      * The creation transition's world: a bare {@code origin} with a base commit, the clone of the

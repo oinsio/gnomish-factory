@@ -8,11 +8,11 @@ import java.util.Arrays;
 
 /**
  * The harvest-boundary integrity check for a sandboxed round's <b>state commit</b> (FR22,
- * design D16). Its sibling {@link HarvestedBoundaryCheck} (FR23) is factory-side too, but judges
- * the other commit of the round — the gnome's <em>snapshot</em> commit, against the previous tip.
- * This one judges the commit the factory itself asked the environment for: once {@link
- * EnvironmentAttemptPersistence} has harvested the in-box state commit, two properties must hold
- * before that tip may be accepted as the round's new baseline.
+ * design D16). The admission ({@link HarvestAdmission}, FR23) is factory-side too, and judges the
+ * range above the register by its subjects, parents and state-directory paths; this one judges
+ * the content of the commit the factory itself asked the environment for: once {@link
+ * EnvironmentAttemptPersistence} has harvested the in-box state commit into the quarantine, two
+ * properties must hold before the admission may move the branch to it.
  *
  * <ul>
  *   <li><b>parent-check</b> — the round's snapshot commit must be the harvested state commit's
@@ -32,8 +32,9 @@ import java.util.Arrays;
  *
  * <p>What this check does <b>not</b> establish: the state commit's tree beyond those two blobs.
  * {@code git commit} publishes whatever the in-box index holds, so a path a daemon staged
- * alongside the two factory files rides the commit unjudged — and since that commit becomes the
- * next round's baseline, {@link HarvestedBoundaryCheck} does not see it either. FR22 scopes the
+ * alongside the two factory files rides the commit unjudged outside the state directory — the
+ * admission refuses only a state-directory path beyond the two (design D18 of
+ * tighten-spec-contract). FR22 scopes the
  * read-back to exactly the channel-delivered files (design D16); a wider guarantee would need a
  * snapshot-to-state tree diff this check deliberately does not run.
  *

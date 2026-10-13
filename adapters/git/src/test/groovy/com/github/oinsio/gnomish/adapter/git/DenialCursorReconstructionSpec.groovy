@@ -36,7 +36,7 @@ import spock.lang.TempDir
  * reconstruct the same task state, and the escalation-side cursor in {@code task.json} never
  * reaches the reconstructed record or the {@code status.json} rendering.
  */
-class DenialCursorReconstructionSpec extends Specification implements BareGitRepoFixture {
+class DenialCursorReconstructionSpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
 
     private static final String SOURCE = 'sha256:guard-container'
     private static final String POSITION = '2026-09-05T10:05:00.000000001Z'
@@ -123,6 +123,7 @@ class DenialCursorReconstructionSpec extends Specification implements BareGitRep
         repository.createTask(new TaskContext('PROJ-1', UntrustedText.tracker('t'), UntrustedText.tracker('b'), []),
         TaskStart.commit(bare, 'refs/heads/base'), PIN, TaskState.atStageStart('implement'))
         repository.recordOutcome('PROJ-1', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation), TrackerWrite.OWED)
+        registerTip(bare, 'PROJ-1')
         bare
     }
 

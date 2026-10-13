@@ -44,4 +44,21 @@ trait PlumbingCommitFixture implements BareGitRepoFixture {
         gitOutput(repo, 'update-ref', ref, commit)
         commit
     }
+
+    /**
+     * Lands one plumbing commit in {@code taskId}'s harvest quarantine, on top of what the
+     * quarantine holds — or of the task branch, the first time — as a harvest of an in-box commit
+     * does since the admission owns the branch (design D18 of tighten-spec-contract).
+     *
+     * @return the new quarantined commit's hash; never null
+     */
+    String harvestLands(Path repo, String taskId, String message) {
+        String quarantine = FactoryRegister.quarantine(taskId).name()
+        def held = new GitProcessRunner().run(repo, 'rev-parse', '--verify', '--quiet', quarantine)
+        String parent = held.exitCode() == 0 ? held.stdout().forParsing().trim()
+                : gitOutput(repo, 'rev-parse', 'refs/heads/' + com.github.oinsio.gnomish.app.git.TaskIdSanitizer.branchName(taskId))
+        String commit = plumbCommit(repo, parent, message)
+        gitOutput(repo, 'update-ref', quarantine, commit)
+        commit
+    }
 }

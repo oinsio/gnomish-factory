@@ -147,8 +147,9 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, RegisteredClone register
             // The pipeline reached Position.PipelineEnd: the engine's last persist() call already
             // committed that terminal state.json durably, so it is read back from the medium the
             // recovery paths read rather than taken from the in-memory outcome.
-            TaskOutcome.Completed completed = new TaskOutcome.Completed(
-                    git.store().readRecordedState(worktree).orElseThrow(() -> AbsentEnvelope.state(taskId, worktree)));
+            TaskOutcome.Completed completed = new TaskOutcome.Completed(git.store()
+                    .readRecordedState(worktree, taskId)
+                    .orElseThrow(() -> AbsentEnvelope.state(taskId, worktree)));
             GitOutcomeRecorder.recordAndCleanUp(git, taskRepository, cloneDir, worktree, taskId, completed);
             return;
         }

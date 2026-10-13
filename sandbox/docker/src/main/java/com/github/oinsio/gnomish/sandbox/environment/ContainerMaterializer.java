@@ -38,6 +38,7 @@ final class ContainerMaterializer {
     private final Path sourceClone;
     private final TaskContainerSettings settings;
     private final ObjectOwnership ownership;
+    private final BoxGitFloor boxGit;
 
     /**
      * @param docker the docker subprocess seam; never null
@@ -54,6 +55,7 @@ final class ContainerMaterializer {
         this.sourceClone = sourceClone;
         this.settings = settings;
         this.ownership = ownership;
+        this.boxGit = new BoxGitFloor(docker, key, ownership);
     }
 
     /**
@@ -76,6 +78,7 @@ final class ContainerMaterializer {
             management(DockerCommands.startContainer(name), "start container");
         }
         if (commitPin != null) {
+            boxGit.require(image);
             management(
                     DockerCommands.seedClone(
                             key, image, sourceClone.toAbsolutePath().toString(), branch, commitPin, ownership),
@@ -86,6 +89,9 @@ final class ContainerMaterializer {
     /** The fresh-materialize path (FR3): network, volume, seed clone, task container, scratch. */
     void create(String branch, @Nullable String commitPin) {
         String image = settings.image();
+        // The seed clone runs with the image's own git and reads the reftable factory clone: an
+        // image below the floor is refused before any object exists (design D13 as amended).
+        boxGit.require(image);
         // A surviving network (e.g. a container removed by hand, network left behind) is reused;
         // any other network-create failure is real. Volume create is idempotent by docker itself.
         DockerResult network = docker.run(DockerCommands.createNetwork(key, ownership));

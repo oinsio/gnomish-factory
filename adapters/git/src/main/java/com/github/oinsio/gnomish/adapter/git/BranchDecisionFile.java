@@ -12,7 +12,7 @@ import java.util.Optional;
  * decision request lives at {@code
  * .gnomish-task/decisions/<stage>-a<attempt>-<token>.json} <em>inside the working
  * copy</em> — the single gnome-writable path under {@code .gnomish-task/}
- * ({@link HarvestedBoundaryCheck}'s carve-out names exactly this path) — instead
+ * (the admission's carve-out, {@link GnomeRangeInspection}, names exactly this path) — instead
  * of the host temp directory of {@code DecisionFileTransport}, which the
  * git-less in-place mode keeps. Riding the snapshot/salvage commit, a pending
  * escalation survives any death and any instance resumes it from the branch
@@ -56,7 +56,7 @@ public final class BranchDecisionFile {
      * @return the round's handle; never null
      */
     public static Handle open(TaskExecutionEnvironment environment, AttemptKey key, RoundToken token) {
-        return new Handle(environment, HarvestedBoundaryCheck.decisionPath(key, token));
+        return new Handle(environment, GnomeRangeInspection.decisionPath(key, token));
     }
 
     /** One round's in-branch decision transport: the path, its env fragment, and the boundary-time read. */

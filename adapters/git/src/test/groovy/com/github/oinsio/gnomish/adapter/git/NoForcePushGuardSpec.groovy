@@ -72,38 +72,35 @@ class NoForcePushGuardSpec extends Specification {
 
     private record PushCall(String file, String call) {}
 
+    /** The transfer owner's push builder, the one construction site of a push argv (FR13 of tighten-spec-contract). */
+    private static final Path PUSH_OWNER =
+    Path.of('../../gittransfer/src/main/java/com/github/oinsio/gnomish/gittransfer/GitPush.java')
+
     /**
-     * FR7, D6 of add-claim-heartbeat: the scan must actually find the task-branch push, else the
-     * guard is vacuous. M3 of fix-lifecycle-push sharpens it to a single site: design D2 collapsed
-     * the three inline copies into the shared {@link RefspecPush}, so the push command now has
-     * exactly one construction site in production — a second one appearing here is the duplication
-     * this change removed growing back.
+     * FR7, D6 of add-claim-heartbeat; M3 of fix-lifecycle-push: the push command has exactly one
+     * construction site. Since tighten-spec-contract (design D13) that site is the transfer owner's
+     * {@code GitPush} — the closing push and the mid-round push — so {@code adapter.git} runs no
+     * push argv of its own; a second one appearing here is the duplication this guard exists for.
      */
-    def "M3: the push command has exactly one construction site, and the scan finds it"() {
+    def "M3: adapter.git builds no push argv — the transfer owner's GitPush is the one construction site"() {
         expect:
-        pushInvocations().collect { it.file() } == ['RefspecPush.java']
+        pushInvocations() == []
+        Files.readString(PUSH_OWNER).contains('argv.add("push")')
     }
 
-    // FR7, D6: no git push in adapter.git may ever force — the non-fast-forward fence must stand.
+    // FR7, D6: no git push may ever force — the non-fast-forward fence must stand.
     // Scenario: git/git-task-persistence / Non-fast-forward never escalates to force
     // Scenario: git/git-task-persistence / Push names exactly the task branch
     // Scenario: git/git-task-persistence / The CAS reset is the only non-fast-forward write
     // Scenario: lifecycle/task-branch-contract / Origin history is never rewritten
-    def "no git push invocation in adapter.git uses a forcing flag or forced refspec"() {
-        expect:
-        pushInvocations().every { PushCall push ->
-            def call = push.call()
-            !call.contains('--force') &&
-                    !call.contains('"-f"') &&
-                    !(call =~ /"\+/) &&
-                    !(call =~ /"\+refs/)
-        }
+    def "no git push the factory builds uses a forcing flag or forced refspec"() {
+        given:
+        def owner = Files.readString(PUSH_OWNER)
 
-        and: 'name any offender explicitly for a readable failure'
-        def offenders = pushInvocations().findAll { PushCall push ->
-            def call = push.call()
-            call.contains('--force') || call.contains('"-f"') || (call =~ /"\+/)
-        }
-        offenders.collect { it.file() } == []
+        expect:
+        !owner.contains('--force')
+        !owner.contains('"-f"')
+        !(owner =~ /"\+/)
+        !owner.contains('"+" +')
     }
 }

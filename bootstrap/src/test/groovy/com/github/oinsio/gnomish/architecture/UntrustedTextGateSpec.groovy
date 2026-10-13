@@ -124,6 +124,10 @@ class UntrustedTextGateSpec extends Specification {
         'a failed harvest fetch\'s stderr into the failure class it belongs to',
         'com.github.oinsio.gnomish.adapter.git.FetchRefusal':
         'a transfer\'s stderr into the fsck message id and object git refused, or empty',
+        'com.github.oinsio.gnomish.sandbox.environment.BoxGitFloor':
+        'the image\'s git --version output into the transfer leaf\'s typed GitVersion, judged against the floor',
+        'com.github.oinsio.gnomish.adapter.git.FactoryCloneRefFormat':
+        'rev-parse --show-ref-format output into the verdict that the clone is on the required ref backend',
         'com.github.oinsio.gnomish.adapter.git.FactoryCloneHardening':
         'rev-parse --absolute-git-dir output into the clone\'s git directory Path',
         'com.github.oinsio.gnomish.adapter.git.GitProcessRunner':
@@ -131,10 +135,13 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.adapter.git.GitVersionCheck':
         'git --version output into the transfer leaf\'s typed GitVersion, judged against the floor',
         'com.github.oinsio.gnomish.adapter.git.GitShowTip':
-        'a rev-list answer into the cleanup commit\'s id; the file content it reads at a revision is' +
-        ' the document itself and stays a carrier',
-        'com.github.oinsio.gnomish.adapter.git.HarvestedBoundaryCheck':
-        'a name-only diff into the list of state-directory paths the gnome touched',
+        'the registered commit\'s subject into whether it is the cleanup commit (a boolean); the file' +
+        ' content it reads there is the document itself and stays a carrier',
+        'com.github.oinsio.gnomish.adapter.git.GnomeRangeInspection':
+        'log lines into each commit\'s parents, subject and state-directory paths, judged into a' +
+        ' verdict; the subjects and paths it quotes go back into a carrier through the log exit',
+        'com.github.oinsio.gnomish.adapter.git.HostBranchProbe':
+        'symbolic-ref output into whether HEAD is on the task branch (a boolean)',
         'com.github.oinsio.gnomish.adapter.git.LocalBranchTip':
         'rev-parse --verify output into the branch\'s commit id',
         'com.github.oinsio.gnomish.adapter.git.OriginRemote':
@@ -147,8 +154,6 @@ class UntrustedTextGateSpec extends Specification {
         'an ls-remote --symref answer into the default branch name, gated by DefaultBranch\'s rules',
         'com.github.oinsio.gnomish.adapter.git.ReplicaPairReconciler':
         'rev-parse output into a ref\'s commit id, or null',
-        'com.github.oinsio.gnomish.adapter.git.RoundBoundaryCheck':
-        'symbolic-ref and name-only diff output into the two boundary verdicts (booleans)',
         'com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck':
         'a NUL-separated log line into the snapshot\'s stage, round and round token; the decision' +
         ' request it reads at the token path is the document itself, handed raw to the tolerant reader that mints it',
@@ -158,6 +163,9 @@ class UntrustedTextGateSpec extends Specification {
         'worktree list --porcelain output into whether this worktree is registered (a boolean)',
         'com.github.oinsio.gnomish.adapter.git.UsageHistoryWalker':
         'a --format=%H log into the list of state-touching commit ids',
+        'com.github.oinsio.gnomish.adapter.git.WorktreeClosingCommit':
+        'symbolic-ref, rev-parse, write-tree and commit-tree output into object ids, compared and' +
+        ' passed back to git as arguments, never shown to a reader',
         'com.github.oinsio.gnomish.adapter.git.VerifiedTip':
         'rev-parse output into the commit id a resolution established, or empty',
         'com.github.oinsio.gnomish.sandbox.environment.ContainerMaterializer':

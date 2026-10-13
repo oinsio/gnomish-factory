@@ -12,7 +12,7 @@ import spock.lang.Specification
  *
  * <ul>
  *   <li>The port's whole surface is the lifecycle, the exec seam, the file channel, the passport
- *       and the denial surface; no operation persists the environment, and the docker command
+ *       the denial surface and the guard's liveness probe (D14 of tighten-spec-contract); no operation persists the environment, and the docker command
  *       owners spell none of the runtime's image-making subcommands.
  *   <li>The production callers of {@code .materialize(} are exactly the fresh environments' owners
  *       and the decorators that pass the call on, and the in-box preparation itself — the seed
@@ -38,7 +38,8 @@ class EnvironmentPreparationOwnerSpec extends Specification {
         'passport',
         'readDenials',
         'denialCursor',
-        'restoreDenials'
+        'restoreDenials',
+        'probeGuard'
     ] as Set
 
     /** The production files allowed to call {@code .materialize(}, each with why. */
@@ -67,7 +68,7 @@ class EnvironmentPreparationOwnerSpec extends Specification {
 
     // Scenario: sandbox/execution-environment / No snapshot of a gnome-touched environment
     def "D1: no port operation persists an environment, and no docker owner spells an image-making subcommand"() {
-        expect: 'the port declares exactly its lifecycle, exec, channel, passport and denial operations'
+        expect: 'the port declares exactly its lifecycle, exec, channel, passport, denial and guard-probe operations'
         def declared = TaskExecutionEnvironment.declaredMethods.findAll {
             !Modifier.isStatic(it.modifiers) && !it.synthetic
         }

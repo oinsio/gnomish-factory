@@ -42,6 +42,8 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
     private String commitPark() {
         Files.writeString(clone.resolve('park.txt'), 'parked')
         commitAll(clone, 'task parked')
+        // The outcome commit registered itself, as the lifecycle push does (FR13 of tighten-spec-contract).
+        gitOutput(clone, 'update-ref', "refs/gnomish-factory/${TASK_ID}", 'HEAD')
         gitOutput(clone, 'rev-parse', 'HEAD')
     }
 
@@ -67,6 +69,9 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         then:
         verdict instanceof ParkDeliveryVerdict.Delivered
         originTip() == Optional.of(parked)
+
+        and: 'the park landed whole: its register with it, in one atomic push (FR13 of tighten-spec-contract)'
+        gitOutput(origin, 'rev-parse', "refs/gnomish-factory/${TASK_ID}") == parked
     }
 
     def "an already delivered tip is confirmed without a push"() {

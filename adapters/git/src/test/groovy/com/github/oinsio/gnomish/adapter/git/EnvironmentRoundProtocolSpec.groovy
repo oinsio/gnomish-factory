@@ -30,7 +30,7 @@ import spock.lang.TempDir
  * snapshot-without-state resume classification that re-verifies without
  * burning an attempt.
  */
-class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoFixture {
+class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
 
     static final String TASK = 'PROT-1'
     static final String BRANCH = TaskIdSanitizer.branchName(TASK)
@@ -52,12 +52,14 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
         commitAll(cloneDir)
         gitOutput(cloneDir, 'branch', BRANCH)
+        // The branch starts at a registered closing commit, as STARTED leaves it (design D13).
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + BRANCH.substring('gnomish/'.length()), 'refs/heads/' + BRANCH)
         openTip = gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
         box = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('box')))
         box.materialize(BRANCH, null)
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
-        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))
-        persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
+        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
+        persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
     }
 
     private void gnomeWork(String file = 'work.txt', String content = 'gnome work') {
@@ -220,9 +222,9 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
                     }
                 }
         tamperingBox.materialize(BRANCH, null)
-        def snapshot2 = new EnvironmentRoundSnapshot(tamperingBox, runner, cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))
+        def snapshot2 = new EnvironmentRoundSnapshot(tamperingBox, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp2')))
-        def persistence2 = new EnvironmentAttemptPersistence(tamperingBox, runner, cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
+        def persistence2 = new EnvironmentAttemptPersistence(tamperingBox, runner, cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
         snapshot2.snapshot(TASK, 'implement', 1)
 
         when:
@@ -231,6 +233,39 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         then:
         def ex = thrown(RoundBoundaryViolationException)
         ex.message.contains('differs from what the factory wrote')
+    }
+
+    // FR13 of tighten-spec-contract (design D18): the state commit's two blobs read back exactly, but
+    //     a daemon staged a third state-directory path beside them — the read-back cannot see it, the
+    //     admission refuses it, and the branch does not move to it.
+    def "FR13: a state commit carrying a state-directory path beyond its two files is refused by the admission"() {
+        given: 'a box in which a daemon stages a factory-owned path beside the factory\'s writes'
+        def dirtyBox = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('dbox'))) {
+                    @Override
+                    void putFile(String path, byte[] content) {
+                        super.putFile(path, content)
+                        if (path.endsWith('trace.jsonl')) {
+                            Files.writeString(workingCopy.resolve('.gnomish-task/task.json'), '{"forged":true}')
+                            assert new GitProcessRunner().run(workingCopy, 'add', '.gnomish-task/task.json').exitCode() == 0
+                        }
+                    }
+                }
+        dirtyBox.materialize(BRANCH, null)
+        def snapshot2 = new EnvironmentRoundSnapshot(dirtyBox, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
+        def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp5')))
+        def persistence2 = new EnvironmentAttemptPersistence(dirtyBox, runner, cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
+        def snapshot = snapshot2.snapshot(TASK, 'implement', 1)
+
+        when:
+        persistence2.persist(TASK, sampleState(), sampleTrace(1))
+
+        then:
+        def ex = thrown(RoundBoundaryViolationException)
+        ex.message.contains('.gnomish-task/task.json')
+
+        and: 'the branch and the register still name the admitted snapshot'
+        factoryTip() == snapshot
+        gitOutput(cloneDir, 'rev-parse', 'refs/gnomish-factory/' + TASK) == snapshot
     }
 
     // Scenario: git/git-task-persistence / A tampered round trace is caught by read-back
@@ -249,9 +284,9 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
                     }
                 }
         tamperingBox.materialize(BRANCH, null)
-        def snapshot2 = new EnvironmentRoundSnapshot(tamperingBox, runner, cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))
+        def snapshot2 = new EnvironmentRoundSnapshot(tamperingBox, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp3')))
-        def persistence2 = new EnvironmentAttemptPersistence(tamperingBox, runner, cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
+        def persistence2 = new EnvironmentAttemptPersistence(tamperingBox, runner, cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
         snapshot2.snapshot(TASK, 'implement', 1)
 
         when:
@@ -278,9 +313,9 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
                     }
                 }
         tamperingBox.materialize(BRANCH, null)
-        def snapshot2 = new EnvironmentRoundSnapshot(tamperingBox, runner, cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))
+        def snapshot2 = new EnvironmentRoundSnapshot(tamperingBox, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp4')))
-        def persistence2 = new EnvironmentAttemptPersistence(tamperingBox, runner, cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
+        def persistence2 = new EnvironmentAttemptPersistence(tamperingBox, runner, cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
         snapshot2.snapshot(TASK, 'implement', 1)
 
         when:
@@ -328,6 +363,8 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
 
     // Scenario: git/git-task-persistence / Decision file keeps the one-writer rule
     // Scenario: git/git-task-persistence / Decision request is the one permitted state-directory write
+    // Scenario: git/git-task-persistence / No in-box check decides the boundary
+    // Scenario: git/git-task-persistence / Sandboxed boundary verification runs on harvested refs
     def "FR23: any other gnome write under .gnomish-task/ aborts"() {
         given:
         def stateDir = new File(box.workingCopy.toFile(), '.gnomish-task')
@@ -338,8 +375,12 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         when:
         persistence.persist(TASK, sampleState(), sampleTrace(1))
 
-        then:
+        then: 'the factory-side judgment of the quarantined harvest refused it'
         thrown(RoundBoundaryViolationException)
+
+        and: 'before the branch moved: the branch and the register still name the commit the round opened on'
+        factoryTip() == openTip
+        gitOutput(cloneDir, 'rev-parse', 'refs/gnomish-factory/' + TASK) == openTip
     }
 
     // Scenario: git/git-task-persistence / Interrupted verification resumes without burning an attempt
@@ -357,24 +398,32 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
             request().isEmpty()
         }
 
-        when: 'the state commit lands'
+        when: 'the state commit lands, registered by its closing push'
         persistence.persist(TASK, sampleState(), sampleTrace(2))
+        registerTip(cloneDir, TASK)
 
         then: 'the tip is no longer an interrupted verification'
         check.inspect(TASK).isEmpty()
     }
 
     // Scenario: git/git-task-persistence / Sandboxed boundary verification runs on harvested refs
-    def "FR22: a rewritten in-box history is refused at the state-commit harvest too"() {
+    // Scenario: git/git-task-persistence / Rewritten history is refused at the boundary
+    // Scenario: git/git-task-persistence / Refused content is not durable
+    def "FR22: a rewritten in-box history is refused at the state-commit harvest too, and the branch does not move"() {
         given:
         gnomeWork()
-        snapshotStep.snapshot(TASK, 'implement', 1)
+        def snapshot = snapshotStep.snapshot(TASK, 'implement', 1)
         runner.run(box.workingCopy, 'commit', '--amend', '-m', 'rewritten snapshot')
 
         when:
         persistence.persist(TASK, sampleState(), sampleTrace(1))
 
         then:
-        thrown(HarvestRefusedException)
+        def ex = thrown(RoundBoundaryViolationException)
+        ex.message.contains('history rewrite') || ex.message.contains('parent')
+
+        and: 'the branch and the register still name the admitted snapshot'
+        factoryTip() == snapshot
+        gitOutput(cloneDir, 'rev-parse', 'refs/gnomish-factory/' + TASK) == snapshot
     }
 }

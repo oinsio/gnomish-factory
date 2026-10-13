@@ -15,10 +15,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Classifies a task branch tip on resume (FR21, design D15): a tip carrying the
+ * Classifies a task branch on resume (FR21, design D15): a registered commit carrying the
  * snapshot commit message — {@code gnomish: snapshot <stage>#<round> <token>} — means
  * the factory died between the snapshot and the state commit, i.e. <em>during
- * verification</em>. The resuming instance re-runs verification against exactly
+ * verification</em>. The subject is read at the task's registered commit and nowhere else (design
+ * D13 of tighten-spec-contract): the snapshot is a closing commit the factory registers, so a
+ * snapshot-shaped subject the gnome commits above the register is not a snapshot. The resuming instance re-runs verification against exactly
  * that attempt commit and the attempt counter is unchanged — no attempt burned
  * for a verdict that was never recorded. Any other tip (a state commit, a
  * lifecycle commit, the gnome's own commits from an interrupted round) resumes
@@ -26,7 +28,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>The subject's round token names the round that wrote the snapshot, and with the stage and
  * round fixes the one path that round's decision request could live at ({@link
- * HarvestedBoundaryCheck#decisionPath}, the one spelling): the request — if any — is read from the
+ * GnomeRangeInspection#decisionPath}, the one spelling): the request — if any — is read from the
  * snapshot's own tree, so a round killed after asking re-raises its question rather than passing
  * as completed (FR15, NFR-R4 of make-checkpoint-gate-durable, design D10). A subject without a
  * readable token is refused like any other malformed one. The token itself travels on, typed, in
@@ -63,43 +65,55 @@ public final class SnapshotTipCheck {
 
     private final GitRunner runner;
     private final Path cloneDir;
+    private final FactoryRegisterRead register;
 
     public SnapshotTipCheck(GitRunner runner, Path cloneDir) {
         this.runner = runner;
         this.cloneDir = cloneDir;
+        this.register = new FactoryRegisterRead(runner);
     }
 
     /**
-     * An interrupted verification found at the task branch's tip, if any.
+     * An interrupted verification found at the task's registered commit, if any.
      *
      * @param taskId the tracker's original taskId; sanitized into the task branch name ({@link
      *     TaskIdSanitizer#branchName})
      * @return the pending verification's attempt commit, round and decision request, or empty when
-     *     the tip is not a well-formed snapshot commit
+     *     the registered commit is not a well-formed snapshot commit, or there is none
      */
     public Optional<PendingVerification> inspect(String taskId) {
         String branch = TaskIdSanitizer.branchName(taskId);
-        GitCommandResult tip = runner.run(cloneDir, "log", "-1", "--format=%H%x00%s", "refs/heads/" + branch);
-        if (tip.exitCode() != 0) {
-            // Not an alarm — the branch may simply not exist yet — but the resume it silently
+        Optional<RegisteredCommit> registered = register.registered(cloneDir, taskId);
+        if (registered.isEmpty()) {
+            // throwable-not-subject: the absence is the classification; nothing was thrown.
+            log.debug("snapshot check found no factory register for {}, resuming through salvage", branch);
+            return Optional.empty();
+        }
+        return inspectAt(taskId, branch, registered.get());
+    }
+
+    private Optional<PendingVerification> inspectAt(String taskId, String branch, RegisteredCommit registered) {
+        GitCommandResult subjectLine = runner.run(cloneDir, "log", "-1", "--format=%s", registered.id());
+        if (subjectLine.exitCode() != 0) {
+            // Not an alarm — the commit may be unreadable here — but the resume it silently
             // routes through the ordinary salvage path is worth a trace (FR5).
             // throwable-not-subject: git reported a status, not a thrown fault.
             log.debug(
                     "snapshot-tip check could not read {} (git exited {}): {}",
                     branch,
-                    tip.exitCode(),
-                    tip.stderr().forLog());
+                    subjectLine.exitCode(),
+                    subjectLine.stderr().forLog());
             return Optional.empty();
         }
-        // @UntrustedParser warrant (design D11): what leaves the split is a commit id and a commit
-        //     subject the factory itself wrote (ServiceCommitMessages), from which only the stage
-        //     name, the round number and the round token are lifted — and a malformed subject is
-        //     refused below.
-        String[] parts = tip.stdout().forParsing().strip().split("\u0000", 2);
-        if (parts.length < 2 || !parts[1].startsWith(SUBJECT_PREFIX)) {
+        // @UntrustedParser warrant (design D11): what leaves is a commit subject the factory itself
+        //     wrote (ServiceCommitMessages) on a commit the register names, from which only the
+        //     stage name, the round number and the round token are lifted — and a malformed subject
+        //     is refused below.
+        String line = subjectLine.stdout().forParsing().strip();
+        if (!line.startsWith(SUBJECT_PREFIX)) {
             return Optional.empty();
         }
-        String rest = parts[1].substring(SUBJECT_PREFIX.length());
+        String rest = line.substring(SUBJECT_PREFIX.length());
         Matcher subject = STAGE_ROUND_TOKEN.matcher(rest);
         if (!subject.matches()) {
             warnMalformed(branch, rest);
@@ -114,8 +128,8 @@ public final class SnapshotTipCheck {
             return Optional.empty();
         }
         RoundToken token = RoundToken.of(subject.group(3));
-        return Optional.of(
-                new PendingVerification(parts[0], key.stage(), key.attempt(), token, request(parts[0], key, token)));
+        return Optional.of(new PendingVerification(
+                registered.id(), key.stage(), key.attempt(), token, request(registered, key, token)));
     }
 
     /**
@@ -128,9 +142,9 @@ public final class SnapshotTipCheck {
      * decision file itself, handed to the one tolerant reader a live round uses, which mints it as
      * agent text — the same bytes the live read hands over from the box's working copy.
      */
-    private Optional<String> request(String snapshot, AttemptKey key, RoundToken token) {
+    private Optional<String> request(RegisteredCommit snapshot, AttemptKey key, RoundToken token) {
         return new GitShowTip(runner, cloneDir, snapshot)
-                .readAtTip(HarvestedBoundaryCheck.decisionPath(key, token))
+                .readAtRegister(GnomeRangeInspection.decisionPath(key, token))
                 .map(UntrustedText::forParsing);
     }
 

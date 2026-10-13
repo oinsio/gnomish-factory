@@ -136,14 +136,14 @@ record ContainerRunSupportFactory(
         // normalize-project-identity-url).
         String projectId = ProjectIdentity.resolve(
                 sandboxProperties.projectId(), new OriginRemote(runner).url(cloneDir), cloneDir);
-        // The denial restoration is read from the branch tip each time a round box is built
+        // The denial restoration is read at the registered commit each time a round box is built
         // (FR17, design D11 of make-checkpoint-gate-durable) — never offered by a later step.
         var taskEnvironments = environments.forTask(
                 TaskIdSanitizer.sanitize(taskId),
                 new BoxGitLink(cloneDir, new ContainerHarvestFetch(runner, cloneDir)),
                 allowlist,
                 projectId,
-                ContainerTipReader.restorations(runner, cloneDir, TaskIdSanitizer.branchName(taskId)));
+                ContainerTipReader.restorations(runner, cloneDir, taskId));
         return new ContainerRunSupport(
                 runner, cloneDir, taskId, taskEnvironments, segments, sandboxLifecyclePass, epochs);
     }

@@ -38,13 +38,17 @@ trait BranchShapeFixture implements SeededCloneFixture {
         persistRound(taskId, TaskState.atStageStart('implement').recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 100)))
     }
 
-    /** A task with one round, then {@code damage} committed to its envelope as a broken or foreign writer would. */
+    /** A task with one round, then {@code damage} committed to its envelope as a broken factory writer would. */
     void damaged(String taskId, Closure damage) {
         withRound(taskId)
         def worktree = worktreeFor(taskId)
         damage(worktree.resolve('.gnomish-task'))
         runner.run(worktree, 'add', '-A')
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'damage')
+        // The damage is the factory's own record (a newer factory's version, a broken write), so it
+        // is registered as its closing push would register it (design D13 of tighten-spec-contract):
+        // damage above the register is the gnome's, and changes no shape.
+        registerTip(cloneDir, taskId)
     }
 
     void finished(String taskId, TaskOutcome outcome, boolean cleanedUp = false) {

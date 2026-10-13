@@ -4,9 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.RemoteBranchTip.Carriage;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.InvalidTaskIdException;
-import com.github.oinsio.gnomish.gittransfer.GitTransfer;
 import com.github.oinsio.gnomish.gittransfer.Refspec;
-import com.github.oinsio.gnomish.gittransfer.TransferSource;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
@@ -15,9 +13,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Locates the task branch {@code gnomish/<taskId>} in a clone, trying — in order, stopping at the
- * first hit — a local branch, an already-present remote-tracking ref, then a narrow fetch of
- * exactly that one ref from {@code origin}. Shared verbatim by two very different callers: resume
+ * Locates the task branch {@code gnomish/<taskId>} in a clone: a local branch, else the touchpoint
+ * fetch of exactly that one ref (and the task's register) from {@code origin}, with a
+ * remote-tracking ref already present as the fallback when origin cannot deliver (design D13 of
+ * tighten-spec-contract, amended 2026-10-13: {@code git clone} brings a tracking ref without its
+ * register, so a present tracking ref no longer ends the search). Shared verbatim by two very different callers: resume
  * (task 4.6), which goes on to materialize a worktree from whatever ref this returns, and
  * inspection (`status`/`usage`, task 5.2), which only ever reads via {@code git show <ref>:<path>}
  * and must never create a local branch or touch the working copy itself — this locator never
@@ -32,7 +32,9 @@ import org.slf4j.LoggerFactory;
  * of every factory transfer, so "exactly one ref" is enforced by the flags as well as by the
  * refspec: without them git auto-follows tags into the operator's own {@code refs/tags/} and
  * truncates {@code FETCH_HEAD}, two writes this clone was promised it would never see. This
- * satisfies FR8's "never fetching anything else".
+ * satisfies FR8's "never fetching anything else" — the one other ref the same transfer names is the
+ * task's own factory register ({@link TouchpointFetch}, design D13 of tighten-spec-contract), which
+ * lands in the clone's register beside the tracking ref.
  *
  * <p>A fetch that does not produce the ref is <em>not</em> absence (FR6 of
  * harden-task-branch-contract): it is a question this clone cannot answer, and only {@code origin}
@@ -54,7 +56,7 @@ import org.slf4j.LoggerFactory;
  * history that no retry changes (FR5 of own-git-transfer-argv).
  *
  * <p>Implements FR8, FR13 of add-git-workflow; FR6 of harden-task-branch-contract; FR5 of
- * own-git-transfer-argv.
+ * own-git-transfer-argv; FR13 of tighten-spec-contract.
  */
 public final class TaskBranchLocator {
 
@@ -64,6 +66,7 @@ public final class TaskBranchLocator {
     private final OriginRemote origin;
     private final RemoteBranchTip remoteTip;
     private final GitInfrastructureRetry retry;
+    private final TouchpointFetch touchpoint;
 
     /**
      * @param runner the git subprocess seam; never null
@@ -74,6 +77,7 @@ public final class TaskBranchLocator {
         this.origin = new OriginRemote(runner);
         this.remoteTip = new RemoteBranchTip(runner);
         this.retry = retry;
+        this.touchpoint = new TouchpointFetch(runner);
     }
 
     /**
@@ -90,22 +94,34 @@ public final class TaskBranchLocator {
     public BranchLocation locate(Path cloneDir, String taskId) {
         String branchName = TaskIdSanitizer.branchName(taskId);
         return retry.until(
-                () -> attempt(cloneDir, branchName), located -> !(located instanceof BranchLocation.Unavailable));
+                () -> attempt(cloneDir, taskId, branchName),
+                located -> !(located instanceof BranchLocation.Unavailable));
     }
 
-    private BranchLocation attempt(Path cloneDir, String branchName) {
+    private BranchLocation attempt(Path cloneDir, String taskId, String branchName) {
         String localRef = "refs/heads/" + branchName;
         String trackingRef = "refs/remotes/origin/" + branchName;
 
         if (refExists(cloneDir, localRef)) {
             return new BranchLocation.Local(localRef);
         }
-        if (refExists(cloneDir, trackingRef)) {
-            return new BranchLocation.RemoteTracking(trackingRef);
-        }
+        // A remote-tracking ref already present does not end the search (design D13 of
+        // tighten-spec-contract, amended 2026-10-13): `git clone` and an operator's own fetch bring
+        // the branch without its factory register, and the touchpoint fetch is the register's only
+        // route into a clone with no local branch. So the fetch runs whenever no local branch
+        // exists, and the present ref is only the fallback for an origin that could not deliver.
+        boolean tracked = refExists(cloneDir, trackingRef);
 
-        GitCommandResult fetch = runner.run(
-                cloneDir, GitTransfer.fetch(TransferSource.ORIGIN, new Refspec(branchName + ":" + trackingRef)));
+        // The touchpoint fetch carries the factory register with the branch (design D13 of
+        // tighten-spec-contract). No local branch exists here, so nothing local can be ahead of
+        // origin's register: it lands in the clone's register itself.
+        GitCommandResult fetch = touchpoint.fetch(
+                cloneDir, taskId, new Refspec(branchName + ":" + trackingRef), FactoryRegister.fetchedInPlace(taskId));
+        if (tracked) {
+            return delivered(fetch)
+                    ? new BranchLocation.RemoteTracking(trackingRef)
+                    : fallBack(branchName, trackingRef, fetch);
+        }
         // The ref is the authority, not the fetch's exit code: a fetch killed on its deadline or
         // cut short by a shutdown cannot have created the tracking ref, and a fetch that reports
         // success without one has delivered nothing. Reading the ref answers all of those at once.
@@ -126,16 +142,50 @@ public final class TaskBranchLocator {
         return classifyFailedFetch(cloneDir, branchName, fetch);
     }
 
+    /**
+     * Whether the touchpoint fetch ran to its own exit and succeeded. Only consulted beside a
+     * tracking ref that was present before the fetch, where the ref's presence proves nothing.
+     */
+    private static boolean delivered(GitCommandResult fetch) {
+        return fetch.termination() == Termination.EXITED && fetch.exitCode() == 0;
+    }
+
+    /**
+     * The tracking ref already present, as the answer when origin could not deliver a fresher one:
+     * unreachable, no origin configured at all, or cut off. The clone's register is then whatever
+     * an earlier touchpoint fetch left — none for a ref {@code git clone} brought, which the reader
+     * classifies {@code Unknown}, the honest answer offline. Object validation refusing what origin
+     * served is a fact about the branch's history, not an outage, so it is never fallen back from.
+     */
+    private BranchLocation fallBack(String branchName, String trackingRef, GitCommandResult fetch) {
+        Optional<BranchLocation> refused = refused(branchName, fetch);
+        if (refused.isPresent()) {
+            return refused.get();
+        }
+        // throwable-not-subject: git reported a status; nothing was thrown.
+        log.debug(
+                "touchpoint fetch of {} did not deliver ({}); falling back to the tracking ref {} already present",
+                branchName,
+                why(fetch).forLog(),
+                trackingRef);
+        return new BranchLocation.RemoteTracking(trackingRef);
+    }
+
+    /** The refusal git's own object validation made of what origin served, if that is the failure. */
+    private static Optional<BranchLocation> refused(String branchName, GitCommandResult fetch) {
+        return FetchRefusal.parse(fetch.stderr())
+                .map(refusal -> new BranchLocation.Refused(refusal.report(
+                        "The task branch " + branchName + " was found on origin",
+                        FetchRefusal.Remedy.BEFORE_RETURNING_THE_TASK)));
+    }
+
     private BranchLocation classifyFailedFetch(Path cloneDir, String branchName, GitCommandResult fetch) {
         // Asked first, before origin is asked to confirm the branch (design D4 of
         // own-git-transfer-argv): validation refused what origin served, so the carriage is known
         // and the refusal is the finding — a task-level park, never the unavailable arm (FR5).
-        Optional<FetchRefusal> refusal = FetchRefusal.parse(fetch.stderr());
-        if (refusal.isPresent()) {
-            return new BranchLocation.Refused(refusal.get()
-                    .report(
-                            "The task branch " + branchName + " was found on origin",
-                            FetchRefusal.Remedy.BEFORE_RETURNING_THE_TASK));
+        Optional<BranchLocation> refused = refused(branchName, fetch);
+        if (refused.isPresent()) {
+            return refused.get();
         }
         return switch (remoteTip.confirmBranch(cloneDir, branchName)) {
             case Carriage.ABSENT -> {

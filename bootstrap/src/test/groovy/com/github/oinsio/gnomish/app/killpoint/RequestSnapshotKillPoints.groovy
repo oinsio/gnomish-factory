@@ -105,7 +105,10 @@ final class RequestSnapshotKillPoints {
                 [
                     new TreeEdit.PutFile(round.decisionFilePath().toString(), REQUEST.getBytes(StandardCharsets.UTF_8))
                 ],
-                new CommitMetadata(identity, now, identity, now, ServiceCommitMessages.snapshot(STAGE, 0, rounds.opened()))))
+                new CommitMetadata(identity, now, identity, now, ServiceCommitMessages.snapshot(STAGE, 0, rounds.opened())))
+                // The snapshot is a closing commit: it lands with its register in one transaction,
+                // as the admission lands an in-box snapshot (design D13, D18 of tighten-spec-contract).
+                .alongside('refs/gnomish-factory/' + TaskIdSanitizer.sanitize(world.taskId)))
     }
 
     /**

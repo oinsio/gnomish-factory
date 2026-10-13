@@ -36,6 +36,8 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
         new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
         commitAll(cloneDir)
         gitOutput(cloneDir, 'branch', BRANCH)
+        // The branch starts at a registered closing commit, as STARTED leaves it (design D13).
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + BRANCH.substring('gnomish/'.length()), 'refs/heads/' + BRANCH)
         box = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('box')))
         box.materialize(BRANCH, null)
     }
@@ -47,7 +49,7 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
     // Scenario: git/git-task-persistence / A blank tip is never recorded
     def "FR13: a snapshot whose tip cannot be resolved records no attempt commit"() {
         given:
-        def snapshotStep = new EnvironmentRoundSnapshot(box, blindToTips(), cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))
+        def snapshotStep = new EnvironmentRoundSnapshot(box, blindToTips(), cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
 
         when:
@@ -77,16 +79,16 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
         given: 'a closed round, and a persistence whose git cannot resolve the tip after the harvest'
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
         def closed = OpenedRound.reopen(rounds, cloneDir, BRANCH)
-        new EnvironmentRoundSnapshot(box, new GitProcessRunner(), cloneDir, TASK, closed).snapshot(TASK, 'implement', 1)
-        def persistence = new EnvironmentAttemptPersistence(
-                box, blindToTips(), cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
+        new EnvironmentRoundSnapshot(box, new GitProcessRunner(), cloneDir, closed).snapshot(TASK, 'implement', 1)
+        def persistence = new EnvironmentAttemptPersistence(box, blindToTips(), cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
 
         when:
         persistence.persist(TASK, TaskState.atStageStart('implement'),
                 new ToolTrace(new AttemptKey(TASK, 'implement', 1), []))
 
-        then:
-        def failure = thrown(BranchTipUnavailableException)
+        then: 'the admission cannot judge the round on refs that do not resolve: infrastructure, carrying git\'s words'
+        def failure = thrown(GitPersistFailedException)
+        failure.message.contains('harvest admission')
         failure.message.contains(GIT_FAILURE_STDERR)
     }
 

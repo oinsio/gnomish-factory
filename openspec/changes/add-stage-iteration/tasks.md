@@ -110,3 +110,12 @@ without the arbiter change. TDD throughout (`.claude/rules/testing.md`).
       (design Risks)
 - [ ] 6.4 Traceability grep per `.claude/rules/traceability.md`; recommend
       a Conventional Commits message referencing add-stage-iteration
+
+## Carried from tighten-spec-contract
+
+- `tighten-spec-contract` (task 9.13c, design D18) dissolved the declared pair
+  `RoundBoundaryCheck` / `HarvestedBoundaryCheck` into one range inspection,
+  `GnomeRangeInspection`, whose per-caller permits live in `AdmissionRule` / `PathPermit`; the
+  pair's markers are gone. Any task here that extends "both ends" of that pair (an allowed path
+  under `.gnomish-task/`, a new boundary rule) extends `AdmissionRule` once instead; revise the
+  affected tasks and design text through `/opsx:update` before this change is applied.

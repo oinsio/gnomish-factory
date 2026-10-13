@@ -262,7 +262,9 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
         String ref = refFor(taskId);
         var writer = writerFor();
         ObjectId tip = writer.requireTip(taskId, ref, event);
-        CommittedTaskJson committed = writer.readCommitted(taskId, tip, event);
+        // Built from the registered envelope, never the tip's (design D18 of tighten-spec-contract),
+        // as its host twin reads it; the commit still sits on the tip.
+        CommittedTaskJson committed = writer.readCommitted(taskId, writer.requireRegistered(taskId, event), event);
         TaskJsonDto currentDto = committed.dto();
         TaskRecord current = TaskJsonMapper.fromDto(currentDto);
 

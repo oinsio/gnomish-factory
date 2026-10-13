@@ -46,6 +46,9 @@ trait LifecyclePushFixture implements BareGitRepoFixture {
         commitAll(worktree, message)
         def sha = gitOutput(worktree, 'rev-parse', 'HEAD')
         git.run(cloneDir, 'worktree', 'remove', '--force', worktree.toString())
+        // A lifecycle commit lands with its register in one transaction (design D13 of
+        // tighten-spec-contract): this stand-in for the decorated store's commit registers too.
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + TASK_ID, sha)
         sha
     }
 

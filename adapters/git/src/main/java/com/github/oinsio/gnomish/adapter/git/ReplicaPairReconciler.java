@@ -4,9 +4,7 @@ import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
-import com.github.oinsio.gnomish.gittransfer.GitTransfer;
 import com.github.oinsio.gnomish.gittransfer.Refspec;
-import com.github.oinsio.gnomish.gittransfer.TransferSource;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
@@ -41,7 +39,8 @@ import org.slf4j.LoggerFactory;
  * discards anything a claim could arbitrate.
  *
  * <p>Fast-forward and discard are the same write: an explicit compare-and-swap of the local ref
- * against the tip the decision was made on ({@code git update-ref <ref> <new> <expected>}), so a tip
+ * against the tip the decision was made on — one ref transaction through {@link
+ * FactoryRegister#adopt}, which moves the register to origin's in the same step — so a tip
  * that moved in between fails the swap and the branch is classified again rather than overwritten
  * blindly. Origin history is never rewritten — no force push exists on any automatic path; the
  * local ref is the only thing that moves (NFR-R3).
@@ -74,12 +73,16 @@ final class ReplicaPairReconciler {
     private final Path repo;
     private final boolean syncWorkingTree;
     private final ClaimEpochSource epochs;
+    private final TouchpointFetch touchpoint;
+    private final FactoryRegister register;
 
     private ReplicaPairReconciler(GitRunner runner, Path repo, boolean syncWorkingTree, ClaimEpochSource epochs) {
         this.runner = runner;
         this.repo = repo;
         this.syncWorkingTree = syncWorkingTree;
         this.epochs = epochs;
+        this.touchpoint = new TouchpointFetch(runner);
+        this.register = new FactoryRegister(runner);
     }
 
     /**
@@ -117,7 +120,9 @@ final class ReplicaPairReconciler {
         // tracking ref", never to a wrong verdict (FR7 of bound-subprocess-commands). Its argv is
         // the transfer owner's, the one construction site every factory transfer shares, so this
         // one cannot auto-follow a tag or truncate FETCH_HEAD either (ADR 0008).
-        runner.run(repo, GitTransfer.fetch(TransferSource.ORIGIN, new Refspec(branch + ":" + trackingRef)));
+        // The register rides along into its tracking name (D13 of tighten-spec-contract).
+        touchpoint.fetch(
+                repo, taskId, new Refspec(branch + ":" + trackingRef), FactoryRegister.fetchedTracking(taskId));
 
         String lastLostSwap = null;
         for (int pass = 0; pass < MAX_PASSES; pass++) {
@@ -130,7 +135,12 @@ final class ReplicaPairReconciler {
             }
             DivergenceOutcome relation = ReplicaRelation.of(localTip, remoteTip, this::isAncestor);
             if (relation == DivergenceOutcome.EQUAL || relation == DivergenceOutcome.AHEAD) {
-                return relation;
+                lastLostSwap = followOriginRegister(taskId, localRef, localTip);
+                if (lastLostSwap == null) {
+                    return relation;
+                }
+                logLostSwap(taskId, branch, pass, lastLostSwap);
+                continue;
             }
             if (relation == DivergenceOutcome.DIVERGED && tenureOn(taskId).isEmpty()) {
                 throw new DivergedBranchException(taskId, branch, localTip, remoteTip);
@@ -139,18 +149,61 @@ final class ReplicaPairReconciler {
             if (lastLostSwap == null) {
                 return relation;
             }
-            log.warn(
-                    OperatorEvent.REPLICA_RESET_LOST_CAS.head()
-                            + "replica reset lost its compare-and-swap, classifying again: taskId={}, branch={}, pass={},"
-                            + " update-ref said: {}",
-                    taskId,
-                    branch,
-                    pass + 1,
-                    lastLostSwap);
+            logLostSwap(taskId, branch, pass, lastLostSwap);
         }
         throw new IllegalStateException("the local ref for " + branch + " of task " + taskId + " kept moving under "
                 + MAX_PASSES + " reconciliation passes; a second writer holds this branch"
                 + " (the last update-ref reported: " + lastLostSwap + ")");
+    }
+
+    private static void logLostSwap(String taskId, String branch, int pass, String lostSwap) {
+        log.warn(
+                OperatorEvent.REPLICA_RESET_LOST_CAS.head()
+                        + "replica reset lost its compare-and-swap, classifying again: taskId={}, branch={}, pass={},"
+                        + " update-ref said: {}",
+                taskId,
+                branch,
+                pass + 1,
+                lostSwap);
+    }
+
+    /**
+     * Where the local branch already holds origin's line (equal or ahead), brings the clone's
+     * register forward to origin's as the touchpoint fetch landed it (design D13 of
+     * tighten-spec-contract, amended 2026-10-13, cross-instance resume finding): a clone that got
+     * the branch from {@code git clone} or a plain fetch holds no register, and nothing else moves
+     * one into it. The register only ever moves forward — absent, or an ancestor of origin's — and
+     * only to a commit on the local line: a closing commit whose push was lost and whose branch a
+     * later branch-only push carried leaves the clone's register ahead of origin's, and rolling it
+     * back would hand the reader an older record than this clone made.
+     *
+     * @return {@code null} when nothing was to move or the move landed; the losing invocation's
+     *     stderr when the branch or the register moved under the compare-and-swap
+     * @throws IllegalStateException when the transaction was cut off before git answered
+     */
+    private @Nullable String followOriginRegister(String taskId, String localRef, String localTip) {
+        String originRegister = tipOf(FactoryRegister.of(taskId).trackingName());
+        if (originRegister == null) {
+            return null;
+        }
+        String localRegister = tipOf(FactoryRegister.of(taskId).name());
+        if (originRegister.equals(localRegister)
+                || (localRegister != null && !isAncestor(localRegister, originRegister))
+                || !isAncestor(originRegister, localTip)) {
+            return null;
+        }
+        GitCommandResult swap = register.follow(repo, taskId, localRef, localTip, localRegister, originRegister);
+        if (swap.termination() != Termination.EXITED) {
+            throw new IllegalStateException("could not bring the register of task " + taskId + " up to origin's:"
+                    + " git update-ref did not run to its own exit ("
+                    + swap.termination().name()
+                    + "), so the swap's outcome is unknown; resume the task to re-run the reconciliation");
+        }
+        if (swap.exitCode() != 0) {
+            return swap.stderr().isBlank() ? "(no stderr)" : swap.stderr().forLog();
+        }
+        log.info("register of task {} brought up to origin's: {} -> {}", taskId, localRegister, originRegister);
+        return null;
     }
 
     /**
@@ -173,7 +226,9 @@ final class ReplicaPairReconciler {
             String localTip,
             String remoteTip,
             DivergenceOutcome relation) {
-        GitCommandResult swap = runner.run(repo, "update-ref", localRef, remoteTip, localTip);
+        // The local line becomes origin's, and the register follows origin's in the same ref
+        // transaction (D13 of tighten-spec-contract), so no kill separates the two moves.
+        GitCommandResult swap = register.adopt(repo, taskId, localRef, remoteTip, localTip);
         if (swap.termination() != Termination.EXITED) {
             throw new IllegalStateException("could not reconcile " + branch + " of task " + taskId + ": git update-ref "
                     + "did not run to its own exit (" + swap.termination().name()

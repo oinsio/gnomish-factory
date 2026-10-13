@@ -1,6 +1,8 @@
 # ADR 0007: Pipeline Law Source
 
-Status: accepted (2026-09-08, introduced by `add-base-ref-resolution`)
+Status: accepted (2026-09-08, introduced by `add-base-ref-resolution`; amended
+2026-10-13 by `tighten-spec-contract` — resume reads the base pin at the task
+branch's registered commit, and host mode carries no claim for it)
 
 ## Context
 
@@ -144,6 +146,35 @@ is closed by the pipeline pin of `add-pipeline-routing`, whose structural
 hash therefore covers stage list, order and verify checks only, never
 instruction or criteria content; otherwise a human fix would park the very
 task it was meant to unblock.
+
+#### Where resume reads the pin
+
+*Amendment of 2026-10-13, from design D13 and D19 of `tighten-spec-contract`.
+"The pin is final" assumed that the pin resume reads is the one the factory
+wrote. It was read from `task.json` at the task branch's tip, and the gnome
+writes commits to that branch: a forged pin above the factory's last commit
+chose which ref name, and so which commit, the law of the resumed task came
+from.*
+
+Resume reads the base pin at the task branch's **registered commit** — the
+commit the factory register `refs/gnomish-factory/<task>` names, the factory's
+latest closing commit, moved only by the factory and only together with that
+commit (one ref transaction in the factory clone, one `git push --atomic` at
+origin). The pin is read by the same reader, at the same commit, as the rest of
+the envelope the branch shape is classified from, so the pin a resume binds
+from is the pin the factory recorded, by construction; whatever the gnome
+committed above the register is never read as the pin. The law is still read
+from the pinned ref name's current tip, as above: the register decides *which
+pin*, not *which law*. `ResumeLawBinding` takes the pin from that record;
+`docs/glossary.md` defines *factory register* and *registered commit*.
+
+**The host-mode limitation.** In host mode the gnome runs as the operator's
+user with the clone's `.git`: it can move the register itself, so the guarantee
+above holds in the container tier only. Host mode carries no integrity claim
+against the gnome — the `docs/sandbox-threat-registry.md` row on forging the
+factory's record (threat #49) states it — and its detections (a register that
+is not an ancestor of the tip, a registered envelope in no factory shape, both
+classified `Unknown` with a diagnosis) are signals, not guarantees.
 
 ### The law-root rule: `.gnomish/` is the one root, in every medium
 

@@ -40,7 +40,8 @@ class MidRoundEventDetectionSpec extends Specification implements BareGitRepoFix
                 }
         box.materialize(BRANCH, null)
         def clock = new VirtualClock(Instant.parse('2026-08-08T10:00:00Z'))
-        new MidRoundHarvestListener(box, new GitProcessRunner(), clone, clock, Duration.ofSeconds(30),
+        new MidRoundHarvestListener(box, new HarvestAdmission(new GitProcessRunner(), clone),
+                gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH), AdmissionRule.midRound(new com.github.oinsio.gnomish.domain.engine.AttemptKey('PROJ-9', 'implement', 0), com.github.oinsio.gnomish.app.port.git.RoundToken.of('a' * 40)), clock, Duration.ofSeconds(30),
                 new MidRoundPollContext('PROJ-9', BRANCH, new RepeatSuppressor(clock, RepeatSuppressor.DEFAULT_ROLL_UP_INTERVAL)))
 
         when: 'the gnome commits inside the box and the poll interval elapses, with no agent progress event'

@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.branch.BranchQuarantineException;
+import com.github.oinsio.gnomish.app.port.git.BoxGitVersionRefusedException;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
+import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException;
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.TakeCrashAbort;
@@ -24,7 +26,10 @@ import com.github.oinsio.gnomish.app.take.TakeResult;
  *       was dropped mid-run — a beat reported the claim gone — so the diverged branch is no longer
  *       this instance's to repair (FR8 of harden-task-branch-contract). The claim is still dropped
  *       first (see {@link #releaseBestEffort}), so a refusal never leaves the task hanging {@code
- *       Working}.
+ *       Working}. A refused factory clone ({@link CloneRefFormatRefusedException}) and a refused
+ *       sandbox image ({@link BoxGitVersionRefusedException}) take the same arm: each is the
+ *       operator's precondition, not the task's fault, so it spends no abort
+ *       (design D13 of tighten-spec-contract, as amended 2026-10-13).
  *   <li><b>A quarantined branch</b> — one that classifies to a non-recoverable shape — stops at
  *       {@link TakeQuarantinePark}, parking the task for a human on the first classification and
  *       spending no attempt of the unified recovery accounting (FR15 of
@@ -66,6 +71,8 @@ final class ClaimedRunFailureDispatch {
         return switch (failure) {
             case UsageException deliberate -> throw releaseBestEffort(order, deliberate);
             case DivergedBranchException deliberate -> throw releaseBestEffort(order, deliberate);
+            case CloneRefFormatRefusedException deliberate -> throw releaseBestEffort(order, deliberate);
+            case BoxGitVersionRefusedException deliberate -> throw releaseBestEffort(order, deliberate);
             case BranchQuarantineException quarantine -> TakeQuarantinePark.onQuarantine(order, quarantine);
             case BranchLocationUnavailableException outage ->
                 TaskBranchLookupOutage.release(order.tracker(), order.ref(), outage);

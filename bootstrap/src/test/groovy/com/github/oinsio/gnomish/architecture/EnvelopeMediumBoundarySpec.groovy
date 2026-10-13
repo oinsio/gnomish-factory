@@ -22,7 +22,7 @@ import spock.lang.Specification
  *   <li><b>Rule 1, the read medium.</b> In {@code adapters/git/src/main} and the application's
  *       {@code app} package, a filesystem read call is allowlisted by path with its reason or it is
  *       a defect: every envelope read belongs to {@code GitTaskStore} over {@code GitShowTip} at
- *       the worktree's {@code HEAD}. The sibling {@code dashboard} and {@code serveobservability}
+ *       the task's registered commit ({@link EnvelopeRegisterOwnerSpec}). The sibling {@code dashboard} and {@code serveobservability}
  *       packages are outside the scanned tree on purpose — they read their own ledger and snapshot
  *       files, never an envelope.
  *   <li><b>Rule 2, the path names.</b> No production source outside {@code EnvelopePaths} spells

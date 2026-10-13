@@ -252,7 +252,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         def rounds = new CurrentRound()
         def openTip = gitOutput(cloneDir, 'rev-parse', TaskIdSanitizer.branchName(taskId)).trim()
         rounds.open(RoundToken.of(openTip))
-        def snapshot = new EnvironmentRoundSnapshot(environment, gitRunner, cloneDir, taskId, rounds)
+        def snapshot = new EnvironmentRoundSnapshot(environment, gitRunner, cloneDir, rounds)
                 .snapshot(taskId, 'work', 0)
         support.keepStopped()
 

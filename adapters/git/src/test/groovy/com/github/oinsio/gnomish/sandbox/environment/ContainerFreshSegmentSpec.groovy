@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.adapter.git.AdmittedHarvest
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -75,6 +76,7 @@ class ContainerFreshSegmentSpec extends Specification implements BareGitRepoFixt
         def clone = initWorkingRepo(tempDir, 'factory-clone')
         commit(clone, 'seed.txt', 'seed')
         gitOutput(clone, 'branch', BRANCH)
+        gitOutput(clone, 'update-ref', 'refs/gnomish-factory/fresh-1', 'refs/heads/' + BRANCH)
         def planner = new SegmentPlanner(new BindingResolver(new BindingProperties('container', [:]),
         AdapterBindingRegistry.ratified([
             new HostBindingProvider(),
@@ -98,6 +100,10 @@ class ContainerFreshSegmentSpec extends Specification implements BareGitRepoFixt
         inBox(first, 'mkdir -p $HOME/bin /tmp/shims && echo "echo hijacked" > $HOME/bin/git && echo poisoned > $HOME/.profile && echo x > /tmp/shims/marker')
         def poisoned = inBox(first, 'ls $HOME/bin/git $HOME/.profile /tmp/shims/marker').readLines().size()
         inBox(first, "echo work > work.txt && git add -A && git commit -q -m 'stage one'")
+
+        and: "the stage's work is admitted onto the branch, as its rounds' closes admit it (design D18)"
+        first.harvest()
+        assert AdmittedHarvest.admitted(AdmittedHarvest.admit(clone, 'fresh-1'))
 
         and: 'the fresh stage takes its box'
         def second = lease.environmentFor('review')

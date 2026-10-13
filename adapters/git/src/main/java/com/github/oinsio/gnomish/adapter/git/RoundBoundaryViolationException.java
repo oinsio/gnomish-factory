@@ -4,19 +4,21 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
- * Thrown when {@link RoundBoundaryCheck} finds that the gnome broke the round-boundary git
- * discipline (design D12): HEAD left the task branch, the previous round's tip is no longer an
- * ancestor of HEAD (history rewrite), or the gnome modified {@code .gnomish-task/} directly. This
+ * Thrown when an admission point finds that the gnome broke the round-boundary git discipline
+ * (design D12; design D18 of tighten-spec-contract): HEAD left the task branch, the previous tip is
+ * no longer an ancestor (history rewrite), a commit has a second parent or a {@code gnomish: }
+ * subject, or the gnome modified {@code .gnomish-task/} — judged by the one {@link
+ * GnomeRangeInspection}, at the host round close and at the harvest admission alike. This
  * is a distinct failure class from {@link GitPersistFailedException} — that type means "the git
  * command or filesystem I/O itself failed"; this one means "the working tree is intact and git
  * succeeded, but its state violates the protocol the adapter relies on" — worth telling apart in
  * logs and error messages (NFR-O2).
  *
- * <p>Violation breaks durability: the caller (the round-boundary check runs before the round
- * commit in {@link GitAttemptPersistence#persist}) never reaches the commit step, so {@code
- * persist} throws and the engine turns it into an {@code Aborted} outcome.
+ * <p>Violation breaks durability: the caller never reaches the step that would make the refused
+ * content branch state, so {@code persist} throws and the engine turns it into an {@code Aborted}
+ * outcome.
  *
- * <p>Implements FR12 of add-git-workflow.
+ * <p>Implements FR12 of add-git-workflow; FR13 of tighten-spec-contract.
  */
 public final class RoundBoundaryViolationException extends RuntimeException {
 

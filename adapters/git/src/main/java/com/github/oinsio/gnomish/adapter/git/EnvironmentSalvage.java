@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException;
 import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -29,8 +30,16 @@ import org.slf4j.LoggerFactory;
  * corrupting recorded rounds. Two failures deliberately do <em>not</em>
  * degrade: {@link DockerUnavailableException} (the runtime itself is down — an
  * infrastructure failure that must retry or escalate cannot-execute, not
- * silently drop work) and {@link HarvestRefusedException} (rewritten history —
- * the existing violation, never a loss).
+ * silently drop work) and a refused harvest — an object git's validation
+ * refused ({@link HarvestRefusedException}), or a range the admission refuses
+ * ({@link RoundBoundaryViolationException}): the existing violation, never a loss.
+ *
+ * <p>The harvest lands in the task's quarantine, and the salvage commit enters the
+ * branch only through the admission ({@link HarvestAdmission}, design D18 of
+ * tighten-spec-contract): the gnome's commits below it and the salvage commit
+ * itself may change nothing under the state directory but the gnome-writable
+ * {@code decisions/} subtree, and the commit at the top must be the salvage the
+ * factory asked for. Admitted, the branch and the register move to it together.
  *
  * <p>{@code --discard-work} ({@link #discard}) instead resets the working copy
  * to the last recorded round: the caller disposes this environment and
@@ -43,15 +52,24 @@ import org.slf4j.LoggerFactory;
  * D11 of harden-task-branch-contract): only gnome-owned work files ride a salvage commit.
  *
  * <p>Kept in sync with {@link WorktreeSalvage}: both must produce a salvage commit carrying the
- * claim-epoch trailer, restore factory-owned paths from the tip, and — past the guard that
- * tolerates a tip with no state directory — FAIL the salvage when that restore fails, rather
- * than letting the working copy's factory files ride into the commit. Their degrade paths are
- * symmetric too: a discard that cannot reach or reset its working copy leaves the leftovers in
- * place, and both ends say so at WARN (FR5 of harden-logging-observability).
+ * claim-epoch trailer, restore the factory-owned paths before staging — here from the box's
+ * {@code HEAD}, with the admission refusing any owned path the gnome's commits changed above the
+ * register; there from the registered commit itself — and, past the guard that tolerates a base
+ * with no state directory, FAIL the salvage when that restore fails, rather than letting the
+ * working copy's factory files ride into the commit. Their degrade paths are symmetric too: a
+ * discard that cannot reach or reset its working copy leaves the leftovers in place, and both ends
+ * say so at WARN (FR5 of harden-logging-observability). And the salvage commit is a closing commit
+ * in both media, landed with its register in one ref transaction only when it was made (design
+ * D13 of tighten-spec-contract): the host end through {@link WorktreeClosingCommit}, this end
+ * through the admission's transaction. A salvage that made no commit registers nothing at either
+ * end, so a tip the gnome wrote is never registered in its place.
  *
- * <p>Implements FR6 of add-sandbox-core; FR5 of harden-task-branch-contract.
+ * <p>Implements FR6 of add-sandbox-core; FR5 of harden-task-branch-contract; FR13 of
+ * tighten-spec-contract.
  */
-public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpochSource epochs) implements TaskSalvage {
+public record EnvironmentSalvage(
+        TaskExecutionEnvironment environment, ClaimEpochSource epochs, GitRunner runner, Path cloneDir)
+        implements TaskSalvage {
 
     private static final Logger log = LoggerFactory.getLogger(EnvironmentSalvage.class);
 
@@ -123,9 +141,24 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
 
     @Override
     public void salvage(String taskId) {
+        salvageHarvested(taskId);
+    }
+
+    /**
+     * {@link #salvage}, answering whether a salvage commit reached the task branch — admitted, with
+     * the register moved to it in the same transaction (design D13, D18 of tighten-spec-contract).
+     *
+     * @param taskId the task whose leftovers are salvaged
+     * @return {@code true} when a salvage commit was made in-box, harvested and admitted; {@code
+     *     false} when there was nothing to salvage, or the environment was lost before the commit
+     *     or its harvest
+     * @throws RoundBoundaryViolationException if the admission refuses the harvested range
+     * @throws GitSalvageFailedException if the admission could not judge it
+     */
+    public boolean salvageHarvested(String taskId) {
         try {
             if (!hasLeftovers()) {
-                return;
+                return false;
             }
             InBoxGitCommand.Outcome commit = exec(COMMIT_SCRIPT, commitArguments(taskId));
             if (!commit.succeeded()) {
@@ -137,9 +170,24 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
                             + "salvage skipped for taskId={}: environment lost, continuing from the last harvested state",
                     taskId,
                     e);
-            return;
+            return false;
         }
-        harvestLossTolerant(taskId);
+        if (!harvestLossTolerant(taskId)) {
+            return false;
+        }
+        admit(taskId);
+        return true;
+    }
+
+    /** Admits the harvested salvage commit, or throws the admission's refusal. */
+    private void admit(String taskId) {
+        HarvestAdmission admission = new HarvestAdmission(runner, cloneDir);
+        switch (admission.admit(taskId, admission.quarantined(taskId), AdmissionRule.salvage())) {
+            case AdmittedRange.Admitted ignored -> {}
+            case AdmittedRange.Refused refused -> throw new RoundBoundaryViolationException(taskId, refused.reason());
+            case AdmittedRange.Unverified unverified ->
+                throw new GitSalvageFailedException(taskId, "harvest admission", unverified.evidence());
+        }
     }
 
     /** Resets the in-box working copy to {@code HEAD}, discarding leftovers; degrades like salvage. */
@@ -160,9 +208,10 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
      * environment died between commit and fetch — WARN and continue from the
      * last harvested state (FR6).
      */
-    private void harvestLossTolerant(String taskId) {
+    private boolean harvestLossTolerant(String taskId) {
         try {
             environment.harvest();
+            return true;
         } catch (HarvestFailedException e) {
             log.warn(
                     OperatorEvent.SALVAGE_HARVEST_FAILED.head()
@@ -170,6 +219,7 @@ public record EnvironmentSalvage(TaskExecutionEnvironment environment, ClaimEpoc
                             + " state",
                     taskId,
                     e);
+            return false;
         }
     }
 

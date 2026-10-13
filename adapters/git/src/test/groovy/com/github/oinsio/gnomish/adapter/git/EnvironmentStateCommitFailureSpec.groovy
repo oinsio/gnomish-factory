@@ -41,11 +41,13 @@ class EnvironmentStateCommitFailureSpec extends Specification implements BareGit
         new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
         commitAll(cloneDir)
         gitOutput(cloneDir, 'branch', BRANCH)
+        // The branch starts at a registered closing commit, as STARTED leaves it (design D13).
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + BRANCH.substring('gnomish/'.length()), 'refs/heads/' + BRANCH)
         box = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('box')))
         box.materialize(BRANCH, null)
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
-        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))
-        persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
+        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
+        persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
     }
 
     // FR21, FR22: the exception's detail is the in-box command output read back through the

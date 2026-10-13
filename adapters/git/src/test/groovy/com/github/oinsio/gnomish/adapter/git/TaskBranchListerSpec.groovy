@@ -37,7 +37,7 @@ import spock.lang.TempDir
  * branches, deduplicated per task with the local tip preferred, into a compact
  * {@link TaskListRow} summary — the source for {@code gnomish status}'s list mode.
  */
-class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
+class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
 
     @TempDir
     Path tempDir
@@ -71,6 +71,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
                 TaskStart.commit(repo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 TaskState.atStageStart('implement'))
+        registerTip(repo, taskId)
     }
 
     private void createLocalTask(String taskId, String stage = 'implement', int attemptsUsed = 0) {
@@ -81,6 +82,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
+        registerTip(registeredClone.clonePath(), taskId)
     }
 
     /** Records one completed round on an existing task branch, so its tip classifies as in-flight. */
@@ -91,6 +93,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
                         ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()))
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state,
                 new ToolTrace(new AttemptKey(taskId, stage, 0), []))
+        registerTip(registeredClone.clonePath(), taskId)
     }
 
     // Scenario: cli/task-inspection / Overview of all tasks
@@ -148,7 +151,8 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
                 new ToolTrace(new AttemptKey('REMOTE-ONLY', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))
-        runner.run(worktreeFor(seed, 'REMOTE-ONLY'), 'push', 'origin', 'gnomish/REMOTE-ONLY')
+        registerTip(worktreeFor(seed, 'REMOTE-ONLY'), 'REMOTE-ONLY')
+        runner.run(worktreeFor(seed, 'REMOTE-ONLY'), 'push', 'origin', 'gnomish/REMOTE-ONLY', 'refs/gnomish-factory/REMOTE-ONLY')
 
         // Task BOTH: pushed from the seed clone too, so origin carries it.
         createTaskAtHead(seed, 'BOTH')
@@ -157,12 +161,15 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
                 new ToolTrace(new AttemptKey('BOTH', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))
-        runner.run(worktreeFor(seed, 'BOTH'), 'push', 'origin', 'gnomish/BOTH')
+        registerTip(worktreeFor(seed, 'BOTH'), 'BOTH')
+        runner.run(worktreeFor(seed, 'BOTH'), 'push', 'origin', 'gnomish/BOTH', 'refs/gnomish-factory/BOTH')
 
         def observerClone = tempDir.resolve('observer-clone')
         seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
         // Fetch REMOTE-ONLY and BOTH as remote-tracking refs (no local branch), matching a peer instance's clone state.
+        // Each with its factory register, as the touchpoint fetch lands it (design D13 of tighten-spec-contract).
         fetchFromOrigin(observerClone, 'refs/heads/gnomish/REMOTE-ONLY:refs/remotes/origin/gnomish/REMOTE-ONLY')
+        fetchFromOrigin(observerClone, 'refs/gnomish-factory/REMOTE-ONLY:refs/gnomish-factory/REMOTE-ONLY')
         fetchFromOrigin(observerClone, 'refs/heads/gnomish/BOTH:refs/remotes/origin/gnomish/BOTH')
 
         def observer = register(observerClone)
@@ -275,11 +282,13 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         createLocalTask('DELIVERED-1')
         repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('DELIVERED-1')
+        registerTip(cloneDir, 'DELIVERED-1')
         createTaskAtHead(registeredClone, 'FRESH-1')
         createLocalTask('FLIGHT-1')
         recordRound('FLIGHT-1')
         createLocalTask('PARKED-1')
         repository.recordOutcome('PARKED-1', new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'), TrackerWrite.OWED)
+        registerTip(cloneDir, 'PARKED-1')
 
         when:
         def rows = lister.list(cloneDir)
@@ -309,6 +318,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         def worktree = worktreeFor(registeredClone, 'BROKEN-1')
         new File(worktree.toFile(), '.gnomish-task/state.json').text = '{ not json at all'
         commitAll(worktree, 'break state')
+        registerTip(cloneDir, 'BROKEN-1')
 
         when:
         def rows = lister.list(cloneDir)
@@ -338,6 +348,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture {
         def worktree = worktreeFor(registeredClone, 'PRE-1')
         runner.run(worktree, 'rm', '-f', '.gnomish-task/state.json')
         commitAll(worktree, 'drop state')
+        registerTip(cloneDir, 'PRE-1')
 
         when:
         def rows = lister.list(cloneDir)

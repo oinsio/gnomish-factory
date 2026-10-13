@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.adapter.git.AdmittedHarvest
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.EnvironmentSalvage
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.git.HarvestRefusedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
@@ -33,6 +33,7 @@ import spock.lang.TempDir
 })
 class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixture {
 
+    static final String TASK = 'mech-1'
     static final String BRANCH = 'gnomish/mech-1'
     static final ResourceLimits LIMITS = new ResourceLimits('2', '512m', 256L, '10g')
 
@@ -56,6 +57,8 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         new File(clone.toFile(), 'seed.txt').text = 'seed'
         commitAll(clone)
         gitOutput(clone, 'branch', BRANCH)
+        // The branch starts at a registered closing commit, as STARTED leaves it (design D13).
+        gitOutput(clone, 'update-ref', 'refs/gnomish-factory/' + TASK, 'refs/heads/' + BRANCH)
         clone
     }
 
@@ -104,9 +107,11 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         inBox(e, 'git config gc.auto') == '0'
     }
 
-    def "FR5: harvest brings an in-box gnome commit to the factory clone as a bare ref update"() {
+    // Scenario: git/git-task-persistence / The branch moves only through the admission
+    def "FR5: harvest brings an in-box gnome commit to the factory clone's quarantine, and the admission onto the branch"() {
         given:
         def source = factoryClone()
+        def branchBefore = gitOutput(source, 'rev-parse', 'refs/heads/' + BRANCH)
         def e = env(source)
         e.materialize(BRANCH, null)
         def inBoxTip = gnomeCommit(e)
@@ -114,7 +119,15 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         when:
         e.harvest()
 
-        then: 'the factory branch now points at the in-box tip'
+        then: 'the harvest moved the quarantine alone'
+        gitOutput(source, 'rev-parse', 'refs/gnomish-quarantine/' + TASK) == inBoxTip
+        gitOutput(source, 'rev-parse', 'refs/heads/' + BRANCH) == branchBefore
+
+        when:
+        def verdict = AdmittedHarvest.admit(source, TASK)
+
+        then: 'the admission moved the factory branch to the in-box tip'
+        AdmittedHarvest.admitted(verdict)
         gitOutput(source, 'rev-parse', 'refs/heads/' + BRANCH) == inBoxTip
 
         and: 'the content is readable as a bare object without any checkout'
@@ -136,8 +149,8 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         when:
         e.harvest()
 
-        then: 'the branch arrived, the tag did not, and FETCH_HEAD was not written'
-        gitOutput(source, 'rev-parse', 'refs/heads/' + BRANCH) == inBoxTip
+        then: 'the branch arrived in the quarantine, the tag did not, and FETCH_HEAD was not written'
+        gitOutput(source, 'rev-parse', 'refs/gnomish-quarantine/' + TASK) == inBoxTip
         gitExitCode(source, 'rev-parse', '--verify', '--quiet', 'refs/tags/box-made') != 0
         gitOutput(source, 'tag', '--list') == ''
         !new File(source.toFile(), '.git/FETCH_HEAD').exists()
@@ -145,21 +158,25 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
 
     // Scenario: git/git-task-persistence / History rewrite aborts
     // Scenario: git/git-task-persistence / Rewritten history is refused at the boundary
-    def "FR5: rewritten history inside the box is refused by the harvest itself and the factory ref is unchanged"() {
-        given: 'one harvested commit, then an in-box amend of that same tip'
+    // Scenario: git/git-task-persistence / Refused content is not durable
+    def "FR5: rewritten history inside the box is refused by the admission and the factory ref is unchanged"() {
+        given: 'one harvested and admitted commit, then an in-box amend of that same tip'
         def source = factoryClone()
         def e = env(source)
         e.materialize(BRANCH, null)
         def harvested = gnomeCommit(e)
         e.harvest()
+        assert AdmittedHarvest.admitted(AdmittedHarvest.admit(source, TASK))
         inBox(e, "git commit --amend -m 'rewritten'")
 
         when:
         e.harvest()
+        def verdict = AdmittedHarvest.admit(source, TASK)
 
-        then:
-        thrown(HarvestRefusedException)
+        then: 'the rewritten line reached the quarantine only, and the admission refused it'
+        AdmittedHarvest.refused(verdict)
         gitOutput(source, 'rev-parse', 'refs/heads/' + BRANCH) == harvested
+        gitOutput(source, 'rev-parse', 'refs/gnomish-factory/' + TASK) != gitOutput(source, 'rev-parse', 'refs/gnomish-quarantine/' + TASK)
     }
 
     // Scenario: git/git-task-persistence / Hooks do not cross the boundary
@@ -191,7 +208,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         when: 'a second adapter instance reattaches and salvages through the port'
         def e2 = env(source, key)
         e2.materialize(BRANCH, null)
-        new EnvironmentSalvage(e2, ClaimEpochSource.NONE).salvage('mech-task')
+        new EnvironmentSalvage(e2, ClaimEpochSource.NONE, new GitProcessRunner(), source).salvage(TASK)
 
         then: 'the salvage commit reached the factory branch with the interrupted tail'
         gitOutput(source, 'show', BRANCH + ':tail.txt') == 'half-done'
@@ -207,11 +224,12 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         e1.materialize(BRANCH, null)
         def tip = gnomeCommit(e1)
         e1.harvest()
+        assert AdmittedHarvest.admitted(AdmittedHarvest.admit(source, TASK))
         inBox(e1, "echo 'to-be-lost' > lost.txt")
         assert new ProcessBuilder('docker', 'rm', '-f', 'gnomish-box-' + key).start().waitFor() == 0
 
         when: 'salvage runs against the dead box'
-        new EnvironmentSalvage(e1, ClaimEpochSource.NONE).salvage('mech-task')
+        new EnvironmentSalvage(e1, ClaimEpochSource.NONE, new GitProcessRunner(), source).salvage(TASK)
 
         then: 'nothing thrown, at most the uncommitted tail is lost, recorded rounds intact'
         noExceptionThrown()
@@ -238,6 +256,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
         eA.materialize(BRANCH, null)
         def tip = gnomeCommit(eA)
         eA.harvest()
+        assert AdmittedHarvest.admitted(AdmittedHarvest.admit(sourceA, TASK))
         gitOutput(sourceA, 'push', 'origin', BRANCH + ':' + BRANCH)
 
         when: 'instance B, a different machine, fetches exactly that branch and materializes'

@@ -65,7 +65,7 @@ public final class ServiceCommitMessages {
      * which is the only way to tell a factory snapshot from the gnome's own in-box commits (both
      * carry the in-box identity). The round token names the round that wrote the snapshot, so the
      * resume reads the decision request — if any — at exactly that round's path in the snapshot's
-     * tree ({@link HarvestedBoundaryCheck#decisionPath}).
+     * tree ({@link GnomeRangeInspection#decisionPath}).
      *
      * @param stage the stage id the round belongs to
      * @param round the round's 1-based sequence number within the current stage visit

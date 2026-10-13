@@ -111,6 +111,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         seedTask('PROJ-10')
         def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         repository.recordOutcome('PROJ-10', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'), TrackerWrite.OWED)
+        registerTip(cloneDir, 'PROJ-10')
 
         expect:
         branches.classifyShape(cloneDir, 'PROJ-10') instanceof BranchShape.Parked
@@ -118,6 +119,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         and: 'the outcome commit without its cleanup behind it is the kill-window shape, not delivery'
         seedTask('PROJ-11')
         repository.recordOutcome('PROJ-11', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
+        registerTip(cloneDir, 'PROJ-11')
         branches.classifyShape(cloneDir, 'PROJ-11') instanceof BranchShape.CompletedUncleaned
     }
 
@@ -156,7 +158,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         delivered.finalState() == finalState
     }
 
-    def "pushBestEffort delegates to BranchPush — the branch lands on origin"() {
+    def "pushBestEffort is the closing push — the branch lands on origin"() {
         given:
         def bare = initBareRepo(tempDir, 'push-origin.git')
         seedTask('PROJ-7')
@@ -164,7 +166,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         runner.run(worktree, 'remote', 'add', 'origin', bare.toString())
 
         when:
-        branches.pushBestEffort(worktree, 'gnomish/PROJ-7')
+        branches.pushBestEffort(worktree, 'PROJ-7')
 
         then:
         runner.run(bare, 'rev-parse', '--verify', 'gnomish/PROJ-7').exitCode() == 0

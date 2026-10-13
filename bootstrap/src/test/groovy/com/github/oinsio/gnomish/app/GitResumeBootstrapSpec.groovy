@@ -113,6 +113,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         Files.writeString(rewriteWorktree.resolve('.gnomish-task').resolve('task.json'), rewritten)
         commitAll(rewriteWorktree, 'bump version')
         gitOutput(cloneDir, 'worktree', 'remove', '--force', rewriteWorktree.toString())
+        registerTip(cloneDir, 'PROJ-4')
 
         when:
         newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-4')

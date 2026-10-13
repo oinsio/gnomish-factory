@@ -221,6 +221,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         repository.recordOutcome('DELIVERED-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('DELIVERED-1')
+        registerTip(cloneDir, 'DELIVERED-1')
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'DELIVERED-1')
 
         when:
@@ -243,6 +244,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         stateFile.text = stateFile.text.replaceFirst(/"version"\s*:\s*1/, '"version":2')
         runner.run(worktree, 'add', '-A')
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'version 2')
+        registerTip(cloneDir, 'VERSION-2')
         def tipBefore = runner.run(cloneDir, 'rev-parse', 'gnomish/VERSION-2').stdout().forParsing().trim()
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'VERSION-2')
 
@@ -267,6 +269,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         stateFile.text = stateFile.text.replaceFirst(/"version"\s*:\s*1/, '"version":9')
         runner.run(worktree, 'add', '-A')
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'version 9')
+        registerTip(cloneDir, 'VERSION-3')
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'VERSION-3', '--json')
 
         when:
@@ -288,11 +291,13 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         repository.recordOutcome('MIXED-DONE', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('MIXED-DONE')
+        registerTip(cloneDir, 'MIXED-DONE')
         persistRound('MIXED-BAD', TaskState.atStageStart('implement'))
         def broken = worktreeFor('MIXED-BAD')
         new File(broken.toFile(), '.gnomish-task/state.json').text = '{ not json'
         runner.run(broken, 'add', '-A')
         runner.run(broken, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'break')
+        registerTip(cloneDir, 'MIXED-BAD')
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir)
 
         when:
@@ -355,6 +360,7 @@ class StatusCommandSpec extends Specification implements SeededCloneFixture, Std
         stateFile.text = stateFile.text.replaceFirst(/"version"\s*:\s*1/, '"version":9')
         runner.run(worktree, 'add', '-A')
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'version 9')
+        registerTip(cloneDir, 'MACHINE-3')
         def shape = (TaskGitFixture.realClaimless().branches().readState(cloneDir, 'MACHINE-3')
                 as BranchStateResult.Shaped).shape()
         def expected = new BranchShapeReportRenderer().renderJson('MACHINE-3', shape) + ConsoleIO.LINE_END

@@ -78,8 +78,8 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         worktrees.salvage(_) >> salvager
         store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> { persistence }
-        store.readRecordedState(_) >> { stateRead.call() }
-        store.readTaskRecord(_) >> { Optional.ofNullable(record) }
+        store.readRecordedState(_, _) >> { stateRead.call() }
+        store.readTaskRecord(_, _) >> { Optional.ofNullable(record) }
     }
 
     ScriptedConsoleIO console = unreadableConsole()

@@ -89,7 +89,7 @@ class TakeRepairObservabilitySpec extends Specification implements RunChainFakes
     /** The resume bootstrap's last step, throwing so each scenario stops right after the routing. */
     private TaskStoreGit stoppingStore() {
         Stub(TaskStoreGit) {
-            readTaskRecord(_) >> {
+            readTaskRecord(_, _) >> {
                 throw new UsageException('stopped at the resume bootstrap')
             }
         }

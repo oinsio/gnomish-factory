@@ -102,7 +102,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-        store.readRecordedState(_) >> { stateRead.call() }
+        store.readRecordedState(_, _) >> { stateRead.call() }
     }
 
     private TaskGit git() {
@@ -145,7 +145,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         def executor = new ScriptedExecutor([completedRound()])
         // FR5 of fix-envelope-medium: the cleanup commit took the whole envelope off the tip, so
         // the read answers empty. That empty IS the route — no cause chain is inspected.
-        store.readTaskRecord(_) >> Optional.empty()
+        store.readTaskRecord(_, _) >> Optional.empty()
         tracker.fetchTask(_) >> heldByUs()
         branches.readDelivered(_, _) >> new DeliveredBranchState(
                 new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskState.atStageStart('build'))
@@ -169,7 +169,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     def "resumes a pre-contract tip at the first stage instead of failing"() {
         given: 'a branch whose task.json reads back but whose state.json is absent'
         def executor = new ScriptedExecutor([completedRound()])
-        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
         stateRead = { Optional.<TaskState> empty() }
         tracker.fetchTask(_) >> heldByUs()
 
@@ -188,7 +188,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     // or shutdown hiccup finish a task the engine never ran.
     def "lets a tip read that did not run to its exit propagate"() {
         given:
-        store.readTaskRecord(_) >> {
+        store.readTaskRecord(_, _) >> {
             throw new BranchTipUnavailableException('refs/heads/gnomish/PROJ-1', 'show', 'TIMEOUT')
         }
 
@@ -205,7 +205,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     def "reconciles an orphaned park without running the engine"() {
         given:
         def executor = new ScriptedExecutor([completedRound()])
-        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Paused('build'), null, true))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(new RecordedOutcome.Paused('build'), null, true))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -226,7 +226,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         def executor = new ScriptedExecutor([completedRound()])
         recordedState = CheckpointMechanicsFixtures.gatedAt('build')
-        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Paused('build'), null, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(new RecordedOutcome.Paused('build'), null, false))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -251,7 +251,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         def executor = new ScriptedExecutor([completedRound()])
         recordedState = CheckpointMechanicsFixtures.gatedAt('build')
-        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -280,7 +280,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         def resolved = []
         baseRefGit = recordingResumingBaseRefGit(resolved)
-        store.readTaskRecord(_) >> Optional.of(recordPinnedTo('release/1.18'))
+        store.readTaskRecord(_, _) >> Optional.of(recordPinnedTo('release/1.18'))
         tracker.fetchTask(_) >> heldByUsNamingConflictingBase()
 
         when:
@@ -307,7 +307,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
             UntrustedText.agent('postgres'),
             UntrustedText.agent('sqlite')
         ])
-        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -328,7 +328,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     // Scenario: tracker/github-tracker / Kill between branch append and acknowledge
     def "FR12: an answered branch whose acknowledge never landed re-drives just the acknowledge"() {
         given:
-        store.readTaskRecord(_) >> Optional.of(recordWithDecision('use postgres'))
+        store.readTaskRecord(_, _) >> Optional.of(recordWithDecision('use postgres'))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -348,7 +348,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     // FR12: the same branch whose acknowledge did land pays one read and writes nothing.
     def "FR12: an answered branch whose acknowledge already landed re-posts nothing"() {
         given:
-        store.readTaskRecord(_) >> Optional.of(recordWithDecision('use postgres'))
+        store.readTaskRecord(_, _) >> Optional.of(recordWithDecision('use postgres'))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -370,7 +370,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
             UntrustedText.agent('postgres'),
             UntrustedText.agent('sqlite')
         ])
-        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -395,7 +395,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     def "resumes an AttemptsExhausted escalation on the return alone, appending no decision"() {
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
-        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -417,7 +417,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     def "FR7: consumes an infrastructure park through the resumed write before resuming"() {
         given:
         def report = new EscalationReport.CannotExecute(UntrustedText.subprocess('adapter crashed'), [])
-        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -440,7 +440,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
             ensureWorktree(_, _, _) >> worktree
             salvage(worktree) >> salvager
         }
-        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
         def ownGit = new TaskGit(store, branches, ownWorktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
         def runner = new TakeResumeRunner(
@@ -466,7 +466,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         def executor = new ScriptedExecutor([completedRound()])
         def report = new EscalationReport.AttemptsExhausted(3)
-        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, true))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, true))
         tracker.fetchTask(_) >> heldByUs()
 
         when:
@@ -487,7 +487,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('which database?'), [
             UntrustedText.agent('postgres')
         ])
-        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
         recordedState = finalState
         tracker.fetchTask(_) >> heldByUs()
 
@@ -515,7 +515,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         def lostFlag = new ClaimLossFlag()
         lostFlag.claimLost(REF, 'taken over')
-        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
         def runner = new TakeResumeRunner(slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])),
         git(), tracker, registeredClone, ContainerTakeSupportFixture.hostOnly(), new ClaimTenure(ClaimBeat.NONE, lostFlag)))
@@ -533,7 +533,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     // it is cleared on confirmation whichever path wrote it.
     def "clears the pending marker when the engine's own run parks"() {
         given:
-        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
         def runner = new TakeResumeRunner(slotWiring(
                         assemblyRunning(new ScriptedExecutor([

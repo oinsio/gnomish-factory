@@ -174,8 +174,38 @@ factory checks it.
 
 ## Open Questions
 
-None: base distribution, tag scheme and the non-blocking scan were decided in
-the design session and in this proposal's non-goals.
+Base distribution, tag scheme and the non-blocking scan were decided in the
+design session and in this proposal's non-goals. Three questions are open,
+raised by the task 9.13f report of `tighten-spec-contract` (2026-10-13); they
+are recorded here without a decision.
+
+- **Q1 — The base's git is below the factory's floor.** The box's seed clone
+  reads the factory clone with the image's own git, and the factory clone is
+  on the reftable ref backend, so the image's git must be at least 2.45.1
+  (`GitVersion.FLOOR`; `BoxGitFloor` refuses an image below it before any seed
+  clone). Ubuntu 24.04 packages git 2.43, which cannot open a reftable store
+  (`unknown repository extension found: refstorage`; both features of
+  `JvmProxyEgressE2ESpec` failed this way on a noble-based image). The base as
+  specified here (`ubuntu:24.04`, `apt-get install git`) would be refused by
+  the factory it ships with. Where the base's git comes from (the `git-core`
+  PPA, a source build, another base) and what that does to NFR-P1, to the
+  weekly rebuild (G3: a package source outside Ubuntu) and to the "Ubuntu
+  24.04" requirement is undecided.
+- **Q2 — Which other image dependencies carry a version requirement.** git is
+  the first tool whose version the factory's own mechanics constrain; the
+  image contract lists tools by presence only. The other tools the factory
+  drives inside the box (curl for the egress self-check probes, the shell the
+  seed helper and the self-check run in, the CA tooling behind
+  `gnomish-trust-ca`, `keytool`) and the age of the distribution itself need
+  the same review before the contract text is fixed.
+- **Q3 — How the factory checks that the box carries the versions it needs.**
+  Today `BoxGitFloor` starts a one-shot container per materialize
+  (`git --version`), which NFR-R1 does not account for; `gnomish-verify-image`
+  (FR3) checks presence, not versions; the contract label names a contract
+  version, not tool versions. Whether the label implies the floors, whether
+  the build-time check and the box-start check read the floors from one
+  source (the file of design D2), and what an operator's custom image (NG5)
+  must prove, is to be designed.
 
 ## Impact
 

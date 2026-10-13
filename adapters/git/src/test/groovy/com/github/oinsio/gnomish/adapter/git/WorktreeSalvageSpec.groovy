@@ -16,7 +16,8 @@ import spock.lang.TempDir
  * (a service commit, not a round) or discarded on request, resetting to the last recorded round.
  *
  * <p>FR5 of harden-task-branch-contract: factory-owned {@code .gnomish-task/} paths are restored
- * from the tip rather than salvaged, per the shared {@link FactoryOwnedPaths} policy.
+ * from the registered commit rather than salvaged, per the shared {@link FactoryOwnedPaths} policy
+ * (design D18 of tighten-spec-contract).
  */
 class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
 
@@ -51,6 +52,7 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
         given:
         def repo = initWorkingRepo(tempDir, 'salvage-me')
         commit(repo, 'a.txt', 'first')
+        runner.run(repo, 'checkout', '-q', '-b', 'gnomish/PROJ-1')
         def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         Files.writeString(repo.resolve('leftover.txt'), 'half-done work')
         def salvage = new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE)
@@ -66,6 +68,30 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
         and: 'the leftover is committed, not discarded'
         Files.exists(repo.resolve('leftover.txt'))
         !salvage.hasLeftovers()
+
+        and: 'FR13 of tighten-spec-contract: the salvage commit is a closing commit — the factory register names it'
+        runner.run(repo, 'rev-parse', 'refs/gnomish-factory/PROJ-1').stdout().forParsing().trim() == tipAfter
+    }
+
+    // FR13 of tighten-spec-contract: a salvage commit lands on the task branch with its register in
+    //     one transaction, so with no task branch there is nothing to land it on, and the salvage
+    //     fails rather than committing somewhere else.
+    def "FR13: a salvage with no task branch to land on fails, naming the taskId, and moves nothing"() {
+        given: 'a worktree whose task branch does not exist'
+        def repo = initWorkingRepo(tempDir, 'unregistrable')
+        commit(repo, 'a.txt', 'first')
+        def tipBefore = currentHead(repo)
+        Files.writeString(repo.resolve('leftover.txt'), 'half-done work')
+
+        when:
+        new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE).salvage('PROJ-9')
+
+        then:
+        def e = thrown(GitSalvageFailedException)
+        e.message.contains('PROJ-9')
+        e.message.contains('git rev-parse refs/heads/gnomish/PROJ-9')
+        currentHead(repo) == tipBefore
+        runner.run(repo, 'rev-parse', '--verify', '--quiet', 'refs/gnomish-factory/PROJ-9').exitCode() != 0
     }
 
     // FR5, design D11 of harden-task-branch-contract: a process killed mid-round can leave a
@@ -77,10 +103,12 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
     def "salvage() restores factory-owned files from the tip instead of committing them"() {
         given: 'a task branch carrying committed factory files, plus a dying round\'s dirt'
         def repo = initWorkingRepo(tempDir, 'factory-owned')
+        runner.run(repo, 'checkout', '-q', '-b', 'gnomish/PROJ-1')
         Files.createDirectories(repo.resolve('.gnomish-task/decisions'))
         Files.writeString(repo.resolve('.gnomish-task/state.json'), '{"recorded":true}')
         runner.run(repo, 'add', '-A')
         runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'started')
+        runner.run(repo, 'update-ref', 'refs/gnomish-factory/PROJ-1', 'HEAD')
 
         and: 'the worktree holds an overwritten state.json, a stray factory file, gnome work and a decision file'
         Files.writeString(repo.resolve('.gnomish-task/state.json'), '{ truncated')
@@ -108,10 +136,12 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
     def "salvage() makes no commit when the only leftover was a factory-owned file"() {
         given:
         def repo = initWorkingRepo(tempDir, 'factory-only-dirt')
+        runner.run(repo, 'checkout', '-q', '-b', 'gnomish/PROJ-1')
         Files.createDirectories(repo.resolve('.gnomish-task'))
         Files.writeString(repo.resolve('.gnomish-task/state.json'), '{"recorded":true}')
         runner.run(repo, 'add', '-A')
         runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'started')
+        runner.run(repo, 'update-ref', 'refs/gnomish-factory/PROJ-1', 'HEAD')
         def tipBefore = runner.run(repo, 'rev-parse', 'HEAD').stdout().forParsing().trim()
         Files.writeString(repo.resolve('.gnomish-task/state.json'), '{ truncated')
 
@@ -218,11 +248,13 @@ class WorktreeSalvageSpec extends Specification implements BareGitRepoFixture {
     def "salvage() fails rather than committing a factory-owned file the restore could not put back"() {
         given: 'a tip carrying the recorded state.json, plus a dying round\'s truncated one'
         def repo = initWorkingRepo(tempDir, 'restore-fails')
+        runner.run(repo, 'checkout', '-q', '-b', 'gnomish/PROJ-4')
         Files.createDirectories(repo.resolve('.gnomish-task/decisions'))
         Files.writeString(repo.resolve('.gnomish-task/state.json'), '{"recorded":true}')
         Files.writeString(repo.resolve('.gnomish-task/decisions/.keep'), '')
         runner.run(repo, 'add', '-A')
         runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'started')
+        runner.run(repo, 'update-ref', 'refs/gnomish-factory/PROJ-4', 'HEAD')
         Files.writeString(repo.resolve('.gnomish-task/state.json'), '{ truncated')
         Files.writeString(repo.resolve('work.txt'), 'half-done work')
 

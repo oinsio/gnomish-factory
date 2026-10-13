@@ -84,8 +84,12 @@ class ConsumedOutcomeIdentitySpec extends Specification implements BareGitRepoFi
         history.requests(consumed).isEmpty()
 
         // FR1, FR3, FR7 over every commit of the branch, the continued drive's included
-        and: 'the task is one ref, and only a continuation write clears an outcome or resets the attempts'
-        refsNaming(m.origin(), TASK) == [history.ref]
+        and: 'the task is one branch beside its factory register, which names the same commit (FR13 of tighten-spec-contract), and only a continuation write clears an outcome or resets the attempts'
+        refsNaming(m.origin(), TASK).toSet() == [
+            history.ref,
+            "refs/gnomish-factory/${TASK}".toString()
+        ].toSet()
+        gitOutput(m.origin(), 'rev-parse', "refs/gnomish-factory/${TASK}") == gitOutput(m.origin(), 'rev-parse', history.ref)
         !history.after(consumed).isEmpty()
         def pairs = history.commits().collate(2, 1, false)
         pairs.findAll { p, c ->

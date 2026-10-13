@@ -228,6 +228,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         def worktree = expectedWorktree(taskId)
         Files.writeString(worktree.resolve('.gnomish-task/state.json'), 'not json at all')
         commitAll(worktree, 'corrupt state')
+        registerTip(cloneDir, taskId)
 
         and:
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))

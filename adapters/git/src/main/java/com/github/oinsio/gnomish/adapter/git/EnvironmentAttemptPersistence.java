@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.adapter.git.state.TraceLineWriter;
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.ClosedRound;
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
@@ -20,67 +19,69 @@ import java.util.List;
  * (FR21, FR22, design D15, D16): where host mode closes a round as one worktree
  * commit ({@link GitAttemptPersistence}), a sandboxed round closes in two steps
  * — the executor's snapshot commit ({@link EnvironmentRoundSnapshot}, already
- * harvested and verified by the time this port is called) and this class's
- * <b>state commit</b>: {@code state.json} and the round trace written through
- * the environment channel ({@code putFile}), committed in-box (hooks off at
- * argv level), harvested, and then verified at the boundary.
+ * harvested by the time this port is called) and this class's <b>state
+ * commit</b>: {@code state.json} and the round trace written through the
+ * environment channel ({@code putFile}), committed in-box (hooks off at argv
+ * level), harvested into the task's quarantine, checked, and admitted.
  *
- * <p>Harvest-boundary integrity (D16) is factory-side and trusted, and owned by
- * two checks this class only sequences: the <b>boundary protocol</b> — {@code
- * .gnomish-task/} untouched by the gnome between the tip the round opened on and
- * the snapshot commit, with the single decision-file carve-out ({@link
- * HarvestedBoundaryCheck}, FR23) — and, on the harvested state commit itself, the
- * parent-check and the byte-exact read-back ({@link HarvestedStateCommitCheck},
- * FR22).
+ * <p>Harvest-boundary integrity (D16; design D18 of tighten-spec-contract) is
+ * factory-side and trusted, and owned by two checks this class only sequences:
+ * the <b>admission</b> ({@link HarvestAdmission}, the one {@link
+ * GnomeRangeInspection} of the range above the register — FR23) and, on the
+ * harvested state commit itself, the parent-check and the byte-exact read-back
+ * ({@link HarvestedStateCommitCheck}, FR22). The snapshot is judged first, again:
+ * an admitted snapshot is already on the branch and passes without a move, while
+ * one its admission refused is a boundary violation here, thrown before anything
+ * is written in-box — the persist is where the engine turns a boundary into
+ * {@code Aborted}. The state commit is judged before the branch moves to it, so a
+ * refused one never becomes branch state.
  *
  * <p>The round being persisted is read whole from the run's {@link CurrentRound}
- * cell (design D10 of make-checkpoint-gate-durable): its token is both the
- * carve-out's name and the diff base, its attempt commit the parent the state
- * commit must sit on. A live round put them there when it opened and snapshotted;
- * a resumed round restored them from the snapshot's durable record. This class
- * keeps no baseline of its own and never re-reads the tip to stand in for a round
- * the cell does not hold: a persist with no closed round throws, so the boundary
- * is never judged against a value compared with its own re-read.
+ * cell (design D10 of make-checkpoint-gate-durable): its token names the
+ * carve-out, its attempt commit the snapshot the state commit must sit on. A
+ * live round put them there when it opened and snapshotted; a resumed round
+ * restored them from the snapshot's durable record. This class keeps no baseline
+ * of its own and never re-reads the tip to stand in for a round the cell does not
+ * hold: a persist with no closed round throws.
  *
- * <p>The one tip this class resolves — the harvested state commit, the commit the
- * read-back reads from — is verified before use ({@link VerifiedTip}): a failed or
- * blank resolution fails the persist with the git evidence rather than being
- * judged, the same rule its host twin {@link GitAttemptPersistence} applies to
- * its own round baseline.
- *
- * <p>Any mismatch throws {@link RoundBoundaryViolationException}; the engine
- * turns a thrown persist into {@code Aborted}, the branch keeps the evidence,
- * and the environment is kept untouched. This is a strict port: any failure to
- * durably commit throws, never returns.
+ * <p>Any violation throws {@link RoundBoundaryViolationException}; the engine
+ * turns a thrown persist into {@code Aborted}, the branch keeps the evidence it
+ * admitted, and the environment is kept untouched. A verdict git could not
+ * produce throws {@link GitPersistFailedException}, the round's infrastructure
+ * path. This is a strict port: any failure to durably commit throws, never
+ * returns.
  *
  * <p>Kept in sync with {@link GitAttemptPersistence}: both must close a round
  * with the same durable sequence — {@code state.json} and the round's trace file
  * written first, then one commit stamped with the claim epoch that carries both,
  * so neither medium can leave a branch on which a round's state landed without
- * its trace (or the other way round). The denial cursor this class commits inside
- * {@code state.json} ({@link EnvironmentRoundDocuments}) is deliberately
- * environment-side only and is not part of the synchronized invariant: host mode
- * has no egress guard, so there is no denial source to mirror. Nor is the round
- * identity this class reads from {@link CurrentRound} (design D6, D10 of
- * make-checkpoint-gate-durable): it names the harvested carve-out and the diff
- * base, and host mode has no carve-out — {@link RoundBoundaryCheck} treats any
- * {@code .gnomish-task/} change as a violation and the host request never enters
- * the working copy — so the host end needs no mirrored change.
+ * its trace (or the other way round) — judge the gnome's range with the one
+ * {@link GnomeRangeInspection} before it becomes part of the round, keep the
+ * factory-owned paths of the round commit the factory's own (here the in-box
+ * commit stages exactly the two files and the admission refuses any other owned
+ * path; there the worktree is restored from the register before staging), and
+ * land the round commit with its register in one ref transaction, carried to
+ * origin by one atomic push (design D13, D18 of tighten-spec-contract). The
+ * denial cursor this class commits inside {@code state.json} ({@link
+ * EnvironmentRoundDocuments}) is deliberately environment-side only and is not
+ * part of the synchronized invariant: host mode has no egress guard, so there is
+ * no denial source to mirror. Nor is the round's decision carve-out: host mode's
+ * request never enters the working copy, so its inspection permits no path.
  *
- * <p>Kill windows (crash-consistency rule). The durable step is the harvest: the
- * in-box commit lives in a disposable environment, so it becomes branch state only
- * once the fast-forward-only fetch lands it in the factory clone, and the push to
- * origin is a later step owned by {@link PushBestEffortAttemptPersistence}. A kill
- * before the harvest — during the {@code putFile} writes, or between them and the
- * in-box commit — dies with the box and freezes "round not closed": the clone and
- * origin still read the previous tip, and the next pickup sees no round rather than
- * a half-written one. A kill after the harvest but before the push freezes "round
- * harvested locally, not pushed", the same window the host twin's commit-before-push
- * gap leaves, converged by the next push of this branch. The sequence is not atomic
- * across those steps and does not claim to be.
+ * <p>Kill windows (crash-consistency rule). The durable step is the admission's
+ * ref transaction: the in-box commit and the quarantine are scratch until the
+ * branch and the register move to the state commit together, and the push to
+ * origin is a later step owned by {@link PushBestEffortAttemptPersistence}. A
+ * kill before the transaction — during the {@code putFile} writes, the in-box
+ * commit, the harvest or the checks — freezes "round not closed": the branch and
+ * the register still name the snapshot, and the next pickup resumes the
+ * interrupted verification from it. A kill after the transaction but before the
+ * push freezes "round closed locally, not pushed", converged by the next push of
+ * this branch.
  *
  * <p>Implements FR21, FR22, FR23 of add-sandbox-core; FR13 of
- * harden-logging-observability; FR13, FR15 of make-checkpoint-gate-durable.
+ * harden-logging-observability; FR13, FR15 of make-checkpoint-gate-durable; FR13,
+ * NFR-S2 of tighten-spec-contract.
  */
 public final class EnvironmentAttemptPersistence implements AttemptPersistence {
 
@@ -92,22 +93,18 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
     private static final String COMMIT_SCRIPT = "git add -- \"$1\" \"$2\" && git -c core.hooksPath= commit -m \"$3\"";
 
     private final TaskExecutionEnvironment environment;
-    private final GitRunner runner;
-    private final Path cloneDir;
-    private final String branch;
     private final CurrentRound rounds;
-    private final HarvestedBoundaryCheck boundaryCheck;
+    private final HarvestAdmission admission;
     private final HarvestedStateCommitCheck stateCommitCheck;
     private final EnvironmentRoundDocuments documents;
     private final ClaimEpochSource epochs;
 
     /**
      * @param environment the task's bound environment; state files and the state commit cross it
-     * @param runner the git subprocess runner for factory-side ref reads
+     * @param runner the git subprocess runner for factory-side ref reads and the admission
      * @param cloneDir the factory clone harvest lands in
      * @param gitObjects the bare-object facade opened against the factory clone, for byte-exact
      *     read-back (D16)
-     * @param taskId the tracker's original taskId; sanitized into the task branch name
      * @param rounds the run's round cell; the closed round names the carve-out, the diff base and the
      *     snapshot this persist judges
      * @param epochs the tenure the in-box state commits are stamped with (FR13 of
@@ -118,15 +115,11 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
             GitRunner runner,
             Path cloneDir,
             GitObjects gitObjects,
-            String taskId,
             CurrentRound rounds,
             ClaimEpochSource epochs) {
         this.environment = environment;
-        this.runner = runner;
-        this.cloneDir = cloneDir;
-        this.branch = TaskIdSanitizer.branchName(taskId);
         this.rounds = rounds;
-        this.boundaryCheck = new HarvestedBoundaryCheck(runner, cloneDir);
+        this.admission = new HarvestAdmission(runner, cloneDir);
         this.stateCommitCheck = new HarvestedStateCommitCheck(gitObjects);
         this.documents = new EnvironmentRoundDocuments(environment);
         this.epochs = epochs;
@@ -140,9 +133,9 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         ClosedRound round = rounds.closed();
         String snapshot = round.attemptCommit();
 
-        // The token is the tip the round opened on, so it is both the diff base and the name of
-        // the one permitted decision file — one value, recorded once (FR13, FR15).
-        boundaryCheck.verify(taskId, round.token().commit(), snapshot, key, round.token());
+        // The token is the tip the round opened on: the name of the one permitted decision file,
+        // one value recorded once (FR13, FR15). An admitted snapshot passes without a move.
+        judged(taskId, key, admission.admit(taskId, snapshot, AdmissionRule.snapshot(key, round.token())));
 
         byte[] stateBytes = documents.state(taskId, key, state);
         byte[] traceBytes = EnvironmentRoundDocuments.trace(trace);
@@ -153,9 +146,22 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         commitInBox(taskId, key, tracePath);
         environment.harvest();
 
-        // A fresh observation of the branch, judged against the record: the state commit must sit
-        // on the round's own snapshot.
-        stateCommitCheck.verify(taskId, currentTip(), snapshot, tracePath, stateBytes, traceBytes);
+        // A fresh observation of the harvest, judged against the record before the branch moves: the
+        // state commit must sit on the round's own snapshot and carry exactly what was written.
+        String stateCommit = admission.quarantined(taskId);
+        stateCommitCheck.verify(taskId, stateCommit, snapshot, tracePath, stateBytes, traceBytes);
+        judged(taskId, key, admission.admit(taskId, stateCommit, AdmissionRule.state(key, round.token(), tracePath)));
+    }
+
+    /** The admission's verdict as this port's outcome: a violation, or the infrastructure path. */
+    private static void judged(String taskId, AttemptKey key, AdmittedRange admitted) {
+        switch (admitted) {
+            case AdmittedRange.Admitted ignored -> {}
+            case AdmittedRange.Refused refused -> throw new RoundBoundaryViolationException(taskId, refused.reason());
+            case AdmittedRange.Unverified unverified ->
+                throw new GitPersistFailedException(
+                        taskId, key.stage(), key.attempt(), "harvest admission", unverified.evidence());
+        }
     }
 
     private void commitInBox(String taskId, AttemptKey key, String tracePath) {
@@ -173,15 +179,5 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
             throw new GitPersistFailedException(
                     taskId, key.stage(), key.attempt(), "in-box state commit", commit.output());
         }
-    }
-
-    /**
-     * The harvested branch tip, verified before it is used (FR13 of harden-logging-observability):
-     * it is the commit the parent check judges and the read-back reads its blobs from, so a failed
-     * resolution must fail the persist rather than travel on as the empty string.
-     */
-    private String currentTip() {
-        String revision = "refs/heads/" + branch;
-        return VerifiedTip.required(revision, "rev-parse", runner.run(cloneDir, "rev-parse", revision));
     }
 }

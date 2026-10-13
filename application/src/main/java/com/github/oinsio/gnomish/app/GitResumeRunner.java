@@ -155,7 +155,7 @@ final class GitResumeRunner {
         Path cloneDir = order.cloneDir();
         var taskRepository = git.store().taskRepository(clone);
         TaskState finalState = git.store()
-                .readRecordedState(bootstrap.worktreePath())
+                .readRecordedState(bootstrap.worktreePath(), bootstrap.taskId())
                 .orElseThrow(() -> AbsentEnvelope.state(bootstrap.taskId(), bootstrap.worktreePath()));
 
         RecordedOutcome outcome = bootstrap.outcome();

@@ -30,6 +30,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
 
     def runner = new GitProcessRunner()
     def branchName = 'gnomish/PROJ-1'
+    static final String REGISTER = 'refs/gnomish-factory/PROJ-1'
 
     /** The take path: this instance holds a tenure on the task, so the discard is authorized. */
     def underTenure = { String taskId ->
@@ -112,6 +113,41 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         and: "and nothing else in the operator's clone moved"
         gitOutput(env.clone, 'for-each-ref', '--format=%(refname)', 'refs/tags').isEmpty()
         !Files.exists(env.clone.resolve('.git/FETCH_HEAD'))
+    }
+
+    // FR13 of tighten-spec-contract: the reconcile fetch carries origin's register beside the
+    //     branch; adopting origin's line adopts its register, so the next closing push does not
+    //     carry a register origin's branch has left behind.
+    def "FR13: adopting origin's line adopts origin's register, which the fetch brought with the branch"() {
+        given: 'origin moved branch and register together; the clone registered the older tip'
+        def env = setUpClonedBranch()
+        runner.run(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
+        commit(env.seed, 'b.txt', 'second')
+        runner.run(env.seed, 'push', 'origin', branchName, "HEAD:${REGISTER}")
+
+        when:
+        def outcome = ReplicaPairReconciler.forWorktree(runner, env.worktree, underTenure).reconcile('PROJ-1', branchName)
+
+        then:
+        outcome == DivergenceOutcome.BEHIND
+        tip(env.clone, REGISTER) == tip(env.seed)
+        tip(env.clone, 'refs/remotes/origin/gnomish-factory/PROJ-1') == tip(env.seed)
+    }
+
+    def "FR13: a local line ahead of origin keeps the clone's register — a fetch never rolls it back"() {
+        given: 'origin registered the first commit; the clone closed one more it has not pushed yet'
+        def env = setUpClonedBranch()
+        runner.run(env.seed, 'push', 'origin', "HEAD:${REGISTER}")
+        commit(env.worktree, 'c.txt', 'local closing commit')
+        runner.run(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
+
+        when:
+        def outcome = ReplicaPairReconciler.forWorktree(runner, env.worktree, underTenure).reconcile('PROJ-1', branchName)
+
+        then:
+        outcome == DivergenceOutcome.AHEAD
+        tip(env.clone, REGISTER) == tip(env.worktree)
+        tip(env.clone, 'refs/remotes/origin/gnomish-factory/PROJ-1') == tip(env.seed)
     }
 
     // Scenario: lifecycle/task-branch-contract / Local-ahead is kept, local-behind fast-forwards

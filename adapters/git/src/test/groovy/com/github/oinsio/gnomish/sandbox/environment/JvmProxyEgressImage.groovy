@@ -19,8 +19,10 @@ package com.github.oinsio.gnomish.sandbox.environment
  *       requirement.
  * </ul>
  *
- * <p>The base is {@code eclipse-temurin:21-jdk-noble} (a real JDK, ~450 MB) —
- * the same family the reference recipe defaults to; the image builds on demand
+ * <p>The base is {@code eclipse-temurin:21-jdk-resolute} (a real JDK, ~450 MB) —
+ * the same base the reference recipe defaults to, on Ubuntu 26.04 whose archive git (2.53) meets
+ * the box's git floor: the seed clone runs the image's git against the reftable factory clone
+ * (design D13 of tighten-spec-contract, as amended 2026-10-13), which noble's 2.43 cannot open; the image builds on demand
  * and the spec is Docker-gated, so an offline machine skips it cleanly.
  */
 class JvmProxyEgressImage {
@@ -37,11 +39,12 @@ class JvmProxyEgressImage {
         def alias = GuardCommands.PROXY_ALIAS
         def port = GuardCommands.PROXY_PORT
         def dockerfile = """
-            FROM eclipse-temurin:21-jdk-noble
+            FROM eclipse-temurin:21-jdk-resolute
             # Baked JVM proxy system properties — the reference image's plumbing.
             # NO HTTP_PROXY env var: a routed request proves the system property.
             ENV JAVA_TOOL_OPTIONS="-Dhttp.proxyHost=${alias} -Dhttp.proxyPort=${port} -Dhttps.proxyHost=${alias} -Dhttps.proxyPort=${port}"
-            # git is the container adapter's image contract — the seed clone runs it in-box.
+            # git is the container adapter's image contract — the seed clone runs it in-box;
+            # the distro's git meets the box floor (2.45.1).
             RUN apt-get update \\
              && apt-get install -y --no-install-recommends git \\
              && rm -rf /var/lib/apt/lists/*
@@ -58,7 +61,7 @@ class JvmProxyEgressImage {
                 '}' \\
                 > /gnomish-probe/Probe.java
             # The in-box task user the container adapter execs as (uid 1000, owns
-            # the file-channel roots); temurin noble ships a uid-1000 user, renamed.
+            # the file-channel roots); temurin's Ubuntu base ships a uid-1000 user, renamed.
             RUN if getent passwd 1000 >/dev/null; then \\
                   old="\$(getent passwd 1000 | cut -d: -f1)"; \\
                   usermod -l gnome -d /home/gnome -m "\$old"; \\

@@ -9,13 +9,13 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR15, D2 of add-tracker-port: revocation's best-effort push, distinct from {@link
- * BestEffortPush}'s round-boundary-gated push — no {@code RoundBoundaryCheck}/{@code
- * previousTip} preconditions apply, since revocation is not a round. Same refspec convention and
- * failure discipline: exact {@code origin branch:branch}, never {@code --force}, no-origin is a
- * silent no-op, a failed push WARNs and never throws.
+ * FR5 of add-sandbox-core; FR13 of tighten-spec-contract (design D18): the mid-round admission
+ * pushes what it admitted — the task branch alone, best-effort — with no host precondition, since
+ * the admission is the precondition. Same refspec convention and failure discipline as every push
+ * point: exact {@code origin branch:branch}, never {@code --force}, no-origin is a silent no-op, a
+ * failed push WARNs and never throws.
  */
-class BranchPushSpec extends Specification implements BareGitRepoFixture {
+class HarvestAdmissionPushSpec extends Specification implements BareGitRepoFixture {
 
     @TempDir
     Path tempDir
@@ -23,7 +23,7 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
     def runner = new GitProcessRunner()
     Path repo
     Path bareRepo
-    BranchPush push
+    HarvestAdmission push
 
     def setup() {
         repo = initTaskWorkingRepo(tempDir)
@@ -31,11 +31,11 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
         bareRepo = initBareRepo(tempDir, 'origin.git')
         addRemote(repo, 'origin', bareRepo.toString())
 
-        push = new BranchPush(runner)
+        push = new HarvestAdmission(runner, repo)
     }
 
     private static List<ILoggingEvent> capture(Closure<Void> emit) {
-        def logs = LogCaptureSupport.attach(BranchPush)
+        def logs = LogCaptureSupport.attach(HarvestAdmission)
         try {
             emit()
             return List.copyOf(logs.list)
@@ -44,7 +44,7 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
         }
     }
 
-    def "with no origin remote configured, pushBestEffort is a silent no-op"() {
+    def "FR5: with no origin remote configured, the admitted push is a silent no-op"() {
         given: 'a repo with no origin remote configured at all'
         def noOriginRepo = tempDir.resolve('no-origin-repo')
         def noOriginRunner = new GitProcessRunner()
@@ -54,11 +54,11 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
         noOriginRunner.run(noOriginRepo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
         noOriginRunner.run(noOriginRepo, 'checkout', '-q', '-b', 'gnomish/PROJ-99')
         assert noOriginRunner.run(noOriginRepo, 'remote', 'get-url', 'origin').exitCode() != 0
-        def noOriginPush = new BranchPush(noOriginRunner)
+        def noOriginPush = new HarvestAdmission(noOriginRunner, noOriginRepo)
 
         when:
         def events = capture {
-            noOriginPush.pushBestEffort(noOriginRepo, 'gnomish/PROJ-99')
+            noOriginPush.pushAdmitted('PROJ-99')
         }
 
         then:
@@ -66,13 +66,15 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
         events.isEmpty()
     }
 
-    def "a normal push updates the remote's task branch to the exact same-named ref"() {
+    // Scenario: git/git-task-persistence / A mid-round push leaves the register
+    def "FR13: the admitted push updates the remote's task branch alone, never the register"() {
         when:
-        push.pushBestEffort(repo, 'gnomish/PROJ-1')
+        push.pushAdmitted('PROJ-1')
 
         then:
         def remoteHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim()
         remoteHead == currentHead(repo)
+        runner.run(bareRepo, 'rev-parse', '--verify', '--quiet', 'refs/gnomish-factory/PROJ-1').exitCode() != 0
     }
 
     // Scenario: git/git-task-persistence / Non-fast-forward never escalates to force
@@ -89,7 +91,7 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
 
         when:
         def events = capture {
-            push.pushBestEffort(repo, 'gnomish/PROJ-1')
+            push.pushAdmitted('PROJ-1')
         }
 
         then:
@@ -99,7 +101,7 @@ class BranchPushSpec extends Specification implements BareGitRepoFixture {
         and: 'a WARN was actually logged for the rejected push'
         events.size() == 1
         events[0].level == Level.WARN
-        events[0].formattedMessage.startsWith(OperatorEvent.BRANCH_PUSH_FAILED.head() + 'revocation push failed:')
+        events[0].formattedMessage.startsWith(OperatorEvent.BRANCH_PUSH_FAILED.head() + 'mid-round push failed:')
         events[0].formattedMessage.contains('branch=gnomish/PROJ-1')
 
         and: 'FR6 of harden-logging-observability: git rejects a push in several lines of prose, ' +

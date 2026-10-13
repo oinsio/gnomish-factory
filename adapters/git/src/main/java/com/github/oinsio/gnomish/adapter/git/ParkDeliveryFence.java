@@ -33,8 +33,12 @@ import org.slf4j.LoggerFactory;
  * {@code origin} once more and asserts "behind" only when {@code origin} itself answers that the
  * tip is missing. An interrupted one is not re-checked at all: the run is shutting down.
  *
+ * <p>Its push delivers the park's closing push whole (design D13 of tighten-spec-contract): the
+ * branch and the clone's factory register, which the outcome commit already moved, in one atomic
+ * push ({@link ClosingPush}); it registers nothing itself.
+ *
  * <p>Implements FR4, FR5, NFR-R2, NFR-O1, UX2 of fix-lifecycle-push; FR7, FR8, NFR-O2, UX2, UX3
- * of bound-subprocess-commands.
+ * of bound-subprocess-commands; FR13 of tighten-spec-contract.
  */
 public final class ParkDeliveryFence {
 
@@ -43,7 +47,7 @@ public final class ParkDeliveryFence {
     private final OriginRemote origin;
     private final LocalBranchTip localTip;
     private final RemoteBranchTip remoteTip;
-    private final RefspecPush push;
+    private final ClosingPush push;
 
     /**
      * @param runner the git subprocess seam; never null
@@ -52,7 +56,7 @@ public final class ParkDeliveryFence {
         this.origin = new OriginRemote(runner);
         this.localTip = new LocalBranchTip(runner);
         this.remoteTip = new RemoteBranchTip(runner);
-        this.push = new RefspecPush(runner);
+        this.push = new ClosingPush(runner);
     }
 
     /**
@@ -88,7 +92,7 @@ public final class ParkDeliveryFence {
             return new ParkDeliveryVerdict.Delivered();
         }
 
-        GitCommandResult result = push.push(cloneDir, branch);
+        GitCommandResult result = push.push(cloneDir, taskId);
         if (result.termination() == Termination.EXITED && result.exitCode() != 0) {
             // FR12: the first of two bounded attempts failing is not something an operator acts
             //     on — only an exhausted fence is. The line stays, at INFO, so a post-mortem can
@@ -98,7 +102,7 @@ public final class ParkDeliveryFence {
                     taskId,
                     branch,
                     result.stderr().forLog());
-            result = push.push(cloneDir, branch);
+            result = push.push(cloneDir, taskId);
         }
         if (result.termination() != Termination.EXITED) {
             return unverified(cloneDir, taskId, branch, tip.get(), result);

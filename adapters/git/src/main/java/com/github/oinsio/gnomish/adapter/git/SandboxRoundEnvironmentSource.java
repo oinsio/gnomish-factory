@@ -94,11 +94,13 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         AttemptKey key = new AttemptKey(taskId, stage, request.attempt());
         rounds.open(openTip());
         // The handle reads the identity back from the cell, like every other consumer of it.
-        BranchDecisionFile.Handle decision = BranchDecisionFile.open(environment, key, rounds.opened());
+        RoundToken token = rounds.opened();
+        BranchDecisionFile.Handle decision = BranchDecisionFile.open(environment, key, token);
         var midRound = new MidRoundHarvestListener(
                 environment,
-                runner,
-                cloneDir,
+                new HarvestAdmission(runner, cloneDir),
+                token.commit(),
+                AdmissionRule.midRound(key, token),
                 clock,
                 MID_ROUND_MIN_INTERVAL,
                 new MidRoundPollContext(taskId, branch, harvestSuppressor));
@@ -158,7 +160,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
 
         @Override
         public void closeRound() {
-            new EnvironmentRoundSnapshot(environment, runner, cloneDir, taskId, rounds)
+            new EnvironmentRoundSnapshot(environment, runner, cloneDir, rounds)
                     .snapshot(taskId, key.stage(), key.attempt());
         }
 

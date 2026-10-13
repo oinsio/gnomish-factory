@@ -42,7 +42,10 @@ import org.slf4j.LoggerFactory;
  * held it in — falling back to {@code baseCommit} as a bare SHA (itself a valid {@link
  * BaseRefGit#resolveForResume} input, and a {@link BaseRefKind#COMMIT} by construction) only for a
  * legacy branch created before the structured pin existed, whose {@code task.json} carries no ref
- * at all.
+ * at all. That pin is read at the task's registered commit, never at the branch tip (design D13 of
+ * tighten-spec-contract): both loaders read the record there ({@code TaskStoreGit#readTaskRecord},
+ * the container tip reader), so a pin the gnome rewrites above the register is never what a resume
+ * binds its law from, and ADR 0007's "the pin is final" holds by construction.
  *
  * <p><b>The pinned kind is the namespace the resume fetches</b> (D7, revised 2026-09-10). Handing
  * it to {@link BaseRefGit#resolveForResume} is what keeps a tag pushed later under a pinned
@@ -50,7 +53,7 @@ import org.slf4j.LoggerFactory;
  * answer when the base was first resolved, so re-asking the question every resume could only
  * un-answer it. A pin written without a kind classifies at resume time exactly as before.
  *
- * <p>Implements FR7, FR12, D13 of add-base-ref-resolution.
+ * <p>Implements FR7, FR12, D13 of add-base-ref-resolution; NFR-S2 of tighten-spec-contract.
  */
 final class ResumeLawBinding {
 

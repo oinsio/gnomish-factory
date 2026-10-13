@@ -65,4 +65,11 @@ class ServiceCommitMessagesSpec extends Specification {
         expect:
         ServiceCommitMessages.cleanup() == 'gnomish: cleanup'
     }
+
+    // FR10 of add-claim-heartbeat: the callers' specs compare the tip's subject with this method,
+    // so only a literal here pins the message itself
+    def "FR10: trackerWriteConfirmed() is the fixed constant string"() {
+        expect:
+        ServiceCommitMessages.trackerWriteConfirmed() == 'gnomish: task write-confirmed'
+    }
 }

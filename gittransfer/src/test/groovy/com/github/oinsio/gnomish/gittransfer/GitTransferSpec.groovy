@@ -75,16 +75,38 @@ class GitTransferSpec extends Specification {
         transfer.environment() == STRIPPED + [GIT_ALLOW_PROTOCOL: Optional.of('https:http:ssh:file')]
     }
 
+    // FR13 of tighten-spec-contract: a touchpoint fetch moves the task branch and the factory
+    //     register in one transfer, so both reflect one advertisement of origin; the refspecs
+    //     follow the terminator in the order given.
+    def "an origin fetch of several refspecs places them all after the terminator, in order"() {
+        when:
+        def transfer = GitTransfer.fetch(
+                TransferSource.ORIGIN,
+                new Refspec('gnomish/T-1:refs/remotes/origin/gnomish/T-1'),
+                new Refspec('+refs/gnomish-factory/T-1:refs/gnomish-factory/T-1'))
+
+        then:
+        transfer.argv().drop(transfer.argv().indexOf('--end-of-options')) == [
+            '--end-of-options',
+            'origin',
+            'gnomish/T-1:refs/remotes/origin/gnomish/T-1',
+            '+refs/gnomish-factory/T-1:refs/gnomish-factory/T-1',
+        ]
+    }
+
     // FR3, FR4, FR5, FR6: a container fetch names its URL in place of the remote, so no refmap
     //     applies; it reads no operator configuration at all.
     // Scenario: git/git-transfer / A harvest and a base refresh share one flag set
     // Scenario: git/git-transfer / A harvest sees no operator configuration at all
     // Scenario: git/git-transfer / Inherited repository overrides are stripped
+    // FR13 of tighten-spec-contract (design D18): the harvest lands in the task's quarantine, forced,
+    //     and never names the branch.
     def "a container fetch is the common set, the fetch-only half without a refmap, and full isolation"() {
         when:
-        def transfer = GitTransfer.fetch(
+        def transfer = GitTransfer.harvest(
                 new TransferSource.Container('ext::docker exec -i box %S'),
-                new Refspec('refs/heads/gnomish/T-1:refs/heads/gnomish/T-1'))
+                'gnomish/T-1',
+                QuarantineRef.forTask('T-1'))
 
         then:
         transfer.argv() == CONFIG_PAIRS + [
@@ -94,7 +116,7 @@ class GitTransferSpec extends Specification {
             '--no-write-fetch-head',
             '--end-of-options',
             'ext::docker exec -i box %S',
-            'refs/heads/gnomish/T-1:refs/heads/gnomish/T-1',
+            '+refs/heads/gnomish/T-1:refs/gnomish-quarantine/T-1',
         ]
 
         and:
@@ -155,7 +177,7 @@ class GitTransferSpec extends Specification {
         where:
         transfer << [
             GitTransfer.fetch(TransferSource.ORIGIN, new Refspec('a:b')),
-            GitTransfer.fetch(new TransferSource.Container('ext::cmd %S'), new Refspec('a:b')),
+            GitTransfer.harvest(new TransferSource.Container('ext::cmd %S'), 'b', QuarantineRef.forTask('b')),
             GitTransfer.clone(new TransferSource.SeedPath(SOURCE, DESTINATION)),
         ]
     }
@@ -199,7 +221,17 @@ class GitTransferSpec extends Specification {
         construct << [
             { GitTransfer.fetch(null, new Refspec('a:b')) },
             { GitTransfer.fetch(TransferSource.ORIGIN, null) },
+            {
+                GitTransfer.fetch(TransferSource.ORIGIN, new Refspec('a:b'), (Refspec) null)
+            },
             { GitTransfer.clone(null) },
+            { GitTransfer.harvest(null, 'b', QuarantineRef.forTask('b')) },
+            {
+                GitTransfer.harvest(new TransferSource.Container('ext::cmd %S'), 'b', null)
+            },
+            {
+                GitTransfer.harvest(new TransferSource.Container('ext::cmd %S'), null, QuarantineRef.forTask('b'))
+            },
         ]
     }
 }

@@ -25,7 +25,7 @@ import java.util.List;
  * <p>Implements FR5 of add-tracker-port.
  */
 // Not a record: this is a behavior-bearing service (a collaborator over an HTTP client, not
-// immutable data), kept as a plain final class per the codebase convention (cf. BranchPush).
+// immutable data), kept as a plain final class per the codebase convention (cf. ClosingPush).
 @SuppressWarnings("ClassCanBeRecord")
 public final class GithubLabelOps {
 

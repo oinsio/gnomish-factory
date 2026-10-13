@@ -91,6 +91,7 @@ class StatusInterruptedHonestySpec extends Specification implements SeededCloneF
         recordInterruptedRound('PROJ-INT-3')
         new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock()).recordOutcome('PROJ-INT-3',
                 new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'), TrackerWrite.OWED)
+        registerTip(cloneDir, 'PROJ-INT-3')
         def args = new DefaultApplicationArguments('status', '--dir=' + cloneDir, 'PROJ-INT-3', '--json')
 
         when:

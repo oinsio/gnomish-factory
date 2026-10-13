@@ -103,9 +103,9 @@ class RawCaptureOwners {
         // --- document file reads ---
         // The four host-side envelope readers that used to sit here — GitTaskStore,
         // GitTaskRepository, TerminalWriteMarker, StateFileWrite — left this map with
-        // fix-envelope-medium: every one of them now reads at the worktree's HEAD through
-        // GitShowTip, which captures a subprocess stream rather than a file and mints the
-        // BRANCH_DOCUMENT there. Their entries are removed rather than kept, because the
+        // fix-envelope-medium: every one of them now reads through git — GitShowTip at the
+        // registered commit, or RegisterBase for a write's own base (tighten-spec-contract) —
+        // which captures a subprocess stream rather than a file and mints the BRANCH_DOCUMENT there. Their entries are removed rather than kept, because the
         // reached-every-file assertion is what makes this allowlist a gate.
         [
             'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/DecisionFileTransport.java',

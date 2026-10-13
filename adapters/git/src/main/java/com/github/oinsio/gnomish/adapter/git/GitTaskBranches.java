@@ -31,13 +31,14 @@ import java.util.List;
 public final class GitTaskBranches implements TaskBranchGit {
 
     private final GitRunner runner;
+    private final FactoryCloneRefFormat refFormat;
     private final FactoryCloneHardening hardening;
     private final ContainerResumeBranch resumeBranch;
     private final TaskBranchLocator locator;
     private final TaskBranchLister lister;
     private final BranchStateReader stateReader;
     private final DeliveredBranchReader deliveredReader;
-    private final BranchPush push;
+    private final BestEffortClosingPush push;
     private final TaskBranchReconciliation reconciliation;
     private final ParkDeliveryFence parkFence;
     private final BranchTipFactsReader facts;
@@ -57,13 +58,14 @@ public final class GitTaskBranches implements TaskBranchGit {
      *     supervise-daemon-loops-and-embed-dashboard); never null
      */
     GitTaskBranches(GitRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry) {
+        this.refFormat = new FactoryCloneRefFormat(runner);
         this.hardening = new FactoryCloneHardening(runner);
         this.resumeBranch = new ContainerResumeBranch(runner, epochs, retry);
         this.locator = new TaskBranchLocator(runner, retry);
         this.lister = new TaskBranchLister(runner);
         this.stateReader = new BranchStateReader(runner, retry);
         this.deliveredReader = new DeliveredBranchReader(runner, retry);
-        this.push = new BranchPush(runner);
+        this.push = new BestEffortClosingPush(runner);
         this.reconciliation = new TaskBranchReconciliation(runner);
         this.parkFence = new ParkDeliveryFence(runner);
         this.facts = new BranchTipFactsReader();
@@ -73,6 +75,9 @@ public final class GitTaskBranches implements TaskBranchGit {
 
     @Override
     public void harden(Path cloneDir) {
+        // The backend first: a clone the factory refuses is not written to, not even its config
+        // (design D13 of tighten-spec-contract, as amended 2026-10-13).
+        refFormat.require(cloneDir);
         hardening.harden(cloneDir);
     }
 
@@ -90,9 +95,11 @@ public final class GitTaskBranches implements TaskBranchGit {
     public BranchShape classifyShape(Path cloneDir, String taskId) {
         // The located ref is the medium: no worktree is created, and a branch that lives only on
         // origin classifies from its remote-tracking ref exactly as a local one does (design D3).
+        // Either way the envelope is read at the task's registered commit, the located ref giving
+        // only its relation to it (design D13 of tighten-spec-contract).
         return switch (locator.locate(cloneDir, taskId)) {
-            case BranchLocation.Local(String ref) -> shapeAt(cloneDir, ref);
-            case BranchLocation.RemoteTracking(String ref) -> shapeAt(cloneDir, ref);
+            case BranchLocation.Local(String ref) -> shapeAt(cloneDir, taskId, ref);
+            case BranchLocation.RemoteTracking(String ref) -> shapeAt(cloneDir, taskId, ref);
             case BranchLocation.NotFound() -> new BranchShape.Bare();
             case BranchLocation.Unavailable(UntrustedText reason) ->
                 throw new BranchLocationUnavailableException(taskId, reason);
@@ -105,8 +112,8 @@ public final class GitTaskBranches implements TaskBranchGit {
         };
     }
 
-    private BranchShape shapeAt(Path cloneDir, String ref) {
-        return classifier.classify(facts.read(new RefTipSource(runner, cloneDir, ref)));
+    private BranchShape shapeAt(Path cloneDir, String taskId, String ref) {
+        return classifier.classify(facts.read(RefTipSource.at(runner, cloneDir, taskId, ref)));
     }
 
     @Override
@@ -125,8 +132,8 @@ public final class GitTaskBranches implements TaskBranchGit {
     }
 
     @Override
-    public void pushBestEffort(Path worktreeRoot, String branch) {
-        push.pushBestEffort(worktreeRoot, branch);
+    public void pushBestEffort(Path worktreeRoot, String taskId) {
+        push.pushBestEffort(worktreeRoot, taskId);
     }
 
     @Override

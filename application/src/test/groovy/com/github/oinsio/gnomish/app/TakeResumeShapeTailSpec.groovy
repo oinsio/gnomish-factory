@@ -66,8 +66,8 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> { journal }
-        store.readRecordedState(_) >> { recordedState() }
-        store.readTaskRecord(_) >> { Optional.ofNullable(record) }
+        store.readRecordedState(_, _) >> { recordedState() }
+        store.readTaskRecord(_, _) >> { Optional.ofNullable(record) }
         tracker.fetchTask(_) >> heldByUs()
     }
 

@@ -5,13 +5,17 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskLifecycleStore
+import com.github.oinsio.gnomish.adapter.git.RegisteredBranchFixture
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
+import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.RoundToken
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -48,7 +52,7 @@ import spock.lang.TempDir
  * objects, a resume runner whose per-run support runs over a {@link ScriptedSandboxDocker}, and
  * the branch-authoring helpers each recorded-outcome scenario starts from.
  */
-abstract class ContainerResumeSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+abstract class ContainerResumeSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture, RegisteredBranchFixture {
 
     @TempDir
     Path tempDir
@@ -57,7 +61,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
     def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
     Path cloneDir
     GitObjects gitObjects
-    GitObjectsTaskRepository repository
+    TaskLifecycleStore repository
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'clone')
@@ -67,7 +71,11 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
         Path index = tempDir.resolve('index')
         Files.createDirectories(index)
         gitObjects = GitObjects.open(cloneDir.resolve('.git'), index)
-        repository = new GitObjectsTaskRepository(gitObjects, new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), ClaimEpochSource.NONE, DenialCursorSource.NONE)
+        // Behind the closing push, as production assembles the container lifecycle store: every
+        // closing commit a spec seeds becomes the factory register (design D13 of tighten-spec-contract).
+        repository = new PushBestEffortTaskLifecycleStore(
+                new GitObjectsTaskRepository(gitObjects, new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), ClaimEpochSource.NONE, DenialCursorSource.NONE),
+                new GitProcessRunner(), cloneDir, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
     }
 
     protected static StageDefinition stage() {
@@ -135,6 +143,8 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
                     new TreeEdit.PutFile(path, bytes)
                 ],
                 new CommitMetadata(identity, now, identity, now, message)))
+        // A crash-window shape the factory itself leaves: its closing commit is registered (D13).
+        registerTip(cloneDir, taskId)
     }
 
     /** Commits a state.json parked at PipelineEnd, so a resumed drive completes without a round. */

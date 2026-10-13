@@ -38,3 +38,10 @@
 	# from the account and host (a CI runner), while passing on a workstation that can.
 	name = gnomish-factory test
 	email = test@gnomish-factory.invalid
+
+[gc]
+	# Not adversarial: hermeticity. Since git 2.47 the auto maintenance a commit, a fetch or a
+	# receiving push triggers detaches into a child that takes and drops `objects/maintenance.lock`
+	# after the command has returned; under a loaded build it races the spec's temporary-directory
+	# deletion. `maintenance.autoDetach` falls back to this key, and older `gc --auto` reads it too.
+	autoDetach = false

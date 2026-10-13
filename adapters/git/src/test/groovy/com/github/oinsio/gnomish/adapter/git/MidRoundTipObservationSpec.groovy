@@ -40,18 +40,20 @@ class MidRoundTipObservationSpec extends Specification implements PlumbingCommit
         new File(clone.toFile(), 'a.txt').text = 'first'
         commitAll(clone)
         gitOutput(clone, 'branch', BRANCH)
+        gitOutput(clone, 'update-ref', 'refs/gnomish-factory/PROJ-9', 'refs/heads/' + BRANCH)
         origin = initBareRepo(tempDir, 'origin.git')
         addRemote(clone, 'origin', origin.toString())
     }
 
     private MidRoundHarvestListener blindListener() {
         def env = [harvest: {
-                advanceBranch(clone, BRANCH, 'in-box commit')
+                harvestLands(clone, 'PROJ-9', 'in-box commit')
             }] as TaskExecutionEnvironment
         new MidRoundHarvestListener(
                 env,
-                new GitProcessRunner(gitFailingOn(tempDir, 'rev-parse').toString()),
-                clone,
+                new HarvestAdmission(new GitProcessRunner(gitFailingOn(tempDir, 'rev-parse').toString()), clone),
+                gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH),
+                AdmissionRule.midRound(new com.github.oinsio.gnomish.domain.engine.AttemptKey('PROJ-9', 'implement', 0), com.github.oinsio.gnomish.app.port.git.RoundToken.of('a' * 40)),
                 clock,
                 Duration.ofSeconds(30),
                 new MidRoundPollContext('PROJ-9', BRANCH, suppressor))
@@ -123,7 +125,8 @@ class MidRoundTipObservationSpec extends Specification implements PlumbingCommit
         recoveries[0].formattedMessage.contains('2 failure(s)')
         recoveries[0].formattedMessage.contains('taskId=PROJ-9')
 
-        and: 'the branch that moved while the poll was blind is pushed once it can be seen'
+        and: 'the harvest that landed while the poll was blind is admitted and pushed once it can be seen'
+        gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH) == gitOutput(clone, 'rev-parse', 'refs/gnomish-quarantine/PROJ-9')
         gitOutput(origin, 'rev-parse', 'refs/heads/' + BRANCH) == gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH)
 
         cleanup:

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -25,8 +26,14 @@ trait UsageHistoryFixture implements SeededCloneFixture {
         walker = new UsageHistoryWalker(runner, VirtualTimeGitRetries.gitInfrastructure())
     }
 
-    GitTaskRepository taskRepository() {
-        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
+    /**
+     * The lifecycle store as production assembles it ({@code GitTaskStore#taskRepository}): every
+     * lifecycle commit is a closing commit and becomes the factory register (design D13 of
+     * tighten-spec-contract), which is where the walk starts.
+     */
+    TaskLifecycleStore taskRepository() {
+        new GitTaskStore(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock())
+                .taskRepository(registeredClone)
     }
 
     GitAttemptPersistence persistenceFor(String taskId) {

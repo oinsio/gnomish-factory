@@ -35,7 +35,7 @@ class TakeResumeReplicationSpec extends HostResumeReplicationSpecBase {
     // but never got pushed.
     def "reconciles the remote at resume start"() {
         given:
-        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
         branches.fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
 
         when:
@@ -51,7 +51,7 @@ class TakeResumeReplicationSpec extends HostResumeReplicationSpecBase {
     // Scenario: git/git-task-persistence / Completed and Aborted outcomes run no fence
     def "a delivered run runs no delivery fence"() {
         given:
-        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
 
         when:
         def result = resume(chain(new ScriptedExecutor([completedRound()])))
@@ -67,7 +67,7 @@ class TakeResumeReplicationSpec extends HostResumeReplicationSpecBase {
     // Scenario: git/git-task-persistence / Fence delivers before the park lands
     def "the delivery fence runs before the park's tracker write"() {
         given:
-        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
 
         when:
         resume(parkingChain())

@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.RegisteredBranchFixture
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -43,7 +44,7 @@ import spock.lang.TempDir
  * branch and worktree, prints the UX1 banner upfront, and runs the pipeline against the worktree
  * — proven here end to end against a local bare-repo clone (task 4.4).
  */
-class ManualRunRunnerSpec extends Specification implements AppAssemblyFixture, ManualRunPipelineFixture {
+class ManualRunRunnerSpec extends Specification implements AppAssemblyFixture, ManualRunPipelineFixture, RegisteredBranchFixture {
 
     @TempDir
     Path projectRoot
@@ -641,6 +642,11 @@ advancement: auto
         def rewritten = Files.readString(taskJson).replaceFirst(/"version"\s*:\s*1/, '"version":2')
         Files.writeString(taskJson, rewritten)
         commitAll(worktree, 'bump version')
+
+        and: 'the bump is registered, as a closing transaction would register it'
+        // A reader reads the envelope at the register (design D13 of tighten-spec-contract), so an
+        // unregistered commit above it is not the factory's record and would not be read.
+        registerTip(registeredClone().clonePath(), 'manual-test-badversion')
 
         def originalErr = System.err
         def capturedErr = new ByteArrayOutputStream()

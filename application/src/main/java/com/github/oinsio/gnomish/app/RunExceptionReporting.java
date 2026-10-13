@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
+import com.github.oinsio.gnomish.app.port.git.BoxGitVersionRefusedException;
+import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException;
 import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException;
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
@@ -31,6 +33,8 @@ final class RunExceptionReporting {
             InternalErrorException.class,
             DefaultBranchUnboundException.class,
             GitVersionRefusedException.class, // UX2 of own-git-transfer-argv: a precondition, not a crash
+            CloneRefFormatRefusedException.class, // D13 of tighten-spec-contract: the clone's precondition
+            BoxGitVersionRefusedException.class, // D13 of tighten-spec-contract: the image's precondition
             UnsupportedStateFileVersionException.class, // FR4: clean refusal, no WARN/stack trace
             ConfigurationViolationsException.class); // FR7 of add-project-registry: the loader's report
 

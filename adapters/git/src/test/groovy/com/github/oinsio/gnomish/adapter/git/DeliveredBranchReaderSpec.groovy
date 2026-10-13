@@ -27,7 +27,7 @@ import spock.lang.TempDir
  * cleanup commit (FR15 of add-git-workflow), so reconcile-on-resume can post the deferred finish
  * from the branch's own recorded delivery.
  */
-class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixture {
+class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
 
     @TempDir
     Path tempDir
@@ -75,6 +75,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         assert runner.run(cloneDir, 'show', 'gnomish/PROJ-1:.gnomish-task/task.json').exitCode() != 0
 
         when:
+        registerTip(cloneDir, 'PROJ-1')
         def delivered = reader.read(cloneDir, 'PROJ-1')
 
         then: 'the delivered identity and final state are recovered from history'
@@ -96,7 +97,8 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         persistOneRound('PROJ-6', finalState)
         repository.recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-6')
-        runner.run(registeredClone.worktrees().resolve('PROJ-6'), 'push', 'origin', 'gnomish/PROJ-6')
+        registerTip(registeredClone.worktrees().resolve('PROJ-6'), 'PROJ-6')
+        runner.run(registeredClone.worktrees().resolve('PROJ-6'), 'push', 'origin', 'gnomish/PROJ-6', 'refs/gnomish-factory/PROJ-6')
 
         def observerClone = tempDir.resolve('observer-clone')
         seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
@@ -129,10 +131,26 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         assert runner.run(cloneDir, 'branch', 'gnomish/PROJ-2', 'HEAD').exitCode() == 0
 
         when:
+        registerTip(cloneDir, 'PROJ-2')
         reader.read(cloneDir, 'PROJ-2')
 
         then:
         thrown(BranchStateFileMissingException)
+    }
+
+    // FR13 of tighten-spec-contract: delivery is read at the register; with none, nothing to recover.
+    def "throws BranchStateFileMissingException when the task has no factory register"() {
+        given: 'a Completed branch the register never named'
+        repository.createTask(context('PROJ-5'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        repository.recordOutcome('PROJ-5', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
+        assert runner.run(cloneDir, 'update-ref', '-d', 'refs/gnomish-factory/PROJ-5').exitCode() == 0
+
+        when:
+        reader.read(cloneDir, 'PROJ-5')
+
+        then:
+        def missing = thrown(BranchStateFileMissingException)
+        missing.message.contains('no factory register')
     }
 
     // FR6 of fix-envelope-medium: a delivered branch that gained commits after its cleanup commit
@@ -146,6 +164,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         persistOneRound('PROJ-3', finalState)
         repository.recordOutcome('PROJ-3', new TaskOutcome.Completed(finalState), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-3')
+        registerTip(cloneDir, 'PROJ-3')
         commit(registeredClone.worktrees().resolve('PROJ-3'), 'later.txt', 'work landed after the cleanup')
 
         when:
@@ -165,13 +184,15 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         repository.createTask(context('PROJ-4'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         persistOneRound('PROJ-4', TaskState.atStageStart('implement'))
         def deliveredState = TaskState.atStageStart('review')
-        // The lifecycle commit stages the whole worktree, so this write lands in the Completed
-        // commit itself — the same way the STARTED commit carries StateFileWrite's initial state.
-        StateFileWrite.write(runner, registeredClone.worktrees().resolve('PROJ-4'), 'PROJ-4', deliveredState, TaskLifecycleEvent.COMPLETED)
         repository.recordOutcome('PROJ-4', new TaskOutcome.Completed(deliveredState), TrackerWrite.OWED)
+        // A registered Completed tip whose state its parent lacks: written and registered by hand,
+        // since every factory writer restores the state file from the register before it stages.
+        StateFileWrite.write(runner, registeredClone.worktrees().resolve('PROJ-4'), 'PROJ-4', deliveredState, TaskLifecycleEvent.COMPLETED)
+        commitAll(registeredClone.worktrees().resolve('PROJ-4'), 'completed state')
         assert runner.run(cloneDir, 'show', 'gnomish/PROJ-4:.gnomish-task/task.json').exitCode() == 0
 
         when:
+        registerTip(cloneDir, 'PROJ-4')
         def delivered = reader.read(cloneDir, 'PROJ-4')
 
         then: 'the delivered state is the one recorded at the tip, not the previous round\'s at tip^'

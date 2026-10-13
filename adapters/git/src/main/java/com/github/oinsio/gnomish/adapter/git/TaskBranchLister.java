@@ -125,8 +125,10 @@ public final class TaskBranchLister {
      * envelopes, the shape alone for every other branch (FR16).
      */
     private TaskListRow readRow(Path cloneDir, String ref, String prefix) {
-        BranchTipSource source = new RefTipSource(runner, cloneDir, ref);
         String branchName = ref.substring(prefix.length());
+        // The branch name's core string is the register's task part (design D13 of
+        // tighten-spec-contract): it only selects the register, never the identity shown.
+        BranchTipSource source = RefTipSource.at(runner, cloneDir, branchName, ref);
         return switch (tipEnvelopeReader.read(source)) {
             case TipEnvelopeRead.NoState(BranchShape shape) -> new TaskListRow(branchName, null, 0, null, shape);
             case TipEnvelopeRead.Loaded(BranchShape shape, UntrustedText taskJson, UntrustedText stateJson) ->

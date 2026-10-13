@@ -24,7 +24,7 @@ a symlink to one resolves to it, and an unregistered path exits 2 with the
 gnomish status --dir=<clone-dir> [<task>] [--json]
 ```
 
-- **List mode** (`<task>` omitted): prints a table over all `gnomish/*` branches, local and remote-tracking alike, deduplicated per task (the local tip wins when both exist).
+- **List mode** (`<task>` omitted): prints a table over all `gnomish/*` branches, local and remote-tracking alike, deduplicated per task (the local tip wins when both exist). The listing fetches nothing per branch, so a task held only as a remote-tracking ref, whose register no fetch has brought into this clone yet, lists as `Unknown` until a single-task `status` or any other command touching the task fetches it.
 
   | Column   | Meaning                                                    |
   |----------|------------------------------------------------------------|
@@ -40,7 +40,7 @@ gnomish status --dir=<clone-dir> [<task>] [--json]
   whose files cannot be read. One unreadable branch degrades to its own
   diagnostic row naming its shape; it never fails the listing of the others.
 
-- **Single-task mode** (`<task>` given): reads `.gnomish-task/` straight off `gnomish/<task>` via `git show` — no worktree is materialized, no checkout happens, no local branch is created. If the branch isn't already known locally or as a remote-tracking ref, `status` falls back to a narrow fetch of exactly `gnomish/<task>`. Text and `--json` output are two renders of one StatusReport (`"version": 1`), built from the state recorded on the branch tip — a running task shows its last recorded round, not what it is doing right now — plus the task's worktree path if one currently exists. This is the only status path: `gnomish run` reads no input and has no in-process status command (see [`operator-guide-run.md`](operator-guide-run.md)).
+- **Single-task mode** (`<task>` given): reads `.gnomish-task/` straight off `gnomish/<task>` via `git show` — no worktree is materialized, no checkout happens, no local branch is created. If no local branch exists, `status` fetches exactly `gnomish/<task>` and its register together (`git clone` does not copy the register); a remote-tracking ref is used only when that fetch does not deliver, and a branch read that way without its register reports `Unknown`. Text and `--json` output are two renders of one StatusReport (`"version": 1`), built from the state recorded at the commit the task's factory register (`refs/gnomish-factory/<task>`) names — the factory's latest commit of the task, never a commit the gnome added on top — so a running task shows its last recorded round, not what it is doing right now — plus the task's worktree path if one currently exists. This is the only status path: `gnomish run` reads no input and has no in-process status command (see [`operator-guide-run.md`](operator-guide-run.md)).
 - **Every shape renders**: the branch's shape is classified before anything is read from it, so `status` reports a delivered branch as delivered and a freshly created one as pending instead of failing on state files that shape does not have. For those branches the output is the shape itself:
 
   ```
@@ -48,7 +48,7 @@ gnomish status --dir=<clone-dir> [<task>] [--json]
   Shape: Delivered
   ```
 
-- **A branch that refuses inspection**: the three quarantine shapes — `Corrupt`, `UnsupportedVersion`, `Unknown` — print a `Diagnosis:` line naming the offending file and the observed versus expected content (for `UnsupportedVersion`, the observed and supported versions) and exit with code 7. No stack trace, and nothing in the clone is mutated. Example:
+- **A branch that refuses inspection**: the three quarantine shapes — `Corrupt`, `UnsupportedVersion`, `Unknown` — print a `Diagnosis:` line naming the offending file and the observed versus expected content (for `UnsupportedVersion`, the observed and supported versions) and exit with code 7. `Unknown` also covers a branch whose top is not a descendant of the commit its register names, and a branch carrying task files with no register at all; the diagnosis names which. No stack trace, and nothing in the clone is mutated. Example:
 
   ```
   Task: PROJ-1
@@ -68,7 +68,7 @@ gnomish usage --dir=<clone-dir> <task> [--json]
 
 Unlike `status`, `<task>` is mandatory here — there is no list mode.
 
-`usage` reconstructs per-stage/per-round resource usage by walking the git history of `.gnomish-task/state.json` on the task branch, chronologically from oldest to newest — not by parsing commit messages. A commit counts as a "round record" when its `state.json` shows a new attempt (the attempts list grew, or the pipeline position advanced to a new stage visit); salvage, `task.json`, and cleanup commits are naturally skipped since they don't add a new attempt record. `usage` only makes sense in git mode — a `--mode=in-place` run has no branch or history to reconstruct from.
+`usage` reconstructs per-stage/per-round resource usage by walking the git history of `.gnomish-task/state.json` on the task branch, chronologically from oldest to newest, up to the commit the task's factory register names (a `state.json` the gnome committed above it is not a round, and a branch with no register reports no rounds) — not by parsing commit messages. A commit counts as a "round record" when its `state.json` shows a new attempt (the attempts list grew, or the pipeline position advanced to a new stage visit); salvage, `task.json`, and cleanup commits are naturally skipped since they don't add a new attempt record. `usage` only makes sense in git mode — a `--mode=in-place` run has no branch or history to reconstruct from.
 
 **Text output** (default) is a stage/round table plus totals (wall time, tokens).
 

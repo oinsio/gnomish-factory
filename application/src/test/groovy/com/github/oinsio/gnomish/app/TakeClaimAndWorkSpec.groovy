@@ -186,7 +186,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         }
         def worktrees = Mock(TaskWorktreeGit)
         def store = Stub(TaskStoreGit) {
-            readTaskRecord(_) >> {
+            readTaskRecord(_, _) >> {
                 throw new UsageException('stopped at the resume bootstrap')
             }
         }
@@ -440,7 +440,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readTaskRecord(_) >> Optional.of(freshRecord())
+            readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
         def branches = freshBranches()
         def recoveringBaseRefGit = Stub(BaseRefGit) {
@@ -514,7 +514,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readTaskRecord(_) >> Optional.of(freshRecord())
+            readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
         def branches = freshBranches()
         def beat = new RecordingBeat()
@@ -555,8 +555,8 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readTaskRecord(_) >> Optional.of(freshRecord())
-            readRecordedState(_) >> Optional.of(TaskState.atStageStart('build'))
+            readTaskRecord(_, _) >> Optional.of(freshRecord())
+            readRecordedState(_, _) >> Optional.of(TaskState.atStageStart('build'))
         }
         // FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so
         // this port-fake chain needs a working BaseRefGit rather than BaseRefGit.UNWIRED.

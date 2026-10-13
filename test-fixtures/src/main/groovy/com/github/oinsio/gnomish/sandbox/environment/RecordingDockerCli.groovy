@@ -20,8 +20,26 @@ class RecordingDockerCli extends DockerCli {
         DockerResult.of(0, '', '')
     }
 
+    /**
+     * What the sandbox image's {@code git --version} prints when the box's git floor is probed
+     * before a seed clone (design D13 of tighten-spec-contract, as amended 2026-10-13): a git above
+     * the floor by default, so a scenario that is not about the floor never meets it; a scenario
+     * that is sets an older line, or {@code null} to hand the probe to {@link #onRun}.
+     */
+    String boxGitVersion = 'git version 2.47.0'
+
     RecordingDockerCli() {
         super('docker')
+    }
+
+    /**
+     * The one place a daemon-free fake answers the box's git-version probe: {@code run … git
+     * --version} — the probe is the only {@code run} whose argv ends that way.
+     *
+     * @return the scripted result, or {@code null} when this argv is not the probe
+     */
+    static DockerResult answerBoxGitVersion(List<String> args, String line = 'git version 2.47.0') {
+        args[0] == 'run' && args.takeRight(2) == ['git', '--version'] ? DockerResult.of(0, line + '\n', '') : null
     }
 
     /**
@@ -44,7 +62,8 @@ class RecordingDockerCli extends DockerCli {
     @Override
     DockerResult run(List<String> args) {
         runs << args
-        onRun.call(args)
+        def probe = boxGitVersion == null ? null : answerBoxGitVersion(args, boxGitVersion)
+        probe != null ? probe : onRun.call(args)
     }
 
     @Override

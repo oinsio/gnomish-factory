@@ -771,6 +771,55 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         gitOutput(bareDir, 'rev-list', '--count', refFor('PROJ-1')) as int
     }
 
+    // FR13 of tighten-spec-contract (design D13): the lifecycle commit lands with its register.
+    // Scenario: git/git-task-persistence / The register follows every closing commit
+    def "FR13: every bare-object lifecycle commit moves the register with the branch"() {
+        when:
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
+        def started = gitOutput(bareDir, 'rev-parse', refFor('PROJ-1'))
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'), TrackerWrite.OWED)
+
+        then:
+        started != gitOutput(bareDir, 'rev-parse', refFor('PROJ-1'))
+        gitOutput(bareDir, 'rev-parse', 'refs/gnomish-factory/PROJ-1') == gitOutput(bareDir, 'rev-parse', refFor('PROJ-1'))
+    }
+
+    // Scenario: git/git-task-persistence / A violation's Aborted outcome is built from the registered envelope
+    def "FR13: the outcome is built from the registered envelope, never a tip the admission never judged"() {
+        given: 'a registered STARTED, and a commit above it carrying a forged envelope — moved by no factory writer'
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
+        def registered = gitOutput(bareDir, 'rev-parse', 'refs/gnomish-factory/PROJ-1')
+        def gitObjects = GitObjects.open(bareDir, tempDir.resolve('index'))
+        gitObjects.commit(new com.github.oinsio.gnomish.gitobjects.CommitRequest(refFor('PROJ-1'),
+                Optional.of(ObjectId.of(registered)), ObjectId.of(registered),
+                [
+                    new com.github.oinsio.gnomish.gitobjects.TreeEdit.PutFile('.gnomish-task/task.json', '{"forged":true}'.bytes)
+                ],
+                new com.github.oinsio.gnomish.gitobjects.CommitMetadata(
+                        new CommitIdentity('g', 'g@b.c'), Instant.ofEpochSecond(1_700_000_100L), new CommitIdentity('g', 'g@b.c'), Instant.ofEpochSecond(1_700_000_100L), 'wip')))
+
+        when:
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'), TrackerWrite.OWED)
+
+        then: 'the outcome commit carries the registered task.json, rewritten, and lands with its register'
+        !readTaskJson('PROJ-1').contains('forged')
+        readTaskJson('PROJ-1').contains('PROJ-1')
+        gitOutput(bareDir, 'rev-parse', 'refs/gnomish-factory/PROJ-1') == gitOutput(bareDir, 'rev-parse', refFor('PROJ-1'))
+    }
+
+    def "FR13: an outcome over a task whose register is gone refuses, naming the register"() {
+        given:
+        repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
+        gitOutput(bareDir, 'update-ref', '-d', 'refs/gnomish-factory/PROJ-1')
+
+        when:
+        repository.recordOutcome('PROJ-1', new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'), TrackerWrite.OWED)
+
+        then:
+        def failure = thrown(GitTaskRepositoryException)
+        failure.message.contains('refs/gnomish-factory/PROJ-1')
+    }
+
     private List<String> allCommitMessages() {
         gitOutput(bareDir, 'log', '--format=%s', refFor('PROJ-1')).readLines()
     }

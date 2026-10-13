@@ -37,6 +37,12 @@ import java.nio.file.Path
  *       {@link #IDENTITY_EMAIL}). Without it every such commit fails with "Author identity
  *       unknown" wherever git cannot guess one from the account and host — a CI runner — while
  *       passing on a workstation that can, so the file supplies it on every machine alike.
+ *   <li>{@code gc.autoDetach=false} — not adversarial: since git 2.47 the auto maintenance a
+ *       commit, a fetch or a receiving push triggers detaches into a child that takes and drops
+ *       {@code objects/maintenance.lock} after the command has returned, racing a spec's
+ *       temporary-directory deletion under a loaded build ({@code @TempDir} cleanup failed with
+ *       {@code NoSuchFileException} in a full {@code check}). {@code maintenance.autoDetach} falls
+ *       back to this key, and an older {@code gc --auto} reads it directly.
  * </ul>
  *
  * <p>Every other key of an operator's real {@code ~/.gitconfig} — aliases, colours, includes —
@@ -79,6 +85,17 @@ final class AdversarialGitConfig {
 
     static final String IDENTITY_EMAIL = 'test@gnomish-factory.invalid'
 
+    /**
+     * The variable the build sets beside {@link #VARIABLE} so every repository the test build creates
+     * is on {@link #REF_FORMAT} — the backend production's factory clone must be on (design D13 of
+     * tighten-spec-contract, as amended 2026-10-13). An environment variable rather than the file's
+     * {@code init.defaultRefFormat}: the variable needs git 2.45, the project's floor; the key, 2.48.
+     */
+    static final String REF_FORMAT_VARIABLE = 'GIT_DEFAULT_REF_FORMAT'
+
+    /** The ref backend every repository the test build creates is initialised on. */
+    static final String REF_FORMAT = 'reftable'
+
     /** Every key the file defines, as {@code git config --list} spells them. */
     static final Set<String> KEYS = [
         'alias.' + PROBE_ALIAS,
@@ -88,6 +105,7 @@ final class AdversarialGitConfig {
         'credential.helper',
         'user.name',
         'user.email',
+        'gc.autodetach',
     ] as Set
 
     private AdversarialGitConfig() {

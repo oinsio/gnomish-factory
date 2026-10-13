@@ -39,8 +39,11 @@ factory:
 
 Build the image from the reference recipe in
 `docs/examples/sandbox-image/` — it bakes the image contract the factory
-assumes (git, curl, a non-root `gnome` user owning `/gnomish/**`, root-owned
-control surfaces) plus your project's toolchain. Without Docker the factory
+assumes (git 2.45.1 or newer, curl, a non-root `gnome` user owning `/gnomish/**`,
+root-owned control surfaces) plus your project's toolchain. The git floor is
+checked before every seed clone: the seed clone reads the factory clone, which is
+on the reftable ref backend, with the image's own git, and an image whose git is
+older is refused with a `[GF163]` line naming it. Without Docker the factory
 refuses with an error naming the two ways out — install Docker, or explicitly
 bind host — and never falls back to host silently.
 
@@ -142,6 +145,18 @@ what it means:
   filesystem access. It stops a leaked `AWS_SECRET_ACCESS_KEY` from appearing
   in `env`; it does not stop a process from reading `~/.aws/credentials`.
 - There is no egress control: any process can reach any destination.
+- The task branch's record is not protected from the gnome. In container mode
+  the factory's record of a task — its outcome, its position, a checkpoint's
+  approval, the base pin, the cleanup that marks it delivered — is read only
+  at the commit the factory register `refs/gnomish-factory/<task>` names, and
+  the gnome's commits enter the branch only after the harvest admission has
+  inspected them, so a gnome cannot forge that record. On the host the gnome
+  works in the clone's own `.git` and can move the register itself, so host
+  mode makes no such claim (threat #49 of the
+  [threat registry](../sandbox-threat-registry.md)). What remains are
+  signals: a branch whose top does not descend from its register, or whose
+  registered commit carries no factory shape, reports `Unknown` with a
+  diagnosis instead of being trusted.
 
 Host mode remains fully supported for trusted setups — running the factory on
 this project's own repository, licensed toolchains, iOS/GPU builds — but treat

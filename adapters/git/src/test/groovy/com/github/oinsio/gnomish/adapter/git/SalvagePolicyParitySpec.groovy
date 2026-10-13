@@ -48,6 +48,8 @@ class SalvagePolicyParitySpec extends Specification implements BareGitRepoFixtur
 
     private boolean hostCarries(String path) {
         def repo = tipRepo('host-' + System.nanoTime())
+        gitOutput(repo, 'checkout', '-q', '-b', BRANCH)
+        gitOutput(repo, 'update-ref', 'refs/gnomish-factory/' + TASK, 'HEAD')
         dirty(repo, path)
         new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE).salvage(TASK)
         assert carried(repo, 'gnome-work.txt', 'work'): 'the host salvage commit landed'
@@ -57,10 +59,12 @@ class SalvagePolicyParitySpec extends Specification implements BareGitRepoFixtur
     private boolean containerCarries(String path) {
         def clone = tipRepo('clone-' + System.nanoTime())
         gitOutput(clone, 'branch', BRANCH)
+        // The branch starts at a registered closing commit, as STARTED leaves it (design D13).
+        gitOutput(clone, 'update-ref', 'refs/gnomish-factory/' + BRANCH.substring('gnomish/'.length()), 'refs/heads/' + BRANCH)
         def box = new LocalBoxEnvironment(clone, Files.createDirectories(tempDir.resolve('box-' + System.nanoTime())))
         box.materialize(BRANCH, null)
         dirty(box.workingCopy, path)
-        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage(TASK)
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), clone).salvage(TASK)
         assert carried(box.workingCopy, 'gnome-work.txt', 'work'): 'the in-box salvage commit landed'
         carried(box.workingCopy, path)
     }

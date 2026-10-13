@@ -119,6 +119,23 @@ class FetchRefusalOutcomeSpec extends Specification implements BareGitRepoFixtur
         recordedSubcommands(fetchLog).count('fetch') == 1
     }
 
+    // FR13 of tighten-spec-contract (D13, amended 2026-10-13): the tracking ref already present is
+    //     the fallback for an origin that cannot deliver, never for one whose objects failed validation.
+    def "FR5: a refused touchpoint fetch beside a present tracking ref is refused, never fallen back from"() {
+        given: 'the clone already holds the task branch as a tracking ref, fetched by the real git'
+        def taskClone = cloneLackingTaskBranch('tracked', 'PROJ-2')
+        fetchFromOrigin(taskClone, 'refs/heads/gnomish/PROJ-2:refs/remotes/origin/gnomish/PROJ-2')
+
+        when:
+        def location = new TaskBranchLocator(refusingRunner(), VirtualTimeGitRetries.gitInfrastructure())
+                .locate(taskClone, 'PROJ-2')
+
+        then:
+        location instanceof BranchLocation.Refused
+        (location as BranchLocation.Refused).report().contains('gnomish/PROJ-2')
+        recordedSubcommands(fetchLog).count('fetch') == 1
+    }
+
     def "FR5: the take's shape classification turns a refused locate into a quarantine shape"() {
         given: 'origin carries the task branch and the clone holds no ref for it'
         def taskClone = cloneLackingTaskBranch('shape', 'PROJ-2')

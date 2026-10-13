@@ -3,18 +3,20 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
+import com.github.oinsio.gnomish.domain.branch.TipRelation;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Optional;
 
 /**
- * Reads one branch tip down to the point every tip reader needs before it diverges: the tip's
- * {@link BranchShape} and, when that shape carries state (FR16 of harden-task-branch-contract),
- * its raw {@code task.json} / {@code state.json} text. {@link BranchStateReader} and {@link
+ * Reads one task branch down to the point every branch reader needs before it diverges: its {@link
+ * BranchShape} and, when that shape carries state (FR16 of harden-task-branch-contract), its raw
+ * {@code task.json} / {@code state.json} text — both read at the task's registered commit, never at
+ * the tip (design D13 of tighten-spec-contract). {@link BranchStateReader} and {@link
  * TaskBranchLister} both stop here and build their own result type from what it returns, so the
  * classify-then-read-envelopes sequence has exactly one implementation instead of two hand-kept in
  * step.
  *
- * <p>Implements FR13, FR16 of harden-task-branch-contract.
+ * <p>Implements FR13, FR16 of harden-task-branch-contract; FR13 of tighten-spec-contract.
  */
 final class TipEnvelopeReader {
 
@@ -32,9 +34,15 @@ final class TipEnvelopeReader {
      *     TipEnvelopeRead.Loaded} with both envelope texts
      */
     TipEnvelopeRead read(BranchTipSource source) {
-        Optional<UntrustedText> taskJson = source.readAtTip(TASK_JSON_PATH);
-        Optional<UntrustedText> stateJson = source.readAtTip(STATE_JSON_PATH);
-        BranchShape shape = classifier.classify(facts.factsFrom(taskJson, stateJson, source.cleanupCommitInHistory()));
+        TipRelation relation = source.tipRelation();
+        if (!BranchTipFactsReader.readsAtRegister(relation)) {
+            // A missing or diverged register: nothing is read, the relation alone classifies.
+            return new TipEnvelopeRead.NoState(classifier.classify(facts.read(source)));
+        }
+        Optional<UntrustedText> taskJson = source.readAtRegister(TASK_JSON_PATH);
+        Optional<UntrustedText> stateJson = source.readAtRegister(STATE_JSON_PATH);
+        BranchShape shape =
+                classifier.classify(facts.factsFrom(taskJson, stateJson, source.registeredCleanup(), relation));
         if (!shape.tipCarriesState()) {
             return new TipEnvelopeRead.NoState(shape);
         }

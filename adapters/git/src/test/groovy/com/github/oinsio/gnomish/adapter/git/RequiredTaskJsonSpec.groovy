@@ -37,6 +37,7 @@ class RequiredTaskJsonSpec extends Specification implements BareGitRepoFixture {
     def "a lifecycle rewrite on a tip with no envelope reports git's own diagnosis, not just its absence"() {
         given: 'a task branch whose tip was never given a .gnomish-task/ envelope'
         runner.run(cloneDir, 'branch', 'gnomish/PROJ-9', 'HEAD')
+        runner.run(cloneDir, 'update-ref', 'refs/gnomish-factory/PROJ-9', 'HEAD')
 
         when:
         repository.recordOutcome('PROJ-9', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
@@ -48,6 +49,6 @@ class RequiredTaskJsonSpec extends Specification implements BareGitRepoFixture {
         e.message.contains('git show exited 128')
 
         and: "git's own words survive into the operator's line"
-        e.message.contains("does not exist in 'HEAD'")
+        e.message.contains("does not exist in 'refs/gnomish-factory/PROJ-9'")
     }
 }

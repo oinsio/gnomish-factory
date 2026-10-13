@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
-import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 
@@ -12,9 +11,11 @@ import java.nio.file.Path;
  * to be there — the one owner of that read for both host-side rewrites: the lifecycle rewrites in
  * {@link GitTaskRepository} and the terminal-write receipt in {@link TerminalWriteMarker}.
  *
- * <p>The read resolves at the worktree's {@code HEAD}, not at its working copy (FR2, design D1 of
- * fix-envelope-medium): the file on disk is where the <em>next</em> envelope version is staged, so
- * a stale or half-written one there must not be carried forward into a lifecycle commit.
+ * <p>The read resolves at the task's registered commit ({@link RegisterBase}), not at its working
+ * copy (FR2, design D1 of fix-envelope-medium) and not at a {@code HEAD} the gnome may have
+ * committed above the register (design D18 of tighten-spec-contract): the file on disk is where
+ * the <em>next</em> envelope version is staged, and a violation's {@code Aborted} outcome must be
+ * built from the factory's own record, never the tip's.
  *
  * <p>Unlike a classifier's read, a non-zero exit here is never read as absence: a revision with no
  * such path, an unborn {@code HEAD} and a corrupt object all end this way and only git can say
@@ -30,7 +31,7 @@ final class RequiredTaskJson {
 
     /**
      * @param runner the git subprocess runner the tip read goes through
-     * @param worktree the task worktree whose {@code HEAD} carries the envelope
+     * @param worktree the task worktree; the register is the clone's
      * @param taskId the task whose envelope is read; for error reporting
      * @param event the lifecycle write this read serves; for error reporting
      * @return the branch's current {@code task.json}: the committed text and its raw wire DTO
@@ -45,18 +46,19 @@ final class RequiredTaskJson {
      * The required read itself, for either envelope file: {@link RequiredTaskState} reads {@code
      * state.json} through it under the same rule.
      *
-     * @param path the envelope file to read at {@code HEAD}
+     * @param path the envelope file to read at the registered commit
      * @return the file's content as committed, still a carrier
      * @throws GitTaskRepositoryException if the tip read exits non-zero, carrying git's diagnosis
      */
     static UntrustedText documentAtTip(
             GitRunner runner, Path worktree, String taskId, TaskLifecycleEvent event, String path) {
-        GitCommandResult result = new GitShowTip(runner, worktree, GitObjects.HEAD).showAtTip(path);
+        GitCommandResult result = RegisterBase.show(runner, worktree, taskId, path);
         if (result.exitCode() != 0) {
             throw new GitTaskRepositoryException(
                     taskId,
                     event,
-                    "reading " + path + " at HEAD of " + worktree + ", git show exited " + result.exitCode(),
+                    "reading " + path + " at the registered commit of " + worktree + ", git show exited "
+                            + result.exitCode(),
                     result.stderr());
         }
         return result.stdout();

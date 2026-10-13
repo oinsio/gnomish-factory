@@ -769,6 +769,8 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
                 .writeValueAsString(TaskJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(taskJson))).withEgressCursor(escalation)))
         runner.run(worktree, 'add', '-A')
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'round state')
+        // A container round's state commit, registered as its closing transaction would (design D13).
+        assert runner.run(worktree, 'update-ref', 'refs/gnomish-factory/' + taskId, 'HEAD').exitCode() == 0
     }
 
     private int commitCount(Path worktree) {

@@ -1,11 +1,14 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.git.BoxGitVersionRefusedException
+import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeCrashAbort
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -33,6 +36,7 @@ class ClaimedRunFailureDispatchSpec extends Specification implements RunChainFak
     // pipeline whose prerequisites are unmet with a UsageException, after the claim is held; a
     // diverged branch reaches here once a beat reported the claim gone (FR8 of
     // harden-task-branch-contract).
+    // Scenario: sandbox/execution-environment / A refused image releases the claimed task
     @Unroll
     def "releases the claim when a deliberate #kind aborts a claimed run"() {
         given:
@@ -61,6 +65,13 @@ class ClaimedRunFailureDispatchSpec extends Specification implements RunChainFak
         'diverged branch' | {
             new DivergedBranchException('PROJ-1', 'gnomish/PROJ-1', 'aaaa', 'bbbb')
         } | DivergedBranchException
+        // D13 of tighten-spec-contract (amended 2026-10-13): the operator's clone, not the task
+        'refused factory clone' | {
+            new CloneRefFormatRefusedException('/clones/x', 'reftable', UntrustedText.subprocess('files'))
+        } | CloneRefFormatRefusedException
+        'refused sandbox image' | {
+            new BoxGitVersionRefusedException('img:1', '2.45.1', UntrustedText.container('git version 2.43.0'), 'why')
+        } | BoxGitVersionRefusedException
     }
 
     // NFR-R2 in spirit: the release is best-effort. A tracker that is itself the reason the run is

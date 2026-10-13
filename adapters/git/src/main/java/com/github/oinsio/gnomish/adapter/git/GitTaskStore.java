@@ -11,7 +11,6 @@ import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
-import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import java.nio.file.Path;
 import java.time.InstantSource;
 import java.util.Optional;
@@ -27,17 +26,19 @@ import java.util.Optional;
  * coherent — the same runner, hence the same per-clone mutation lock (design D8 of
  * add-git-workflow).
  *
- * <p>The two document reads go through {@link GitShowTip} at the worktree's {@code HEAD} (design
- * D1 of fix-envelope-medium) — the same seam the ref-based readers and the branch classifier
- * already read through, so host mode answers what the branch records rather than what the working
- * copy happens to hold. A worktree is reused as-is between pickups, so its disk may carry a
- * killed predecessor's staged removal or half-written envelope; the tip cannot. Reading the tip
+ * <p>The two document reads go through {@link GitShowTip} at the task's registered commit (design
+ * D1 of fix-envelope-medium; design D13 of tighten-spec-contract) — the commit the task's factory
+ * register names, the same commit the branch classifier read. Not the
+ * working copy: a worktree is reused as-is between pickups, so its disk may carry a killed
+ * predecessor's staged removal or half-written envelope. And not {@code HEAD}: the gnome commits on
+ * the worktree's branch, so a {@code Completed} outcome, a gate position or a base pin it wrote
+ * there would otherwise be what a resume routes and binds its law on. Reading the registered commit
  * also inherits the seam's invocation gate: a read cut off before git's own exit throws {@link
  * com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException} instead of answering
  * "absent" (NFR-R2).
  *
  * <p>Implements FR1, FR14, NFR-C1 of add-git-workflow; FR12b of split-into-modules; FR1, NFR-R2
- * of fix-envelope-medium; FR9 of add-project-registry.
+ * of fix-envelope-medium; FR9 of add-project-registry; FR13, NFR-S2 of tighten-spec-contract.
  */
 public final class GitTaskStore implements TaskStoreGit {
 
@@ -87,27 +88,31 @@ public final class GitTaskStore implements TaskStoreGit {
     }
 
     @Override
-    public Optional<TaskState> readRecordedState(Path worktree) {
-        return tipOf(worktree)
-                .readAtTip(EnvelopePaths.STATE_JSON_PATH)
+    public Optional<TaskState> readRecordedState(Path worktree, String taskId) {
+        return registeredOf(worktree, taskId)
+                .flatMap(registered -> registered.readAtRegister(EnvelopePaths.STATE_JSON_PATH))
                 .map(StateJsonMapper::readDto)
                 .map(StateJsonMapper::fromDto);
     }
 
     @Override
-    public Optional<TaskRecord> readTaskRecord(Path worktree) {
-        return tipOf(worktree)
-                .readAtTip(EnvelopePaths.TASK_JSON_PATH)
+    public Optional<TaskRecord> readTaskRecord(Path worktree, String taskId) {
+        return registeredOf(worktree, taskId)
+                .flatMap(registered -> registered.readAtRegister(EnvelopePaths.TASK_JSON_PATH))
                 .map(TaskJsonMapper::readDto)
                 .map(TaskJsonMapper::fromDto);
     }
 
     /**
-     * The envelope reader for one worktree: {@code HEAD} of a task worktree is the checked-out task
-     * branch, so this is the very tip the branch classifier read.
+     * The envelope reader for one task: its registered commit, read in the worktree (the ref store
+     * is the clone's), or empty when the task has no register — which reads as an absent envelope,
+     * exactly as a commit that carries none. The task names the register, never the branch the
+     * worktree happens to have checked out.
      */
-    private GitShowTip tipOf(Path worktree) {
-        return new GitShowTip(runner, worktree, GitObjects.HEAD);
+    private Optional<GitShowTip> registeredOf(Path worktree, String taskId) {
+        return new FactoryRegisterRead(runner)
+                .registered(worktree, taskId)
+                .map(registered -> new GitShowTip(runner, worktree, registered));
     }
 
     @Override

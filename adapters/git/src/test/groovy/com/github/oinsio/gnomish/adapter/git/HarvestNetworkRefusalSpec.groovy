@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.gittransfer.GitTransfer
-import com.github.oinsio.gnomish.gittransfer.Refspec
 import com.github.oinsio.gnomish.gittransfer.TransferSource
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Path
@@ -17,7 +16,6 @@ import spock.lang.TempDir
  */
 class HarvestNetworkRefusalSpec extends Specification implements BareGitRepoFixture {
 
-    private static final Refspec REFSPEC = new Refspec('refs/heads/gnomish/T-1:refs/heads/gnomish/T-1')
     private static final String EXT_URL = 'ext::docker exec -i box %S'
 
     @TempDir
@@ -27,7 +25,7 @@ class HarvestNetworkRefusalSpec extends Specification implements BareGitRepoFixt
     // Scenario: git/git-transfer / A harvest cannot reach the network
     def "FR4: the harvest argv with a #protocol URL in place of its ext:: URL is refused by git"() {
         given: "the owner's harvest value, whose allowlist names ext alone"
-        def harvest = GitTransfer.fetch(new TransferSource.Container(EXT_URL), REFSPEC)
+        def harvest = GitTransfer.harvest(new TransferSource.Container(EXT_URL), 'gnomish/T-1', FactoryRegister.quarantine('T-1'))
         assert harvest.environment().get('GIT_ALLOW_PROTOCOL') == Optional.of('ext')
         Path clone = initWorkingRepo(tempDir, 'factory-clone')
 

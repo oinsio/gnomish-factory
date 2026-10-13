@@ -36,7 +36,7 @@ class TakeParkFenceExhaustionSpec extends HostResumeReplicationSpecBase {
     // Scenario: git/git-task-persistence / Fence exhaustion leaves the marker to the confirm protocol
     def "an exhausted fence parks anyway, with the origin-behind note in the report"() {
         given:
-        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
 
         when:
         def result = resume(parkingChain())
@@ -65,7 +65,7 @@ class TakeParkFenceExhaustionSpec extends HostResumeReplicationSpecBase {
     def "a deferred park's re-post carries the fence's origin-behind note"() {
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
-        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, true))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, true))
         def executor = new ScriptedExecutor([completedRound()])
 
         when:
@@ -87,7 +87,7 @@ class TakeParkFenceExhaustionSpec extends HostResumeReplicationSpecBase {
     def "a deferred park whose fence reports delivered carries no note"() {
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
-        store.readTaskRecord(_) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, true))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, true))
 
         when:
         resume(chain(new ScriptedExecutor([completedRound()])))

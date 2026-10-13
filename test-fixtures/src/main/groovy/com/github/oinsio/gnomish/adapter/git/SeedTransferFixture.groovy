@@ -46,7 +46,25 @@ trait SeedTransferFixture {
             destination.toString()
         ])
         assert result.exitCode() == 0: "seed clone of ${source} failed: ${result.stderr()}"
-        destination
+        assertOnReftable(destination)
+    }
+
+    /**
+     * Fails unless {@code repo} is on the ref backend the factory clone must be on ({@link
+     * AdversarialGitConfig#REF_FORMAT}; design D13 of tighten-spec-contract, as amended 2026-10-13),
+     * and returns it — the self-check of every repository the shared fixtures create, so a spec
+     * cannot pass on the files backend because the build's ref-format variable did not reach git.
+     */
+    Path assertOnReftable(Path repo) {
+        def format = seedGit(repo, [
+            'rev-parse',
+            '--show-ref-format'
+        ])
+        String reported = format.stdout().forParsing().trim()
+        assert format.exitCode() == 0 && reported == AdversarialGitConfig.REF_FORMAT:
+        "${repo} is on the '${reported}' ref backend, not ${AdversarialGitConfig.REF_FORMAT}: the test " +
+        "build sets ${AdversarialGitConfig.REF_FORMAT_VARIABLE}=${AdversarialGitConfig.REF_FORMAT}; run under Gradle"
+        repo
     }
 
     /**

@@ -24,8 +24,13 @@ import org.slf4j.LoggerFactory;
  * <p>Never blocks and never throws: no {@code origin} is a silent no-op, an unreachable origin or a
  * failed catch-up push is one WARN, and the run proceeds either way (NFR-R1).
  *
+ * <p>The catch-up push is a closing push that registers nothing (design D13 of
+ * tighten-spec-contract): it delivers the branch and the clone's factory register as they stand, in
+ * one atomic push ({@link ClosingPush}), so the closing push an earlier instance lost is delivered
+ * whole — never the branch above a register origin lacks.
+ *
  * <p>Implements FR3, NFR-R1, NFR-O1, NFR-C1 of fix-lifecycle-push; FR8 of
- * harden-task-branch-contract.
+ * harden-task-branch-contract; FR13 of tighten-spec-contract.
  */
 public final class OriginReconciliation {
 
@@ -33,7 +38,7 @@ public final class OriginReconciliation {
 
     private final OriginRemote origin;
     private final RemoteBranchTip remoteTip;
-    private final RefspecPush push;
+    private final ClosingPush push;
 
     /**
      * @param runner the git subprocess seam; never null
@@ -41,7 +46,7 @@ public final class OriginReconciliation {
     public OriginReconciliation(GitRunner runner) {
         this.origin = new OriginRemote(runner);
         this.remoteTip = new RemoteBranchTip(runner);
-        this.push = new RefspecPush(runner);
+        this.push = new ClosingPush(runner);
     }
 
     /**
@@ -100,7 +105,7 @@ public final class OriginReconciliation {
                 touchpoint,
                 remote.orElse("(absent or unreachable)"),
                 localTip);
-        GitCommandResult result = push.push(repo, branch);
+        GitCommandResult result = push.push(repo, taskId);
         String outcome = PushOutcome.describe("origin reconciliation push", result);
         if (outcome != null) {
             log.warn(

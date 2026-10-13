@@ -21,7 +21,7 @@ import spock.lang.TempDir
  * <p>FR15, NFR-R4 of make-checkpoint-gate-durable (design D10): the token names the round, and the
  * request the round asked — if any — is read from the snapshot's tree at exactly that round's path.
  */
-class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture {
+class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
 
     static final String TASK = 'TIP-1'
     static final String BRANCH = 'gnomish/TIP-1'
@@ -39,7 +39,14 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture {
         gitOutput(clone, 'checkout', '-b', BRANCH)
     }
 
+    /** A factory closing commit with {@code subject}, registered as the closing push registers it. */
     private void tipWithSubject(String subject) {
+        gnomeCommit(subject)
+        registerTip(clone, TASK)
+    }
+
+    /** A commit the gnome makes: the branch moves, the register does not. */
+    private void gnomeCommit(String subject) {
         new File(clone.toFile(), 'a.txt').text = subject
         commitAll(clone, subject)
     }
@@ -54,6 +61,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture {
         Files.createDirectories(file.parent)
         Files.writeString(file, content)
         commitAll(clone, subject)
+        registerTip(clone, TASK)
     }
 
     def "FR15, FR13: a well-formed subject yields the attempt commit, stage, round, the typed token and no request"() {
@@ -80,7 +88,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture {
     def "FR15: the request the round asked is read from the snapshot's tree at its token path"() {
         given:
         def token = RoundToken.of(tip())
-        def path = HarvestedBoundaryCheck.decisionPath(new AttemptKey(TASK, 'implement', 0), token)
+        def path = GnomeRangeInspection.decisionPath(new AttemptKey(TASK, 'implement', 0), token)
         commitFile(path, '{"question":"which db?"}', ServiceCommitMessages.snapshot('implement', 0, token))
 
         and: 'the working copy no longer holds it — the read is of the snapshot, not of a working copy'
@@ -93,7 +101,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture {
     def "NFR-R4: a request at the same key under another round's token is not read"() {
         given: 'an earlier round left its request on the branch'
         def earlier = RoundToken.of(tip())
-        commitFile(HarvestedBoundaryCheck.decisionPath(new AttemptKey(TASK, 'implement', 0), earlier),
+        commitFile(GnomeRangeInspection.decisionPath(new AttemptKey(TASK, 'implement', 0), earlier),
                 '{"question":"stale?"}', 'gnomish: task approved')
 
         and: 'the current round, opened on the next tip, asked nothing'
@@ -168,7 +176,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture {
         and:
         events.size() == 1
         events[0].level == Level.DEBUG
-        events[0].formattedMessage.contains('could not read gnomish/NO-SUCH-BRANCH')
+        events[0].formattedMessage.contains('no factory register for gnomish/NO-SUCH-BRANCH')
     }
 
     // FR6: git's stderr is text from outside this process; one refused read stays one line.

@@ -4,8 +4,9 @@ import com.github.oinsio.gnomish.domain.engine.Position;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The one place a task branch tip becomes a named shape (design D3): a total mapping of file set ×
- * envelope version onto the closed set of {@link BranchShape}. Three media reach it through the
+ * The one place a task branch becomes a named shape (design D3): a total mapping of file set ×
+ * envelope version — read at the task's registered commit, the tip contributing only its relation
+ * to it (design D13 of tighten-spec-contract) — onto the closed set of {@link BranchShape}. Three media reach it through the
  * tip-reader seam, and all three get the same verdict — three access paths must not become three
  * classifiers.
  *
@@ -18,7 +19,12 @@ import org.jspecify.annotations.Nullable;
  * <p>The order the rules are applied in is itself contract:
  *
  * <ol>
- *   <li>delivery first — a delivered branch is finished, so a stray post-cleanup file never
+ *   <li>the register first — a tip the registered commit is not an ancestor of, or a branch with no
+ *       register whose tip carries an envelope, is {@link BranchShape.Unknown} with a diagnosis
+ *       naming the register and the tip, and a branch with no register and no envelope is {@link
+ *       BranchShape.Bare}; a tip at or above the register classifies by the registered commit alone,
+ *       so a record the gnome wrote above it changes nothing (FR13, NFR-S2 of tighten-spec-contract);
+ *   <li>then delivery — the registered commit is the cleanup commit — a delivered branch is finished, so a stray post-cleanup file never
  *       re-parks a task that is done;
  *   <li>then the envelope diagnoses (version before parse failure, so a version diagnosis can name
  *       the version);
@@ -33,7 +39,8 @@ import org.jspecify.annotations.Nullable;
  * (fix-claim-epoch-fence FR1, FR2).
  *
  * <p>Implements FR1, FR2, FR3, FR13, FR15, NFR-R2 of harden-task-branch-contract; FR1, FR2 of
- * fix-claim-epoch-fence; FR11 of make-checkpoint-gate-durable.
+ * fix-claim-epoch-fence; FR11 of make-checkpoint-gate-durable; FR13, NFR-S2 of
+ * tighten-spec-contract.
  */
 public final class BranchShapeClassifier {
 
@@ -57,7 +64,11 @@ public final class BranchShapeClassifier {
      * @return exactly one shape; never null, and never a thrown exception for any content
      */
     public BranchShape classify(BranchTipFacts facts) {
-        if (facts.cleanupCommitInHistory()) {
+        BranchShape unregistered = unregistered(facts.tipRelation());
+        if (unregistered != null) {
+            return unregistered;
+        }
+        if (facts.registeredCleanup()) {
             return new BranchShape.Delivered();
         }
         BranchShape envelopeFault = envelopeFault(facts);
@@ -73,6 +84,25 @@ public final class BranchShapeClassifier {
             return new BranchShape.AwaitingApproval();
         }
         return progression(facts);
+    }
+
+    /**
+     * The shape a tip that does not stand at or above its registered commit takes, or null when it
+     * does. Nothing is read at such a tip but the presence of an envelope, so no shape is guessed
+     * from content the factory never registered.
+     */
+    private static @Nullable BranchShape unregistered(TipRelation relation) {
+        return switch (relation) {
+            case TipRelation.AtRegister(), TipRelation.AboveRegister() -> null;
+            case TipRelation.Diverged(String register, String tip) ->
+                new BranchShape.Unknown(
+                        "the factory register " + register + " is not an ancestor of the branch tip " + tip);
+            case TipRelation.NoRegister(String register, String tip, boolean tipCarriesEnvelope) ->
+                tipCarriesEnvelope
+                        ? new BranchShape.Unknown(
+                                "no factory register " + register + " names a commit of the branch tip " + tip)
+                        : new BranchShape.Bare();
+        };
     }
 
     /**

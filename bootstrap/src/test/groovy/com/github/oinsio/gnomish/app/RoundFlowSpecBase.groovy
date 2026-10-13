@@ -110,7 +110,7 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
         // Ahead of the fixed instant the local box stamps process starts with, so wall time is positive.
         def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(scenario),
                 new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, source)
-        def persistence = new EnvironmentAttemptPersistence(box, runner, clone, objects(), TASK, rounds, ClaimEpochSource.NONE)
+        def persistence = new EnvironmentAttemptPersistence(box, runner, clone, objects(), rounds, ClaimEpochSource.NONE)
         engine(definition, executor, persistence, checks, Files.createDirectories(tempDir.resolve('workspace')))
     }
 

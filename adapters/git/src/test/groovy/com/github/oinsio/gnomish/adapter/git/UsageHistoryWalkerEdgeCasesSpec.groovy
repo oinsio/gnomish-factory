@@ -82,6 +82,8 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         stateJson.toFile().text = stateJson.toFile().text + ' '
         runner.run(worktree, 'add', '-A')
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'no-op re-commit')
+        // A factory rewrite of state.json, so registered as its closing push would (design D13).
+        registerTip(cloneDir, 'PROJ-6')
 
         when:
         def result = (walker.walk(cloneDir, 'PROJ-6') as UsageHistoryResult.Found)

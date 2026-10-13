@@ -42,6 +42,9 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
     private String commitOnBranch(String content) {
         Files.writeString(clone.resolve('a.txt'), content)
         commitAll(clone, content)
+        // Each local commit here stands for a closing commit, registered as the closing push does
+        //     (FR13 of tighten-spec-contract); the catch-up delivers the register with the branch.
+        gitOutput(clone, 'update-ref', "refs/gnomish-factory/${TASK_ID}", 'HEAD')
         gitOutput(clone, 'rev-parse', 'HEAD')
     }
 
@@ -70,6 +73,9 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
 
         then:
         originTip() == Optional.of(local)
+
+        and: 'the catch-up is a closing push: the register landed with the branch (FR13 of tighten-spec-contract)'
+        gitOutput(origin, 'rev-parse', "refs/gnomish-factory/${TASK_ID}") == local
 
         and: 'the catch-up is visible to a diagnosis, and silent on the operator plane'
         // FR12 of harden-logging-observability: the intention and the outcome of one push are

@@ -223,15 +223,21 @@ The vocabulary of recovery from a crash inside a multi-step transition. The
 principle and the mechanisms live in `docs/adr/0003-crash-consistency.md`; the
 checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
 
-- **Envelope** — the factory-owned files under `.gnomish-task/` at a branch tip
-  that record a task's identity (`task.json`) and pipeline position
-  (`state.json`); read from the tip in every medium, written to a working copy
-  only as the staging step of the next commit. *Never:* "state directory" for
+- **Envelope** — the factory-owned files under `.gnomish-task/` on a task
+  branch that record a task's identity (`task.json`) and pipeline position
+  (`state.json`); read at the branch's **registered commit** in every medium,
+  never at a tip the gnome may have written above it, and written to a working
+  copy only as the staging step of the next commit. *Never:* "state directory" for
   the concept (that names the path), "worktree state" (a working copy holds no
   envelope, only a staged copy of one).
-- **Branch shape** — the classification of a task branch tip: its file set and
-  envelope versions mapped to exactly one name from a closed set. Classified
-  by content alone — the tip's claim epoch is provenance, not an input. Total by construction — every combination classifies, `Unknown`
+- **Branch shape** — the classification of a task branch: the file set and
+  envelope versions of its **registered commit** mapped to exactly one name
+  from a closed set. Classified at the registered commit, never at the tip;
+  the tip contributes one fact, its relation to the register (at it, above it,
+  diverged from it, or no register at all — type `TipRelation`), and a
+  diverged tip or a missing register over an envelope classifies `Unknown`
+  with a diagnosis. Classified by content alone — the claim epoch is
+  provenance, not an input. Total by construction — every combination classifies, `Unknown`
   included, and classification never throws on content. The closed set and the
   meaning of each name are owned by the `task-branch-contract` capability, in
   its "Total branch-shape classification" requirement
@@ -260,6 +266,63 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   shape to a clean state, and whether it rolls the transition forward or
   discards back to a known-good tip. Exactly one per shape; two owners for one
   shape is a bug.
+- **Factory register** — the ref `refs/gnomish-factory/<task>`, in origin and
+  in the factory clone, naming the factory's latest **closing commit** of the
+  task; moved only by the factory, only together with a closing commit — one
+  ref transaction in the factory clone (`git update-ref --stdin`, atomic on
+  disk because the clone is on the reftable ref backend), one
+  `git push --atomic` of branch and register at origin. A mid-round push or an
+  admitted gnome range moves the branch alone. `git clone` does not carry it:
+  a clone receives it through the touchpoint fetch, which fetches branch and
+  register together. It is the trust anchor of the branch's record in the
+  container tier; in host mode the gnome can move it, so it carries no
+  integrity claim there, and its anomalies are signals only. Owner in the
+  clone: `FactoryRegister`; ref name: `RegisterRef` (introduced by
+  `tighten-spec-contract`, design D13, D19). *Not:* a **registered clone** of
+  Operator configuration, which is a clone directory listed in a project
+  file.
+- **Registered commit** — the commit the **factory register** names, read once
+  per pickup after the touchpoint fetch; every reader of the factory's record
+  takes it — the **envelope**, the position, the outcome, the **base pin**,
+  the snapshot subject, and the delivery fact (`Delivered` is "the registered
+  commit is the cleanup commit"). It is a commit id, never a ref or `HEAD`, so
+  a reader handed one cannot be pointed at the tip. Type: `RegisteredCommit`,
+  produced only by `FactoryRegisterRead` (introduced by
+  `tighten-spec-contract`, design D13).
+- **Closing commit** — a commit by which the factory closes a step of the
+  task's record: task started, a round's state commit, the round snapshot, an
+  outcome, an approval, an appended decision, a resumed write, a salvage, the
+  cleanup. Made as an object first, then landed with the **factory register**
+  in one ref transaction and carried to origin by the **closing push** (the
+  atomic push of branch and register). A host closing commit is built on the
+  task branch's tip, never on the worktree's `HEAD`. *Not:* a gnome commit,
+  which never moves the register.
+- **Harvest quarantine** — the ref `refs/gnomish-quarantine/<task>`, in the
+  factory clone only, that every harvest of a box's task branch fetches into;
+  what the gnome committed exists factory-side as objects and this one scratch
+  ref until the **harvest admission** moves the branch to it. Type:
+  `QuarantineRef` (introduced by `tighten-spec-contract`, design D18).
+  *Not:* the **quarantine** below, the park of a task whose shape recovery
+  cannot converge.
+- **Harvest admission** — the one way gnome content from a box enters the task
+  branch: it inspects the range from the **registered commit** to the
+  **harvest quarantine** with the **gnome range inspection**, requires it to
+  descend from the branch tip, and only then moves the branch to it (with the
+  register, in one transaction, when the top is the factory's own in-box
+  closing commit). A refused or unverifiable range moves nothing, so it never
+  becomes durable; a refusal is a boundary violation of the box. Type:
+  `HarvestAdmission`, its result `AdmittedRange` (introduced by
+  `tighten-spec-contract`, design D18).
+- **Gnome range inspection** — the one rule a range of gnome commits must pass
+  before it may enter the task branch: the base an ancestor of the top, no
+  commit with a second parent, no commit whose subject is in the `gnomish: `
+  namespace, no change to a factory-owned path the round's rule does not
+  permit (the gnome's own decision requests). Two callers: the **harvest
+  admission** in container mode, and the host round close over its own range,
+  which also restores the factory-owned paths from the registered commit
+  before staging. Type: `GnomeRangeInspection`, under an `AdmissionRule`
+  (introduced by `tighten-spec-contract`, design D18; it replaced the declared
+  pair of the host and container round-boundary checks).
 - **Claim epoch** — the monotonically increasing token issued with every
   (re)claim (the tracker-assigned claim comment id), recorded with the claim
   and stamped into every commit and tracker write of that tenure. It carries
@@ -277,10 +340,11 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   shape on first classification, or an exhausted recovery budget. Its report
   names the shape, the diagnosis, and the attempts consumed. *Not:* an
   escalation raised by the gnome's own work, which reports findings rather
-  than a shape.
+  than a shape; nor the **harvest quarantine** above, a ref where a box's
+  commits wait for the harvest admission.
 - **Gate** — a stop that a durable write records and only a later durable
-  write may open: whatever the tip of a task branch records, a pickup may do
-  no more than that tip allows, so the gate lives in the record of the step
+  write may open: whatever the **registered commit** of a task branch
+  records, a pickup may do no more than that commit allows, so the gate lives in the record of the step
   that reaches it, never in the step that follows. The `manual` checkpoint is
   the gate this vocabulary was introduced for: its passing round commit already
   records **awaiting approval**, and only the **approval** moves past it
@@ -409,9 +473,11 @@ trusted/task tier split, and the law-root rule.
   written into `task.json` at task creation. The **ref kind** is the
   namespace origin held the name in — branch, tag, or commit — as the refresh
   established it; a pin written by the manual tier, which classifies nothing,
-  carries no kind. Resume reads the pin and never re-resolves the base from
-  tracker data or configuration: it refreshes the pinned name in the pinned
-  kind's namespace only, so a name later reused in the other namespace
+  carries no kind. Resume reads the pin at the task branch's **registered
+  commit**, so a pin the gnome writes above it is never read (in the
+  container tier; host mode carries no such claim), and never re-resolves the
+  base from tracker data or configuration: it refreshes the pinned name in
+  the pinned kind's namespace only, so a name later reused in the other namespace
   neither redirects nor parks the task. The SHA is not a second way of
   finding the base — it *is* the commit the task branch was created from,
   read once from the refresh's destination ref (`docs/adr/0006`).
@@ -622,7 +688,8 @@ trusted/task tier split, and the law-root rule.
   these are the per-container slice.
 - **Box git link** — the git link between the factory and one **box**: the
   factory's local clone the box's working copy is seeded from, and the fetch
-  that brings the box's commits back into that clone. One value because
+  that brings the box's commits back into that clone — into the task's
+  **harvest quarantine**, never onto the task branch. One value because
   neither names a thing without the other — a seed source with no way back is
   a leak, a harvest into nothing has no destination. Type: `BoxGitLink`; the
   environment harvests through it rather than reading the fetch back out.

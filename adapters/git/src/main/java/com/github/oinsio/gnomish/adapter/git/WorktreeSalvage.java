@@ -4,11 +4,8 @@ import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException;
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
-import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,9 +18,10 @@ import org.slf4j.LoggerFactory;
  * that {@code HEAD} is precisely the interrupted round's unsalvaged work.
  *
  * <p>Default (salvage, {@link #salvage}): the leftovers are committed as-is with {@link
- * ServiceCommitMessages#salvage()} — a plain {@code git add -A && git commit}, deliberately never
- * routed through {@link GitAttemptPersistence#persist} or {@link RoundBoundaryCheck}, since a
- * salvage commit is not a round and must not be counted in {@code state.json}'s attempts (FR10).
+ * ServiceCommitMessages#salvage()} — {@code git add -A}, then a closing commit landed with its
+ * register in one ref transaction ({@link WorktreeClosingCommit}), deliberately never routed
+ * through {@link GitAttemptPersistence#persist}, since a salvage commit is not a round and must not
+ * be counted in {@code state.json}'s attempts (FR10).
  * The next round's gnome sees the half-done work and the QC loop judges the result.
  *
  * <p>{@code --discard-work} ({@link #discard}): resets the worktree to {@code HEAD} — the last
@@ -31,20 +29,27 @@ import org.slf4j.LoggerFactory;
  * the engine loop replays the interrupted round from a clean base. Never restarts the whole task:
  * only the one round in flight when the process died is replayed.
  *
- * <p>Either way, the factory's own {@code .gnomish-task/} files come from the branch tip and
- * never from the dirty worktree, per the shared ownership policy in {@link FactoryOwnedPaths}
- * (FR5, design D11 of harden-task-branch-contract) — the same policy the in-box {@link
- * EnvironmentSalvage} applies.
+ * <p>Either way, the factory's own {@code .gnomish-task/} files come from the registered commit
+ * and never from the dirty worktree or a {@code HEAD} the gnome committed above the register, per
+ * the shared ownership policy in {@link FactoryOwnedPaths} (FR5, design D11 of
+ * harden-task-branch-contract; design D18 of tighten-spec-contract) — restored by {@link
+ * EnvelopeRestore}, the owner every host closing write uses.
  *
  * <p>Kept in sync with {@link EnvironmentSalvage}: both must produce a salvage commit carrying the
- * claim-epoch trailer, restore factory-owned paths from the tip, and — past the guard that tests
- * the tip for the state directory and tolerates its absence — FAIL the salvage when that restore
- * fails, rather
- * than letting the working copy's factory files ride into the commit. Their degrade paths are
- * symmetric too: a discard that cannot reach or reset its working copy leaves the leftovers in
- * place, and both ends say so at WARN (FR5 of harden-logging-observability).
+ * claim-epoch trailer, restore the factory-owned paths before staging — here from the registered
+ * commit; there from the box's {@code HEAD}, with the admission refusing any owned path the gnome's
+ * commits changed above the register — and, past the guard that tolerates a base with no state
+ * directory, FAIL the salvage when that restore fails, rather than letting the working copy's
+ * factory files ride into the commit. Their degrade paths are symmetric too: a discard that cannot
+ * reach or reset its working copy leaves the leftovers in place, and both ends say so at WARN (FR5
+ * of harden-logging-observability). And the salvage commit is a closing commit in both media,
+ * landed with its register in one ref transaction only when it was made (design D13 of
+ * tighten-spec-contract): this end through {@link WorktreeClosingCommit}, the in-box end through
+ * the admission's transaction. A salvage that made no commit registers nothing at either end, so a
+ * tip the gnome wrote is never registered in its place.
  *
- * <p>Implements FR10 of add-git-workflow; FR5 of harden-task-branch-contract.
+ * <p>Implements FR10 of add-git-workflow; FR5 of harden-task-branch-contract; FR13 of
+ * tighten-spec-contract.
  */
 public record WorktreeSalvage(GitRunner runner, Path worktreeRoot, ClaimEpochSource epochs)
         implements WorktreeSalvager {
@@ -64,16 +69,19 @@ public record WorktreeSalvage(GitRunner runner, Path worktreeRoot, ClaimEpochSou
      * Commits any uncommitted leftovers as-is with the fixed salvage message (FR10) — not a round,
      * never recorded in {@code state.json}. A no-op when {@link #hasLeftovers()} is false.
      *
-     * @throws GitSalvageFailedException if staging or committing the leftovers fails
-     * @throws BranchTipUnavailableException if the tip read that guards the factory-file restore
-     *     did not run to its own exit — deliberately not folded into {@link
+     * @throws GitSalvageFailedException if restoring the factory-owned paths, staging or landing
+     *     the salvage commit with its register fails (design D13 of tighten-spec-contract)
+     * @throws BranchTipUnavailableException if the register read that guards the factory-file
+     *     restore did not run to its own exit — deliberately not folded into {@link
      *     GitSalvageFailedException}: a read that established nothing is a different verdict from
      *     a step that failed, and answering {@code false} instead would let the dirty working
      *     copy's factory files ride into the salvage commit (NFR-R2 of fix-envelope-medium)
      */
     @Override
     public void salvage(String taskId) {
-        restoreFactoryFiles(taskId);
+        new EnvelopeRestore(runner, worktreeRoot, taskId).restore().ifPresent(failure -> {
+            throw new GitSalvageFailedException(taskId, "restore of the factory-owned paths", failure);
+        });
         if (!hasLeftovers()) {
             return;
         }
@@ -81,56 +89,12 @@ public record WorktreeSalvage(GitRunner runner, Path worktreeRoot, ClaimEpochSou
         if (add.exitCode() != 0) {
             throw new GitSalvageFailedException(taskId, "git add -A", add.stderr());
         }
-        GitCommandResult commit = runner.run(
-                worktreeRoot,
-                "commit",
-                "-m",
-                ClaimEpochTrailer.stamp(
-                        ServiceCommitMessages.salvage(), epochs.epochFor(taskId).orElse(null)));
-        if (commit.exitCode() != 0) {
-            throw new GitSalvageFailedException(taskId, "git commit", commit.stderr());
+        String message = ClaimEpochTrailer.stamp(
+                ServiceCommitMessages.salvage(), epochs.epochFor(taskId).orElse(null));
+        if (new WorktreeClosingCommit(runner).commit(worktreeRoot, taskId, message)
+                instanceof WorktreeClosingCommit.Outcome.Failed failed) {
+            throw new GitSalvageFailedException(taskId, failed.step(), failed.evidence());
         }
-    }
-
-    /**
-     * Puts every factory-owned {@code .gnomish-task/} path back the way the branch tip has it,
-     * before anything is staged (FR5, design D11 of harden-task-branch-contract): tracked files
-     * are checked out from {@code HEAD}, untracked ones are cleaned away, and the gnome-writable
-     * {@code decisions/} subtree is excluded from both. A dying process may have left a partial or
-     * stale {@code state.json} behind; salvage contributes the gnome's work files and never lets
-     * that file overwrite what the recorded rounds say.
-     *
-     * <p>A no-op on a tip that carries no state directory at all — the {@code Completed} cleanup
-     * commit removes it, and nothing there is the factory's to restore. That is the ONLY tolerated
-     * shape: past the guard, a restore command that exits non-zero fails the whole salvage. A
-     * swallowed exit code here would be silent, not harmless — the subsequent {@code git add -A}
-     * stages whatever the restore failed to put back, so the dying round's half-written {@code
-     * state.json} would land in the salvage commit and make the dirty worktree, not the branch, the
-     * source of truth for the factory's own state. That is precisely the outcome this method exists
-     * to prevent, so it is reported rather than absorbed.
-     *
-     * @throws GitSalvageFailedException if either restore command fails
-     * @throws BranchTipUnavailableException if the guard's tip read did not run to its own exit
-     */
-    private void restoreFactoryFiles(String taskId) {
-        if (!new GitShowTip(runner, worktreeRoot, GitObjects.HEAD).carries(FactoryOwnedPaths.STATE_DIR)) {
-            return;
-        }
-        GitCommandResult checkout = runner.run(worktreeRoot, args("checkout", "HEAD", "--"));
-        if (checkout.exitCode() != 0) {
-            throw new GitSalvageFailedException(taskId, "git checkout HEAD -- <factory-owned>", checkout.stderr());
-        }
-        GitCommandResult clean = runner.run(worktreeRoot, args("clean", "-fd", "--"));
-        if (clean.exitCode() != 0) {
-            throw new GitSalvageFailedException(taskId, "git clean -fd -- <factory-owned>", clean.stderr());
-        }
-    }
-
-    /** {@code prefix} followed by the factory-owned pathspec, as one argv array. */
-    private static String[] args(String... prefix) {
-        List<String> argv = new ArrayList<>(List.of(prefix));
-        argv.addAll(FactoryOwnedPaths.pathspec());
-        return argv.toArray(new String[0]);
     }
 
     /**

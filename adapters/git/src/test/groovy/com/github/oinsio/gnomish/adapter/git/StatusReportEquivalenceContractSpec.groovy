@@ -49,7 +49,7 @@ import spock.lang.TempDir
  * contract, kept aligned with the status-report view by this content-equivalence test rather
  * than by DTO reuse.
  */
-class StatusReportEquivalenceContractSpec extends Specification implements BareGitRepoFixture {
+class StatusReportEquivalenceContractSpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
 
     @TempDir
     Path tempDir
@@ -98,6 +98,8 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         when: 'both are rendered through the same JSON mapper'
         def memoryJson = mapper.serialize(memoryReport)
 
+        registerTip(cloneDir, taskId)
+
         def result = new BranchStateReader(runner, VirtualTimeGitRetries.gitInfrastructure()).read(cloneDir, taskId)
         def stateFileReport = (result as BranchStateResult.Found).report()
         def stateFileJson = mapper.serialize(stateFileReport)
@@ -134,6 +136,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
                 .persist(taskId, state, new ToolTrace(new AttemptKey(taskId, 'implement', 0), []))
 
         when: 'the branch is read back and both renderings go through the same mapper'
+        registerTip(cloneDir, taskId)
         def result = new BranchStateReader(runner, VirtualTimeGitRetries.gitInfrastructure()).read(cloneDir, taskId)
         def stateFileReport = (result as BranchStateResult.Found).report()
 
@@ -166,6 +169,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         taskRepository.recordOutcome(taskId, new TaskOutcome.Escalated(state, escalation), TrackerWrite.OWED)
 
         when: 'the branch is read back and both renderings go through the same mapper'
+        registerTip(cloneDir, taskId)
         def result = new BranchStateReader(runner, VirtualTimeGitRetries.gitInfrastructure()).read(cloneDir, taskId)
         def stateFileReport = (result as BranchStateResult.Found).report()
 

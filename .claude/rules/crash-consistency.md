@@ -44,14 +44,17 @@ change's `design.md` or spec:
    work.
 9. **Atomicity named per medium.** Say which mechanism from the ADR's
    durability table carries each write, and keep the durability point at the
-   successful push.
+   successful push. A factory closing commit and its **factory register** are
+   one write, never two: one `update-ref --stdin` transaction in the reftable
+   factory clone, one `push --atomic` at origin (provenance:
+   `tighten-spec-contract`, design D13).
 10. **Kill-point specs exist.** The transition joins the kill-point matrix:
     kill after each durable step, run the pickup, assert the shape and the
     convergence, and assert the second recovery pass is a no-op.
 11. **Readers name their medium.** Every decision on a recovery path reads the
-    durable medium (tip, tracker); a local working copy is a write staging
-    area, and a read of a factory-owned file from it is a defect the
-    `EnvelopeMediumBoundarySpec` gate rejects.
+    durable medium (the branch at its registered commit, the tracker); a local
+    working copy is a write staging area, and a read of a factory-owned file
+    from it is a defect the `EnvelopeMediumBoundarySpec` gate rejects.
 12. **No write implies an authorisation a later write grants.** For every
     durable step, ask what a pickup that sees it and nothing after it is
     allowed to do; if the answer is "continue past a gate", "deliver", or
@@ -64,13 +67,18 @@ change's `design.md` or spec:
     tell "written for this pickup" from "carried over" by looking for a file,
     a marker or a record. The writer stamps the message with an identity the
     orchestrator minted and no later step repeats (the round token: the tip a
-    round opened on; the claim epoch; a source identity on a cursor), the
+    round opened on; the claim epoch; a source identity on a cursor; the
+    registered commit: the factory's latest closing commit, named by the
+    task's **factory register**, a ref the gnome never moves), the
     receiver accepts only the current identity, and deletion of consumed
     messages is hygiene in the consuming commit — never the judge. Two
     independent liveness judgements for one message are two recovery owners
     (item 3). A key that is reset by design — the attempt number restarts on
-    an answer, an advancement, a retry — is not an identity. Introduced by
-    `make-checkpoint-gate-durable` (design D10).
+    an answer, an advancement, a retry — is not an identity. Authorship is
+    judged the same way: a subject or an envelope at the tip proves nothing,
+    since the gnome can write both; only the registered commit names the
+    factory's record. Introduced by `make-checkpoint-gate-durable` (design
+    D10); the registered commit by `tighten-spec-contract` (design D13).
 14. **Recovery rebuilds context from the record through the live path's parse.**
     An identity a run holds in memory (the round token, the attempt commit, the
     claim epoch) has a named producer on the live path and a named producer on

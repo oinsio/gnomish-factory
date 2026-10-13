@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 /**
  * The one push in the factory that is load-bearing (FR7): a newly created task branch's first
  * delivery to {@code origin}. Everything after it is best-effort ({@link LifecyclePush}, {@link
- * BestEffortPush}, {@link BranchPush}) because the recorded branch state is the durability
+ * BestEffortPush}, {@link HarvestAdmission#pushAdmitted}) because the recorded branch state is the durability
  * boundary and a missed push is caught up at the next touchpoint — but a branch origin has never
  * seen has no next touchpoint on any other instance, so a claim must not proceed on one.
  *
@@ -35,14 +35,19 @@ import org.slf4j.LoggerFactory;
  * <p>With no {@code origin} configured the run is purely local and this is a silent no-op, exactly
  * like its best-effort siblings: there is nothing to be load-bearing about (UX3).
  *
- * <p>Implements FR7 of harden-task-branch-contract.
+ * <p>STARTED is the task's first closing commit (design D13 of tighten-spec-contract): it landed
+ * with the clone's factory register in one ref transaction when the store wrote it, and every
+ * attempt pushes the branch and the register in one atomic push ({@link ClosingPush}), so the
+ * re-check that asks whether the branch landed answers for the register too.
+ *
+ * <p>Implements FR7 of harden-task-branch-contract; FR13 of tighten-spec-contract.
  */
 final class FirstPush {
 
     private static final Logger log = LoggerFactory.getLogger(FirstPush.class);
 
     private final OriginRemote origin;
-    private final RefspecPush push;
+    private final ClosingPush push;
     private final LocalBranchTip localTip;
     private final RemoteBranchTip remoteTip;
     private final GitInfrastructureRetry retry;
@@ -50,7 +55,7 @@ final class FirstPush {
 
     FirstPush(GitRunner runner, GitInfrastructureRetry retry, RepeatSuppressor suppressor) {
         this.origin = new OriginRemote(runner);
-        this.push = new RefspecPush(runner);
+        this.push = new ClosingPush(runner);
         this.localTip = new LocalBranchTip(runner);
         this.remoteTip = new RemoteBranchTip(runner);
         this.retry = retry;
@@ -89,7 +94,7 @@ final class FirstPush {
     }
 
     private Attempt attempt(String taskId, Path repo, String branch) {
-        GitCommandResult result = push.push(repo, branch);
+        GitCommandResult result = push.push(repo, taskId);
         String outcome = PushOutcome.describe("first push", result);
         if (outcome == null) {
             return new Attempt(true, "pushed");

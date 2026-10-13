@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto;
-import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException;
@@ -10,7 +9,6 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import java.io.IOException;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
@@ -48,8 +46,8 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Either way the orphan does not reach a commit by itself, and since FR2 of fix-envelope-medium
  * it is read by nobody: the resume path ({@code TaskStoreGit#readRecordedState}) and the cursor
- * carry-forward below both resolve at the tip, and salvage restores factory-owned paths from the
- * tip rather than from a dirty worktree (FR5).
+ * carry-forward below both resolve at the registered commit, and salvage restores factory-owned
+ * paths from it rather than from a dirty worktree (FR5).
  *
  * <p>Split out of {@link GitTaskRepository}, which keeps {@code task.json}: the two envelopes have
  * different writers and different rules, and this one also owns the denial-cursor carry-forward
@@ -78,7 +76,7 @@ final class StateFileWrite {
             AtomicFileWriter.write(
                     target,
                     TaskStateJson.mapper()
-                            .writeValueAsString(StateJsonMapper.toDto(state, currentCursor(runner, worktree))));
+                            .writeValueAsString(StateJsonMapper.toDto(state, currentCursor(runner, worktree, taskId))));
         } catch (IOException e) {
             throw new GitTaskRepositoryException(taskId, event, "writing state.json", e);
         }
@@ -100,10 +98,12 @@ final class StateFileWrite {
      * committed, and the lifecycle commit that follows would make that erasure durable; the
      * refusal instead aborts a transition that is restartable, since the write has not happened.
      *
-     * <p>The position is read at the worktree's {@code HEAD}, not from its working copy (FR2,
-     * design D1 of fix-envelope-medium): the file on disk is the staging area for the very write
-     * below, so a stale or half-written one there must not be what a lifecycle commit carries
-     * forward.
+     * <p>The position is read at the registered commit, not from the working copy (FR2, design D1
+     * of fix-envelope-medium) and not at a {@code HEAD} the gnome may have committed above the
+     * register (design D18 of tighten-spec-contract): the file on disk is the staging area for the
+     * very write below, and the register is this write's own base ({@link RegisterBase}). The
+     * container end reads at the branch tip, which in that medium carries the register's envelope:
+     * only the admission moves the branch above the register, and it refuses any owned path.
      *
      * <p>Kept in sync with {@link TaskLifecycleCommitWriter#tipStateCursor}: both media read the
      * cursor from the tip's {@code state.json} and carry it into the regenerated file, and both
@@ -116,18 +116,24 @@ final class StateFileWrite {
      * subprocess, that one a blob through the bare-object reader), so no shared implementation is
      * available to enforce it.
      */
-    private static @Nullable EgressCursorDto currentCursor(GitRunner runner, Path worktree) {
+    private static @Nullable EgressCursorDto currentCursor(GitRunner runner, Path worktree, String taskId) {
         try {
-            return new GitShowTip(runner, worktree, GitObjects.HEAD)
-                    .readAtTip(EnvelopePaths.STATE_JSON_PATH)
-                    .map(StateJsonMapper::readDto)
-                    .map(StateJsonDto::egressCursor)
-                    .orElse(null);
+            GitCommandResult base = RegisterBase.show(runner, worktree, taskId, EnvelopePaths.STATE_JSON_PATH);
+            if (base.exitCode() != 0) {
+                // throwable-not-subject: git reported a status, not a thrown fault.
+                log.debug(
+                        "no state.json at the register of {} to carry a denial cursor forward from (git exited {}): {}",
+                        worktree,
+                        base.exitCode(),
+                        base.stderr().forLog());
+                return null;
+            }
+            return StateJsonMapper.readDto(base.stdout()).egressCursor();
         } catch (BranchTipUnavailableException e) {
             throw e;
         } catch (RuntimeException e) {
             log.debug(
-                    "no recorded denial cursor to carry forward from HEAD of {}: absent or unreadable;"
+                    "no recorded denial cursor to carry forward from the register of {}: absent or unreadable;"
                             + " the next run reads its denial source from the start",
                     worktree,
                     e);

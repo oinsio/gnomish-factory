@@ -31,7 +31,7 @@ trait BareGitRepoFixture implements SeedTransferFixture {
         def runner = new GitProcessRunner()
         def result = runner.run(repo, 'init', '--bare')
         assert result.exitCode() == 0: "git init --bare failed: ${result.stderr()}"
-        repo
+        assertOnReftable(repo)
     }
 
     /**
@@ -45,7 +45,7 @@ trait BareGitRepoFixture implements SeedTransferFixture {
         def runner = new GitProcessRunner()
         def result = runner.run(repo, 'init')
         assert result.exitCode() == 0: "git init failed: ${result.stderr()}"
-        repo
+        assertOnReftable(repo)
     }
 
     /**

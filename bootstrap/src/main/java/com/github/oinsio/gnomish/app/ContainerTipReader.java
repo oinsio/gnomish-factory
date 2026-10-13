@@ -1,11 +1,13 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.adapter.git.FactoryRegisterRead;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.RefTipSource;
 import com.github.oinsio.gnomish.adapter.git.TipRecordedDenials;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
+import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -21,8 +23,10 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Everything a container run reads back from its task branch as bare git objects, with no working
- * copy and no live box (FR6, FR17 of add-sandbox-core): the tip's {@code state.json} and {@code
- * task.json}, and the denial cursor recorded alongside them.
+ * copy and no live box (FR6, FR17 of add-sandbox-core): the registered commit's {@code state.json}
+ * and {@code task.json}, and the denial cursor recorded alongside them. Every read here is at the
+ * task's registered commit, never at the branch tip (design D13 of tighten-spec-contract): the
+ * mid-round harvest moves the branch alone, so the tip may carry what the gnome wrote.
  *
  * <p>Split out of {@link ContainerRunTermination}, whose remaining half writes the run's terminal
  * boundary — sweep, complete, park, abort, keep. The two halves face opposite directions across the
@@ -41,14 +45,14 @@ final class ContainerTipReader {
 
     private ContainerTipReader() {}
 
-    /** Reads the last durably committed {@code state.json} from the branch tip as bare objects (FR17). */
+    /** Reads the last durably committed {@code state.json} at the registered commit as bare objects (FR17). */
     static TaskState readFinalState(ContainerRunSupport support) {
         return StateJsonMapper.fromDto(readStateDto(support));
     }
 
-    /** The branch tip's {@code state.json} as its wire DTO — the domain state plus what it omits. */
+    /** The registered commit's {@code state.json} as its wire DTO — the domain state plus what it omits. */
     private static StateJsonDto readStateDto(ContainerRunSupport support) {
-        byte[] bytes = support.gitObjects.readBlob(tip(support), EnvelopePaths.STATE_JSON_PATH, FILE_READ_CAP);
+        byte[] bytes = support.gitObjects.readBlob(registered(support), EnvelopePaths.STATE_JSON_PATH, FILE_READ_CAP);
         return StateJsonMapper.readDto(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8)));
     }
 
@@ -73,9 +77,9 @@ final class ContainerTipReader {
         }
     }
 
-    /** Reads the branch tip's {@code task.json} as bare objects — context, outcome, escalation (FR17). */
+    /** Reads the registered commit's {@code task.json} as bare objects — context, outcome, escalation (FR17). */
     static TaskRecord readTaskJson(ContainerRunSupport support) {
-        byte[] bytes = support.gitObjects.readBlob(tip(support), EnvelopePaths.TASK_JSON_PATH, FILE_READ_CAP);
+        byte[] bytes = support.gitObjects.readBlob(registered(support), EnvelopePaths.TASK_JSON_PATH, FILE_READ_CAP);
         return TaskJsonMapper.fromDto(
                 TaskJsonMapper.readDto(UntrustedText.branchDocument(new String(bytes, StandardCharsets.UTF_8))));
     }
@@ -86,8 +90,8 @@ final class ContainerTipReader {
      * branch tip, so every box — first open, segment boundary, resume reattach — is born with
      * the position the tip records at the moment it is built, never a value read earlier.
      */
-    static Supplier<DenialRestoration> restorations(GitProcessRunner runner, Path cloneDir, String branch) {
-        return () -> restorable(runner, cloneDir, branch);
+    static Supplier<DenialRestoration> restorations(GitProcessRunner runner, Path cloneDir, String taskId) {
+        return () -> restorable(runner, cloneDir, taskId);
     }
 
     /**
@@ -105,18 +109,22 @@ final class ContainerTipReader {
      * merges its full re-read against the identities offered here rather than duplicating what
      * the branch already holds.
      */
-    static DenialRestoration restorable(GitProcessRunner runner, Path cloneDir, String branch) {
+    static DenialRestoration restorable(GitProcessRunner runner, Path cloneDir, String taskId) {
         try {
-            return new TipRecordedDenials().restorable(new RefTipSource(runner, cloneDir, "refs/heads/" + branch));
+            String branchRef = "refs/heads/" + TaskIdSanitizer.branchName(taskId);
+            return new TipRecordedDenials().restorable(RefTipSource.at(runner, cloneDir, taskId, branchRef));
         } catch (RuntimeException e) {
             log.debug("no recorded denial cursor to restore", e);
             return DenialRestoration.none();
         }
     }
 
-    private static ObjectId tip(ContainerRunSupport support) {
-        return support.gitObjects
-                .resolveRef("refs/heads/" + support.branch)
-                .orElseThrow(() -> new IllegalStateException("task branch \"" + support.branch + "\" disappeared"));
+    /** The registered commit the reads above are made at — the register's one reader resolves it. */
+    private static ObjectId registered(ContainerRunSupport support) {
+        return new FactoryRegisterRead(support.runner)
+                .registered(support.cloneDir, support.taskId)
+                .map(registered -> ObjectId.of(registered.id()))
+                .orElseThrow(() -> new IllegalStateException(
+                        "task branch \"" + support.branch + "\" has no factory register naming its record"));
     }
 }

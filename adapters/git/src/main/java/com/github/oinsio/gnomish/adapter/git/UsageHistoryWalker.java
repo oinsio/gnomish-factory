@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +54,11 @@ import org.slf4j.LoggerFactory;
  * readable one, so the rounds recorded across the gap are still attributed, and only the rounds the
  * unreadable commit itself would have contributed are lost.
  *
- * <p>Implements FR14, NFR-C1 of add-git-workflow; FR16 of harden-task-branch-contract.
+ * <p>The walk runs from the task's registered commit down (design D13 of tighten-spec-contract), so a
+ * round the gnome wrote into {@code state.json} above the register is not reported.
+ *
+ * <p>Implements FR14, NFR-C1 of add-git-workflow; FR16 of harden-task-branch-contract; FR13 of
+ * tighten-spec-contract.
  */
 @UntrustedParser
 public final class UsageHistoryWalker {
@@ -64,6 +69,7 @@ public final class UsageHistoryWalker {
 
     private final GitRunner runner;
     private final TaskBranchLocator locator;
+    private final FactoryRegisterRead register;
 
     /**
      * @param runner the git subprocess seam; never null
@@ -73,6 +79,7 @@ public final class UsageHistoryWalker {
     public UsageHistoryWalker(GitRunner runner, GitInfrastructureRetry retry) {
         this.runner = runner;
         this.locator = new TaskBranchLocator(runner, retry);
+        this.register = new FactoryRegisterRead(runner);
     }
 
     /**
@@ -99,8 +106,15 @@ public final class UsageHistoryWalker {
         if (ref == null) {
             return new UsageHistoryResult.NotFound();
         }
-
-        List<UsageRow> rows = walkRows(cloneDir, ref);
+        // The walk starts at the registered commit, never at the tip (design D13 of
+        // tighten-spec-contract): a state.json the gnome committed above the register is not a round.
+        Optional<RegisteredCommit> registered = register.registered(cloneDir, taskId);
+        if (registered.isEmpty()) {
+            // throwable-not-subject: the absence is the classification; nothing was thrown.
+            log.debug("usage: no factory register names a commit of {}, so no round is recorded", ref);
+            return new UsageHistoryResult.Found(List.of(), UsageTotals.of(List.of()));
+        }
+        List<UsageRow> rows = walkRows(cloneDir, registered.get().id());
         return new UsageHistoryResult.Found(rows, UsageTotals.of(rows));
     }
 

@@ -45,7 +45,7 @@ class BranchDecisionFileSpec extends Specification implements BareGitRepoFixture
 
         expect:
         handle.relativePath() == TOKEN_PATH
-        handle.relativePath() == HarvestedBoundaryCheck.decisionPath(KEY, TOKEN)
+        handle.relativePath() == GnomeRangeInspection.decisionPath(KEY, TOKEN)
         handle.envFragment() == ['GNOMISH_DECISION_FILE': TOKEN_PATH]
     }
 

@@ -53,15 +53,16 @@ class LeasedEnvironmentCursorWiringSpec extends Specification implements BareGit
         new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
         commitAll(cloneDir)
         gitOutput(cloneDir, 'branch', BRANCH)
+        // The branch starts at a registered closing commit, as STARTED leaves it (design D13).
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + BRANCH.substring('gnomish/'.length()), 'refs/heads/' + BRANCH)
         box = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('box')))
         box.materialize(BRANCH, null)
         // The production seam: collaborators are wired over the leased VIEW of the environment of
         // the stage in flight, exactly as ContainerRunSupport.persistence() builds them.
         leased = new LeasedEnvironment({ box })
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
-        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, OpenedRound.reopen(rounds, cloneDir, BRANCH))
-        persistence = new EnvironmentAttemptPersistence(
-                leased, runner, cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
+        snapshotStep = new EnvironmentRoundSnapshot(box, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
+        persistence = new EnvironmentAttemptPersistence(leased, runner, cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
     }
 
     private void closeRound(int round) {

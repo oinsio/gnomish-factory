@@ -18,10 +18,12 @@ import org.slf4j.Logger;
  * only the edges are logged — first occurrence and periodic counted roll-ups at WARN, the polls in
  * between at DEBUG, one INFO when the subject works again (FR4 of harden-logging-observability).
  *
- * <p>Two subjects, suppressed independently: the <b>harvest</b> (mid-round commits stop being
- * mirrored out of the environment) and the <b>tip resolution</b> (the poll cannot see where the
- * branch is, so it observes nothing at all — FR13). The host-mode poll has no environment to
- * harvest and reports only the second.
+ * <p>Three subjects, suppressed independently: the <b>harvest</b> (mid-round commits stop being
+ * mirrored out of the environment), the <b>tip resolution</b> (the poll cannot see where the
+ * branch is, so it observes nothing at all — FR13) and the <b>admission</b> (the harvested range
+ * was refused or could not be judged, so the branch did not move and nothing was pushed — design
+ * D18 of tighten-spec-contract). The host-mode poll has no environment to harvest and reports only
+ * the tip resolution.
  *
  * <p>Implements FR4, FR13 of harden-logging-observability.
  *
@@ -35,7 +37,8 @@ record MidRoundPollLog(Logger log, RepeatSuppressor suppressor, String taskId, S
     /** The suppressor subjects; each is namespaced by branch so rounds never share a streak. */
     enum Subject {
         HARVEST("mid-round harvest"),
-        TIP("mid-round tip resolution");
+        TIP("mid-round tip resolution"),
+        ADMISSION("mid-round admission");
 
         private final String label;
 

@@ -204,8 +204,9 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         def ex = thrown(AbortedException)
         ex.outcome() != null
 
-        and: 'the aborted outcome is durably recorded in the worktree HEAD via GitOutcomeRecorder'
-        def taskJson = gitOutput(worktree, 'show', 'HEAD:.gnomish-task/task.json')
+        and: 'the aborted outcome is durably recorded on the task branch via GitOutcomeRecorder, with its register'
+        def taskJson = gitOutput(cloneDir, 'show', "gnomish/${taskId}:.gnomish-task/task.json")
+        gitOutput(cloneDir, 'rev-parse', "refs/gnomish-factory/${taskId}") == gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}")
         taskJson.contains('"aborted"')
 
         and: 'the worktree is kept, unconditionally, for forensics'

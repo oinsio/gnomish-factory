@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.adapter.agent.FreshJudgeEnvironments;
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource;
-import com.github.oinsio.gnomish.adapter.git.BranchPush;
+import com.github.oinsio.gnomish.adapter.git.BestEffortClosingPush;
 import com.github.oinsio.gnomish.adapter.git.EnvironmentAttemptPersistence;
 import com.github.oinsio.gnomish.adapter.git.EnvironmentSalvage;
 import com.github.oinsio.gnomish.adapter.git.GitInfrastructureRetry;
@@ -74,7 +74,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
     final GitObjects gitObjects;
     final TaskLifecycleStore taskRepository;
     final FreshJudgeEnvironments judgeEnvironments;
-    final BranchPush push;
+    final BestEffortClosingPush push;
     final SandboxLifecyclePass sandboxLifecyclePass;
     final ClaimEpochSource epochs;
     private final TimeEquipment time;
@@ -118,7 +118,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
                         time, GitInfrastructureRetry.DEFAULT_ATTEMPTS, GitInfrastructureRetry.DEFAULT_INITIAL_BACKOFF),
                 time.clock());
         this.judgeEnvironments = new FreshJudgeEnvironments(environments::judgeEnvironment, branch);
-        this.push = new BranchPush(runner);
+        this.push = new BestEffortClosingPush(runner);
         this.sandboxLifecyclePass = sandboxLifecyclePass;
     }
 
@@ -140,8 +140,8 @@ final class ContainerRunSupport implements SandboxRunSupport {
     @Override
     public AttemptPersistence persistence() {
         var strict = new EnvironmentAttemptPersistence(
-                new LeasedEnvironment(lease::current), runner, cloneDir, gitObjects, taskId, rounds, epochs);
-        return new PushBestEffortAttemptPersistence(strict, push, cloneDir, branch);
+                new LeasedEnvironment(lease::current), runner, cloneDir, gitObjects, rounds, epochs);
+        return new PushBestEffortAttemptPersistence(strict, push, cloneDir);
     }
 
     /** The adapter bundle {@link RunAssembly#withSandbox} swaps in. */
@@ -152,7 +152,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
                 judgeEnvironments,
                 new SandboxCheckEnvironmentSource(lease, environments, branch),
                 gitObjects,
-                new RemoteAttemptDelivery(runner, cloneDir, branch),
+                new RemoteAttemptDelivery(runner, cloneDir, taskId),
                 rounds,
                 pendingVerification);
     }
@@ -184,7 +184,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
 
     /** The sandboxed salvage over the leased environment (FR6); see {@link #lease()} on visibility. */
     EnvironmentSalvage salvage() {
-        return new EnvironmentSalvage(new LeasedEnvironment(lease::current), epochs);
+        return new EnvironmentSalvage(new LeasedEnvironment(lease::current), epochs, runner, cloneDir);
     }
 
     /** The snapshot-without-state classifier of resume (FR21, D15); see {@link #lease()} on visibility. */
@@ -209,7 +209,10 @@ final class ContainerRunSupport implements SandboxRunSupport {
     /** The sandboxed salvage over the leased environment (FR6). */
     @Override
     public void salvageLeftovers(String taskId) {
+        // An admitted salvage commit is a closing commit, already landed with its register (design
+        // D13, D18 of tighten-spec-contract); either way the clone's two refs go as they are.
         salvage().salvage(taskId);
+        push.pushBestEffort(cloneDir, taskId);
     }
 
     /** The snapshot-without-state classifier of resume (FR21, D15). */
@@ -301,6 +304,6 @@ final class ContainerRunSupport implements SandboxRunSupport {
     @DoNotMutate
     public void revocationSalvageAndPush(String taskId) {
         salvage().salvage(taskId);
-        push.pushBestEffort(cloneDir, branch);
+        push.pushBestEffort(cloneDir, taskId);
     }
 }

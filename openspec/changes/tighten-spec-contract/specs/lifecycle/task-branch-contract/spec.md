@@ -3,9 +3,9 @@
 ## MODIFIED Requirements
 
 ### Requirement: Total branch-shape classification
-A classifier SHALL map any task branch — the envelope at its registered commit (see "Classification reads the factory register"), that commit's file set, envelope versions and recorded position, and the tip's relation to it — to exactly one named shape from a closed set of eleven: `Bare`, `Created`, `InProgress`, `AwaitingApproval`, `Parked`, `Answered`, `CompletedUncleaned`, `Delivered`, `UnsupportedVersion`, `Corrupt(reason)` and `Unknown`. The set SHALL be modelled as a sealed hierarchy so readers switch without a default branch.
+A classifier SHALL map any task branch — its registered commit's envelope, file set, versions and position, and the tip's relation to it — to exactly one shape of a closed set of eleven: `Bare`, `Created`, `InProgress`, `AwaitingApproval`, `Parked`, `Answered`, `CompletedUncleaned`, `Delivered`, `UnsupportedVersion`, `Corrupt(reason)` and `Unknown`. The set SHALL be a sealed hierarchy so readers switch without a default branch.
 
-The happy path, and the group quarantined on first classification:
+The happy path and the group quarantined on first classification:
 
 ```mermaid
 stateDiagram-v2
@@ -29,6 +29,7 @@ stateDiagram-v2
     }
 ```
 **Implements**: FR11 of make-checkpoint-gate-durable; FR1, FR3, FR15, NFR-R2 of harden-task-branch-contract; FR1, FR2 of fix-claim-epoch-fence; FR14, NFR-R4 of fix-operator-blockers
+**Notes**: Where the registered commit comes from is the requirement "Classification reads the factory register".
 **Notes**: The eleven names are the canonical vocabulary every other artifact of this contract refers to rather than restates.
 **Notes**: The distinct `UnsupportedVersion` shape is what lets a version diagnosis name the version rather than a parse failure.
 

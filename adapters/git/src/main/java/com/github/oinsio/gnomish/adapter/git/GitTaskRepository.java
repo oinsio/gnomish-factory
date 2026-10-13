@@ -138,7 +138,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
 
     @Override
     public void appendDecision(String taskId, Decision decision, TaskState resetState) {
-        Path worktree = ensureWorktree(taskId);
+        Path worktree = restoredWorktree(taskId, TaskLifecycleEvent.RESUMED);
         TaskJsonDto dto = OutcomeClearingTaskJson.withDecision(
                 readCommitted(taskId, worktree, TaskLifecycleEvent.RESUMED).dto(), decision);
         // One transition, one commit (FR4): the decision and the attempt-counter reset it implies
@@ -155,7 +155,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     @Override
     public void approveCheckpoint(String taskId, Position.AwaitingApproval gate, TaskState approved) {
         TaskLifecycleEvent event = TaskLifecycleEvent.APPROVED;
-        Path worktree = ensureWorktree(taskId);
+        Path worktree = restoredWorktree(taskId, event);
         Position tipPosition =
                 RequiredTaskState.atTipOf(runner, worktree, taskId, event).position();
         CheckpointApprovalCheck.requireAdmitted(taskId, gate, tipPosition, approved);
@@ -175,7 +175,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     @Override
     public void resumeFrom(String taskId, TaskState reset) {
         TaskLifecycleEvent event = TaskLifecycleEvent.RESUMED;
-        Path worktree = ensureWorktree(taskId);
+        Path worktree = restoredWorktree(taskId, event);
         TaskJsonDto tip = readCommitted(taskId, worktree, event).dto();
         RecordedOutcome consumed = ResumedWriteCheck.requireRecordedOutcome(taskId, TaskJsonMapper.fromDto(tip));
         StateFileWrite.write(runner, worktree, taskId, reset, event);
@@ -186,7 +186,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     @Override
     public void recordOutcome(String taskId, TaskOutcome outcome, TrackerWrite trackerWrite) {
         TaskLifecycleEvent event = TaskOutcomeLifecycleEvent.of(outcome);
-        Path worktree = ensureWorktree(taskId);
+        Path worktree = restoredWorktree(taskId, event);
         CommittedTaskJson committed = readCommitted(taskId, worktree, event);
         TaskJsonDto currentDto = committed.dto();
         TaskRecord current = TaskJsonMapper.fromDto(currentDto);
@@ -250,7 +250,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      */
     @Override
     public void confirmTerminalWrite(String taskId) {
-        Path worktree = ensureWorktree(taskId);
+        Path worktree = restoredWorktree(taskId, TaskLifecycleEvent.RESUMED);
         TerminalWriteMarker.clearPending(runner, worktree, taskId);
         commitWith(taskId, worktree, ServiceCommitMessages.trackerWriteConfirmed(), TaskLifecycleEvent.RESUMED);
     }
@@ -258,6 +258,21 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     private Path ensureWorktree(String taskId) {
         String branchName = TaskIdSanitizer.branchName(taskId);
         return worktreeManager.ensureWorktree(taskId, branchName);
+    }
+
+    /**
+     * The task worktree with its factory-owned paths put back the way the registered commit has
+     * them (design D18 of tighten-spec-contract): every write after STARTED stages the whole
+     * worktree, so an envelope the gnome edited — committed above the register, or left in the
+     * working tree — would otherwise ride the factory's own lifecycle commit; a violation's {@code
+     * Aborted} outcome is built from the register's envelope this way, never the tip's.
+     */
+    private Path restoredWorktree(String taskId, TaskLifecycleEvent event) {
+        Path worktree = ensureWorktree(taskId);
+        new EnvelopeRestore(runner, worktree, taskId).restore().ifPresent(failure -> {
+            throw new GitTaskRepositoryException(taskId, event, "restoring the factory-owned paths", failure);
+        });
+        return worktree;
     }
 
     /**
@@ -336,6 +351,10 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      * Completed} cleanup stages with {@code git rm -r} rather than {@code git add -A}, so it
      * commits and emits the same anchor inside {@link CleanupCommit} instead.
      *
+     * <p>The commit lands with the factory register in one ref transaction ({@link
+     * WorktreeClosingCommit}, design D13 of tighten-spec-contract), so every lifecycle commit is
+     * registered the moment it is on the branch.
+     *
      * <p>The line goes out after the commit succeeds: an anchor states that the transition is on
      * the branch, and a failed commit has not put it there (its own failure travels as the thrown
      * {@link GitTaskRepositoryException}).
@@ -344,13 +363,14 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      * per lifecycle transition, after the commit succeeds, naming the task and the event.
      */
     private void commitStaged(String taskId, Path worktree, String message, TaskLifecycleEvent event) {
-        GitCommandResult commit = runner.run(
-                worktree,
-                "commit",
-                "-m",
-                ClaimEpochTrailer.stamp(message, epochs.epochFor(taskId).orElse(null)));
-        if (commit.exitCode() != 0) {
-            throw new GitTaskRepositoryException(taskId, event, "git commit", commit.stderr());
+        if (new WorktreeClosingCommit(runner)
+                        .commit(
+                                worktree,
+                                taskId,
+                                ClaimEpochTrailer.stamp(
+                                        message, epochs.epochFor(taskId).orElse(null)))
+                instanceof WorktreeClosingCommit.Outcome.Failed failed) {
+            throw new GitTaskRepositoryException(taskId, event, failed.step(), failed.evidence());
         }
         log.info("task lifecycle commit written for task {}: event={}", taskId, event);
     }

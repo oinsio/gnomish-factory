@@ -21,7 +21,8 @@ class BranchShapeClassifierSpec extends Specification {
             recordedPosition: Optional.empty(),
             roundsRecorded: false,
             decisionsRecorded: false,
-            cleanupCommitInHistory: false
+            registeredCleanup: false,
+            tipRelation: new TipRelation.AtRegister()
         ] + overrides
         new BranchTipFacts(
                 base.taskEnvelope as EnvelopeStatus,
@@ -30,10 +31,13 @@ class BranchShapeClassifierSpec extends Specification {
                 base.recordedPosition as Optional<Position>,
                 base.roundsRecorded as boolean,
                 base.decisionsRecorded as boolean,
-                base.cleanupCommitInHistory as boolean)
+                base.registeredCleanup as boolean,
+                base.tipRelation as TipRelation)
     }
 
-    // FR1: the happy-path progression, one row per shape it passes through.
+    // FR1: the happy-path progression, one row per shape it passes through — every row read with
+    // the tip at the register (FR13 of tighten-spec-contract), the default of facts() above.
+    // Scenario: lifecycle/task-branch-contract / The tip equals the register
     // Scenario: lifecycle/task-branch-contract / A branch ref with no STARTED commit is Bare
     // Scenario: lifecycle/task-branch-contract / A started branch with no completed round is Created
     // Scenario: lifecycle/task-branch-contract / A run underway is InProgress
@@ -53,7 +57,7 @@ class BranchShapeClassifierSpec extends Specification {
         [recordedOutcome: RecordedTerminal.PARKED, roundsRecorded: true] || new BranchShape.Parked()
         [decisionsRecorded: true] || new BranchShape.Answered()
         [recordedOutcome: RecordedTerminal.COMPLETED, roundsRecorded: true] || new BranchShape.CompletedUncleaned()
-        [cleanupCommitInHistory: true, taskEnvelope: new EnvelopeStatus.Absent(),
+        [registeredCleanup: true, taskEnvelope: new EnvelopeStatus.Absent(),
             stateEnvelope: new EnvelopeStatus.Absent()] || new BranchShape.Delivered()
     }
 
@@ -80,7 +84,7 @@ class BranchShapeClassifierSpec extends Specification {
     def "delivery in history wins over whatever the tip carries now"() {
         expect:
         classifier.classify(facts(
-                        cleanupCommitInHistory: true,
+                        registeredCleanup: true,
                         stateEnvelope: new EnvelopeStatus.Unreadable('truncated'))) == new BranchShape.Delivered()
     }
 
@@ -199,7 +203,7 @@ class BranchShapeClassifierSpec extends Specification {
         def gate = Optional.of(new Position.AwaitingApproval('review'))
 
         expect:
-        classifier.classify(facts(recordedPosition: gate, cleanupCommitInHistory: true)) == new BranchShape.Delivered()
+        classifier.classify(facts(recordedPosition: gate, registeredCleanup: true)) == new BranchShape.Delivered()
         classifier.classify(facts(recordedPosition: gate, taskEnvelope: new EnvelopeStatus.Unreadable('truncated'))) ==
         new BranchShape.Corrupt('task.json: truncated')
         classifier.classify(facts(recordedPosition: gate, taskEnvelope: new EnvelopeStatus.Absent())) instanceof BranchShape.Unknown

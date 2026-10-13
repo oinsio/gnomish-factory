@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
+import java.util.Optional;
 
 /**
  * Recovers a delivered task's pre-cleanup {@code .gnomish-task/} state from branch history, for the
@@ -26,20 +27,23 @@ import java.nio.file.Path;
  * branch's own recorded outcome rather than fabricating one.
  *
  * <p>Branch lookup is delegated verbatim to {@link TaskBranchLocator} (local -> remote-tracking ->
- * narrow fetch -> not found), exactly as {@link BranchStateReader} does for the tip; the only
- * difference is which revision of the located branch the files are read at.
+ * narrow fetch -> not found), exactly as {@link BranchStateReader} does: the lookup's touchpoint
+ * fetch carries the task's factory register with the branch (design D13 of tighten-spec-contract).
  *
- * <p>Which revision that is, is resolved rather than assumed (FR6, design D5 of
- * fix-envelope-medium): the tip when the tip still carries the envelope, and otherwise the parent
- * of the cleanup commit {@link GitShowTip#cleanupCommit()} locates in the tip's history. See
- * {@link #deliveredRevision}.
+ * <p>Which revision the files are read at is the register's, never the tip's (FR6, design D5 of
+ * fix-envelope-medium; design D13 of tighten-spec-contract): the registered commit itself when it
+ * still carries the envelope — a {@code CompletedUncleaned} branch — and otherwise, when the
+ * registered commit is the cleanup commit, the {@code Completed} commit the cleanup was written on.
+ * A {@code Completed} envelope the gnome committed above the register, or a cleanup subject it
+ * wrote, is never read. See {@link #deliveredRevision}.
  *
  * <p>Every revision-scoped read below passes {@link GitReadGate#answered}, so this reader can tell
  * "the delivered commit does not carry the files" from "the question was not answered": an
  * interrupted or timed-out {@code git show} surfaces as unavailability instead of as a missing
  * state file.
  *
- * <p>Implements FR10 of add-claim-heartbeat; FR6 of fix-envelope-medium.
+ * <p>Implements FR10 of add-claim-heartbeat; FR6 of fix-envelope-medium; FR13, NFR-S2 of
+ * tighten-spec-contract.
  */
 public final class DeliveredBranchReader {
 
@@ -48,6 +52,7 @@ public final class DeliveredBranchReader {
 
     private final GitRunner runner;
     private final TaskBranchLocator locator;
+    private final FactoryRegisterRead register;
 
     /**
      * @param runner the git subprocess seam; never null
@@ -57,6 +62,7 @@ public final class DeliveredBranchReader {
     public DeliveredBranchReader(GitRunner runner, GitInfrastructureRetry retry) {
         this.runner = runner;
         this.locator = new TaskBranchLocator(runner, retry);
+        this.register = new FactoryRegisterRead(runner);
     }
 
     /**
@@ -79,14 +85,14 @@ public final class DeliveredBranchReader {
      *     located one does not carry the state files
      */
     public DeliveredBranchState read(Path cloneDir, String taskId) {
-        String delivered = resolveDeliveredRef(cloneDir, taskId);
+        RegisteredCommit delivered = resolveDeliveredRef(cloneDir, taskId);
         TaskRecord content = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(show(cloneDir, delivered, TASK_JSON_PATH)));
         TaskState finalState =
                 StateJsonMapper.fromDto(StateJsonMapper.readDto(show(cloneDir, delivered, STATE_JSON_PATH)));
         return new DeliveredBranchState(content.context(), finalState);
     }
 
-    private String resolveDeliveredRef(Path cloneDir, String taskId) {
+    private RegisteredCommit resolveDeliveredRef(Path cloneDir, String taskId) {
         BranchLocation location = locator.locate(cloneDir, taskId);
         String tip =
                 switch (location) {
@@ -103,36 +109,40 @@ public final class DeliveredBranchReader {
                                 "locating delivered branch",
                                 UntrustedText.factory("no branch found to reconcile a deferred finish from"));
                 };
-        return deliveredRevision(cloneDir, tip);
+        RegisteredCommit registered = register.registered(cloneDir, taskId)
+                .orElseThrow(() -> new BranchStateFileMissingException(
+                        tip, TASK_JSON_PATH, UntrustedText.factory("no factory register names a commit of this task")));
+        return deliveredRevision(cloneDir, registered);
     }
 
     /**
-     * The revision whose tree carries the delivered envelope (design D5 of fix-envelope-medium):
-     * the tip itself when it still carries {@code task.json} — a {@code CompletedUncleaned} branch,
-     * whose {@code Completed} envelope has not been removed yet — and otherwise the parent of the
-     * cleanup commit located in the tip's history, which is the {@code Completed} commit by
-     * construction. That is the same commit the branch classifier calls a delivery, so the reader
-     * and the classifier cannot disagree about which one it is; reading {@code tip^} by assumption
-     * did, on every branch that gained a commit after cleanup.
+     * The commit whose tree carries the delivered envelope (design D5 of fix-envelope-medium,
+     * design D13 of tighten-spec-contract): the registered commit itself when it still carries
+     * {@code task.json} — a {@code CompletedUncleaned} branch, whose {@code Completed} envelope has
+     * not been removed yet — and otherwise, when the registered commit is the cleanup commit, the
+     * commit it was written on, which is the {@code Completed} commit by construction. That is the
+     * same commit the branch classifier calls a delivery, so the reader and the classifier cannot
+     * disagree about which one it is.
      *
-     * @throws BranchStateFileMissingException when neither holds — a tip with no envelope and no
-     *     cleanup commit in its history was never delivered, so there is no state to recover
+     * @throws BranchStateFileMissingException when neither holds — a registered commit with no
+     *     envelope that is not the cleanup commit was never delivered, so there is no state to
+     *     recover
      */
-    private String deliveredRevision(Path cloneDir, String tip) {
-        GitShowTip tipReader = new GitShowTip(runner, cloneDir, tip);
-        if (tipReader.readAtTip(TASK_JSON_PATH).isPresent()) {
-            return tip;
+    private RegisteredCommit deliveredRevision(Path cloneDir, RegisteredCommit registered) {
+        GitShowTip reader = new GitShowTip(runner, cloneDir, registered);
+        if (reader.readAtRegister(TASK_JSON_PATH).isPresent()) {
+            return registered;
         }
-        return tipReader
-                .cleanupCommit()
-                .map(cleanup -> cleanup + "^")
-                .orElseThrow(() -> new BranchStateFileMissingException(
-                        tip,
-                        TASK_JSON_PATH,
-                        UntrustedText.factory("the tip carries no envelope and its history holds no cleanup commit")));
+        Optional<RegisteredCommit> completed =
+                reader.isCleanupCommit() ? register.completedBefore(cloneDir, registered) : Optional.empty();
+        return completed.orElseThrow(() -> new BranchStateFileMissingException(
+                registered.id(),
+                TASK_JSON_PATH,
+                UntrustedText.factory("the registered commit carries no envelope and is not the cleanup commit")));
     }
 
-    private UntrustedText show(Path cloneDir, String ref, String filePath) {
+    private UntrustedText show(Path cloneDir, RegisteredCommit commit, String filePath) {
+        String ref = commit.id();
         // GitReadGate.answered: an interrupted or timed-out `git show` would otherwise read as
         // "the delivered commit carries no state files", turning unavailability into a missing-file
         // verdict the reconcile cannot tell from a genuinely stateless commit.

@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Path;
 
@@ -25,51 +26,63 @@ import java.nio.file.Path;
  * GitPersistFailedException}, never swallowed, so the engine turns it into an {@code Aborted}
  * outcome rather than continuing on unpersisted state.
  *
- * <p>Round-boundary protocol checks (design D12, task 3.3) run before the round commit: still on
- * the task branch, the previous round's tip is an ancestor of {@code HEAD} (no history rewrite),
- * and {@code .gnomish-task/} untouched by the gnome — delegated to {@link RoundBoundaryCheck}, whose
- * third outcome, cannot-verify, arrives here as a {@link GitPersistFailedException} so a failed
- * probe aborts the round as infrastructure instead of being read as a clean boundary. The
- * "previous tip" is this instance's own remembered state: the worktree's {@code HEAD} at
- * construction time for the first round, updated to the new {@code HEAD} after every successful
- * commit — one adapter instance is expected to live for a whole task run, over one worktree.
- * After the round commit succeeds, a best-effort push to {@code origin} follows, delegated to
- * {@link BestEffortPush} (NFR-S1): a failed or skipped push never fails {@link #persist}, since
- * durability is the local commit made just above it. The push precondition check reuses the same
- * {@code previousTip} this method captured before the round commit — the tip {@link
- * RoundBoundaryCheck#verify} already confirmed HEAD descends from.
+ * <p>The round boundary (design D12; design D18 of tighten-spec-contract) runs before anything is
+ * written: {@code HEAD} still on the task branch ({@link HostBranchProbe}), then the one {@link
+ * GnomeRangeInspection} over {@code previousTip..HEAD} — no history rewrite, no second parent, no
+ * {@code gnomish: } subject, no change under {@code .gnomish-task/} — then the working tree's
+ * uncommitted half ({@link EnvelopeRestore#uncommittedEdits}). The factory-owned paths are restored
+ * from the registered commit before {@code git add -A} ({@link EnvelopeRestore#restore}), so an
+ * envelope the gnome edited never rides the round commit; an uncommitted edit is restored and then
+ * reported as a violation. A violation throws {@link RoundBoundaryViolationException}; the third
+ * outcome, cannot-verify, throws {@link GitPersistFailedException}, so a failed probe aborts the
+ * round as infrastructure instead of being read as a clean boundary. The "previous tip" is this
+ * instance's own remembered state: the worktree's {@code HEAD} at construction time for the first
+ * round, updated to the round commit after every successful one — one adapter instance is expected
+ * to live for a whole task run, over one worktree.
+ *
+ * <p>The round commit lands with its register in one ref transaction ({@link
+ * WorktreeClosingCommit}), and a best-effort atomic push of both to {@code origin} follows, delegated
+ * to {@link BestEffortPush} (NFR-S1): a failed or skipped push never fails {@link #persist}, since
+ * durability is the local transaction made just above it.
  *
  * <p>{@code state.json} is written through the shared {@link AtomicFileWriter} (design D10 of
- * harden-task-branch-contract): a kill mid-write leaves the complete previous content, never a
- * half-written file the next resume would have to parse.
+ * harden-task-branch-contract): a kill mid-write leaves the complete previous content.
  *
  * <p>Every round commit carries the tenure's claim epoch as a trailer ({@link ClaimEpochTrailer},
- * FR13): a reader can then tell a round this instance wrote under its live claim from one a
- * superseded holder wrote before it was reaped.
+ * FR13), so a reader can tell this instance's rounds from a superseded holder's.
  *
  * <p>Kept in sync with {@link EnvironmentAttemptPersistence}: both must close a round with the
  * same durable sequence — {@code state.json} and the round's trace file written first, then one
  * commit stamped with the claim epoch that carries both, so neither medium can leave a branch on
- * which a round's state landed without its trace (or the other way round).
+ * which a round's state landed without its trace (or the other way round) — judge the gnome's range
+ * with the one {@link GnomeRangeInspection} before it becomes part of the round, keep the
+ * factory-owned paths of the round commit the factory's own (here restored from the register
+ * before staging; there the in-box commit stages exactly the two files and the admission refuses
+ * any other owned path), and land the round commit with its register in one ref transaction,
+ * carried to origin by one atomic push (design D13, D18 of tighten-spec-contract).
  *
- * <p>Kill windows (crash-consistency rule). The sequence has two durable steps, the commit and the
- * push, and the durability point is the commit. A kill between the file writes and the commit
- * freezes "files written, nothing committed": the branch still reads as the previous round's tip,
- * so the next pickup sees no round at all, and the residue is not attributed to the gnome — {@link
- * RoundBoundaryCheck} compares two commits and never inspects these not-yet-staged writes. A kill
- * between the commit and the push freezes "round committed locally, not pushed", the window the
- * next push of this branch converges by carrying the commit forward. This method is not atomic
- * across those two steps and does not claim to be.
+ * <p>Kill windows (crash-consistency rule). The sequence has two durable steps, the ref transaction
+ * and the push, and the durability point is the transaction. A kill before it — between the file
+ * writes, the staging and the {@code commit-tree} — freezes "files written, nothing landed": the
+ * branch and the register still name the previous closing commit, an unreferenced commit object at
+ * most is left behind, and the next round close restores the owned paths from the register before
+ * it stages anything. A kill between the transaction and the push freezes "round closed locally, not
+ * pushed", the window the next push of this branch converges by carrying both refs forward; origin's
+ * two refs move together or not at all.
  *
  * <p>Implements FR2, FR11, FR12, NFR-R1, NFR-S1 of add-git-workflow; FR5, FR13 of
- * harden-task-branch-contract; FR13 of harden-logging-observability.
+ * harden-task-branch-contract; FR13 of harden-logging-observability; FR13, NFR-S2 of
+ * tighten-spec-contract.
  */
 public final class GitAttemptPersistence implements AttemptPersistence {
 
     private final GitRunner runner;
     private final Path worktreeRoot;
     private final String branch;
-    private final RoundBoundaryCheck roundBoundaryCheck;
+    private final HostBranchProbe probe;
+    private final GnomeRangeInspection inspection;
+    private final EnvelopeRestore envelope;
+    private final WorktreeClosingCommit closingCommit;
     private final BestEffortPush bestEffortPush;
     private final ClaimEpochSource epochs;
     private String previousTip;
@@ -88,35 +101,32 @@ public final class GitAttemptPersistence implements AttemptPersistence {
         this.epochs = epochs;
         this.worktreeRoot = worktreeRoot;
         this.branch = TaskIdSanitizer.branchName(taskId);
-        this.roundBoundaryCheck = new RoundBoundaryCheck(runner, worktreeRoot, branch);
-        this.bestEffortPush = new BestEffortPush(runner);
-        this.previousTip = roundBoundaryCheck.currentHead();
+        this.probe = new HostBranchProbe(runner, worktreeRoot, branch);
+        this.inspection = new GnomeRangeInspection(runner, worktreeRoot);
+        this.envelope = new EnvelopeRestore(runner, worktreeRoot, taskId);
+        this.closingCommit = new WorktreeClosingCommit(runner);
+        this.bestEffortPush = BestEffortPush.closing(runner);
+        this.previousTip = probe.currentHead();
     }
 
     /**
-     * Verifies the round-boundary protocol against the tip left by the previous round, then
-     * writes {@code state.json} and the round's trace file under {@code .gnomish-task/}, stages
-     * the whole working tree, and commits with the round's service message (FR2, FR12, NFR-R1).
+     * Verifies the round boundary against the tip left by the previous round, restores the
+     * factory-owned paths from the register, then writes {@code state.json} and the round's trace
+     * file under {@code .gnomish-task/}, stages the whole working tree, and lands the round commit
+     * with its register (FR2, FR12, NFR-R1).
      *
      * @throws RoundBoundaryViolationException if the gnome broke git discipline since the
-     *     previous round (off the task branch, history rewrite, {@code .gnomish-task/} touched)
-     * @throws GitPersistFailedException if any step of the commit fails, or if the boundary
-     *     diff could not be computed at all (cannot-verify, FR13 of harden-logging-observability)
-     * @throws com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException if the new
-     *     round baseline cannot be resolved after the commit (FR13). This one refusal is raised
-     *     <em>after</em> the durable step, so the best-effort push is skipped and the frozen
-     *     state is "round committed, not pushed" — the pre-existing commit-before-push window
-     *     the same recovery already converges, never a new one. The engine reads it exactly as it
-     *     reads a failed persist (both are unchecked, both abort the run), so keeping the tip
-     *     refusal's own type is what lets the post-mortem name the read that never answered; the
-     *     sandboxed twin {@link EnvironmentAttemptPersistence} refuses in the same position.
+     *     previous round (off the task branch, history rewrite, a second parent, a service subject,
+     *     {@code .gnomish-task/} touched — committed or not)
+     * @throws GitPersistFailedException if any step of the commit fails, or if the boundary could
+     *     not be judged at all (cannot-verify, FR13 of harden-logging-observability)
      */
     @Override
     public void persist(String taskId, TaskState state, ToolTrace trace) {
         AttemptKey key = trace.key();
         Path gnomishTaskRoot = worktreeRoot.resolve(EnvelopePaths.DIR_NAME);
 
-        roundBoundaryCheck.verify(taskId, key, previousTip);
+        verifyBoundary(taskId, key);
         String tipBeforeThisRound = previousTip;
 
         writeStateJson(taskId, key, state);
@@ -130,15 +140,44 @@ public final class GitAttemptPersistence implements AttemptPersistence {
         String message = ClaimEpochTrailer.stamp(
                 ServiceCommitMessages.round(key.stage(), key.attempt()),
                 epochs.epochFor(taskId).orElse(null));
-        GitCommandResult commit = runner.run(worktreeRoot, "commit", "-m", message);
-        if (commit.exitCode() != 0) {
-            throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "git commit", commit.stderr());
-        }
-
-        previousTip = roundBoundaryCheck.currentHead();
+        previousTip = switch (closingCommit.commit(worktreeRoot, taskId, message)) {
+            case WorktreeClosingCommit.Outcome.Landed landed -> landed.commit();
+            case WorktreeClosingCommit.Outcome.Failed failed ->
+                throw new GitPersistFailedException(
+                        taskId, key.stage(), key.attempt(), failed.step(), failed.evidence());
+        };
 
         bestEffortPush.pushBestEffort(
-                taskId, key.stage(), key.attempt(), worktreeRoot, branch, roundBoundaryCheck, tipBeforeThisRound);
+                taskId, key.stage(), key.attempt(), worktreeRoot, branch, probe, tipBeforeThisRound);
+    }
+
+    /**
+     * The host round's boundary, committed half then uncommitted half, then the restore that keeps
+     * the gnome's envelope edits out of the round commit whichever way the boundary went.
+     */
+    private void verifyBoundary(String taskId, AttemptKey key) {
+        if (!probe.isOnExpectedBranch()) {
+            throw new RoundBoundaryViolationException(
+                    taskId, UntrustedText.factory("HEAD is not on the task branch \"" + branch + "\""));
+        }
+        String head = probe.currentHead();
+        verdict(taskId, key, inspection.inspect(previousTip, head, AdmissionRule.hostRound()));
+        RangeVerdict uncommitted = envelope.uncommittedEdits();
+        envelope.restore().ifPresent(failure -> {
+            throw new GitPersistFailedException(
+                    taskId, key.stage(), key.attempt(), "restore of the factory-owned paths", failure);
+        });
+        verdict(taskId, key, uncommitted);
+    }
+
+    private static void verdict(String taskId, AttemptKey key, RangeVerdict verdict) {
+        switch (verdict) {
+            case RangeVerdict.Clean ignored -> {}
+            case RangeVerdict.Violated violated -> throw new RoundBoundaryViolationException(taskId, violated.reason());
+            case RangeVerdict.CannotVerify unverified ->
+                throw new GitPersistFailedException(
+                        taskId, key.stage(), key.attempt(), "round boundary", unverified.evidence());
+        }
     }
 
     private void writeStateJson(String taskId, AttemptKey key, TaskState state) {

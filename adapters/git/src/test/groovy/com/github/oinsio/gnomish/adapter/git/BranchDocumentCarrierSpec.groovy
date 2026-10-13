@@ -24,7 +24,7 @@ import spock.lang.TempDir
  * an exit, takes the raw text out, minting every field it lifts as a branch-document value. Driven
  * on a real clone: the document is the one the host medium committed.
  */
-class BranchDocumentCarrierSpec extends Specification implements BareGitRepoFixture {
+class BranchDocumentCarrierSpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
 
     @TempDir
     Path tempDir
@@ -39,6 +39,7 @@ class BranchDocumentCarrierSpec extends Specification implements BareGitRepoFixt
         new GitTaskRepository(new GitProcessRunner(), registered, ClaimEpochSource.NONE, new VirtualClock()).createTask(
                 new TaskContext('PROJ-1', UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('Body'), []),
                 TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        registerTip(cloneDir, 'PROJ-1')
     }
 
     // FR10: the read at the tip is not a parse — the content stays a carrier up to the reader.
@@ -47,7 +48,7 @@ class BranchDocumentCarrierSpec extends Specification implements BareGitRepoFixt
     def "FR10: the tip reader yields the document as the carrier git's output arrived in, and is no parser"() {
         when:
         Optional<UntrustedText> document =
-                new RefTipSource(new GitProcessRunner(), cloneDir, 'gnomish/PROJ-1').readAtTip(EnvelopePaths.TASK_JSON_PATH)
+                RefTipSource.at(new GitProcessRunner(), cloneDir, 'PROJ-1', 'gnomish/PROJ-1').readAtRegister(EnvelopePaths.TASK_JSON_PATH)
 
         then: 'the content travels on as a carrier, under the family it was captured in'
         document.isPresent()
@@ -64,8 +65,8 @@ class BranchDocumentCarrierSpec extends Specification implements BareGitRepoFixt
     // Scenario: core/untrusted-text / Reading a branch document is not parsing
     def "FR3: only the document reader, an exit, takes the raw text out, minting branch-document fields"() {
         given:
-        def document = new RefTipSource(new GitProcessRunner(), cloneDir, 'gnomish/PROJ-1')
-                .readAtTip(EnvelopePaths.TASK_JSON_PATH).get()
+        def document = RefTipSource.at(new GitProcessRunner(), cloneDir, 'PROJ-1', 'gnomish/PROJ-1')
+                .readAtRegister(EnvelopePaths.TASK_JSON_PATH).get()
 
         when:
         def record = TaskJsonMapper.fromDto(TaskJsonMapper.readDto(document))

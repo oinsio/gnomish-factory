@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.subprocess;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.time.Duration;
 import org.jspecify.annotations.Nullable;
 
@@ -35,7 +36,10 @@ public record CaptureRunner(ProcessSupervisor supervisor, Duration drainJoinBoun
 
     /**
      * Starts {@code builder}, drains both its streams concurrently, and waits under {@code
-     * deadline}.
+     * deadline}. The command is given no input: its standard input is closed at once, so a command
+     * that falls back to reading it — {@code git commit-tree} with an empty message — sees
+     * end-of-input instead of waiting on a pipe nobody writes to, until its deadline or, without
+     * one, forever (found by the final gate of tighten-spec-contract, task 9.17).
      *
      * @param builder the fully configured command; started by this method
      * @param deadline the hard bound on the wait, or {@code null} for an unbounded one
@@ -44,9 +48,39 @@ public record CaptureRunner(ProcessSupervisor supervisor, Duration drainJoinBoun
      *     exception, since what an unlaunchable binary means is the caller's classification
      */
     public Captured run(ProcessBuilder builder, @Nullable Duration deadline) throws IOException {
+        return run(builder, deadline, new byte[0]);
+    }
+
+    /**
+     * {@link #run(ProcessBuilder, Duration)} for a command that reads its whole input from
+     * standard input — a {@code git update-ref --stdin} transaction: {@code input} is written once
+     * the drains are running, and the stream is closed, so the command sees end-of-input and
+     * cannot wait on a pipe nobody will write to again.
+     *
+     * <p>A command that exits before reading everything breaks the pipe; that write failure is not
+     * the command's outcome, so it is swallowed here and the exit the wait observes is returned —
+     * the caller classifies a refusal by its exit code and stderr, as for any other command.
+     *
+     * @param builder the fully configured command; started by this method
+     * @param deadline the hard bound on the wait, or {@code null} for an unbounded one
+     * @param input the bytes the command reads from standard input, in full
+     * @return the named termination, the exit value, and the captured streams
+     * @throws IOException if the binary could not be launched
+     */
+    public Captured run(ProcessBuilder builder, @Nullable Duration deadline, byte[] input) throws IOException {
         Process process = builder.start();
         Drain stdout = Drain.start(process.getInputStream(), "subprocess-stdout");
         Drain stderr = Drain.start(process.getErrorStream(), "subprocess-stderr");
+        try (OutputStream stdin = process.getOutputStream()) {
+            stdin.write(input);
+        } catch (IOException brokenPipe) {
+            // The command stopped reading — it exited, or refused before the end of its input. The
+            // wait below observes that exit; the broken pipe adds nothing a caller could act on.
+        }
+        return await(process, stdout, stderr, deadline);
+    }
+
+    private Captured await(Process process, Drain stdout, Drain stderr, @Nullable Duration deadline) {
         Supervision supervision = supervisor.await(process, deadline);
         Duration joinBound = supervision.termination() == Termination.EXITED ? null : drainJoinBound;
         String out = stdout.join(joinBound);

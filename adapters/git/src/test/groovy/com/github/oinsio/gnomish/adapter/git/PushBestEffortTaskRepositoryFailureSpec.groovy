@@ -163,6 +163,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
         def local = initWorkingRepo(tempDir, 'local')
         Files.writeString(local.resolve('a.txt'), 'a')
         commitAll(local, 'init')
+        gitOutput(local, 'branch', "gnomish/${TASK_ID}")
         def delegate = Mock(TaskRepository)
         def repository = decorated(delegate, local)
 

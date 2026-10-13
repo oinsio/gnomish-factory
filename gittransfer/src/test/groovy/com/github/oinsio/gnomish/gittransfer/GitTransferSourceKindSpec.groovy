@@ -13,6 +13,10 @@ class GitTransferSourceKindSpec extends Specification {
 
     private static final Refspec REFSPEC = new Refspec('refs/heads/gnomish/T-1:refs/heads/gnomish/T-1')
 
+    private static final String BOX_BRANCH = 'gnomish/T-1'
+
+    private static final QuarantineRef QUARANTINE = QuarantineRef.forTask('T-1')
+
     /** The owner's part of a fetch: everything in the argv up to the source's transport word. */
     private static List<String> ownersPart(GitTransfer transfer, String transport) {
         transfer.argv().subList(0, transfer.argv().indexOf(transport)) - '--refmap='
@@ -23,17 +27,19 @@ class GitTransferSourceKindSpec extends Specification {
     // Scenario: git/git-transfer / A new source kind needs no new flags
     def "FR1: a #backend source supplies its transport and allowlist, and the owner's flags come out unchanged"() {
         given: 'the reference: the docker box every existing harvest reaches'
-        def docker = GitTransfer.fetch(new TransferSource.Container('ext::docker exec -i box %S'), REFSPEC)
+        def docker = GitTransfer.harvest(new TransferSource.Container('ext::docker exec -i box %S'), BOX_BRANCH, QUARANTINE)
 
         when:
-        def transfer = GitTransfer.fetch(source, REFSPEC)
+        def transfer = source instanceof TransferSource.Origin
+                ? GitTransfer.fetch(source, REFSPEC)
+                : GitTransfer.harvest(source, BOX_BRANCH, QUARANTINE)
 
         then: 'the common set, the fetch flags and the validation are the reference\'s, word for word'
         ownersPart(transfer, transport) == ownersPart(docker, 'ext::docker exec -i box %S')
         transfer.argv().contains('fetch.fsckObjects=true')
 
         and: 'what differs is what the source supplies: its transport word, its allowlist and its isolation'
-        transfer.argv().last() == REFSPEC.value()
+        transfer.argv().last() == (source instanceof TransferSource.Origin ? REFSPEC : QUARANTINE.harvestRefspec(BOX_BRANCH)).value()
         transfer.environment().get('GIT_ALLOW_PROTOCOL') == Optional.of(source.protocolAllowlist())
         source.configurationIsolation().every {
             transfer.environment().get(it.key) == it.value

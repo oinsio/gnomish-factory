@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.TaskStart
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -77,7 +76,7 @@ class ContainerTerminalDriveSpec extends Specification implements BareGitRepoFix
         // The production restoration supplier, as ContainerRunSupportFactory.create wires it (FR17).
         def environments = docker.environments(
                 KEY, cloneDir, sandbox, tempDir.resolve('guard'), OwnershipMode.MANUAL, 'test-project',
-                ContainerTipReader.restorations(gitRunner, cloneDir, TaskIdSanitizer.branchName('T-ABORT')))
+                ContainerTipReader.restorations(gitRunner, cloneDir, 'T-ABORT'))
         def support = new ContainerRunSupport(gitRunner, cloneDir, 'T-ABORT', environments, segments, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         def context = new TaskContext('T-ABORT', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
         support.taskRepository().createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))

@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.domain.branch.TipRelation
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -16,7 +18,6 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
-import spock.lang.PendingFeature
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -25,10 +26,11 @@ import spock.lang.TempDir
  * commit an earlier task left in the base — its branch merged with history — is not this task's
  * delivery, so a live task forked from that base must not read as delivered.
  *
- * <p>FR14 of fix-operator-blockers (with its NFR-R4 and M6): delivery is searched only in the task's own
- * first-parent history after its STARTED commit (design D11).
+ * <p>F122, FR13 of tighten-spec-contract (design D13): delivery is "the registered commit is the
+ * cleanup commit" — no history is searched, so neither a base's history nor a gnome commit carrying
+ * the cleanup subject can deliver a task. Every write here is registered as the closing push would.
  */
-class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
+class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
 
     @TempDir
     Path tempDir
@@ -52,6 +54,12 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
                 TaskStart.commit(cloneDir, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 TaskState.atStageStart('implement'))
+        registerTip(cloneDir, taskId)
+    }
+
+    /** Whether the branch of {@code taskId} reads as delivered, through the classification's own source. */
+    private boolean delivered(String taskId) {
+        RefTipSource.at(runner, cloneDir, taskId, 'refs/heads/gnomish/' + taskId).registeredCleanup()
     }
 
     /** Runs PROJ-1 to delivery and merges its branch into the base with its history (no squash). */
@@ -64,8 +72,11 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
                 ])
         new GitAttemptPersistence(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE)
                 .persist('PROJ-1', TaskState.atStageStart('implement'), trace)
+        registerTip(cloneDir, 'PROJ-1')
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
+        registerTip(cloneDir, 'PROJ-1')
         repository.finishCleanup('PROJ-1')
+        registerTip(cloneDir, 'PROJ-1')
         def merge = runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a',
                 'merge', mergeMode, '-m', 'Merge PR: PROJ-1', 'gnomish/PROJ-1')
         assert merge.exitCode() == 0
@@ -80,8 +91,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
         create('PROJ-2')
 
         then: 'the new branch has no cleanup commit of its own'
-        !new RefTipSource(runner, cloneDir, 'gnomish/PROJ-2').cleanupCommitInHistory()
-        new GitShowTip(runner, cloneDir, 'gnomish/PROJ-2').cleanupCommit().isEmpty()
+        !delivered('PROJ-2')
     }
 
     // Scenario: lifecycle/task-branch-contract / A base merged into a live task after it started does not deliver it
@@ -97,7 +107,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
         assert merge.exitCode() == 0
 
         then:
-        !new RefTipSource(runner, cloneDir, 'gnomish/PROJ-2').cleanupCommitInHistory()
+        !delivered('PROJ-2')
     }
 
     // Scenario: lifecycle/task-branch-contract / A branch ref with no STARTED commit is Bare
@@ -108,8 +118,10 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
         when: 'a bare branch points at that base'
         assert runner.run(cloneDir, 'branch', 'gnomish/PROJ-3', 'HEAD').exitCode() == 0
 
-        then:
-        !new RefTipSource(runner, cloneDir, 'gnomish/PROJ-3').cleanupCommitInHistory()
+        then: 'it has no register, so nothing is read at all, and its tip carries no envelope'
+        !delivered('PROJ-3')
+        RefTipSource.at(runner, cloneDir, 'PROJ-3', 'refs/heads/gnomish/PROJ-3').tipRelation() ==
+                new TipRelation.NoRegister('refs/gnomish-factory/PROJ-3', currentHead(cloneDir), false)
     }
 
     def "FR14: a bare branch on a base that fast-forwarded an earlier task's branch is not delivered"() {
@@ -120,15 +132,14 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
         assert runner.run(cloneDir, 'branch', 'gnomish/PROJ-3', 'HEAD').exitCode() == 0
 
         then:
-        !new RefTipSource(runner, cloneDir, 'gnomish/PROJ-3').cleanupCommitInHistory()
-        new GitShowTip(runner, cloneDir, 'gnomish/PROJ-3').cleanupCommit().isEmpty()
+        !delivered('PROJ-3')
     }
 
-    // Known defect, not closed by FR14: delivery is still read from a commit message the gnome can
-    // write on its own branch — even the exact subject. Closing it needs delivery bound to
-    // something only the factory writes; this feature turns red the day that lands.
-    @PendingFeature(reason = 'F122 (bind-delivery-to-factory-record): a gnome commit carrying the cleanup subject reads as delivery')
-    def "a gnome commit carrying the cleanup subject does not deliver the task (#message)"() {
+    // F122: delivery is read from the registered commit, a commit the gnome cannot name, so a
+    // gnome commit carrying the cleanup subject — as the subject or anywhere in its message — above
+    // the register delivers nothing.
+    // Scenario: lifecycle/task-branch-contract / A gnome commit carrying the cleanup subject does not deliver the task
+    def "F122: a gnome commit carrying the cleanup subject does not deliver the task (#message)"() {
         given: 'a live task'
         create('PROJ-2')
         def worktree = registeredClone.worktrees().resolve('PROJ-2')
@@ -140,7 +151,9 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
         'commit', '-m', message).exitCode() == 0
 
         then:
-        !new RefTipSource(runner, cloneDir, 'gnomish/PROJ-2').cleanupCommitInHistory()
+        !delivered('PROJ-2')
+        new GitTaskBranches(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).classifyShape(cloneDir, 'PROJ-2') ==
+                new BranchShape.Created()
 
         where:
         message << [
@@ -149,51 +162,11 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
         ]
     }
 
-    def "FR14: a cleanup after a STARTED commit whose task.json #shape, read at #ref, delivers: #delivered"() {
-        given: 'a branch whose nearest STARTED commit carries that task.json, with a cleanup after it'
-        assert runner.run(cloneDir, 'checkout', '-q', '-b', 'gnomish/PROJ-9').exitCode() == 0
-        def envelope = cloneDir.resolve('.gnomish-task').toFile()
-        envelope.mkdirs()
-        if (taskJson != null) {
-            new File(envelope, 'task.json').text = taskJson
-        } else {
-            new File(envelope, 'other.txt').text = 'x'
-        }
-        commitAll(cloneDir, 'gnomish: task started')
-        new File(envelope, 'other.txt').text = 'y'
-        commitAll(cloneDir, 'gnomish: cleanup')
-        assert runner.run(cloneDir, 'tag', 'v1').exitCode() == 0
-
-        expect:
-        new RefTipSource(runner, cloneDir, ref).cleanupCommitInHistory() == delivered
-
-        where:
-        shape | taskJson | ref | delivered
-        'names this task' | taskJson('PROJ-9') | 'gnomish/PROJ-9' | true
-        'names this task (full ref)'| taskJson('PROJ-9') | 'refs/heads/gnomish/PROJ-9' | true
-        'names another task' | taskJson('PROJ-1') | 'gnomish/PROJ-9' | false
-        'names a suffix of it' | taskJson('9') | 'gnomish/PROJ-9' | false
-        'names this task (HEAD)' | taskJson('PROJ-9') | 'HEAD' | true
-        'names this task (a tag)' | taskJson('PROJ-9') | 'v1' | false
-        'names this task (commit)' | taskJson('PROJ-9') | 'gnomish/PROJ-9^{commit}' | false
-        'is absent' | null | 'gnomish/PROJ-9' | false
-        'is not JSON' | '{' | 'gnomish/PROJ-9' | false
-        'has an unknown version' | '{"version":2,"taskId":"PROJ-9"}' | 'gnomish/PROJ-9' | false
-        'pins a malformed base ref' | taskJson('PROJ-9', '"baseRef":"refs/heads/a..b"') | 'gnomish/PROJ-9' | false
-        'names an unsanitizable id' | taskJson('...') | 'gnomish/PROJ-9' | false
-    }
-
-    private static String taskJson(String taskId, String extra = null) {
-        '{"version":1,"taskId":"' + taskId + '","title":"t","body":"b","createdAt":"2026-07-18T09:00:00Z",' +
-                '"baseCommit":"0000000000000000000000000000000000000000","decisions":[]' +
-                (extra == null ? '' : ',' + extra) + '}'
-    }
-
     def "FR1: the earlier task's own branch still reads as delivered"() {
         when:
         deliverAndMergeEarlierTask()
 
         then:
-        new RefTipSource(runner, cloneDir, 'gnomish/PROJ-1').cleanupCommitInHistory()
+        delivered('PROJ-1')
     }
 }

@@ -179,6 +179,26 @@ public final class GitProcessRunner implements GitRunner {
         return runClassified(cwd, transfer.argv().toArray(String[]::new), transfer.environment());
     }
 
+    /**
+     * Runs one ref transaction — {@code git update-ref --stdin} with the transaction's script on
+     * standard input, under the same environment as every other local command and unbounded like
+     * them (design D13 of tighten-spec-contract, amended 2026-10-13). Not a repo-level mutation in
+     * this runner's sense: like a single {@code update-ref}, it takes git's own per-ref locks.
+     *
+     * @param cwd the working directory: the clone, or a worktree of it
+     * @param transaction the owner's value
+     * @return the captured exit code, separate stdout/stderr, and the named termination
+     * @throws GitBinaryNotFoundException if the configured git executable could not be launched
+     */
+    @Override
+    public GitCommandResult run(Path cwd, RefTransaction transaction) {
+        if (!cwd.toFile().isDirectory()) {
+            return GitCommandResult.of(128, "", "fatal: cwd does not exist: " + cwd);
+        }
+        return execute(
+                cwd, RefTransaction.ARGV.toArray(String[]::new), Collections.emptySortedMap(), transaction.script());
+    }
+
     private GitCommandResult runClassified(
             Path cwd, String[] args, SequencedMap<String, Optional<String>> transferEnvironment) {
         if (!cwd.toFile().isDirectory()) {
@@ -186,11 +206,11 @@ public final class GitProcessRunner implements GitRunner {
         }
 
         if (!isRepoLevelMutating(args)) {
-            return execute(cwd, args, transferEnvironment);
+            return execute(cwd, args, transferEnvironment, null);
         }
 
         Path cloneKey = resolveCloneKey(cwd);
-        return MUTATION_LOCK.runLocked(cloneKey, () -> execute(cwd, args, transferEnvironment));
+        return MUTATION_LOCK.runLocked(cloneKey, () -> execute(cwd, args, transferEnvironment, null));
     }
 
     /**
@@ -248,11 +268,14 @@ public final class GitProcessRunner implements GitRunner {
     }
 
     private GitCommandResult execute(Path cwd, String... args) {
-        return execute(cwd, args, Collections.emptySortedMap());
+        return execute(cwd, args, Collections.emptySortedMap(), null);
     }
 
     private GitCommandResult execute(
-            Path cwd, String[] args, SequencedMap<String, Optional<String>> transferEnvironment) {
+            Path cwd,
+            String[] args,
+            SequencedMap<String, Optional<String>> transferEnvironment,
+            byte @Nullable [] input) {
         boolean network = GitNetworkCommands.isNetwork(args);
         ProcessBuilder builder =
                 new ProcessBuilder(commandLine(network ? GitNetworkCommands.withStallDetection(args) : args));
@@ -280,7 +303,7 @@ public final class GitProcessRunner implements GitRunner {
 
         Duration deadline = network ? networkTimeout : null;
         long startedAt = System.nanoTime();
-        Captured captured = capture(builder, deadline);
+        Captured captured = capture(builder, deadline, input);
         report(captured.termination(), args, deadline, Duration.ofNanos(System.nanoTime() - startedAt));
         // The single choke point for git's text (design D3 of type-untrusted-text): both streams
         // become UntrustedText here, at the first factory reader, and stderr is scrubbed of any
@@ -334,9 +357,9 @@ public final class GitProcessRunner implements GitRunner {
      * command that means a push or fetch still writing into the clone after the run that owns it
      * has gone.
      */
-    private Captured capture(ProcessBuilder builder, @Nullable Duration deadline) {
+    private Captured capture(ProcessBuilder builder, @Nullable Duration deadline, byte @Nullable [] input) {
         try {
-            return captureRunner.run(builder, deadline);
+            return input == null ? captureRunner.run(builder, deadline) : captureRunner.run(builder, deadline, input);
         } catch (IOException e) {
             throw new GitBinaryNotFoundException(gitBinary, e);
         }

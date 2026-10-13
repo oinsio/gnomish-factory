@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import java.time.Duration
@@ -18,7 +19,7 @@ import spock.lang.TempDir
  * load-bearing push in the factory — bounded retries, a remote-tip re-check before any re-push,
  * and an abort on exhaustion so no round ever runs on a branch origin has never seen.
  */
-class FirstPushSpec extends Specification implements BareGitRepoFixture {
+class FirstPushSpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
 
     @TempDir
     Path tempDir
@@ -40,6 +41,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
     private static ScriptedGit pushRefused(String lsRemote) {
         new ScriptedGit()
                 .answer(['push'], 128, '', 'fatal: unable to access origin\n')
+                .answer(['update-ref'], 0)
                 .answer(['ls-remote'], 0, lsRemote)
                 .answer(['merge-base'], 0)
                 .answer(['rev-parse'], 0, SHA + '\n')
@@ -69,6 +71,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         commit(clone, 'a.txt', 'first')
         runner.run(clone, 'remote', 'add', 'origin', bare.toString())
         runner.run(clone, 'branch', 'gnomish/PROJ-1')
+        registerTip(clone, 'PROJ-1')
 
         when:
         new FirstPush(runner, instantRetry(), suppressor).deliver('PROJ-1', clone, 'gnomish/PROJ-1')
@@ -76,6 +79,11 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         then:
         noExceptionThrown()
         runner.run(bare, 'rev-parse', '--verify', '--quiet', 'refs/heads/gnomish/PROJ-1').exitCode() == 0
+
+        and: 'FR13 of tighten-spec-contract: the register STARTED landed with travelled with the branch'
+        def tip = runner.run(clone, 'rev-parse', 'refs/heads/gnomish/PROJ-1').stdout().forParsing().trim()
+        runner.run(clone, 'rev-parse', 'refs/gnomish-factory/PROJ-1').stdout().forParsing().trim() == tip
+        runner.run(bare, 'rev-parse', 'refs/gnomish-factory/PROJ-1').stdout().forParsing().trim() == tip
     }
 
     def "UX3: a purely local run has no origin to be load-bearing about and stays a silent no-op"() {
@@ -208,6 +216,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture {
         given: 'a git whose push fails and whose clone cannot resolve the branch at all'
         def git = new ScriptedGit()
                 .answer(['push'], 128, '', 'fatal: unable to access origin\n')
+                .answer(['update-ref'], 0)
                 .answer(['rev-parse'], 1)
                 .answer(['remote'], 0, 'https://example.invalid/repo.git\n')
         def clone = tempDir

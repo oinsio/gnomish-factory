@@ -58,12 +58,15 @@ class RefspecPushSpec extends Specification implements BareGitRepoFixture {
         when:
         new RefspecPush(git).push(clone, BRANCH)
 
-        then: 'one invocation, exactly the explicit refspec'
+        then: 'one invocation, exactly the explicit refspec of the branch alone — the mid-round push carries no register (FR13 of tighten-spec-contract)'
         git.calls()*.argv == [
             [
                 'push',
+                '--no-follow-tags',
+                '--no-recurse-submodules',
+                '--end-of-options',
                 'origin',
-                "${BRANCH}:${BRANCH}".toString()
+                "refs/heads/${BRANCH}:refs/heads/${BRANCH}".toString()
             ]
         ]
     }

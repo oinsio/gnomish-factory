@@ -59,15 +59,16 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
         def tipBefore = currentHead(repo)
 
         when:
-        def result = handler.handle(REF, 'PROJ-1', STATE, repo, BRANCH, 'task closed')
+        def result = handler.handle(REF, 'PROJ-1', STATE, repo, 'task closed')
 
         then: 'the leftover was salvage-committed'
         currentHead(repo) != tipBefore
         runner.run(repo, 'log', '-1', '--format=%s').stdout().forParsing().trim() == 'gnomish: salvage'
         !worktreeSalvage.hasLeftovers()
 
-        and: 'the branch was pushed to origin, up to the salvage commit'
+        and: 'the branch was pushed to origin, up to the salvage commit, its factory register with it (FR13 of tighten-spec-contract)'
         runner.run(bareRepo, 'rev-parse', BRANCH).stdout().forParsing().trim() == currentHead(repo)
+        runner.run(bareRepo, 'rev-parse', 'refs/gnomish-factory/PROJ-1').stdout().forParsing().trim() == currentHead(repo)
 
         and: 'a stop note is posted and the claim is released'
         1 * tracker.postNote(REF, { String note ->
@@ -91,7 +92,7 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
         def tipBefore = currentHead(repo)
 
         when:
-        def result = handler.handle(REF, 'PROJ-1', STATE, repo, BRANCH, 'claim held by another instance')
+        def result = handler.handle(REF, 'PROJ-1', STATE, repo, 'claim held by another instance')
 
         then: 'no salvage commit landed'
         currentHead(repo) == tipBefore
@@ -108,7 +109,7 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
         new File(repo.toFile(), '.git/index.lock').text = 'held by another process'
 
         when:
-        handler.handle(REF, 'PROJ-1', STATE, repo, BRANCH, 'task closed')
+        handler.handle(REF, 'PROJ-1', STATE, repo, 'task closed')
 
         then:
         thrown(GitSalvageFailedException)

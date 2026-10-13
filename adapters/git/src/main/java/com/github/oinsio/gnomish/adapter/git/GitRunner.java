@@ -5,7 +5,7 @@ import java.nio.file.Path;
 
 /**
  * The role every holder of the git runner plays against it: one {@link GitCommandResult} per git
- * invocation, by an untyped argv or by the transfer owner's value. {@link GitProcessRunner} is the
+ * invocation, by an untyped argv, by the transfer owner's value, or as a ref transaction. {@link GitProcessRunner} is the
  * one production implementation — argv, environment, deadlines, the clone mutation lock all stay
  * there — and {@code ScriptedGit} in this package's specs is the one fake, so a class above the
  * runner is specified in process rather than through a stand-in binary (design D27 of
@@ -37,4 +37,14 @@ interface GitRunner {
      * @see GitProcessRunner#run(Path, GitTransfer)
      */
     GitCommandResult run(Path cwd, GitTransfer transfer);
+
+    /**
+     * Runs one ref transaction: {@code git update-ref --stdin} with the value's script as input.
+     *
+     * @param cwd the working directory for the git process
+     * @param transaction the owner's value ({@link FactoryRegister} builds every one)
+     * @return the captured exit code, separate stdout/stderr, and the named termination
+     * @see GitProcessRunner#run(Path, RefTransaction)
+     */
+    GitCommandResult run(Path cwd, RefTransaction transaction);
 }

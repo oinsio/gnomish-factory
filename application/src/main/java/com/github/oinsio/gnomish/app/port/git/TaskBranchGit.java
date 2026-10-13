@@ -21,9 +21,12 @@ import java.util.List;
 public interface TaskBranchGit {
 
     /**
-     * Applies the factory's required hardening to a clone before any task work touches it.
+     * Applies the factory's required hardening to a clone before any task work touches it, after
+     * refusing a clone the factory cannot write atomically to.
      *
      * @param cloneDir the working directory of an existing clone; never null
+     * @throws CloneRefFormatRefusedException when the clone is not on the ref backend whose ref
+     *     transactions are atomic on disk (design D13 of tighten-spec-contract); nothing is written
      */
     void harden(Path cloneDir);
 
@@ -99,13 +102,16 @@ public interface TaskBranchGit {
     DeliveredBranchState readDelivered(Path cloneDir, String taskId);
 
     /**
-     * Pushes {@code branch} best-effort: a push failure is swallowed, never propagated, because
-     * the durable record is the local branch and the push is an availability optimization.
+     * Pushes {@code taskId}'s branch and its factory register best-effort, as the clone holds them,
+     * in one atomic push (design D13 of tighten-spec-contract) — after a salvage, which registered
+     * its own commit when it made one, so a tip the gnome left is never registered here. A push
+     * failure is swallowed, never propagated, because the durable record is the local branch and
+     * the push is an availability optimization.
      *
      * @param worktreeRoot the worktree to push from; never null
-     * @param branch the task branch name; never null
+     * @param taskId the tracker's original taskId, naming the branch and the register; never null
      */
-    void pushBestEffort(Path worktreeRoot, String branch);
+    void pushBestEffort(Path worktreeRoot, String taskId);
 
     /**
      * Brings the remote up to {@code taskId}'s local branch tip when it is behind or does not

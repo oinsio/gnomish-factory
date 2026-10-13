@@ -1,6 +1,8 @@
 # ADR 0003: Crash Consistency of Factory Transitions
 
-Status: accepted (2026-08-27, introduced by `harden-task-branch-contract`)
+Status: accepted (2026-08-27, introduced by `harden-task-branch-contract`;
+amended 2026-10-13 by `tighten-spec-contract` — the branch is read at its
+registered commit, and a closing commit lands with the factory register)
 
 ## Context
 
@@ -23,8 +25,8 @@ repositories with one-way movement only.
 
 ### The principle: the media are the journal
 
-Recovery reads the world — branch tip plus tracker state — classifies it, and
-converges it. There is no step journal. Every frozen intermediate state
+Recovery reads the world — the task branch at its registered commit plus
+tracker state — classifies it, and converges it. There is no step journal. Every frozen intermediate state
 classifies to exactly one named shape, and every shape has exactly one
 recovery owner.
 
@@ -35,7 +37,7 @@ delimits).
 
 ```mermaid
 flowchart LR
-    W["Read the media<br/>(branch tip + tracker)"] --> C["Classify<br/>(total, closed shape set)"]
+    W["Read the media<br/>(registered commit + tracker)"] --> C["Classify<br/>(total, closed shape set)"]
     C --> O["Route to the shape's<br/>one recovery owner"]
     O --> A["Roll forward or discard"]
     A --> W
@@ -133,7 +135,7 @@ auditd/Falco loss counters):
    `task.json`, and a lifecycle rewrite of either document carries the
    committed position forward rather than dropping it.
 2. **Recorded events carry a source-assigned identity**, so a re-read merges
-   idempotently: events already recorded at the tip are matched by identity and
+   idempotently: events already recorded on the branch are matched by identity and
    attached once. This is what turns rule 1's worst case from duplicates into a
    no-op, and it is why losing a position is recoverable without a second
    durable store.
@@ -236,19 +238,26 @@ local commit.**
 | Host worktree `.gnomish-task/` files | the shared `atomicfile` writer: temp file + atomic rename                                                        | host-side state, marker, and trace writers |
 | In-box round state                   | commit granularity: a plain in-box write followed by an in-box commit, so a partial write never reaches a commit | the container round-state persister        |
 | Lifecycle commits in container mode  | built from bare git objects; the ref update is the atomic step                                                   | the bare-objects task repository           |
+| Task branch and its factory register | a closing commit is made as an object, then branch and register move in one `git update-ref --stdin` transaction, one table write on the reftable factory clone; at origin, one `git push --atomic` of both refs | the factory register's owner (`FactoryRegister`) and the closing push |
 
-Recovery restores factory-owned files under `.gnomish-task/` from the branch
-tip and never salvages them from a dirty worktree — which is also what shields
+Recovery restores factory-owned files under `.gnomish-task/` from the
+registered commit and never salvages them from a dirty worktree — which is also what shields
 readers from a partial in-box write. Gnome-owned work files stay salvageable.
 Both salvage paths consume one shared factory-owned-paths policy.
 
-**Reads resolve at the tip in every medium.** Every host-side read of an
+**Reads resolve at the registered commit in every medium.** Every read of an
 envelope file (`task.json`, `state.json`, the presence of `.gnomish-task/`
-itself) resolves at the worktree's `HEAD` through the shared tip reader, exactly
-as the container medium reads it from bare objects: the working tree is the
-staging area for the next write, never a read medium — a killed predecessor can
-leave it emptied or half-staged while the tip still carries the envelope
-(provenance: `fix-envelope-medium`).
+itself) and of a service subject resolves through git objects at the commit the
+task's factory register names, on the host exactly as in the container medium:
+the working tree is the staging area for the next write, never a read medium —
+a killed predecessor can leave it emptied or half-staged while the branch still
+carries the envelope (provenance: `fix-envelope-medium`). The tip is not a read
+medium for the factory's record either, since the gnome writes commits to it;
+it contributes one fact, its relation to the register, and the commits above
+the register are the open round's gnome range, entering the branch only through
+the harvest admission (provenance: `tighten-spec-contract`, design D13, D18).
+Host mode carries no integrity claim for this against the gnome, which runs
+with the clone's `.git` (threat #49 of `docs/sandbox-threat-registry.md`).
 
 Two **accepted non-mechanisms**, recorded so they are not re-proposed as
 oversights:

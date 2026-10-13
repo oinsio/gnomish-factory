@@ -35,11 +35,26 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
 
     Path cloneDir
 
-    private LocalBoxEnvironment materializedBox() {
+    /**
+     * A box materialized from the task branch, whose registered closing commit carries {@code
+     * recorded} — the factory's own files, as STARTED and the rounds leave them.
+     */
+    private LocalBoxEnvironment materializedBox(Map<String, String> recorded = [:]) {
         cloneDir = initWorkingRepo(tempDir, 'factory-clone')
         new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
         commitAll(cloneDir)
         gitOutput(cloneDir, 'branch', BRANCH)
+        if (recorded) {
+            gitOutput(cloneDir, 'checkout', '-q', BRANCH)
+            recorded.each { path, content ->
+                Files.createDirectories(cloneDir.resolve(path).parent)
+                Files.writeString(cloneDir.resolve(path), content)
+            }
+            commitAll(cloneDir, 'gnomish: task started')
+            gitOutput(cloneDir, 'checkout', '-q', '-')
+        }
+        // The branch tip is a registered closing commit (design D13).
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + BRANCH.substring('gnomish/'.length()), 'refs/heads/' + BRANCH)
         def box = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('box')))
         box.materialize(BRANCH, null)
         box
@@ -51,12 +66,12 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new File(box.workingCopy.toFile(), 'work.txt').text = 'interrupted round'
 
         expect:
-        new EnvironmentSalvage(box, ClaimEpochSource.NONE).hasLeftovers()
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).hasLeftovers()
     }
 
     def "FR6: a clean in-box working copy has no leftovers"() {
         expect:
-        !new EnvironmentSalvage(materializedBox(), ClaimEpochSource.NONE).hasLeftovers()
+        !new EnvironmentSalvage(materializedBox(), ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).hasLeftovers()
     }
 
     // FR5 of harden-logging-observability, the environment half of WorktreeSalvage's degrade
@@ -70,7 +85,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         def logs = LogCaptureSupport.attach(EnvironmentSalvage)
 
         when: 'the probe degrades to false — resume continues from the last harvested state'
-        def leftovers = new EnvironmentSalvage(dead, ClaimEpochSource.NONE).hasLeftovers()
+        def leftovers = new EnvironmentSalvage(dead, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).hasLeftovers()
         def events = List.copyOf(logs.list)
         logs.detach()
 
@@ -94,6 +109,8 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
         commitAll(cloneDir)
         gitOutput(cloneDir, 'branch', BRANCH)
+        // The branch starts at a registered closing commit, as STARTED leaves it (design D13).
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + BRANCH.substring('gnomish/'.length()), 'refs/heads/' + BRANCH)
         def dying = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('dying-box'))) {
                     @Override
                     ExecHandle exec(ExecCommand command) {
@@ -108,7 +125,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         def logs = LogCaptureSupport.attach(EnvironmentSalvage)
 
         when:
-        new EnvironmentSalvage(dying, ClaimEpochSource.NONE).salvage('SALV-LOST')
+        new EnvironmentSalvage(dying, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).salvage('SALV-1')
         def events = List.copyOf(logs.list)
         logs.detach()
 
@@ -119,7 +136,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
         warnings[0].formattedMessage.startsWith(OperatorEvent.SALVAGE_SKIPPED_ENVIRONMENT_LOST.head())
-        warnings[0].formattedMessage.contains('taskId=SALV-LOST')
+        warnings[0].formattedMessage.contains('taskId=SALV-1')
         warnings[0].formattedMessage.contains('environment lost')
         warnings[0].throwableProxy.className == ProcessStartException.name
 
@@ -138,7 +155,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         def logs = LogCaptureSupport.attach(EnvironmentSalvage)
 
         when:
-        new EnvironmentSalvage(dead, ClaimEpochSource.NONE).discard()
+        new EnvironmentSalvage(dead, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).discard()
         def events = List.copyOf(logs.list)
         logs.detach()
 
@@ -161,7 +178,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         def tipBefore = gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
 
         when:
-        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-1')
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).salvage('SALV-1')
 
         then: 'the leftover is committed in-box and harvested to the factory clone'
         def tipAfter = gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
@@ -170,7 +187,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         gitOutput(cloneDir, 'show', tipAfter + ':work.txt') == 'interrupted round'
 
         and: 'the box is clean afterwards'
-        !new EnvironmentSalvage(box, ClaimEpochSource.NONE).hasLeftovers()
+        !new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).hasLeftovers()
     }
 
     // FR5, design D11 of harden-task-branch-contract: the in-box salvage applies the SAME
@@ -181,14 +198,10 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
     // Scenario: sandbox/execution-environment / A tampered state file cannot ride a salvage commit
     // Scenario: executor/agent-executor / A salvage commit carries the request
     def "FR5: salvage() restores factory-owned files from the in-box tip instead of committing them"() {
-        given: 'a box whose HEAD carries a recorded state.json'
-        def box = materializedBox()
+        given: 'a box whose HEAD carries the recorded state.json the register names'
+        def box = materializedBox(['.gnomish-task/state.json': '{"recorded":true}'])
         def work = box.workingCopy
         Files.createDirectories(work.resolve('.gnomish-task/decisions'))
-        Files.writeString(work.resolve('.gnomish-task/state.json'), '{"recorded":true}')
-        gitOutput(work, 'add', '-A')
-        gitOutput(work, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'started')
-        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-STATE')
 
         and: 'a dying round left a truncated state.json, gnome work and a decision file behind'
         Files.writeString(work.resolve('.gnomish-task/state.json'), '{ truncated')
@@ -196,7 +209,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new File(work.toFile(), 'work.txt').text = 'interrupted round'
 
         when:
-        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-4')
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).salvage('SALV-1')
 
         then: 'the harvested tip carries the gnome work and the tip\'s state.json, not the dirty one'
         def tip = gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
@@ -231,11 +244,11 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
                 stateDir, EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_EXECUTE))
 
         when:
-        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-5')
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).salvage('SALV-1')
 
         then: 'the failed restore is reported, not absorbed into a salvage commit'
         def ex = thrown(GitSalvageFailedException)
-        ex.message.contains('SALV-5')
+        ex.message.contains('SALV-1')
 
         and: 'and the truncated state.json never reached the in-box tip'
         gitOutput(work, 'show', 'HEAD:.gnomish-task/state.json') == '{"recorded":true}'
@@ -250,13 +263,9 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
     // during the factory's own salvage restore.
     // Scenario: sandbox/execution-environment / Factory-invoked in-box git runs without hooks
     def "FR5: the salvage restore checkout runs no gnome-planted hook"() {
-        given: 'a box whose HEAD carries a recorded state.json'
-        def box = materializedBox()
+        given: 'a box whose HEAD carries the recorded state.json the register names'
+        def box = materializedBox(['.gnomish-task/state.json': '{"recorded":true}'])
         def work = box.workingCopy
-        Files.createDirectories(work.resolve('.gnomish-task'))
-        Files.writeString(work.resolve('.gnomish-task/state.json'), '{"recorded":true}')
-        gitOutput(work, 'add', '-A')
-        gitOutput(work, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'started')
 
         and: 'a gnome-planted post-checkout hook that records each run beside itself, which no salvage step cleans'
         def hook = StandIn.link(work.resolve('.git/hooks/post-checkout'), 'hook-record')
@@ -266,7 +275,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new File(work.toFile(), 'work.txt').text = 'interrupted round'
 
         when:
-        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-HOOK')
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).salvage('SALV-1')
 
         then: 'the salvage succeeded without ever running the hook'
         StandInLog.blocks(hook).isEmpty()
@@ -285,6 +294,8 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
         commitAll(cloneDir)
         gitOutput(cloneDir, 'branch', BRANCH)
+        // The branch starts at a registered closing commit, as STARTED leaves it (design D13).
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + BRANCH.substring('gnomish/'.length()), 'refs/heads/' + BRANCH)
         List<ExecCommand> seen = []
         def box = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('argv-box'))) {
                     @Override
@@ -297,7 +308,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new File(box.workingCopy.toFile(), 'work.txt').text = 'interrupted round'
 
         when:
-        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-ARGV')
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).salvage('SALV-1')
 
         then: 'the commit ran through sh -c with a script that names none of them'
         ExecCommand commit = seen.find { it.command()[2].contains('commit -m') }
@@ -323,7 +334,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         def tipBefore = gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
 
         when:
-        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-2')
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).salvage('SALV-1')
 
         then:
         gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH) == tipBefore
@@ -337,11 +348,11 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new File(box.workingCopy.toFile(), '.git/index.lock').text = 'held by another process'
 
         when:
-        new EnvironmentSalvage(box, ClaimEpochSource.NONE).salvage('SALV-3')
+        new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).salvage('SALV-1')
 
         then:
         def ex = thrown(GitSalvageFailedException)
-        ex.message.contains('SALV-3')
+        ex.message.contains('SALV-1')
 
         and: 'the factory clone tip is unchanged — the failed commit was never harvested'
         gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH) == tipBefore
@@ -353,6 +364,8 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
         commitAll(cloneDir)
         gitOutput(cloneDir, 'branch', BRANCH)
+        // The branch starts at a registered closing commit, as STARTED leaves it (design D13).
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + BRANCH.substring('gnomish/'.length()), 'refs/heads/' + BRANCH)
         def flakyBox = new LocalBoxEnvironment(cloneDir, Files.createDirectories(tempDir.resolve('flaky-box'))) {
                     @Override
                     void harvest() {
@@ -364,7 +377,7 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         def logs = LogCaptureSupport.attach(EnvironmentSalvage)
 
         when:
-        new EnvironmentSalvage(flakyBox, ClaimEpochSource.NONE).salvage('SALV-4')
+        new EnvironmentSalvage(flakyBox, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).salvage('SALV-1')
         def events = List.copyOf(logs.list)
         logs.detach()
 
@@ -375,11 +388,11 @@ class EnvironmentSalvageSpec extends Specification implements BareGitRepoFixture
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
         warnings[0].formattedMessage.startsWith(OperatorEvent.SALVAGE_HARVEST_FAILED.head())
-        warnings[0].formattedMessage.contains('salvage harvest failed for taskId=SALV-4')
+        warnings[0].formattedMessage.contains('salvage harvest failed for taskId=SALV-1')
         warnings[0].throwableProxy.className == HarvestFailedException.name
 
         and: 'the in-box commit did land even though the harvest afterward failed'
-        !new EnvironmentSalvage(flakyBox, ClaimEpochSource.NONE).hasLeftovers()
+        !new EnvironmentSalvage(flakyBox, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).hasLeftovers()
 
         and: 'but the factory clone never saw it, since the harvest failed'
         gitOutput(cloneDir, 'log', '--format=%s', 'refs/heads/' + BRANCH) == 'init'

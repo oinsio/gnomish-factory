@@ -1,11 +1,14 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
+import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
@@ -156,5 +159,41 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
         then:
         result.rows().isEmpty()
         result.totals().wallMillis() == null
+    }
+
+    // FR13 of tighten-spec-contract: the walk starts at the registered commit, so a branch the
+    //     factory never registered records no round — even one whose tip carries round commits.
+    def "FR13: a task branch with no factory register yields an empty history"() {
+        given:
+        persistRound('PROJ-8', TaskState.atStageStart('implement').recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 50)))
+        assert runner.run(cloneDir, 'update-ref', '-d', 'refs/gnomish-factory/PROJ-8').exitCode() == 0
+
+        when:
+        def result = walker.walk(cloneDir, 'PROJ-8')
+
+        then:
+        result instanceof UsageHistoryResult.Found
+        (result as UsageHistoryResult.Found).rows().isEmpty()
+    }
+
+    // FR13 of tighten-spec-contract: a round the gnome wrote into state.json above the register
+    //     is not a round of the report.
+    def "FR13: a state.json round committed above the register is not reported"() {
+        given:
+        def first = TaskState.atStageStart('implement').recordQualityFailure(round(0, AttemptRecord.Result.QUALITY_FAILURE, 500, 50))
+        persistRound('PROJ-9', first)
+        def worktree = worktreeFor('PROJ-9')
+        def forged = new GitAttemptPersistence(runner, worktree, 'PROJ-9', ClaimEpochSource.NONE)
+        def registered = registeredId(cloneDir, 'PROJ-9')
+        forged.persist('PROJ-9', first.recordUnburnedRound(round(1, AttemptRecord.Result.PASSED, 900, 90)),
+                new ToolTrace(new AttemptKey('PROJ-9', 'implement', 1), []))
+        assert runner.run(cloneDir, 'update-ref', 'refs/gnomish-factory/PROJ-9', registered).exitCode() == 0
+
+        when:
+        def result = walker.walk(cloneDir, 'PROJ-9') as UsageHistoryResult.Found
+
+        then: 'the round above the register is not billed'
+        result.rows().size() == 1
+        result.rows()[0].attempt().round() == 0
     }
 }

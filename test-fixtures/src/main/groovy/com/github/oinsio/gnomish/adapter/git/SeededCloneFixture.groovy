@@ -31,7 +31,7 @@ import java.time.Instant
  *
  * <p>Implementers provide {@code tempDir}, typically via Spock's {@code @TempDir}.
  */
-trait SeededCloneFixture implements BareGitRepoFixture {
+trait SeededCloneFixture implements BareGitRepoFixture, RegisteredBranchFixture {
 
     abstract Path getTempDir()
 
@@ -58,6 +58,7 @@ trait SeededCloneFixture implements BareGitRepoFixture {
                 new TaskContext(taskId, UntrustedText.tracker(title), UntrustedText.tracker('Body'), []),
                 TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 TaskState.atStageStart('implement'))
+        registerTip(cloneDir, taskId)
         def worktree = worktreeFor(taskId)
         def persistence = new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [

@@ -513,3 +513,26 @@ Container round environments SHALL be built by a factory constructed once per ow
 #### Scenario: No constructor mixes installation equipment and task inputs
 - **WHEN** a container round environment or a run's container support is constructed
 - **THEN** no constructor or static factory takes the installation's equipment and a task's inputs in one parameter list, and the run-support factory holds the installation's settings as fixed state
+
+## ADDED Requirements
+
+### Requirement: The box's git meets the floor before the seed clone
+The container adapter SHALL, before every seed clone of a box (a fresh materialize, and a reattach that applies a commit pin), run the image's own `git --version` in a one-shot, network-less helper carrying the environment's ownership labels, and SHALL refuse the image when the reported version is below the factory's git floor or no version is reported. A claimed task whose box image is refused SHALL be released, not aborted.
+**Implements**: NFR-S2 of tighten-spec-contract
+**Notes**: The seed clone reads the factory clone, on the reftable ref backend since git 2.45, with the image's git; the version is judged by the same parser and floor as the factory's own git check, and the reference sandbox-image recipe installs a git at or above it.
+
+#### Scenario: An image whose git is below the floor is refused before the seed clone
+- **WHEN** a box is materialized on an image whose `git --version` reports 2.43.0
+- **THEN** the run stops with a message naming the image, the floor, the reported version and the remedy, one coded ERROR is logged, and no network, volume or container was created
+
+#### Scenario: An image without git is refused with the runtime's complaint
+- **WHEN** a box is materialized on an image in which `git` cannot be executed
+- **THEN** the refusal quotes the runtime's answer instead of a version and nothing is created
+
+#### Scenario: An image at or above the floor seeds as before
+- **WHEN** a box is materialized on an image whose git reports the floor or newer
+- **THEN** the probe logs nothing and the materialize continues with the seed clone
+
+#### Scenario: A refused image releases the claimed task
+- **WHEN** a claimed run stops because its box image's git is below the floor
+- **THEN** the claim is released and the task is not aborted

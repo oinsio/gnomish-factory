@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.port.git.BoxGitVersionRefusedException
+import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException
 import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
@@ -89,6 +91,9 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
             new UnsupportedStateFileVersionException('task.json', 2, 1),
             // UX2 of own-git-transfer-argv: the floor refusal reads like a precondition
             new GitVersionRefusedException('2.45.1', '2.44.0', 'the seed clone relies on it'),
+            // D13 of tighten-spec-contract: a factory clone off the reftable backend is a precondition
+            new CloneRefFormatRefusedException('/clones/x', 'reftable', UntrustedText.subprocess('files')),
+            new BoxGitVersionRefusedException('img:1', '2.45.1', UntrustedText.container('git version 2.43.0'), 'why'),
             // FR7 of add-project-registry: the configuration report is its message
             new ConfigurationViolationsException([
                 'factory.x is not a known key'

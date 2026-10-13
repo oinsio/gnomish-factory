@@ -38,7 +38,7 @@ class HostResumeMechanicsCheckpointSpec extends Specification implements RunChai
 
     def setup() {
         store.taskRepository(CLONE) >> repository
-        store.readRecordedState(WORKTREE) >> { Optional.of(recorded) }
+        store.readRecordedState(WORKTREE, _) >> { Optional.of(recorded) }
     }
 
     private HostResumeMechanics mechanics() {

@@ -4,11 +4,12 @@ import com.github.oinsio.gnomish.domain.engine.Position;
 import java.util.Optional;
 
 /**
- * Everything the classifier is allowed to know about one task branch tip: the status of each
- * envelope, the content facts read out of them, and whether cleanup happened somewhere in history.
- * No claim epoch is among them — the stamp on the tip is provenance, not a classification input
- * (fix-claim-epoch-fence FR1). Assembled by the adapter that owns the wire format, over the
- * tip-reader seam — never from a dirty worktree (FR5).
+ * Everything the classifier is allowed to know about one task branch: the status of each envelope
+ * and the content facts read out of them — all at the task's registered commit, never at the tip
+ * (design D13 of tighten-spec-contract) — whether that registered commit is the cleanup commit, and
+ * the tip's relation to it. No claim epoch is among them — the stamp on the tip is provenance, not
+ * a classification input (fix-claim-epoch-fence FR1). Assembled by the adapter that owns the wire
+ * format, over the tip-reader seam — never from a dirty worktree (FR5).
  *
  * <p>A value object, so classification is a pure function of it and the property-based spec can
  * generate every combination (M2).
@@ -18,7 +19,7 @@ import java.util.Optional;
  * whatever {@code task.json}'s outcome says (design D8 of make-checkpoint-gate-durable).
  *
  * <p>Implements FR1, FR5 of harden-task-branch-contract; FR1 of fix-claim-epoch-fence; FR11 of
- * make-checkpoint-gate-durable.
+ * make-checkpoint-gate-durable; FR13, NFR-S2 of tighten-spec-contract.
  *
  * @param taskEnvelope what the reader found at {@code .gnomish-task/task.json}
  * @param stateEnvelope what the reader found at {@code .gnomish-task/state.json}
@@ -28,9 +29,9 @@ import java.util.Optional;
  *     envelope is absent or not readable
  * @param roundsRecorded whether {@code state.json} records at least one round of the current stage
  * @param decisionsRecorded whether {@code task.json} records at least one human decision
- * @param cleanupCommitInHistory whether the cleanup commit appears anywhere in the branch's
- *     history — searched rather than assumed at {@code tip^}, so commits made after cleanup do not
- *     hide it
+ * @param registeredCleanup whether the registered commit is the cleanup commit — the delivery
+ *     fact: commits the gnome makes above it, whatever their messages, cannot produce it
+ * @param tipRelation where the branch tip stands relative to the registered commit
  */
 public record BranchTipFacts(
         EnvelopeStatus taskEnvelope,
@@ -39,4 +40,5 @@ public record BranchTipFacts(
         Optional<Position> recordedPosition,
         boolean roundsRecorded,
         boolean decisionsRecorded,
-        boolean cleanupCommitInHistory) {}
+        boolean registeredCleanup,
+        TipRelation tipRelation) {}

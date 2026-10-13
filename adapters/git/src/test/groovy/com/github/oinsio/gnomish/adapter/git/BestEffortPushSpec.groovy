@@ -12,7 +12,9 @@ import spock.lang.TempDir
  * NFR-S1 of add-git-workflow: push is the adapter's exclusive responsibility — exact refspec
  * {@code origin gnomish/<task>:gnomish/<task>}, never {@code --force}, and a push only runs once
  * the round-boundary preconditions (still on the task branch, previousTip is an ancestor of HEAD)
- * are freshly confirmed via {@link RoundBoundaryCheck}'s non-throwing queries. Any failure here —
+ * are freshly confirmed via {@link HostBranchProbe}'s non-throwing queries. The closing push carries
+ * the branch and the register the round's own transaction moved together (design D13 of
+ * tighten-spec-contract); this spec registers by hand what it commits by hand. Any failure here —
  * a broken precondition or a rejected push (e.g. non-fast-forward) — is a skip-or-WARN, never a
  * thrown exception and never a forced retry.
  *
@@ -21,7 +23,7 @@ import spock.lang.TempDir
  * This spec drives {@link BestEffortPush} directly so the two new precondition-skip paths can be
  * set up without needing a full {@code GitAttemptPersistence} round trip.
  */
-class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
+class BestEffortPushSpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
 
     @TempDir
     Path tempDir
@@ -37,7 +39,7 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
         bareRepo = initBareRepo(tempDir, 'origin.git')
         addRemote(repo, 'origin', bareRepo.toString())
 
-        push = new BestEffortPush(runner)
+        push = BestEffortPush.closing(runner)
     }
 
     /** Migrated to the shared helper (`.claude/rules/logging.md`) when this spec was next touched. */
@@ -65,9 +67,9 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
         noOriginRunner.run(bareRepoDir, 'checkout', '-q', '-b', 'gnomish/PROJ-99')
         assert noOriginRunner.run(bareRepoDir, 'remote', 'get-url', 'origin').exitCode() != 0
 
-        def check = new RoundBoundaryCheck(noOriginRunner, bareRepoDir, 'gnomish/PROJ-99')
+        def check = new HostBranchProbe(noOriginRunner, bareRepoDir, 'gnomish/PROJ-99')
         def previousTip = noOriginRunner.run(bareRepoDir, 'rev-parse', 'HEAD').stdout().forParsing().trim()
-        def noOriginPush = new BestEffortPush(noOriginRunner)
+        def noOriginPush = BestEffortPush.closing(noOriginRunner)
 
         when:
         def events = capture {
@@ -80,9 +82,10 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
     }
 
     def "NFR-S1: a normal push updates the remote's task branch to the exact same-named ref"() {
-        given:
-        def check = new RoundBoundaryCheck(runner, repo, 'gnomish/PROJ-1')
+        given: 'the round commit landed with its register, as its closing transaction lands it'
+        def check = new HostBranchProbe(runner, repo, 'gnomish/PROJ-1')
         def previousTip = currentHead(repo)
+        registerTip(repo, 'PROJ-1')
 
         when:
         push.pushBestEffort('PROJ-1', 'implement', 0, repo, 'gnomish/PROJ-1', check, previousTip)
@@ -90,11 +93,33 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
         then:
         def remoteHead = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim()
         remoteHead == currentHead(repo)
+
+        and: 'FR13 of tighten-spec-contract: the round close is a closing push — the register travels with the branch'
+        runner.run(bareRepo, 'rev-parse', 'refs/gnomish-factory/PROJ-1').stdout().forParsing().trim() == remoteHead
+        runner.run(repo, 'rev-parse', 'refs/gnomish-factory/PROJ-1').stdout().forParsing().trim() == remoteHead
+    }
+
+    // Scenario: git/git-task-persistence / A mid-round push leaves the register
+    def "FR13: the mid-round push moves the branch alone, the register stays on the last closing commit"() {
+        given: 'a closing push registered the current tip, then the gnome committed above it'
+        def check = new HostBranchProbe(runner, repo, 'gnomish/PROJ-1')
+        def closed = currentHead(repo)
+        registerTip(repo, 'PROJ-1')
+        push.pushBestEffort('PROJ-1', 'implement', 0, repo, 'gnomish/PROJ-1', check, closed)
+        commit(repo, 'gnome.txt', 'mid-round work')
+
+        when:
+        BestEffortPush.midRound(runner).pushBestEffort('PROJ-1', 'implement', 1, repo, 'gnomish/PROJ-1', check, closed)
+
+        then: 'origin carries the gnome commit on the branch, and the register in origin and in the clone did not move'
+        runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim() == currentHead(repo)
+        runner.run(bareRepo, 'rev-parse', 'refs/gnomish-factory/PROJ-1').stdout().forParsing().trim() == closed
+        runner.run(repo, 'rev-parse', 'refs/gnomish-factory/PROJ-1').stdout().forParsing().trim() == closed
     }
 
     def "NFR-S1: push is skipped with no exception when HEAD is off the task branch"() {
         given:
-        def check = new RoundBoundaryCheck(runner, repo, 'gnomish/PROJ-1')
+        def check = new HostBranchProbe(runner, repo, 'gnomish/PROJ-1')
         def previousTip = currentHead(repo)
         runner.run(repo, 'checkout', '-q', '-b', 'not-the-task-branch')
 
@@ -119,7 +144,7 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
 
     def "NFR-S1: push is skipped with no exception when previousTip is not an ancestor of HEAD"() {
         given: 'an orphan commit replaces the branch history, so the remembered previousTip is stranded'
-        def check = new RoundBoundaryCheck(runner, repo, 'gnomish/PROJ-1')
+        def check = new HostBranchProbe(runner, repo, 'gnomish/PROJ-1')
         def previousTip = currentHead(repo)
         runner.run(repo, 'checkout', '-q', '--orphan', 'rewritten-history')
         new File(repo.toFile(), 'rewritten.txt').text = 'rewritten history'
@@ -160,8 +185,9 @@ class BestEffortPushSpec extends Specification implements BareGitRepoFixture {
         runner.run(otherClone, 'push', 'origin', 'gnomish/PROJ-1:gnomish/PROJ-1')
         def remoteHeadBeforeLocalPush = runner.run(bareRepo, 'rev-parse', 'gnomish/PROJ-1').stdout().forParsing().trim()
 
-        def check = new RoundBoundaryCheck(runner, repo, 'gnomish/PROJ-1')
+        def check = new HostBranchProbe(runner, repo, 'gnomish/PROJ-1')
         def previousTip = currentHead(repo)
+        registerTip(repo, 'PROJ-1')
 
         when:
         def events = capture {

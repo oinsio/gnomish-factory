@@ -522,8 +522,8 @@ finding names.
       lands in a named shape) and record the answer in the task report. Verify:
       `EgressGuardRecoverySpec` green without `@PendingFeature`, its restart feature green; the
       sandbox round-outcome specs green.
-- [ ] 9.13a F122, F135 — the factory register, written (*single-owner*, row "The factory
-      register"; D13; NFR-S2; third revision 2026-10-12 replaces the round-record walk): one
+- [x] 9.13a F122, F135 — the factory register, written (*single-owner*, row "The factory
+      register"; D13; NFR-S2; third revision 2026-10-12 replaces the walk over round records): one
       writer of `refs/gnomish-factory/<task>`, the closing push — `git push --atomic origin
       <branch> <register>` built by the one transfer owner (`git-transfer`), for every closing
       commit of both media: STARTED (`GitTaskRepository.createTask`, `GitObjectsTaskRepository`),
@@ -539,7 +539,7 @@ finding names.
       closing path of both media, register and branch tip are one commit; a refused push of
       either ref lands neither (the atomic scenario, against a stand-in origin preset that
       refuses one ref).
-- [ ] 9.13b F122, F135 — the factory register, read (*single-owner*, row "The factory
+- [x] 9.13b F122, F135 — the factory register, read (*single-owner*, row "The factory
       register"; D13; NFR-S2): a `RegisteredCommit` value, read once per pickup from the fetched
       register, is the revision every envelope reader takes: `RefTipSource` and `GitShowTip`
       (facts and `cleanupCommit` at the register; the `rev-list --first-parent --grep` walk and
@@ -561,7 +561,7 @@ finding names.
       snapshot, a non-ancestor register is `Unknown`; the "tip equals register" feature shows every
       existing classifier row unchanged. Verify: those specs green; every existing delivery,
       classifier and kill-point spec green; scoped PIT on the readers.
-- [ ] 9.13c F135 — the admission gate at the harvest (*single-owner*, row "The harvest
+- [x] 9.13c F135 — the admission gate at the harvest (*single-owner*, row "The harvest
       admission"; D18; NFR-S2): the harvest fetch targets `refs/gnomish-quarantine/<task>` (the
       transfer owner's refspec, nothing else writes it); one range inspection
       (`GnomeRangeInspection`, replacing `RoundBoundaryCheck` and `HarvestedBoundaryCheck` — both
@@ -585,7 +585,33 @@ finding names.
       (the register unmoved, re-admitted on the next harvest; the second recovery a no-op); the
       `ContainerGitMechanicsSpec` and end-to-end harvest features unchanged and green. Verify:
       those specs green; scoped PIT on the inspection, the admission and both persistences.
-- [ ] 9.13d D19 — the record: a new row in `docs/sandbox-threat-registry.md` (the next free
+- [x] 9.13f F122, F135 — the factory clone on reftable (D13 as amended 2026-10-13; NFR-S2;
+      added by the operator after the 9.13c report): the owner that creates the factory clone
+      (`GitTransfer` clone argv in `:gittransfer`) passes `--ref-format=reftable`, so the
+      branch-and-register transaction of `FactoryRegister` is one table write and atomic on disk;
+      every worktree shares that ref store. An existing clone on the files backend is not used
+      silently: the factory detects it at the clone's touchpoint (`git rev-parse
+      --show-ref-format`) and fails closed with an operator-visible reason naming the remedy
+      (re-clone; the project is pre-release, no migration). The test build follows production:
+      the shared clone fixtures (`BareGitRepoFixture` and its callers, `TaskGitFixture`, the
+      kill-point worlds) create clones through the same owner or with the same format, so every
+      spec exercises the reftable store; the adversarial gitconfig stays in force. Sweep:
+      `grep -rn '"clone"\|git init\|"init"' --include='*.java' --include='*.groovy' .` — every
+      factory-clone creation passes the format or is listed with its reason (a bare origin, a
+      box-side clone, a fixture that is not a factory clone). Verify: a spec that the clone the
+      owner creates reports `reftable`; a spec that a files-backend clone is refused with the
+      operator reason; `FactoryRegisterIdentitySpec`, `RegisterRelationSpec`, the kill-point specs
+      and the architecture gates green on the reftable store; scoped PIT on the changed classes.
+      *Amended 2026-10-13 (operator decision on the 9.13f report):* the box's seed clone reads
+      the reftable factory clone with the image's own git, so the sandbox image contract requires
+      git ≥ 2.45: the reference `docs/examples/sandbox-image/Dockerfile` and the test images
+      (`JvmProxyEgressImage` and any other noble-based one) install it (git-core PPA or another
+      base), the image contract text (capability and operator docs) states the floor, and the
+      box's git version is checked when a box is materialized, failing closed with an
+      operator-visible reason before the seed clone runs. Verify additionally:
+      `JvmProxyEgressE2ESpec` green; a spec that a box image with git older than 2.45 is refused
+      with the reason.
+- [x] 9.13d D19 — the record: a new row in `docs/sandbox-threat-registry.md` (the next free
       number; envelope and service-subject forgery on the task branch read as the factory's
       record — delivery, cleanup, gate approval, law pin; mitigation: the register and the
       admission, container tier; host tier: no claim, detections as signals); a glossary entry
@@ -595,7 +621,7 @@ finding names.
       reads the pin at the register, the host limitation named; `manual-sync-pairs.md` rows per
       9.13a and 9.13c. Verify: the doc links resolve; `grep -rn "round-record walk\|bind-delivery-
       to-factory-record" docs/ openspec/changes/tighten-spec-contract .claude/ */src/test` empty.
-- [ ] 9.13e F122, F135 — the sweep report (`implementation.md`): the consumer lists of both
+- [x] 9.13e F122, F135 — the sweep report (`implementation.md`): the consumer lists of both
       single-owner rows checked off with evidence; the three greps of 9.13b and 9.13c with their
       hits and what happened to each; the escape hatches closed (`RefTipSource`, `GitShowTip` and
       `DeliveredBranchReader` take a `RegisteredCommit`, never a bare ref or `HEAD`; the harvest
@@ -826,7 +852,7 @@ Findings:
 ### Follow-up 2026-10-12
 
 - F122 — lifecycle/task-branch-contract / delivery read from a commit subject the gnome can
-  write — revealed defect — new change `bind-delivery-to-factory-record`. The test predates this
+  write — revealed defect — then sent to a new change (withdrawn by the third revision below). The test predates this
   change (#71); its `@PendingFeature` reason now names the finding and the change.
 
 ### Revision 2026-10-12, second (operator)
@@ -844,15 +870,15 @@ Findings:
 
 ### Revision 2026-10-12, third (operator)
 
-- Task 9.13 as written could not be done: the round-record walk of the former D13 has no sound
+- Task 9.13 as written could not be done: the walk over round records of the former D13 has no sound
   starting point (mid-round pushes put gnome commits at the tip, nothing in a commit tells a
   factory commit from a gnome one, host round commits carry no token, a forged snapshot subject
   jumps the walk), and the same root cause admits a forged envelope without any subject (F135,
   found by 9.13; the host `git add -A` carry and the Aborted-over-forged-envelope route found by
   the 2026-10-12 architect audit). The operator decided: host mode carries no integrity claim
   against the gnome (D19); the factory register is a ref pushed atomically with the branch, not a
-  tracker record (D13 as revised); and the fix stays in this change rather than opening
-  `bind-delivery-to-factory-record` — 9.13 becomes 9.13a–9.13e (D13, D18, D19; NFR-S2 as
+  tracker record (D13 as revised); and the fix stays in this change rather than opening the
+  follow-up change named on 2026-10-12 — 9.13 becomes 9.13a–9.13e (D13, D18, D19; NFR-S2 as
   revised; FR13 gains F135).
 - The `@PendingFeature` reason of `DeliveryAncestrySpec` names a change that no longer exists;
   9.13b removes the annotation, so no rename is owed.

@@ -107,7 +107,13 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
         new ContainerEnvironments(
                 new BoxEquipment(this, sandbox, timing, guardRoot, mode),
                 key,
-                new BoxGitLink(sourceClone, { String container, String branch -> } as ContainerHarvest),
+                // A scripted box changed nothing: its harvest lands the branch's own tip in the
+                // task's quarantine, as a real harvest of an unchanged box does (design D18 of
+                // tighten-spec-contract), so the admission finds the range already on the branch.
+                new BoxGitLink(sourceClone, { String container, String branch ->
+                    new com.github.oinsio.gnomish.adapter.git.GitProcessRunner().run(sourceClone, 'update-ref',
+                    com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch.quarantine(branch).name(), 'refs/heads/' + branch)
+                } as ContainerHarvest),
                 ChildEnvAllowlist.none(),
                 projectId,
                 restoration)

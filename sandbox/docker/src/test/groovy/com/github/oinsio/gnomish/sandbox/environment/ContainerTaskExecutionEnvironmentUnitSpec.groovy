@@ -53,6 +53,9 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     static final List<String> IMAGE_INSPECT = DockerCommands.inspectImageVolumes('gnomish/img')
     static final DeclaredVolumeOverrides NO_OVERRIDES = new DeclaredVolumeOverrides([])
 
+    /** The box's git-floor probe that precedes every seed clone (design D13 of tighten-spec-contract). */
+    static final List<String> GIT_PROBE = new BoxGitFloor(new RecordingDockerCli(), KEY, OWNERSHIP).versionProbe('gnomish/img')
+
     /** The shared fake's answer to the image-declared-volume read (FR1 of fix-image-declared-volumes). */
     private static DockerResult declaredVolumes(List<String> args, String answer = 'null') {
         RecordingDockerCli.answerDeclaredVolumes(args, answer)
@@ -71,6 +74,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         then:
         docker.runs == [
             INSPECT,
+            GIT_PROBE,
             DockerCommands.createNetwork(KEY, OWNERSHIP),
             DockerCommands.createVolume(KEY, OWNERSHIP),
             DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', null, OWNERSHIP),
@@ -219,6 +223,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         then:
         docker.runs == [
             INSPECT,
+            GIT_PROBE,
             DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', 'pin99', OWNERSHIP),
         ]
     }
@@ -248,7 +253,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         env().materialize('gnomish/task-x', null)
 
         then: 'the one-shot helper is --rm, off-network, with the factory clone ro beside the task volume'
-        def seed = docker.runs[3]
+        def seed = docker.runs[4]
         seed[0] == 'run'
         seed.contains('--rm')
         seed.contains('none')
@@ -272,7 +277,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         seed.last() == 'gnomish/task-x'
 
         and: 'the task container run mounts only the task volume'
-        def run = docker.runs[5]
+        def run = docker.runs[6]
         run.findAll {
             it.toString().contains(':') && it.toString().contains('/gnomish')
         } ==
@@ -286,7 +291,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         env().materialize('gnomish/task-x', 'abc123')
 
         then:
-        def seed = docker.runs[3]
+        def seed = docker.runs[4]
         seed == DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', 'abc123', OWNERSHIP)
         seed.last() == 'abc123'
         seed[seed.size() - 2] == 'gnomish/task-x'

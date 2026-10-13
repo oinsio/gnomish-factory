@@ -4,13 +4,16 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.BranchTipFactsReader
+import com.github.oinsio.gnomish.adapter.git.BranchTipSource
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.git.RefTipSource
+import com.github.oinsio.gnomish.adapter.git.GitShowTip
+import com.github.oinsio.gnomish.adapter.git.RegisteredCommit
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.domain.branch.TipRelation
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -130,8 +133,16 @@ tracker:
      * follows it.
      */
     BranchShape shapeAt(String rev) {
-        new BranchShapeClassifier().classify(
-                new BranchTipFactsReader().read(new RefTipSource(new GitProcessRunner(), projectDir, rev)))
+        // The commit at rev read as the registered commit it was when the factory wrote it (design
+        // D13 of tighten-spec-contract): its envelope, its subject, the tip at it.
+        def commit = new GitShowTip(new GitProcessRunner(), projectDir,
+                new RegisteredCommit(gitOutput(projectDir, 'rev-parse', rev + '^{commit}')))
+        def source = [
+            readAtRegister : { String path -> commit.readAtRegister(path) },
+            registeredCleanup: { -> commit.isCleanupCommit() },
+            tipRelation : { -> new TipRelation.AtRegister() },
+        ] as BranchTipSource
+        new BranchShapeClassifier().classify(new BranchTipFactsReader().read(source))
     }
 
     /**

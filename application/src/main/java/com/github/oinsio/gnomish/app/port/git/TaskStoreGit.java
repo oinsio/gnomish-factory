@@ -43,34 +43,42 @@ public interface TaskStoreGit {
     AttemptPersistence attemptPersistence(Path worktree, String taskId);
 
     /**
-     * Reads back the last durably recorded task state from the tip of {@code worktree}'s branch —
-     * after a completed run, the last state the round persistence committed.
+     * Reads back the last durably recorded task state at {@code taskId}'s registered commit — the
+     * commit its factory register names (design D13 of tighten-spec-contract), never the tip of
+     * {@code worktree}'s branch, where the gnome commits; after a completed run, the last state the
+     * round persistence committed.
      *
      * <p>Absence is a value, not a fault (design D1, D2 of fix-envelope-medium): an empty result
-     * means the branch's tip carries no state envelope — a pre-contract tip, or a tip whose
-     * cleanup commit removed the state directory. A read that never ran to its own exit is the
-     * one failure that escapes, as {@link BranchTipUnavailableException}: it established nothing
-     * about the tip, so it must not be read as absence (NFR-R2).
+     * means the registered commit carries no state envelope — a pre-contract commit, or the
+     * cleanup commit that removed the state directory — or that the task has no register at all.
+     * A read that never ran to its own exit is the one failure that escapes, as {@link
+     * BranchTipUnavailableException}: it established nothing, so it must not be read as absence
+     * (NFR-R2).
      *
-     * <p>Implements FR1, NFR-R2 of fix-envelope-medium.
+     * <p>Implements FR1, NFR-R2 of fix-envelope-medium; FR13, NFR-S2 of tighten-spec-contract.
      *
-     * @param worktree the task's worktree; never null
-     * @return the recorded state, or empty when the tip carries no state envelope; never null
+     * @param worktree the task's worktree, the repository the read runs in; never null
+     * @param taskId the tracker's original taskId, naming the register; never null
+     * @return the recorded state, or empty when the registered commit carries no state envelope;
+     *     never null
      * @throws BranchTipUnavailableException if the read did not run to its own exit
      */
-    Optional<TaskState> readRecordedState(Path worktree);
+    Optional<TaskState> readRecordedState(Path worktree, String taskId);
 
     /**
-     * Reads back the task's recorded lifecycle from the tip of {@code worktree}'s branch, with the
-     * same absence and unavailability contract as {@link #readRecordedState}.
+     * Reads back the task's recorded lifecycle at {@code taskId}'s registered commit, with the
+     * same absence and unavailability contract as {@link #readRecordedState} — the outcome, the
+     * decisions and the base pin a resume binds its law from all come from that one commit.
      *
-     * <p>Implements FR1, NFR-R2 of fix-envelope-medium.
+     * <p>Implements FR1, NFR-R2 of fix-envelope-medium; FR13, NFR-S2 of tighten-spec-contract.
      *
-     * @param worktree the task's worktree; never null
-     * @return the recorded task record, or empty when the tip carries no task envelope; never null
+     * @param worktree the task's worktree, the repository the read runs in; never null
+     * @param taskId the tracker's original taskId, naming the register; never null
+     * @return the recorded task record, or empty when the registered commit carries no task
+     *     envelope; never null
      * @throws BranchTipUnavailableException if the read did not run to its own exit
      */
-    Optional<TaskRecord> readTaskRecord(Path worktree);
+    Optional<TaskRecord> readTaskRecord(Path worktree, String taskId);
 
     /**
      * Reconstructs {@code taskId}'s per-round usage history.

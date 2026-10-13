@@ -16,7 +16,7 @@ import org.slf4j.LoggerFactory;
  * AgentProgressEvent} per recognized tool-call/round event, and each delivery is this listener's
  * cheap opportunity to check whether {@code HEAD} moved since it last looked — a moved tip means
  * the gnome committed through a Bash tool between two events, so the branch is pushed the same
- * way a round-boundary commit is (reusing {@link BestEffortPush} and {@link RoundBoundaryCheck}
+ * way a round-boundary commit is (reusing {@link BestEffortPush} and {@link HostBranchProbe}
  * verbatim, never duplicating their precondition or push logic).
  *
  * <p><b>Lifecycle: one instance per round.</b> A fresh {@link MidRoundPushListener} is meant to be
@@ -45,8 +45,8 @@ import org.slf4j.LoggerFactory;
  * {@code rev-parse} that fails or prints no ref <b>skips the observation</b> — the tip is reported
  * neither moved nor lost, and no push rests on it — instead of reducing to the empty string, which
  * differs from every real SHA and so would read as movement on one event and as a return to it on
- * the next. It therefore reads {@link RoundBoundaryCheck#readHead()} rather than {@link
- * RoundBoundaryCheck#currentHead()}, whose refusal belongs to the round baseline that is recorded
+ * the next. It therefore reads {@link HostBranchProbe#readHead()} rather than {@link
+ * HostBranchProbe#currentHead()}, whose refusal belongs to the round baseline that is recorded
  * durably. The poll runs once per progress event, so a resolution that keeps failing reports to a
  * {@link RepeatSuppressor} through {@link MidRoundPollLog} and only the edges are logged (FR4) —
  * the same treatment its sandboxed twin {@link MidRoundHarvestListener} gives the same subject.
@@ -54,8 +54,8 @@ import org.slf4j.LoggerFactory;
  * <p>Kept in sync with {@link MidRoundHarvestListener}: both must poll the tip once per progress
  * event through {@link VerifiedTip} (a failed resolution skips the observation, never reduces to
  * a blank), report the failure streak edge-only through {@link MidRoundPollLog}, live one
- * instance per round, and push only behind an ancestry-proving precondition — the {@link BestEffortPush} ancestry pre-check
- * here, the completed fast-forward harvest there.
+ * instance per round, and push only behind a precondition that proves the pushed range — the {@link BestEffortPush}
+ * ancestry pre-check here, the admission there.
  *
  * <p>Implements FR11 of add-git-workflow, coordinated with {@link AgentProgressListener} of
  * add-agent-executor; FR4, FR13 of harden-logging-observability.
@@ -65,7 +65,7 @@ public final class MidRoundPushListener implements AgentProgressListener {
     private static final Logger log = LoggerFactory.getLogger(MidRoundPushListener.class);
 
     private final BestEffortPush push;
-    private final RoundBoundaryCheck roundBoundaryCheck;
+    private final HostBranchProbe probe;
     private final String taskId;
     private final String stage;
     private final int round;
@@ -85,8 +85,8 @@ public final class MidRoundPushListener implements AgentProgressListener {
      */
     public MidRoundPushListener(
             GitRunner runner, Path worktreeRoot, String stage, int round, MidRoundPollContext context) {
-        this.push = new BestEffortPush(runner);
-        this.roundBoundaryCheck = new RoundBoundaryCheck(runner, worktreeRoot, context.branch());
+        this.push = BestEffortPush.midRound(runner);
+        this.probe = new HostBranchProbe(runner, worktreeRoot, context.branch());
         this.worktreeRoot = worktreeRoot;
         this.taskId = context.taskId();
         this.stage = stage;
@@ -95,7 +95,7 @@ public final class MidRoundPushListener implements AgentProgressListener {
         this.pollLog = context.logTo(log);
         // An unresolvable HEAD leaves the baseline unknown rather than blank: the first event that
         // does resolve it adopts it silently, and only movement away from that adopted tip pushes.
-        this.lastObservedTip = VerifiedTip.read(roundBoundaryCheck.readHead()).orElse(null);
+        this.lastObservedTip = VerifiedTip.read(probe.readHead()).orElse(null);
     }
 
     /**
@@ -112,7 +112,7 @@ public final class MidRoundPushListener implements AgentProgressListener {
      */
     @Override
     public void onProgress(AgentProgressEvent event) {
-        GitCommandResult read = roundBoundaryCheck.readHead();
+        GitCommandResult read = probe.readHead();
         Optional<String> tip = VerifiedTip.read(read);
         if (tip.isEmpty()) {
             // The resolution established nothing, so this event observed nothing: skipping keeps a
@@ -128,6 +128,6 @@ public final class MidRoundPushListener implements AgentProgressListener {
         if (previousTip == null || currentTip.equals(previousTip)) {
             return;
         }
-        push.pushBestEffort(taskId, stage, round, worktreeRoot, branch, roundBoundaryCheck, previousTip);
+        push.pushBestEffort(taskId, stage, round, worktreeRoot, branch, probe, previousTip);
     }
 }

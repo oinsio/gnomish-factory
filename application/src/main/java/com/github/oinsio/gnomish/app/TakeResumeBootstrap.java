@@ -88,7 +88,9 @@ record TakeResumeBootstrap(TaskGit git, RegisteredClone registeredClone, String 
         // commit an earlier instance recorded but never got pushed. Best-effort, never blocking.
         git.branches().reconcileRemote(cloneDir, taskId, "resume-start");
 
-        return git.store().readTaskRecord(worktree).map(content -> bundle(taskId, worktree, branchName, content));
+        return git.store()
+                .readTaskRecord(worktree, taskId)
+                .map(content -> bundle(taskId, worktree, branchName, content));
     }
 
     private ResumeBootstrap bundle(String taskId, Path worktree, String branchName, TaskRecord content) {

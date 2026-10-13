@@ -32,6 +32,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
 
     private static final String TASK_ID = 'PROJ-1'
     private static final String BRANCH = 'gnomish/PROJ-1'
+    private static final String REGISTER = 'refs/gnomish-factory/PROJ-1'
 
     private final GitProcessRunner runner = new GitProcessRunner()
     private Path origin
@@ -62,12 +63,24 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
     /**
      * The crash shape: a task recorded through the STRICT repository — no lifecycle decorator, so
      * no push ever ran — which is exactly the state an instance killed between the commit and its
-     * push leaves behind on disk.
+     * push leaves behind on disk. STARTED was registered, as its load-bearing first push registers
+     * it before anything else; the park commit was not (killed between the commit and the closing
+     * push's register write, FR13 of tighten-spec-contract).
+     *
+     * @return the registered STARTED commit
      */
-    private void driveWithoutPushing() {
+    private String driveWithoutPushing() {
         def repository = undecoratedHostRepository()
         repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
+        def started = registerTip()
         repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'), TrackerWrite.OWED)
+        started
+    }
+
+    /** The clone's register moved to the branch tip, as a closing push's register write does. */
+    private String registerTip() {
+        gitOutput(cloneDir, 'update-ref', REGISTER, "refs/heads/${BRANCH}")
+        gitOutput(cloneDir, 'rev-parse', REGISTER)
     }
 
     /** Migrated to the shared helper (`.claude/rules/logging.md`) during the duplication sweep. */
@@ -86,22 +99,28 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
 
         then: 'origin now carries the park commit — healed without the crashed instance coming back'
         originTip() == Optional.of(localTip())
+
+        and: 'the register travelled with it: the park landed with its register in one transaction (FR13 of tighten-spec-contract)'
+        gitOutput(origin, 'rev-parse', REGISTER) == localTip()
     }
 
     def "a partially delivered branch is caught up to its local tip"() {
         given: 'the creation commit reached origin, the terminal one did not'
         def repository = undecoratedHostRepository()
         repository.createTask(new TaskContext(TASK_ID, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        assert new RefspecPush(runner).push(cloneDir, BRANCH).exitCode() == 0
+        registerTip()
+        assert new ClosingPush(runner).push(cloneDir, TASK_ID).exitCode() == 0
         def deliveredTip = originTip()
         repository.recordOutcome(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('implement'), 'implement'), TrackerWrite.OWED)
+        def parked = registerTip()
         assert originTip() == deliveredTip
 
         when:
         new GitTaskBranches(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).reconcileRemote(cloneDir, TASK_ID, 'terminal-boundary')
 
-        then:
+        then: 'branch and register caught up together'
         originTip() == Optional.of(localTip())
+        gitOutput(origin, 'rev-parse', REGISTER) == parked
     }
 
     // Scenario: git/git-task-persistence / Reconciliation never blocks the run

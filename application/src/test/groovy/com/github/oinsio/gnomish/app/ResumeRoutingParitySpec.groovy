@@ -118,8 +118,8 @@ class ResumeRoutingParitySpec extends Specification implements RunChainFakes {
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> Stub(TaskLifecycleStore)
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-            readRecordedState(_) >> Optional.of(RECORDED)
-            readTaskRecord(_) >> Optional.ofNullable(record)
+            readRecordedState(_, _) >> Optional.of(RECORDED)
+            readTaskRecord(_, _) >> Optional.ofNullable(record)
         }
         def worktrees = Stub(TaskWorktreeGit) {
             ensureWorktree(_, _, _) >> worktree

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.domain.branch.TipRelation
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -19,14 +20,19 @@ class TipRecordedDenialsSpec extends Specification {
     private static BranchTipSource tip(String taskJson, String stateJson) {
         new BranchTipSource() {
                     @Override
-                    Optional<UntrustedText> readAtTip(String path) {
+                    Optional<UntrustedText> readAtRegister(String path) {
                         Optional.ofNullable(path.endsWith('task.json') ? taskJson : stateJson)
                                 .map { UntrustedText.branchDocument(it) }
                     }
 
                     @Override
-                    boolean cleanupCommitInHistory() {
+                    boolean registeredCleanup() {
                         false
+                    }
+
+                    @Override
+                    TipRelation tipRelation() {
+                        new TipRelation.AtRegister()
                     }
                 }
     }

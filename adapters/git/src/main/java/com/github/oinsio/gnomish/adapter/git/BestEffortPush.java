@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.nio.file.Path;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,13 +26,12 @@ import org.slf4j.LoggerFactory;
  *       OriginRemote} (design D2 of fix-lifecycle-push), so this class holds policy only;
  *   <li>{@code --force} / {@code --force-with-lease} are never used; a non-fast-forward rejection
  *       is just another failed push — one WARN, no retry;
- *   <li>the push only runs once the round-boundary preconditions it depends on are freshly
- *       confirmed: {@code HEAD} is still on the task branch, and {@code previousTip} is still an
- *       ancestor of {@code HEAD}. Both checks are delegated to {@link RoundBoundaryCheck}'s
- *       non-throwing boolean queries so this class never duplicates the underlying git commands.
- *       A failed precondition skips the push with a WARN instead of attempting it — the
- *       round-boundary check that already ran inside {@link GitAttemptPersistence#persist}
- *       remains the authoritative verdict for the round itself.
+ *   <li>the push only runs once the preconditions it depends on are freshly confirmed: {@code
+ *       HEAD} is still on the task branch, and {@code previousTip} is still an ancestor of {@code
+ *       HEAD}. Both checks are delegated to {@link HostBranchProbe}'s non-throwing queries so this
+ *       class never duplicates the underlying git commands. A failed precondition skips the push
+ *       with a WARN instead of attempting it — the boundary that already ran inside {@link
+ *       GitAttemptPersistence#persist} remains the authoritative verdict for the round itself.
  * </ul>
  *
  * <p>A push that was killed on its deadline or cut short by a shutdown is not a failed push: it
@@ -40,8 +40,15 @@ import org.slf4j.LoggerFactory;
  * (UX3 of bound-subprocess-commands). The discipline is unchanged either way — still one WARN,
  * still no retry, still no throw.
  *
+ * <p>Two push points share this policy, and differ in what the push carries (design D13 of
+ * tighten-spec-contract). The host round close ({@link #closing}, from {@link
+ * GitAttemptPersistence}) is a closing push: the round commit landed with its register in one ref
+ * transaction ({@link WorktreeClosingCommit}), and the branch and the register travel in one atomic
+ * push ({@link ClosingPush}). The host mid-round poll ({@link #midRound}, from {@link MidRoundPushListener})
+ * pushes the branch alone ({@link RefspecPush}) and never touches the register.
+ *
  * <p>Implements FR11, NFR-O2, NFR-S1 of add-git-workflow; FR8, NFR-O2, UX3 of
- * bound-subprocess-commands.
+ * bound-subprocess-commands; FR13 of tighten-spec-contract.
  */
 final class BestEffortPush {
 
@@ -49,25 +56,38 @@ final class BestEffortPush {
 
     private final OriginRemote origin;
     private final RefspecPush push;
+    private final @Nullable ClosingPush closing;
 
-    BestEffortPush(GitRunner runner) {
+    private BestEffortPush(GitRunner runner, @Nullable ClosingPush closing) {
         this.origin = new OriginRemote(runner);
         this.push = new RefspecPush(runner);
+        this.closing = closing;
+    }
+
+    /** The round close's push: the branch and its register, atomically. */
+    static BestEffortPush closing(GitRunner runner) {
+        return new BestEffortPush(runner, new ClosingPush(runner));
+    }
+
+    /** The mid-round poll's push: the branch alone. */
+    static BestEffortPush midRound(GitRunner runner) {
+        return new BestEffortPush(runner, null);
     }
 
     /**
-     * Pushes {@code branch} to {@code origin} in {@code worktreeRoot} using the exact refspec
-     * {@code branch:branch}, if: {@code origin} is configured, {@code roundBoundaryCheck} reports
+     * Pushes {@code branch} — with its register, on the closing push — to {@code origin} in {@code
+     * worktreeRoot} using the exact refspec {@code branch:branch}, if: {@code origin} is configured, {@code probe} reports
      * {@code HEAD} is still on {@code branch}, and {@code previousTip} is still an ancestor of
      * {@code HEAD}. Otherwise does nothing but log a WARN (or, with no {@code origin} configured,
      * does nothing at all — silent, per FR11). Never throws, never retries, never forces.
      *
-     * @param taskId the task whose branch is being pushed, for the WARN log context
+     * @param taskId the task whose branch is being pushed: names the register on the closing push,
+     *     and the WARN log context
      * @param stage the current stage name, for the WARN log context
      * @param round the current round number, for the WARN log context
      * @param worktreeRoot the task worktree; git commands run with this path as {@code cwd}
      * @param branch the task branch name to push, e.g. {@link TaskIdSanitizer#branchName}
-     * @param roundBoundaryCheck supplies the non-throwing branch/ancestry precondition queries
+     * @param probe supplies the non-throwing branch/ancestry precondition queries
      * @param previousTip the tip {@code HEAD} must still descend from for the push to proceed
      */
     void pushBestEffort(
@@ -76,13 +96,13 @@ final class BestEffortPush {
             int round,
             Path worktreeRoot,
             String branch,
-            RoundBoundaryCheck roundBoundaryCheck,
+            HostBranchProbe probe,
             String previousTip) {
         if (!origin.isConfigured(worktreeRoot)) {
             return;
         }
 
-        if (!roundBoundaryCheck.isOnExpectedBranch()) {
+        if (!probe.isOnExpectedBranch()) {
             log.warn(
                     OperatorEvent.PUSH_SKIPPED_HEAD_OFF_BRANCH.head()
                             + "push skipped: taskId={}, stage={}, round={}, branch={}, reason=HEAD is not on the task branch",
@@ -93,7 +113,7 @@ final class BestEffortPush {
             return;
         }
 
-        if (!roundBoundaryCheck.isAncestor(previousTip)) {
+        if (!probe.isAncestor(previousTip)) {
             log.warn(
                     OperatorEvent.PUSH_SKIPPED_TIP_NOT_ANCESTOR.head()
                             + "push skipped: taskId={}, stage={}, round={}, branch={}, reason=previous tip {} is not an"
@@ -106,7 +126,8 @@ final class BestEffortPush {
             return;
         }
 
-        GitCommandResult result = push.push(worktreeRoot, branch);
+        GitCommandResult result =
+                closing != null ? closing.push(worktreeRoot, taskId) : push.push(worktreeRoot, branch);
         String outcome = PushOutcome.describe("push", result);
         if (outcome != null) {
             log.warn(

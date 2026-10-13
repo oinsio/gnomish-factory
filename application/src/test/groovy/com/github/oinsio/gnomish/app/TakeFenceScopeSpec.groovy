@@ -60,8 +60,8 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> { journal }
-        store.readRecordedState(_) >> Optional.of(TaskState.atStageStart('build'))
-        store.readTaskRecord(_) >> Optional.of(recordWith(null, null, false))
+        store.readRecordedState(_, _) >> Optional.of(TaskState.atStageStart('build'))
+        store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
     }
 

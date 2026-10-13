@@ -44,5 +44,7 @@ abstract class GitResumeSpecBase extends ResumeSpecFixtureBase {
         Files.writeString(taskJson, rewritten)
         gitRunner.run(worktree, 'add', '-A')
         gitRunner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'mark completed')
+        // The factory's own Completed record, so registered as its closing push would (design D13).
+        registerTip(cloneDir, taskId)
     }
 }

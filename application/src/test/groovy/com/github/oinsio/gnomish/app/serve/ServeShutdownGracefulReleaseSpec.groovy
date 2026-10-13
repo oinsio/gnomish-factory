@@ -70,7 +70,7 @@ class ServeShutdownGracefulReleaseSpec extends ServeShutdownSpecBase implements 
             try {
                 persistence.persist(ref.id(), STATE, new ToolTrace(new AttemptKey(ref.id(), 'implement', 1), []))
             } catch (RevocationDetectedException ignored) {
-                handler.handle(ref, ref.id(), STATE, worktree, "gnomish/${ref.id()}", flag.reason(ref))
+                handler.handle(ref, ref.id(), STATE, worktree, flag.reason(ref))
             } finally {
                 ledger.release(ref)
             }

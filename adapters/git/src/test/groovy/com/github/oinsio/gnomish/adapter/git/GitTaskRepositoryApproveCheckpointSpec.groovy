@@ -197,11 +197,12 @@ class GitTaskRepositoryApproveCheckpointSpec extends Specification implements Ba
         tipState() == approved()
     }
 
-    def "FR3: a tip without state.json fails the approval with git's own refusal"() {
-        given: 'a branch whose tip lost its state file'
+    def "FR3: a registered commit without state.json fails the approval with git's own refusal"() {
+        given: 'a branch whose registered commit lost its state file'
         parkedAt(gated())
         runner.run(worktree(), 'rm', '-q', '.gnomish-task/state.json')
         runner.run(worktree(), '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'drop state')
+        runner.run(worktree(), 'update-ref', 'refs/gnomish-factory/PROJ-1', 'HEAD')
 
         when:
         repository.approveCheckpoint('PROJ-1', GATE, approved())

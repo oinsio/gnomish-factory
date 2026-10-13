@@ -61,7 +61,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
         Files.createDirectories(TaskWorktreePath.resolve(registeredClone, 'PROJ-1'))
         store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> { persistence }
-        store.readRecordedState(_) >> { stateRead.call() }
+        store.readRecordedState(_, _) >> { stateRead.call() }
     }
 
     private static TaskContext context(String taskId = 'PROJ-1') {

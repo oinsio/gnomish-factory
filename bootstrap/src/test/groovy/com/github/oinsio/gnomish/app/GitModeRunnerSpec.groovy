@@ -212,9 +212,10 @@ class GitModeRunnerSpec extends Specification implements BareGitRepoFixture, App
         def ex = thrown(AbortedException)
         ex.outcome() != null
 
-        and: 'the outcome is durably recorded in the worktree HEAD (GitTaskRepository commits wherever'
-        and: 'the worktree currently is, unlike the round-boundary check that caused this Aborted)'
-        def taskJson = gitOutput(worktree, 'show', 'HEAD:.gnomish-task/task.json')
+        and: 'the outcome is durably recorded on the task branch, with its register — the closing commit'
+        and: 'lands there whatever branch the worktree was left on (design D13 of tighten-spec-contract)'
+        def taskJson = gitOutput(cloneDir, 'show', 'gnomish/PROJ-6:.gnomish-task/task.json')
+        gitOutput(cloneDir, 'rev-parse', 'refs/gnomish-factory/PROJ-6') == gitOutput(cloneDir, 'rev-parse', 'gnomish/PROJ-6')
         taskJson.contains('"aborted"')
 
         and: 'the worktree is kept, unconditionally, for forensics'

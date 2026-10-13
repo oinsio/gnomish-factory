@@ -16,7 +16,7 @@ import spock.lang.TempDir
  * same {@code test-conventions} wiring reaches every Test task, and this module is where the
  * repository root is known, so the file git lists can be compared with the committed one.
  */
-class AdversarialGitConfigSpec extends Specification {
+class AdversarialGitConfigSpec extends Specification implements SeedTransferFixture {
 
     @TempDir
     Path tempDir
@@ -73,6 +73,30 @@ class AdversarialGitConfigSpec extends Specification {
         result.exitCode() == 0
         runner.run(tempDir, 'log', '-1', '--format=%an <%ae>').stdout().forParsing().trim() ==
                 "${AdversarialGitConfig.IDENTITY_NAME} <${AdversarialGitConfig.IDENTITY_EMAIL}>".toString()
+    }
+
+    def "F122, F135: every repository the test build creates is on the reftable ref backend"() {
+        given: 'a bare origin, a working repo with one commit pushed to it, a clone and a worktree'
+        Path origin = tempDir.resolve('origin.git')
+        Path work = tempDir.resolve('work')
+        Path clone = tempDir.resolve('clone')
+        Path worktree = tempDir.resolve('worktree')
+        [origin, work]*.toFile()*.mkdirs()
+        assert runner.run(origin, 'init', '-q', '--bare').exitCode() == 0
+        assert runner.run(work, 'init', '-q').exitCode() == 0
+        assert runner.run(work, 'commit', '-q', '--allow-empty', '-m', 'm').exitCode() == 0
+        assert runner.run(work, 'push', '-q', origin.toString(), 'HEAD:refs/heads/main').exitCode() == 0
+        seedClone(tempDir, origin.toString(), clone, '-q', '--branch', 'main')
+        assert runner.run(clone, 'worktree', 'add', '-q', worktree.toString(), '-b', 'task').exitCode() == 0
+
+        expect: 'the build handed git the backend the fixture names (the two ends of the sync pair agree)'
+        System.getenv(AdversarialGitConfig.REF_FORMAT_VARIABLE) == AdversarialGitConfig.REF_FORMAT
+
+        and: 'each reports it, the backend the factory clone must be on'
+        [origin, work, clone, worktree].every {
+            runner.run(it, 'rev-parse', '--show-ref-format').stdout().forParsing().trim() ==
+            AdversarialGitConfig.REF_FORMAT
+        }
     }
 
     def "FR12: a runner whose git points the variable elsewhere fails assertInEffect"() {

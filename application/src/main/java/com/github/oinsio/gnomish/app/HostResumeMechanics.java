@@ -52,7 +52,7 @@ record HostResumeMechanics(
         // a fault: the task resumes its first stage from scratch, exactly as a branch created
         // today would. The container twin is ContainerTipReader#readStateOrInitial.
         return git.store()
-                .readRecordedState(branch.worktreePath())
+                .readRecordedState(branch.worktreePath(), branch.taskId())
                 .orElseGet(() ->
                         TaskState.atStageStart(definition.stages().getFirst().name()));
     }

@@ -90,3 +90,12 @@ Docker is available.
 - [ ] 6.4 Operator-stand acceptance (human step): rewrite the stand's
       Dockerfile `FROM` the base and run one container-mode task. Verify the
       box starts and the task reaches a terminal outcome.
+
+## Carried from tighten-spec-contract
+
+- `tighten-spec-contract` (task 9.13f, D13 as amended 2026-10-13) raised the box image's git floor
+  to 2.45.1: the factory clone is on the reftable ref backend, the box's seed clone reads it with
+  the image's git, and `BoxGitFloor` refuses an older git at materialize (GF163). Noble ships git
+  2.43, so the base planned on `eclipse-temurin:25-jdk-noble` (design, task on line 58) would be
+  refused; revise the base (the reference recipe moved to `eclipse-temurin:21-jdk-resolute`, whose
+  archive ships git 2.53) through `/opsx:update` before this change is applied.

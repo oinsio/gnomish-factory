@@ -6,7 +6,7 @@ import spock.lang.Specification
 /**
  * Design D7/D10 of make-checkpoint-gate-durable: a decision request is live only under the token
  * of the round that owns it, so its path has one spelling — {@code
- * HarvestedBoundaryCheck.decisionPath(key, token)} — over one directory constant, {@code
+ * GnomeRangeInspection.decisionPath(key, token)} — over one directory constant, {@code
  * EnvelopePaths.DECISIONS_DIR}. A second spelling (a token-less name, a hand-joined
  * {@code DECISIONS_DIR + "/" + ...}) would compile, read correctly in its own spec, and reopen the
  * stale-request defect the token closed: a file under another name read as a fresh question. The
@@ -15,7 +15,8 @@ import spock.lang.Specification
  * <p>The allowlist, by file: the constant's owner ({@code EnvelopePaths}); the gnome-writable
  * directory ({@code FactoryOwnedPaths}, a directory, not a file name — {@code
  * ConsumedRequestRemoval} reaches it through {@code FactoryOwnedPaths.GNOME_WRITABLE}, so the
- * remover needs no entry here); the spelling and its carve-out ({@code HarvestedBoundaryCheck});
+ * remover needs no entry here); the spelling ({@code GnomeRangeInspection}) and its carve-outs ({@code
+ * AdmissionRule}, the admission's rules of a round);
  * and the two readers that take the spelling, never compose one ({@code BranchDecisionFile} — the
  * path handed to the gnome and the one path read — and {@code SnapshotTipCheck} — the request in a
  * snapshot's tree on resume). Every allowlisted file must still name a token, so a rename cannot
@@ -34,7 +35,8 @@ class DecisionPathOwnerSpec extends Specification {
     private static final Map<String, String> ALLOWED = [
         ('domain/src/main/java/com/github/oinsio/gnomish/domain/branch/EnvelopePaths.java'): 'owns DECISIONS_DIR',
         (GIT + 'FactoryOwnedPaths.java') : 'the gnome-writable directory',
-        (GIT + 'HarvestedBoundaryCheck.java'): 'the one spelling of the path, and its carve-out',
+        (GIT + 'GnomeRangeInspection.java'): 'the one spelling of the path',
+        (GIT + 'AdmissionRule.java') : 'the carve-out of a round\'s admission rules',
         (GIT + 'BranchDecisionFile.java') : 'the path handed to the gnome and the one path read',
         (GIT + 'SnapshotTipCheck.java') : 'the request read from a snapshot on resume',
     ]
@@ -67,8 +69,8 @@ class DecisionPathOwnerSpec extends Specification {
         shape | line || detected
         'a hand-joined path' | 'String p = EnvelopePaths.DECISIONS_DIR + "/" + key.stage() + ".json";' || true
         'a static-imported constant' | 'String p = DECISIONS_DIR + "/x.json";' || true
-        'a call of the spelling' | 'var p = HarvestedBoundaryCheck.decisionPath(key, token);' || true
-        'a javadoc mention' | ' * named by {@link HarvestedBoundaryCheck#decisionPath(AttemptKey, RoundToken)}' || false
+        'a call of the spelling' | 'var p = GnomeRangeInspection.decisionPath(key, token);' || true
+        'a javadoc mention' | ' * named by {@link GnomeRangeInspection#decisionPath(AttemptKey, RoundToken)}' || false
         'a trailing comment' | 'var p = handle.relativePath(); // was decisionPath(key)' || false
         'a longer identifier' | 'var p = round.decisionFilePath();' || false
         'a longer constant' | 'var d = DECISIONS_DIR_LEGACY;' || false

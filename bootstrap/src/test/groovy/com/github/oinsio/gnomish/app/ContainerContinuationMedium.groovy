@@ -4,13 +4,17 @@ import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.BestEffortClosingPush
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.EnvironmentAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.LocalBoxEnvironment
+import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
+import com.github.oinsio.gnomish.adapter.git.PushBestEffortTaskLifecycleStore
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.git.TaskStart
+import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.TrackerWrite
@@ -105,7 +109,9 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
     void park(String taskId, PipelineDefinition definition, String scenario) {
         def objects = objects()
         def first = TaskState.atStageStart(definition.stages().first().name())
-        new GitObjectsTaskRepository(objects, new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), ClaimEpochSource.NONE, DenialCursorSource.NONE).createTask(context(taskId),
+        new PushBestEffortTaskLifecycleStore(
+                new GitObjectsTaskRepository(objects, new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), ClaimEpochSource.NONE, DenialCursorSource.NONE),
+                runner, cloneDir, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock()).createTask(context(taskId),
                 TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), first)
         def rounds = new CurrentRound()
         def box = new LocalBoxEnvironment(cloneDir, Files.createTempDirectory(root, 'box'))
@@ -116,7 +122,10 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
         // Ahead of the fixed instant the local box stamps process starts with, so wall time is positive.
         def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(scenario), new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)),
                 { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, source)
-        def persistence = new EnvironmentAttemptPersistence(box, runner, cloneDir, objects, taskId, rounds, ClaimEpochSource.NONE)
+        // Behind the closing push, as ContainerRunSupport#persistence assembles it (design D13).
+        def persistence = new PushBestEffortAttemptPersistence(
+                new EnvironmentAttemptPersistence(box, runner, cloneDir, objects, rounds, ClaimEpochSource.NONE),
+                new BestEffortClosingPush(runner), cloneDir)
         def clock = new VirtualClock()
         def ports = new EnginePorts(executor, new FilesExistCheckRunner(), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,

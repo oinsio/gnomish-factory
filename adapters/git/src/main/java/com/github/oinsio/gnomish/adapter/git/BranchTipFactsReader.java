@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.branch.BranchTipFacts;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.branch.EnvelopeStatus;
 import com.github.oinsio.gnomish.domain.branch.RecordedTerminal;
+import com.github.oinsio.gnomish.domain.branch.TipRelation;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
@@ -20,7 +21,10 @@ import org.jspecify.annotations.Nullable;
 /**
  * Turns one {@link BranchTipSource} into the {@link BranchTipFacts} the classifier decides on: this
  * is where the {@code task.json} / {@code state.json} wire format is read, and it is the last place
- * that format is interpreted — everything above works in shapes (design D3).
+ * that format is interpreted — everything above works in shapes (design D3). The envelopes are read
+ * at the task's registered commit, and only when the tip stands at or above it: a branch whose
+ * register is missing or not an ancestor of the tip is classified by that relation alone, so no
+ * content the factory never registered is parsed (design D13 of tighten-spec-contract).
  *
  * <p>Reading never throws on content (NFR-R2): a version the build does not support becomes {@link
  * EnvelopeStatus.UnsupportedVersion} carrying both versions, and anything else that fails to parse
@@ -30,7 +34,8 @@ import org.jspecify.annotations.Nullable;
  * is the tip source's own concern.
  *
  * <p>Implements FR1, FR3, FR13, FR15, NFR-R2 of harden-task-branch-contract; FR11 of
- * make-checkpoint-gate-durable (the recorded position, read from the same tip's {@code state.json}).
+ * make-checkpoint-gate-durable (the recorded position, read from the same commit's {@code
+ * state.json}); FR13, NFR-S2 of tighten-spec-contract.
  */
 public final class BranchTipFactsReader {
 
@@ -38,29 +43,48 @@ public final class BranchTipFactsReader {
     private static final String STATE_JSON_PATH = EnvelopePaths.STATE_JSON_PATH;
 
     /**
-     * Reads every fact the classification needs from one tip.
+     * Reads every fact the classification needs from one branch.
      *
-     * @param source the medium to read the tip through; never null
+     * @param source the medium to read the branch through; never null
      * @return the facts, always complete and never a thrown content failure
      */
     public BranchTipFacts read(BranchTipSource source) {
-        Optional<UntrustedText> taskJson = source.readAtTip(TASK_JSON_PATH);
-        Optional<UntrustedText> stateJson = source.readAtTip(STATE_JSON_PATH);
-        return factsFrom(taskJson, stateJson, source.cleanupCommitInHistory());
+        TipRelation relation = source.tipRelation();
+        if (!readsAtRegister(relation)) {
+            return factsFrom(Optional.empty(), Optional.empty(), false, relation);
+        }
+        Optional<UntrustedText> taskJson = source.readAtRegister(TASK_JSON_PATH);
+        Optional<UntrustedText> stateJson = source.readAtRegister(STATE_JSON_PATH);
+        return factsFrom(taskJson, stateJson, source.registeredCleanup(), relation);
     }
 
     /**
-     * Turns envelope texts already read from a tip into facts, so a caller that also needs the raw
-     * texts (e.g. {@link TipEnvelopeReader}) reads {@code task.json} / {@code state.json} exactly
-     * once instead of once here and once more for itself.
+     * Whether the tip stands at or above its registered commit — the only relations under which
+     * the registered commit's envelope is read at all.
      *
-     * @param taskJson the tip's {@code task.json} text, or empty when absent
-     * @param stateJson the tip's {@code state.json} text, or empty when absent
-     * @param cleanupCommitInHistory whether the same tip's cleanup commit appears in its history
+     * @param relation the tip's relation to the register
+     * @return {@code true} for {@link TipRelation.AtRegister} and {@link TipRelation.AboveRegister}
+     */
+    static boolean readsAtRegister(TipRelation relation) {
+        return relation instanceof TipRelation.AtRegister || relation instanceof TipRelation.AboveRegister;
+    }
+
+    /**
+     * Turns envelope texts already read at the registered commit into facts, so a caller that also
+     * needs the raw texts (e.g. {@link TipEnvelopeReader}) reads {@code task.json} / {@code
+     * state.json} exactly once instead of once here and once more for itself.
+     *
+     * @param taskJson the registered commit's {@code task.json} text, or empty when absent
+     * @param stateJson the registered commit's {@code state.json} text, or empty when absent
+     * @param registeredCleanup whether the registered commit is the cleanup commit
+     * @param relation the tip's relation to the registered commit
      * @return the facts, always complete and never a thrown content failure
      */
     BranchTipFacts factsFrom(
-            Optional<UntrustedText> taskJson, Optional<UntrustedText> stateJson, boolean cleanupCommitInHistory) {
+            Optional<UntrustedText> taskJson,
+            Optional<UntrustedText> stateJson,
+            boolean registeredCleanup,
+            TipRelation relation) {
         Optional<TaskJsonDto> task = Optional.empty();
         Optional<StateJsonDto> state = Optional.empty();
         Optional<Position> position = Optional.empty();
@@ -93,7 +117,8 @@ public final class BranchTipFactsReader {
                 position,
                 state.map(dto -> isNotEmpty(dto.attempts())).orElse(false),
                 task.map(dto -> isNotEmpty(dto.decisions())).orElse(false),
-                cleanupCommitInHistory);
+                registeredCleanup,
+                relation);
     }
 
     private static EnvelopeStatus statusOf(boolean present) {

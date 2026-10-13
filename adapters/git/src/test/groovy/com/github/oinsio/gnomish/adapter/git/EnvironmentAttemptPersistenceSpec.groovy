@@ -35,6 +35,8 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
         new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
         commitAll(cloneDir)
         gitOutput(cloneDir, 'branch', BRANCH)
+        // The branch starts at a registered closing commit, as STARTED leaves it (design D13).
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + BRANCH.substring('gnomish/'.length()), 'refs/heads/' + BRANCH)
         gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
     }
 
@@ -45,7 +47,7 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
     }
 
     private EnvironmentAttemptPersistence persistence(LocalBoxEnvironment box, CurrentRound rounds, GitProcessRunner git = runner) {
-        new EnvironmentAttemptPersistence(box, git, cloneDir, gitObjects, TASK, rounds, ClaimEpochSource.NONE)
+        new EnvironmentAttemptPersistence(box, git, cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
     }
 
     private String tip() {
@@ -57,6 +59,7 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
         gitOutput(cloneDir, 'checkout', '-q', BRANCH)
         Files.createDirectories(cloneDir.resolve('.gnomish-task')).resolve('task.json').toFile().text = '{"outcome":null}'
         commitAll(cloneDir, 'gnomish: task resumed')
+        gitOutput(cloneDir, 'update-ref', 'refs/gnomish-factory/' + TASK, 'refs/heads/' + BRANCH)
         gitOutput(cloneDir, 'checkout', '-q', '-')
     }
 
@@ -86,7 +89,7 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
         def openTip = tip()
         OpenedRound.reopen(rounds, cloneDir, BRANCH)
         write(box, 'work.txt', 'gnome work')
-        new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, rounds).snapshot(TASK, 'implement', 0)
+        new EnvironmentRoundSnapshot(box, runner, cloneDir, rounds).snapshot(TASK, 'implement', 0)
 
         when:
         persistRound(persistence, 0)
@@ -102,7 +105,7 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
         def box = materializedBox()
         def token = rounds.opened().commit()
         write(box, ".gnomish-task/decisions/implement-a1-${token}.json", '{"question":"which db?"}')
-        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, rounds).snapshot(TASK, 'implement', 1)
+        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, rounds).snapshot(TASK, 'implement', 1)
 
         when:
         persistRound(persistence(box, rounds), 1)
@@ -112,23 +115,32 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
     }
 
     // Scenario: git/git-task-persistence / A resumed round is checked against its recorded token
-    def "FR15: a resumed round is judged against its recorded token, so a forged state write in its snapshot is caught"() {
-        given: 'a round that wrote under .gnomish-task/ and was killed between its snapshot and its state commit'
+    def "FR15: a snapshot with a forged state write is never registered, so no pickup resumes from it, and its persist is refused"() {
+        given: 'a round that wrote under .gnomish-task/ and snapshotted it'
         def box = materializedBox()
+        def registered = tip()
         def live = OpenedRound.at(cloneDir, BRANCH)
         write(box, '.gnomish-task/state.json', '{"forged":true}')
-        new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, live).snapshot(TASK, 'implement', 1)
+        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, live).snapshot(TASK, 'implement', 1)
 
-        and: 'the pickup restores the round from the snapshot record into a fresh cell'
-        def resumed = new CurrentRound()
-        resumed.restore(new SnapshotTipCheck(runner, cloneDir).inspect(TASK).get())
+        expect: 'the admission refused it: the branch and the register stayed on the registered commit'
+        snapshot != registered
+        tip() == registered
+        gitOutput(cloneDir, 'rev-parse', 'refs/gnomish-factory/' + TASK) == registered
 
-        when: 'a persistence built after the snapshot — whose tip is the snapshot itself — persists it'
-        persistRound(persistence(box, resumed), 1)
+        and: 'a pickup reads the register, so there is no snapshot to resume from'
+        new SnapshotTipCheck(runner, cloneDir).inspect(TASK).isEmpty()
 
-        then: 'the diff ran from the recorded token, not from a re-read tip that would compare the snapshot with itself'
+        when: 'the live round persists'
+        persistRound(persistence(box, live), 1)
+
+        then: 'the persist judges the recorded snapshot against its token and refuses it'
         def ex = thrown(RoundBoundaryViolationException)
         ex.message.contains('.gnomish-task/state.json')
+        tip() == registered
+
+        and: 'before anything was written in-box: the forged state.json is still what the gnome left'
+        java.nio.file.Files.readString(box.workingCopy.resolve('.gnomish-task/state.json')) == '{"forged":true}'
     }
 
     def "FR15: a resumed round's own decision file passes the carve-out under its recorded token"() {
@@ -137,7 +149,7 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
         def live = OpenedRound.at(cloneDir, BRANCH)
         def token = live.opened().commit()
         write(box, ".gnomish-task/decisions/implement-a1-${token}.json", '{"question":"which db?"}')
-        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, TASK, live).snapshot(TASK, 'implement', 1)
+        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, live).snapshot(TASK, 'implement', 1)
         def resumed = new CurrentRound()
         resumed.restore(new SnapshotTipCheck(runner, cloneDir).inspect(TASK).get())
 

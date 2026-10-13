@@ -19,14 +19,15 @@ import java.time.Instant
  * Shared "seed one task" step for adapters/git specs that read a task branch back through some
  * collaborator and need a real branch plus one recorded attempt to read: creates the task on
  * {@link #getCloneDir}, then persists one {@code implement} attempt against the worktree {@link
- * #worktreeFor} names for it.
+ * #worktreeFor} names for it. Both commits are closing commits, registered as the closing push
+ * registers them (design D13 of tighten-spec-contract), so every reader reads them back.
  *
  * <p>Implementing classes supply {@code runner}, {@code cloneDir} and {@code registeredClone} as
  * plain Groovy properties (the {@code def field = value} shape every caller already uses) — the
  * trait only reads them. The clone is obtained through the production registry ({@code
  * RegisteredCloneFixture.registered}, FR9 of add-project-registry).
  */
-trait TaskSeedFixture {
+trait TaskSeedFixture implements RegisteredBranchFixture {
 
     abstract GitProcessRunner getRunner()
 
@@ -50,10 +51,12 @@ trait TaskSeedFixture {
                 TaskStart.commit(cloneDir, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 state)
+        registerTip(cloneDir, taskId)
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
         new GitAttemptPersistence(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
+        registerTip(cloneDir, taskId)
         state
     }
 }

@@ -19,7 +19,7 @@ import spock.lang.TempDir
  * supervise-daemon-loops-and-embed-dashboard); the runner's own WARN for a bound that fired is
  * {@link GitProcessRunnerBoundedNetworkSpec}'s. The rejected-push
  * wording of each point is covered by its own spec ({@link BestEffortPushSpec},
- * {@link PushBestEffortTaskRepositorySpec}, {@link BranchPushSpec}).
+ * {@link PushBestEffortTaskRepositorySpec}, {@link HarvestAdmissionPushSpec}).
  */
 class PushTerminationLoggingSpec extends Specification {
 
@@ -34,7 +34,7 @@ class PushTerminationLoggingSpec extends Specification {
         when:
         def runner = StalledPush.timingOut()
         def events = LogCaptureSupport.capture(BestEffortPush, Level.INFO) {
-            new BestEffortPush(runner.git).pushBestEffort(
+            BestEffortPush.closing(runner.git).pushBestEffort(
             TASK_ID, 'implement', 1, tempDir, BRANCH, readyBoundary(runner), 'HEAD~1')
         }
 
@@ -70,27 +70,27 @@ class PushTerminationLoggingSpec extends Specification {
         !warnings[0].formattedMessage.contains('failed')
     }
 
-    def "FR8, UX3: the revocation push distinguishes the same three outcomes"() {
+    def "FR8, UX3: the mid-round push distinguishes the same three outcomes"() {
         when:
-        def events = LogCaptureSupport.capture(BranchPush, Level.INFO) {
-            new BranchPush(StalledPush.timingOut().git).pushBestEffort(tempDir, BRANCH)
+        def events = LogCaptureSupport.capture(HarvestAdmission, Level.INFO) {
+            new HarvestAdmission(StalledPush.timingOut().git, tempDir).pushAdmitted(TASK_ID)
         }
 
-        then: 'never throws — the salvage commit already made the work durable locally'
+        then: 'never throws — the admission already made the work durable locally'
         noExceptionThrown()
 
         and:
         def warnings = events.findAll { it.level == Level.WARN }
         warnings.size() == 1
-        warnings[0].formattedMessage.startsWith(OperatorEvent.BRANCH_PUSH_FAILED.head() + "revocation push timed out: branch=${BRANCH}")
+        warnings[0].formattedMessage.startsWith(OperatorEvent.BRANCH_PUSH_FAILED.head() + "mid-round push timed out: branch=${BRANCH}")
     }
 
     /**
      * The real boundary check over the scripted git, told that {@code HEAD} is on the task branch
      * and that the previous tip is an ancestor — so the push itself is what this spec exercises.
      */
-    private RoundBoundaryCheck readyBoundary(StalledPush push) {
+    private HostBranchProbe readyBoundary(StalledPush push) {
         push.headBranch = BRANCH
-        new RoundBoundaryCheck(push.git, tempDir, BRANCH)
+        new HostBranchProbe(push.git, tempDir, BRANCH)
     }
 }

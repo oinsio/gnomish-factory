@@ -24,13 +24,16 @@ class NoCallerSidePushGuardSpec extends Specification {
     private static final Path BOOTSTRAP_SOURCES = Path.of('src/main/java')
 
     /**
-     * The one caller-side push the design keeps (FR15 of add-tracker-port): revocation salvage is
-     * an in-box commit plus a cloneDir-rooted push with no worktree and no lifecycle write behind
-     * it, so no repository decorator can own it. Keyed by the file and the enclosing method, so
-     * moving it or adding a second push to the same file still reds this spec.
+     * The caller-side pushes the design keeps, both after an in-box salvage: an in-box commit plus a
+     * cloneDir-rooted push with no worktree and no lifecycle write behind it, so no repository
+     * decorator can own it — revocation's (FR15 of add-tracker-port), and resume's, since a
+     * harvested salvage commit is a closing commit whose register travels with the branch (FR13 of
+     * tighten-spec-contract, design D13). Keyed by the file and the enclosing method, so moving one
+     * or adding another push to the same file still reds this spec.
      */
     private static final List<String> ALLOWED = [
-        'ContainerRunSupport.java#revocationSalvageAndPush'
+        'ContainerRunSupport.java#revocationSalvageAndPush',
+        'ContainerRunSupport.java#salvageLeftovers',
     ]
 
     /** Every push invocation in the composition root's production sources, as {@code file#method}. */
@@ -81,7 +84,7 @@ class NoCallerSidePushGuardSpec extends Specification {
         pushSites() == ALLOWED
     }
 
-    def "the scan is not vacuous — it finds the revocation salvage push it allows"() {
+    def "the scan is not vacuous — it finds the salvage pushes it allows"() {
         expect:
         !pushSites().isEmpty()
     }

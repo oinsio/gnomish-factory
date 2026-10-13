@@ -6,12 +6,12 @@ import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
+import com.github.oinsio.gnomish.adapter.git.RegisteredBranchFixture
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.app.port.git.RoundToken
@@ -62,7 +62,7 @@ import spock.lang.TempDir
  * stopping (not removing) the round box, {@code --discard-work} disposal tears down the round
  * key's objects, and a disappeared branch is reported honestly.
  */
-class ContainerRunSupportSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+class ContainerRunSupportSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture, RegisteredBranchFixture {
 
     static final String KEY = 't-1'
 
@@ -99,7 +99,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         def runner = new GitProcessRunner()
         def environments = docker.environments(
                 key, cloneDir, sandbox, tempDir.resolve('guard'), OwnershipMode.MANUAL, 'test-project',
-                ContainerTipReader.restorations(runner, cloneDir, TaskIdSanitizer.branchName(taskId)))
+                ContainerTipReader.restorations(runner, cloneDir, taskId))
         new ContainerRunSupport(
                 runner, cloneDir, taskId,
                 environments, [
@@ -176,6 +176,31 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
     }
 
+    // FR13 of tighten-spec-contract (design D13): the resume salvage is followed by the closing
+    //     push. With nothing to salvage, no commit is registered, and the branch and the register
+    //     go to origin exactly as the clone holds them — so a STARTED origin never saw arrives,
+    //     register and branch together. Red with the push after salvageLeftovers removed.
+    def "FR13: a container resume's salvage pushes the branch and its register as the clone holds them"() {
+        given: 'a task created while the clone had no origin, so origin has seen neither ref'
+        def support = support()
+        assert gitExitCode(cloneDir, 'remote', 'remove', 'origin') == 0
+        createTask(support)
+        addRemote(cloneDir, 'origin', origin.toString())
+        def started = gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
+        assert gitOutput(cloneDir, 'rev-parse', 'refs/gnomish-factory/T-1') == started
+
+        and: 'the resume reattached the box, whose working copy holds nothing to salvage'
+        support.reattachFor('build')
+
+        when:
+        support.salvageLeftovers('T-1')
+
+        then: 'nothing new was registered, and origin received branch and register together'
+        gitOutput(cloneDir, 'rev-parse', 'refs/gnomish-factory/T-1') == started
+        gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == started
+        gitOutput(origin, 'rev-parse', 'refs/gnomish-factory/T-1') == started
+    }
+
     // FR3 of fix-lifecycle-push: the same safety net on the Completed boundary.
     def "completeAndDispose's terminal boundary reconciles origin when the recording push failed"() {
         given:
@@ -220,10 +245,11 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     // and resumes from the first stage instead of failing. The host twin is
     // HostResumeMechanics#readFinalState's NoSuchFileException arm.
     def "FR3: a tip carrying no state.json reads back the initial state of the first stage"() {
-        given: 'the task branch points at a commit predating the .gnomish-task/ envelope'
+        given: 'the task branch, and its register, point at a commit predating the .gnomish-task/ envelope'
         def support = support()
         createTask(support)
         gitOutput(cloneDir, 'update-ref', 'refs/heads/gnomish/T-1', gitOutput(cloneDir, 'rev-parse', 'HEAD'))
+        registerTip(cloneDir, 'T-1')
 
         expect:
         (support.readStateOrInitial('build').position() as Position.AtStage).name() == 'build'
@@ -247,11 +273,14 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         thrown(RuntimeException)
     }
 
+    // FR13 of tighten-spec-contract: the record is the register, so it is the register's vanishing
+    //     — with the branch — that leaves nothing to read.
     def "a branch that vanished mid-run is reported rather than read as an unstarted task"() {
         given:
         def support = support()
         createTask(support)
         gitOutput(cloneDir, 'update-ref', '-d', 'refs/heads/gnomish/T-1')
+        gitOutput(cloneDir, 'update-ref', '-d', 'refs/gnomish-factory/T-1')
 
         when:
         support.readStateOrInitial('build')
@@ -525,7 +554,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         commitStateJson('{ "position": ')
 
         expect: 'the read degrades to nothing recorded'
-        ContainerTipReader.restorable(new GitProcessRunner(), cloneDir, 'gnomish/T-1') == DenialRestoration.none()
+        ContainerTipReader.restorable(new GitProcessRunner(), cloneDir, 'T-1') == DenialRestoration.none()
 
         when: 'the lease builds a box on that tip'
         support.lease().environmentFor('build').readDenials()
@@ -548,7 +577,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
 
         when:
         def logged = LogCaptureSupport.capture(ContainerTipReader, Level.DEBUG) {
-            restoration = ContainerTipReader.restorable(new GitProcessRunner(tempDir.resolve('no-such-git').toString()), cloneDir, 'gnomish/T-1')
+            restoration = ContainerTipReader.restorable(new GitProcessRunner(tempDir.resolve('no-such-git').toString()), cloneDir, 'T-1')
         }
 
         then:
@@ -729,6 +758,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         gitOutput(cloneDir, 'add', '.gnomish-task/task.json')
         gitOutput(cloneDir, '-c', 'user.email=g@b.c', '-c', 'user.name=g', 'commit', '-m', 'park')
         gitOutput(cloneDir, 'checkout', originalBranch)
+        registerTip(cloneDir, 'T-1')
     }
 
     /** Commits {@code state.json} on the task branch, as a finished round would have. */
@@ -746,6 +776,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         // nothing to stage — the commit is still the round boundary the scenario needs.
         gitOutput(cloneDir, '-c', 'user.email=g@b.c', '-c', 'user.name=g', 'commit', '--allow-empty', '-m', 'state')
         gitOutput(cloneDir, 'checkout', originalBranch)
+        registerTip(cloneDir, 'T-1')
     }
 
     // NFR-R1: a branch that disappeared mid-run is an honest IllegalStateException naming it,
@@ -760,7 +791,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         then:
         def e = thrown(IllegalStateException)
         e.message.contains('gnomish/T-GHOST')
-        e.message.contains('disappeared')
+        e.message.contains('no factory register')
     }
 
     // FR3: the task branch is the sanitized taskId under gnomish/, the actual computed value —
@@ -774,7 +805,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     // collaborators are private fields with no seam for mock injection — to invoke all three of
     // FreshJudgeEnvironments::disposeCurrent (the judge box is force-removed), EnvironmentLease::
     // dispose (the round box is force-removed too, not merely stopped — unlike keepStopped), and
-    // BranchPush::pushBestEffort (the outcome commit reaches origin).
+    // the lifecycle push (the outcome commit reaches origin).
     def "completeAndDispose disposes the judge box, disposes the round box, and pushes the outcome to origin"() {
         given: 'a round box and a judge box both materialized'
         def support = support()
@@ -817,7 +848,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         support.finishCleanup()
         gitOutput(cloneDir, 'ls-tree', 'gnomish/T-1', '--', '.gnomish-task') == ''
 
-        and: 'the completed outcome reached origin (BranchPush::pushBestEffort)'
+        and: 'the completed outcome reached origin (the lifecycle push)'
         gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
     }
 

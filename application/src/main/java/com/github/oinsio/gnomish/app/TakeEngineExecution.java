@@ -148,7 +148,6 @@ record TakeEngineExecution(
                     taskId,
                     outcome.finalState(),
                     worktree,
-                    bootstrap.branchName(),
                     RevocationDetectedException.reasonFor(revoked));
         }
 

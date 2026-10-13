@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier
 import com.github.oinsio.gnomish.domain.branch.EnvelopeStatus
 import com.github.oinsio.gnomish.domain.branch.RecordedTerminal
+import com.github.oinsio.gnomish.domain.branch.TipRelation
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
@@ -21,15 +22,22 @@ class BranchTipFactsReaderSpec extends Specification {
     static class FixedTip implements BranchTipSource {
         Map<String, String> files = [:]
         boolean cleaned = false
+        TipRelation relation = new TipRelation.AtRegister()
+        List<String> reads = []
 
-        Optional<UntrustedText> readAtTip(String path) {
+        Optional<UntrustedText> readAtRegister(String path) {
+            reads << path
             Optional.ofNullable(files[path]).map {
                 UntrustedText.branchDocument(it)
             }
         }
 
-        boolean cleanupCommitInHistory() {
+        boolean registeredCleanup() {
             cleaned
+        }
+
+        TipRelation tipRelation() {
+            relation
         }
     }
 
@@ -72,7 +80,7 @@ class BranchTipFactsReaderSpec extends Specification {
         facts.recordedOutcome() == RecordedTerminal.NONE
         !facts.roundsRecorded()
         !facts.decisionsRecorded()
-        !facts.cleanupCommitInHistory()
+        !facts.registeredCleanup()
         classifier.classify(facts) == new BranchShape.Created()
     }
 
@@ -231,7 +239,7 @@ class BranchTipFactsReaderSpec extends Specification {
         def facts = reader.read(tip([:], true))
 
         then:
-        facts.cleanupCommitInHistory()
+        facts.registeredCleanup()
         classifier.classify(facts) == new BranchShape.Delivered()
     }
 

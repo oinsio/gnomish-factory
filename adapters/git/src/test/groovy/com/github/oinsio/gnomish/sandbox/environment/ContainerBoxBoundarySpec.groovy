@@ -96,8 +96,8 @@ class ContainerBoxBoundarySpec extends Specification implements BareGitRepoFixtu
         when:
         e.harvest()
 
-        then: 'the harvested branch carries the gnome\'s work and no scratch content'
-        def files = gitOutput(clone, 'ls-tree', '-r', '--name-only', BRANCH).readLines()
+        then: 'the harvest — in the task\'s quarantine (design D18) — carries the gnome\'s work and no scratch content'
+        def files = gitOutput(clone, 'ls-tree', '-r', '--name-only', 'refs/gnomish-quarantine/box-1').readLines()
         files.contains('work.txt')
         !files.any { it.contains('findings') }
 

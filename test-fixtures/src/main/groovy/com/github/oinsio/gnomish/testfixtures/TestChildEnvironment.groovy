@@ -36,6 +36,7 @@ final class TestChildEnvironment {
         'GIT_CONFIG_COUNT',
         'GIT_CONFIG_KEY_0',
         'GIT_CONFIG_VALUE_0',
+        'GIT_DEFAULT_REF_FORMAT',
         'JAVA_HOME',
         'DOCKER_HOST',
         'DOCKER_CONFIG',

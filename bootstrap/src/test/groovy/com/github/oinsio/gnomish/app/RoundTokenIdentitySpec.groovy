@@ -57,6 +57,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
 
     static final String TASK = FakeAgentSupport.defaultTaskContext().taskId()
     static final String BRANCH = TaskIdSanitizer.branchName(TASK)
+    static final String REGISTER = 'refs/gnomish-factory/' + TaskIdSanitizer.sanitize(TASK)
     static final PipelineLaw LAW = PipelineLaw.ofContent(['instructions.md': 'Do the thing.'])
 
     @TempDir
@@ -124,12 +125,17 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
         String openedOn = tip(clone)
         agentOver(roundSource(box, new CurrentRound())).execute(request)
         String snapshot = tip(clone)
-        push(clone)
+        // The snapshot reaches origin with its register, in one atomic push — as the attempt
+        // delivery an external check asks for carries it (design D13 of tighten-spec-contract).
+        assert runner.run(clone, 'push', '--atomic', 'origin', "refs/heads/${BRANCH}:refs/heads/${BRANCH}",
+        "${REGISTER}:${REGISTER}").exitCode() == 0
 
         and: 'another instance clones origin; its run has a fresh cell and a fresh box'
         Path pickupClone = seedClone(tempDir, origin.toString(), tempDir.resolve('pickup'))
-        // The task branch as a local ref, not checked out — harvest fast-forwards it, as in a factory clone.
+        // The task branch as a local ref, not checked out — harvest fast-forwards it, as in a factory
+        // clone — and the register beside it, as the touchpoint fetch lands it.
         gitOutput(pickupClone, 'branch', BRANCH, "refs/remotes/origin/${BRANCH}")
+        fetchFromOrigin(pickupClone, "${REGISTER}:${REGISTER}")
         def rounds = new CurrentRound()
         def pickupBox = new LocalBoxEnvironment(pickupClone, Files.createDirectories(tempDir.resolve('pickup-box')))
         pickupBox.materialize(BRANCH, null)
@@ -172,7 +178,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
     }
 
     private void persistRound(LocalBoxEnvironment box, Path factoryClone, CurrentRound rounds) {
-        new EnvironmentAttemptPersistence(box, runner, factoryClone, objectsOf(factoryClone), TASK, rounds, ClaimEpochSource.NONE)
+        new EnvironmentAttemptPersistence(box, runner, factoryClone, objectsOf(factoryClone), rounds, ClaimEpochSource.NONE)
                 .persist(TASK, TaskState.atStageStart('build'), new ToolTrace(new AttemptKey(TASK, 'build', 0), []))
     }
 

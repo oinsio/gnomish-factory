@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -78,8 +79,9 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
         new PipelineDefinition('1', new AutonomyLimits(3), [stage()])
     }
 
-    private GitTaskRepository repository() {
-        new GitTaskRepository(gitRunner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
+    /** The lifecycle store as production assembles it, so every seeded commit is registered (D13). */
+    private TaskLifecycleStore repository() {
+        TaskGitFixture.realClaimless().store().taskRepository(registeredClone)
     }
 
     private Path expectedWorktree(String taskId) {

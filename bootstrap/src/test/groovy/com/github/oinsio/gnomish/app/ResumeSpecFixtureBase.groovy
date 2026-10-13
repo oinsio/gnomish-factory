@@ -4,7 +4,9 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.RegisteredBranchFixture
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -33,7 +35,7 @@ import spock.lang.TempDir
  *
  * <p>Implements FR5, FR8, FR9, FR12, UX2, D3 of add-git-workflow / add-tracker-port.
  */
-abstract class ResumeSpecFixtureBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
+abstract class ResumeSpecFixtureBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture, RegisteredBranchFixture {
 
     @TempDir
     Path tempDir
@@ -89,8 +91,14 @@ tracker:
         MDC.remove('taskId')
     }
 
-    protected GitTaskRepository repository() {
-        new GitTaskRepository(gitRunner, registeredClone, taskGit.epochs(), new VirtualClock())
+    /**
+     * The lifecycle store as production assembles it ({@code TaskStoreGit#taskRepository}): the
+     * strict repository behind the closing push, so every lifecycle commit a spec seeds is
+     * registered as the factory register (design D13 of tighten-spec-contract) — the commit every
+     * reader of the branch reads at.
+     */
+    protected TaskLifecycleStore repository() {
+        taskGit.store().taskRepository(registeredClone)
     }
 
     protected Path expectedWorktree(String taskDir) {

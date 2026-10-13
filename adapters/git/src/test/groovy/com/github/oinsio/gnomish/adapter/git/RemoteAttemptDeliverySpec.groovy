@@ -26,7 +26,9 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
 
     private Path clone
     private Path origin
+    private static final String TASK = 'task-1'
     private static final String BRANCH = 'gnomish/task-1'
+    private static final String REGISTER = 'refs/gnomish-factory/task-1'
 
     def setup() {
         clone = initWorkingRepo(tempDir, 'clone')
@@ -40,6 +42,9 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
     private String commitChange(String content) {
         Files.writeString(clone.resolve('a.txt'), content)
         commitAll(clone, 'round')
+        // The snapshot registers the attempt commit in the clone, as production's does (FR13 of
+        //     tighten-spec-contract); the delivery carries that register with the branch.
+        gitOutput(clone, 'update-ref', REGISTER, 'HEAD')
         gitOutput(clone, 'rev-parse', 'HEAD').trim()
     }
 
@@ -49,7 +54,7 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
     }
 
     private RemoteAttemptDelivery delivery() {
-        new RemoteAttemptDelivery(runner, clone, BRANCH)
+        new RemoteAttemptDelivery(runner, clone, TASK)
     }
 
     /** Installs a committed pre-receive hook preset on the bare origin (ADR 0015). */
@@ -88,8 +93,9 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
         then:
         outcome == new AttemptDelivery.Outcome.Delivered()
 
-        and: 'the remote branch now carries the commit'
+        and: 'the remote branch now carries the commit, and its register with it (FR13 of tighten-spec-contract)'
         gitOutput(clone, 'ls-remote', 'origin', "refs/heads/$BRANCH").contains(sha)
+        gitOutput(clone, 'ls-remote', 'origin', REGISTER).contains(sha)
     }
 
     def "delivery is confirmed from the remote tip alone even when a push could not succeed"() {

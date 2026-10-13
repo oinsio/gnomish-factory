@@ -63,7 +63,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
                     def runner = new GitProcessRunner(gitWrapper.toString())
                     def branchCreator = new TaskBranchCreator(runner)
                     def worktreeManager = new TaskWorktreeManager(runner, registeredClone)
-                    def push = new BranchPush(runner)
+                    def push = new RefspecPush(runner)
 
                     def branchName = (branchCreator.createBranch(cloneDir, taskId, TaskStart.commit(cloneDir, 'HEAD'))
                             as BranchCreationResult.Created).branchName()
@@ -82,7 +82,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
                     def trackingRef = "refs/remotes/origin/${branchName}"
                     fetchFromOrigin(worktree, "refs/heads/${branchName}:${trackingRef}")
 
-                    push.pushBestEffort(worktree, branchName)
+                    push.push(worktree, branchName)
 
                     def cleanup = new TaskWorktreeCleanup(runner)
                     def outcome = new TaskOutcome.Completed(TaskState.atStageStart('build'))

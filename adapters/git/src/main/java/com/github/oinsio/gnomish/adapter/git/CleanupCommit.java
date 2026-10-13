@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
-import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -24,29 +23,31 @@ import org.slf4j.LoggerFactory;
  * write, then this removal — destructive last, behind every constructive receipt. Removing the
  * envelope takes the pending marker with it, so the cleaned tip needs no separate receipt.
  *
- * <p>The one kill window is between the {@code git rm} and the commit: the worktree and its index
+ * <p>The one kill window is between the {@code git rm} and the closing transaction: the worktree and its index
  * have lost the directory, but nothing durable has moved — an uncommitted worktree is not the
  * medium anyone reads, so what the next pickup sees is the tip it saw before. That frozen state is
  * a named shape of the {@code task-branch-contract} capability, a {@code Completed} tip still
  * carrying its envelope: a finished task awaiting cleanup, never one to re-execute. Its recovery
  * owner is reconcile-on-resume, which rolls forward by calling this step again.
  *
- * <p>The guard tests the <em>tip</em> (FR3, design D4 of fix-envelope-medium), so the state of the
- * worktree it meets no longer decides anything, and this step converges from all four cells of its
- * own two-command sequence:
+ * <p>The guard tests the <em>registered commit</em> (FR3, design D4 of fix-envelope-medium; design
+ * D18 of tighten-spec-contract), so the state of the worktree it meets no longer decides anything,
+ * and this step converges from all four cells of its own two-step sequence. The commit lands with
+ * its register in one ref transaction ({@link WorktreeClosingCommit}, design D13), so the register
+ * names the cleanup commit the moment the branch does:
  *
  * <table><caption>Cleanup convergence matrix</caption>
- * <tr><th>Tip / worktree</th><th>What happens</th></tr>
- * <tr><td>tip carries the directory, worktree does too</td>
+ * <tr><th>Register / worktree</th><th>What happens</th></tr>
+ * <tr><td>register carries the directory, worktree does too</td>
  *     <td>{@code git rm} removes it from index and working tree; the commit lands the removal</td></tr>
- * <tr><td>tip carries it, the removal is already staged (a predecessor killed after its {@code rm})</td>
+ * <tr><td>register carries it, the removal is already staged (a predecessor killed after its {@code rm})</td>
  *     <td>{@code --ignore-unmatch} makes the {@code rm} a silent exit 0 instead of a {@code pathspec
  *     did not match} failure; the commit lands the staged removal and one INFO line says so</td></tr>
- * <tr><td>tip carries it, the files are gone from disk but the index still tracks them (a
+ * <tr><td>register carries it, the files are gone from disk but the index still tracks them (a
  *     predecessor killed inside {@code rm}, which unlinks before it writes the index)</td>
  *     <td>the {@code rm} matches the index and removes the entries; the missing files are not an
  *     error; the commit lands the removal</td></tr>
- * <tr><td>tip carries no directory</td>
+ * <tr><td>register carries no directory</td>
  *     <td>the no-op, in this medium as in the bare-objects one</td></tr>
  * </table>
  *
@@ -80,7 +81,7 @@ final class CleanupCommit {
      *     harden-task-branch-contract); {@code null} where no claim is held
      */
     static void commit(GitRunner runner, Path worktree, String taskId, @Nullable ClaimEpoch epoch) {
-        if (!new GitShowTip(runner, worktree, GitObjects.HEAD).carries(EnvelopePaths.DIR_NAME)) {
+        if (!RegisterBase.carries(runner, worktree, taskId, EnvelopePaths.DIR_NAME)) {
             // Already cleaned: running the destructive step twice equals running it once, which is
             // what lets the completion recovery re-run safely (FR10 of harden-task-branch-contract).
             log.debug("cleanup commit for task {} is a no-op: the tip carries no envelope", taskId);
@@ -98,11 +99,11 @@ final class CleanupCommit {
             // lands that staged removal (NFR-O1 of fix-envelope-medium).
             log.info("cleanup commit for task {} lands a removal a predecessor already staged", taskId);
         }
-        GitCommandResult commit =
-                runner.run(worktree, "commit", "-m", ClaimEpochTrailer.stamp(ServiceCommitMessages.cleanup(), epoch));
-        if (commit.exitCode() != 0) {
+        if (new WorktreeClosingCommit(runner)
+                        .commit(worktree, taskId, ClaimEpochTrailer.stamp(ServiceCommitMessages.cleanup(), epoch))
+                instanceof WorktreeClosingCommit.Outcome.Failed failed) {
             throw new GitTaskRepositoryException(
-                    taskId, TaskLifecycleEvent.COMPLETED, "git commit (cleanup)", commit.stderr());
+                    taskId, TaskLifecycleEvent.COMPLETED, failed.step() + " (cleanup)", failed.evidence());
         }
         log.info("task lifecycle commit written for task {}: event={}", taskId, TaskLifecycleEvent.COMPLETED);
     }

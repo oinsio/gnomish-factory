@@ -25,6 +25,10 @@ final class ScriptedDockerCli extends DockerCli {
         if (declared != null) {
             return declared
         }
+        def probe = RecordingDockerCli.answerBoxGitVersion(args)
+        if (probe != null) {
+            return probe
+        }
         args[0] == 'inspect' ? DockerResult.of(1, '', 'No such object') : DockerResult.of(0, '', '')
     }
 

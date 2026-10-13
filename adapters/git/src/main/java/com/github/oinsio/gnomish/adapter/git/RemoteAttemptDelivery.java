@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
@@ -15,8 +16,9 @@ import org.slf4j.LoggerFactory;
  * is on the remote before an external check's poll loop starts. First the cheap read: {@code
  * ls-remote} the task branch through the shared {@link RemoteBranchTip} and, when the remote tip
  * is an object the factory clone already has, answer from ancestry alone with no push. Otherwise
- * the commit is (or may be) undelivered: re-attempt the push — the shared {@link RefspecPush},
- * same as every other push point ({@code origin branch:branch}, never {@code --force}) — once
+ * the commit is (or may be) undelivered: re-attempt the push — the shared {@link ClosingPush},
+ * the branch and its factory register in one atomic push as the clone holds them (design D13 of
+ * tighten-spec-contract; never {@code --force}), registering nothing itself — once
  * more after a first failure. A
  * commit that still cannot be delivered is {@link AttemptDelivery.Outcome.Undeliverable}: the
  * check resolves as CannotVerify (infrastructure failure), never as a poll-timeout quality
@@ -30,7 +32,8 @@ import org.slf4j.LoggerFactory;
  * infrastructure rather than quality — with a reason that says the outcome is unknown rather than
  * negative.
  *
- * <p>Implements FR21 of add-sandbox-core; FR7 of bound-subprocess-commands.
+ * <p>Implements FR21 of add-sandbox-core; FR7 of bound-subprocess-commands; FR13 of
+ * tighten-spec-contract.
  */
 public final class RemoteAttemptDelivery implements AttemptDelivery {
 
@@ -38,21 +41,24 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
 
     private final OriginRemote origin;
     private final RemoteBranchTip remoteTip;
-    private final RefspecPush refspecPush;
+    private final ClosingPush closingPush;
     private final Path cloneRoot;
+    private final String taskId;
     private final String branch;
 
     /**
      * @param runner the git subprocess seam; never null
      * @param cloneRoot the factory clone the branch and its objects live in; never null
-     * @param branch the task branch name whose tip carries the attempt commit; never null
+     * @param taskId the tracker's original taskId, whose branch tip carries the attempt commit;
+     *     never null
      */
-    public RemoteAttemptDelivery(GitRunner runner, Path cloneRoot, String branch) {
+    public RemoteAttemptDelivery(GitRunner runner, Path cloneRoot, String taskId) {
         this.origin = new OriginRemote(runner);
         this.remoteTip = new RemoteBranchTip(runner);
-        this.refspecPush = new RefspecPush(runner);
+        this.closingPush = new ClosingPush(runner);
         this.cloneRoot = cloneRoot;
-        this.branch = branch;
+        this.taskId = taskId;
+        this.branch = TaskIdSanitizer.branchName(taskId);
     }
 
     @Override
@@ -114,6 +120,6 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
     }
 
     private GitCommandResult push() {
-        return refspecPush.push(cloneRoot, branch);
+        return closingPush.push(cloneRoot, taskId);
     }
 }

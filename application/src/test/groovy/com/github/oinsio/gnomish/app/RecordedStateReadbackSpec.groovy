@@ -40,7 +40,7 @@ class RecordedStateReadbackSpec extends Specification implements SeededCloneFixt
         persistRound('PROJ-1', written)
 
         when:
-        Optional<TaskState> read = TaskGitFixture.real().store().readRecordedState(worktreeFor('PROJ-1'))
+        Optional<TaskState> read = TaskGitFixture.real().store().readRecordedState(worktreeFor('PROJ-1'), 'PROJ-1')
 
         then: 'the readback carries the exact stage and attempt count that was committed'
         read.isPresent()
@@ -53,6 +53,6 @@ class RecordedStateReadbackSpec extends Specification implements SeededCloneFixt
         Path worktree = addWorktree(cloneDir, tempDir.resolve('plain'), 'plain')
 
         expect: 'FR1 of fix-envelope-medium: absence is a value the caller routes on, not a fault'
-        TaskGitFixture.real().store().readRecordedState(worktree) == Optional.empty()
+        TaskGitFixture.real().store().readRecordedState(worktree, 'PLAIN-1') == Optional.empty()
     }
 }

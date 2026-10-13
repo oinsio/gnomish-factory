@@ -89,3 +89,12 @@ Every code task follows TDD (red Spock spec first) and carries traceability comm
       implementing entity per FR/NFR/UX of the proposal; fix any gap
 - [ ] 7.2 Full gate: `./gradlew check` green in every touched module, PIT mutation score
       at target with no new exemptions beyond the documented categories (M3)
+
+## Carried from tighten-spec-contract
+
+- `tighten-spec-contract` (task 9.13c, design D18) dissolved the declared pair
+  `RoundBoundaryCheck` / `HarvestedBoundaryCheck` into one range inspection,
+  `GnomeRangeInspection`, whose per-caller permits live in `AdmissionRule` / `PathPermit`; the
+  pair's markers are gone. Any task here that extends "both ends" of that pair (an allowed path
+  under `.gnomish-task/`, a new boundary rule) extends `AdmissionRule` once instead; revise the
+  affected tasks and design text through `/opsx:update` before this change is applied.

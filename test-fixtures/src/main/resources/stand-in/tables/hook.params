@@ -19,3 +19,9 @@
 # keeps its one bit in the receiving repository, as a real hook would (RemoteAttemptDeliverySpec,
 # ParkDeliveryFenceSpec).
 * exec-sh steps/reject-once.sh
+
+[hook-refuse-register]
+# An update hook that refuses any move of a factory register and lets every other ref through, so
+# an atomic closing push lands neither ref (FactoryRegisterIdentitySpec).
+refs/gnomish-factory/* refuse 1 data/stderr#register-refused
+* exit 0

@@ -29,7 +29,7 @@ import spock.lang.TempDir
  * branch tip via {@code git show} — no worktree, no checkout, no local branch — and renders them
  * through the shared {@code StatusReport} pure function, every field read from the tip.
  */
-class BranchStateReaderSpec extends Specification implements BareGitRepoFixture {
+class BranchStateReaderSpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
 
     @TempDir
     Path tempDir
@@ -70,6 +70,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         persistRound('PROJ-1', TaskState.atStageStart('implement'))
 
         when:
+        registerTip(cloneDir, 'PROJ-1')
         def result = reader.read(cloneDir, 'PROJ-1')
 
         then:
@@ -89,6 +90,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         persistRound('PROJ-2', TaskState.atStageStart('implement'))
 
         when:
+        registerTip(cloneDir, 'PROJ-2')
         def result = reader.read(cloneDir, 'PROJ-2')
 
         then:
@@ -104,6 +106,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         taskRepository().recordOutcome('PROJ-3', new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'), TrackerWrite.OWED)
 
         when:
+        registerTip(cloneDir, 'PROJ-3')
         def result = reader.read(cloneDir, 'PROJ-3')
 
         then:
@@ -123,6 +126,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         taskRepository().recordOutcome('PROJ-4', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), escalation), TrackerWrite.OWED)
 
         when:
+        registerTip(cloneDir, 'PROJ-4')
         def result = reader.read(cloneDir, 'PROJ-4')
 
         then:
@@ -139,6 +143,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         taskRepository().appendDecision('PROJ-5', new Decision('proceed', 'implement', 'operator', null), TaskState.atStageStart('implement'))
 
         when:
+        registerTip(cloneDir, 'PROJ-5')
         def result = reader.read(cloneDir, 'PROJ-5')
 
         then:
@@ -147,8 +152,11 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         report.lastDecision().body() == 'proceed'
     }
 
-    def "FR13: a task branch reachable only via origin (narrow fetch) is read the same way, no local branch created"() {
-        given: 'a bare origin carrying the task branch, and a fresh single-branch clone that lacks it'
+    // FR13 of tighten-spec-contract (D13, amended 2026-10-13): a full `git clone` brings the branch
+    //     as a tracking ref without its register; the touchpoint fetch still lands the register.
+    // Scenario: cli/task-inspection / Status of a branch the clone holds only as a tracking ref
+    def "FR13: a task branch reachable only via origin is read the same way, no local branch created (#observer)"() {
+        given: 'a bare origin carrying the task branch, and a fresh clone without a local branch for it'
         def bare = initBareRepo(tempDir, 'origin.git')
         def seedRepo = initWorkingRepo(tempDir, 'seed-clone')
         new File(seedRepo.toFile(), 'a.txt').text = 'first'
@@ -166,10 +174,13 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
                 new ToolTrace(new AttemptKey('PROJ-6', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))
-        runner.run(seedRegistered.worktrees().resolve('PROJ-6'), 'push', 'origin', 'gnomish/PROJ-6')
+        registerTip(seedRegistered.worktrees().resolve('PROJ-6'), 'PROJ-6')
+        runner.run(seedRegistered.worktrees().resolve('PROJ-6'), 'push', 'origin', 'gnomish/PROJ-6', 'refs/gnomish-factory/PROJ-6')
 
         def observerClone = tempDir.resolve('observer-clone')
-        seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')
+        seedClone(tempDir, bare.toString(), observerClone, *cloneArgs)
+        assert (runner.run(observerClone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/PROJ-6').exitCode() == 0) == tracked
+        assert runner.run(observerClone, 'rev-parse', '--verify', '--quiet', 'refs/gnomish-factory/PROJ-6').exitCode() != 0
 
         when:
         def result = reader.read(observerClone, 'PROJ-6')
@@ -185,6 +196,15 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         and: 'the working copy is untouched — still on main, clean status'
         runner.run(observerClone, 'branch', '--show-current').stdout().forParsing().trim() == 'main'
         runner.run(observerClone, 'status', '--porcelain').stdout().forParsing().trim() == ''
+
+        where:
+        observer | cloneArgs | tracked
+        'single-branch clone, no tracking ref' | [
+            '--branch',
+            'main',
+            '--single-branch'
+        ] | false
+        'full clone, tracking ref and no register' | ['--branch', 'main'] | true
     }
 
     def "FR13: branch absent everywhere is reported as not-found, not an exception"() {
@@ -207,6 +227,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'corrupt version')
 
         when:
+        registerTip(cloneDir, 'PROJ-7')
         def result = reader.read(cloneDir, 'PROJ-7')
 
         then: 'the shape is the answer, not a thrown version gate (NFR-R2)'
@@ -228,6 +249,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'corrupt version')
 
         when:
+        registerTip(cloneDir, 'PROJ-8')
         def result = reader.read(cloneDir, 'PROJ-8')
 
         then:
@@ -247,6 +269,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'break state')
 
         when:
+        registerTip(cloneDir, 'PROJ-10')
         def result = reader.read(cloneDir, 'PROJ-10')
 
         then:
@@ -265,6 +288,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         repository.finishCleanup('PROJ-11')
 
         when:
+        registerTip(cloneDir, 'PROJ-11')
         def result = reader.read(cloneDir, 'PROJ-11')
 
         then:
@@ -283,6 +307,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
         }
 
         when:
+        registerTip(cloneDir, 'PROJ-12')
         def result = reader.read(cloneDir, 'PROJ-12')
 
         then:
@@ -309,7 +334,8 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture 
                 new ToolTrace(new AttemptKey('PROJ-9', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))
-        runner.run(seedRegistered.worktrees().resolve('PROJ-9'), 'push', 'origin', 'gnomish/PROJ-9')
+        registerTip(seedRegistered.worktrees().resolve('PROJ-9'), 'PROJ-9')
+        runner.run(seedRegistered.worktrees().resolve('PROJ-9'), 'push', 'origin', 'gnomish/PROJ-9', 'refs/gnomish-factory/PROJ-9')
 
         def observerClone = tempDir.resolve('ro-observer-clone')
         seedClone(tempDir, bare.toString(), observerClone, '--branch', 'main', '--single-branch')

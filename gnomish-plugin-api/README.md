@@ -92,6 +92,7 @@ Breaking releases so far — pre-1.0, a break is a MINOR bump:
 | 0.9.0 | `PipelineValidator.validate` takes the configured check providers beside the model (remove-interactive-console). |
 | 0.10.0 | `AttemptRecord` gained `stop`, `RoundOutcome.NeedsDecision` lost its question and options, `BranchTipFacts` gained the recorded position, and `Position` gained `AwaitingApproval` (make-checkpoint-gate-durable). |
 | 0.11.0 | `TrackerAdapterFactory` and `CheckClientFactory` each have one `create`, taking a host-built `TrackerAdapterContext` / `CheckClientContext`; the overload chains are gone. The `:domain` `Clock` port gave way to `java.time.InstantSource` and real time travels as `TimeEquipment` (supervise-daemon-loops-and-embed-dashboard). |
+| 0.12.0 | `BranchTipFacts` reads the registered commit: `cleanupCommitInHistory` gave way to `registeredCleanup` and the new `TipRelation` (tighten-spec-contract, design D13). |
 
 0.7.0 was a non-breaking bump: no signature changed, but the `untrustedtext` and `operatorevent`
 leaves entered the published jar graph (split-logtext-leaves).

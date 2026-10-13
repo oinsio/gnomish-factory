@@ -86,17 +86,18 @@ public final class BranchStateReader {
                 throw new BranchLocationUnavailableException(taskId, reason);
             case BranchLocation.Refused(UntrustedText report) ->
                 throw new BranchLocationRefusedException(taskId, report);
-            case BranchLocation.Local local -> readAt(cloneDir, local.ref());
-            case BranchLocation.RemoteTracking tracking -> readAt(cloneDir, tracking.ref());
+            case BranchLocation.Local local -> readAt(cloneDir, taskId, local.ref());
+            case BranchLocation.RemoteTracking tracking -> readAt(cloneDir, taskId, tracking.ref());
         };
     }
 
     /**
-     * Classifies the tip at {@code ref} and renders it, or answers with the shape when the tip
-     * carries nothing to render (FR16).
+     * Classifies the branch at {@code ref} — its envelope read at the task's registered commit
+     * (design D13 of tighten-spec-contract) — and renders it, or answers with the shape when that
+     * commit carries nothing to render (FR16).
      */
-    private BranchStateResult readAt(Path cloneDir, String ref) {
-        BranchTipSource source = new RefTipSource(runner, cloneDir, ref);
+    private BranchStateResult readAt(Path cloneDir, String taskId, String ref) {
+        BranchTipSource source = RefTipSource.at(runner, cloneDir, taskId, ref);
         return switch (tipEnvelopeReader.read(source)) {
             case TipEnvelopeRead.NoState(BranchShape shape) -> new BranchStateResult.Shaped(shape);
             case TipEnvelopeRead.Loaded(BranchShape ignored, UntrustedText taskJson, UntrustedText stateJson) ->

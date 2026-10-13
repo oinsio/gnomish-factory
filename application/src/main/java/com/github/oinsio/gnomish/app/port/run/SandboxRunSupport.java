@@ -57,7 +57,11 @@ public interface SandboxRunSupport {
      */
     void reattachFor(String stage);
 
-    /** Commits the interrupted round's uncommitted leftovers in-box, as-is and unrecorded (FR6). */
+    /**
+     * Commits the interrupted round's uncommitted leftovers in-box, as-is and unrecorded (FR6). A
+     * harvested salvage commit is a closing commit: it becomes the task's factory register and is
+     * pushed with the branch in one atomic push (design D13 of tighten-spec-contract).
+     */
     void salvageLeftovers(String taskId);
 
     /** Disposes a kept environment left by a previous instance ({@code --discard-work}, FR6). */
@@ -147,7 +151,8 @@ public interface SandboxRunSupport {
     /**
      * Runs the tracker-take revocation salvage protocol (FR15 of add-tracker-port; FR1 of
      * add-serve-sandbox-lifecycle): commits any uncommitted round leftovers in-box, then
-     * best-effort pushes the task branch — the sandboxed equivalent of {@code
+     * best-effort pushes the task branch with its factory register, which a harvested salvage
+     * commit moved (design D13 of tighten-spec-contract) — the sandboxed equivalent of {@code
      * TaskSalvage#salvage} followed by {@code TaskBranchGit#pushBestEffort}, folded into one
      * method because a sandboxed run has no worktree path for those host-shaped ports to push
      * from. The box itself is left exactly as the claim loss found it — running or not — so the

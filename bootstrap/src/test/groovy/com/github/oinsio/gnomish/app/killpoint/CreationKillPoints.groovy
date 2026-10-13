@@ -64,6 +64,8 @@ final class CreationKillPoints {
                 converged: 'Created')
     }
 
+    private static final String REGISTER_NAMESPACE = 'refs/gnomish-factory/'
+
     private static void step(CreationWorld world, int index) {
         if (index == 0) {
             world.creating.createTask(
@@ -71,9 +73,15 @@ final class CreationKillPoints {
                     TaskStart.commit(world.creatingClone, 'HEAD'),
                     TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                     TaskState.atStageStart('build'))
+            // The STARTED commit is registered with it, as FirstPush registers before it pushes
+            // (design D13 of tighten-spec-contract).
+            world.gitOutput(world.creatingClone, 'update-ref', REGISTER_NAMESPACE + world.taskId,
+                    "refs/heads/${world.branch()}")
         } else {
-            world.gitOutput(world.creatingClone, 'push', 'origin',
-                    "refs/heads/${world.branch()}:refs/heads/${world.branch()}")
+            // The closing push: branch and register in one atomic push.
+            world.gitOutput(world.creatingClone, 'push', '--atomic', 'origin',
+                    "refs/heads/${world.branch()}:refs/heads/${world.branch()}",
+                    "${REGISTER_NAMESPACE}${world.taskId}:${REGISTER_NAMESPACE}${world.taskId}")
         }
     }
 

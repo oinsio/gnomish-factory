@@ -93,7 +93,7 @@ class ContainerGitModeRunnerSpec extends Specification implements BareGitRepoFix
             // The production restoration supplier, as ContainerRunSupportFactory.create wires it (FR17).
             def environments = docker.environments(
                     TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard'), OwnershipMode.MANUAL,
-                    'test-project', ContainerTipReader.restorations(gitRunner, c, TaskIdSanitizer.branchName(t)))
+                    'test-project', ContainerTipReader.restorations(gitRunner, c, t))
             new ContainerRunSupport(gitRunner, c, t, environments, s, SandboxLifecyclePass.NONE, ClaimEpochSource.NONE)
         } as ContainerSupportFactory
         def runner = new ContainerGitModeRunner(

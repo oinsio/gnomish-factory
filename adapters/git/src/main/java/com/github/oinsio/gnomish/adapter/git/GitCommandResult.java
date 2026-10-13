@@ -120,8 +120,8 @@ record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr
 
     /**
      * The git evidence a cannot-verify outcome carries: how this result ended, and what it said.
-     * Shared by {@link RoundBoundaryCheck} and {@link HarvestedBoundaryCheck}, whose boundary
-     * diffs both classify a non-zero or non-exiting invocation as cannot-verify.
+     * Used by {@link GnomeRangeInspection} and {@link EnvelopeRestore}, the boundary's two git
+     * probes, which classify a non-zero or non-exiting invocation as cannot-verify.
      *
      * <p>git's stderr is subprocess output, and this string travels into a {@code
      * GitPersistFailedException} message that is rendered into a log record, into {@code task.json}

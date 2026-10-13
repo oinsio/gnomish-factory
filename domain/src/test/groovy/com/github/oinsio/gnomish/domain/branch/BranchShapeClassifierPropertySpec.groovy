@@ -30,7 +30,16 @@ class BranchShapeClassifierPropertySpec extends Specification {
         Optional.of(new Position.PipelineEnd())
     ]
 
-    private static List<BranchTipFacts> everyTip() {
+    // FR13 of tighten-spec-contract: the tip's relation to the factory register is a fact too.
+    private static final List<TipRelation> RELATIONS = [
+        new TipRelation.AtRegister(),
+        new TipRelation.AboveRegister(),
+        new TipRelation.Diverged('a' * 40, 'b' * 40),
+        new TipRelation.NoRegister('refs/gnomish-factory/PROJ-1', 'b' * 40, true),
+        new TipRelation.NoRegister('refs/gnomish-factory/PROJ-1', 'b' * 40, false)
+    ]
+
+    static List<BranchTipFacts> everyTip() {
         def tips = []
         for (taskEnvelope in ENVELOPES) {
             for (stateEnvelope in ENVELOPES) {
@@ -39,8 +48,10 @@ class BranchShapeClassifierPropertySpec extends Specification {
                         for (rounds in [true, false]) {
                             for (decisions in [true, false]) {
                                 for (cleanup in [true, false]) {
-                                    tips << new BranchTipFacts(taskEnvelope, stateEnvelope, outcome,
-                                            position, rounds, decisions, cleanup)
+                                    for (relation in RELATIONS) {
+                                        tips << new BranchTipFacts(taskEnvelope, stateEnvelope, outcome,
+                                                position, rounds, decisions, cleanup, relation)
+                                    }
                                 }
                             }
                         }
@@ -63,7 +74,7 @@ class BranchShapeClassifierPropertySpec extends Specification {
         def shapes = tips.collect { classifier.classify(it) }
 
         then: 'the space really was enumerated, not silently emptied'
-        tips.size() == ENVELOPES.size()**2 * RecordedTerminal.values().length * POSITIONS.size() * 8
+        tips.size() == ENVELOPES.size()**2 * RecordedTerminal.values().length * POSITIONS.size() * 8 * RELATIONS.size()
 
         and: 'each verdict is one shape of the closed set, with an owner and a disposition'
         shapes.every { it != null }
@@ -118,7 +129,8 @@ class BranchShapeClassifierPropertySpec extends Specification {
             it.recordedPosition().orElse(null) instanceof Position.AwaitingApproval &&
             it.taskEnvelope() instanceof EnvelopeStatus.Parsed &&
             it.stateEnvelope() instanceof EnvelopeStatus.Parsed &&
-            !it.cleanupCommitInHistory()
+            !it.registeredCleanup() &&
+            (it.tipRelation() instanceof TipRelation.AtRegister || it.tipRelation() instanceof TipRelation.AboveRegister)
         }
 
         expect:

@@ -62,6 +62,7 @@ class ReplicaRelationSpec extends Specification {
 
     def "FR8: a refused harvest is the box-and-clone pair's own DIVERGED verdict"() {
         expect:
-        new HarvestRefusedException('gnomish/PROJ-1', UntrustedText.subprocess('non-fast-forward')).verdict() == DivergenceOutcome.DIVERGED
+        HarvestRefusedException.objectValidation('gnomish/PROJ-1',
+                FetchRefusal.parse(UntrustedText.subprocess(FetchRefusalSpec.FETCH_REFUSAL)).get()).verdict() == DivergenceOutcome.DIVERGED
     }
 }

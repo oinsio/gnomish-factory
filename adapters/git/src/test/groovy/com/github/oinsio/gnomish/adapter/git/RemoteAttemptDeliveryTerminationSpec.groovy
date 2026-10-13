@@ -106,7 +106,7 @@ class RemoteAttemptDeliveryTerminationSpec extends Specification {
     }
 
     private RemoteAttemptDelivery delivery(StalledPush push) {
-        new RemoteAttemptDelivery(push.git, tempDir, BRANCH)
+        new RemoteAttemptDelivery(push.git, tempDir, 'task-1')
     }
 
     /** A workspace carrying a commit origin's empty ls-remote answer never confirms. */

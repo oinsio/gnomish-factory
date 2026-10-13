@@ -63,6 +63,24 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
     }
 
     /**
+     * The task's registered commit (design D13 of tighten-spec-contract): the base a violation's
+     * {@code Aborted} outcome is built from (design D18), never the tip — the host twin reads every
+     * base there ({@link RegisterBase}). The other rewrites of this medium read at the tip, which
+     * here carries the register's envelope: the branch moves above the register only through the
+     * admission ({@link HarvestAdmission}), which refuses a range that changes a factory-owned path.
+     */
+    ObjectId requireRegistered(String taskId, TaskLifecycleEvent event) {
+        String register = FactoryRegister.of(taskId).name();
+        return gitObjects
+                .resolveRef(register)
+                .orElseThrow(() -> new GitTaskRepositoryException(
+                        taskId,
+                        event,
+                        "locating the factory register",
+                        UntrustedText.factory("no register \"" + register + "\" exists")));
+    }
+
+    /**
      * The tip's {@code task.json}: the committed text and its raw wire DTO. The rewrites read it
      * this way rather than through the domain record: the recorded outcome, decisions, and
      * escalation are preserved verbatim, which rebuilding from a domain outcome could not do (the
@@ -217,7 +235,9 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
      */
     void build(String taskId, CommitRequest request, TaskLifecycleEvent event) {
         try {
-            gitObjects.commit(request);
+            // A lifecycle commit is a closing commit: the branch and the factory register move to
+            // it in one ref transaction (design D13 of tighten-spec-contract, amended 2026-10-13).
+            gitObjects.commit(request.alongside(FactoryRegister.of(taskId).name()));
         } catch (StaleTipException e) {
             throw new GitTaskRepositoryException(taskId, event, "advancing task branch (tip moved concurrently)", e);
         } catch (RuntimeException e) {

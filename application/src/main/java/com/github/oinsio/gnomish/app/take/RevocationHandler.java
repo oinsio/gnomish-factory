@@ -20,8 +20,8 @@ import java.nio.file.Path;
  * TaskSalvage#salvage} — the host realization commits in the worktree, the sandboxed one commits
  * in-box and harvests (FR6 of add-sandbox-core), letting a {@code GitSalvageFailedException}
  * propagate — a failed salvage is a genuine local-durability problem, not something this handler
- * can paper over); best-effort push the branch ({@link TaskBranchGit#pushBestEffort}, which never
- * throws); post a
+ * can paper over); best-effort closing push of the branch and its factory register ({@link
+ * TaskBranchGit#pushBestEffort}, which never throws); post a
  * structural "work stopped" note; release the claim. The tracker's logical state is deliberately
  * left untouched (FR15) — revocation may have been caused by a human closing the task or claiming
  * it directly, and this handler must not fight that action, only stop working and get out of the
@@ -60,8 +60,6 @@ public record RevocationHandler(Tracker tracker, TaskSalvage worktreeSalvage, Ta
      * @param finalState the last known task state at the point of revocation; never null
      * @param worktreeRoot the checked-out task worktree; salvage and push run with this path as
      *     the git {@code cwd}
-     * @param branch the task branch name to push, e.g. {@link
-     *     com.github.oinsio.gnomish.app.git.TaskIdSanitizer#branchName}; never blank
      * @param reason free-text description of why the task was revoked, folded into the posted stop
      *     note; never blank
      * @return {@link TakeResult.Revoked} carrying {@code finalState} and the posted stop note
@@ -73,9 +71,9 @@ public record RevocationHandler(Tracker tracker, TaskSalvage worktreeSalvage, Ta
      *     propagated, for the same reason
      */
     public TakeResult.Revoked handle(
-            TaskRef ref, String taskId, TaskState finalState, Path worktreeRoot, String branch, String reason) {
+            TaskRef ref, String taskId, TaskState finalState, Path worktreeRoot, String reason) {
         worktreeSalvage.salvage(taskId);
-        branchPush.pushBestEffort(worktreeRoot, branch);
+        branchPush.pushBestEffort(worktreeRoot, taskId);
 
         // The reason names what the tracker held — the new claim's holder, a closure reason — so it
         // leaves through the comment plane at the write, with the factory's own sentences outside

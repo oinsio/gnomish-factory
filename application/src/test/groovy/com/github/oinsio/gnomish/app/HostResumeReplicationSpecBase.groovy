@@ -66,7 +66,7 @@ abstract class HostResumeReplicationSpecBase extends Specification implements Ru
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
-        store.readRecordedState(_) >> Optional.of(TaskState.atStageStart('build'))
+        store.readRecordedState(_, _) >> Optional.of(TaskState.atStageStart('build'))
         tracker.fetchTask(_) >> heldByUs()
     }
 

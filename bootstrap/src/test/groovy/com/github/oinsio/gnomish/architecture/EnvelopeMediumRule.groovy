@@ -46,7 +46,7 @@ final class EnvelopeMediumRule {
     ]
 
     private static final String READ_OWNER_HINT =
-    'the envelope is read by GitTaskStore over GitShowTip at the worktree\'s HEAD, never from the working copy'
+    'the envelope is read by GitTaskStore over GitShowTip at the task\'s registered commit, never from the working copy'
 
     private static final String PATH_OWNER_HINT =
     "the envelope's path names are declared once, by domain.branch.EnvelopePaths"

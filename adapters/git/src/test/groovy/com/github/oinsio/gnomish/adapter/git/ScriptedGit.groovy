@@ -134,6 +134,16 @@ final class ScriptedGit implements GitRunner {
         answerFor(new Call(cwd, transfer.argv()))
     }
 
+    /**
+     * A ref transaction arrives as its argv, {@code update-ref --stdin}, followed by the script's
+     * lines as further words — so a row can match the transaction by its prefix and a spec can
+     * assert which refs it moved.
+     */
+    @Override
+    GitCommandResult run(Path cwd, RefTransaction transaction) {
+        answerFor(new Call(cwd, RefTransaction.ARGV + new String(transaction.script(), 'UTF-8').readLines()))
+    }
+
     /** Every invocation so far, in order. */
     List<Call> calls() {
         calls.toList()

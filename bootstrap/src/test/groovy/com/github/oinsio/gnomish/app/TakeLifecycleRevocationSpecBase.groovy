@@ -119,8 +119,8 @@ tracker:
     repo: acme/widgets
 ''')
         commitAll(projectDir)
-        // A real origin remote so BranchPush actually pushes (with none configured, push is a
-        // silent no-op, per BranchPush's own contract) — every task worktree created via `git
+        // A real origin remote so the push actually runs (with none configured, push is a
+        // silent no-op, per every push point's contract) — every task worktree created via `git
         // worktree add` under projectDir inherits this remote from the shared .git. Also the real
         // remote a real take startup/fresh-claim now resolves and refreshes its base against (FR5,
         // FR13 of add-base-ref-resolution), never the clone's local HEAD.

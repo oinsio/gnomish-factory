@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.gittransfer.GitTransfer;
-import com.github.oinsio.gnomish.gittransfer.Refspec;
+import com.github.oinsio.gnomish.gittransfer.QuarantineRef;
 import com.github.oinsio.gnomish.gittransfer.TransferSource.Container;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerHarvest;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerTaskExecutionEnvironment;
@@ -25,8 +25,12 @@ import java.util.Optional;
  * <p>Security posture (FR5, NFR-S1): the URL and refspec are assembled from
  * factory-derived values only — the container name comes from the factory's
  * own naming scheme and the branch from the sanitized task id; nothing
- * produced inside the box is ever interpolated. The refspec carries no {@code
- * +} prefix, so git itself refuses a rewritten history (fast-forward-only).
+ * produced inside the box is ever interpolated. The fetch lands in the task's
+ * quarantine and never on the task branch (design D18 of tighten-spec-contract):
+ * the transfer owner's {@link GitTransfer#harvest} takes only a quarantine as
+ * its destination, and the branch moves only through the admission ({@link
+ * HarvestAdmission}), which refuses a rewritten history — a harvest that does not
+ * descend from the branch tip — together with every other boundary violation.
  * Everything else about the fetch — no tag auto-following, no {@code
  * FETCH_HEAD}, no submodule recursion, object validation, the {@code ext}-only
  * protocol allowlist that is what enables the transport, and full isolation
@@ -39,8 +43,7 @@ import java.util.Optional;
  *
  * <p>Failure classification: an object git's validation refused throws
  * {@link HarvestRefusedException} naming it (a boundary violation of the box,
- * FR5 of own-git-transfer-argv), as does a fast-forward refusal (the
- * history-rewrite violation, a quality signal); an unreachable docker daemon
+ * FR5 of own-git-transfer-argv); an unreachable docker daemon
  * throws {@link DockerUnavailableException} (an infrastructure failure, no
  * attempt burned, NFR-R1); anything else throws {@link HarvestFailedException}.
  *
@@ -56,12 +59,12 @@ public record ContainerHarvestFetch(GitRunner runner, Path cloneDir) implements 
     @Override
     public void fetch(String containerName, String branch) {
         GitCommandResult result = runner.run(
-                cloneDir, GitTransfer.fetch(new Container(url(containerName)), new Refspec(refspec(branch))));
+                cloneDir, GitTransfer.harvest(new Container(url(containerName)), branch, quarantine(branch)));
         if (result.termination() != Termination.EXITED) {
             // A fetch killed on its deadline or cut short by a shutdown printed at most a partial
-            // transcript, and git writes its "non-fast-forward" refusal at the very end — so
-            // classifying that transcript would grade an unanswered fetch as a history-rewrite
-            // violation. It is a plain harvest failure, named as unfinished (FR7).
+            // transcript, and git writes its object-validation refusal at the very end — so
+            // classifying that transcript would grade an unanswered fetch as a refusal. It is a
+            // plain harvest failure, named as unfinished (FR7).
             throw new HarvestFailedException(
                     branch,
                     "the harvest fetch "
@@ -86,17 +89,19 @@ public record ContainerHarvestFetch(GitRunner runner, Path cloneDir) implements 
         return "ext::docker exec -i " + containerName + " %S " + ContainerTaskExecutionEnvironment.WORKING_COPY;
     }
 
-    /** The factory-fixed refspec, no {@code +} prefix — fast-forward-only by git's own rules (FR5). */
-    static String refspec(String branch) {
-        return branch + ":" + branch;
+    /**
+     * The task's quarantine, named from the branch's core string — the part after the branch prefix,
+     * which the sanitizer leaves as it is — so the box's branch never lands on the task branch.
+     */
+    public static QuarantineRef quarantine(String branch) {
+        return FactoryRegister.quarantine(branch.substring(branch.lastIndexOf('/') + 1));
     }
 
     /**
      * Maps a failed fetch to its failure class by git's stderr: an object that
      * failed validation is a boundary violation of the box (asked first, through
      * the one parser of that grammar, design D4 of own-git-transfer-argv), a
-     * fast-forward refusal is the history-rewrite violation, a daemon outage is
-     * infrastructure, everything else is a plain harvest failure.
+     * daemon outage is infrastructure, everything else is a plain harvest failure.
      */
     static RuntimeException classify(String branch, UntrustedText stderr) {
         Optional<FetchRefusal> refusal = FetchRefusal.parse(stderr);
@@ -105,9 +110,6 @@ public record ContainerHarvestFetch(GitRunner runner, Path cloneDir) implements 
         }
         if (DockerUnavailableException.reportsDaemonUnreachable(stderr.forParsing())) {
             return new DockerUnavailableException("docker daemon is unreachable during harvest", stderr);
-        }
-        if (stderr.contains("non-fast-forward")) {
-            return new HarvestRefusedException(branch, stderr);
         }
         return new HarvestFailedException(branch, stderr);
     }

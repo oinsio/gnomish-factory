@@ -13,7 +13,12 @@ import java.util.Optional;
  * <p>Implements FR25 of add-sandbox-core.
  */
 public record CommitRequest(
-        String ref, Optional<ObjectId> expectedTip, ObjectId parent, List<TreeEdit> edits, CommitMetadata metadata) {
+        String ref,
+        Optional<ObjectId> expectedTip,
+        ObjectId parent,
+        List<TreeEdit> edits,
+        CommitMetadata metadata,
+        Optional<String> alongside) {
 
     @SuppressWarnings({"ConstantValue", "ConstantConditions", "OptionalAssignedToNull"}) // defensive: guards
     // construction paths NullAway cannot see (e.g. Groovy specs), where a null argument would
@@ -31,6 +36,33 @@ public record CommitRequest(
         if (metadata == null) {
             throw new IllegalArgumentException("commit metadata must not be null");
         }
+        if (alongside == null) {
+            throw new IllegalArgumentException("alongside must be an Optional, not null");
+        }
         edits = List.copyOf(edits);
+    }
+
+    /** A request that moves {@code ref} alone. */
+    public CommitRequest(
+            String ref,
+            Optional<ObjectId> expectedTip,
+            ObjectId parent,
+            List<TreeEdit> edits,
+            CommitMetadata metadata) {
+        this(ref, expectedTip, parent, edits, metadata, Optional.empty());
+    }
+
+    /**
+     * This request, with {@code other} set to the new commit in the same ref transaction as
+     * {@link #ref()}.
+     *
+     * @param other the second ref's full name; never blank
+     * @return the request moving both refs together
+     */
+    public CommitRequest alongside(String other) {
+        if (other.isBlank()) {
+            throw new IllegalArgumentException("the ref moved alongside must not be blank");
+        }
+        return new CommitRequest(ref, expectedTip, parent, edits, metadata, Optional.of(other));
     }
 }

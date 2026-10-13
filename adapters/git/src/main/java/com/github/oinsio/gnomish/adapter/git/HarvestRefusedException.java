@@ -1,25 +1,17 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 
 /**
- * Thrown when the fast-forward-only harvest fetch refuses the branch because its
- * history inside the environment was rewritten — the previous factory-side tip
- * is no longer an ancestor of the in-box tip, so git rejects the explicit
- * unforced refspec (FR5, design D3). This is the sandboxed twin of the
- * history-rewrite arm of {@link RoundBoundaryViolationException}: the transport
- * itself performs the ancestry check, and the factory treats a refusal exactly
- * as that existing violation — the round cannot be persisted and the task
- * aborts, with the evidence kept in the environment.
+ * Thrown when git's object validation refuses what the box sent during a harvest fetch: a
+ * malformed object, a {@code .gitmodules} that is a symbolic link — the box's content is refused
+ * before anything is admitted, and the report names the message id and the object (FR5, UX3 of
+ * own-git-transfer-argv). The factory treats it as a boundary violation of the box.
  *
- * <p>The second shape, {@link #objectValidation}, is the same boundary violation
- * decided one step earlier: git's object validation refused what the box sent
- * (a malformed object, a {@code .gitmodules} that is a symbolic link), so the
- * box's content is refused before its ancestry is even examined — the report
- * names the message id and the object in the same shape as the rewrite
- * refusal (FR5, UX3 of own-git-transfer-argv).
+ * <p>A rewritten history is no longer this exception: the harvest lands in the task's quarantine
+ * whatever the box holds, and the admission refuses a range that does not descend from the branch
+ * tip as a boundary violation ({@link HarvestAdmission}, design D18 of tighten-spec-contract).
  *
  * <p>Distinct from {@link HarvestFailedException}, which means the fetch could
  * not be completed at all (transport or repository trouble), not that git
@@ -39,15 +31,6 @@ public final class HarvestRefusedException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
-
-    /**
-     * @param branch the task branch whose harvest was refused
-     * @param stderr git's own refusal output, for the log trail; rendered through its log exit
-     */
-    public HarvestRefusedException(String branch, UntrustedText stderr) {
-        super("harvest refused for branch \"" + branch + "\": history was rewritten inside the environment"
-                + " (non-fast-forward): " + stderr);
-    }
 
     private HarvestRefusedException(String message) {
         super(message);

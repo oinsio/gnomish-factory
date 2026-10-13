@@ -28,6 +28,14 @@ The factory SHALL keep, per task, the ref `refs/gnomish-factory/<task>` in origi
 - **WHEN** a pickup, a status read or a reconcile fetches the task branch from origin
 - **THEN** the same transfer fetches the register, and a missing or non-ancestor register classifies the branch `Unknown` rather than being guessed
 
+#### Scenario: The reconcile brings the register forward
+- **WHEN** the clone's task branch equals or is ahead of origin's, and origin's register is on that line while the clone holds no register or an ancestor of origin's
+- **THEN** the reconcile moves the clone's register to origin's in one ref transaction that verifies the branch unmoved
+
+#### Scenario: A register ahead of origin's is never rolled back
+- **WHEN** a closing push was lost and a later branch-only push made origin's branch equal to the clone's, so the clone's register is ahead of origin's
+- **THEN** the reconcile leaves the clone's register naming its own closing commit
+
 ### Requirement: Factory-side branch-tip observation
 In sandboxed mode the factory SHALL observe the task branch's tip in the environment by a poll, run and rate-limited on the factory side.
 **Implements**: FR5 of add-sandbox-core; FR6, NFR-S1, UX3 of own-git-transfer-argv; FR4 of tighten-spec-contract
@@ -421,12 +429,21 @@ In host mode, task worktrees SHALL live in `GNOMISH_HOME/projects/<name>/worktre
 - **THEN** it runs `git worktree prune` and the environment orphan sweep
 
 ### Requirement: Resume from the recorded branch
-`--resume <task>` SHALL locate the branch: local → remote-tracking → narrow fetch of exactly `gnomish/<task>` — that locate step fetches nothing else, then continue by `task.json` outcome: escalated → decision dialog; paused → confirmation; null → continue from the recorded position; completed → report "task done" and exit. When the task working copy does not exist locally (another machine, or removed), resume SHALL materialize it through the bound task environment from the branch state alone.
-**Implements**: FR8 of add-git-workflow; FR6 of add-sandbox-core; FR7, FR12 of add-base-ref-resolution
+`--resume <task>` SHALL locate the branch — the local branch, else the touchpoint fetch of exactly `gnomish/<task>` and its register, else, only when origin cannot deliver, a tracking ref already present — then continue by `task.json` outcome: escalated → decision dialog; paused → confirmation; null → continue from the recorded position; completed → report "task done" and exit. A missing task working copy SHALL be materialized through the bound task environment from the branch state alone.
+**Implements**: FR8 of add-git-workflow; FR6 of add-sandbox-core; FR7, FR12 of add-base-ref-resolution; FR13 of tighten-spec-contract
+**Notes**: `git clone` brings a task branch as a remote-tracking ref without its register, so a present tracking ref does not end the locate (design D13 of tighten-spec-contract, amended 2026-10-13).
 
 #### Scenario: Another instance resumes from origin
 - **WHEN** the branch exists only on origin
 - **THEN** resume fetches that single ref and materializes an environment that continues from the recorded position
+
+#### Scenario: A tracking ref without a local branch still fetches the register
+- **WHEN** no local task branch exists and a remote-tracking ref of it is already present, as a `git clone` leaves it
+- **THEN** the locate runs the touchpoint fetch, and origin's register lands in the clone's register beside the refreshed tracking ref
+
+#### Scenario: An unreachable origin falls back to the tracking ref
+- **WHEN** no local task branch exists, a remote-tracking ref of it is present, and origin cannot deliver
+- **THEN** the locate answers with that tracking ref, the clone's register stays as an earlier touchpoint fetch left it, and a branch with no register in the clone classifies `Unknown`
 
 #### Scenario: Autonomous resume refreshes the pinned base for the law
 - **WHEN** a tracker-driven resume finds the task branch and a pinned base ref name
@@ -623,8 +640,9 @@ Push SHALL be the adapter's monopoly, coded in factory logic — never expressed
 - **THEN** the push is skipped with a WARN, the branch tip is unchanged, nothing refused becomes durable, and the authoritative verdict is the boundary violation the round close reports
 
 ### Requirement: Gnome commits within a round
-Gnome commits inside a round SHALL be allowed (encouraged via stage instructions, using plain git); the adapter's commit closes the round. At every admission of gnome commits — the harvest in sandboxed mode, the round close in host mode — one inspection SHALL judge the range above the register: the previous tip still an ancestor, no second parent, `.gnomish-task/` untouched except the current round's decision request, no `gnomish: ` subject — with three outcomes, clean, violated or cannot-verify; a violation SHALL abort the task.
+Gnome commits inside a round SHALL be allowed; the adapter's commit closes the round. Every admission of gnome commits — the harvest in sandboxed mode, the round close in host mode — SHALL run one inspection of the range above the register (the previous tip an ancestor, no second parent, `.gnomish-task/` untouched but for the round's decision request, no `gnomish: ` subject) with three outcomes: clean, violated or cannot-verify. A violation SHALL abort the task.
 **Implements**: FR13, FR16 of make-checkpoint-gate-durable; FR12 of add-git-workflow; FR21, FR23 of add-sandbox-core; FR13 of harden-logging-observability; FR13, NFR-S2 of tighten-spec-contract
+**Notes**: Stage instructions encourage the gnome to commit with plain git as it works.
 **Notes**: A boundary violation breaks durability, which is why it aborts the task instead of failing the round.
 **Notes**: The one inspection replaces the host and container twins of the check (design D18 of tighten-spec-contract); the harvest runs it before the branch moves, the host round close over `previousTip..HEAD`.
 
@@ -785,8 +803,9 @@ In sandboxed mode, materialize SHALL create the working copy as a clone from the
 - **THEN** the seed clone refuses it — the local-path shortcut that would have copied it unchecked is never taken
 
 ### Requirement: Harvest protocol
-The factory SHALL collect results by fetching the task branch from the environment into the quarantine ref `refs/gnomish-quarantine/<task>` with a factory-fixed refspec (never names produced inside the box); the task branch SHALL move to the fetched commit only after the admission inspection passed, fast-forward-only; rewritten or refused history SHALL never move it. A tag, a submodule reference, or a configuration value authored inside the box SHALL change nothing in the factory clone beyond the quarantine and task branch refs. Harvest SHALL precede any push.
+The factory SHALL collect results by fetching the task branch from the environment into the quarantine ref `refs/gnomish-quarantine/<task>` with a factory-fixed refspec; the task branch SHALL move to the fetched commit only after the admission inspection passed, fast-forward-only. A tag, a submodule reference or a configuration value authored in the box SHALL change nothing in the factory clone beyond those two refs. Harvest SHALL precede any push.
 **Implements**: FR5 of add-sandbox-core; FR6, NFR-S1, UX3 of own-git-transfer-argv; FR13, NFR-S2 of tighten-spec-contract
+**Notes**: The refspec never takes a name produced inside the box; rewritten or refused history is the subject of the scenarios below.
 **Notes**: The harvest fetch is a transfer built by the one transfer owner (see `git-transfer`); pushes run outside the environment with factory credentials.
 **Notes**: The quarantine ref is git's own receive-side shape — objects admitted to the branch only after the check passed (design D18 of tighten-spec-contract).
 
