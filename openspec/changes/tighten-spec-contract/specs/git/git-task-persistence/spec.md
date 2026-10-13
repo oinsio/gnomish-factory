@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: Factory register ref
-The factory SHALL keep, per task, the ref `refs/gnomish-factory/<task>` in origin and in its clone, naming its latest closing commit: STARTED, a round's state commit, a snapshot, an outcome, an approval, an appended decision, a salvage, the cleanup. Every closing push SHALL push the task branch and the register in one atomic push; a mid-round push or harvest SHALL move the branch alone. Every touchpoint fetch of the branch SHALL fetch the register with it.
+The factory SHALL keep, per task, the ref `refs/gnomish-factory/<task>` in origin and in its clone, naming its latest closing commit: STARTED, a round's state commit, a snapshot, an outcome, an approval, an appended decision, a salvage, the cleanup. Every closing push SHALL push the task branch and the register in one atomic push; a mid-round push or harvest SHALL move the branch alone. Every touchpoint fetch of the branch SHALL fetch the register with it, in one atomic transfer.
 **Implements**: FR13, NFR-S2 of tighten-spec-contract
 **Notes**: The register is the factory's trust anchor on the branch: a commit id is content-addressed, and only a factory closing push moves the ref (design D13 of tighten-spec-contract).
 **Notes**: In host mode the gnome shares the clone and can move the ref; the host tier carries no integrity claim (design D19), and the register there is a detection.
@@ -27,6 +27,10 @@ The factory SHALL keep, per task, the ref `refs/gnomish-factory/<task>` in origi
 #### Scenario: The touchpoint fetch carries the register
 - **WHEN** a pickup, a status read or a reconcile fetches the task branch from origin
 - **THEN** the same transfer fetches the register, and a missing or non-ancestor register classifies the branch `Unknown` rather than being guessed
+
+#### Scenario: A rejected branch update leaves the register unmoved
+- **WHEN** a touchpoint fetch's branch refspec is rejected by the clone (origin's branch is not a descendant of the clone's tracking ref)
+- **THEN** neither the tracking ref nor the register moves, and the fetch reports the rejection
 
 #### Scenario: The reconcile brings the register forward
 - **WHEN** the clone's task branch equals or is ahead of origin's, and origin's register is on that line while the clone holds no register or an ancestor of origin's

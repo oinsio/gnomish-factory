@@ -611,6 +611,34 @@ finding names.
       operator-visible reason before the seed clone runs. Verify additionally:
       `JvmProxyEgressE2ESpec` green; a spec that a box image with git older than 2.45 is refused
       with the reason.
+- [x] 9.13g F135 — the clone's ref backend checked before the first write (D13 as amended
+      2026-10-13, check-issue on the 9.13f implementation; 9.13f's "fails closed before it writes
+      anything"): `TouchpointFetch.fetch` requires the backend (`FactoryCloneRefFormat`) before
+      the fetch — the first write of every task touchpoint, so the take router's
+      `classifyShape`, the `status`/`usage` reads that never harden, and the container resume's
+      replica reconcile are covered; `GitModeRunner` and `TakeFreshClaim` harden before
+      `pruneWorktrees`. Verified: `FactoryCloneRefFormatSpec` (three features: a status read, a
+      take routing and a container resume reconcile on a files-backend clone are refused, and no
+      tracking ref or register is written), the `ScriptedGit` specs of the touchpoint over
+      `ScriptedGit.reftableClone()`, `GitModeRunnerFreshRunSpec` and `TakeFreshClaimSpec` (order
+      harden → prune) green; scoped PIT 100% (`:adapters:git` 7/7, `:application` 23/23).
+- [ ] 9.13h F122, F135 — the git floor 2.51 and the atomic touchpoint fetch (D13 as amended
+      2026-10-13, check-issue on the 9.13f implementation): `GitVersion.FLOOR` 2.51.0 and
+      `FLOOR_REASON` naming the local-clone protections, reftable lock retry (2.47) and batched
+      fetch ref updates (2.51); `BoxGitFloor.REASON` follows; `GitTransfer.fetch` for `Origin`
+      with more than one refspec passes `--atomic` (harvest unchanged); the javadoc of
+      `GitProcessRunner.run(Path, RefTransaction)` says reftable takes one store-wide lock and that
+      concurrency with other writers rests on git's lock retry, not on `CloneMutationLock`. Images
+      and texts: `docs/examples/sandbox-image/Dockerfile` and README, `JvmProxyEgressImage` and any
+      other test image (the distribution's git if ≥ 2.51, else the git-core PPA),
+      `docs/guides/operator-guide-sandbox.md`, `docs/sandbox-threat-registry.md`,
+      `docs/adr/0008-git-transfer-policy.md`, both `AdversarialGitConfig` ends, the stand-in data
+      `stdout-git`, the javadoc of `FactoryCloneRefFormat`. Verify: `GitVersionSpec`,
+      `GitVersionCheckSpec`, `BoxGitFloorSpec` at 2.51; `GitTransferSpec` and
+      `NoForcePushGuardSpec` argv expectations with `--atomic`; a spec for the scenario "A
+      rejected branch update leaves the register unmoved" (real git, marker);
+      `JvmProxyEgressE2ESpec` green; scoped PIT on the changed classes; `grep -rn "2\.45"` outside
+      `build/` and the archive lists only historical statements (the reftable readability fact).
 - [x] 9.13d D19 — the record: a new row in `docs/sandbox-threat-registry.md` (the next free
       number; envelope and service-subject forgery on the task branch read as the factory's
       record — delivery, cleanup, gate approval, law pin; mitigation: the register and the

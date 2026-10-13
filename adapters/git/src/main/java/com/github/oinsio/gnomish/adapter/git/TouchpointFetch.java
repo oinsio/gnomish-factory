@@ -24,6 +24,12 @@ import org.slf4j.LoggerFactory;
  * (git-task-persistence, "The touchpoint fetch carries the register"). Any other failure is the
  * caller's to classify, exactly as before, so an unreachable origin still costs one fetch.
  *
+ * <p>The touchpoint fetch is the first write every task touchpoint makes to the clone — before
+ * any run path hardens it, and on the {@code status}/{@code usage} reads that never do — so the
+ * clone's ref backend is required here, before the fetch ({@link FactoryCloneRefFormat}): a clone
+ * the factory refuses receives no ref (design D13 of tighten-spec-contract, as amended
+ * 2026-10-13).
+ *
  * <p>Implements FR13, NFR-S2 of tighten-spec-contract.
  */
 // Not a record: a behavior-bearing command seam over the git runner, like its siblings.
@@ -36,9 +42,11 @@ final class TouchpointFetch {
     private static final String MISSING_REMOTE_REF = "couldn't find remote ref ";
 
     private final GitRunner runner;
+    private final FactoryCloneRefFormat refFormat;
 
     TouchpointFetch(GitRunner runner) {
         this.runner = runner;
+        this.refFormat = new FactoryCloneRefFormat(runner);
     }
 
     /**
@@ -50,8 +58,11 @@ final class TouchpointFetch {
      * @param branch the branch refspec
      * @param register the register refspec
      * @return the result of the last fetch that ran
+     * @throws com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException when the clone
+     *     is not on the factory's ref backend; nothing was fetched
      */
     GitCommandResult fetch(Path repo, String taskId, Refspec branch, Refspec register) {
+        refFormat.require(repo);
         GitCommandResult both = runner.run(repo, GitTransfer.fetch(TransferSource.ORIGIN, branch, register));
         if (!both.stderr()
                 .contains(MISSING_REMOTE_REF + FactoryRegister.of(taskId).name())) {

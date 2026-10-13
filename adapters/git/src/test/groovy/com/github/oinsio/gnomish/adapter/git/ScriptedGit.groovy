@@ -73,6 +73,18 @@ final class ScriptedGit implements GitRunner {
     private final List<Row> rows = new CopyOnWriteArrayList<>()
     private final List<Call> calls = new CopyOnWriteArrayList<>()
 
+    /**
+     * A git over a factory clone on the reftable ref backend: its first row answers the backend
+     * check every touchpoint fetch makes before it writes ({@link FactoryCloneRefFormat}), so a
+     * spec of a touchpoint scripts only what it is about.
+     */
+    static ScriptedGit reftableClone() {
+        new ScriptedGit().answer([
+            'rev-parse',
+            '--show-ref-format'
+        ], 0, FactoryCloneRefFormat.REQUIRED + '\n')
+    }
+
     /** Answers every invocation starting with {@code prefix} with {@code result}. */
     ScriptedGit answer(List<String> prefix, GitCommandResult result) {
         rows << new Row(prefix, { result })

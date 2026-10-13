@@ -120,11 +120,11 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
                         assemblyRunning(executor), git, tracker, registeredClone)).claim(
                 takeOrder(readyTask(), tracker, runOrder(definition, cloneDir)))
 
+        then: 'the clone is checked (its ref backend inside harden) before anything is written to it (design D13 of tighten-spec-contract, as amended 2026-10-13)'
+        1 * branches.harden(cloneDir)
+
         then: 'run-start hygiene runs before anything is created (FR17, design D11)'
         1 * worktrees.pruneWorktrees(cloneDir)
-
-        then:
-        1 * branches.harden(cloneDir)
 
         then: 'the branch is created once from the trusted-tier default branch, then the run reaches its terminal boundary'
         1 * lifecycleStore.createTask({

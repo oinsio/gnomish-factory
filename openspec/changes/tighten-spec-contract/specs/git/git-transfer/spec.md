@@ -181,8 +181,9 @@ that `FETCH_HEAD` is untouched.
 
 ### Requirement: Git version floor at startup
 The factory SHALL read the installed git version once at startup, before any transfer, and
-SHALL refuse to run below 2.45.1 — the release whose local-clone protections the seed clone
-depends on — with a report naming the floor, the installed version, and the reason. A git that
+SHALL refuse to run below 2.51.0 — the lowest release that carries the local-clone protections
+the seed clone depends on, reftable lock retry (2.47) and fetch ref updates in one transaction
+(2.51), which the factory clone's concurrent writers and the touchpoint fetch depend on — with a report naming the floor, the installed version, and the reason. A git that
 cannot report its version SHALL be refused the same way. The check SHALL log one INFO line with
 the detected version and the floor when it passes.
 **Implements**: FR10, NFR-R2, NFR-O1, UX2 of own-git-transfer-argv

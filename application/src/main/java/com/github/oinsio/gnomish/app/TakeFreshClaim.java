@@ -62,8 +62,9 @@ final class TakeFreshClaim {
         TaskGit git = wiring.git();
         Path cloneDir = order.run().cloneDir();
 
-        git.worktrees().pruneWorktrees(cloneDir);
+        // The backend check inside harden first: a refused clone gets no worktree-registry write.
         git.branches().harden(cloneDir);
+        git.worktrees().pruneWorktrees(cloneDir);
 
         TaskState notYetStarted = TaskState.atStageStart(
                 order.run().definition().stages().getFirst().name());

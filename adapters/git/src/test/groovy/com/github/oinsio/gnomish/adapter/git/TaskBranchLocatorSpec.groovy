@@ -160,7 +160,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         given: 'a git whose tracking ref exists and whose fetch was cut off on its deadline'
         // The exit code is authoritative only on EXITED (GitCommandResult), so a zero carried by
         // a cut-off fetch must not count as delivery.
-        def git = new ScriptedGit()
+        def git = ScriptedGit.reftableClone()
                 .answer(['fetch'], GitCommandResult.of(0, '', '', Termination.TIMED_OUT))
                 .answer([
                     'rev-parse',
@@ -314,7 +314,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
      * (an {@code ls-remote} listing) and whose every fetch exits with {@code fetch}.
      */
     private static ScriptedGit originCarries(GitCommandResult fetch) {
-        new ScriptedGit()
+        ScriptedGit.reftableClone()
                 .answer(['fetch'], fetch)
                 .answer(['ls-remote'], 0, "${'1' * 40}\trefs/heads/gnomish/PROJ\n")
                 .answer(['rev-parse'], 1)
@@ -402,7 +402,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
     def "FR6: a fetch cut off on its deadline is unavailable even when the origin read fails too"() {
         given: 'a git that stalls on every network command and denies having an origin at all'
         def cutOff = GitCommandResult.of(143, '', '', Termination.TIMED_OUT)
-        def stalling = new ScriptedGit()
+        def stalling = ScriptedGit.reftableClone()
                 .answer(['fetch'], cutOff)
                 .answer(['ls-remote'], cutOff)
                 .answer([

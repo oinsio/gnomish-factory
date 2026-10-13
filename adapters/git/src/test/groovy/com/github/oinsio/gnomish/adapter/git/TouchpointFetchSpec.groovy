@@ -23,7 +23,7 @@ class TouchpointFetchSpec extends Specification {
 
     def "FR13: one transfer names the branch and the register, and its result is the caller's"() {
         given:
-        def git = new ScriptedGit().answer(['fetch'], exit, '', stderr)
+        def git = ScriptedGit.reftableClone().answer(['fetch'], exit, '', stderr)
 
         when:
         def result = new TouchpointFetch(git).fetch(CLONE, 'T-1', BRANCH, REGISTER)
@@ -45,7 +45,7 @@ class TouchpointFetchSpec extends Specification {
 
     def "FR13: a branch origin holds no register for is fetched alone, by a second transfer"() {
         given:
-        def git = new ScriptedGit()
+        def git = ScriptedGit.reftableClone()
                 .answers(['fetch'],
                 GitCommandResult.of(128, '', "fatal: couldn't find remote ref refs/gnomish-factory/T-1\n"),
                 GitCommandResult.of(0, '', ''))

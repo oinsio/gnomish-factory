@@ -110,6 +110,62 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         gitOutput(clone, 'config', 'core.hooksPath').endsWith(FactoryCloneHardening.EMPTY_HOOKS_DIR)
     }
 
+    def "F135: a status read of a files-backend clone is refused before the touchpoint fetch writes a ref"() {
+        given: 'origin carries the task branch and its register; the clone is on the files backend'
+        Path clone = filesCloneOfOriginWithTask()
+        def branches = TaskGitFixture.realClaimless().branches()
+
+        when: 'status reads the task, which no run path hardened first'
+        branches.readState(clone, 'PROJ-1')
+
+        then: 'the refusal, and neither the tracking ref nor the register was written'
+        thrown(CloneRefFormatRefusedException)
+        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/PROJ-1') != 0
+        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', FactoryRegister.of('PROJ-1').name()) != 0
+    }
+
+    def "F135: routing a take over a files-backend clone is refused before the touchpoint fetch writes a ref"() {
+        given:
+        Path clone = filesCloneOfOriginWithTask()
+        def branches = TaskGitFixture.realClaimless().branches()
+
+        when: 'the take router classifies the branch before any run path hardens the clone'
+        branches.classifyShape(clone, 'PROJ-1')
+
+        then:
+        thrown(CloneRefFormatRefusedException)
+        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/PROJ-1') != 0
+        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', FactoryRegister.of('PROJ-1').name()) != 0
+    }
+
+    def "F135: a replica reconcile on a files-backend clone is refused before the touchpoint fetch writes a ref"() {
+        given: 'a local task branch, so the container resume reconciles the pair and fetches beside it'
+        Path clone = filesCloneOfOriginWithTask()
+        assert gitExitCode(clone, 'update-ref', 'refs/heads/gnomish/PROJ-1', gitOutput(clone, 'rev-parse', 'HEAD')) == 0
+        def branches = TaskGitFixture.realClaimless().branches()
+
+        when:
+        branches.ensureLocalTaskBranch(clone, 'PROJ-1')
+
+        then:
+        thrown(CloneRefFormatRefusedException)
+        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/PROJ-1') != 0
+        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', FactoryRegister.of('PROJ-1').trackingName()) != 0
+    }
+
+    /** A files-backend clone of an origin that holds the task branch and its factory register. */
+    private Path filesCloneOfOriginWithTask() {
+        Path origin = initBareRepo(tempDir)
+        Path work = initTaskWorkingRepo(tempDir)
+        String tip = gitOutput(work, 'rev-parse', 'HEAD')
+        assert gitExitCode(work, 'push', origin.toString(),
+        "${tip}:refs/heads/gnomish/PROJ-1", "${tip}:${FactoryRegister.of('PROJ-1').name()}") == 0
+        Path clone = filesClone()
+        commit(clone, 'local.txt', 'local')
+        addRemote(clone, 'origin', origin.toString())
+        clone
+    }
+
     /** A working clone forced onto the files backend, as `git clone` made one before this change. */
     private Path filesClone() {
         Path clone = tempDir.resolve('files-clone')

@@ -353,7 +353,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
      * A git over two unrelated tips — the local one all {@code a}, origin's tracking ref all
      * {@code b}, no common ancestor — whose fetch succeeds; the rows after it decide the swap.
      */
-    private static ScriptedGit diverged(ScriptedGit git = new ScriptedGit()) {
+    private static ScriptedGit diverged(ScriptedGit git = ScriptedGit.reftableClone()) {
         git.answer(['fetch'], 0)
         .answer(['merge-base'], 1)
         .answer([
@@ -370,7 +370,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
     // Scenario: lifecycle/task-branch-contract / Divergence resolves automatically under the lease
     def "FR8: a local tip that keeps moving loses the compare-and-swap and is never overwritten blindly"() {
         given: 'a git whose ref swap always loses, standing in for a second writer on the branch'
-        def losingSwapGit = diverged(new ScriptedGit().answer(['update-ref'], 1, '', CANNOT_LOCK_REF + '\n'))
+        def losingSwapGit = diverged(ScriptedGit.reftableClone().answer(['update-ref'], 1, '', CANNOT_LOCK_REF + '\n'))
         def clone = tempDir
 
         and: 'a sink for the lines it emits on its way to refusing'
@@ -412,7 +412,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
 
     def "FR8: a losing swap that said nothing is named as such in the second-writer diagnosis"() {
         given: 'a losing-swap git whose update-ref fails silently'
-        def git = diverged(new ScriptedGit().answer(['update-ref'], 1))
+        def git = diverged(ScriptedGit.reftableClone().answer(['update-ref'], 1))
 
         when:
         ReplicaPairReconciler.forWorktree(git, tempDir, underTenure)
@@ -429,7 +429,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
     // tip, where salvage reads it as the interrupted round's work and commits it straight back.
     def "FR8: a working-tree resync that fails refuses the reconciliation instead of reporting success"() {
         given: 'a git that swaps the diverged ref but cannot finish the resync'
-        def git = diverged(new ScriptedGit()
+        def git = diverged(ScriptedGit.reftableClone()
                 .answer([failing], 1, '', LOCK_INDEX + '\n')
                 .answer(['reset'], 0)
                 .answer(['clean'], 0)

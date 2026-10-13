@@ -98,8 +98,9 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, RegisteredClone register
         Path cloneDir = order.cloneDir();
         PipelineDefinition definition = order.definition();
 
-        git.worktrees().pruneWorktrees(cloneDir);
+        // The backend check inside harden first: a refused clone gets no worktree-registry write.
         git.branches().harden(cloneDir);
+        git.worktrees().pruneWorktrees(cloneDir);
 
         String branchName = branchName(taskId);
         Path worktree = worktreePath(taskId);

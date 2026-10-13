@@ -85,7 +85,7 @@ class ReplicaPairReconcilerTerminationSpec extends Specification {
      * to produce on demand.
      */
     private static Map stallingOn(String stalled) {
-        def git = new ScriptedGit()
+        def git = ScriptedGit.reftableClone()
                 .stalls([stalled], new CountDownLatch(1))
                 .answer(['fetch'], 0)
                 .answer(['update-ref'], 0)

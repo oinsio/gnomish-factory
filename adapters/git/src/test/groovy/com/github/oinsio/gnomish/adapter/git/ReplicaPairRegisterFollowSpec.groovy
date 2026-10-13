@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.gittransfer.GitTransfer
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.subprocess.Termination
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -143,7 +144,7 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
                         runner.run(cwd, args)
                     }
 
-                    GitCommandResult run(Path cwd, com.github.oinsio.gnomish.gittransfer.GitTransfer transfer) {
+                    GitCommandResult run(Path cwd, GitTransfer transfer) {
                         runner.run(cwd, transfer)
                     }
 
@@ -167,7 +168,7 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
      * line, so the reconcile reaches the register move; {@code updateRef} answers that move.
      */
     private static ScriptedGit equalPairWithOriginRegister(GitCommandResult updateRef) {
-        new ScriptedGit()
+        ScriptedGit.reftableClone()
                 .answer(['fetch'], 0)
                 .answer(['merge-base'], 0)
                 .answer(['update-ref'], updateRef)
