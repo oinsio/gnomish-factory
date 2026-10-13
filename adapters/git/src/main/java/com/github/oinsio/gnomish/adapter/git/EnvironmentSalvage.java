@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException;
+import com.github.oinsio.gnomish.subprocess.Termination;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -75,6 +76,10 @@ public record EnvironmentSalvage(
 
     private static final String STATUS = "git status --porcelain";
 
+    // The exit code COMMIT_SCRIPT reports when the restore left nothing to commit. Git itself exits
+    // with 1, 128 or 129 on failure, never 3, so the code cannot be confused with a failed commit.
+    private static final int NOTHING_LEFT = 3;
+
     // The state directory, the pathspec and the commit message travel as positional args ($1-$3),
     // never string-interpolated into the script, so none of them can carry a shell metacharacter
     // that alters the command — the same defense-in-depth pattern EnvironmentAttemptPersistence
@@ -85,8 +90,8 @@ public record EnvironmentSalvage(
             + " git -c core.hooksPath= checkout HEAD -- \"$1\" \"$2\" || exit 1;"
             + " git clean -fd -- \"$1\" \"$2\" >/dev/null || exit 1;"
             + " fi;"
-            + " if [ -n \"$(git status --porcelain)\" ]; then"
-            + " git add -A && git -c core.hooksPath= commit -m \"$3\"; fi";
+            + " [ -n \"$(git status --porcelain)\" ] || exit " + NOTHING_LEFT + ";"
+            + " git add -A && git -c core.hooksPath= commit -m \"$3\"";
 
     /**
      * The in-box salvage script: put the factory-owned {@code .gnomish-task/} paths back the way
@@ -102,7 +107,9 @@ public record EnvironmentSalvage(
      * twin {@link WorktreeSalvage#salvage} makes the same guarded-then-fatal distinction. The
      * leftovers are re-probed afterwards, because a working copy whose only dirt WAS a factory file
      * has nothing left to commit — and {@code git commit} with an empty index is a failure, not a
-     * no-op.
+     * no-op. That outcome exits with {@link #NOTHING_LEFT}, so the caller knows no salvage commit
+     * exists: with none made, there is nothing to harvest or admit under the salvage rule, whose
+     * top must be the salvage commit — a gnome commit at the top would be refused as a forgery.
      *
      * <p>The commit message is stamped with the claim epoch trailer (FR13 of
      * harden-task-branch-contract), same as the host {@link WorktreeSalvage}. Script text and data
@@ -150,8 +157,8 @@ public record EnvironmentSalvage(
      *
      * @param taskId the task whose leftovers are salvaged
      * @return {@code true} when a salvage commit was made in-box, harvested and admitted; {@code
-     *     false} when there was nothing to salvage, or the environment was lost before the commit
-     *     or its harvest
+     *     false} when there was nothing to salvage — no leftovers, or only factory-owned ones the
+     *     restore put back — or the environment was lost before the commit or its harvest
      * @throws RoundBoundaryViolationException if the admission refuses the harvested range
      * @throws GitSalvageFailedException if the admission could not judge it
      */
@@ -161,6 +168,9 @@ public record EnvironmentSalvage(
                 return false;
             }
             InBoxGitCommand.Outcome commit = exec(COMMIT_SCRIPT, commitArguments(taskId));
+            if (commit.termination() == Termination.EXITED && commit.exitCode() == NOTHING_LEFT) {
+                return false;
+            }
             if (!commit.succeeded()) {
                 throw new GitSalvageFailedException(taskId, "in-box salvage commit", commit.output());
             }

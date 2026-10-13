@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
@@ -120,6 +121,36 @@ class EnvironmentSalvageHarvestedSpec extends Specification implements BareGitRe
         gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH) == before
     }
 
+    def "FR13: factory-owned dirt alone is no salvage, #gnome"() {
+        given: 'a branch carrying state.json, and a box whose only dirt is under the state directory'
+        def box = box { Path clone, Path dir ->
+            Files.createDirectories(clone.resolve('.gnomish-task'))
+            Files.writeString(clone.resolve('.gnomish-task/state.json'), '{"recorded":true}')
+            commitAll(clone)
+            gitOutput(clone, 'branch', '-f', BRANCH)
+            gitOutput(clone, 'update-ref', 'refs/gnomish-factory/SALV-H', 'refs/heads/' + BRANCH)
+            new LocalBoxEnvironment(clone, dir)
+        }
+        def before = gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH)
+        if (committed) {
+            new File(box.workingCopy.toFile(), 'work.txt').text = 'committed by the gnome'
+            gitOutput(box.workingCopy, 'add', '-A')
+            gitOutput(box.workingCopy, 'commit', '-q', '-m', 'gnome')
+        }
+        Files.writeString(box.workingCopy.resolve('.gnomish-task/state.json'), '{"stale":true}')
+
+        expect: 'nothing was salvaged, nothing refused, nothing registered'
+        !new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).salvageHarvested('SALV-H')
+        gitOutput(cloneDir, 'rev-parse', 'refs/heads/' + BRANCH) == before
+        gitOutput(cloneDir, 'rev-parse', 'refs/gnomish-factory/SALV-H') == before
+        Files.readString(box.workingCopy.resolve('.gnomish-task/state.json')) == '{"recorded":true}'
+
+        where:
+        committed | gnome
+        true | 'with a gnome commit above the register'
+        false | 'with the box HEAD already on the branch'
+    }
+
     def "FR13: a salvage the admission cannot judge fails the salvage, naming the admission"() {
         given: 'a clone whose register is gone'
         def box = box { Path clone, Path dir ->
@@ -132,7 +163,7 @@ class EnvironmentSalvageHarvestedSpec extends Specification implements BareGitRe
         new EnvironmentSalvage(box, ClaimEpochSource.NONE, new GitProcessRunner(), cloneDir).salvageHarvested('SALV-H')
 
         then:
-        def ex = thrown(com.github.oinsio.gnomish.app.port.git.GitSalvageFailedException)
+        def ex = thrown(GitSalvageFailedException)
         ex.message.contains('harvest admission')
     }
 }
