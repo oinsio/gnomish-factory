@@ -36,6 +36,13 @@ class SplitTenureRecordSpec extends Specification {
         'new GitTaskWorktrees(',
     ]
 
+    /** The writers whose constructors only {@code :adapters:git} may call. */
+    private static final List<String> WRITERS = [
+        'GitTaskStore',
+        'GitTaskBranches',
+        'GitTaskWorktrees'
+    ]
+
     /** The one module whose sources build the writers directly: the package that declares them. */
     private static final String WRITER_MODULE = 'adapters/git/'
 
@@ -89,27 +96,40 @@ final class Assembly {
 '''
     }
 
-    private boolean compiles(String source) {
+    /** The compiler's diagnostics for {@code source}, or an empty string when it compiles. */
+    private String compile(String source) {
         Path dir = Files.createDirectories(tempDir.resolve(UUID.randomUUID().toString()))
         Path file = dir.resolve('Assembly.java')
         Files.writeString(file, source)
         def out = new ByteArrayOutputStream()
         int exit = ToolProvider.systemJavaCompiler.run(null, out, out,
                 '-proc:none', '-d', dir.toString(), '-cp', System.getProperty('java.class.path'), file.toString())
-        exit == 0
+        exit == 0 ? '' : out.toString()
     }
 
     // The control: the probe compiles the production shape, so a refusal below is the split's own
     def "FR4: an assembly whose writers and tracker share one book compiles"() {
         expect:
-        compiles(assembly())
+        compile(assembly()).isEmpty()
     }
 
-    // FR4: the stamping half and the recording half must be one object, by the compiler's hand
+    // FR4: the stamping half and the recording half must be one object, by the compiler's hand —
+    //     and for that reason alone: each writer's constructor is refused as package-private, and
+    //     nothing else in the split shape is an error
     // Scenario: lifecycle/task-branch-contract / A split tenure record cannot be assembled
     def "FR4: an assembly whose writers stamp from one book while the tracker fills another does not compile"() {
-        expect:
-        !compiles(split())
+        when:
+        def errors = compile(split()).readLines().findAll {
+            it.contains('error:')
+        }
+
+        then:
+        errors.size() == WRITERS.size()
+        WRITERS.every { writer ->
+            errors.any {
+                it.contains("${writer}(") && it.contains("is not public in ${writer};")
+            }
+        }
     }
 
     // FR4: Groovy compiles a package-private constructor call from any package, so the compiler's

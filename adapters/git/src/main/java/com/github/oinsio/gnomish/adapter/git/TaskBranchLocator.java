@@ -118,7 +118,7 @@ public final class TaskBranchLocator {
         GitCommandResult fetch = touchpoint.fetch(
                 cloneDir, taskId, new Refspec(branchName + ":" + trackingRef), FactoryRegister.fetchedInPlace(taskId));
         if (tracked) {
-            return delivered(fetch)
+            return fetch.succeeded()
                     ? new BranchLocation.RemoteTracking(trackingRef)
                     : fallBack(branchName, trackingRef, fetch);
         }
@@ -140,14 +140,6 @@ public final class TaskBranchLocator {
             return new BranchLocation.NotFound();
         }
         return classifyFailedFetch(cloneDir, branchName, fetch);
-    }
-
-    /**
-     * Whether the touchpoint fetch ran to its own exit and succeeded. Only consulted beside a
-     * tracking ref that was present before the fetch, where the ref's presence proves nothing.
-     */
-    private static boolean delivered(GitCommandResult fetch) {
-        return fetch.termination() == Termination.EXITED && fetch.exitCode() == 0;
     }
 
     /**

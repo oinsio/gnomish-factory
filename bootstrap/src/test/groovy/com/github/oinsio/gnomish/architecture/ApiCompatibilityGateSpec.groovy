@@ -93,8 +93,8 @@ class ApiCompatibilityGateSpec extends Specification {
     // FR4 of split-into-modules: the baseline is the published jar graph at the declared version —
     //     a jar joining or leaving the graph, or a version bump, fails here until the baseline is
     //     regenerated in the same change
+    // F110: scenario text aligned to what this test asserts
     // Scenario: plugin/plugin-api-contract / A jar-set change is re-baselined with a version bump
-    // F110: text aligned to code (8.15)
     def "the committed baseline is the published jar graph, at the version the module declares"() {
         given: 'the module itself and every project its layering gate admits into its jar graph'
         def buildFile = publishedApiBuildFile().text

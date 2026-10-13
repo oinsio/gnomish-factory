@@ -93,8 +93,8 @@ class GithubMarkerInstantSpec extends Specification {
     }
 
     // FR20: the claim marker and the heartbeat marker both read the source the adapter holds.
+    // F102: scenario text aligned to what this test asserts
     // Scenario: core/time-source / A marker carries the virtual instant
-    // F102: text aligned to code (8.15)
     def "FR20: a claim marker and a heartbeat marker carry the virtual source's instant at the write"() {
         when: 'a claim is written at the start instant'
         claim()

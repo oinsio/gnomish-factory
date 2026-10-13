@@ -33,11 +33,11 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
         def bare = initBareRepo(tempDir, 'origin.git')
         def seed = initWorkingRepo(tempDir, 'seed')
         commit(seed, 'seed.txt', 'seed')
-        runner.run(seed, 'remote', 'add', 'origin', bare.toString())
-        runner.run(seed, 'push', 'origin', 'HEAD:refs/heads/main')
-        runner.run(seed, 'checkout', '-b', branchName)
+        gitOutput(seed, 'remote', 'add', 'origin', bare.toString())
+        gitOutput(seed, 'push', 'origin', 'HEAD:refs/heads/main')
+        gitOutput(seed, 'checkout', '-b', branchName)
         commit(seed, 'a.txt', 'first')
-        runner.run(seed, 'push', 'origin', branchName)
+        gitOutput(seed, 'push', 'origin', branchName)
 
         def clone = seedClone(tempDir, bare.toString(), tempDir.resolve('clone'))
         fetchFromOrigin(clone, "refs/heads/${branchName}:refs/remotes/origin/${branchName}")
@@ -47,7 +47,7 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
     }
 
     private String tip(Path repo, String ref = 'HEAD') {
-        runner.run(repo, 'rev-parse', ref).stdout().forParsing().trim()
+        gitOutput(repo, 'rev-parse', '--verify', ref)
     }
 
     private DivergenceOutcome reconcile(Path worktree) {
@@ -58,7 +58,7 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
     def "FR13: an equal branch with no register in the clone adopts origin's register"() {
         given: 'origin registered its tip; the clone has the same branch and no register, as a git clone leaves it'
         def env = setUpClonedBranch()
-        runner.run(env.seed, 'push', 'origin', "HEAD:${REGISTER}")
+        gitOutput(env.seed, 'push', 'origin', "HEAD:${REGISTER}")
         def logs = LogCaptureSupport.attach(ReplicaPairReconciler, Level.DEBUG)
 
         when:
@@ -82,11 +82,11 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
     def "FR13: a branch ahead of origin with an older register moves it forward to origin's"() {
         given: 'the clone registered the first commit; origin registered a later one; the clone then went ahead'
         def env = setUpClonedBranch()
-        runner.run(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
+        gitOutput(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
         commit(env.seed, 'b.txt', 'closing')
-        runner.run(env.seed, 'push', 'origin', branchName, "HEAD:${REGISTER}")
+        gitOutput(env.seed, 'push', 'origin', branchName, "HEAD:${REGISTER}")
         fetchFromOrigin(env.clone, "refs/heads/${branchName}:refs/remotes/origin/${branchName}")
-        runner.run(env.worktree, 'merge', '--ff-only', "origin/${branchName}")
+        gitOutput(env.worktree, 'merge', '--ff-only', "origin/${branchName}")
         commit(env.worktree, 'c.txt', 'gnome work above it')
 
         when:
@@ -101,11 +101,11 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
     def "FR13: a lost closing push carried by a later branch-only push keeps the clone's register"() {
         given: 'origin registered the first commit'
         def env = setUpClonedBranch()
-        runner.run(env.seed, 'push', 'origin', "HEAD:${REGISTER}")
+        gitOutput(env.seed, 'push', 'origin', "HEAD:${REGISTER}")
 
         and: 'the clone closed a commit whose atomic push was lost, then a branch-only push carried the line'
         commit(env.worktree, 'c.txt', 'closing commit, push lost')
-        runner.run(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
+        gitOutput(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
         def closing = tip(env.worktree)
         commit(env.worktree, 'd.txt', 'gnome work')
         assert runner.run(env.clone, 'push', 'origin', branchName).exitCode() == 0
@@ -123,7 +123,7 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
         given: 'the clone registered a closing commit origin never received; origin moved on unregistered'
         def env = setUpClonedBranch()
         commit(env.worktree, 'c.txt', 'closing commit, push lost')
-        runner.run(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
+        gitOutput(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
         commit(env.seed, 'o.txt', 'origin line')
         assert runner.run(env.seed, 'push', 'origin', branchName).exitCode() == 0
         def underTenure = { String taskId ->
@@ -142,7 +142,7 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
     def "FR13: a register on origin's line survives the discard when origin registers nothing"() {
         given: 'the clone registered a commit origin also holds; the local line then diverged above it'
         def env = setUpClonedBranch()
-        runner.run(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
+        gitOutput(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
         def registered = tip(env.clone, REGISTER)
         commit(env.worktree, 'c.txt', 'local work, push lost')
         commit(env.seed, 'o.txt', 'origin line')
@@ -160,11 +160,11 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
     }
 
     def "FR13: origin's register off the local line is never adopted"() {
-        given: 'origin registers a commit the task branch does not contain'
+        given: 'origin registers a commit the task branch does not contain, forked from the seed commit below it'
         def env = setUpClonedBranch()
-        runner.run(env.seed, 'checkout', '-b', 'elsewhere', 'main')
+        gitOutput(env.seed, 'checkout', '-b', 'elsewhere', 'HEAD~1')
         commit(env.seed, 'x.txt', 'not on the task line')
-        runner.run(env.seed, 'push', 'origin', "HEAD:${REGISTER}")
+        gitOutput(env.seed, 'push', 'origin', "HEAD:${REGISTER}")
 
         when:
         def outcome = reconcile(env.worktree)
@@ -177,8 +177,8 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
     def "FR13: a register already equal to origin's runs no ref transaction"() {
         given:
         def env = setUpClonedBranch()
-        runner.run(env.seed, 'push', 'origin', "HEAD:${REGISTER}")
-        runner.run(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
+        gitOutput(env.seed, 'push', 'origin', "HEAD:${REGISTER}")
+        gitOutput(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
         def transactions = []
         GitRunner counting = new GitRunner() {
                     GitCommandResult run(Path cwd, String... args) {

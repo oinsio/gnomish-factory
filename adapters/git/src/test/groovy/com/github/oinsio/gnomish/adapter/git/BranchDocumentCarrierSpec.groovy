@@ -43,8 +43,8 @@ class BranchDocumentCarrierSpec extends Specification implements BareGitRepoFixt
     }
 
     // FR10: the read at the tip is not a parse — the content stays a carrier up to the reader.
+    // F104: scenario text aligned to what this test asserts
     // Scenario: core/untrusted-text / A document reader carries the carrier onward
-    // F104: text aligned to code (8.15)
     def "FR10: the tip reader yields the document as the carrier git's output arrived in, and is no parser"() {
         when:
         Optional<UntrustedText> document =

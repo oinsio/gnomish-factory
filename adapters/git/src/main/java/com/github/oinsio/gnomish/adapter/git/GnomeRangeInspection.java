@@ -65,12 +65,12 @@ final class GnomeRangeInspection {
         if (ancestry.termination() == Termination.EXITED && ancestry.exitCode() == 1) {
             return violated("the previous tip " + base + " is not an ancestor of " + top + " (history rewrite)");
         }
-        if (!answered(ancestry)) {
+        if (!ancestry.succeeded()) {
             return new RangeVerdict.CannotVerify(ancestry.cannotVerifyDetail());
         }
         GitCommandResult commits =
                 runner.run(repo, "log", "--no-color", "--format=%H" + FIELD + "%P" + FIELD + "%s", base + ".." + top);
-        if (!answered(commits)) {
+        if (!commits.succeeded()) {
             return new RangeVerdict.CannotVerify(commits.cannotVerifyDetail());
         }
         // @UntrustedParser warrant (design D11 of type-untrusted-text): each line becomes a verdict —
@@ -114,7 +114,7 @@ final class GnomeRangeInspection {
                 base + ".." + top,
                 "--",
                 EnvelopePaths.DIR_NAME);
-        if (!answered(touched)) {
+        if (!touched.succeeded()) {
             return new RangeVerdict.CannotVerify(touched.cannotVerifyDetail());
         }
         List<String> refused = new ArrayList<>();
@@ -158,9 +158,5 @@ final class GnomeRangeInspection {
         // Factory prose quoting captures that left their carriers through the log exit (design D3
         // of type-untrusted-text), so the violation receives the sentence whole.
         return new RangeVerdict.Violated(UntrustedText.factory(sentence));
-    }
-
-    private static boolean answered(GitCommandResult result) {
-        return result.termination() == Termination.EXITED && result.exitCode() == 0;
     }
 }

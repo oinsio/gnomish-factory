@@ -118,8 +118,8 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         slotLog.detach()
     }
 
-    // Scenario: observability/serve-observability / An outage open at stop writes no line
     // F88: a dead origin is met first by the claim-time task-branch lookup; its outage opens the gate too.
+    // Scenario: observability/serve-observability / An outage open at stop writes no line
     def "NFR-O3: an outage still open at stop writes no remoteOutage line, and the next daemon starts closed"() {
         when: 'the drain stops with the gate open'
         drain()

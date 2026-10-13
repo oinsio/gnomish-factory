@@ -72,7 +72,7 @@ final class TerminalWriteMarker {
      * source, so a worktree left dirty by a killed predecessor cannot be what the receipt carries
      * forward.
      *
-     * @param runner the git subprocess runner the tip read goes through
+     * @param runner the git subprocess runner the register read goes through
      * @param worktree the task worktree whose {@code HEAD} carries {@code .gnomish-task/task.json}
      * @param taskId the task whose pending marker is cleared; for error reporting
      * @throws GitTaskRepositoryException if the envelope cannot be read, parsed, or rewritten — a
@@ -84,7 +84,7 @@ final class TerminalWriteMarker {
      */
     static void clearPending(GitRunner runner, Path worktree, String taskId) {
         Path taskJson = worktree.resolve(EnvelopePaths.TASK_JSON_PATH);
-        TaskJsonDto cleared = RequiredTaskJson.atTipOf(runner, worktree, taskId, TaskLifecycleEvent.RESUMED)
+        TaskJsonDto cleared = RequiredTaskJson.atRegisterOf(runner, worktree, taskId, TaskLifecycleEvent.RESUMED)
                 .dto()
                 .withTrackerWritePending(null);
         try {

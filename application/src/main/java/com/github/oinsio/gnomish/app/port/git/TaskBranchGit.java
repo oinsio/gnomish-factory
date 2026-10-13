@@ -111,13 +111,13 @@ public interface TaskBranchGit {
      * @param worktreeRoot the worktree to push from; never null
      * @param taskId the tracker's original taskId, naming the branch and the register; never null
      */
-    void pushBestEffort(Path worktreeRoot, String taskId);
+    void pushClosingBestEffort(Path worktreeRoot, String taskId);
 
     /**
      * Brings the remote up to {@code taskId}'s local branch tip when it is behind or does not
      * carry the branch at all — the touchpoint check that delivers a push an earlier run lost to a
      * crash or an outage, whichever instance next touches the task (FR3 of fix-lifecycle-push).
-     * Best-effort like {@link #pushBestEffort}: it never blocks, fails, or throws, and with no
+     * Best-effort like {@link #pushClosingBestEffort}: it never blocks, fails, or throws, and with no
      * remote configured it does nothing at all.
      *
      * @param cloneDir the clone the branch and its recorded tip live in; never null

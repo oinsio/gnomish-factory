@@ -72,5 +72,9 @@ class BestEffortClosingPushSpec extends Specification {
         events[0].level == Level.WARN
         events[0].formattedMessage.startsWith(OperatorEvent.CLOSING_PUSH_FAILED.head() + 'closing push failed:')
         events[0].formattedMessage.contains('taskId=T-1')
+
+        and: 'it says what happens next, so the operator need not guess'
+        events[0].formattedMessage.contains('the commit and its register stay in the clone')
+        events[0].formattedMessage.contains("the task's next touchpoint")
     }
 }

@@ -96,6 +96,17 @@ record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr
     }
 
     /**
+     * Whether git ran to its own exit and said zero — the one reading of "the command succeeded":
+     * a deadline kill or a shutdown interruption established nothing, whatever exit code it left
+     * (design D6 of bound-subprocess-commands).
+     *
+     * <p>Implements NFR-R3 of bound-subprocess-commands.
+     */
+    boolean succeeded() {
+        return termination == Termination.EXITED && exitCode == 0;
+    }
+
+    /**
      * Why an invocation did not deliver what its caller asked for, phrased for an operator report:
      * the termination first, the exit code and git's own words only when the command actually ran
      * to its own exit. {@code what} names the invocation in the caller's vocabulary ("narrow fetch",

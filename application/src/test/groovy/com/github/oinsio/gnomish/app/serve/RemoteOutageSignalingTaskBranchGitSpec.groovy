@@ -107,14 +107,14 @@ class RemoteOutageSignalingTaskBranchGitSpec extends Specification {
 
         when:
         decorated.harden(CLONE)
-        decorated.pushBestEffort(CLONE, 'PROJ-1')
+        decorated.pushClosingBestEffort(CLONE, 'PROJ-1')
         decorated.reconcileRemote(CLONE, TASK, 'resume-start')
         def listed = decorated.list(CLONE)
         def fenced = decorated.fenceParkDelivery(CLONE, TASK)
 
         then:
         1 * delegate.harden(CLONE)
-        1 * delegate.pushBestEffort(CLONE, 'PROJ-1')
+        1 * delegate.pushClosingBestEffort(CLONE, 'PROJ-1')
         1 * delegate.reconcileRemote(CLONE, TASK, 'resume-start')
         1 * delegate.list(CLONE) >> rows
         1 * delegate.fenceParkDelivery(CLONE, TASK) >> verdict

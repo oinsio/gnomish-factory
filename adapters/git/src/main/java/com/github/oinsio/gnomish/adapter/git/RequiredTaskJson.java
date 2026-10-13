@@ -30,16 +30,17 @@ final class RequiredTaskJson {
     private RequiredTaskJson() {}
 
     /**
-     * @param runner the git subprocess runner the tip read goes through
+     * @param runner the git subprocess runner the register read goes through
      * @param worktree the task worktree; the register is the clone's
      * @param taskId the task whose envelope is read; for error reporting
      * @param event the lifecycle write this read serves; for error reporting
      * @return the branch's current {@code task.json}: the committed text and its raw wire DTO
-     * @throws GitTaskRepositoryException if the tip read exits non-zero, carrying git's own
+     * @throws GitTaskRepositoryException if the register read exits non-zero, carrying git's own
      *     diagnosis of why
      */
-    static CommittedTaskJson atTipOf(GitRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
-        return CommittedTaskJson.parse(documentAtTip(runner, worktree, taskId, event, EnvelopePaths.TASK_JSON_PATH));
+    static CommittedTaskJson atRegisterOf(GitRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
+        return CommittedTaskJson.parse(
+                documentAtRegister(runner, worktree, taskId, event, EnvelopePaths.TASK_JSON_PATH));
     }
 
     /**
@@ -48,9 +49,9 @@ final class RequiredTaskJson {
      *
      * @param path the envelope file to read at the registered commit
      * @return the file's content as committed, still a carrier
-     * @throws GitTaskRepositoryException if the tip read exits non-zero, carrying git's diagnosis
+     * @throws GitTaskRepositoryException if the register read exits non-zero, carrying git's diagnosis
      */
-    static UntrustedText documentAtTip(
+    static UntrustedText documentAtRegister(
             GitRunner runner, Path worktree, String taskId, TaskLifecycleEvent event, String path) {
         GitCommandResult result = RegisterBase.show(runner, worktree, taskId, path);
         if (result.exitCode() != 0) {

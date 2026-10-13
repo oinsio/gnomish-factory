@@ -53,7 +53,7 @@ class HostModeRoundSpec extends RoundFlowSpecBase {
         !gitOutput(clone, 'reflog', 'show', '--format=%gs', BRANCH).contains('fetch')
     }
 
-    // F83: text aligned to code (8.15)
+    // F83: scenario text aligned to what this test asserts
     // Scenario: sandbox/execution-environment / Mode-independent discipline applies in host mode
     def "FR2: in host mode the prompt arrives on stdin from the bound law, and the gnome's question travels outside the branch"() {
         given: 'a worktree whose own copy of the instructions differs from the law the run is bound to'

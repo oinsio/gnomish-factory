@@ -61,7 +61,6 @@ class BranchShapeRegisterSpec extends Specification {
     // A branch with no register is a STARTED-less branch (Bare) only while its tip carries no
     // envelope; any other is quarantined, never guessed from content the factory never registered.
     // Scenario: lifecycle/task-branch-contract / A register that is not an ancestor of the tip quarantines
-    // Scenario: git/git-task-persistence / The touchpoint fetch carries the register
     def "a branch with no register and #tip is #expected"() {
         when:
         def shapes = atRegister().collect {

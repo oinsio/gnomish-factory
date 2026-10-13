@@ -46,7 +46,7 @@ final class VerifiedTip {
      *     object id; empty otherwise
      */
     static Optional<String> read(GitCommandResult result) {
-        if (result.termination() != Termination.EXITED || result.exitCode() != 0) {
+        if (!result.succeeded()) {
             return Optional.empty();
         }
         // @UntrustedParser warrant (design D11): the value this yields passed the fixed shape of a
@@ -54,7 +54,18 @@ final class VerifiedTip {
         //     answer — so it holds no separator, no control character and no option prefix; it
         //     travels as a revision argument and an equality subject (F105).
         String tip = result.stdout().forParsing().trim();
-        return OBJECT_ID.matcher(tip).matches() ? Optional.of(tip) : Optional.empty();
+        return isObjectId(tip) ? Optional.of(tip) : Optional.empty();
+    }
+
+    /**
+     * Whether {@code value} is exactly one full object id — the shape a resolution must print, and
+     * the one {@link RefTransaction.Update} accepts for a commit it writes into its script.
+     *
+     * @param value the candidate, untrimmed
+     * @return true only for 40 or 64 lowercase hex characters and nothing else
+     */
+    static boolean isObjectId(String value) {
+        return OBJECT_ID.matcher(value).matches();
     }
 
     /**

@@ -51,7 +51,7 @@ class FeedUnblockedByReapingSpec extends Specification {
                 new TrackerTaskState.Ready(), AbortFacts.none())
     }
 
-    // F96: text aligned to code (8.15)
+    // F96: scenario text aligned to what this test asserts
     // Scenario: serve/factory-serve / Reaping unblocks a WIP-blocked feed
     def "FR13: the reaper returns a stale front, the open-front count drops below W, and the feed claims the returned task first"() {
         when: 'the feed polls with one Working front at W = 1'

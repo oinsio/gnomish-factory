@@ -65,6 +65,28 @@ class HarvestAdmissionSpec extends Specification {
         new HarvestAdmission(git, CLONE).admit(TASK, TOP, rule)
     }
 
+    // The refused commits are not lost: they stay in the quarantine until the next harvest, and the
+    //     refusal says where, so the operator can inspect what the gnome rewrote.
+    def "FR13: a history-rewrite refusal names the quarantine that still holds the harvested commits"() {
+        given:
+        def git = clone {
+            answer([
+                'merge-base',
+                '--is-ancestor',
+                TIP,
+                TOP
+            ], 1)
+        }
+
+        when:
+        def admitted = admit(git)
+
+        then:
+        admitted instanceof AdmittedRange.Refused
+        (admitted as AdmittedRange.Refused).reason().forLog().contains(
+                "held at refs/gnomish-quarantine/PROJ-1 in ${CLONE} until the next harvest")
+    }
+
     // Scenario: git/git-task-persistence / A refused mid-round harvest leaves the verdict to the round boundary
     def "FR13: a refused range leaves the branch where it was — #row"() {
         given:

@@ -162,8 +162,8 @@ class DashboardCommandDegradationSpec extends Specification implements Applicati
         }
     }
 
+    // F94: scenario text aligned to what this test asserts
     // Scenario: observability/dashboard-page / Hygiene block degrades on its own
-    // F94: text aligned to code (8.15)
     def "NFR-O3: hygiene inputs that are #description degrade the hygiene block alone"() {
         given: 'a snapshot whose sweep vital is #description, a healthy ledger and a reachable tracker'
         def base = BaselineSnapshotFixture.baselineSnapshot(NOW, new LifecycleState.Running())

@@ -80,8 +80,8 @@ class BoardGithubReadOnlySpec extends Specification implements ApplicationArgume
                 liveConsole())
     }
 
+    // F92: scenario text aligned to what this test asserts
     // Scenario: observability/tracker-board / No write operations reach the tracker
-    // F92: text aligned to code (8.15)
     def "NG3: a board run through the GitHub adapter issues only GET requests"() {
         given: 'a provisioned repository with one ready issue; every other request, a write included, is answered'
         github.stubFor(any(anyUrl()).atPriority(10).willReturn(aResponse().withStatus(200).withBody('[]')))

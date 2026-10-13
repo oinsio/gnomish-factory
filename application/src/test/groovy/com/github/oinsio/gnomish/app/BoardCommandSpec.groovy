@@ -64,9 +64,9 @@ class BoardCommandSpec extends Specification implements ApplicationArgumentsFixt
                 console)
     }
 
+    // F92: scenario text aligned to what this test asserts
     // Scenario: observability/tracker-board / Tracker resolved from the --dir config root
     // Scenario: observability/tracker-board / The board never writes to the tracker
-    // F92: text aligned to code (8.15)
     // Scenario: observability/tracker-board / No per-row fetch beyond the two list calls
     // Scenario: observability/tracker-board / The ready window defaults to 50
     def "resolves the tracker from --dir's config, minting an InstanceId passed to the factory, and calls only listReady/listOpen"() {

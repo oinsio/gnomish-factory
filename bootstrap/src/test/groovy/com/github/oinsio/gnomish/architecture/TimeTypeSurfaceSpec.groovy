@@ -123,8 +123,8 @@ class TimeTypeSurfaceSpec extends Specification {
 
     // FR22: a policy's time is the equipment its builder was handed, because no other equipment,
     //     sleeper or system default can be made outside the root.
+    // F101: scenario text aligned to what this test asserts
     // Scenario: core/time-source / A policy is built from the equipment it is handed
-    // F101: text aligned to code (8.15)
     def "FR22: time equipment is assembled only from the root's own halves"() {
         given:
         def code = codeByPath()
@@ -150,8 +150,8 @@ class TimeTypeSurfaceSpec extends Specification {
 
     // FR22: the instant source and the sleeper are one value; a signature taking both side by
     //     side is the pair the value replaced (two parameters where the value is one).
+    // F101: scenario text aligned to what this test asserts
     // Scenario: core/time-source / One value replaces the pair on every signature
-    // F101: text aligned to code (8.15)
     def "FR22: no production signature takes an instant source and a sleeper side by side"() {
         expect: 'only the equipment\'s own record header declares the pair'
         codeByPath().findAll { path, code -> takesThePair(code) }.keySet() ==

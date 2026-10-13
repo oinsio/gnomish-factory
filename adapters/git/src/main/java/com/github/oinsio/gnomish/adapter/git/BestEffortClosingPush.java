@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
  * The best-effort closing push outside the lifecycle store and the host round (design D13 of
  * tighten-spec-contract): a sandboxed round's admitted state commit ({@link
  * PushBestEffortAttemptPersistence}) and the push that follows a salvage, in either medium ({@link
- * GitTaskBranches#pushBestEffort}, and the container support). The branch and the register are
+ * GitTaskBranches#pushClosingBestEffort}, and the container support). The branch and the register are
  * pushed as the clone holds them — a closing commit already moved both together in its own ref
  * transaction, and a salvage that found nothing to commit moved neither — in one atomic push
  * ({@link ClosingPush}).
@@ -55,7 +55,9 @@ public final class BestEffortClosingPush {
         String outcome = PushOutcome.describe("closing push", result);
         if (outcome != null) {
             log.warn(
-                    OperatorEvent.CLOSING_PUSH_FAILED.head() + "{}: taskId={}, stderr={}",
+                    OperatorEvent.CLOSING_PUSH_FAILED.head()
+                            + "{}: taskId={}, stderr={}; the commit and its register stay in the clone, and"
+                            + " the task's next touchpoint delivers them to origin",
                     outcome,
                     taskId,
                     result.stderr().forLog());

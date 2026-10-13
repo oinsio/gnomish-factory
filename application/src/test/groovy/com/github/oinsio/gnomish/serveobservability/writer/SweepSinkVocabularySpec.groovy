@@ -42,7 +42,7 @@ class SweepSinkVocabularySpec extends Specification implements RotatingLedgerApp
     }
 
     // FR9, NFR-O4: one verdict of an unowned stopped box, through take's sinks and the daemon's
-    // F87: text aligned to code (8.15)
+    // F87: scenario text aligned to what this test asserts
     // Scenario: sandbox/sandbox-lifecycle / Same vocabulary in daemon and one-shot logs
     def "FR9: a #category verdict reads the same in take's log and in the daemon's log and ledger"() {
         given: 'the verdict the sweep gives an unowned stopped main box'
@@ -87,7 +87,7 @@ class SweepSinkVocabularySpec extends Specification implements RotatingLedgerApp
 
     // FR9: a verdict that acts on nothing is logged by both entry points alike; the ledger records
     // acting verdicts only (SweepLedgerWriter), so it gets no line.
-    // F87: text aligned to code (8.15)
+    // F87: scenario text aligned to what this test asserts
     // Scenario: sandbox/sandbox-lifecycle / Same vocabulary in daemon and one-shot logs
     def "FR9: a kept-under-threshold verdict reads the same in both logs and writes no ledger line"() {
         given: 'the verdict the sweep gives an unowned stopped main box under the age threshold'

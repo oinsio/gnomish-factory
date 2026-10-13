@@ -84,7 +84,7 @@ class RemoteSectionProbeSpec extends Specification {
     }
 
     // F91: the gate counts the failed fetch that opened it, so three failed probes read four.
-    // F91: text aligned to code (8.15)
+    // F91: scenario text aligned to what this test asserts
     // Scenario: observability/serve-observability / Probes advance the section without claims
     def "NFR-O3: three failed probes while the gate is open read as four consecutive failures, the opening failure included"() {
         given:

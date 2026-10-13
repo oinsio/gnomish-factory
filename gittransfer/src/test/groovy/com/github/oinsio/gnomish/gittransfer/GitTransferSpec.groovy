@@ -103,11 +103,11 @@ class GitTransferSpec extends Specification {
 
     // FR3, FR4, FR5, FR6: a container fetch names its URL in place of the remote, so no refmap
     //     applies; it reads no operator configuration at all.
+    // FR13 of tighten-spec-contract (design D18): the harvest lands in the task's quarantine, forced,
+    //     and never names the branch.
     // Scenario: git/git-transfer / A harvest and a base refresh share one flag set
     // Scenario: git/git-transfer / A harvest sees no operator configuration at all
     // Scenario: git/git-transfer / Inherited repository overrides are stripped
-    // FR13 of tighten-spec-contract (design D18): the harvest lands in the task's quarantine, forced,
-    //     and never names the branch.
     def "a container fetch is the common set, the fetch-only half without a refmap, and full isolation"() {
         when:
         def transfer = GitTransfer.harvest(

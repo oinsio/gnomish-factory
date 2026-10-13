@@ -132,7 +132,7 @@ public final class GitTaskBranches implements TaskBranchGit {
     }
 
     @Override
-    public void pushBestEffort(Path worktreeRoot, String taskId) {
+    public void pushClosingBestEffort(Path worktreeRoot, String taskId) {
         push.pushBestEffort(worktreeRoot, taskId);
     }
 

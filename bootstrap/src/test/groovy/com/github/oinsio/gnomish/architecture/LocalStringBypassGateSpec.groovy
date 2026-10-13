@@ -17,9 +17,9 @@ class LocalStringBypassGateSpec extends Specification {
         CarrierSinkScan.violations(source, 'Seeded.java', [] as Set)
     }
 
-    // Scenario: observability/factory-logging / The local-string bypass fails the gate
     // F98: text the findings sanitizer prepared reached a log call unnamed; the log-call scan now
     // names the findings exit at a log site, as TrackerPublicationOwnerSpec's WRONG_EXIT does for writes
+    // Scenario: observability/factory-logging / The local-string bypass fails the gate
     def "FR2: a log call fed a carrier held in a local, or text the findings sanitizer prepared, is named by the type gate"() {
         expect: 'a carrier held in a local variable and passed to the logger without an exit'
         namedSites('UntrustedText stderr = result.stderr();\nlog.warn("push failed: {}", stderr);') == ['Seeded.java:2']

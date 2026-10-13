@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
-import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
@@ -59,16 +57,16 @@ final class WorktreeClosingCommit {
      * @return the commit that landed, or the step that failed
      */
     Outcome commit(Path worktree, String taskId, String message) {
-        String branchRef = "refs/heads/" + TaskIdSanitizer.branchName(taskId);
+        String branchRef = FactoryRegister.branchRef(taskId);
         GitCommandResult base = runner.run(worktree, "rev-parse", branchRef, branchRef + "^{tree}");
-        if (!answered(base)) {
+        if (!base.succeeded()) {
             return new Outcome.Failed("git rev-parse " + branchRef, base.failureDetail("task branch read"));
         }
         // @UntrustedParser warrant (design D11): two object ids git printed for the factory's own
         //     revisions, used as a parent argument and an equality subject, never shown as text.
         List<String> ids = base.stdout().forParsing().strip().lines().toList();
         GitCommandResult tree = runner.run(worktree, "write-tree");
-        if (!answered(tree)) {
+        if (!tree.succeeded()) {
             return new Outcome.Failed("git write-tree", tree.failureDetail("index write"));
         }
         String treeId = tree.stdout().forParsing().strip();
@@ -77,18 +75,14 @@ final class WorktreeClosingCommit {
         }
         String parent = ids.getFirst();
         GitCommandResult commit = runner.run(worktree, "commit-tree", treeId, "-p", parent, "-m", message);
-        if (!answered(commit)) {
+        if (!commit.succeeded()) {
             return new Outcome.Failed("git commit-tree", commit.failureDetail("commit write"));
         }
         String commitId = commit.stdout().forParsing().strip();
         GitCommandResult landed = register.close(worktree, taskId, commitId, parent);
-        if (!answered(landed)) {
+        if (!landed.succeeded()) {
             return new Outcome.Failed("closing ref transaction", landed.failureDetail("ref transaction"));
         }
         return new Outcome.Landed(commitId);
-    }
-
-    private static boolean answered(GitCommandResult result) {
-        return result.termination() == Termination.EXITED && result.exitCode() == 0;
     }
 }

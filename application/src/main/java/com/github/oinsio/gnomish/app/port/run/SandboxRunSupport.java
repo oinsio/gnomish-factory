@@ -153,7 +153,7 @@ public interface SandboxRunSupport {
      * add-serve-sandbox-lifecycle): commits any uncommitted round leftovers in-box, then
      * best-effort pushes the task branch with its factory register, which a harvested salvage
      * commit moved (design D13 of tighten-spec-contract) — the sandboxed equivalent of {@code
-     * TaskSalvage#salvage} followed by {@code TaskBranchGit#pushBestEffort}, folded into one
+     * TaskSalvage#salvage} followed by {@code TaskBranchGit#pushClosingBestEffort}, folded into one
      * method because a sandboxed run has no worktree path for those host-shaped ports to push
      * from. The box itself is left exactly as the claim loss found it — running or not — so the
      * next sweep tick classifies it unowned and stops it (design D3); this method disposes

@@ -1,7 +1,7 @@
 spec: tracker/tracker-take
 
 # Verified by the operator guide: the scenario is the content of the named document.
-Guide covers the operator surface => docs/guides/operator-guide.md
+Guide covers the operator surface => docs/guides/operator-guide.md (sections "Setting up a project", "Quick Start", "Handing Off a Task", "Escalation, Decision, and Acknowledgement Flow")
 Guide states when recovery is automatic => docs/guides/operator-guide.md (section "Stuck `Working`: Three Ways Back")
 Guide covers configuration and hand-off => docs/guides/operator-guide.md (sections "Quick Start", "Handing Off a Task")
 Guide covers the escalation round-trip and the snapshot => docs/guides/operator-guide.md (sections "Escalation, Decision, and Acknowledgement Flow", "Snapshot Behavior")

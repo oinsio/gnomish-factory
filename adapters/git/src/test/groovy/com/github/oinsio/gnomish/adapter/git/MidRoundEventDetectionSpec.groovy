@@ -23,7 +23,7 @@ class MidRoundEventDetectionSpec extends Specification implements BareGitRepoFix
     Path tempDir
 
     // FR5 of add-sandbox-core.
-    // F73: text aligned to code (8.15) — the event-driven scenario was dropped; a commit wakes no poll.
+    // F73: scenario text aligned to what this test asserts — the event-driven scenario was dropped; a commit wakes no poll.
     // Scenario: git/git-task-persistence / Tip observation is a rate-limited factory-side poll
     def "FR5: a gnome commit inside the box, with no agent progress event, wakes no poll and harvests nothing"() {
         given: 'a factory clone with the task branch and a box materialized from it, counting harvests'

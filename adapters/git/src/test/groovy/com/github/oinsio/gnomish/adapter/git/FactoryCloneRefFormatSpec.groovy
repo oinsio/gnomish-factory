@@ -61,8 +61,13 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         def refused = thrown(CloneRefFormatRefusedException)
         refused.message.contains(clone.toString())
         refused.message.contains('printed: files')
-        refused.message.contains('clone --ref-format=reftable <origin-url> <dir>')
+        refused.message.contains('`git clone --ref-format=reftable <origin-url> <dir>`')
         refused.message.contains('gnomish project add')
+
+        and: 'it warns that a fresh clone holds only what origin has, and names the in-place conversion git offers'
+        refused.message.contains('push any branch that exists only in this clone first')
+        refused.message.contains('`git refs migrate --ref-format=reftable`')
+        refused.message.contains('a clone with no worktrees')
 
         and: 'one ERROR carries the catalog code, the clone and the reported backend'
         logs.list.size() == 1

@@ -43,7 +43,7 @@ class TakeBareAutoFeedOrderSpec extends TakeBareAutoSpecBase {
     // WIP limit blocks a fresh start — open fronts are at the configured limit and only
     // fresh tasks are ready; bare take claims nothing and ends Skipped (exit 15) naming the WIP limit,
     // distinct from a structurally empty queue (EmptyQueue) and from a claim-race loss (Skipped naming the race).
-    // F77: text aligned to code (8.15)
+    // F77: scenario text aligned to what this test asserts
     // Scenario: tracker/tracker-take / WIP limit blocks a fresh start
     def "WIP limit blocks a fresh-only queue: nothing claimed, Skipped with exit 15 naming the limit"() {
         given:

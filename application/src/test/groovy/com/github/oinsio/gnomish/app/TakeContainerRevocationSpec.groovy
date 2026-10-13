@@ -34,7 +34,7 @@ import spock.lang.Specification
 class TakeContainerRevocationSpec extends Specification implements RunChainFakes {
 
     // FR15: the round-boundary check finds the task no longer ours (Gone), so the run is revoked.
-    // F75: text aligned to code (8.15)
+    // F75: scenario text aligned to what this test asserts
     // Scenario: tracker/tracker-take / Revoked sandboxed task keeps a stopped environment
     def "a revoked sandboxed run salvages, pushes after the harvest, and leaves the environment to the sweep"() {
         given:

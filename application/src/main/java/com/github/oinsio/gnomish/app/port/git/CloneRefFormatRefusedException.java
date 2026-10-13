@@ -10,7 +10,8 @@ import java.io.Serial;
  * transaction as one write on disk; on the files backend a kill of git between two lock-file
  * renames could split them (design D13 of tighten-spec-contract, as amended 2026-10-13). The
  * message names the clone, what git reported and the remedy — a fresh clone on the required
- * backend, since the project is pre-release and migrates nothing — so the operator reads a
+ * backend, since the project is pre-release and migrates nothing itself, or git's own in-place
+ * {@code git refs migrate}, which refuses a clone that has worktrees — so the operator reads a
  * precondition rather than a crash; the command that ends on it prints the message and nothing
  * else.
  *
@@ -35,7 +36,9 @@ public final class CloneRefFormatRefusedException extends RuntimeException {
         super("the factory clone \"" + cloneDir + "\" is not on the " + required + " ref backend (git rev-parse"
                 + " --show-ref-format printed: " + reported.forLog() + "); the factory moves a task branch and"
                 + " its register in one ref transaction, which only " + required + " writes atomically. Re-clone"
-                + " the project on " + required + " (`clone --ref-format=" + required + " <origin-url> <dir>`) and"
-                + " register the new clone with `gnomish project add`.");
+                + " the project on " + required + " (`git clone --ref-format=" + required + " <origin-url> <dir>`)"
+                + " and register the new clone with `gnomish project add`; a fresh clone holds only what origin"
+                + " has, so push any branch that exists only in this clone first. Alternatively, convert a clone"
+                + " with no worktrees in place with `git refs migrate --ref-format=" + required + "`.");
     }
 }

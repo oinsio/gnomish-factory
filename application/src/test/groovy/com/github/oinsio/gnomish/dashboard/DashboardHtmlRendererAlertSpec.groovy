@@ -63,8 +63,8 @@ class DashboardHtmlRendererAlertSpec extends Specification {
 
     // NFR-O3, UX6 of add-base-ref-resolution: one line names the target, when the gate opened, the
     //     last error and the next probe — the open duration is stated as its start instant (F89).
+    // F89: scenario text aligned to what this test asserts
     // Scenario: observability/dashboard-page / Blocked on the remote reads from one place
-    // F89: text aligned to code (8.15)
     def "an open remote gate renders one alarm line naming the target, its opening, the last error and the next probe"() {
         when:
         def html = markup(renderer.render(

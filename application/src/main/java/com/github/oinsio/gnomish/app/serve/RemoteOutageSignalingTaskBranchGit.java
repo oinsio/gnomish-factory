@@ -85,8 +85,8 @@ record RemoteOutageSignalingTaskBranchGit(TaskBranchGit delegate, RemoteOutageGa
     }
 
     @Override
-    public void pushBestEffort(Path worktreeRoot, String taskId) {
-        delegate.pushBestEffort(worktreeRoot, taskId);
+    public void pushClosingBestEffort(Path worktreeRoot, String taskId) {
+        delegate.pushClosingBestEffort(worktreeRoot, taskId);
     }
 
     @Override

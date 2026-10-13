@@ -255,7 +255,11 @@ convenience with no integrity guarantee. The host tier is written as that: the t
 this change adds, the glossary entry and NFR-S2 state the claim for the container tier only. The
 cheap detections stay in host mode as audit signals, not guarantees: a register that is not an
 ancestor of the tip, a registered commit whose envelope is not in a factory shape, both classify
-`Unknown` with a diagnosis. *Rationale:* a guarantee the design cannot keep is worse than a stated
+`Unknown` with a diagnosis. One route is accepted, not detected: a branch with no register whose tip carries no envelope
+is `Bare` (the shape of a branch the factory never started), so a host gnome that deletes both the
+register and the envelope makes the next pickup start the task afresh over the branch's history.
+A mid-round push cannot open it alone — it carries the branch, never the register, so a tip above
+origin's register reads at the registered commit (`RegisterRelationSpec`). *Rationale:* a guarantee the design cannot keep is worse than a stated
 limit; `harden-verification-integrity` already records the shared `.git` as an accepted host
 limitation. *Alternative rejected:* a second OS user plus server-side ref protection for the host
 tier — a real design, out of this change's scope; named for a later change.

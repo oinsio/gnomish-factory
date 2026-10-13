@@ -121,7 +121,6 @@ class RegisterRelationSpec extends Specification implements RegisteredRoundFixtu
     // A started branch whose register is missing — a branch from before the register, or one whose
     //     STARTED registration was killed — is quarantined, never classified from the tip.
     // Scenario: lifecycle/task-branch-contract / A register that is not an ancestor of the tip quarantines
-    // Scenario: git/git-task-persistence / The touchpoint fetch carries the register
     def "a started branch with no register is Unknown naming the register"() {
         when:
         assert runner.run(cloneDir, 'update-ref', '-d', 'refs/gnomish-factory/PROJ-1').exitCode() == 0
@@ -145,6 +144,33 @@ class RegisterRelationSpec extends Specification implements RegisteredRoundFixtu
         new BestEffortClosingPush(runner).pushBestEffort(cloneDir, TASK)
         gnomeRewrites('task.json') { it.outcome = [type: 'completed'] }
         assert runner.run(cloneDir, 'push', 'origin', 'gnomish/PROJ-1').exitCode() == 0
+
+        and: 'a peer clone that never saw the task'
+        def peer = tempDir.resolve('peer')
+        seedClone(tempDir, bare.toString(), peer, '--branch', 'main', '--single-branch')
+
+        expect:
+        branches.classifyShape(peer, TASK) == new BranchShape.InProgress()
+        registeredId(peer, TASK) == registeredId(cloneDir, TASK)
+    }
+
+    // FR13 on a bare origin: a host mid-round push carries the branch alone, never the register, so
+    //     a gnome commit that deletes the envelope is above origin's register and the pickup reads the
+    //     registered commit — the envelope-free tip is never classified Bare.
+    def "FR13: a gnome commit deleting the envelope, pushed mid-round, leaves a fresh pickup at the registered shape"() {
+        given: 'origin holds the branch and the register'
+        def bare = initBareRepo(tempDir, 'origin.git')
+        addRemote(cloneDir, 'origin', bare.toString())
+        assert runner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main').exitCode() == 0
+        new BestEffortClosingPush(runner).pushBestEffort(cloneDir, TASK)
+
+        and: 'the gnome deletes the envelope and the mid-round push carries its commit'
+        assert runner.run(worktree(), 'rm', '-r', '-q', '.gnomish-task').exitCode() == 0
+        commitAll(worktree(), 'wip: drop the envelope')
+        def gnomeTip = gitOutput(cloneDir, 'rev-parse', TIP_REF)
+        BestEffortPush.midRound(runner).pushBestEffort(TASK, 'implement', 1, worktree(), 'gnomish/PROJ-1',
+                new HostBranchProbe(runner, worktree(), 'gnomish/PROJ-1'), registeredId(cloneDir, TASK))
+        assert gitOutput(bare, 'rev-parse', TIP_REF) == gnomeTip
 
         and: 'a peer clone that never saw the task'
         def peer = tempDir.resolve('peer')

@@ -53,7 +53,9 @@ Make every clone on git's **reftable** ref backend: `git clone --ref-format=reft
 transaction, and only reftable writes that transaction atomically on disk. A run on a
 clone with the default `files` backend stops before it writes anything, with a `[GF162]`
 line naming the clone; the remedy is a fresh clone made that way and registered with
-`gnomish project add` (there is no migration).
+`gnomish project add` — push any branch that exists only in the old clone first — or,
+for a clone with no worktrees, git's own in-place `git refs migrate --ref-format=reftable`
+(the factory migrates nothing itself; git refuses the migration while worktrees exist).
 
 A sample project file, `~/.gnomish/projects/widgets/project.yaml`:
 

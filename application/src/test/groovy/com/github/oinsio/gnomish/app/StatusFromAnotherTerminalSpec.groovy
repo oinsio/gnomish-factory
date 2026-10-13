@@ -70,8 +70,8 @@ class StatusFromAnotherTerminalSpec extends Specification implements SeededClone
 
     // FR16: a branch with only its STARTED commit classifies as Created and renders with its
     //     snapshot title, no round and no outcome.
+    // F103: scenario text aligned to what this test asserts
     // Scenario: cli/task-inspection / Freshly created branch renders as pending
-    // F103: text aligned to code (8.15)
     def "FR16: a branch holding only the STARTED commit renders as not yet started, with its title"() {
         given:
         TaskGitFixture.realClaimless().store().taskRepository(registeredClone).createTask(

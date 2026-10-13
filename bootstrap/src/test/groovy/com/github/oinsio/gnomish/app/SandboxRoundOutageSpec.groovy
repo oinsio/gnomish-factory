@@ -35,7 +35,7 @@ class SandboxRoundOutageSpec extends RoundFlowSpecBase {
         new HostExecHandle(builder.start(), LocalBoxEnvironment.EXEC_STAMP)
     }
 
-    // F84: text aligned to code (8.15) — no retry: the second launch is the last one.
+    // F84: scenario text aligned to what this test asserts — no retry: the second launch is the last one.
     // Scenario: sandbox/execution-environment / Docker daemon dies mid-task
     def "NFR-R1: a daemon gone between rounds makes the next round cannot-execute, with the attempt count unchanged"() {
         given: 'a first round that fails its check, after which the daemon stops answering'

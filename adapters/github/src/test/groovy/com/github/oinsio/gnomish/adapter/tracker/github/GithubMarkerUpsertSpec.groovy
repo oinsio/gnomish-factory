@@ -50,7 +50,7 @@ class GithubMarkerUpsertSpec extends Specification {
 
     // The claim is the one write whose find is fused into its verify-read (design D6): it posts
     // first, then reads the thread back and deletes the duplicate it finds (GithubClaimLease's javadoc).
-    // F78: text aligned to code (8.15)
+    // F78: scenario text aligned to what this test asserts
     // Scenario: tracker/github-tracker / Every marker kind is written through the upsert
     def "a claim killed after its comment and re-driven posts again, and its read-back deletes the duplicate"() {
         given:

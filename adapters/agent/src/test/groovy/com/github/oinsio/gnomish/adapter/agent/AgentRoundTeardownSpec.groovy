@@ -52,7 +52,7 @@ class AgentRoundTeardownSpec extends Specification {
     }
 
     // FR4, NFR-R2, D3: telemetry is best-effort — the round completes, with no usage and no trace
-    // F86: text aligned to code (8.15) — no tool or token usage, the wall time still the adapter's
+    // F86: scenario text aligned to what this test asserts — no tool or token usage, the wall time still the adapter's
     // Scenario: executor/agent-executor / Telemetry failure does not fail the round
     def "FR4: a stream whose usage fields cannot be parsed completes the round with no tool or token usage, its wall time, and an empty trace"() {
         when:

@@ -158,7 +158,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         delivered.finalState() == finalState
     }
 
-    def "pushBestEffort is the closing push — the branch lands on origin"() {
+    def "pushClosingBestEffort is the closing push — the branch lands on origin"() {
         given:
         def bare = initBareRepo(tempDir, 'push-origin.git')
         seedTask('PROJ-7')
@@ -166,7 +166,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         runner.run(worktree, 'remote', 'add', 'origin', bare.toString())
 
         when:
-        branches.pushBestEffort(worktree, 'PROJ-7')
+        branches.pushClosingBestEffort(worktree, 'PROJ-7')
 
         then:
         runner.run(bare, 'rev-parse', '--verify', 'gnomish/PROJ-7').exitCode() == 0

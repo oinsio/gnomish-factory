@@ -194,7 +194,14 @@ final class FactoryRegister {
                 .orElse(null);
     }
 
-    private static String branchRef(String taskId) {
+    /**
+     * The full ref of {@code taskId}'s task branch, {@code refs/heads/gnomish/<sanitized taskId>} —
+     * the one spelling the register's writers and the admission read move together.
+     *
+     * @param taskId the tracker's original taskId, or the core string a branch name carries
+     * @return the branch's full ref name
+     */
+    static String branchRef(String taskId) {
         return HEADS + TaskIdSanitizer.branchName(taskId);
     }
 }

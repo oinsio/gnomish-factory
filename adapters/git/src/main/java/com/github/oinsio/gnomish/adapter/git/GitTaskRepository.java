@@ -157,7 +157,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
         TaskLifecycleEvent event = TaskLifecycleEvent.APPROVED;
         Path worktree = restoredWorktree(taskId, event);
         Position tipPosition =
-                RequiredTaskState.atTipOf(runner, worktree, taskId, event).position();
+                RequiredTaskState.atRegisterOf(runner, worktree, taskId, event).position();
         CheckpointApprovalCheck.requireAdmitted(taskId, gate, tipPosition, approved);
         TaskJsonDto dto = OutcomeClearingTaskJson.of(
                 readCommitted(taskId, worktree, event).dto());
@@ -289,7 +289,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      * transition that rewrites the envelope runs on a branch that carries one.
      */
     private CommittedTaskJson readCommitted(String taskId, Path worktree, TaskLifecycleEvent event) {
-        return RequiredTaskJson.atTipOf(runner, worktree, taskId, event);
+        return RequiredTaskJson.atRegisterOf(runner, worktree, taskId, event);
     }
 
     private static String serialize(String taskId, TaskJsonDto dto, TaskLifecycleEvent event) {

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.subprocess.Termination;
 import java.nio.file.Path;
 
 /**
@@ -35,6 +34,6 @@ final class OriginProbe {
      */
     boolean answers(Path cloneDir) {
         GitCommandResult probe = LsRemote.refs(runner, cloneDir, "HEAD");
-        return probe.termination() == Termination.EXITED && probe.exitCode() == 0;
+        return probe.succeeded();
     }
 }

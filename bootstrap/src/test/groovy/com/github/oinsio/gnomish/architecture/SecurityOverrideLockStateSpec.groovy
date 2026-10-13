@@ -73,8 +73,8 @@ class SecurityOverrideLockStateSpec extends Specification {
         stale(catalogPins(), lockfiles()) == []
     }
 
+    // F112: scenario text aligned to what this test asserts
     // Scenario: build/quality-gates / A production-scope advisory is fixed, never suppressed
-    // F112: text aligned to code (8.15)
     def "NFR-S1: an advisory a production-scope override clears is allowlisted only for a metadata-only candidate no lockfile resolves"() {
         given: 'the advisories of the overrides whose artifact sits on a production runtime classpath'
         def locks = lockLines(lockfiles())

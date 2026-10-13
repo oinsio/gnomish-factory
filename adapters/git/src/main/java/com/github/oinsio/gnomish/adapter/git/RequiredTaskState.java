@@ -22,15 +22,15 @@ final class RequiredTaskState {
     private RequiredTaskState() {}
 
     /**
-     * @param runner the git subprocess runner the tip read goes through
+     * @param runner the git subprocess runner the register read goes through
      * @param worktree the task worktree; the register is the clone's
      * @param taskId the task whose state is read; for error reporting
      * @param event the lifecycle write this read serves; for error reporting
      * @return the state the branch tip records
-     * @throws GitTaskRepositoryException if the tip read exits non-zero, carrying git's diagnosis
+     * @throws GitTaskRepositoryException if the register read exits non-zero, carrying git's diagnosis
      */
-    static TaskState atTipOf(GitRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
+    static TaskState atRegisterOf(GitRunner runner, Path worktree, String taskId, TaskLifecycleEvent event) {
         return StateJsonMapper.fromDto(StateJsonMapper.readDto(
-                RequiredTaskJson.documentAtTip(runner, worktree, taskId, event, EnvelopePaths.STATE_JSON_PATH)));
+                RequiredTaskJson.documentAtRegister(runner, worktree, taskId, event, EnvelopePaths.STATE_JSON_PATH)));
     }
 }

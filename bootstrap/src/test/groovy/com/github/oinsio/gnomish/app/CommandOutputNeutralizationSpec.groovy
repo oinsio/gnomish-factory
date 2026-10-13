@@ -65,7 +65,7 @@ class CommandOutputNeutralizationSpec extends Specification {
         !parked.comment.contains(ESC)
     }
 
-    // F108: text aligned to code (8.15)
+    // F108: scenario text aligned to what this test asserts
     // Scenario: verification/verification-hardening / Terminal escape attack is neutralized
     def "FR15: the comment renders the CannotVerify report field by field, the output under its Details field, unfenced"() {
         when:

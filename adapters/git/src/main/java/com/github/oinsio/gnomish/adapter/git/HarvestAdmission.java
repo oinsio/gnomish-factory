@@ -74,7 +74,7 @@ final class HarvestAdmission {
      */
     AdmittedRange admit(String taskId, String top, AdmissionRule rule) {
         GitCommandResult registerRead = read(FactoryRegister.of(taskId).name());
-        GitCommandResult branchRead = read("refs/heads/" + TaskIdSanitizer.branchName(taskId));
+        GitCommandResult branchRead = read(FactoryRegister.branchRef(taskId));
         Optional<String> registered = VerifiedTip.read(registerRead);
         Optional<String> branchTip = VerifiedTip.read(branchRead);
         if (registered.isEmpty() || branchTip.isEmpty()) {
@@ -83,15 +83,17 @@ final class HarvestAdmission {
                     + taskId + " does not resolve in " + cloneDir + ": " + VerifiedTip.failureReason(failed)));
         }
         String tip = branchTip.get();
-        if (answered(runner.run(cloneDir, "merge-base", "--is-ancestor", top, tip))) {
+        if (runner.run(cloneDir, "merge-base", "--is-ancestor", top, tip).succeeded()) {
             return new AdmittedRange.Admitted(tip);
         }
         GitCommandResult descends = runner.run(cloneDir, "merge-base", "--is-ancestor", tip, top);
         if (descends.termination() == Termination.EXITED && descends.exitCode() == 1) {
-            return new AdmittedRange.Refused(UntrustedText.factory(
-                    "the harvested " + top + " does not descend from the branch tip " + tip + " (history rewrite)"));
+            return new AdmittedRange.Refused(UntrustedText.factory("the harvested " + top
+                    + " does not descend from the branch tip " + tip + " (history rewrite); it"
+                    + " is held at " + FactoryRegister.quarantine(taskId).name() + " in " + cloneDir
+                    + " until the next harvest"));
         }
-        if (!answered(descends)) {
+        if (!descends.succeeded()) {
             return new AdmittedRange.Unverified(descends.cannotVerifyDetail());
         }
         return switch (inspection.inspect(registered.get(), top, rule)) {
@@ -127,7 +129,7 @@ final class HarvestAdmission {
         GitCommandResult moved = rule.closing()
                 ? register.close(cloneDir, taskId, top, expectedTip)
                 : register.advance(cloneDir, taskId, top, expectedTip);
-        if (!answered(moved)) {
+        if (!moved.succeeded()) {
             return new AdmittedRange.Unverified(moved.failureDetail("admission's ref transaction"));
         }
         return new AdmittedRange.Admitted(top);
@@ -135,9 +137,5 @@ final class HarvestAdmission {
 
     private GitCommandResult read(String ref) {
         return GitReadGate.answered(ref, "rev-parse", runner.run(cloneDir, "rev-parse", "--verify", "--quiet", ref));
-    }
-
-    private static boolean answered(GitCommandResult result) {
-        return result.termination() == Termination.EXITED && result.exitCode() == 0;
     }
 }

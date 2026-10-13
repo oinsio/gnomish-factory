@@ -70,7 +70,7 @@ class GithubMarkerPrivacySpec extends Specification {
     // repository-scoped owner/repo#N (GithubCommentIdentity, NFR-S1), never the canonical id, whose
     // host segment the scenario above bans from the hidden marker. The task.json, MDC and branch
     // halves are TakeTrackerRecordsSpec's.
-    // F80: text aligned to code (8.15)
+    // F80: scenario text aligned to what this test asserts
     // Scenario: tracker/github-tracker / The canonical id flows unchanged into the records
     def "every #kind marker carries the task's repository-scoped identity, without the host"() {
         given:

@@ -33,6 +33,26 @@ record RefTransaction(List<Update> updates) {
      */
     record Update(String ref, String newCommit, @Nullable String expectedTip) {
 
+        /**
+         * Refuses any value that is not one full ref name or one full object id: the script is
+         * line-oriented and space-separated, so a value carrying a separator would write a command
+         * of its own. The values are not quoted in the message — they may be git's output.
+         */
+        Update {
+            if (!ref.startsWith("refs/") || ref.chars().anyMatch(c -> c <= ' ' || c == 0x7f)) {
+                throw new IllegalArgumentException(
+                        "the ref of a ref-transaction update is not one full ref name under refs/");
+            }
+            if (!VerifiedTip.isObjectId(newCommit)) {
+                throw new IllegalArgumentException(
+                        "the new commit of a ref-transaction update is not one full object id");
+            }
+            if (expectedTip != null && !VerifiedTip.isObjectId(expectedTip)) {
+                throw new IllegalArgumentException(
+                        "the expected tip of a ref-transaction update is not one full object id");
+            }
+        }
+
         /** Deletes {@code ref} if it still names {@code expectedTip}: update-ref reads an all-zero new value as a deletion. */
         static Update deletion(String ref, String expectedTip) {
             return new Update(ref, "0".repeat(expectedTip.length()), expectedTip);

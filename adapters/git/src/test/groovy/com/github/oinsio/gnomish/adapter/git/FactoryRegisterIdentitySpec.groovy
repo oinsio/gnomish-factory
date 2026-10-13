@@ -127,20 +127,21 @@ class FactoryRegisterIdentitySpec extends Specification implements LifecyclePush
         write.call(store)
 
         then:
-        1 * delegate./approveCheckpoint|appendDecision|resumeFrom/(*_) >> {
+        1 * delegate."$method"(*_) >> {
             commitOnTaskBranch(name)
         }
+        0 * delegate._
         registeredEverywhere()
 
         where:
-        name | write
-        'approval' | { TaskLifecycleStore s ->
+        name | method | write
+        'approval' | 'approveCheckpoint' | { TaskLifecycleStore s ->
             s.approveCheckpoint(TASK_ID, new Position.AwaitingApproval('implement'), TaskState.atStageStart('implement'))
         }
-        'decision' | { TaskLifecycleStore s ->
+        'decision' | 'appendDecision' | { TaskLifecycleStore s ->
             s.appendDecision(TASK_ID, null, TaskState.atStageStart('implement'))
         }
-        'resumed' | { TaskLifecycleStore s ->
+        'resumed' | 'resumeFrom' | { TaskLifecycleStore s ->
             s.resumeFrom(TASK_ID, TaskState.atStageStart('implement'))
         }
     }
@@ -160,7 +161,7 @@ class FactoryRegisterIdentitySpec extends Specification implements LifecyclePush
         and: 'an interrupted round is salvaged and pushed, as revocation does'
         Files.writeString(worktree.resolve('leftover.txt'), 'half-done')
         new WorktreeSalvage(git, worktree, ClaimEpochSource.NONE).salvage(TASK_ID)
-        new GitTaskBranches(git, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).pushBestEffort(worktree, TASK_ID)
+        new GitTaskBranches(git, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure()).pushClosingBestEffort(worktree, TASK_ID)
 
         then:
         afterRound

@@ -21,7 +21,7 @@ import java.nio.file.Path;
  * in-box and harvests (FR6 of add-sandbox-core), letting a {@code GitSalvageFailedException}
  * propagate — a failed salvage is a genuine local-durability problem, not something this handler
  * can paper over); best-effort closing push of the branch and its factory register ({@link
- * TaskBranchGit#pushBestEffort}, which never throws); post a
+ * TaskBranchGit#pushClosingBestEffort}, which never throws); post a
  * structural "work stopped" note; release the claim. The tracker's logical state is deliberately
  * left untouched (FR15) — revocation may have been caused by a human closing the task or claiming
  * it directly, and this handler must not fight that action, only stop working and get out of the
@@ -73,7 +73,7 @@ public record RevocationHandler(Tracker tracker, TaskSalvage worktreeSalvage, Ta
     public TakeResult.Revoked handle(
             TaskRef ref, String taskId, TaskState finalState, Path worktreeRoot, String reason) {
         worktreeSalvage.salvage(taskId);
-        branchPush.pushBestEffort(worktreeRoot, taskId);
+        branchPush.pushClosingBestEffort(worktreeRoot, taskId);
 
         // The reason names what the tracker held — the new claim's holder, a closure reason — so it
         // leaves through the comment plane at the write, with the factory's own sentences outside

@@ -73,9 +73,9 @@ task-branch:
         gitOutput(projectDir, 'checkout', '-q', main)
     }
 
+    // F99: the park report's "Base ref:" line names the ref the task resolved to, not the law commit SHA
     // Scenario: serve/factory-serve / Two bases, one broken
     // Scenario: pipeline/pipeline-config / A broken base parks only its task
-    // F99: the park report's "Base ref:" line names the ref the task resolved to, not the law commit SHA
     def "FR13: the task on the valid base runs, the task on the broken base parks naming its errors and base, and the daemon runs on"() {
         when: 'one drain pass works the queue'
         def properties = FakeAgentSupport.propertiesFor('plain-round')

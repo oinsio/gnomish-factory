@@ -74,9 +74,9 @@ class DashboardHygieneBlockSpec extends Specification {
     //     tracker or runtime error, per the sandbox-lifecycle capability). The sweep vital carries
     //     the last skip's source and the line names it (F90, D17 of tighten-spec-contract).
     // Scenario: observability/dashboard-page / Silent stall becomes loud
-    def "three consecutive no-verdict ticks raise a stall alarm naming the failing verdict source"() {
+    def "three consecutive no-verdict ticks raise a stall alarm naming the failing verdict source (#source)"() {
         given:
-        def sweep = new SweepVital(GENERATED_AT, 300L, new SweepCounts(0, 0, 0, 0, 0, 2), [], 0, 3, SkippedVerdictSource.TRACKER)
+        def sweep = new SweepVital(GENERATED_AT, 300L, new SweepCounts(0, 0, 0, 0, 0, 2), [], 0, 3, source)
 
         when:
         def html = markup(renderer.render(new DaemonSnapshotView.Absent(), emptyHistory(), neverFetchedBoard(),
@@ -89,7 +89,13 @@ class DashboardHygieneBlockSpec extends Specification {
         alarms.size() == 1
         alarms[0].startsWith('sandbox cleanup stalled')
 
-        and: 'it names the failing verdict source'
-        alarms[0] =~ /tracker|runtime/
+        and: 'it names the source the sweep recorded, and no other'
+        alarms[0].endsWith("(failing verdict source: ${source.name().toLowerCase(Locale.ROOT)})")
+        SkippedVerdictSource.values().findAll { it != source }.every {
+            !alarms[0].contains(it.name().toLowerCase(Locale.ROOT))
+        }
+
+        where:
+        source << SkippedVerdictSource.values()
     }
 }

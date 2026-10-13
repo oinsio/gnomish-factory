@@ -158,4 +158,18 @@ class GitCommandResultDetailSpec extends Specification {
         !detail.contains('\n')
         detail.contains('forged record')
     }
+
+    // NFR-R3 of bound-subprocess-commands: success is a fact only when git ran to its own exit and
+    //     said zero; a cut-off invocation's exit code is no answer, whatever its value.
+    def "NFR-R3: a result succeeded only when git ran to its own exit with code zero (#termination, #exitCode)"() {
+        expect:
+        GitCommandResult.of(exitCode, '', '', termination).succeeded() == succeeded
+
+        where:
+        termination | exitCode || succeeded
+        Termination.EXITED | 0 || true
+        Termination.EXITED | 1 || false
+        Termination.TIMED_OUT | 0 || false
+        Termination.INTERRUPTED | 0 || false
+    }
 }

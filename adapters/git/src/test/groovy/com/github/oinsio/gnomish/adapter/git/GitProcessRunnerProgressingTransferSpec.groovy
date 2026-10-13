@@ -22,7 +22,7 @@ class GitProcessRunnerProgressingTransferSpec extends Specification {
     Path tempDir
 
     // FR4, G3 of bound-subprocess-commands.
-    // F72: text aligned to code (8.15)
+    // F72: scenario text aligned to what this test asserts
     // Scenario: git/git-task-persistence / A slow but progressing transfer completes
     def "FR4: a progressing fetch finishes within a deadline that covers it, and is timed out by one that does not"() {
         given:

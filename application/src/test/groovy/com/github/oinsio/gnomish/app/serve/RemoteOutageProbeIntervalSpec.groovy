@@ -38,9 +38,9 @@ class RemoteOutageProbeIntervalSpec extends Specification {
         gaps
     }
 
-    // Scenario: serve/factory-serve / Probe intervals grow with jitter and stop at the cap
     // F95: the jittered interval is clamped to the cap after the jitter; at the cap the jitter is
     // taken off the cap, so the gaps there stay distinct inside the jitter band below it.
+    // Scenario: serve/factory-serve / Probe intervals grow with jitter and stop at the cap
     def "FR14: eight failed probes on virtual time space out from the idle interval toward the cap, jittered, never past the cap"() {
         when:
         def gaps = gapsBetweenFailedProbes(8)
