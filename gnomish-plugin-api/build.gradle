@@ -34,13 +34,8 @@ plugins {
 // owed and `japicmpApiGate` stays green against the committed jars.
 //
 // FR13, NFR-S2 of tighten-spec-contract (design D13): 0.11.0 -> 0.12.0, the tenth BREAKING move.
-// The classifier reads the task's registered commit, named by the factory register, never the tip,
-// so the re-exposed `:domain` record `BranchTipFacts` loses its old canonical constructor:
-// `cleanupCommitInHistory` (a history search the gnome could satisfy with a forged subject) gives
-// way to `registeredCleanup` (whether the registered commit is the cleanup commit) and the new
-// sealed `TipRelation` (where the tip stands relative to it). The same version adds three
-// `OperatorEvent` constants (GF161-GF163), an addition. `compat-baseline/` was regenerated
-// (`updateApiCompatibilityBaseline`) in the same change.
+// `BranchTipFacts` reads the registered commit: `cleanupCommitInHistory` gave way to
+// `registeredCleanup` and `TipRelation` (README, "Versioning"); `compat-baseline/` regenerated.
 //
 // FR23 (and FR17, FR22) of supervise-daemon-loops-and-embed-dashboard: 0.10.0 -> 0.11.0, the
 // ninth BREAKING move. Each plugin SPI factory now has exactly one `create`, taking a host-built

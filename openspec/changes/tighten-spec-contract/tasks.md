@@ -662,7 +662,7 @@ finding names.
       `AgentAiSeam` keeps that route), `add-command-executor` and `fix-docker-exec-env-argv` (F82:
       the container chain takes `BoxEquipment`). Verify: `openspec validate <change> --strict` and
       `scripts/check-spec-contract.sh --changes` green for the five.
-- [ ] 9.17 Final gate: every `findings.md` row of the sixteen carries "done (9.n)"; `grep -rn
+- [x] 9.17 Final gate: every `findings.md` row of the sixteen carries "done (9.n)"; `grep -rn
       "@PendingFeature" --include='*.groovy' .` (outside `build/`) lists exactly F97 (M9); every
       `pending-test:` entry names `add-subprocess-access-log` (3 entries, M8); none of the twelve
       follow-up change names of 8.14 is left in a test tree or `config/`; then the checks of 7.4
