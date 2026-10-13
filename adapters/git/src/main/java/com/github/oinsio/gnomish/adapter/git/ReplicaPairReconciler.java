@@ -227,8 +227,12 @@ final class ReplicaPairReconciler {
             String remoteTip,
             DivergenceOutcome relation) {
         // The local line becomes origin's, and the register follows origin's in the same ref
-        // transaction (D13 of tighten-spec-contract), so no kill separates the two moves.
-        GitCommandResult swap = register.adopt(repo, taskId, localRef, remoteTip, localTip);
+        // transaction (D13 of tighten-spec-contract), so no kill separates the two moves. A clone
+        // register off origin's line names a commit being given up: with no register at origin to
+        // replace it, the same transaction deletes it rather than leave every later read Diverged.
+        String localRegister = tipOf(FactoryRegister.of(taskId).name());
+        String offLineRegister = localRegister != null && !isAncestor(localRegister, remoteTip) ? localRegister : null;
+        GitCommandResult swap = register.adopt(repo, taskId, localRef, remoteTip, localTip, offLineRegister);
         if (swap.termination() != Termination.EXITED) {
             throw new IllegalStateException("could not reconcile " + branch + " of task " + taskId + ": git update-ref "
                     + "did not run to its own exit (" + swap.termination().name()

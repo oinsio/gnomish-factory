@@ -30,7 +30,7 @@ import org.jspecify.annotations.Nullable;
  *       branch alone, so the register keeps naming the last closing commit.
  *   <li>{@link #adopt} — the replica reconciler's move of the local branch to origin's line
  *       (behind, or a discarded divergence): the register follows origin's, in the same transaction,
- *       when origin carries one; a branch origin holds without a register moves alone.
+ *       when origin carries one; otherwise a clone register off origin's line is deleted with it.
  *   <li>{@link #follow} — the replica reconciler's catch-up of the register alone where the branch
  *       already holds origin's line (equal or ahead): the register moves forward to origin's under
  *       a compare-and-swap against the clone's own, the branch verified unmoved in the same
@@ -126,23 +126,27 @@ final class FactoryRegister {
     }
 
     /**
-     * Moves {@code localRef} from {@code localTip} to origin's {@code remoteTip}, and the register to
-     * origin's register as the last touchpoint fetch landed it, in one transaction; the register is
-     * left alone when origin carries none for the task.
+     * Moves {@code localRef} from {@code localTip} to origin's {@code remoteTip}; the register as the
+     * class javadoc says — a register naming the line given up would read {@code Diverged} forever.
      *
-     * @param repo the clone, or a worktree of it
-     * @param taskId the tracker's original taskId
-     * @param localRef the local task branch's full ref name
-     * @param remoteTip origin's tip, the branch's new value
      * @param localTip the local tip the decision was made on, the compare-and-swap's expectation
+     * @param offLineRegister the clone's register if not an ancestor of {@code remoteTip}, else null
      * @return the transaction's result; a non-zero exit moved neither ref
      */
-    GitCommandResult adopt(Path repo, String taskId, String localRef, String remoteTip, String localTip) {
+    GitCommandResult adopt(
+            Path repo,
+            String taskId,
+            String localRef,
+            String remoteTip,
+            String localTip,
+            @Nullable String offLineRegister) {
         List<RefTransaction.Update> updates = new ArrayList<>();
         updates.add(new RefTransaction.Update(localRef, remoteTip, localTip));
         String originRegister = originRegister(repo, taskId);
         if (originRegister != null) {
             updates.add(new RefTransaction.Update(of(taskId).name(), originRegister, null));
+        } else if (offLineRegister != null) {
+            updates.add(RefTransaction.Update.deletion(of(taskId).name(), offLineRegister));
         }
         return runner.run(repo, new RefTransaction(updates));
     }

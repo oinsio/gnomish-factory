@@ -611,6 +611,11 @@ finding names.
       operator-visible reason before the seed clone runs. Verify additionally:
       `JvmProxyEgressE2ESpec` green; a spec that a box image with git older than 2.45 is refused
       with the reason.
+      *As built:* the factory does not create its clone (the operator does), so no owner passes
+      `--ref-format=reftable`; `FactoryCloneRefFormat` requires reftable at every touchpoint and
+      refuses any other backend with `[GF162]` and the remedy in the operator guide, and the test
+      build sets `GIT_DEFAULT_REF_FORMAT=reftable` (`AdversarialGitConfig` in `build-logic`), so
+      every fixture clone is on it (D13, *As built*).
 - [x] 9.13g F135 — the clone's ref backend checked before the first write (D13 as amended
       2026-10-13, check-issue on the 9.13f implementation; 9.13f's "fails closed before it writes
       anything"): `TouchpointFetch.fetch` requires the backend (`FactoryCloneRefFormat`) before

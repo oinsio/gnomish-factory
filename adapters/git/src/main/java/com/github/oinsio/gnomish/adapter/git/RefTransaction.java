@@ -28,10 +28,16 @@ record RefTransaction(List<Update> updates) {
      * One ref move.
      *
      * @param ref the full ref name
-     * @param newCommit the commit the ref names afterwards
+     * @param newCommit the commit the ref names afterwards; all zeros deletes the ref
      * @param expectedTip the commit the ref must name now, or {@code null} for no precondition
      */
-    record Update(String ref, String newCommit, @Nullable String expectedTip) {}
+    record Update(String ref, String newCommit, @Nullable String expectedTip) {
+
+        /** Deletes {@code ref} if it still names {@code expectedTip}: update-ref reads an all-zero new value as a deletion. */
+        static Update deletion(String ref, String expectedTip) {
+            return new Update(ref, "0".repeat(expectedTip.length()), expectedTip);
+        }
+    }
 
     RefTransaction {
         if (updates.isEmpty()) {

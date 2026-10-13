@@ -36,7 +36,8 @@ import org.slf4j.LoggerFactory;
  * permitted state-directory path — and it moves the branch alone, never the
  * register. A refused or unjudged range moves nothing and skips the push with one
  * WARN, leaving the authoritative verdict to the round's close
- * (git-task-persistence "Push safety rules"). Like every {@link
+ * (git-task-persistence "Push safety rules"); only a verdict — admitted or refused — settles a
+ * harvested tip, so an unjudged one is judged again at the next poll. Like every {@link
  * AgentProgressListener}, {@link #onProgress} never throws.
  *
  * <p>A poll that keeps failing would otherwise cost one WARN per progress event for the whole
@@ -110,8 +111,8 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
     /**
      * Harvests, admits and pushes best-effort if the rate limit allows and the harvested tip moved
      * since the last observation; otherwise a cheap no-op. Never throws: a refused or failed
-     * harvest, a quarantine the poll cannot resolve and a refused admission are each one
-     * suppressed line and no push.
+     * harvest, a quarantine the poll cannot resolve, a refused or unjudged admission and an
+     * admission read cut off before git answered are each one suppressed line and no push.
      *
      * @param event the progress event that just occurred; unused beyond being the
      *     poll opportunity — tip movement, not event content, is what matters
@@ -145,15 +146,28 @@ public final class MidRoundHarvestListener implements AgentProgressListener {
         if (harvested.equals(lastObservedTip)) {
             return;
         }
-        lastObservedTip = harvested;
-        switch (admission.admit(taskId, harvested, rule)) {
+        AdmittedRange admitted;
+        try {
+            admitted = admission.admit(taskId, harvested, rule);
+        } catch (BranchTipUnavailableException e) {
+            // A read cut off before git answered judged nothing: the same tip is judged again at
+            // the next poll, like any other unverified range.
+            pollLog.failed(MidRoundPollLog.Subject.ADMISSION, FailureReason.of(e), null);
+            return;
+        }
+        switch (admitted) {
             case AdmittedRange.Admitted ignored -> {
+                lastObservedTip = harvested;
                 pollLog.recovered(MidRoundPollLog.Subject.ADMISSION);
                 admission.pushAdmitted(taskId);
             }
-            case AdmittedRange.Refused refused ->
+            case AdmittedRange.Refused refused -> {
+                lastObservedTip = harvested;
                 pollLog.failed(
                         MidRoundPollLog.Subject.ADMISSION, refused.reason().forLog(), null);
+            }
+            // Only a verdict settles a tip: an unjudged range stays unobserved, so the next poll
+            // judges it again instead of waiting for the gnome's next commit.
             case AdmittedRange.Unverified unverified ->
                 pollLog.failed(
                         MidRoundPollLog.Subject.ADMISSION, unverified.evidence().forLog(), null);

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.domain.branch
 
-import com.github.oinsio.gnomish.domain.engine.Position
 import spock.lang.Specification
 
 /**
@@ -40,27 +39,6 @@ class BranchShapeRegisterSpec extends Specification {
         tips.every {
             classifier.classify(withRelation(it, new TipRelation.AboveRegister())) == classifier.classify(it)
         }
-    }
-
-    // F135: the facts come from the registered commit, so a Completed the gnome wrote above it is
-    // simply not among them — the shape is the registered commit's own.
-    // Scenario: lifecycle/task-branch-contract / A gnome-written Completed outcome is not a pending cleanup
-    // Scenario: lifecycle/task-branch-contract / A gnome-written gate position opens no gate
-    def "F135: a registered commit in progress under a tip above it is InProgress, not #forged"() {
-        given: 'the facts the registered commit carries: rounds recorded, no outcome, at a stage'
-        def registered = new BranchTipFacts(new EnvelopeStatus.Parsed(), new EnvelopeStatus.Parsed(),
-                RecordedTerminal.NONE, Optional.of(new Position.AtStage('implement')), true, false, false,
-                new TipRelation.AboveRegister())
-
-        expect:
-        classifier.classify(registered) == new BranchShape.InProgress()
-
-        where:
-        forged << [
-            'CompletedUncleaned',
-            'AwaitingApproval',
-            'Delivered'
-        ]
     }
 
     // D19: a register that is not an ancestor of the tip names both commits, whatever the

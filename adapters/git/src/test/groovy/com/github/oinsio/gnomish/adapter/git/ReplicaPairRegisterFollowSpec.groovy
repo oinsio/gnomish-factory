@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
+import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.gittransfer.GitTransfer
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.subprocess.Termination
@@ -116,6 +117,46 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
         outcome == DivergenceOutcome.EQUAL
         tip(env.clone, 'refs/remotes/origin/gnomish-factory/PROJ-1') == tip(env.seed)
         tip(env.clone, REGISTER) == closing
+    }
+
+    def "FR13: a discarded local line takes its register with it when origin registers nothing"() {
+        given: 'the clone registered a closing commit origin never received; origin moved on unregistered'
+        def env = setUpClonedBranch()
+        commit(env.worktree, 'c.txt', 'closing commit, push lost')
+        runner.run(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
+        commit(env.seed, 'o.txt', 'origin line')
+        assert runner.run(env.seed, 'push', 'origin', branchName).exitCode() == 0
+        def underTenure = { String taskId ->
+            Optional.of(new ClaimEpoch(7L))
+        } as ClaimEpochSource
+
+        when:
+        def outcome = ReplicaPairReconciler.forWorktree(runner, env.worktree, underTenure).reconcile('PROJ-1', branchName)
+
+        then: 'the branch is origin\'s, and no register names a commit off it'
+        outcome == DivergenceOutcome.DIVERGED
+        tip(env.clone, "refs/heads/${branchName}") == tip(env.seed)
+        runner.run(env.clone, 'rev-parse', '--verify', '--quiet', REGISTER).exitCode() != 0
+    }
+
+    def "FR13: a register on origin's line survives the discard when origin registers nothing"() {
+        given: 'the clone registered a commit origin also holds; the local line then diverged above it'
+        def env = setUpClonedBranch()
+        runner.run(env.clone, 'update-ref', REGISTER, "refs/heads/${branchName}")
+        def registered = tip(env.clone, REGISTER)
+        commit(env.worktree, 'c.txt', 'local work, push lost')
+        commit(env.seed, 'o.txt', 'origin line')
+        assert runner.run(env.seed, 'push', 'origin', branchName).exitCode() == 0
+        def underTenure = { String taskId ->
+            Optional.of(new ClaimEpoch(7L))
+        } as ClaimEpochSource
+
+        when:
+        def outcome = ReplicaPairReconciler.forWorktree(runner, env.worktree, underTenure).reconcile('PROJ-1', branchName)
+
+        then:
+        outcome == DivergenceOutcome.DIVERGED
+        tip(env.clone, REGISTER) == registered
     }
 
     def "FR13: origin's register off the local line is never adopted"() {

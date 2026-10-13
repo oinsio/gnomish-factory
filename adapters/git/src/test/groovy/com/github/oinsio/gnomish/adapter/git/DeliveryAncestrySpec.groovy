@@ -28,9 +28,10 @@ import spock.lang.TempDir
  *
  * <p>F122, FR13 of tighten-spec-contract (design D13): delivery is "the registered commit is the
  * cleanup commit" — no history is searched, so neither a base's history nor a gnome commit carrying
- * the cleanup subject can deliver a task. Every write here is registered as the closing push would.
+ * the cleanup subject can deliver a task. Every write here goes through the factory's own writers,
+ * which register what they commit, so a writer that stopped registering turns this spec red.
  */
-class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture, RegisteredBranchFixture {
+class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
 
     @TempDir
     Path tempDir
@@ -54,7 +55,6 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture, 
                 TaskStart.commit(cloneDir, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 TaskState.atStageStart('implement'))
-        registerTip(cloneDir, taskId)
     }
 
     /** Whether the branch of {@code taskId} reads as delivered, through the classification's own source. */
@@ -72,11 +72,8 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture, 
                 ])
         new GitAttemptPersistence(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE)
                 .persist('PROJ-1', TaskState.atStageStart('implement'), trace)
-        registerTip(cloneDir, 'PROJ-1')
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
-        registerTip(cloneDir, 'PROJ-1')
         repository.finishCleanup('PROJ-1')
-        registerTip(cloneDir, 'PROJ-1')
         def merge = runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a',
                 'merge', mergeMode, '-m', 'Merge PR: PROJ-1', 'gnomish/PROJ-1')
         assert merge.exitCode() == 0

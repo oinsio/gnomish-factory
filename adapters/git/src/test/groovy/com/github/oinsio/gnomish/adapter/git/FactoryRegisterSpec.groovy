@@ -83,7 +83,7 @@ class FactoryRegisterSpec extends Specification implements BareGitRepoFixture {
                 .answer(['update-ref'], 0)
 
         when:
-        new FactoryRegister(git).adopt(CLONE, 'T-1', 'refs/heads/gnomish/T-1', NEW, OLD)
+        new FactoryRegister(git).adopt(CLONE, 'T-1', 'refs/heads/gnomish/T-1', NEW, OLD, null)
 
         then:
         git.calls(['update-ref'])*.argv == [
@@ -104,7 +104,7 @@ class FactoryRegisterSpec extends Specification implements BareGitRepoFixture {
         def git = new ScriptedGit().answer(['rev-parse'], 1).answer(['update-ref'], 0)
 
         when:
-        new FactoryRegister(git).adopt(CLONE, 'T-1', 'refs/heads/gnomish/T-1', NEW, OLD)
+        new FactoryRegister(git).adopt(CLONE, 'T-1', 'refs/heads/gnomish/T-1', NEW, OLD, null)
 
         then:
         git.calls(['update-ref'])*.argv == [
@@ -113,6 +113,28 @@ class FactoryRegisterSpec extends Specification implements BareGitRepoFixture {
                 '--stdin',
                 'start',
                 "update refs/heads/gnomish/T-1 ${NEW} ${OLD}".toString(),
+                'prepare',
+                'commit'
+            ]
+        ]
+    }
+
+    def "FR13: adopting a line origin holds without a register deletes a clone register off it, in the same transaction"() {
+        given:
+        def offLine = 'd' * 40
+        def git = new ScriptedGit().answer(['rev-parse'], 1).answer(['update-ref'], 0)
+
+        when:
+        new FactoryRegister(git).adopt(CLONE, 'T-1', 'refs/heads/gnomish/T-1', NEW, OLD, offLine)
+
+        then:
+        git.calls(['update-ref'])*.argv == [
+            [
+                'update-ref',
+                '--stdin',
+                'start',
+                "update refs/heads/gnomish/T-1 ${NEW} ${OLD}".toString(),
+                "update refs/gnomish-factory/T-1 ${'0' * 40} ${offLine}".toString(),
                 'prepare',
                 'commit'
             ]

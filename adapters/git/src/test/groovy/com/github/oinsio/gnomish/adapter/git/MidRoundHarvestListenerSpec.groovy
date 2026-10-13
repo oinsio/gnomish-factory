@@ -3,9 +3,11 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.gittransfer.GitTransfer
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.subprocess.Termination
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -67,8 +69,9 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
     private MidRoundHarvestListener listener(
             TaskExecutionEnvironment env,
             Duration interval = MIN_INTERVAL,
-            MidRoundPollContext context = new MidRoundPollContext('PROJ-9', BRANCH, suppressor)) {
-        new MidRoundHarvestListener(env, new HarvestAdmission(runner, clone), gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH),
+            MidRoundPollContext context = new MidRoundPollContext('PROJ-9', BRANCH, suppressor),
+            GitRunner admissionRunner = runner) {
+        new MidRoundHarvestListener(env, new HarvestAdmission(admissionRunner, clone), gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH),
                 AdmissionRule.midRound(new com.github.oinsio.gnomish.domain.engine.AttemptKey('PROJ-9', 'implement', 0), com.github.oinsio.gnomish.app.port.git.RoundToken.of('a' * 40)), clock, interval, context)
     }
 
@@ -360,5 +363,73 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
 
         cleanup:
         logs.detach()
+    }
+
+    def "FR13: an admission read cut off before git answered is one suppressed line, never a throw"() {
+        given: 'a harvest that lands a commit, and an admission whose register read is interrupted'
+        def branchBefore = gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH)
+        def l = listener(environment({
+            harvestLands(clone, 'PROJ-9', 'in-box commit')
+        }), MIN_INTERVAL, new MidRoundPollContext('PROJ-9', BRANCH, suppressor), new RegisterReadCutOff(runner))
+
+        when:
+        def events = LogCaptureSupport.capture(MidRoundHarvestListener, Level.WARN) {
+            l.onProgress(toolEvent)
+        }
+
+        then: 'nothing moved, and the poll reported the read through its own suppressed line'
+        noExceptionThrown()
+        gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH) == branchBefore
+        events.size() == 1
+        events[0].formattedMessage.startsWith(OperatorEvent.MID_ROUND_POLL_SKIPPED.head())
+        events[0].formattedMessage.contains('mid-round admission')
+    }
+
+    def "FR13: a range the admission could not judge is judged again on the next poll, without a new gnome commit"() {
+        given: 'one in-box commit, harvested once; the register is missing at the first poll'
+        String landed = null
+        def l = listener(environment({
+            if (landed == null) {
+                landed = harvestLands(clone, 'PROJ-9', 'in-box commit')
+            }
+        }))
+        def registered = gitOutput(clone, 'rev-parse', 'refs/gnomish-factory/PROJ-9')
+        gitOutput(clone, 'update-ref', '-d', 'refs/gnomish-factory/PROJ-9')
+
+        when: 'the register comes back and the next poll sees the same harvested tip'
+        l.onProgress(toolEvent)
+        gitOutput(clone, 'update-ref', 'refs/gnomish-factory/PROJ-9', registered)
+        clock.advance(Duration.ofMinutes(1))
+        l.onProgress(toolEvent)
+
+        then: 'the same range is admitted and pushed'
+        gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH) == landed
+        gitOutput(origin, 'rev-parse', 'refs/heads/' + BRANCH) == landed
+    }
+
+    /** A runner whose read of the task's register is cut off before git answered. */
+    private static final class RegisterReadCutOff implements GitRunner {
+        private final GitRunner real
+
+        RegisterReadCutOff(GitRunner real) {
+            this.real = real
+        }
+
+        @Override
+        GitCommandResult run(Path cwd, String... args) {
+            args[0] == 'rev-parse' && args[-1] == 'refs/gnomish-factory/PROJ-9'
+                    ? GitCommandResult.of(130, '', '', Termination.INTERRUPTED)
+                    : real.run(cwd, args)
+        }
+
+        @Override
+        GitCommandResult run(Path cwd, GitTransfer transfer) {
+            real.run(cwd, transfer)
+        }
+
+        @Override
+        GitCommandResult run(Path cwd, RefTransaction transaction) {
+            real.run(cwd, transaction)
+        }
     }
 }
