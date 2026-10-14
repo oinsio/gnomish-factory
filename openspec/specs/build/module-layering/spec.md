@@ -61,6 +61,79 @@ The build SHALL be organized into layered Gradle modules by hexagonal layer:
 - **THEN** the allowed-bases pattern grammar, the designator validation against the allowed bases, the source priority and the decision value types come from the `:baseref` leaf
 - **AND** the leaf is a function from values to a decision, with no subprocess, no port and no factory type inside
 
+### Requirement: Composition root isolated in bootstrap
+`app` SHALL be split into `application` (use cases and ports, adapter-free) and
+`bootstrap` (the single composition root holding `@SpringBootApplication`,
+`main()`, and all wiring). The split SHALL be by *role*: composition — `main()`,
+`@Configuration`, and the assembly/factory classes whose job is to instantiate
+and connect adapters — belongs to `bootstrap`; use-case logic stays in
+`application`, with its adapter references inverted.
+**Implements**: FR3, NFR-R1 of split-into-modules
+
+#### Scenario: application module has no adapter imports
+- **WHEN** the boundary rules run against `:application`
+- **THEN** no import of any adapter module is present
+- **AND** its uses of the execution environment go through the `:sandbox:core`
+  port, not a backend module
+
+#### Scenario: bootstrap is the only Spring scan root
+- **WHEN** the application starts
+- **THEN** component scanning is rooted in `bootstrap` only, and adapters are
+  contributed via explicit configuration or factories, not cross-module scanning
+
+#### Scenario: Startup wiring is unchanged by the split
+- **WHEN** `bootstrap` starts the factory with the same configuration as the
+  pre-split monolith
+- **THEN** the same adapter set is wired and startup succeeds on the flat
+  classpath, with no new wiring failure mode
+
+### Requirement: Vertical adapter modules per technology
+In the second pass, adapters SHALL be split vertically per technology:
+`:adapters:github` bundles the shared github HTTP core with the github tracker
+and github check adapters as one vendor module; `:adapters:git` and
+`:adapters:agent` get their own modules; the in-memory tracker stays in-tree as
+the reference/test double and the small adapters stay in the coarse remainder
+module.
+**Implements**: FR10 of split-into-modules
+
+#### Scenario: The github vendor bundle is one module
+- **WHEN** `./gradlew projects` is run after the vertical split
+- **THEN** `:adapters:github`, `:adapters:git`, and `:adapters:agent` appear as
+  separate projects
+- **AND** the shared github HTTP core is an internal package of
+  `:adapters:github`, not a module other adapters can depend on
+
+#### Scenario: Sibling isolation holds after the vertical split
+- **WHEN** the boundary rules re-run after the vertical split
+- **THEN** no adapter module imports a sibling adapter's internals
+- **AND** the full suite passes unchanged
+
+### Requirement: Application reaches adapters only through ports
+`application` SHALL contain no import of an adapter implementation. Where a use
+case reaches one, the dependency SHALL be inverted either by relocating the
+referenced type — when it is a port interface or a pure value/utility type
+merely misfiled under `adapter.*`, moved with its signature unchanged — or by
+introducing a port interface owned by `application` (or `domain`, where the
+engine already consumes it) that `bootstrap` binds to the concrete adapter.
+**Implements**: FR12 of split-into-modules
+**Notes**: The scenario `A relocated port keeps its signature` was the acceptance of the archived change `split-into-modules` and left with the old heading `Use-case dependencies inverted onto ports` (FR16 of tighten-spec-contract).
+
+#### Scenario: A use case reaches its collaborator through a port
+- **WHEN** a use case in `application` needs a git subprocess, the console,
+  pipeline loading, a workspace, a check runner, or the container-availability
+  probe
+- **THEN** it declares a port interface owned by `application` or `domain`
+- **AND** the concrete adapter satisfying it is supplied by `bootstrap`
+
+#### Scenario: An adapter import in application fails the build
+- **WHEN** a class under `application` imports any `..adapter..` type
+- **THEN** `check` fails with the named ArchUnit rule identifying the offending
+  class and the imported adapter type
+
+#### Scenario: An inverted seam is the smallest capability
+- **WHEN** a port is introduced to invert a use case's reference to an adapter
+- **THEN** it declares the smallest capability the use case needs, not a mirror of the adapter's class surface
+
 ### Requirement: Enforced acyclic dependency direction
 The module dependency direction SHALL be acyclic and enforced by the build: each
 module SHALL declare only the internal edges its layer permits, and the layering
@@ -144,7 +217,7 @@ gate SHALL fail the build naming any declared edge outside that set.
 - **THEN** it declares `:untrustedtext` as its only internal dependency and no
   external dependency beyond `slf4j-api`
 
-#### Scenario: The baseref leaf stays empty of dependencies
+#### Scenario: The baseref leaf depends only on the untrustedtext leaf
 - **WHEN** the dependency gates run against `:baseref`
 - **THEN** it declares no internal module dependency but the dependency-free
   `:untrustedtext` leaf, and no external dependency at all — the layering
@@ -215,76 +288,3 @@ gate SHALL fail the build naming any declared edge outside that set.
 - **WHEN** `:gitobjects` runs a git command and no observer was supplied
 - **THEN** it reports its execution facts to a no-op through its own JDK-only observer hook and declares no dependency for access-log emission
 - **AND** in the shipped composition `bootstrap` wires that hook to the access-log emitter
-
-### Requirement: Composition root isolated in bootstrap
-`app` SHALL be split into `application` (use cases and ports, adapter-free) and
-`bootstrap` (the single composition root holding `@SpringBootApplication`,
-`main()`, and all wiring). The split SHALL be by *role*: composition — `main()`,
-`@Configuration`, and the assembly/factory classes whose job is to instantiate
-and connect adapters — belongs to `bootstrap`; use-case logic stays in
-`application`, with its adapter references inverted.
-**Implements**: FR3, NFR-R1 of split-into-modules
-
-#### Scenario: application module has no adapter imports
-- **WHEN** the boundary rules run against `:application`
-- **THEN** no import of any adapter module is present
-- **AND** its uses of the execution environment go through the `:sandbox:core`
-  port, not a backend module
-
-#### Scenario: bootstrap is the only Spring scan root
-- **WHEN** the application starts
-- **THEN** component scanning is rooted in `bootstrap` only, and adapters are
-  contributed via explicit configuration or factories, not cross-module scanning
-
-#### Scenario: Startup wiring is unchanged by the split
-- **WHEN** `bootstrap` starts the factory with the same configuration as the
-  pre-split monolith
-- **THEN** the same adapter set is wired and startup succeeds on the flat
-  classpath, with no new wiring failure mode
-
-### Requirement: Vertical adapter modules per technology
-In the second pass, adapters SHALL be split vertically per technology:
-`:adapters:github` bundles the shared github HTTP core with the github tracker
-and github check adapters as one vendor module; `:adapters:git` and
-`:adapters:agent` get their own modules; the in-memory tracker stays in-tree as
-the reference/test double and the small adapters stay in the coarse remainder
-module.
-**Implements**: FR10 of split-into-modules
-
-#### Scenario: The github vendor bundle is one module
-- **WHEN** `./gradlew projects` is run after the vertical split
-- **THEN** `:adapters:github`, `:adapters:git`, and `:adapters:agent` appear as
-  separate projects
-- **AND** the shared github HTTP core is an internal package of
-  `:adapters:github`, not a module other adapters can depend on
-
-#### Scenario: Sibling isolation holds after the vertical split
-- **WHEN** the boundary rules re-run after the vertical split
-- **THEN** no adapter module imports a sibling adapter's internals
-- **AND** the full suite passes unchanged
-
-### Requirement: Application reaches adapters only through ports
-`application` SHALL contain no import of an adapter implementation. Where a use
-case reaches one, the dependency SHALL be inverted either by relocating the
-referenced type — when it is a port interface or a pure value/utility type
-merely misfiled under `adapter.*`, moved with its signature unchanged — or by
-introducing a port interface owned by `application` (or `domain`, where the
-engine already consumes it) that `bootstrap` binds to the concrete adapter.
-**Implements**: FR12 of split-into-modules
-**Notes**: The scenario `A relocated port keeps its signature` was the acceptance of the archived change `split-into-modules` and left with the old heading `Use-case dependencies inverted onto ports` (FR16 of tighten-spec-contract).
-
-#### Scenario: A use case reaches its collaborator through a port
-- **WHEN** a use case in `application` needs a git subprocess, the console,
-  pipeline loading, a workspace, a check runner, or the container-availability
-  probe
-- **THEN** it declares a port interface owned by `application` or `domain`
-- **AND** the concrete adapter satisfying it is supplied by `bootstrap`
-
-#### Scenario: An adapter import in application fails the build
-- **WHEN** a class under `application` imports any `..adapter..` type
-- **THEN** `check` fails with the named ArchUnit rule identifying the offending
-  class and the imported adapter type
-
-#### Scenario: An inverted seam is the smallest capability
-- **WHEN** a port is introduced to invert a use case's reference to an adapter
-- **THEN** it declares the smallest capability the use case needs, not a mirror of the adapter's class surface

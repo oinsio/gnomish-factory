@@ -139,7 +139,7 @@ class ModuleBuildFileSpec extends Specification {
     // Scenario: build/module-layering / The untrustedtext and operatorevent leafs stay empty of dependencies
     // Scenario: build/module-layering / The gittransfer leaf stays empty of dependencies
     // Scenario: build/module-layering / The logtext leaf carries only the logging API
-    // Scenario: build/module-layering / The baseref leaf stays empty of dependencies
+    // Scenario: build/module-layering / The baseref leaf depends only on the untrustedtext leaf
     // Scenario: build/module-layering / The dependency-free leafs depend on nothing internal
     def "the shared leaf #module declares only its permitted production dependencies"() {
         given: 'the module build file, read as data'

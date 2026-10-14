@@ -165,10 +165,10 @@ class PinCheckedExternalCheckClientSpec extends Specification implements PinChec
         delegate.pollCount == 1
     }
 
-    // Scenario: verification/verification-hardening / Interactive client with nothing declared passes the pin
+    // Scenario: verification/verification-hardening / A check with no declared pin paths passes the pin vacuously
     // Scenario: verification/http-check-provider / Only law-declared paths pin an http check
     def "an empty union passes vacuously without touching git"() {
-        given: 'the "Interactive client with nothing declared passes the pin" scenario'
+        given: 'the "A check with no declared pin paths passes the pin vacuously" scenario'
         def workspace = AttemptCommitWorkspaces.empty()
 
         when: 'the workspace carries no attempt commit at all — vacuous pass must not need one'

@@ -54,6 +54,7 @@ import java.time.Instant
 // Scenario: tracker/github-tracker / Abort facts read back on any instance
 // Scenario: tracker/github-tracker / Ready issue with a live claim is visible to the sweep
 // Scenario: tracker/tracker-port / Suite passes on both adapters
+// Scenario: tracker/tracker-port / Returned-fact suite passes on both adapters
 // Scenario: tracker/tracker-port / The suite covers the open listing and its facts
 // Scenario: tracker/tracker-port / The suite covers the heartbeat
 // Scenario: tracker/tracker-port / Finish-reopen property is adapter-equivalent

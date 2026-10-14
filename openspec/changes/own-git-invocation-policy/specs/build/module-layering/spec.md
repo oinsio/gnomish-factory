@@ -164,7 +164,7 @@ gate SHALL fail the build naming any declared edge outside that set.
 - **THEN** it declares `:untrustedtext` as its only internal dependency and no
   external dependency beyond `slf4j-api`
 
-#### Scenario: The baseref leaf stays empty of dependencies
+#### Scenario: The baseref leaf depends only on the untrustedtext leaf
 - **WHEN** the dependency gates run against `:baseref`
 - **THEN** it declares no internal module dependency but the dependency-free
   `:untrustedtext` leaf, and no external dependency at all — the layering

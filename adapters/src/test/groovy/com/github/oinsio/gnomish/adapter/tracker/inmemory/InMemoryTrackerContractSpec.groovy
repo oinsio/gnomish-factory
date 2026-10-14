@@ -71,6 +71,7 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 // Scenario: tracker/tracker-port / Absent is absent, not empty
 // Scenario: tracker/tracker-port / Equal duplicates are one designator
 // Scenario: tracker/tracker-port / Suite passes on both adapters
+// Scenario: tracker/tracker-port / Returned-fact suite passes on both adapters
 // Scenario: tracker/tracker-port / The suite covers the open listing and its facts
 // Scenario: tracker/tracker-port / The suite covers the heartbeat
 // Scenario: tracker/tracker-port / Finish-reopen property is adapter-equivalent

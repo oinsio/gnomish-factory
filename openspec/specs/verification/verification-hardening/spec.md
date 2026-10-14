@@ -81,6 +81,14 @@ The factory SHALL enforce size limits when reading command output and polling ex
 - **WHEN** an external check exposes multi-gigabyte logs
 - **THEN** the factory reads at most the configured cap and records that truncation occurred
 
+### Requirement: Model-output writes are confined to the working copy
+Any factory-side application of model-produced file content SHALL resolve symlinks before writing and refuse paths outside the working copy and any path under `.git/`, enforced by a contract test.
+**Implements**: FR17 of add-sandbox-core
+
+#### Scenario: Path traversal is refused
+- **WHEN** model output instructs writing `../../outside.txt` or `.git/hooks/post-checkout`
+- **THEN** the write is refused and the attempt is reported as a violation
+
 ### Requirement: Pin-check guards external checks
 When a stage declares external checks, each SHALL be guarded by a pin-check performed by a guard component wrapping any `ExternalCheckClient`, before the adapter's first poll: the check's definition files — the union of pin paths declared in the stage law and paths contributed by the adapter — SHALL be byte-identical to the base branch, compared as bare git objects at the attempt commit. Any difference SHALL yield a Fail verdict — a quality failure.
 **Implements**: NFR-S1 of remove-interactive-console
@@ -94,14 +102,6 @@ When a stage declares external checks, each SHALL be guarded by a pin-check perf
 - **WHEN** the gnome modified a stage-3 check's definition file back at stage 1 and stages 1 and 2 passed
 - **THEN** stage 3 fails the pin-check against the base branch before its adapter is invoked
 
-#### Scenario: Interactive client with nothing declared passes the pin
+#### Scenario: A check with no declared pin paths passes the pin vacuously
 - **WHEN** an external check is served by a configured provider that contributes no pin paths and its declaration names none
 - **THEN** the pin passes vacuously and the provider's client is polled as usual
-
-### Requirement: Model-output writes are confined to the working copy
-Any factory-side application of model-produced file content SHALL resolve symlinks before writing and refuse paths outside the working copy and any path under `.git/`, enforced by a contract test.
-**Implements**: FR17 of add-sandbox-core
-
-#### Scenario: Path traversal is refused
-- **WHEN** model output instructs writing `../../outside.txt` or `.git/hooks/post-checkout`
-- **THEN** the write is refused and the attempt is reported as a violation
