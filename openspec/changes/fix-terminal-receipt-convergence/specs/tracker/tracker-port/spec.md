@@ -19,7 +19,7 @@ boundary** — `PARK`, `FINISH`, `ABORT`, `STALE_CLAIM_REMOVED`, or none — der
 from the tracker's durable history. Closed or nonexistent tasks SHALL be reported
 as `Gone`, not as errors.
 **Implements**: FR1, NFR-C1 of fix-terminal-receipt-convergence; FR1 of add-tracker-port; FR3 of add-base-ref-resolution
-**Notes**: Designator kinds are classified as in "Designators are classified once and derived per adapter"; the boundary comes from the boundary markers on the thread, so a claim that follows it does not erase it.
+**Notes**: Designator kinds are classified as in "Designators are classified once and derived per adapter"; the boundary is the thread's last boundary marker, so a claim that follows it does not erase it — it is not the claim-scoped boundary the shape facts carry for the reaper.
 
 #### Scenario: Full fact set for a working task
 - **WHEN** `fetchTask` is called for a task claimed by instance A with two
@@ -62,6 +62,7 @@ shipped adapter SHALL pass the identical suite.
 #### Scenario: Tenure boundary survives a claim on every adapter
 - **WHEN** the suite parks a task, returns it to `Ready` and claims it again, on each adapter
 - **THEN** `fetchTask` reports latest boundary `PARK` with the new holder, on each adapter
+- **AND** after a second return and a second claim it still reports `PARK`
 
 #### Scenario: Every tenure boundary kind is reported on every adapter
 - **WHEN** the suite parks one task, finishes one, aborts one and has the reaper remove one stale claim, on each adapter
