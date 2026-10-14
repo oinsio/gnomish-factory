@@ -59,6 +59,9 @@ class RefTransactionSpec extends Specification {
         'ref' | 'a space' | 'refs/heads/gnomish/T-1 refs/x' | '1' * 40 | null
         'ref' | 'a newline' | 'refs/heads/x\ndelete refs/y' | '1' * 40 | null
         'ref' | 'no refs/ prefix' | 'HEAD' | '1' * 40 | null
+        'ref' | 'a tab' | 'refs/heads/x\ty' | '1' * 40 | null
+        'ref' | 'a DEL' | 'refs/heads/x\u007fy' | '1' * 40 | null
+        'ref' | 'nothing after refs/' | 'refs/' | '1' * 40 | null
     }
 
     def "FR13: SHA-256 ids, a deletion and an absent precondition are well-formed"() {

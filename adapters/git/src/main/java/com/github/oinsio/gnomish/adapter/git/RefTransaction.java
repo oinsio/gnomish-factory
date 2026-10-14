@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -33,13 +34,16 @@ record RefTransaction(List<Update> updates) {
      */
     record Update(String ref, String newCommit, @Nullable String expectedTip) {
 
+        /** One full ref name: under {@code refs/}, with no space, control character or DEL in it. */
+        private static final Pattern FULL_REF = Pattern.compile("refs/[^\\x00-\\x20\\x7f]+");
+
         /**
          * Refuses any value that is not one full ref name or one full object id: the script is
          * line-oriented and space-separated, so a value carrying a separator would write a command
          * of its own. The values are not quoted in the message — they may be git's output.
          */
         Update {
-            if (!ref.startsWith("refs/") || ref.chars().anyMatch(c -> c <= ' ' || c == 0x7f)) {
+            if (!FULL_REF.matcher(ref).matches()) {
                 throw new IllegalArgumentException(
                         "the ref of a ref-transaction update is not one full ref name under refs/");
             }

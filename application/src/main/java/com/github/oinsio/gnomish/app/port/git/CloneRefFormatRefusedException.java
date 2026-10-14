@@ -36,7 +36,7 @@ public final class CloneRefFormatRefusedException extends RuntimeException {
         super("the factory clone \"" + cloneDir + "\" is not on the " + required + " ref backend (git rev-parse"
                 + " --show-ref-format printed: " + reported.forLog() + "); the factory moves a task branch and"
                 + " its register in one ref transaction, which only " + required + " writes atomically. Re-clone"
-                + " the project on " + required + " (`git clone --ref-format=" + required + " <origin-url> <dir>`)"
+                + " the project from origin with git's clone option `--ref-format=" + required + "`"
                 + " and register the new clone with `gnomish project add`; a fresh clone holds only what origin"
                 + " has, so push any branch that exists only in this clone first. Alternatively, convert a clone"
                 + " with no worktrees in place with `git refs migrate --ref-format=" + required + "`.");
