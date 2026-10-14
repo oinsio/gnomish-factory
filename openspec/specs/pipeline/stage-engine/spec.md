@@ -7,10 +7,12 @@ Orchestrate one task through a declarative pipeline from its recorded state to a
 ## Requirements
 
 ### Requirement: Pure orchestration run
-The engine SHALL run one task from its recorded state to a terminal outcome via `run(definition, context, state, workspace, ports)`, touching no tracker, filesystem, or git — the engine executes nothing itself; all effects happen behind the injected `EnginePorts` members: the seven behavioral ports (`StageExecutor`, `BuiltinCheckRunner`, `CommandCheckRunner`, `ExternalCheckClient`, `JudgeVoter`, `EngineEventListener`, `AttemptPersistence`) plus the one environment port: the time equipment (`TimeEquipment`), carrying the JDK instant source (`java.time.InstantSource`, the one type for the current instant across the codebase) and the `Sleeper` as one value.
-<!-- implements FR1, NFR-S1 of add-stage-engine -->
-<!-- implements FR15 of add-manual-run -->
-<!-- implements FR17 of supervise-daemon-loops-and-embed-dashboard -->
+The engine SHALL run one task from its recorded state to a terminal outcome via `run(definition, context, state, workspace, ports)`, touching no tracker, filesystem, or git — the engine executes nothing itself; all effects happen behind the injected `EnginePorts` members.
+**Implements**: FR1, NFR-S1 of add-stage-engine; FR15 of add-manual-run; FR17 of supervise-daemon-loops-and-embed-dashboard
+
+#### Scenario: Every effect crosses an injected port
+- **WHEN** the engine runs a task
+- **THEN** every effect reaches the outside through the `EnginePorts` members: the seven behavioral ports (`StageExecutor`, `BuiltinCheckRunner`, `CommandCheckRunner`, `ExternalCheckClient`, `JudgeVoter`, `EngineEventListener`, `AttemptPersistence`) plus the time equipment (`TimeEquipment`), carrying the JDK instant source (`java.time.InstantSource`, the one type for the current instant across the codebase) and the `Sleeper` as one value, and the attempt-delivery seam (`AttemptDelivery`), which verifies an external check's push precondition before the poll loop starts
 
 #### Scenario: Reference run with fakes only
 - **WHEN** a pipeline exercising all four check types runs with fake ports, including a quality-failure retry, a decision escalation with a decision-carrying re-run, and a manual pause
@@ -22,7 +24,7 @@ The engine SHALL run one task from its recorded state to a terminal outcome via 
 
 ### Requirement: Ordered fail-fast verification
 Verify checks SHALL run strictly in manifest order; the first non-Pass verdict stops the chain.
-<!-- implements FR2 of add-stage-engine -->
+**Implements**: FR2 of add-stage-engine
 
 #### Scenario: Later checks not reached
 - **WHEN** the second of four checks returns Fail
@@ -33,24 +35,17 @@ The engine SHALL poll an `external` check via single-poll port calls
 returning `PollStatus` (Pass with an optional platform run URL | Fail
 with findings | Running | CannotVerify with reason and details) at the
 manifest interval until a verdict or the manifest timeout, using an
-injected sleeper/clock. A run URL carried by Pass SHALL be preserved
-into the recorded check result, so reporting publishes it through the
-same channel a failing check's findings travel. A timeout SHALL classify
-per the check's declared timeout class: `quality` (the default) fails the
-check as a quality failure with a timeout finding; `infrastructure`
-resolves the check as CannotVerify naming the elapsed timeout — no stage
-attempt is burned. The engine SHALL NOT submit external checks: they are
-assumed to be triggered by the task-branch push (submission is deferred —
-add-stage-engine NG8). Because of that, delivery of the attempt commit
-to the remote SHALL be a verified precondition of the poll loop: before
-the first poll the engine SHALL confirm the attempt commit is on the
-remote, re-attempting the push if it is not; a commit that cannot be
-delivered SHALL resolve the check as CannotVerify (infrastructure
-failure, no stage attempt burned) — never left to expire as a
-poll-timeout quality failure.
-<!-- implements FR3, NFR-R3 of add-stage-engine -->
-<!-- implements FR9 of add-external-check-github-actions -->
-<!-- implements FR21, NFR-O2 of add-sandbox-core -->
+injected sleeper/clock.
+**Implements**: FR3, NFR-R3 of add-stage-engine; FR9 of add-external-check-github-actions; FR21, NFR-O2 of add-sandbox-core
+**Notes**: A passing poll's run URL is kept so reporting publishes it through the same channel a failing check's findings travel; submitting external checks is deferred (add-stage-engine NG8).
+
+#### Scenario: The engine never submits an external check
+- **WHEN** the verify chain reaches an `external` check
+- **THEN** the engine issues no submission call — the check is assumed to be triggered by the task-branch push — and only polls
+
+#### Scenario: Delivery is confirmed before the first poll
+- **WHEN** the verify chain reaches an `external` check and the attempt commit is not yet on the remote
+- **THEN** the engine re-attempts the push and issues the first poll only after the attempt commit is confirmed on the remote
 
 #### Scenario: Verdict within timeout
 - **WHEN** the poll port returns Running twice and then Pass
@@ -80,8 +75,9 @@ poll-timeout quality failure.
   "cannot verify" report
 
 ### Requirement: Judge majority voting
-The engine SHALL cast up to the manifest `votes` count of sequential single-vote calls, stopping as soon as the majority is mathematically decided, and resolve the check by that majority; findings of failing cast votes are aggregated; any CannotVerify among cast votes SHALL fail the whole check as infrastructure. Manifest validation guarantees an odd `votes` count, so a decided majority is always reached; should all cast votes complete without one (an even count that ties), the check SHALL resolve to Pass — the defensive `pass >= fail` tie-break — never leaving the verdict undefined.
-<!-- implements FR3 of add-stage-engine -->
+The engine SHALL cast up to the manifest `votes` count of sequential single-vote calls, stopping as soon as the majority is mathematically decided, and resolve the check by that majority; findings of failing cast votes are aggregated; any CannotVerify among cast votes SHALL fail the whole check as infrastructure.
+**Implements**: FR3 of add-stage-engine
+**Notes**: Manifest validation guarantees an odd `votes` count, so a decided majority is always reached; the tie-break below is defensive.
 
 #### Scenario: Majority verdict with aggregated findings
 - **WHEN** votes return Fail, Pass, Fail for a 3-vote judge check
@@ -100,24 +96,32 @@ The engine SHALL cast up to the manifest `votes` count of sequential single-vote
 - **THEN** the check resolves to Pass via the defensive `pass >= fail` tie-break rather than leaving the verdict undefined
 
 ### Requirement: Failure classification
-Verdicts SHALL be Pass, Fail (findings, possibly empty), or CannotVerify (reason, details). Fail increments the attempt counter and feeds the non-passing check results (every non-Pass result, including CannotVerify) of all prior attempts of the stage into the next executor request; CannotVerify escalates without burning an attempt. Adapter exceptions SHALL be caught and treated as CannotVerify with the stack trace preserved. The following classification SHALL hold row by row:
-
-| Situation                                   | Class                      |
-|---------------------------------------------|----------------------------|
-| `command`: exit code ≠ 0                    | Fail                       |
-| `command`: binary not found / cannot start  | CannotVerify               |
-| `external`: poll returns failure            | Fail                       |
-| `external`: poll timeout elapsed            | Fail                       |
-| `external`: check id unknown to the service | CannotVerify               |
-| `judge`: majority of votes negative         | Fail                       |
-| `judge`: model reply unparseable as verdict | CannotVerify               |
-| `judge`: any single vote CannotVerify       | CannotVerify (whole check) |
-| any check adapter throws                    | CannotVerify               |
-<!-- implements FR4 of add-stage-engine -->
+Verdicts SHALL be Pass, Fail (findings, possibly empty), or CannotVerify (reason, details). Fail increments the attempt counter and feeds the non-passing check results (every non-Pass result, including CannotVerify) of all prior attempts of the stage into the next executor request; CannotVerify escalates without burning an attempt. Each check situation SHALL classify as the scenarios below state.
+**Implements**: FR4 of add-stage-engine
 
 #### Scenario: Classification table verified
-- **WHEN** each table row's condition is produced by a fake port
-- **THEN** the engine classifies it as the table's class (data-driven spec, one row per case)
+- **WHEN** each classification case this requirement's scenarios state is produced by a fake port
+- **THEN** the engine classifies it as stated (data-driven spec, one row per case)
+
+#### Scenario: A command check classifies by how it ended
+- **WHEN** a `command` check's process exits with a non-zero code
+- **THEN** the check is Fail
+- **AND** a `command` check whose binary is not found or cannot start is CannotVerify
+
+#### Scenario: An external check classifies by its poll
+- **WHEN** an `external` check's poll returns failure
+- **THEN** the check is Fail
+- **AND** a poll timeout is Fail under the timeout class `quality` (the default) and CannotVerify under `infrastructure`
+- **AND** a check id unknown to the service is CannotVerify
+
+#### Scenario: A judge check classifies by its votes
+- **WHEN** the majority of a `judge` check's votes are negative
+- **THEN** the check is Fail
+- **AND** a model reply unparseable as a verdict is CannotVerify, and any single CannotVerify vote makes the whole check CannotVerify
+
+#### Scenario: A throwing adapter keeps its stack trace
+- **WHEN** a check adapter throws
+- **THEN** the engine catches the exception and the check's CannotVerify carries the exception's stack trace
 
 #### Scenario: Feedback carries the whole stage history
 - **WHEN** attempt 3 starts after two quality failures
@@ -125,7 +129,7 @@ Verdicts SHALL be Pass, Fail (findings, possibly empty), or CannotVerify (reason
 
 ### Requirement: Attempt limit and exhaustion
 When the resolved attempt limit is exhausted — including `attemptsUsed >= limit` already on entry — the engine SHALL escalate with `AttemptsExhausted` carrying the full recorded attempt history of the stage.
-<!-- implements FR5 of add-stage-engine -->
+**Implements**: FR5 of add-stage-engine
 
 #### Scenario: Limit reached mid-run
 - **WHEN** the final permitted attempt ends in a quality failure
@@ -133,16 +137,15 @@ When the resolved attempt limit is exhausted — including `attemptsUsed >= limi
 
 ### Requirement: Gnome-initiated decision escalation
 An executor SHALL be able to return DecisionNeeded (question, free-text options) instead of completing; the engine SHALL escalate immediately without burning an attempt, recording the round with its metrics.
-<!-- implements FR6 of add-stage-engine -->
+**Implements**: FR6 of add-stage-engine
 
 #### Scenario: Undecidable choice
 - **WHEN** the executor returns DecisionNeeded
 - **THEN** the outcome is Escalated(DecisionNeeded) and `attemptsUsed` is unchanged
 
 ### Requirement: Human decisions as pass-through context
-`TaskContext.decisions` SHALL be a chronological list of free-text decisions (optional stage/author/time) passed verbatim to executor and judge requests; the engine SHALL never interpret them. Resume adjustments (attempt reset, position moves) are the caller's state manipulation. The appended decision and the attempt-counter reset it implies SHALL become durable together as one transition: a resumed run never observes a state carrying the decision without the reset, or the reset without the decision.
-<!-- implements FR7 of add-stage-engine -->
-<!-- implements FR4 of harden-task-branch-contract -->
+`TaskContext.decisions` SHALL be a chronological list of free-text decisions (optional stage/author/time) passed verbatim to executor and judge requests; the engine SHALL never interpret them. Resume adjustments (attempt reset, position moves) are the caller's state manipulation.
+**Implements**: FR7 of add-stage-engine; FR4 of harden-task-branch-contract
 
 #### Scenario: Decision-carrying resume
 - **WHEN** a run starts with a decision appended and `attemptsUsed` reset by the caller
@@ -153,8 +156,9 @@ An executor SHALL be able to return DecisionNeeded (question, free-text options)
 - **THEN** the recorded state carries the decision and the attempt-counter reset together, and the resumed run sees both or neither
 
 ### Requirement: Advancement modes
-After verification passes, `auto` SHALL proceed to the next stage (Completed after the last); `manual` SHALL return Paused with the position **at the gate** — `AwaitingApproval(stage)`, naming the stage that passed — never past it. The passing round's own commit records that position (one durable transition, "One logical transition, one commit" of `git-task-persistence`), so no tip ever says "continue" before the approval that allows it has been recorded. A run starting from `AwaitingApproval(stage)` SHALL return Paused(stage) immediately, emitting RunStarted and TaskFinished and invoking no execution, verification or persistence port — the stop is reproduced from the record, not derived from the pipeline. The position moves past the gate only through the approval write of the task repository; a manual pause on the final stage therefore never writes the pipeline end — the approval does, and a run starting there returns Completed as before.
-<!-- implements FR1, FR2, FR4 of make-checkpoint-gate-durable -->
+After verification passes, `auto` SHALL proceed to the next stage (Completed after the last); `manual` SHALL return Paused with the position **at the gate** — `AwaitingApproval(stage)`, naming the stage that passed — never past it.
+**Implements**: FR1, FR2, FR4 of make-checkpoint-gate-durable
+**Notes**: A run starting at the gate reproduces the stop from the record, not from the pipeline; the approval write of the task repository is what moves the position past the gate.
 
 #### Scenario: Manual checkpoint
 - **WHEN** a stage with `manual` advancement passes verification
@@ -168,10 +172,17 @@ After verification passes, `auto` SHALL proceed to the next stage (Completed aft
 - **WHEN** the approval write moves the position from `AwaitingApproval(stage)` to the following stage and a run starts from the approved state
 - **THEN** the engine starts the following stage at round zero with an empty attempt history and never re-invokes the passed stage's executor or checks
 
+#### Scenario: The gate position rides the passing round's commit
+- **WHEN** a stage with `manual` advancement passes verification
+- **THEN** the single persist call for that round receives a state already positioned at `AwaitingApproval(stage)` (one durable transition, "One logical transition, one commit" of `git-task-persistence`), so no recorded tip says "continue" before the approval that allows it has been recorded
+
+#### Scenario: A run at the gate emits only its bracket events
+- **WHEN** a run starts from `AwaitingApproval(stage)`
+- **THEN** it returns Paused(stage) immediately, emitting RunStarted and TaskFinished and no other event
+
 ### Requirement: Resume from any valid state
-The engine SHALL resume at attempt-boundary granularity from any valid recorded state — mid-pipeline, mid-retry, at a gate, or post-approval. A position naming a stage absent from the pipeline SHALL escalate as PipelineMismatch before any execution or persistence port call, with observability events still emitted. A resume from the state a passing `auto` round persisted — the position already advanced past the passed stage, the round still in the recorded history — SHALL start the following stage with a fresh attempt history, never re-invoking the passed stage's executor or any of its checks. A resume from `AwaitingApproval(stage)` SHALL return Paused(stage) and run nothing (see "Advancement modes"). A resume from a state whose last recorded round carries a stop SHALL return the matching Escalated outcome and run nothing (see "The stop rides the round record").
-<!-- implements FR2, FR6 of make-checkpoint-gate-durable -->
-<!-- implements FR9 of add-stage-engine; FR4, NFR-C1 of harden-task-branch-contract -->
+The engine SHALL resume at attempt-boundary granularity from any valid recorded state — mid-pipeline, mid-retry, at a gate, or post-approval.
+**Implements**: FR2, FR6 of make-checkpoint-gate-durable; FR9 of add-stage-engine; FR4, NFR-C1 of harden-task-branch-contract
 
 #### Scenario: Mid-retry resume
 - **WHEN** a run starts from a state recorded after two quality failures
@@ -189,10 +200,14 @@ The engine SHALL resume at attempt-boundary granularity from any valid recorded 
 - **WHEN** a run starts from `AwaitingApproval(stage)` — the state a passing `manual` round persisted, with or without a park recorded in `task.json`
 - **THEN** the outcome is Paused(stage), no execution, verification or persistence port was invoked, and the recorded state is unchanged
 
+#### Scenario: Resume from a recorded stop runs nothing
+- **WHEN** a run starts from a state whose last recorded round in the current stage carries a stop
+- **THEN** the outcome is the matching Escalated report (see "The stop rides the round record"), and no execution or verification port was invoked
+
 ### Requirement: Outcome and report model
-`TaskOutcome` SHALL be Completed | Paused(passedStage) | Escalated(report) | Aborted(failedAt, cause), each carrying the final TaskState. Escalation reports SHALL be data-only values of five kinds: AttemptsExhausted, DecisionNeeded, CannotVerify, PipelineMismatch, CannotExecute (executor infrastructure failure — no attempt burned, no round recorded). CannotExecute SHALL additionally carry the denials list drained from the environment of the round that could not execute — the round left no attempt record to hold them, and its blocked egress attempts SHALL still reach the report. Carrying them SHALL NOT change the classification: the outcome stays an infrastructure failure, no attempt is burned, no round is recorded, and no verdict is derived from the list. Engine-internal errors SHALL propagate as exceptions, never as outcomes. An escalation SHALL be renderable from the outcome and its final state alone.
-<!-- implements FR10, UX1 of add-stage-engine -->
-<!-- implements FR1 of fix-denial-attribution-durability -->
+`TaskOutcome` SHALL be Completed | Paused(passedStage) | Escalated(report) | Aborted(failedAt, cause), each carrying the final TaskState. Escalation reports SHALL be data-only values of five kinds: AttemptsExhausted, DecisionNeeded, CannotVerify, PipelineMismatch, CannotExecute (executor infrastructure failure — no attempt burned, no round recorded).
+**Implements**: FR10, UX1 of add-stage-engine; FR1 of fix-denial-attribution-durability
+**Notes**: CannotExecute carries the denials drained from its round's environment because that round left no attempt record to hold them.
 
 #### Scenario: Executor infrastructure failure
 - **WHEN** the executor port throws after its own retries
@@ -210,10 +225,13 @@ The engine SHALL resume at attempt-boundary granularity from any valid recorded 
 - **WHEN** a CannotExecute escalation carries denials
 - **THEN** the stage's recorded verdicts and the feedback context of any later retry are identical to those of the same failure with no denials
 
+#### Scenario: An engine-internal error is thrown, not returned
+- **WHEN** an error inside the engine's own logic, not a port failure, occurs during a run
+- **THEN** it propagates to the caller as an exception and no `TaskOutcome` is returned
+
 ### Requirement: Strict attempt persistence
-The engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` synchronously after every executed round — including rounds ending in CannotVerify or DecisionNeeded — before the AttemptFinished event and before any next attempt. A persistence failure SHALL end the run as Aborted with the in-memory final state, the failed round key, and the cause. An unpersisted round SHALL be safe to lose: a new run from the last persisted state re-executes it. A passing round SHALL become durable together with its consequence in one persist call: the state handed to persistence for a round that passed verification already carries the advanced pipeline position, so the pass and the advancement land as a single durable transition — never split across two persistence calls.
-<!-- implements FR11, NFR-R4 of add-stage-engine -->
-<!-- implements FR4 of harden-task-branch-contract -->
+The engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` synchronously after every executed round — including rounds ending in CannotVerify or DecisionNeeded — before the AttemptFinished event and before any next attempt. A persistence failure SHALL end the run as Aborted with the in-memory final state, the failed round key, and the cause.
+**Implements**: FR11, NFR-R4 of add-stage-engine; FR4 of harden-task-branch-contract
 
 #### Scenario: Ordering invariant
 - **WHEN** a round completes
@@ -232,8 +250,8 @@ The engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` synchro
 - **THEN** the single persist call for that round receives a state already positioned past the passed stage, and a resume from that persisted state starts at the next stage
 
 ### Requirement: Engine events
-The engine SHALL emit sealed events — RunStarted, AttemptStarted, ExecutionFinished, CheckStarted, CheckFinished, AttemptFinished (new state + trace), TaskFinished — each self-contained with the (taskId, stage, attempt) key shared with logs and telemetry, delivered synchronously; every run, including pre-flight escalations, emits at least RunStarted and TaskFinished; listener exceptions SHALL be logged and swallowed. The stream SHALL suffice to reconstruct a status view (position, attempt, per-check results, aggregate metrics).
-<!-- implements FR12, NFR-O2, UX2 of add-stage-engine -->
+The engine SHALL emit sealed events — RunStarted, AttemptStarted, ExecutionFinished, CheckStarted, CheckFinished, AttemptFinished (new state + trace), TaskFinished — each self-contained with the (taskId, stage, attempt) key shared with logs and telemetry, delivered synchronously; every run, including pre-flight escalations, emits at least RunStarted and TaskFinished; listener exceptions SHALL be logged and swallowed.
+**Implements**: FR12, NFR-O2, UX2 of add-stage-engine
 
 #### Scenario: Status reconstructed from events alone
 - **WHEN** a recording listener observes a run with a retry
@@ -244,11 +262,8 @@ The engine SHALL emit sealed events — RunStarted, AttemptStarted, ExecutionFin
 - **THEN** the run completes normally and each failure is logged
 
 ### Requirement: Two-level attempt telemetry
-Every executed round SHALL be recorded in `TaskState.attempts` with an explicit result classification (Passed, QualityFailure, CannotVerify, DecisionNeeded), a `startedAt` timestamp read from the engine's instant source when the round begins, and optional metrics — wall time, per-tool aggregates (name, call count, total duration), and per-model token maps keyed by resolved model id, each entry carrying input, output, cache-creation, and cache-read counts (judge tokens as per-model maps per vote) — including rounds ending in CannotVerify, which are recorded but not counted. An empty token map means unreported, preserving the unknown ≠ zero distinction; merging token maps SHALL union keys and sum the four counts per key; any display total is derived, never stored alongside the map. `TaskState` SHALL carry cumulative usage totals for the whole task, updated on every recorded round and preserved across stage advancement and resume. The raw chronological ToolTrace SHALL stay out of TaskState, correlated by the (taskId, stage, attempt) key. The history SHALL cover only the current stage, resetting on advancement.
-<!-- implements FR13, FR14, NFR-C1 of add-stage-engine -->
-<!-- implements FR15 of add-manual-run -->
-<!-- implements FR5, FR9, NFR-C1 of add-agent-executor -->
-<!-- implements FR17 of supervise-daemon-loops-and-embed-dashboard -->
+Every executed round — including rounds ending in CannotVerify, which are recorded but not counted — SHALL be recorded in `TaskState.attempts` with an explicit result classification (Passed, QualityFailure, CannotVerify, DecisionNeeded), a `startedAt` timestamp read from the engine's instant source when the round begins, and optional metrics. The history SHALL cover only the current stage, resetting on advancement.
+**Implements**: FR13, FR14, NFR-C1 of add-stage-engine; FR15 of add-manual-run; FR5, FR9, NFR-C1 of add-agent-executor; FR17 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: Unburned round is still recorded
 - **WHEN** a round's verification ends in CannotVerify
@@ -278,9 +293,25 @@ Every executed round SHALL be recorded in `TaskState.attempts` with an explicit 
 - **WHEN** a round reports an empty token map
 - **THEN** the cumulative totals are unchanged by that round rather than gaining zero-valued entries
 
+#### Scenario: Round metrics carry wall time, tool aggregates and per-model tokens
+- **WHEN** a round reports its metrics
+- **THEN** its record carries the wall time, per-tool aggregates (name, call count, total duration), and per-model token maps keyed by resolved model id, each entry carrying input, output, cache-creation, and cache-read counts, with judge tokens as per-model maps per vote
+
+#### Scenario: No display total is stored
+- **WHEN** a round's usage or the task's cumulative totals are recorded
+- **THEN** the record holds the per-model token map and no stored total beside it; any display total is derived from the map
+
+#### Scenario: Cumulative totals survive resume
+- **WHEN** a run resumes from a persisted state
+- **THEN** the task's cumulative usage totals start from the persisted totals and keep accumulating on every recorded round
+
+#### Scenario: The raw tool trace stays out of the state
+- **WHEN** a round produces its chronological ToolTrace
+- **THEN** `TaskState` holds only the round's aggregates, and the trace travels beside it, correlated by the (taskId, stage, attempt) key
+
 ### Requirement: Reentrant engine without internal retries
 The engine SHALL hold no static or shared mutable state — concurrent runs with independent ports must not interfere — and SHALL never retry a port call.
-<!-- implements NFR-R1, NFR-R2 of add-stage-engine -->
+**Implements**: NFR-R1, NFR-R2 of add-stage-engine
 
 #### Scenario: Concurrent runs stay isolated
 - **WHEN** two runs execute concurrently with independent fake ports
@@ -288,15 +319,16 @@ The engine SHALL hold no static or shared mutable state — concurrent runs with
 
 ### Requirement: Exceptional-path logging
 Adapter exceptions, listener failures, and aborts SHALL log at ERROR/WARN via SLF4J at the point of capture, with stack traces also preserved in CannotVerify details or the Aborted cause. (Domain purity of the engine packages is already governed by the pipeline-config capability, whose ArchUnit rule covers all `domain` packages and does not forbid `org.slf4j`.)
-<!-- implements NFR-O1 of add-stage-engine -->
+**Implements**: NFR-O1 of add-stage-engine
 
 #### Scenario: Stack trace reaches the report
 - **WHEN** a check adapter throws
 - **THEN** an ERROR line is logged and the escalation report's details contain the stack trace
 
 ### Requirement: The stop rides the round record
-A round whose result is a stop the engine will escalate SHALL carry that stop on its recorded attempt: a `DECISION_NEEDED` round carries the question and its options, a `CANNOT_VERIFY` round carries the check, the reason and the details — as untrusted-text carriers, persisted in the same round commit as the result. A run starting from a state whose last recorded round in the current stage carries a stop SHALL return the matching Escalated report built from the record, invoking no execution or verification port and burning no attempt — exactly as a spent attempt limit already re-escalates from the counter. The park commit that follows a stop is tracker delivery only: losing it loses nothing the next run needs. `AttemptsExhausted` (the counter) and `CannotExecute` (no round recorded; a retry is the right recovery) are unchanged.
-<!-- implements FR5, FR6, NFR-C1 of make-checkpoint-gate-durable -->
+A round whose result is a stop the engine will escalate SHALL carry that stop on its recorded attempt: a `DECISION_NEEDED` round carries the question and its options, a `CANNOT_VERIFY` round carries the check, the reason and the details — as untrusted-text carriers, persisted in the same round commit as the result.
+**Implements**: FR5, FR6, NFR-C1 of make-checkpoint-gate-durable
+**Notes**: A recorded stop re-escalates from the record exactly as a spent attempt limit re-escalates from the counter; the park commit that follows a stop is tracker delivery, holding nothing the next run needs.
 
 #### Scenario: A lost park re-raises the question from the record
 - **WHEN** a round ends in `DecisionNeeded`, its round commit lands, and the process dies before the park is recorded
@@ -309,3 +341,7 @@ A round whose result is a stop the engine will escalate SHALL carry that stop on
 #### Scenario: A consumed stop is not re-raised
 - **WHEN** the resumed write or a decision commit has cleared the outcome and reset the attempt history after a stop
 - **THEN** the next run executes the stage from round zero and does not re-raise the recorded stop
+
+#### Scenario: Stops without a recorded round are unchanged
+- **WHEN** a run starts from a state whose attempt counter is spent, or from the state a `CannotExecute` escalation left
+- **THEN** the first re-escalates as `AttemptsExhausted` from the counter, and the second, carrying no recorded round and so no stop, executes the stage again as a retry

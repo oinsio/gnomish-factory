@@ -15,26 +15,10 @@ Text from outside the trust boundary — subprocess output, in-container command
 output, agent output, tracker-sourced strings, the target repository's
 manifest, and values read back from a task-branch document — SHALL be carried
 by one value type from the moment it enters the process, tagged with its
-provenance. One further provenance SHALL exist for text that is *not* from
-outside the trust boundary: an operator's own command-line argument, for the
-case where a syntax gate has refused it and the refusal is published to the
-tracker — a refused ref name is refused precisely for holding whitespace or a
-control character, so quoting it back needs an exit like any other text. A
-second such provenance SHALL exist for the factory's own prose: a field that
-carries captured text on one path carries a factory-composed sentence on
-another — a refusal, a disposition, an empty detail — and that sentence SHALL
-be minted in its own family rather than in the family of whatever capture sits
-beside it. A sentence that quotes a capture SHALL stay factory-composed only
-when the quote left its carrier through an exit first; a sentence interpolating
-a capture raw SHALL keep the capture's family. The provenance set SHALL
-otherwise stay closed: text with no family here has no mint. The type SHALL expose the raw text only through one accessor
-reserved for exit owners, and SHALL render itself by default in the log-safe
-form, so string concatenation of the value yields neutralized text. Equality
-SHALL be by the text alone: provenance is evidence a report may name, never a
-policy input and never part of the value's identity, so a carrier written to a
-durable medium and read back — under the provenance of the medium it was read
-from — equals the carrier that was written.
-<!-- implements FR1, FR4 of type-untrusted-text -->
+provenance.
+**Implements**: FR1, FR4 of type-untrusted-text
+**Notes**: The operator provenance exists because a refused ref name is refused precisely for holding whitespace or a control character, so quoting it back needs an exit like any other text.
+**Notes**: The factory provenance exists because a field that carries captured text on one path carries a factory-composed sentence on another — a refusal, a disposition, an empty detail.
 
 #### Scenario: Concatenation is safe by default
 - **WHEN** a carrier holding an ANSI cursor sequence and a newline is
@@ -68,17 +52,35 @@ from — equals the carrier that was written.
 - **THEN** the report can name its provenance as subprocess output without
   any other source
 
+#### Scenario: A sentence interpolating a capture raw keeps the capture's family
+- **WHEN** a factory-composed sentence quotes a capture
+- **THEN** it is minted under the factory provenance only when the quote left
+  its carrier through an exit first, and a sentence interpolating the capture
+  raw is minted in the capture's family
+
+#### Scenario: The provenance set is closed
+- **WHEN** text belongs to none of the provenance families — the six families
+  from outside the trust boundary, the operator's own argument, and the
+  factory's own prose
+- **THEN** no mint exists for it
+
+#### Scenario: The raw text has one accessor, reserved for exit owners
+- **WHEN** code needs a carrier's raw text
+- **THEN** exactly one accessor yields it, and that accessor is reserved for
+  exit owners
+
+#### Scenario: Provenance is never part of the identity
+- **WHEN** two carriers hold the same text under different provenances
+- **THEN** they are equal and hash alike, and no exit or policy decision
+  renders or treats them differently
+
 ### Requirement: Exits render per consumer and equal the owner primitives
-The carrier SHALL offer four exits: a log exit (one line, capped), a console
-exit (visible caret/escape notation, line structure kept), a comment exit
-(fenced, labeled, mentions and issue references neutralized, line structure
-kept), and the comment exit's inline shape (the same neutralization without
-the label and the fence, for a field quoted inside a line the factory wrote
-itself). Each exit SHALL compute exactly what the untrusted-text owner's
-primitive computes for the same raw text, and the default rendering SHALL
-equal the log exit byte for byte, asserted over a common adversarial corpus
-for every provenance.
-<!-- implements FR2, NFR-S2 of type-untrusted-text -->
+The carrier SHALL offer four exits — a log exit, a console exit, a comment
+exit, and the comment exit's inline shape — each computing exactly what the
+untrusted-text owner's primitive computes for the same raw text, with the
+default rendering equal to the log exit byte for byte, asserted over a common
+adversarial corpus for every provenance.
+**Implements**: FR2, NFR-S2 of type-untrusted-text
 
 #### Scenario: Exits equal the primitives
 - **WHEN** every corpus entry is minted with every provenance and rendered
@@ -100,17 +102,24 @@ for every provenance.
   inline shape, the assembled block is published as it stands, and no label or
   fence names the factory's own report lines as machine output
 
+#### Scenario: Each exit renders for its consumer
+- **WHEN** a carrier holding several lines, an ANSI sequence and a mention is
+  rendered through each exit
+- **THEN** the log exit yields one capped line; the console exit shows the
+  sequence in visible caret/escape notation and keeps the line structure; the
+  comment exit fences and labels the text, neutralizes mentions and issue
+  references and keeps the line structure; and the inline shape applies the
+  comment exit's neutralization without the label and the fence, for a field
+  quoted inside a line the factory wrote itself
+
 ### Requirement: Raw access is confined to annotated exit owners
 The raw accessor SHALL be callable only from classes marked as exit owners by
 an annotation the carrier's module defines: the exits, the writers that
 carry raw bytes to a machine medium (state and ledger JSON), and the findings
 funnel entry. An architecture gate SHALL fail the build on any other caller;
 the gate SHALL key on the annotation, never on a list of class names kept in
-build logic. The set SHALL NOT be widened to admit code that reads captured
-text in order to parse it — that is a separate way out with a separate
-allowlist — and the gate SHALL pin the set, so a class joining it fails the
-build until the growth is acknowledged.
-<!-- implements FR3, FR7, NFR-R2, NFR-S1 of type-untrusted-text -->
+build logic.
+**Implements**: FR3, FR7, NFR-R2, NFR-S1 of type-untrusted-text
 
 #### Scenario: A raw read outside an exit fails the build
 - **WHEN** a production class without the exit annotation calls the raw
@@ -124,24 +133,23 @@ build until the growth is acknowledged.
   carrier; a document written before the carrier existed reads back the same
   way, because the wire format is unchanged
 
+#### Scenario: A parser is not admitted as an exit owner
+- **WHEN** a class reads captured text in order to parse it
+- **THEN** it cannot join the exit-owner set, and reads through the separate
+  parsing way out with its own allowlist instead
+
+#### Scenario: A new exit owner fails the build until acknowledged
+- **WHEN** a class gains the exit-owner annotation
+- **THEN** the gate, which pins the annotated set, fails the build until the
+  pinned set is updated to acknowledge the growth
+
 ### Requirement: Machine-readable capture is parsed through its own annotated way out
 Captured text that the factory reads to answer a question about its own
 machinery — a commit id, a ref list, a remote URL, a container's state — SHALL
 stay carried by the type, and SHALL be read for parsing through a dedicated
 accessor callable only from classes marked by a second annotation the
-carrier's module defines. A class so marked SHALL convert the text into a
-value that is no longer untrusted text: a typed value, a string that passed a
-named syntax gate, or a carrier re-minted with another provenance. Returning
-the text unchanged as a plain string SHALL NOT qualify; a reader that yields a
-document's content rather than an answer about it SHALL carry the carrier
-onward to the machine writer that consumes it. Where a parser's converted
-value is itself a string — a commit id, a ref name — it SHALL state what makes
-that string inert: a named syntax gate it applies, or the fixed shape it
-checks. The carrier SHALL additionally
-answer emptiness, substring and length questions to any caller, since those
-yield no text. Both annotated sets SHALL be pinned by the architecture gate
-with seeded-violation coverage.
-<!-- implements FR3, FR10, NFR-S1 of type-untrusted-text -->
+carrier's module defines.
+**Implements**: FR3, FR10, NFR-S1 of type-untrusted-text
 
 #### Scenario: A parser reads the captured bytes and yields a value
 - **WHEN** the commit-id reader takes the standard output of a revision
@@ -175,14 +183,39 @@ with seeded-violation coverage.
 - **THEN** it answers without any annotation, because a boolean carries no
   text out of the carrier
 
+#### Scenario: A parser yields a value that is no longer untrusted text
+- **WHEN** a class marked as a parser returns
+- **THEN** its result is a typed value, a string that passed a named syntax
+  gate, or a carrier re-minted with another provenance; and where the result
+  is a string — a commit id, a ref name — the parser states what makes it
+  inert: the named syntax gate it applies, or the fixed shape it checks
+
+#### Scenario: A document reader carries the carrier onward
+- **WHEN** a reader yields a document's content rather than an answer about it
+- **THEN** it carries the carrier onward to the machine writer that consumes
+  it, and is not marked as a parser; a seam it delegates the read to may be
+  marked for a parsing job of its own (the marker is per class), while the
+  read it performs for the reader never calls the parsing accessor
+
+#### Scenario: The length of the text needs no annotation
+- **WHEN** a caller asks for the length of captured output
+- **THEN** the carrier answers without any annotation, because a number
+  carries no text out of the carrier
+
+#### Scenario: A new parser fails the build until acknowledged
+- **WHEN** a class gains the parser annotation, or a seeded violation of
+  either annotated set is planted
+- **THEN** the architecture gate, which pins both annotated sets, fails the
+  build naming the class
+
 ### Requirement: Sinks receive untrusted text only through an exit
 No logging call, throwable constructor, console print, or tracker write SHALL
 take a carrier as a direct argument; the value passes an exit first, so intent
 is visible at the site. Every accessor that yields text from a capture family
 SHALL return the carrier, not a plain string. Both rules SHALL be enforced by
-architecture gates with seeded-violation coverage, and the former
-accessor-name gate SHALL be retired.
-<!-- implements FR5, FR7, NFR-S1 of type-untrusted-text -->
+architecture gates with seeded-violation coverage; the former accessor-name
+gate SHALL stop guarding sinks and guard the capture point instead.
+**Implements**: FR5, FR7, NFR-S1 of type-untrusted-text
 
 #### Scenario: A carrier passed straight to a logger fails the gate
 - **WHEN** a production log call takes a carrier-typed expression as an

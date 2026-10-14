@@ -14,12 +14,22 @@ remain the machine-readable plane; this capability governs the text log.
 A logging-policy ADR SHALL define log levels by required reader reaction —
 ERROR: the operator must act; WARN: the operator should look, and a persistent
 WARN means act; INFO: lifecycle anchors and state changes; DEBUG: diagnosis —
-together with the best-effort-must-log rule (a degrade path that swallows a
-failure must leave a trace), the one-failure-one-log boundary rule (the layer
-that decides logs it; layers below do not), and the retention rationale (the
-log is expendable; ledgers, the task branch, and the tracker are the durable
-record). A companion rules file SHALL give emitters a one-page checklist.
-<!-- implements FR1 of harden-logging-observability -->
+together with the best-effort-must-log rule, the one-failure-one-log boundary
+rule, and the retention rationale.
+**Implements**: FR1 of harden-logging-observability
+
+#### Scenario: The policy ADR defines its three rules
+- **WHEN** a contributor reads the logging-policy ADR
+- **THEN** it states the best-effort-must-log rule (a degrade path that
+  swallows a failure must leave a trace), the one-failure-one-log boundary
+  rule (the layer that decides logs it; layers below do not), and the
+  retention rationale (the log is expendable; ledgers, the task branch, and
+  the tracker are the durable record)
+
+#### Scenario: Emitters have a one-page checklist
+- **WHEN** a contributor adds or changes a log call
+- **THEN** a companion rules file gives them the policy as a one-page
+  checklist
 
 #### Scenario: Recovered transient is not a WARN
 - **WHEN** an operation fails once and succeeds on its bounded retry
@@ -39,7 +49,7 @@ form), serve started (instance, WIP limit, grace, intervals), serve stopping
 (reason), and the per-task summary. Remote-module lifecycle transitions —
 container environment created/reattached/disposed, git task-lifecycle commits —
 SHALL log one INFO line at their own choke points following the same policy.
-<!-- implements FR2 of harden-logging-observability -->
+**Implements**: FR2 of harden-logging-observability
 
 #### Scenario: Claim is the first correlated line
 - **WHEN** a task is claimed by any claim path
@@ -58,7 +68,7 @@ outcome, stage, attempts used, wall time, and token usage by model — rendered 
 one renderer for all modes (serve, take, manual run) from the same summary
 facts that feed the ledger where a ledger line exists. The summary SHALL be
 emitted on crash-shaped exits of the work as well as clean ones.
-<!-- implements FR3 of harden-logging-observability -->
+**Implements**: FR3 of harden-logging-observability
 
 #### Scenario: Summary closes the grep story
 - **WHEN** an operator greps the log by one taskId after the task finished
@@ -77,7 +87,7 @@ clears. Suppression state is in-memory only; a process restart may repeat the
 first-occurrence line. One owner component SHALL provide this behavior for
 poll sites; sites in modules that cannot reach it SHALL aggregate counts
 locally to the same observable effect.
-<!-- implements FR4, NFR-R2 of harden-logging-observability -->
+**Implements**: FR4, NFR-R2 of harden-logging-observability
 
 #### Scenario: Dead dependency floods no console
 - **WHEN** a polled dependency stays down across many poll intervals
@@ -90,18 +100,8 @@ locally to the same observable effect.
 
 ### Requirement: No silent degradation
 Every path that returns a degraded result after an internal failure SHALL log
-the failure with enough context to attribute it: external-API retries,
-backoffs, and exhaustion; verification votes that cannot be cast; egress
-refusals in guarded checks; destructive cross-instance actions (stale-claim
-removal, index repair) and their converge-aborts; best-effort cleanup failures
-(claim-comment delete, worktree removal, environment dispose steps); fallbacks
-that fabricate defaults (abort-facts unavailable); readers that drop malformed
-or unreadable data (dashboard sources distinguishing missing from malformed,
-token-usage extraction yielding empty); silent adoption of another instance's
-work (resume-branch recreation from the origin tracking ref); degradation
-warnings SHALL name their subject (check identity, secret variable name —
-never the value).
-<!-- implements FR5 of harden-logging-observability -->
+the failure with enough context to attribute it.
+**Implements**: FR5 of harden-logging-observability
 
 #### Scenario: Retry storm is visible
 - **WHEN** an external API call is retried with backoff until exhaustion
@@ -120,17 +120,45 @@ never the value).
 - **THEN** a WARN records the substitution and its consequence before the
   decision is made
 
+#### Scenario: An egress refusal in a guarded check is logged
+- **WHEN** a guarded check's request is refused by the egress guard
+- **THEN** the refusal is logged with the check it concerns
+
+#### Scenario: A destructive cross-instance action is logged
+- **WHEN** an instance removes another instance's stale claim or repairs a
+  task's index, or aborts such an action to converge with another instance
+- **THEN** the action or its converge-abort is logged with the task it
+  concerns
+
+#### Scenario: A failed best-effort cleanup is logged
+- **WHEN** a best-effort cleanup step fails — a claim-comment delete, a
+  worktree removal, an environment dispose step
+- **THEN** the failure is logged naming the step and its subject, and the
+  caller's degraded result stands
+
+#### Scenario: A reader that drops data says so
+- **WHEN** a reader drops malformed or unreadable data — a dashboard source,
+  or a token-usage extraction that yields empty
+- **THEN** the drop is logged, and a dashboard source distinguishes a missing
+  input from a malformed one
+
+#### Scenario: Adopting another instance's work is logged
+- **WHEN** a resume recreates the task branch from the origin tracking ref,
+  adopting another instance's work
+- **THEN** the adoption is logged rather than happening silently
+
+#### Scenario: A degradation warning names its subject, never a secret
+- **WHEN** a degradation warning concerns a check or a secret
+- **THEN** it names the check identity or the secret's variable name, and
+  never the secret's value
+
 ### Requirement: Operator lines carry a stable event identity
 Every production WARN/ERROR message SHALL begin with a stable catalog code
 (`[GFnnn]`) owned by a single operator-event catalog: one code per call site,
 never reused, additive-only. The code — not the wording — is the operator
 contract; prose may change freely without breaking alerts, greps, or specs
-keyed on the code. Every emitter, the domain's included, SHALL render the head
-from the catalog constant; no production source carries a literal code head,
-and the log-contract gate SHALL fail the build on one — the catalog constant's
-rendering is the only accepted form. INFO/DEBUG lines carry no codes.
-<!-- implements FR14 of harden-logging-observability -->
-<!-- implements FR4, FR5, FR10 of split-logtext-leaves -->
+keyed on the code. INFO/DEBUG lines carry no codes.
+**Implements**: FR14 of harden-logging-observability; FR4, FR5, FR10 of split-logtext-leaves
 
 #### Scenario: Wording drifts, contract holds
 - **WHEN** an operator line's prose is reworded without touching its code
@@ -155,12 +183,8 @@ Every production WARN/ERROR call site SHALL have at least one spec asserting
 the event it emits — code, level, and attribution key where the line concerns
 a task or a check. A suppression site pins every edge the suppressor can emit
 (first occurrence, counted roll-up, recovery), not only the first. A build
-gate SHALL fail when a catalog code appears in no test source. A runtime gate
-SHALL report every WARN/ERROR event a spec emitted that no attached capture was
-watching, and SHALL fail the build on an operator-event code the build's test
-run emitted that no attached capture anywhere in that run was watching and no
-declared allowance covers.
-<!-- implements FR15, FR16, FR17 of harden-logging-observability -->
+gate SHALL fail when a catalog code appears in no test source.
+**Implements**: FR15, FR16, FR17 of harden-logging-observability
 
 #### Scenario: A degrade line cannot land unasserted
 - **WHEN** a new WARN line is added with a fresh catalog code but no spec
@@ -184,60 +208,30 @@ declared allowance covers.
   counted roll-up branch is broken
 - **THEN** a spec driving the streak past the roll-up threshold goes red
 
+#### Scenario: Every unwatched operator line is reported
+- **WHEN** a spec emits a WARN/ERROR event that no attached capture was
+  watching
+- **THEN** the runtime gate names the event in the run's report
+
+#### Scenario: A declared allowance excuses an unwatched code
+- **WHEN** the build's test run emits an operator-event code that no attached
+  capture anywhere in that run was watching, and a declared allowance covers
+  the emitting feature
+- **THEN** the runtime gate does not fail the build on that code, while the
+  same code with no allowance and no watching capture fails it
+
 ### Requirement: Untrusted text enters logs only sanitized
 Text from outside the factory's trust boundary — agent/LLM output, subprocess
 stderr, tracker-sourced strings, in-container command output, manifest
 strings, task-branch document values — SHALL be carried by the untrusted-text
 type from the point of capture and SHALL enter log lines only through its log
 exit, which strips control and ANSI sequences, flattens newlines so one event
-renders as one log line, and caps length. The log exit and the plugin-boundary
-findings sanitizer — a distinct control at a distinct trust boundary, which
-deliberately preserves line structure — SHALL share one character-class table
-and one set of primitives owned by the untrusted-text leaf; each is a facade
-over that owner, and a single-table spec SHALL assert that both facades and
-the owner compute the same function over a common adversarial corpus. The
-findings sanitizer SHALL NOT prepare log-line text outside the findings
-funnel: a log line carrying untrusted text uses the log exit even where the
-same raw value also flows into findings — the judge-verdict extraction
-warning included. The mechanical gate that enforces the rule SHALL be
-type-level: a capture accessor returning a plain string, a raw read outside an
-annotated exit, a read for parsing outside an annotated parser, and a carrier
-passed to a log call without an exit each fail the build. The accessor-name
-scan that preceded it is retargeted rather than retired: names no longer guard
-sinks — the type does — and the scan instead guards the capture point, failing
-the build where production code outside the declared mint owners reads a
-subprocess stream, an HTTP response body, or a document file into a plain
-`String`. The scan asserts it reached every file it claims to cover, and its
-allowlist names each mint owner with the family it mints. No secret
-values appear in any log line. A caller-bounded excerpt of the carrier —
-the log exit taken under a bound smaller than the record cap, so that prose
-around it fits under that cap — SHALL bound its *rendered* output: the
-characters that leave the exit after line separators are flattened to their
-visible escapes, never only the characters that enter the flattening, so the
-headroom the caller reserved holds for any content, including text made of
-characters that render longer than they are.
-
-The log exit is the second of three layers. The first is capture: the seven
-capture families mint the carrier where the text enters the process. The
-third is the sink: every log appender the factory configures SHALL
-additionally neutralize the *rendered* record, independently of what the
-emitting call site did — the formatted message has control, ANSI, C1 and
-bidirectional-override sequences made inert, embedded line breaks rendered as
-the same visible marker the log exit produces, and its length bounded by a
-per-record cap with a visible truncation marker. The sink layer SHALL be
-idempotent over log-exit output: a message the exit already prepared renders
-byte-identically with and without the sink layer. The sink layer SHALL never
-fail a record: a value it cannot neutralize degrades to a bounded,
-control-free placeholder naming the failure. The end-to-end property — no
-escape, no forged record, no unbounded record, whatever the call site
-assembled — SHALL be asserted on the real appenders over an adversarial
-corpus, for the message path, the exception path and the MDC path.
-<!-- implements FR6, NFR-S1 of harden-logging-observability -->
-<!-- implements FR16 of add-subprocess-access-log -->
-<!-- implements FR1, FR2, NFR-R1, NFR-O1, NFR-S1 of harden-untrusted-text-sinks -->
-<!-- implements FR1, FR2, FR3 of split-logtext-leaves -->
-<!-- implements FR4, FR7, FR10, FR11, NFR-C1, NFR-R1, NFR-S1 of type-untrusted-text -->
-<!-- implements FR10, NFR-S1, UX3 of fix-envelope-medium -->
+renders as one log line, and caps length. No secret values appear in any log
+line.
+**Implements**: FR6, NFR-S1 of harden-logging-observability; FR16 of add-subprocess-access-log; FR1, FR2, NFR-R1, NFR-O1, NFR-S1 of harden-untrusted-text-sinks; FR1, FR2, FR3 of split-logtext-leaves; FR4, FR7, FR10, FR11, NFR-C1, NFR-R1, NFR-S1 of type-untrusted-text; FR10, NFR-S1, UX3 of fix-envelope-medium
+**Notes**: The log exit is the second of three layers: the first is capture, where the seven capture families mint the carrier as the text enters the process; the third is the sink, every log appender the factory configures.
+**Notes**: The plugin-boundary findings sanitizer is a distinct control at a distinct trust boundary, and deliberately preserves line structure; it and the log exit are facades over one owner.
+**Notes**: The accessor-name scan that preceded the type gate was retargeted rather than retired: names no longer guard sinks — the type does — and the scan guards the capture point instead.
 
 #### Scenario: Newline forgery is neutralized
 - **WHEN** untrusted text containing newlines and a fake log-record prefix is
@@ -319,18 +313,33 @@ corpus, for the message path, the exception path and the MDC path.
   `exited <code>` opening rather than losing them to the record cap's
   tail-keeping truncation
 
+#### Scenario: Every bypass shape fails the type gate
+- **WHEN** a production capture accessor returns a plain string, or a class
+  reads the carrier's raw text outside an annotated exit, or reads it for
+  parsing outside an annotated parser
+- **THEN** the type gate fails the build naming the offending site
+
+#### Scenario: The capture-point scan proves its reach
+- **WHEN** the capture-point scan runs
+- **THEN** it asserts that it reached every file it claims to cover, and its
+  allowlist names each mint owner with the family it mints, so a moved or
+  renamed mint owner fails the build instead of silently leaving the scan
+
+#### Scenario: The sink marks a truncated record
+- **WHEN** a rendered record exceeds the per-record cap at a log appender
+- **THEN** the written record is bounded by the cap and carries a visible
+  truncation marker
+
+#### Scenario: The sink renders a line break as the log exit does
+- **WHEN** a rendered record that bypassed the log exit embeds a line break
+- **THEN** the appender writes the break as the same visible marker the log
+  exit produces, on one record line
+
 ### Requirement: Exceptions keep their stack traces
 Every log call site that reports an exception SHALL pass the throwable as the
 trailing argument so the stack and cause chain are preserved; interpolating
 `toString()`/`getMessage()` into the message instead SHALL fail the build.
-The rendered throwable SHALL be neutralized line by line at the sink: control,
-ANSI, C1 and bidi sequences made inert in every line and carriage returns
-removed, while trace lines keep their indentation. Every line of the rendering
-that is not a recognized trace line SHALL be written as a marked continuation
-line, so a line break embedded in an exception's message can never place text
-at column 0 of the log and forge a record.
-<!-- implements FR7 of harden-logging-observability -->
-<!-- implements FR3, NFR-S1 of harden-untrusted-text-sinks -->
+**Implements**: FR7 of harden-logging-observability; FR3, NFR-S1 of harden-untrusted-text-sinks
 
 #### Scenario: Gate rejects amputated diagnosis
 - **WHEN** a change introduces a log call interpolating an exception's message
@@ -348,19 +357,25 @@ at column 0 of the log and forge a record.
 - **WHEN** an exception message carrying an ANSI cursor sequence is rendered
 - **THEN** the written trace shows the sequence as inert visible text
 
+#### Scenario: Every line of a rendered throwable is neutralized
+- **WHEN** an exception whose message carries carriage returns, C1 and bidi
+  override sequences is logged as the trailing argument
+- **THEN** the sink neutralizes the rendering line by line: every line has
+  its control, ANSI, C1 and bidi sequences made inert and its carriage returns
+  removed, and the trace lines keep their indentation
+
+#### Scenario: A line that is not a trace line is marked
+- **WHEN** the rendering of a logged throwable holds a line that is not a
+  recognized trace line — a cause's or a suppressed exception's message, an
+  unrecognized line shape
+- **THEN** that line is written as a marked continuation line, never at
+  column 0
+
 ### Requirement: Complete and leak-free MDC context
 Every log line emitted while working a task SHALL carry that task's MDC
 context: virtual-thread hops copy and clear the context map; `stage`/`attempt`
-are cleared at the same thread boundaries that clear `taskId`; daemon threads
-carry a `component` key naming the worker (janitor, reaper, snapshot, sweep,
-heartbeat); per-task decisions made by daemon components run under that task's
-`taskId` MDC so a grep by taskId finds them. Every MDC value the encoder
-renders SHALL pass the same sink-side neutralization as the message and SHALL
-be single-line, so a stage name or task id taken from a manifest or a tracker
-can neither forge a record nor drive the terminal through the record's
-context fields.
-<!-- implements FR8 of harden-logging-observability -->
-<!-- implements FR4, NFR-S1 of harden-untrusted-text-sinks -->
+are cleared at the same thread boundaries that clear `taskId`.
+**Implements**: FR8 of harden-logging-observability; FR4, NFR-S1 of harden-untrusted-text-sinks
 
 #### Scenario: Pump thread keeps the task
 - **WHEN** a task's round spawns a helper thread that logs
@@ -376,13 +391,31 @@ context fields.
 - **THEN** every record emitted under it renders the value on one line with
   the sequence inert, and the `taskId` grep still finds the task's lines
 
+#### Scenario: A daemon worker's lines carry its component
+- **WHEN** a daemon thread logs
+- **THEN** its lines carry a `component` MDC key naming the worker by a key
+  of the closed `DaemonComponent` vocabulary (janitor, reaper, snapshot,
+  sweep, heartbeat, dashboard)
+
+#### Scenario: A daemon's per-task decision runs under the task's id
+- **WHEN** a daemon component makes a decision about one task
+- **THEN** the decision is logged under that task's `taskId` MDC, so a grep by
+  taskId finds it
+
+#### Scenario: Every MDC value renders single-line and inert
+- **WHEN** the encoder renders any MDC value — a task id taken from a tracker,
+  a stage name taken from a manifest
+- **THEN** the value passes the same sink-side neutralization as the message
+  and renders on one line, so it can neither forge a record nor drive the
+  terminal through the record's context fields
+
 ### Requirement: Runtime verbosity without rebuild
 The log level SHALL be raisable to DEBUG for a run via environment or
 configuration property, with no rebuild, and the default remains INFO. Test
 runs SHALL use a test-only logging configuration and never write to the
 operator's log location; specs assert logging through the shared capture
 helper that saves and restores logger state.
-<!-- implements FR10, FR11 of harden-logging-observability -->
+**Implements**: FR10, FR11 of harden-logging-observability
 
 #### Scenario: Operator raises verbosity for one run
 - **WHEN** the operator sets the documented level variable and starts the
@@ -399,7 +432,7 @@ appender is asynchronous with no event discarding while the JVM lives; console
 appenders remain synchronous and carry WARN+ only; the shutdown sequence owns
 the final flush so buffered lines survive a signal-initiated stop. All
 encoders pin UTF-8.
-<!-- implements FR10, NFR-P1 of harden-logging-observability -->
+**Implements**: FR10, NFR-P1 of harden-logging-observability
 
 #### Scenario: Signal does not eat the tail
 - **WHEN** the process stops via the owned shutdown sequence

@@ -13,7 +13,7 @@ A supervised daemon loop SHALL repeat its work on a cadence (work then wait, or
 wait then work; a fixed interval or one cut short by a wake signal). An
 `Exception` from the work or the wait SHALL be logged and SHALL NOT end the
 loop. An `Error` SHALL end the worker thread; the restart policy then decides.
-<!-- implements FR1, FR2 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR1, FR2 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: An Exception in the work does not end the loop
 - **WHEN** one run of a loop's work throws a `RuntimeException`
@@ -40,7 +40,7 @@ A loop whose work fails on consecutive runs SHALL log the first failure (or a
 changed reason) at WARN, repeats at DEBUG with a periodic counted roll-up, and
 one recovery line on the first clean run after a failure. The roll-up window
 SHALL be measured on the time source the loop stamps its own state with.
-<!-- implements FR2, FR19, NFR-O1 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR2, FR19, NFR-O1 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: A persistently failing loop floods no console
 - **WHEN** a loop's work fails on fifty consecutive runs for the same reason
@@ -70,7 +70,7 @@ the guard's own reporting cannot survive) and the loop's restart policy is
 Unbounded, the loop SHALL be respawned after an exponential backoff,
 logging ERROR with a lifetime restart count, and SHALL never give up. The
 process SHALL keep running.
-<!-- implements FR3 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR3 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: Unbounded policy respawns with growing backoff
 - **WHEN** an Unbounded loop's thread dies three times in a row without a clean
@@ -88,7 +88,7 @@ Under the Bounded restart policy a dead loop thread SHALL be respawned as under
 the Unbounded policy until the restarts within a configured window exceed a
 configured maximum. After that, one ERROR SHALL say the loop is disabled, no
 respawn SHALL follow, and the process SHALL keep running.
-<!-- implements FR3 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR3 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: Bounded policy gives up
 - **WHEN** a Bounded loop with a maximum of 5 restarts in 10 minutes dies a
@@ -102,7 +102,7 @@ SHALL interrupt the loop only while it waits, never while its work runs, and
 SHALL prevent any respawn afterward, including one already waiting out a backoff.
 A joining stop SHALL return only after the loop's current thread, including a
 respawned one, has exited. Stopping an already stopped loop SHALL change nothing.
-<!-- implements FR4, NFR-R2 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR4, NFR-R2 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: Stop during a respawn backoff
 - **WHEN** a loop's thread has died and the loop is waiting out its backoff
@@ -129,7 +129,7 @@ An interrupt on a loop's thread SHALL end the loop when a stop has been
 requested. Otherwise the interrupt SHALL be cleared, logged once, and the loop
 SHALL continue with its normal wait. No interrupt SHALL cause the work to run
 again without a wait in between.
-<!-- implements FR5 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR5 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: Stray interrupt
 - **WHEN** a running loop's thread is interrupted with no stop requested
@@ -146,7 +146,7 @@ sandbox sweep tick and the snapshot writer as supervised daemon loops under the
 Unbounded policy, keeping each loop's cadence, its order of work and wait, and
 the component name its log lines carry. The claim heartbeat SHALL remain
 unsupervised: its abnormal death keeps degrading to the lease path.
-<!-- implements FR6 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR6 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: The worktree cleaner is respawned after an Error
 - **WHEN** a worktree cleaner run throws an `Error`
@@ -168,7 +168,7 @@ daemon loop. Finite threads (a slot, a batch), the feed thread, shutdown hooks
 and the claim heartbeat are the declared exemptions. A build gate SHALL fail on
 any other thread start in that layer, and on any scheduled executor or timer
 there.
-<!-- implements FR16 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR16 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: A hand-written daemon loop fails the build
 - **WHEN** an application-layer production class outside the exemptions starts

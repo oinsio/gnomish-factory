@@ -18,7 +18,7 @@ additionally immediately on state transitions (lifecycle, feed state, slot
 assign/release, heartbeat state). Transitions set a dirty flag and wake the
 single writer thread; only the writer writes. Every write SHALL be atomic:
 temp file + rename in the target directory.
-<!-- implements FR1 of add-serve-observability -->
+**Implements**: FR1 of add-serve-observability
 
 #### Scenario: Timer beat
 - **WHEN** the interval elapses with no transitions
@@ -38,7 +38,7 @@ temp file + rename in the target directory.
 The snapshot SHALL carry `version: 1`, `writtenAt`, and `intervalSeconds` so
 that a reader computes staleness as `now − writtenAt > k × intervalSeconds`
 without access to the daemon configuration.
-<!-- implements FR2 of add-serve-observability -->
+**Implements**: FR2 of add-serve-observability
 
 #### Scenario: Staleness computed from the file alone
 - **WHEN** a monitor reads only the snapshot file
@@ -50,8 +50,7 @@ The snapshot SHALL contain the top-level scalars `version`, `writtenAt`,
 host, factory version), `lifecycle`, `feed`, `slots`, `vitals`, `tracker`,
 and `remote`. It SHALL NOT contain ready-queue depth, per-task detail, or
 configuration beyond `wipLimit`.
-<!-- implements FR3 of add-serve-observability -->
-<!-- implements NFR-O3 of add-base-ref-resolution -->
+**Implements**: FR3 of add-serve-observability; NFR-O3 of add-base-ref-resolution
 
 #### Scenario: Pointers instead of payloads
 - **WHEN** an operator needs per-task detail for a slot entry
@@ -60,14 +59,14 @@ configuration beyond `wipLimit`.
 
 #### Scenario: Remote section names targets, not tasks
 - **WHEN** the gate is open and four tasks were released by the outage
-- **THEN** the `remote` section names the target and the count of released
-  claims, never the task ids — those are in the tracker, Ready
+- **THEN** the `remote` section names the target and its gate state, never a
+  task id — the released count is on the `remoteOutage` ledger line
 
 ### Requirement: Lifecycle state and final stopped record
 `lifecycle.state` SHALL be one of `running | draining | stopping | stopped`.
 On graceful exit the daemon SHALL write a final snapshot with `stopped` and a
 reason, and SHALL NOT delete the file.
-<!-- implements FR4 of add-serve-observability -->
+**Implements**: FR4 of add-serve-observability
 
 #### Scenario: Graceful stop leaves a stopped snapshot
 - **WHEN** the daemon exits via SIGTERM or drain completion
@@ -84,7 +83,7 @@ reason, and SHALL NOT delete the file.
 `filling | idleEmpty | idleBlocked | full` (factory-serve's Filling /
 Idle-empty / Idle-blocked / Full), plus `since` (state entry time),
 `lastPollAt`, `openFronts`, and `wipLimit`.
-<!-- implements FR5 of add-serve-observability -->
+**Implements**: FR5 of add-serve-observability
 
 #### Scenario: Full state without poll freshness
 - **WHEN** the feed is in Full
@@ -97,7 +96,7 @@ Idle-empty / Idle-blocked / Full), plus `since` (state entry time),
 and `attempt` are refreshed via the runner's progress path and MAY lag up to
 `intervalSeconds`; entry presence (occupancy) never lags — slot
 assign/release are immediate-write triggers.
-<!-- implements FR6 of add-serve-observability -->
+**Implements**: FR6 of add-serve-observability
 
 #### Scenario: Occupancy at a glance
 - **WHEN** 2 of 3 slots run tasks
@@ -107,12 +106,10 @@ assign/release are immediate-write triggers.
 ### Requirement: Vitals cover heartbeat, reaper, and janitor
 `vitals.heartbeat` SHALL be `state: idle | running | died` with `lastTickAt`
 and `heldClaims`; `vitals.reaper` SHALL carry `lastRunAt`, `restartCount`,
-and `intervalSeconds` (the reaper's own tick cadence, distinct from the
-top-level `intervalSeconds` snapshot-write cadence, so a reader can judge
-`lastRunAt` staleness from the file alone — M1); `vitals.janitor` SHALL
-carry `lastRunAt`. The feed and the writer SHALL NOT have vitals entries
-(feed health lives in `feed`; `writtenAt` is the writer's pulse).
-<!-- implements FR7 of add-serve-observability -->
+and `intervalSeconds`; `vitals.janitor` SHALL carry `lastRunAt`. The feed
+and the writer SHALL NOT have vitals entries.
+**Implements**: FR7 of add-serve-observability
+**Notes**: Feed health lives in `feed`, and `writtenAt` is the writer's pulse; the reaper's `intervalSeconds` lets a reader judge `lastRunAt` staleness from the file alone (M1).
 
 #### Scenario: Heartbeat death is a field
 - **WHEN** the heartbeat worker thread dies abnormally and its death handler
@@ -123,11 +120,17 @@ carry `lastRunAt`. The feed and the writer SHALL NOT have vitals entries
 - **WHEN** the standing reaper thread dies and is respawned by its supervisor
 - **THEN** a subsequent snapshot shows a grown `vitals.reaper.restartCount`
 
+#### Scenario: The reaper's interval is its own cadence
+- **WHEN** the reaper ticks on a cadence different from the snapshot-write
+  cadence
+- **THEN** `vitals.reaper.intervalSeconds` carries the reaper's tick cadence,
+  and the top-level `intervalSeconds` carries the snapshot-write cadence
+
 ### Requirement: Tracker section exposes outage at a glance
 `tracker` SHALL expose `lastSuccessAt` and `consecutiveFailures`, updated on
 every tracker-port call by any daemon caller (feed, heartbeat, reaper) — an
 outage stays visible while a saturated feed is not polling.
-<!-- implements FR8 of add-serve-observability -->
+**Implements**: FR8 of add-serve-observability
 
 #### Scenario: Outage visible without logs
 - **WHEN** tracker calls have failed repeatedly
@@ -135,7 +138,7 @@ outage stays visible while a saturated feed is not polling.
 
 ### Requirement: Sweeper vitals in the snapshot
 The snapshot's vitals SHALL carry a sweeper entry: the last tick's completion time, its per-category verdict counts (checked-alive, kept-under-threshold, stopped-orphan, disposed-aged, disposed-reconstructible, skipped-no-verdict), and an inventory of kept environments — each with task key, age, and time remaining until the reap threshold. The inventory SHALL be bounded in size, truncation stated in the snapshot.
-<!-- implements NFR-O1 of add-serve-sandbox-lifecycle -->
+**Implements**: NFR-O1 of add-serve-sandbox-lifecycle
 
 #### Scenario: Kept inventory shows what waits for resume
 - **WHEN** two escalated tasks left kept environments 2 and 6 days old under a 7-day threshold
@@ -147,7 +150,7 @@ The snapshot's vitals SHALL carry a sweeper entry: the last tick's completion ti
 
 ### Requirement: Sweep actions in the ledger
 Every stop and dispose performed by the sweep or reaper SHALL append one ledger line carrying object name, role, ownership mode, task key, verdict category, reason, and age. Each tick SHALL append one summary line with per-category counts. Untouched objects SHALL never be itemized in the ledger. Sweep lines follow the ledger's existing rotation and retention.
-<!-- implements NFR-O2 of add-serve-sandbox-lifecycle -->
+**Implements**: NFR-O2 of add-serve-sandbox-lifecycle
 
 #### Scenario: History answers "what was cleaned yesterday"
 - **WHEN** the operator reads yesterday's ledger file
@@ -162,12 +165,9 @@ Observability files SHALL live in `GNOMISH_HOME/projects/<name>/serve/<instance>
 the snapshot at `snapshot.json`, ledgers under their daily names — keyed
 by the registered project and the configured instance name
 (`factory.instance-name`, default `default`). The full instance id (with
-per-process suffix) SHALL appear inside the data, never in the path, and SHALL
-begin with the project name so a tracker comment names the project. Two daemons
-sharing one project and one configured instance name on a host is a documented
-misconfiguration; no locking.
-<!-- implements FR9 of add-serve-observability -->
-<!-- implements FR10 of add-project-registry -->
+per-process suffix) SHALL appear inside the data, never in the path.
+**Implements**: FR9 of add-serve-observability; FR10 of add-project-registry
+**Notes**: Two daemons sharing one project and one configured instance name on a host is a documented misconfiguration; the directory is not locked against it.
 
 #### Scenario: Restart keeps the paths
 - **WHEN** the daemon restarts (new instance-id suffix)
@@ -178,11 +178,16 @@ misconfiguration; no locking.
 - **WHEN** daemons for projects `widgets` and `gateway` run on one host with the default instance name
 - **THEN** their snapshots live in `projects/widgets/serve/default/` and `projects/gateway/serve/default/`, and neither overwrites the other
 
+#### Scenario: The instance id names the project
+- **WHEN** a daemon for project `widgets` starts with instance name `default`
+- **THEN** its full instance id begins with `widgets-default-`, so a tracker
+  comment carrying it names the project
+
 ### Requirement: Ledger is typed append-only JSONL with status-report conventions
 Each ledger line SHALL carry `version: 1`, a `type` discriminator, camelCase
 fields, ISO-8601 UTC timestamps, and the instance identity (full id, host,
 factory version).
-<!-- implements FR10 of add-serve-observability -->
+**Implements**: FR10 of add-serve-observability
 
 #### Scenario: Line self-identifies its writer
 - **WHEN** a collector merges ledgers from several hosts
@@ -194,7 +199,7 @@ final state — `outcome` ∈ `delivered | awaitingHuman | aborted | revoked`,
 `parkReason` only with `awaitingHuman` — with `taskId`, `stage` (null at
 pipeline end), `attemptsUsed`, `startedAt`, `finishedAt`, `wallMillis`,
 `tokensByModel`. `EmptyQueue` and `Skipped` results SHALL NOT produce lines.
-<!-- implements FR11 of add-serve-observability -->
+**Implements**: FR11 of add-serve-observability
 
 #### Scenario: Delivered task leaves one line
 - **WHEN** a slot delivers a task
@@ -208,7 +213,7 @@ pipeline end), `attemptsUsed`, `startedAt`, `finishedAt`, `wallMillis`,
 ### Requirement: Lifecycle lines record starts and stops
 The ledger SHALL record `lifecycle` lines `started` and `stopped` (with a
 reason). The `stopped` line SHALL NOT carry run totals.
-<!-- implements FR12 of add-serve-observability -->
+**Implements**: FR12 of add-serve-observability
 
 #### Scenario: Crash loop visible in history
 - **WHEN** the daemon restarts repeatedly on an empty queue
@@ -220,7 +225,7 @@ A drain run SHALL append one `runSummary` line (counters by outcome, summed
 `tokensByModel`, duration), aggregated in memory at the `taskOutcome` write
 point — never by reading the ledger back. Standing mode SHALL NOT write
 `runSummary` on any stop; readers aggregate `taskOutcome` lines themselves.
-<!-- implements FR13 of add-serve-observability -->
+**Implements**: FR13 of add-serve-observability
 
 #### Scenario: Drain boundary gets a summary
 - **WHEN** a `--drain` run finishes its last slot
@@ -230,7 +235,7 @@ point — never by reading the ledger back. Standing mode SHALL NOT write
 Ledger files SHALL be named `ledger-YYYY-MM-DD.jsonl` with the day boundary
 in UTC. A live file SHALL never be renamed — rotation is the appender
 switching to the new day's name.
-<!-- implements FR14 of add-serve-observability -->
+**Implements**: FR14 of add-serve-observability
 
 #### Scenario: Overnight history by filename
 - **WHEN** an operator asks "what happened last night"
@@ -239,7 +244,7 @@ switching to the new day's name.
 ### Requirement: Retention sweep is the snapshot writer's duty
 On its tick the snapshot writer SHALL delete ledger files older than the
 configured retention in days; `0` SHALL mean keep forever.
-<!-- implements FR15 of add-serve-observability -->
+**Implements**: FR15 of add-serve-observability
 
 #### Scenario: Old ledgers expire
 - **WHEN** retention is N days and older files exist
@@ -248,7 +253,7 @@ configured retention in days; `0` SHALL mean keep forever.
 ### Requirement: Observability failures never harm task work
 Snapshot or ledger write failures SHALL NOT crash the daemon, fail a task, or
 burn a stage attempt — the daemon logs and continues.
-<!-- implements NFR-R1 of add-serve-observability -->
+**Implements**: NFR-R1 of add-serve-observability
 
 #### Scenario: Disk full
 - **WHEN** appending a ledger line throws an I/O error
@@ -258,7 +263,7 @@ burn a stage attempt — the daemon logs and continues.
 The daemon SHALL never read the ledger back (no recovery, no compaction);
 lines are flushed per line without fsync; readers MUST tolerate a torn last
 line.
-<!-- implements NFR-R2 of add-serve-observability -->
+**Implements**: NFR-R2 of add-serve-observability
 
 #### Scenario: Torn last line after a crash
 - **WHEN** a reader hits an incomplete final line
@@ -267,7 +272,7 @@ line.
 ### Requirement: One appender serializes concurrent slot completions
 All ledger writes SHALL go through one shared appender that appends and
 flushes line-atomically under synchronization; no cross-process locking.
-<!-- implements NFR-R3 of add-serve-observability -->
+**Implements**: NFR-R3 of add-serve-observability
 
 #### Scenario: Simultaneous finishes
 - **WHEN** two slots finish at the same moment
@@ -276,7 +281,7 @@ flushes line-atomically under synchronization; no cross-process locking.
 ### Requirement: Observability adds no tracker calls and no AI tokens
 Producing the snapshot and the ledger SHALL add zero tracker API calls and
 zero AI tokens; the only added I/O is local file writes.
-<!-- implements NFR-P1 of add-serve-observability -->
+**Implements**: NFR-P1 of add-serve-observability
 
 #### Scenario: Write economy unchanged
 - **WHEN** the daemon serves the same task load with observability enabled
@@ -286,7 +291,7 @@ zero AI tokens; the only added I/O is local file writes.
 ### Requirement: Snapshot and ledger carry no task content or credentials
 Snapshot and ledger records SHALL contain only identifiers, states, counters,
 timestamps, and token counts — no task content, prompts, or credentials.
-<!-- implements NFR-S1 of add-serve-observability -->
+**Implements**: NFR-S1 of add-serve-observability
 
 #### Scenario: Field inventory stays leak-free
 - **WHEN** the snapshot and ledger reference documents are reviewed field by
@@ -297,16 +302,10 @@ timestamps, and token counts — no task content, prompts, or credentials.
 ### Requirement: Remote section exposes the outage gate at a glance
 The snapshot SHALL carry a `remote` section beside `tracker`, one entry per
 remote target, reporting the remote outage gate: `state` ∈ `closed | open`,
-`openSince` (null while closed), `lastError` (the scrubbed cause of the last
-failed fetch or probe, null while closed), `nextProbeAt` (null while
-closed), `consecutiveFailures` (failed fetches and probes since the gate
-opened; zero while closed), and `lastSuccessAt` (the last successful fetch
-or probe). The section SHALL be updated on every gate transition and every
-probe, with a transition triggering the immediate snapshot write the
-lifecycle transitions already use. A reader SHALL treat an absent `remote`
-section as "no gate known" — the section is additive, and `version` stays
-`1`.
-<!-- implements NFR-O3, UX6 of add-base-ref-resolution -->
+`openSince`, `lastError` (the scrubbed cause of the last failed fetch or
+probe), `nextProbeAt`, `consecutiveFailures` (failed fetches and probes since
+the gate opened), and `lastSuccessAt` (the last successful fetch or probe).
+**Implements**: NFR-O3, UX6 of add-base-ref-resolution
 
 #### Scenario: Blocked on the remote is a field
 - **WHEN** a slot's base refresh fails against an unreachable remote and the
@@ -317,7 +316,8 @@ section as "no gate known" — the section is additive, and `version` stays
 
 #### Scenario: Probes advance the section without claims
 - **WHEN** three probes fail while the gate is open
-- **THEN** `consecutiveFailures` reads three, `nextProbeAt` moves out on
+- **THEN** `consecutiveFailures` reads four (the failure that opened the
+  gate and the three probes), `nextProbeAt` moves out on
   each failure, `lastSuccessAt` does not advance, and the tracker section is
   unaffected because no tracker call was made
 
@@ -332,16 +332,26 @@ section as "no gate known" — the section is additive, and `version` stays
   `remote` section
 - **THEN** it renders without error and shows no remote gate
 
+#### Scenario: A closed gate counts no failures
+- **WHEN** the gate closes on a successful probe
+- **THEN** the snapshot's `consecutiveFailures` for that target reads zero
+
+#### Scenario: A gate transition writes the snapshot at once
+- **WHEN** the gate opens, or closes
+- **THEN** a snapshot is written immediately, through the same trigger the
+  lifecycle transitions use, without waiting for the write timer
+
+#### Scenario: The remote section keeps version 1
+- **WHEN** a snapshot carries a `remote` section
+- **THEN** its `version` is still `1`
+
 ### Requirement: remoteOutage lines record each closed outage in the ledger
 A `remoteOutage` line SHALL be appended when the gate closes — one line per
 outage, never per failure or per probe — with `target`, `openedAt`,
-`closedAt`, `durationMillis`, `probeCount`, `releasedClaims` (claims the
-outage released before the gate opened), and `lastError`. A gate still open
-at daemon stop SHALL NOT produce a line (the snapshot's final stopped record
-carries the open state); the next daemon starts with a closed gate and
-knows nothing of it. Released-on-outage slot results SHALL NOT produce
-`taskOutcome` lines: like `Skipped`, no engine ran and nothing was spent.
-<!-- implements NFR-O1, NFR-O3 of add-base-ref-resolution -->
+`closedAt`, `durationMillis`, `probeCount`, `releasedClaims` (slot permits
+the open gate abandoned before any claim was attempted), and `lastError`.
+**Implements**: NFR-O1, NFR-O3 of add-base-ref-resolution
+**Notes**: A released-on-outage slot result writes no `taskOutcome` line for the reason a `Skipped` one writes none: no engine ran and nothing was spent.
 
 #### Scenario: One line per outage
 - **WHEN** the remote is dead for an hour with forty failed probes and then
@@ -355,12 +365,18 @@ knows nothing of it. Released-on-outage slot results SHALL NOT produce
 - **THEN** no `taskOutcome` line is written for that task, and the slot's
   outcome log carries the typed released-on-outage line
 
+#### Scenario: An outage open at stop writes no line
+- **WHEN** the daemon stops while the gate is still open
+- **THEN** no `remoteOutage` line is appended, the final stopped snapshot
+  shows the gate open, and the next daemon starts with a closed gate that
+  knows nothing of that outage
+
 ### Requirement: Snapshot writer survives the death of its thread
 The snapshot writer SHALL be respawned when its thread dies, so that the
 snapshot keeps being written while the daemon runs. A single death SHALL be
 followed by a write within two snapshot intervals, inside the dashboard's
 staleness window, so the dashboard does not report the daemon as dead. Every respawn SHALL be logged at ERROR.
-<!-- implements FR6, NFR-O1 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR6, NFR-O1 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: Writer death is not a dead daemon
 - **WHEN** the snapshot writer's thread dies once while the daemon serves
@@ -376,7 +392,7 @@ staleness window, so the dashboard does not report the daemon as dead. Every res
 After the shutdown's final `stopped` write, no further snapshot write SHALL
 occur, even if the writer's thread died and a respawn was pending when the
 stop began.
-<!-- implements FR7 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR7 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: Death racing the final write
 - **WHEN** the writer's thread dies and the stop begins during the respawn

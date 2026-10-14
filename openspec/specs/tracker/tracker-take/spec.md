@@ -12,23 +12,11 @@ boundaries, delivery, and the operator guide.
 ### Requirement: take subcommand surface
 `gnomish take` SHALL be a separate subcommand, always in git mode, with three
 forms: `take <ref>` (explicit mode), `take <ref> <ref> ...` (batch mode, two
-or more refs), and bare `take` (auto mode). Supported flags: `--dir`,
-`--base` (single explicit-mode start only), `--discard-work` (salvage-only:
-reset the working copy to the last recorded round and replay the interrupted
-round — see git-task-persistence "Salvage of interrupted rounds"), and the
-headless takeover flag. `--discard-work` SHALL play no role in divergence:
-divergence between the local branch and origin resolves automatically under
-the live claim (see "Divergence resolves automatically under the lease"),
-and no operator flag selects that resolution. `take` SHALL have no `--mode`, no ad-hoc source flags
-(`--task`, `--task-file`, `--task-id`, `--resume`), no `--from-stage`, and no
-`--interactive` in any form — the token is a usage error like any unknown flag;
-the bare form SHALL reject start modifiers (`--base`) and the headless
-takeover flag (which authorizes an explicit `take <ref>` takeover only); the
-batch form SHALL reject `--base`. The `gnomish run` flag
-matrix SHALL remain unchanged. Short refs (`42`, `#42`) expand via the
-configured binding; a full canonical id naming a foreign repo is an error
-(subject to the adapter's rename tolerance).
-<!-- implements FR1 of remove-interactive-console -->
+or more refs), and bare `take` (auto mode). Its supported flags SHALL be
+`--dir`, `--base` (single explicit-mode start only), `--discard-work`, and the
+headless takeover flag; any other flag is a usage error.
+**Implements**: FR1 of remove-interactive-console
+**Notes**: `--discard-work` is salvage-only: it resets the working copy to the last recorded round and replays the interrupted round (git-task-persistence, "Salvage of interrupted rounds").
 
 #### Scenario: Flag validation
 - **WHEN** `take` is invoked with `--mode`, `--task`, `--resume`, `--interactive`, or bare
@@ -50,32 +38,38 @@ configured binding; a full canonical id naming a foreign repo is an error
 - **WHEN** the operator runs `take 42` with a configured GitHub binding
 - **THEN** the run targets the canonical id built from the binding and issue 42
 
+#### Scenario: Every retired flag is a usage error
+- **WHEN** `take` is invoked with `--task-file`, `--task-id`, or `--from-stage`
+- **THEN** each invocation fails with a usage error before touching the tracker, like any
+  unknown flag
+
+#### Scenario: Batch rejects a base
+- **WHEN** `take 42 43 --base main` is invoked
+- **THEN** the invocation fails with a validation error before touching the tracker
+
+#### Scenario: A hash-prefixed short ref expands like a bare number
+- **WHEN** the operator runs `take '#42'` with a configured GitHub binding
+- **THEN** the run targets the same canonical id as `take 42`
+
+#### Scenario: Discard-work plays no role in divergence
+- **WHEN** `take <ref> --discard-work` resumes a task whose local branch has truly diverged
+  from origin
+- **THEN** the divergence resolves exactly as it does without the flag — the local branch is
+  reset to the origin tip — and the flag acts only on the salvage of the interrupted round
+
+#### Scenario: The run flag matrix is unchanged
+- **WHEN** `gnomish run` is invoked with flags `take` rejects (`--task-file`, `--from-stage`)
+- **THEN** `run` accepts them exactly as before
+
 ### Requirement: Explicit-mode disposition by task state
 `take <ref>` SHALL act as an operator mandate per the task's logical state:
-`Ready` (or readiness criterion unmet) → claim and work, overriding the readiness
-criterion and abort backoff without resetting the abort counter — resuming from
-the branch outcome when one is recorded (a pending reply is collected and
-acknowledged; a recorded `DecisionNeeded` with no reply parks again restating
-the question; any other recorded outcome continues on the return alone) —
-UNLESS the task's history carries a finish report: then the mandate is
-refused, the decline protocol runs (terminal status restored, explanation
-posted directing the operator to open a new task or bug), and the run exits
-with a clear non-success outcome;
-`AwaitingHuman` (any reason) → refuse, naming the pending report and the return
-path (reply if needed, move the task back to ready);
-`Working` held by another
-instance → the takeover path: show the claim facts (holder, age of the last
-beat) and require explicit confirmation — a TTY dialog, or the dedicated
-takeover flag when headless; confirmed → remove the old claim via the
-stale-claim removal (audit marker, dead claim deleted), then claim normally
-and resume from the branch; unconfirmed → refuse with an error naming the
-holder, changing nothing. This confirmation is the one deliberate deviation
-from "identical with and without a TTY": a pre-claim gate, never an in-run
-wait. `Finished` → skip reporting "already done"; `Gone` (closed or
-nonexistent) → skip with a clear error.
-<!-- implements FR9 of add-tracker-port -->
-<!-- implements FR6 of add-claim-heartbeat -->
-<!-- implements FR5 of enforce-finish-terminality -->
+`Ready` (or readiness criterion unmet) → claim and work, unless the task's
+history carries a finish report; `AwaitingHuman` (any reason) → refuse;
+`Working` held by another instance → the takeover path, which requires
+explicit confirmation before any claim; `Finished` → skip reporting "already
+done"; `Gone` (closed or nonexistent) → skip with a clear error.
+**Implements**: FR9 of add-tracker-port; FR6 of add-claim-heartbeat; FR5 of enforce-finish-terminality
+**Notes**: The takeover confirmation is the one deliberate deviation from "identical with and without a TTY": a gate before the claim, not a wait inside the run.
 
 #### Scenario: Mandate overrides readiness and backoff
 - **WHEN** `take <ref>` targets an open task without the ready label and with
@@ -85,8 +79,8 @@ nonexistent) → skip with a clear error.
 
 #### Scenario: Parked task is refused
 - **WHEN** `take <ref>` targets a task in `AwaitingHuman`
-- **THEN** the run refuses, restating the parked report and telling the operator
-  to reply (if a question is pending) and move the task back to ready
+- **THEN** the run refuses without claiming, naming the park reason and that
+  reason's way back to ready — reply in the tracker when a question is pending
 
 #### Scenario: Held task shows facts and asks
 - **WHEN** `take <ref>` targets a task claimed by instance B with a TTY
@@ -119,22 +113,27 @@ nonexistent) → skip with a clear error.
   status is restored, the explanation comment is posted, and the exit
   outcome clearly signals the refusal
 
+#### Scenario: The mandate resumes from the recorded outcome
+- **WHEN** `take <ref>` claims a ready task whose branch records an outcome and whose thread
+  holds a reply after the last ack
+- **THEN** the reply is collected and acknowledged, and the run resumes with it
+- **WHEN** the recorded outcome is `DecisionNeeded` and no reply is pending
+- **THEN** the task is parked again with the question restated
+- **WHEN** any other outcome is recorded and no reply is pending
+- **THEN** the run continues on the return alone
+
+#### Scenario: Closed or nonexistent task is skipped
+- **WHEN** `take <ref>` targets a closed issue or a ref that names no task
+- **THEN** the run skips it with an error naming the ref and its state, and claims nothing
+
 ### Requirement: Bare auto mode takes the head of the queue
-Bare `gnomish take` SHALL fetch the ready queue via `listReady`, hide tasks
-whose abort backoff (exponential from base, capped; computed by core from
-adapter abort facts) has not expired, exclude finished tasks entirely —
-declining each via the decline protocol instead of claiming — prefer
-returned tasks over fresh ones, respect the WIP limit for fresh tasks
-(claimed only while open fronts < W; returned tasks always claimable), claim
-from the head zone — a random pick among the first K eligible, oldest-first
-as a soft preference — process exactly one task to its terminal result, and
-exit. An empty or fully blocked queue SHALL be a clean no-op run naming the
-reason (nothing eligible, or the WIP limit). Losing the claim race SHALL
-fall through to the next eligible task.
-<!-- implements FR10 of add-tracker-port -->
-<!-- implements NFR-C1 of add-tracker-port -->
-<!-- implements FR6, FR9 of add-factory-serve -->
-<!-- implements FR3 of enforce-finish-terminality -->
+Bare `gnomish take` SHALL fetch the ready queue via `listReady`, claim one
+eligible task from the head zone — a random pick among the first K eligible,
+oldest-first as a soft preference — process exactly that one task to its
+terminal result, and exit. A task is eligible when its abort backoff has
+expired, it is not finished, and, if fresh, the WIP limit admits it;
+returned tasks are preferred over fresh ones.
+**Implements**: FR10 of add-tracker-port; NFR-C1 of add-tracker-port; FR6, FR9 of add-factory-serve; FR3 of enforce-finish-terminality
 
 #### Scenario: One task per run
 - **WHEN** the queue holds three ready tasks and bare `take` runs
@@ -147,7 +146,8 @@ fall through to the next eligible task.
 
 #### Scenario: WIP limit blocks a fresh start
 - **WHEN** open fronts equal W and only fresh tasks are ready
-- **THEN** bare `take` exits as a clean no-op naming the WIP limit
+- **THEN** bare `take` claims and runs nothing and exits with the skipped outcome, exit code 15,
+  its reason naming the WIP limit
 
 #### Scenario: Returned task preferred
 - **WHEN** the queue holds an older fresh task and a younger returned task
@@ -157,18 +157,32 @@ fall through to the next eligible task.
 - **WHEN** the queue lists a reopened finished task ahead of a fresh task
 - **THEN** bare `take` declines the finished task and claims the fresh one
 
+#### Scenario: Backoff grows exponentially up to its cap
+- **WHEN** core computes a ready task's backoff from the adapter's abort facts
+- **THEN** the delay is the configured base doubled per consecutive abort after the first,
+  capped at the configured cap, and the task stays hidden until that delay has passed since
+  its last abort
+
+#### Scenario: Returned task claimable at the WIP limit
+- **WHEN** open fronts equal W and a returned task is ready
+- **THEN** bare `take` claims the returned task
+
+#### Scenario: Nothing eligible is a clean no-op naming the reason
+- **WHEN** every ready task is hidden by its unexpired backoff
+- **THEN** bare `take` exits as a clean no-op naming that nothing is eligible
+
+#### Scenario: A lost claim race falls through
+- **WHEN** another instance claims the picked task between the queue read and this run's claim
+- **THEN** bare `take` tries the next eligible task instead of ending the run
+
 ### Requirement: Batch take works the list with a summary and one exit code
 Batch `take <ref> <ref> ...` SHALL apply the explicit-mode disposition matrix
 to each ref independently, working refs through the scheduler up to N
 concurrently: skipped and refused refs are reported with their reason and the
-run continues. `Working` refs SHALL be skipped unless the headless takeover
-flag authorizes takeover (batch never prompts). The run SHALL end with a
-summary naming every ref's outcome and exit with one aggregate code in which
-the "tool could not operate" family (codes below 10) dominates the
-"legitimate outcome" family (10 and above); a batch where every ref delivered
-exits 0.
-<!-- implements FR2, FR3, FR4 of add-factory-serve -->
-<!-- implements NFR-O2 of add-factory-serve -->
+run continues. The run SHALL end with a summary naming every ref's outcome and
+exit with one aggregate code in which the "tool could not operate" family
+(codes below 10) dominates the "legitimate outcome" family (10 and above).
+**Implements**: FR2, FR3, FR4 of add-factory-serve; NFR-O2 of add-factory-serve
 
 #### Scenario: Mixed batch summarized
 - **WHEN** `take 42 43 44` delivers 42, skips 43 as held by another instance,
@@ -180,12 +194,20 @@ exits 0.
 - **WHEN** one ref fails with a pipeline load failure and the others deliver
 - **THEN** the aggregate exit code comes from the below-10 family
 
-### Requirement: Container-bound stages run through take
-`gnomish take` (explicit ref, bare auto-take, and batch) SHALL execute container-bound stages through the same container assembly as `gnomish run`: fresh claim, tracker-driven resume with decision collection, salvage on takeover and revocation, keep-on-non-completed-exit, and `--discard-work` all function in container mode. Host-mode behavior SHALL be unchanged. Objects created by take SHALL be labelled `tracked`.
-<!-- implements FR1, FR2, NFR-R4 of add-serve-sandbox-lifecycle -->
+#### Scenario: Batch never prompts for a held ref
+- **WHEN** a batch names a ref held by another instance, a TTY is attached, and the headless
+  takeover flag is absent
+- **THEN** the ref is skipped as held without any prompt
+- **WHEN** the same batch runs with the headless takeover flag
+- **THEN** the ref is taken over as a confirmed takeover
 
-A resumed branch SHALL be routed by one shared routing table regardless of execution mode: a delivered branch whose tracker finish never landed reconciles the deferred finish, a park whose tracker write never landed reconciles the deferred park, an escalation-kind park enters the decision dialog, and any other recorded outcome resumes on the return alone — each with the same tracker effect and the same number of engine rounds in host and container mode.
-<!-- implements FR1 of add-serve-sandbox-lifecycle -->
+#### Scenario: An all-delivered batch exits zero
+- **WHEN** every ref of a batch delivers
+- **THEN** the aggregate exit code is 0
+
+### Requirement: Container-bound stages run through take
+`gnomish take` (explicit ref, bare auto-take, and batch) SHALL execute container-bound stages through the same container assembly as `gnomish run`: fresh claim, tracker-driven resume with decision collection, salvage on takeover and revocation, keep-on-non-completed-exit, and `--discard-work` all function in container mode.
+**Implements**: FR1, FR2, NFR-R4 of add-serve-sandbox-lifecycle; FR1 of add-serve-sandbox-lifecycle
 
 #### Scenario: A delivered container task with a pending finish reconciles by ref
 - **WHEN** a container-mode task records `Completed` — its cleanup commit having stripped `.gnomish-task/` from the branch tip — while its tracker finish never landed, and the task is taken again by ref
@@ -199,9 +221,18 @@ A resumed branch SHALL be routed by one shared routing table regardless of execu
 - **WHEN** take seizes a task whose previous holder's claim went stale, and that holder's stopped box survives
 - **THEN** resume reattaches (or recreates over the surviving volume), salvages un-harvested work, and continues from the recorded pipeline position
 
+#### Scenario: Take labels its objects tracked
+- **WHEN** take creates a container, volume, or network for a container-bound stage
+- **THEN** each object carries the `tracked` label
+
+#### Scenario: Host-mode take is unchanged
+- **WHEN** take claims a task whose stages are host-bound
+- **THEN** the pipeline runs in the task worktree as before, and no container object is created
+
 ### Requirement: Startup sweep pass with a reported summary
-Each `take` invocation SHALL run one sweep pass at startup, evaluating the shared `sandbox-lifecycle` policy, and SHALL log verdicts in the uniform vocabulary plus one summary line with the per-category counts. The summary belongs to the invocation's log, not to the task's finish report: a finish report describes ONE task, while the sweep is project-wide and mostly concerns objects of other tasks. A tracker error during the pass degrades to skipped-no-verdict; a runtime error aborts the pass with a logged line. Neither ever blocks the take.
-<!-- implements FR6, FR9, NFR-O4 of add-serve-sandbox-lifecycle -->
+Each `take` invocation SHALL run one sweep pass at startup, evaluating the shared `sandbox-lifecycle` policy, and SHALL log verdicts in the uniform vocabulary plus one summary line with the per-category counts, in the invocation's log. No failure of the pass SHALL block the take.
+**Implements**: FR6, FR9, NFR-O4 of add-serve-sandbox-lifecycle
+**Notes**: The summary stays out of the task's finish report because a finish report describes one task, while the sweep is project-wide and mostly concerns objects of other tasks.
 
 #### Scenario: Take reports its sweep
 - **WHEN** a take run's startup pass stops one abandoned box and disposes two aged remnants
@@ -211,12 +242,20 @@ Each `take` invocation SHALL run one sweep pass at startup, evaluating the share
 - **WHEN** the container runtime is unreachable when the startup pass runs
 - **THEN** the pass is abandoned with one logged line, and the take proceeds to claim and work exactly as it would with nothing to sweep
 
+#### Scenario: A tracker error during the sweep skips the verdict
+- **WHEN** the tracker read for one swept object fails during the startup pass
+- **THEN** that object is logged as skipped with no verdict, the pass continues, and the take proceeds
+
+#### Scenario: The sweep summary stays out of the finish report
+- **WHEN** a take run's startup pass acts on objects and the run then delivers its task
+- **THEN** the sweep summary appears in the invocation's log and not in the task's finish report
+
 ### Requirement: Snapshot at first claim
 At the first claim of a task the factory SHALL read id/title/body once into
 `TaskContext` and persist them in `task.json`. Later issue edits SHALL NOT affect
 the running or parked task; resume SHALL NOT re-read the snapshot — it collects
 decisions only. Status output takes the title from the snapshot.
-<!-- implements FR11 of add-tracker-port -->
+**Implements**: FR11 of add-tracker-port
 
 #### Scenario: Issue edited mid-task
 - **WHEN** a human edits the issue body while the task is `Working` or parked
@@ -228,7 +267,7 @@ At resume claim the factory SHALL collect decisions posted after the last ack;
 consuming a decision SHALL post an "acting on decision: <text>" ack comment
 before acting. The ack records which reply the factory acted on and anchors
 future decision collection.
-<!-- implements FR12 of add-tracker-port -->
+**Implements**: FR12 of add-tracker-port
 
 #### Scenario: Ack precedes acting
 - **WHEN** a resumed run consumes a human reply
@@ -242,9 +281,8 @@ future decision collection.
   resumed run
 
 ### Requirement: Escalation parks and exits
-An escalation SHALL end the take run identically with or without a TTY: park the task with its report, then exit telling the operator where the question is and how to return the task ("reply in the tracker and move the task back to ready"). There is no in-run decision wait. A resume claim that finds a recorded `DecisionNeeded` outcome and no pending reply SHALL park the task again with the question restated. A resume claim that finds a `manual` checkpoint — the branch at `AwaitingApproval(stage)`, returned by the human — SHALL perform the approval write before any stage runs; one that finds a recorded outcome it continues without a reply (`AttemptsExhausted` returned bare, an infrastructure park returned after the fix) SHALL perform the resumed write before any stage runs. A claim that finds a gate whose park was never recorded SHALL deliver the park it is owed — record the outcome, park on the tracker — and exit without running a stage.
-<!-- implements FR4, FR7, FR11 of make-checkpoint-gate-durable -->
-<!-- implements FR13 of add-tracker-port -->
+An escalation SHALL end the take run identically with or without a TTY: park the task with its report, then exit telling the operator where the question is and how to return the task ("reply in the tracker and move the task back to ready"). There is no in-run decision wait. A resume claim of a returned park SHALL write what the return decides — the approval of a checkpoint, the reset of an outcome continued without a reply, or the park it is still owed — before any stage runs.
+**Implements**: FR4, FR7, FR11 of make-checkpoint-gate-durable; FR13 of add-tracker-port
 
 #### Scenario: Escalation ends the run
 - **WHEN** a take run escalates while a TTY is attached
@@ -266,38 +304,21 @@ An escalation SHALL end the take run identically with or without a TTY: park the
 - **WHEN** a `manual` stage passed, the process died before the park was recorded, and a take run claims the task
 - **THEN** the claim records the `paused` outcome, parks the task as a checkpoint, and exits; no stage ran
 
-### Requirement: Abort protocol with a K fuse
-An infrastructure abort is either an engine `Aborted` outcome (durable persist
-failed) or an uncaught exception of the take run itself. On an infrastructure
-abort the factory SHALL log ERROR, then best-effort: post the
-structural abort comment, release the claim, and return the task to `Ready` via
-`recordAbort` — a dead tracker never blocks the abort itself. The
-consecutive-abort count SHALL be the crash-cause category of the unified
-recovery accounting ("Recovery attempts share one budgeted accounting with the
-crash fuse") — one counter model and one quarantine outcome, replacing the
-previous standalone fuse counter while remaining shared across instances via
-tracker facts. When that accounting reaches the configured threshold, the
-factory SHALL instead park the task as `AwaitingHuman(infra)` with a report
-carrying the categorized failure history (crash and recovery causes distinct).
+#### Scenario: A returned infrastructure park is reset before any stage
+- **WHEN** a human returns an infrastructure-parked task after fixing the cause, without a reply, and a take run claims it
+- **THEN** the branch gains the resumed commit (`outcome: null`, reset state) before the first round of the resumed stage
 
-Any abort-cause text handed to a tracker write — the structural abort marker's
-cause and the fuse-trip report — SHALL first be capped to the abort-cause
-budget, a fixed limit sized so the resulting comment body fits every supported
-tracker (the smallest known comment limit is Jira Cloud's 32,767 characters)
-with headroom for the report's own framing. Truncation SHALL keep the head and
-the tail of the text and join them with an explicit marker naming the number of
-characters omitted — never a silent cut, and never a cut that drops the end of
-the text, where a rendered exception chain carries its root cause. Text within
-the budget SHALL pass through byte-for-byte unchanged. The ERROR log and the
-task branch's own state records SHALL keep the full, uncapped text: the bound
-is the tracker's, not the diagnostic record's.
-<!-- implements FR14 of add-tracker-port -->
-<!-- implements NFR-R2 of add-tracker-port -->
-<!-- implements NFR-C1 of add-tracker-port -->
-<!-- implements FR14, NFR-O2 of harden-task-branch-contract -->
-<!-- implements FR1 of cap-abort-cause-length -->
-<!-- implements NFR-R1 of cap-abort-cause-length -->
-<!-- implements NFR-O1 of cap-abort-cause-length -->
+### Requirement: Abort protocol with a K fuse
+On an infrastructure abort — an engine `Aborted` outcome (durable persist
+failed) or an uncaught exception of the take run itself — the factory SHALL
+log ERROR, then best-effort post the structural abort comment, release the
+claim, and return the task to `Ready` via `recordAbort`; a dead tracker never
+blocks the abort itself. When the shared recovery accounting reaches its
+configured threshold, the factory SHALL instead park the task as
+`AwaitingHuman(infra)`.
+**Implements**: FR14 of add-tracker-port; NFR-R2 of add-tracker-port; NFR-C1 of add-tracker-port; FR14, NFR-O2 of harden-task-branch-contract; FR1 of cap-abort-cause-length; NFR-R1 of cap-abort-cause-length; NFR-O1 of cap-abort-cause-length
+**Notes**: The consecutive-abort count is the crash-cause category of "Recovery attempts share one budgeted accounting with the crash fuse"; it replaced the earlier standalone fuse counter.
+**Notes**: The budget is sized so the comment body fits every supported tracker (the smallest known limit is Jira Cloud's 32,767 characters) with headroom for the report's framing; the tail is kept because a rendered exception chain carries its root cause there, and the bound is the tracker's, not the diagnostic record's.
 
 #### Scenario: Abort below the fuse
 - **WHEN** a run aborts with the shared accounting below its threshold
@@ -333,17 +354,24 @@ is the tracker's, not the diagnostic record's.
   tracker's limit, so the abort marker lands and the consecutive-abort count
   stays honest
 
+#### Scenario: Aborts on different instances share one count
+- **WHEN** instance A aborts a task, and instance B later claims it and aborts it too
+- **THEN** the abort facts B reads from the tracker count both aborts in the crash-cause
+  category of the shared accounting, and the fuse decision rests on that one count
+
+#### Scenario: The branch keeps the uncapped cause
+- **WHEN** a run aborts with a cause longer than the abort-cause budget
+- **THEN** the task branch's own state records carry the full, uncapped cause, while the
+  tracker writes carry the capped one
+
 ### Requirement: Factory emits durable progress at the round boundary
 On the first durable round after a claim, the factory SHALL call
 `recordProgress` for the task exactly once per claim, from the round-boundary
 hook that runs strictly after a round is durably persisted. The call SHALL be
-best-effort: because the round is already durable when it runs, a tracker
-failure SHALL be logged at WARN and swallowed — it SHALL NOT abort, block, or
-fail the run. This is the mechanism that satisfies the `add-tracker-port` FR14
-clause "the counter resets on the first durably persisted round after claim".
-<!-- implements FR2 of fix-abort-progress-reset -->
-<!-- implements NFR-R1 of fix-abort-progress-reset -->
-<!-- implements NFR-O1 of fix-abort-progress-reset -->
+best-effort: a tracker failure SHALL be logged at WARN and swallowed — it
+SHALL NOT abort, block, or fail the run.
+**Implements**: FR2 of fix-abort-progress-reset; NFR-R1 of fix-abort-progress-reset; NFR-O1 of fix-abort-progress-reset
+**Notes**: Best effort is safe because the round is already durable when the call runs; this is the mechanism behind the `add-tracker-port` FR14 clause "the counter resets on the first durably persisted round after claim".
 
 #### Scenario: First durable round records progress
 - **WHEN** a claimed task completes its first durable round
@@ -369,16 +397,10 @@ clause "the counter resets on the first durably persisted round after claim".
 After every durably persisted round the factory SHALL verify the task is still
 ours and alive in one tracker query — not closed, claim intact, state not changed
 by a human. On revocation, it SHALL salvage uncommitted work through the bound
-task environment — sandboxed: a salvage commit via `exec` inside the environment,
-then harvest; host: a salvage commit in the worktree — push best-effort
-factory-side per the push safety rules (harvest precedes any push), post a
-structural "work stopped" note, release the claim, leave the tracker state
-untouched, and keep the branch and the working copy per the keep semantics of
-git-task-persistence — host: worktree kept; sandboxed: container stopped, volume
-and network retained. Revocation SHALL surface as a runner-level result, not as
-an engine `TaskOutcome`.
-<!-- implements FR15 of add-tracker-port -->
-<!-- implements FR5, FR6 of add-sandbox-core -->
+task environment, push it best-effort factory-side, post a structural "work
+stopped" note, release the claim, leave the tracker state untouched, and keep
+the branch and the working copy per the keep semantics of git-task-persistence.
+**Implements**: FR15 of add-tracker-port; FR5, FR6 of add-sandbox-core
 
 #### Scenario: Issue closed under a working gnome
 - **WHEN** a human closes the issue while a round is executing
@@ -388,8 +410,20 @@ an engine `TaskOutcome`.
 #### Scenario: Revoked sandboxed task keeps a stopped environment
 - **WHEN** revocation is detected while the task runs in container mode
 - **THEN** leftovers are salvage-committed inside the environment and harvested,
-  the push runs factory-side after the harvest, and the environment is kept
-  stopped with volume and network retained
+  the push runs factory-side after the harvest, and the environment is left as
+  the claim loss found it — neither stopped nor disposed by the run — so the
+  lifecycle sweep classifies it unowned and stops it, volume and network
+  retained
+
+#### Scenario: Revoked host task keeps its worktree
+- **WHEN** revocation is detected while the task runs in host mode
+- **THEN** leftovers are committed as a salvage commit in the worktree, pushed best-effort,
+  and the worktree is kept
+
+#### Scenario: Revocation is a runner result, not an engine outcome
+- **WHEN** a run stops on revocation
+- **THEN** the run reports the revocation as its own runner-level result, and no engine
+  `TaskOutcome` is produced for it
 
 ### Requirement: Delivery posts a final report and ends the factory's involvement
 On engine `Completed` the factory SHALL transition the task to `Finished` with a
@@ -397,8 +431,7 @@ final report comment rendered from the status-report model (stages with attempts
 and results, cumulative usage, branch reference, wall time) and SHALL never touch
 the task again — re-running a finished task is a new task, not a resume. All
 lifecycle actions SHALL be logged with the canonical task id in MDC.
-<!-- implements FR18 of add-tracker-port -->
-<!-- implements NFR-O1 of add-tracker-port -->
+**Implements**: FR18 of add-tracker-port; NFR-O1 of add-tracker-port
 
 #### Scenario: Full delivery
 - **WHEN** the engine completes the last stage
@@ -407,8 +440,7 @@ lifecycle actions SHALL be logged with the canonical task id in MDC.
 
 ### Requirement: Any instance can pick up a returned task
 Resume of a returned task SHALL require nothing instance-local: claim, decisions, abort facts, and reports live in the tracker; work artifacts, state, the gate and its approval live on the task branch. A different instance than the one that escalated or paused SHALL be able to claim, collect the decision or perform the approval, and continue from the recorded pipeline position.
-<!-- implements FR4 of make-checkpoint-gate-durable -->
-<!-- implements NFR-R3 of add-tracker-port -->
+**Implements**: FR4 of make-checkpoint-gate-durable; NFR-R3 of add-tracker-port
 
 #### Scenario: Cross-instance resume
 - **WHEN** instance A escalates a task and instance B runs `take <ref>` after a human reply and return to ready
@@ -419,21 +451,13 @@ Resume of a returned task SHALL require nothing instance-local: claim, decisions
 - **THEN** B performs the approval on the branch and continues the following stage without any data from A
 
 ### Requirement: Exit codes by take result
-`gnomish take` SHALL exit with: 0 — Delivered, or a clean bare-mode no-op
-(empty queue); 1 — failure outside a claimed run (tracker unreachable at
-startup, label provisioning); 2 — usage error; 3 — pipeline load failure;
-10 — parked as escalation; 11 — parked as checkpoint; 12 — infrastructure
-abort below the fuse; 13 — parked as infra (fuse trip or infrastructure
-escalation); 14 — revoked; 15 — refused or skipped (held by another instance,
-already done, closed or nonexistent, foreign repo); 16 — claim released on a
-base-refresh infrastructure failure before any work started (the task is
-back in Ready, nothing was recorded against it). Codes shared with
-`gnomish run` SHALL keep the same meaning. An uncaught exception follows the
-abort protocol and exits 12 or 13, never a bare 1.
-<!-- implements FR9 of add-tracker-port -->
-<!-- implements FR10 of add-tracker-port -->
-<!-- implements FR15 of add-tracker-port -->
-<!-- implements FR9 of add-base-ref-resolution -->
+`gnomish take` SHALL exit with: 0 — Delivered, or a clean bare-mode no-op;
+1 — failure outside a claimed run; 2 — usage error; 3 — pipeline load
+failure; 10 — parked as escalation; 11 — parked as checkpoint; 12 —
+infrastructure abort below the fuse; 13 — parked as infra; 14 — revoked;
+15 — refused or skipped; 16 — claim released on a base-refresh
+infrastructure failure before any work started.
+**Implements**: FR9 of add-tracker-port; FR10 of add-tracker-port; FR15 of add-tracker-port; FR9 of add-base-ref-resolution
 
 #### Scenario: Empty queue exits clean
 - **WHEN** bare `take` finds no eligible ready task
@@ -453,28 +477,36 @@ abort protocol and exits 12 or 13, never a bare 1.
 - **THEN** the process exits 16 naming the remote and the cause, and the
   task is Ready with no new marker
 
+#### Scenario: Failure before a claim exits 1
+- **WHEN** the tracker is unreachable at startup, or label provisioning fails
+- **THEN** the process exits 1
+
+#### Scenario: Infra park exit
+- **WHEN** a take run parks its task as infra, by a fuse trip or an infrastructure escalation
+- **THEN** the process exits 13
+
+#### Scenario: Every refusal and skip exits 15
+- **WHEN** `take <ref>` finds its task already done, closed or nonexistent, or names a foreign
+  repo
+- **THEN** the process exits 15
+
+#### Scenario: Shared codes mean the same in run
+- **WHEN** `gnomish run` and `gnomish take` end with the same result family (usage error,
+  pipeline load failure)
+- **THEN** both exit with the same code
+
+#### Scenario: An uncaught exception never exits a bare 1
+- **WHEN** a claimed take run dies with an uncaught exception
+- **THEN** the abort protocol runs and the process exits 12, or 13 at the fuse — never 1
+
 ### Requirement: Operator guide
-The change SHALL ship an operator guide (`docs/guides/operator-guide.md`) covering: quick
-start (tracker config section, token env variable, factory config layers), handing
-off a task via the ready label and automatic label provisioning, the label
-dictionary with who moves what, the escalation/decision/ack flow (reply, return
-to ready, re-run), snapshot behavior (issue edits do not affect a taken
-task; influence via decisions or revoke-and-recreate), stuck-`Working`
-recovery — automatic reaping whenever any factory instance is running, claim
-in hand or not, bounded only by runs too short to observe a full TTL — the
-confirmed `take <ref>` takeover with its headless flag, and the
-honest limitation that one-shot cron runs cannot observe longer than TTL so
-cron-only operation keeps the manual label flip until `serve` exists — the
-heartbeat/TTL settings with the shared write-budget coupling (beat interval ×
-concurrent tasks vs the shared token's write limits), Projects v2 boards as a
-display-only parallel universe with the shipped reference "column → ready label"
-cron workflow (`docs/examples/board-bridge.yml`), the fork warning ("fix
-`tracker.repo`"), and the `take` CLI reference with exit behavior.
-<!-- implements FR19 of add-tracker-port -->
-<!-- implements FR6 of add-claim-heartbeat -->
-<!-- implements NFR-P1, UX2, UX3 of add-claim-heartbeat -->
-<!-- implements FR1 of fix-reaper-idle-liveness -->
-<!-- implements UX1 of fix-reaper-idle-liveness -->
+The change SHALL ship an operator guide (`docs/guides/operator-guide.md`) that
+describes the `take` operator surface — configuration, handing off a task, the
+label dictionary, the escalation round-trip, snapshot behavior, stuck-`Working`
+recovery, the heartbeat settings, Projects v2 boards, the fork warning, and the
+`take` CLI reference with exit behavior — without reference to factory source
+code.
+**Implements**: FR19 of add-tracker-port; FR6 of add-claim-heartbeat; NFR-P1, UX2, UX3 of add-claim-heartbeat; FR1 of fix-reaper-idle-liveness; UX1 of fix-reaper-idle-liveness
 
 #### Scenario: Guide covers the operator surface
 - **WHEN** an operator follows the guide against a fresh repository
@@ -488,25 +520,41 @@ cron workflow (`docs/examples/board-bridge.yml`), the fork warning ("fix
   confirmed), and the cron-only manual escape hatch, and names the
   write-budget consequence of shortening the beat interval
 
+#### Scenario: Guide covers configuration and hand-off
+- **WHEN** an operator reads the quick start and the hand-off sections
+- **THEN** they name the tracker config section, the token environment variable and the
+  factory config layers, hand-off via the ready label with automatic label provisioning, and
+  the label dictionary with who moves what
+
+#### Scenario: Guide covers the escalation round-trip and the snapshot
+- **WHEN** an operator reads the escalation and snapshot sections
+- **THEN** they describe the reply, return-to-ready and re-run flow with its ack, and state
+  that issue edits do not affect a taken task, whose course changes only through decisions or
+  revoke-and-recreate
+
+#### Scenario: Guide covers reaping, takeover and the cron limitation
+- **WHEN** an operator reads the stuck-`Working` section
+- **THEN** it states that reaping runs whenever any factory instance is running, claim in hand
+  or not, bounded only by runs too short to observe a full TTL; describes the confirmed
+  `take <ref>` takeover with its headless flag; and states that one-shot cron runs cannot
+  observe longer than the TTL, so cron-only operation keeps the manual label flip
+
+#### Scenario: Guide covers heartbeat settings, boards and the fork warning
+- **WHEN** an operator reads the remaining sections
+- **THEN** they give the heartbeat/TTL settings with the write-budget coupling (beat interval
+  × concurrent tasks against the shared token's write limits), Projects v2 boards as a
+  display-only parallel universe with the reference `docs/examples/board-bridge.yml` cron
+  workflow, the fork warning ("fix `tracker.repo`"), and the `take` CLI reference with exit
+  behavior
+
 ### Requirement: Operator guide covers autonomous operation
 The operator guide SHALL gain the autonomous-operation surface: the
-`serve` / batch / drain CLI reference with lifecycle behavior (SIGTERM grace,
-drain semantics, restart); the feed states and what the WIP-limit message
-means (answering escalations is the unblocking action); the instance knobs
-(slots N, idle interval, grace) versus the protocol constants in `.gnomish/`
-(`wip-limit` beside the heartbeat keys); the shared write budget — heartbeat
-dominates steady-state writes, bounding total concurrency ΣN at the default
-beat interval, with the beat interval (not instance count) as the scaling
-knob; the WIP method boundary (W limits how many branches are open, not
-whether they merge — integration discipline stays with the pipeline author);
-the autonomy gate ("who can set the ready label can execute code on the
-factory host" — never auto-`ready` from untrusted sources); and CI hygiene
-for gnome branches (workflows triggered by `gnomish/*` pushes carry no
-privileged secrets; `GITHUB_TOKEN` read-only). The cron path SHALL now point
-to drain mode, with the manual label flip demoted to a last-resort escape
-hatch.
-<!-- implements NFR-P2, NFR-S1, NFR-S2 of add-factory-serve -->
-<!-- implements UX1, UX2, UX4 of add-factory-serve -->
+`serve` / batch / drain CLI reference with lifecycle behavior; the feed states
+and what the WIP-limit message means; the instance knobs versus the protocol
+constants in `.gnomish/`; the shared write budget; the WIP method boundary;
+the autonomy gate; CI hygiene for gnome branches; and the cron path through
+drain mode.
+**Implements**: NFR-P2, NFR-S1, NFR-S2 of add-factory-serve; UX1, UX2, UX4 of add-factory-serve
 
 #### Scenario: Guide explains the stalled factory
 - **WHEN** an operator sees the daemon idle at the WIP limit
@@ -518,18 +566,38 @@ hatch.
 - **THEN** the guide forbids auto-`ready` from untrusted sources, equating
   ready-label access with code execution on the factory host
 
+#### Scenario: Guide covers the serve lifecycle and its knobs
+- **WHEN** an operator reads the `serve` / batch / drain reference
+- **THEN** it describes SIGTERM grace, drain semantics and restart, and separates the instance
+  knobs (slots N, idle interval, grace) from the protocol constants in `.gnomish/` (`wip-limit`
+  beside the heartbeat keys)
+
+#### Scenario: Guide explains the write budget and the WIP boundary
+- **WHEN** an operator plans how many instances to run
+- **THEN** the guide states that heartbeat dominates steady-state writes, bounding total
+  concurrency ΣN at the default beat interval, names the beat interval (not the instance
+  count) as the scaling knob, and states that W limits how many branches are open, not whether
+  they merge — integration discipline stays with the pipeline author
+
+#### Scenario: Guide keeps gnome-branch CI unprivileged
+- **WHEN** an operator sets up CI for the repository
+- **THEN** the guide requires that workflows triggered by `gnomish/*` pushes carry no
+  privileged secrets and that `GITHUB_TOKEN` is read-only for them
+
+#### Scenario: Guide points cron at drain mode
+- **WHEN** an operator reads how to run the factory from cron
+- **THEN** the guide points to drain mode and demotes the manual label flip to a last-resort
+  escape hatch
+
 ### Requirement: Take runs the heartbeat thread and the reaper duty
 A take run SHALL start the beat-only instance heartbeat thread at its first
 successful claim and stop it when no claim is held (terminal result reached or
 claim lost). Independently of any claim, the run SHALL start the standing
-reaper at the run start and stop it when the invocation ends: while the run
-lives, the reaper lists open tasks, updates observations, and removes stale
-claims on each tick, whether or not the run currently holds a claim of its
-own. Reaping is a duty of the run itself, never a byproduct of holding a
-claim — the same standing-reaper mechanism `serve` uses, scoped to one
-invocation; the heartbeat thread performs no reaper duty.
-<!-- implements FR1, FR4 of add-claim-heartbeat -->
-<!-- implements FR1, FR5 of fix-reaper-idle-liveness -->
+reaper at the run start and stop it when the invocation ends, whether or not
+the run currently holds a claim of its own; the heartbeat thread performs no
+reaper duty.
+**Implements**: FR1, FR4 of add-claim-heartbeat; FR1, FR5 of fix-reaper-idle-liveness
+**Notes**: Reaping is a duty of the run itself, not a byproduct of holding a claim: it is the same standing-reaper mechanism `serve` uses, scoped to one invocation.
 
 #### Scenario: Beat starts with the claim
 - **WHEN** bare `take` claims the queue head
@@ -548,25 +616,32 @@ invocation; the heartbeat thread performs no reaper duty.
 - **THEN** the standing reaper, on its own thread, still removes the stale
   foreign claim before the run ends
 
+#### Scenario: The reaper tick lists, observes and removes
+- **WHEN** a reaper tick of a take run runs while the run holds no claim of its own
+- **THEN** it lists the open tasks, updates its observations of their claims, and removes
+  the claims its observations judge stale
+
 ### Requirement: Reconcile precedes resume
 Every claim of a task with an existing branch SHALL begin with the reconcile
 check, routed by the `task-branch-contract` shape classifier: when the tip
 records a terminal outcome whose tracker counterpart is missing (finish or
 park never landed), the run SHALL complete the deferred delivery and end —
-executing no stage. For a `Completed` tip whose cleanup commit is also absent,
-the delivery is the full finish of "A Completed-without-cleanup tip is
-finished, never re-executed" (cleanup commit, push, tracker finish); the two
-requirements name one behavior, not two checks. Only when branch and tracker
-agree does the ordinary resume (decision collection, engine run) proceed.
-<!-- implements FR10 of add-claim-heartbeat -->
-<!-- implements NFR-C1 of add-claim-heartbeat -->
-<!-- implements FR9 of harden-task-branch-contract -->
+executing no stage. Only when branch and tracker agree does the ordinary
+resume (decision collection, engine run) proceed.
+**Implements**: FR10 of add-claim-heartbeat; NFR-C1 of add-claim-heartbeat; FR9 of harden-task-branch-contract
+**Notes**: For a `Completed` tip whose cleanup commit is also absent, the deferred delivery is the full finish of "A Completed-without-cleanup tip is finished, never re-executed" (cleanup commit, push, tracker finish); the two requirements name one behavior, not two checks.
 
 #### Scenario: Deferred finish is delivered, not re-run
 - **WHEN** a take run claims a task whose branch records `Completed` but whose
   tracker state is still open after its holder died mid-outage
 - **THEN** the run posts the final report, transitions the task to `Finished`,
   and exits with the delivery exit code without invoking any executor
+
+#### Scenario: Deferred park is delivered, not re-run
+- **WHEN** a take run claims a task whose branch records a park outcome whose tracker park
+  never landed
+- **THEN** the run parks the task in the tracker with the recorded report and exits with the
+  park's exit code without invoking any executor
 
 ### Requirement: Terminal tracker writes retry against an outage
 When a terminal outcome (finish, park, abort record) cannot be written because
@@ -575,8 +650,7 @@ branch and retry the write with backoff for a bounded period before giving up
 with an ERROR naming the unreconciled state; the reconcile-on-resume closes
 the gap whenever the process dies or gives up first. Abort-path writes remain
 best-effort as before — a dead tracker never blocks the abort itself.
-<!-- implements FR10 of add-claim-heartbeat -->
-<!-- implements NFR-R3 of add-claim-heartbeat -->
+**Implements**: FR10 of add-claim-heartbeat; NFR-R3 of add-claim-heartbeat
 
 #### Scenario: Finish lands after the outage
 - **WHEN** the tracker recovers while a completed run is still retrying its
@@ -595,14 +669,11 @@ best-effort as before — a dead tracker never blocks the abort itself.
 ### Requirement: Routing decides only on origin-confirmed state
 Fresh-vs-resume routing SHALL rely only on origin-confirmed state: the take
 routes to a fresh claim only after origin confirms the task ref is missing. A
-locate fetch that fails for any other reason — network error, timeout,
-authentication, an interrupted or timed-out subprocess — SHALL classify as an
-infrastructure failure: the fetch is retried under the existing
-infrastructure-retry policy — a budget of its own, never the bounded
-re-attempt that bound-subprocess-commands forbids spending on an interrupted
-or timed-out invocation — and on exhaustion the take aborts without claiming;
-it SHALL NOT route to a fresh claim or create a new branch.
-<!-- implements FR6 of harden-task-branch-contract -->
+locate fetch that fails for any other reason SHALL classify as an
+infrastructure failure, retried under the infrastructure-retry policy; on
+exhaustion the take releases the claim outside the abort accounting, as a base
+infrastructure failure does, and it SHALL NOT route to a fresh claim or create
+a new branch.
 
 ```mermaid
 flowchart TD
@@ -610,31 +681,41 @@ flowchart TD
     L -->|ref found| S["classify tip, route by shape"]
     L -->|origin confirms ref missing| F["fresh claim: create branch"]
     L -->|any other failure<br/>timeout, network, auth| I["infrastructure: retry fetch"]
-    I -->|retries exhausted| A["abort take — no claim, no branch"]
+    I -->|retries exhausted| A["release claim — no abort, no branch"]
 ```
+**Implements**: FR6 of harden-task-branch-contract
 
 #### Scenario: Fetch failure never forks a duplicate branch
 - **WHEN** the locate fetch of `gnomish/<task>` fails with a network timeout
   while the branch exists on origin
-- **THEN** the take retries the fetch and, on exhaustion, aborts without
-  creating a branch or starting a round — the existing branch is untouched
+- **THEN** the take retries the fetch and, on exhaustion, releases the claim
+  outside the abort accounting without creating a branch or starting a round —
+  the existing branch is untouched
 
 #### Scenario: Confirmed-missing ref routes fresh
 - **WHEN** origin answers the locate fetch confirming no `gnomish/<task>` ref
   exists
 - **THEN** the take routes to a fresh claim and creates the branch
 
+#### Scenario: Every non-confirming locate failure is infrastructure
+- **WHEN** the locate fetch fails on a network error, an authentication refusal, or an
+  interrupted or timed-out subprocess
+- **THEN** the take classifies it as an infrastructure failure and never routes to a fresh
+  claim
+
+#### Scenario: The locate retry spends its own budget
+- **WHEN** the locate fetch is interrupted or times out
+- **THEN** it is retried under the infrastructure-retry policy's own budget, never through the
+  bounded re-attempt that bound-subprocess-commands forbids spending on an interrupted or
+  timed-out invocation
+
 ### Requirement: Divergence resolves automatically under the lease
 When the instance holds a live claim, the local task branch and the origin
 tip SHALL reconcile automatically before resume: local ahead of origin keeps
 the local tip; local behind origin fast-forwards to the origin tip; true
 divergence discards the local branch — reset to the origin tip, drafts
-dropped — and the run continues from origin. No operator flag is consulted
-and no divergence terminates the run with an exit demanding git surgery. The
-discard's reset SHALL be an explicit local-ref compare-and-swap against the
-tip the decision was made on — no push is involved, and origin history is
-never rewritten.
-<!-- implements FR8 of harden-task-branch-contract -->
+dropped — and the run continues from origin.
+**Implements**: FR8 of harden-task-branch-contract
 
 #### Scenario: Stale local branch is discarded and work continues
 - **WHEN** an instance resumes a task whose work was superseded from another
@@ -646,21 +727,24 @@ never rewritten.
 - **WHEN** the local branch holds commits origin lacks and origin has not moved
 - **THEN** the local tip is kept and pushed; nothing is discarded
 
+#### Scenario: A diverged resume asks the operator for nothing
+- **WHEN** a resume finds the local branch and origin truly diverged
+- **THEN** the resolution consults no operator flag or prompt, and the run does not exit
+  demanding git surgery
+
+#### Scenario: The discard is a compare-and-swap on the local ref
+- **WHEN** the local ref moves between the divergence decision and the discard's reset
+- **THEN** the reset fails instead of overwriting the moved ref, no push runs, and origin
+  history is untouched
+
 ### Requirement: A Completed-without-cleanup tip is finished, never re-executed
 When the branch tip records the `Completed` outcome but the cleanup commit is
 absent, the take SHALL finish the delivery — deliver the tracker finish, then
 commit the cleanup and push it — and SHALL NOT re-enter the engine: zero
-rounds, no executor or judge invocation. The order is FR10's: the cleanup is
-the destructive step and runs behind the confirmed finish, so a kill anywhere
-in the sequence leaves the tip recording `Completed` with its envelope intact —
-the same shape this requirement recovers. The delivered state a recovery
-reports SHALL be read from the `Completed` commit itself: at the tip when the
-tip still carries the envelope, otherwise at the parent of the cleanup commit
-located in the tip's history — never from the tip's parent by assumption, so a
-branch that gained commits after its cleanup still reports the state it
-delivered.
-<!-- implements FR9 of harden-task-branch-contract -->
-<!-- implements FR6 of fix-envelope-medium -->
+rounds, no executor or judge invocation. The delivered state a recovery
+reports SHALL be read from the `Completed` commit itself.
+**Implements**: FR9 of harden-task-branch-contract; FR6 of fix-envelope-medium
+**Notes**: The order is FR10's: the cleanup is the destructive step, so it runs behind the confirmed finish.
 
 #### Scenario: Kill between Completed and cleanup costs no re-run
 - **WHEN** a previous run died after committing `Completed` but before its
@@ -685,6 +769,11 @@ delivered.
 - **WHEN** the tip still carries the `Completed` envelope
 - **THEN** the delivered state is read at the tip, not at any parent
 
+#### Scenario: A kill during the finish leaves the recoverable shape
+- **WHEN** the recovering run is killed after the tracker finish but before the cleanup commit
+- **THEN** the tip still records `Completed` with its envelope intact, and the next take
+  recovers it by this same requirement
+
 ### Requirement: Recovery attempts share one budgeted accounting with the crash fuse
 Automatic recovery of a non-clean branch shape SHALL be budgeted: a persisted
 per-task counter of recovery attempts with backoff between attempts, and
@@ -693,7 +782,7 @@ budget is exhausted. This budget and the existing K crash fuse SHALL be one
 accounting — one counter model and one quarantine outcome, not two parallel
 fuses. Quality attempts (stage verification failures) SHALL remain a separate
 count and never burn recovery budget.
-<!-- implements FR14 of harden-task-branch-contract -->
+**Implements**: FR14 of harden-task-branch-contract
 
 #### Scenario: Exhausted recovery budget quarantines with history
 - **WHEN** recovery of the same task fails repeatedly until the shared budget
@@ -711,12 +800,8 @@ A branch tip classifying as one of the three non-recoverable shapes of the
 `task-branch-contract` closed set — `Corrupt`, `UnsupportedVersion`, or
 `Unknown`, on every reading path of take and serve — SHALL quarantine
 the task on its first classification with a diagnosis, without burning
-crash-fuse or recovery-budget cycles and without a crash loop. The quarantine
-report SHALL name the observed shape, the diagnosis (the offending file and
-the expected shape), and the recovery attempts consumed, readable without
-factory logs.
-<!-- implements FR15 of harden-task-branch-contract -->
-<!-- implements UX2, NFR-O2 of harden-task-branch-contract -->
+crash-fuse or recovery-budget cycles and without a crash loop.
+**Implements**: FR15 of harden-task-branch-contract; UX2, NFR-O2 of harden-task-branch-contract
 
 #### Scenario: Corrupt branch parks once, not per pickup
 - **WHEN** a take claims a task whose `state.json` is unparseable
@@ -731,21 +816,21 @@ factory logs.
   observed and supported versions named in the diagnosis, burning no crash-fuse
   cycle
 
+#### Scenario: The quarantine report stands without the logs
+- **WHEN** a task is quarantined for a non-recoverable shape
+- **THEN** the report in the tracker names the observed shape, the offending file, the expected
+  shape and the recovery attempts consumed, so an operator diagnoses it without factory logs
+
 ### Requirement: Base resolution runs between claim and task creation
 For a fresh start, `take` (explicit, batch, and auto forms alike) SHALL
-resolve the base after the factory clone is hardened (the branch hardening
-step that precedes task creation today) and before the task is created on
-the branch: take the `task-branch.base` configuration from the trusted tier bound at
-startup from the refreshed default branch (never re-read per claim),
-evaluate the task's `base` designator, apply the priority order, and
-refresh the resolved ref (see base-ref-resolution and git-task-persistence),
-then load the task tier of the law from the refreshed base's commit (see
-pipeline-config) — a load error parks the task with a configuration report.
-`--base` keeps its existing surface — single explicit-mode start only — and,
-where given, is the top priority tier. Resume of a task whose branch already
-exists SHALL perform no base resolution: the pin governs, and the law binds
-from the tip of the pinned ref name.
-<!-- implements FR4 of add-base-ref-resolution -->
+resolve the base after the factory clone is hardened and before the task is
+created on the branch — evaluate the task's `base` designator, apply the
+priority order, and refresh the resolved ref — then load the task tier of the
+law from the refreshed base's commit (see pipeline-config). Resume of a task
+whose branch already exists SHALL perform no base resolution: the pin
+governs.
+**Implements**: FR4 of add-base-ref-resolution
+**Notes**: The hardening is the branch hardening step that precedes task creation; resolution and refresh are specified by base-ref-resolution and git-task-persistence.
 
 #### Scenario: Auto mode resolves without flags
 - **WHEN** bare `take` claims a task carrying a valid `base` designator
@@ -758,33 +843,37 @@ from the tip of the pinned ref name.
   law binds from the pinned ref's current tip — so a human fix on the base
   reaches the resumed task
 
+#### Scenario: The base configuration is bound once at startup
+- **WHEN** the default branch's `task-branch.base` configuration changes after a take run
+  started, and the run then claims a fresh task
+- **THEN** the resolution uses the configuration of the trusted tier bound at startup from the
+  refreshed default branch, not a per-claim re-read
+
+#### Scenario: A task-tier law load error parks the task
+- **WHEN** the task tier of the law fails to load from the refreshed base's commit
+- **THEN** the task is parked with a configuration report and no stage runs
+
+#### Scenario: An explicit base outranks the designator
+- **WHEN** a single explicit-mode `take <ref> --base <ref>` starts a task that carries its own
+  `base` designator
+- **THEN** the branch starts from the `--base` ref, the top priority tier
+
 ### Requirement: Base infrastructure failure releases the claim outside the abort accounting
 When base resolution or the base refresh fails infrastructurally in a
 tracker-driven start — default-branch discovery or the base fetch
 exhausting its bounded retries — the take SHALL release the
 claim through the plain claim-release path and end without creating a
-branch: the task returns to Ready for any instance to claim later, no stage
-attempt is burned, no escalation is posted to the tracker, and the run ends
-with a typed result naming the infrastructure cause. The release SHALL write
-no abort marker and no comment, so the task's abort facts, backoff, and
-K-fuse accounting stay exactly as they were: the outage is charged to the
-daemon, never to the task. The failure is caught and classified at the
-fresh-claim step and never reaches the abort protocol as an uncaught
-exception; the abort protocol itself is unchanged. Only reachability
-failures are this class, classified by cause and never by the step that
-observed them: a ref that does not exist, an authentication refusal, a
-diverging local tag, a remote refusing fetch-by-SHA, and underdetermined
-input (a disallowed or conflicting designator) park the task with a
-report per base-ref-resolution. Every fetch a take performs at claim time,
-of whatever ref, SHALL classify under this same rule.
-<!-- implements FR9 of add-base-ref-resolution -->
-<!-- implements M4 of add-base-ref-resolution -->
+branch, with a typed result naming the infrastructure cause. The release
+SHALL write no abort marker and no comment. Every fetch a take performs at claim time, of whatever ref, SHALL classify
+under this same rule.
+**Implements**: FR9 of add-base-ref-resolution; M4 of add-base-ref-resolution
+**Notes**: The outage is charged to the daemon, never to the task: the abort protocol itself is unchanged and never sees this failure.
 
 #### Scenario: Dead remote returns the task to the pool
 - **WHEN** the base fetch exhausts retries during an auto-take claim
-- **THEN** the claim is removed, the task shows Ready in the tracker with no
-  new comment, and a later take of the same task succeeds once the remote
-  returns
+- **THEN** the claim is released through the plain release path with no new
+  comment — the reaper returns the task to Ready once the claim lapses — and
+  a later take of the same task succeeds once the remote returns
 
 #### Scenario: Escalation is reserved for human-decidable input
 - **WHEN** one claimed task has a conflicting designator and another hits a
@@ -795,5 +884,29 @@ of whatever ref, SHALL classify under this same rule.
 #### Scenario: Release leaves the abort accounting untouched
 - **WHEN** a task with two recorded aborts is claimed and its base refresh
   hits a dead remote
-- **THEN** the task returns to Ready with exactly two abort facts, its
-  backoff unchanged, and no new marker in its thread
+- **THEN** the claim is released with exactly two abort facts, its backoff
+  unchanged, and no new marker in its thread
+
+#### Scenario: The outage is classified at the fresh claim, not aborted
+- **WHEN** the base fetch of a fresh claim exhausts its bounded retries
+- **THEN** the failure is caught at the fresh-claim step and the run ends with the
+  released-on-outage result, never through the abort protocol as an uncaught exception
+
+#### Scenario: Non-reachability base failures park the task
+- **WHEN** the base names a ref that does not exist, the remote refuses authentication, a
+  local tag under the base's name diverges, or the remote refuses fetch-by-SHA — whichever
+  step observed the failure
+- **THEN** the task is parked with a report per base-ref-resolution, and its claim is not
+  silently released
+
+### Requirement: One resume routing table for both execution modes
+A resumed branch SHALL be routed by one shared routing table regardless of execution mode: a delivered branch whose tracker finish never landed reconciles the deferred finish, a park whose tracker write never landed reconciles the deferred park, an escalation-kind park enters the decision dialog, and any other recorded outcome resumes on the return alone — each with the same tracker effect and the same number of engine rounds in host and container mode.
+**Implements**: FR1, FR2, NFR-R4 of add-serve-sandbox-lifecycle; FR4 of tighten-spec-contract
+**Notes**: Split from "Container-bound stages run through take", whose scenario `A delivered container task with a pending finish reconciles by ref` covers the delivered route in container mode.
+
+#### Scenario: Every recorded outcome routes alike in host and container mode
+- **WHEN** a task is resumed by take in host mode and, separately, in container mode, with the
+  same branch record — a delivered tip with its finish owed, a park with its tracker write
+  owed, an escalation-kind park, or any other recorded outcome
+- **THEN** both modes take the same route, produce the same tracker effect, and run the same
+  number of engine rounds

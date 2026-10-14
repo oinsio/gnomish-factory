@@ -11,12 +11,8 @@ Operator config SHALL support named per-vendor connection profiles
 (`factory.connections.<name>`) carrying the vendor endpoint and the credential
 name(s) resolved through `SecretsProvider`. A port subsection MAY reference a
 profile as `connection: <name>` instead of inlining endpoint and credential-name
-keys; two ports referencing the same profile share one definition, so one
-vendor serving two ports (e.g. github tracker + github checks) keeps a single
-connection/credentials block. Provider selection SHALL remain independent per
-port — a profile shares connection data, never the provider choice.
-<!-- implements FR16 of add-plugin-architecture -->
-<!-- implements UX3 of add-plugin-architecture -->
+keys.
+**Implements**: FR16 of add-plugin-architecture; UX3 of add-plugin-architecture
 
 #### Scenario: Two ports share one named profile
 - **WHEN** the github tracker subsection and the github checks subsection both
@@ -30,14 +26,18 @@ port — a profile shares connection data, never the provider choice.
 - **THEN** each port resolves its own connection independently; sharing is
   opt-in per subsection, never implied by the vendor
 
+#### Scenario: A profile never selects the provider
+- **WHEN** two port subsections reference the same connection profile
+- **THEN** each port uses the provider its own subsection selects, and the
+  profile contributes connection data only
+
 ### Requirement: Profile-resolved credential names join the scrub set
 A credential name a port resolves from a connection profile SHALL enter the
 child-environment scrub and never-allowlist machinery exactly as an
 adapter-declared name does: the SPI credential declaration is
 connection-aware, so the declared set follows the profile. A profile SHALL
 carry the credential name only, never a credential value.
-<!-- implements FR16 of add-plugin-architecture -->
-<!-- implements FR17 of add-plugin-architecture -->
+**Implements**: FR16 of add-plugin-architecture; FR17 of add-plugin-architecture
 
 #### Scenario: Renamed credential in a profile is still scrubbed
 - **WHEN** a profile names a non-default credential for a vendor and a stage
@@ -49,13 +49,9 @@ carry the credential name only, never a credential value.
 ### Requirement: A connection profile reference is validated at load
 Core SHALL grade the `connection:` reference itself, and only it: a blank or
 non-string reference and a name no `factory.connections` profile defines SHALL
-each be a located config error. A referencing subsection MAY still declare
-inline keys the profile does not define — they overlay the profile (design D8)
-— but each inline key the referenced profile also defines SHALL be a located
-config error of its own, naming that key. A subsection declaring *neither*
-form is not a core-level error: what it is missing only the provider knows, so
-it stays that provider's own missing-key validation error.
-<!-- implements FR16 of add-plugin-architecture -->
+each be a located config error.
+**Implements**: FR16 of add-plugin-architecture
+**Notes**: The overlay of inline keys the profile does not define is design D8 of add-plugin-architecture.
 
 #### Scenario: Undefined profile name is a located error
 - **WHEN** a port subsection declares `connection: <name>` and no
@@ -74,3 +70,9 @@ it stays that provider's own missing-key validation error.
   the referenced profile does not define
 - **THEN** loading succeeds and the provider is handed the profile's keys with
   the subsection's own overlaid, the reference key itself dropped
+
+#### Scenario: A subsection with neither form is left to its provider
+- **WHEN** a port subsection declares neither a `connection:` reference nor
+  the provider's inline connection keys
+- **THEN** core reports no error for it, and the provider's own validation
+  reports the key it is missing

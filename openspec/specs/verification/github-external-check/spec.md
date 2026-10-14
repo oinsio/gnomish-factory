@@ -11,7 +11,7 @@ The adapter SHALL derive Pass/Fail exclusively from the conclusion of
 workflow runs authored by the platform; check-run and commit statuses —
 creatable with a repo-scoped token — SHALL never be consulted. A
 non-`success` or unknown conclusion SHALL map to Fail.
-<!-- implements FR2, FR3 of add-external-check-github-actions -->
+**Implements**: FR2, FR3 of add-external-check-github-actions
 
 #### Scenario: Forged status is ignored
 - **WHEN** the attempt commit carries a token-created "success" status while
@@ -29,7 +29,7 @@ attempt commit under verification and whose workflow is the check's
 `checkId`; among several matching runs the latest run attempt SHALL be
 authoritative. Runs of other workflows or other commits SHALL not influence
 the verdict.
-<!-- implements FR1, FR5 of add-external-check-github-actions -->
+**Implements**: FR1, FR5 of add-external-check-github-actions
 
 #### Scenario: Unrelated workflows do not gate the stage
 - **WHEN** the push triggers three workflows and the check declares only
@@ -47,7 +47,7 @@ When no matching run exists yet, or the matching run has no conclusion, the
 poll SHALL return Running; timeout classification stays with the engine,
 per the check's declared timeout class (stage-engine's external check poll
 loop requirement).
-<!-- implements FR2 of add-external-check-github-actions -->
+**Implements**: FR2 of add-external-check-github-actions
 
 #### Scenario: CI has not picked up the push yet
 - **WHEN** the platform lists no run for the attempt commit
@@ -58,7 +58,7 @@ loop requirement).
 Network errors, 5xx responses and rate-limit rejections SHALL classify as
 CannotVerify with the cause named — infrastructure failures of the check,
 retried without consuming a stage attempt.
-<!-- implements NFR-R1 of add-external-check-github-actions -->
+**Implements**: NFR-R1 of add-external-check-github-actions
 
 #### Scenario: Platform outage is not a red build
 - **WHEN** the runs query returns 503
@@ -71,10 +71,9 @@ expired token), a non-rate-limited 403 (token lacks Actions read scope), a
 404 (checkId names no existing workflow), or any other non-2xx that is not a
 transient infrastructure failure — SHALL classify as CannotVerify
 immediately, without polling to the check's timeout, naming the likely
-misconfiguration; no stage attempt is burned. The error body SHALL never be
-parsed as a runs listing (where its missing `workflow_runs` array would read
-as an empty, still-Running list).
-<!-- implements NFR-R3 of add-external-check-github-actions -->
+misconfiguration; no stage attempt is burned.
+**Implements**: NFR-R3 of add-external-check-github-actions
+**Notes**: Read as a runs listing, an error body's missing `workflow_runs` array would look like an empty, still-Running list.
 
 #### Scenario: A mistyped checkId is diagnosed, not silently polled
 - **WHEN** the runs query for the declared checkId returns 404
@@ -87,18 +86,17 @@ as an empty, still-Running list).
 - **THEN** the poll returns CannotVerify naming the invalid or expired token,
   without waiting for the check's timeout, and burns no stage attempt
 
+#### Scenario: An error body is never read as a runs listing
+- **WHEN** the runs query returns a client-side rejection whose body carries no
+  `workflow_runs` array
+- **THEN** the poll returns CannotVerify, never Running, and the error body is
+  never parsed as a runs listing
+
 ### Requirement: Failure findings carry jobs and capped log tails
 On Fail the adapter SHALL emit findings naming each failed job and step plus
 the tail of each failed job's log, within the funnel's size caps; the
 findings travel through the unified funnel like every other check's.
-<!-- implements FR6, NFR-C1, UX1 of add-external-check-github-actions -->
-
-**Provisional until add-sandbox-core lands:** the unified findings funnel
-does not exist in `src/` yet. `GithubWorkflowJobsFetcher` applies a
-local, adapter-specific tail cap (`LOG_TAIL_CAP_CHARS`) as a stand-in for
-the funnel's centrally-tuned size caps. "Within the funnel's size caps" and
-"travel through the unified funnel" describe the target design, not the
-current adapter, until add-sandbox-core's funnel replaces this local cap.
+**Implements**: FR6, NFR-C1, UX1 of add-external-check-github-actions
 
 #### Scenario: The gnome sees why CI failed
 - **WHEN** a matching run concludes `failure` with two failed jobs
@@ -109,15 +107,7 @@ current adapter, until add-sandbox-core's funnel replaces this local cap.
 The pin set checked by the pin-check guard SHALL be the union of the
 user-declared paths from the stage law and the `checkId` workflow file
 contributed by the adapter.
-<!-- implements FR4 of add-external-check-github-actions -->
-
-**Provisional until add-sandbox-core lands:** the pin-check guard
-does not exist in `src/` yet. `GithubCheckPinPaths` implements
-only the adapter's contribution — the `checkId` workflow file — as a small
-static method; the union with law-declared paths and the byte-compare
-against the base branch described below are the guard's responsibility and
-are not implemented. This requirement and its scenario describe the target
-design once the guard lands; they are not exercised end-to-end today.
+**Implements**: FR4 of add-external-check-github-actions
 
 #### Scenario: Early substitution is caught at the point of use
 - **WHEN** the gnome modified the declared workflow file during an earlier
@@ -132,8 +122,7 @@ polling after a crash or takeover and observe the same runs. The adapter
 SHALL read the attempt commit from this change's concrete workspace type
 — the one the engine hands to check runners — replacing the adapter-local
 `GithubCheckWorkspace` stand-in and its internal downcast.
-<!-- implements NFR-R2 of add-external-check-github-actions -->
-<!-- implements FR26 of add-sandbox-core -->
+**Implements**: NFR-R2 of add-external-check-github-actions; FR26 of add-sandbox-core
 
 #### Scenario: Another instance resumes mid-poll
 - **WHEN** the polling instance dies and another instance resumes the task
@@ -149,17 +138,7 @@ SHALL read the attempt commit from this change's concrete workspace type
 ### Requirement: Token resolution and hygiene
 The adapter SHALL obtain its token through `SecretsProvider`, require read
 scope only, and never include token material in logs or findings.
-<!-- implements FR8, NFR-S1 of add-external-check-github-actions -->
-
-**Provisional until add-sandbox-core lands:** the `SecretsProvider` port
-does not exist in `src/` yet. `GithubCheckToken` resolves the token
-from the `GNOMISH_GITHUB_ACTIONS_TOKEN` environment variable once, at
-wiring time, mirroring the tracker adapter's own pre-`SecretsProvider`
-pattern. The read-only-scope and never-leaks-into-findings/logs properties
-hold today regardless of resolution mechanism; only the *source* of the
-token is a stand-in, replaced by a `SecretsProvider`-backed factory once
-that port lands — nothing downstream of token resolution is expected to
-change.
+**Implements**: FR8, NFR-S1 of add-external-check-github-actions
 
 #### Scenario: Token never leaks into findings
 - **WHEN** a poll fails and CannotVerify details preserve the HTTP exception
@@ -170,25 +149,9 @@ The factory SHALL construct `GithubCheckExternalClient` from factory
 config — the platform base URL under a dedicated config key and a token
 resolved by name through `SecretsProvider` — and inject it into the stage
 engine wrapped by the pin-check guard, so an operator enables the GitHub
-Actions adapter with configuration alone, no code changes. In place of the
-inline base URL and token name, the check subsection MAY reference a named
-operator-config connection profile as `connection: <name>` — the same profile
-the github tracker may reference, so one vendor keeps a single
-connection/credentials block (the vendor-connection-profile capability). A
-referencing subsection MAY still declare inline keys the referenced profile
-does not define — they overlay the profile — but declaring an inline key the
-referenced profile also defines is ambiguous and SHALL be a load error, one
-per overlapping key. The env/file
-adapter backs the token name with `GNOMISH_GITHUB_ACTIONS_TOKEN`,
-replacing the provisional direct env read; the adapter SHALL declare
-that name — through the check SPI's connection-aware credential
-declaration, resolving the profile-supplied name when a `connection:`
-profile is referenced — so it can never be admitted into a
-child-environment allowlist, matching the tracker token's treatment.
-<!-- implements FR26 of add-sandbox-core -->
-<!-- implements FR16 of add-plugin-architecture -->
-<!-- implements FR17 of add-plugin-architecture -->
-<!-- implements UX3 of add-plugin-architecture -->
+Actions adapter with configuration alone, no code changes.
+**Implements**: FR26 of add-sandbox-core; FR16 of add-plugin-architecture; FR17 of add-plugin-architecture; UX3 of add-plugin-architecture
+**Notes**: The `connection:` profile is the same one the github tracker may reference, so one vendor keeps a single connection and credentials block (the vendor-connection-profile capability); the `SecretsProvider`-backed token name replaced the provisional direct environment read.
 
 #### Scenario: Operator enables the adapter with config alone
 - **WHEN** factory config declares the external-check base URL and the
@@ -214,11 +177,37 @@ child-environment allowlist, matching the tracker token's treatment.
 - **THEN** startup fails with a configuration error naming the variable,
   same as for the tracker token
 
+#### Scenario: An inline key the profile lacks overlays it
+- **WHEN** the check subsection declares `connection: <name>` and, inline, a
+  key the referenced profile does not define
+- **THEN** the adapter is constructed from the profile's values with that
+  inline key overlaid
+
+#### Scenario: An inline key the profile also defines is a load error
+- **WHEN** a check subsection referencing a profile declares, inline, keys the
+  referenced profile also defines
+- **THEN** the configuration is refused before any adapter is built, with one
+  located error per overlapping key naming it and the two forms declared; in
+  operator config the refusal stops startup
+
+#### Scenario: The default token name is the env/file secret
+- **WHEN** the check subsection references no connection profile
+- **THEN** the token resolves through `SecretsProvider` under the name
+  `GNOMISH_GITHUB_ACTIONS_TOKEN`, which the env/file adapter backs
+
+#### Scenario: A profile-supplied token name cannot be allowlisted
+- **WHEN** the referenced connection profile names the token under another
+  variable and operator config lists that variable as a child-environment
+  passthrough variable
+- **THEN** the adapter declares the profile-supplied name through the check
+  SPI's credential declaration, and startup fails with a configuration error
+  naming the variable
+
 ### Requirement: Pass verdicts carry the platform run URL
 On Pass the adapter SHALL include the URL of the authoritative workflow
 run in the poll result, so the link reaches the tracker report through
 the same check-result channel a failing check's findings use.
-<!-- implements NFR-O2 of add-sandbox-core -->
+**Implements**: NFR-O2 of add-sandbox-core
 
 #### Scenario: A green check is auditable from the tracker
 - **WHEN** the matching workflow run concludes `success`

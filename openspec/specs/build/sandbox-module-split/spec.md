@@ -14,7 +14,7 @@ and per-backend adapter modules. The core SHALL carry no backend-specific code
 or dependencies; each backend's mechanics (today: the subprocess docker-CLI
 backend; later: backends bringing their own SDKs) live only in that backend's
 module.
-<!-- implements FR8 of split-into-modules -->
+**Implements**: FR8 of split-into-modules
 
 #### Scenario: Core is free of backend-specific code and dependencies
 - **WHEN** `:sandbox:core`'s sources and dependencies are inspected
@@ -31,23 +31,21 @@ module.
 - **WHEN** `:application` uses the execution environment
 - **THEN** it imports the port from `:sandbox:core`, never from a backend module
 
-### Requirement: Sandbox port contract preserved; AdapterBinding opened by change C
-The `TaskExecutionEnvironment` port contract SHALL be unchanged by the split;
-the capability-passport reconciliation semantics (operator binds, repo only
-tightens, fail-closed on mismatch) are preserved. `AdapterBinding` is NO LONGER
-a sealed type: `open-adapter-binding-registry` (change C) opens it into a
-discovered first-party registry, so a backend module contributes its binding
-and passport without a core enum edit. The port contract and reconciliation
-semantics remain unchanged by that opening.
-<!-- implements FR8, FR9 of split-into-modules -->
-<!-- modified by FR1 of open-adapter-binding-registry -->
-
-#### Scenario: Existing sandbox specs pass unchanged
-- **WHEN** the existing execution-environment specs run against the split modules
-- **THEN** they pass with no changes to the spec files
+### Requirement: Sandbox port contract and the discovered AdapterBinding registry
+The `TaskExecutionEnvironment` port contract and the capability-passport
+reconciliation semantics (operator binds, repo only tightens, fail-closed on
+mismatch) SHALL be unchanged by the split and by the opening of `AdapterBinding`,
+which `open-adapter-binding-registry` (change C) turned from a sealed type into a
+discovered first-party registry.
+**Implements**: FR8, FR9 of split-into-modules; FR1 of open-adapter-binding-registry
+**Notes**: The scenario `Existing sandbox specs pass unchanged` was the acceptance of the archived change `split-into-modules` and left with the old heading `Sandbox port contract preserved; AdapterBinding opened by change C` (FR16 of tighten-spec-contract).
 
 #### Scenario: AdapterBinding is a discovered registry
 - **WHEN** `AdapterBinding` is inspected after change C
 - **THEN** it is resolved from a discovered first-party registry, not a sealed
   enum of core-defined constants
 - **AND** `host` and `container` remain available with their prior passports
+
+#### Scenario: A backend contributes its binding without a core edit
+- **WHEN** a backend module contributes a new adapter binding and its capability passport
+- **THEN** the binding is discovered from that module through the first-party registry, with no edit to a core enum or any other `:sandbox:core` type

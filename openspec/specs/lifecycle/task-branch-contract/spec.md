@@ -7,25 +7,9 @@ Define the contract every task branch obeys between factory transitions: a total
 ## Requirements
 
 ### Requirement: Total branch-shape classification
-<!-- implements FR11 of make-checkpoint-gate-durable -->
-<!-- implements FR1, FR3, FR15, NFR-R2 of harden-task-branch-contract; FR1, FR2 of fix-claim-epoch-fence; FR14, NFR-R4 of fix-operator-blockers -->
-A classifier SHALL map any task branch tip — its file set, envelope versions and recorded position — to exactly one named shape from this closed set of eleven, which is the canonical vocabulary every other artifact of this contract refers to rather than restates:
+A classifier SHALL map any task branch — its registered commit's envelope, file set, versions and position, and the tip's relation to it — to exactly one shape of a closed set of eleven: `Bare`, `Created`, `InProgress`, `AwaitingApproval`, `Parked`, `Answered`, `CompletedUncleaned`, `Delivered`, `UnsupportedVersion`, `Corrupt(reason)` and `Unknown`. The set SHALL be a sealed hierarchy so readers switch without a default branch.
 
-| Shape                | Meaning                                                                                                                          |
-|----------------------|----------------------------------------------------------------------------------------------------------------------------------|
-| `Bare`               | the branch ref exists but carries no STARTED commit                                                                              |
-| `Created`            | the STARTED commit is present and no round has completed, including a pre-contract tip carrying `task.json` without `state.json` |
-| `InProgress`         | a run is underway; rounds recorded, no outcome, position at a stage or the pipeline end                                          |
-| `AwaitingApproval`   | a `manual` stage passed and the gate is not opened: the recorded position is `AwaitingApproval(stage)`; whether a park outcome is also recorded is a sub-state, not a separate shape |
-| `Parked`             | an outcome is recorded at a non-gate position and a human is awaited; the pending-write marker is a sub-state, not a separate shape |
-| `Answered`           | the human's decision is appended and the outcome cleared, so the branch is resumable                                             |
-| `CompletedUncleaned` | an outcome is recorded and cleanup is still pending                                                                              |
-| `Delivered`          | cleanup completed, found by searching the task's own history for the cleanup commit and tolerating post-cleanup commits           |
-| `UnsupportedVersion` | an envelope declares a version this factory does not support                                                                     |
-| `Corrupt(reason)`    | content is unreadable or self-contradictory; the reason names the offending file and the observed versus expected content        |
-| `Unknown`            | a legal-but-unrecognized combination                                                                                             |
-
-The happy-path progression of the shapes, with the one group that leaves it — quarantine on first classification:
+The happy path and the group quarantined on first classification:
 
 ```mermaid
 stateDiagram-v2
@@ -48,8 +32,10 @@ stateDiagram-v2
         Unknown
     }
 ```
-
-The classifier's facts SHALL include the recorded position, so that a tip at a gate classifies as `AwaitingApproval` whatever `task.json`'s `outcome` says: a null outcome (the park was never recorded), a `paused` outcome (the park landed) and a stale earlier outcome all name the same owed step. The claim epoch stamped on the tip commit SHALL NOT be a classification input: a tip stamped by an earlier tenure classifies exactly as the same tip unstamped would (see "Claim epoch is provenance, not a read-side fence"). A task's own history SHALL be the commits after its STARTED commit on the branch's first-parent line: a cleanup commit reachable only through the base the branch forked from, or through a base merged into the branch, SHALL NOT make the branch `Delivered`, and a branch with no STARTED commit of its own has no delivery. The set SHALL be modelled as a sealed hierarchy so readers switch without a default branch. An unsupported envelope version SHALL classify as `UnsupportedVersion`, never as `Corrupt`, `Unknown`, or a closest legal match — the distinct shape is what lets a version diagnosis name the version rather than a parse failure. No shape name SHALL collide with an existing domain type: the branch shape for "awaiting a human" is `Parked` (never `Escalated`, which names a `TaskOutcome` variant), the shape for a closed gate is `AwaitingApproval` (the same word the position carries, since the shape *is* the position), and the shape for "decision landed" is `Answered` (never `Decision`, which names the human's answer record). The classifier SHALL never throw on content: only environment unavailability (git or daemon unreachable) may surface as an infrastructure error, and that error retries under existing policy without burning quality attempts.
+**Implements**: FR11 of make-checkpoint-gate-durable; FR1, FR3, FR15, NFR-R2 of harden-task-branch-contract; FR1, FR2 of fix-claim-epoch-fence; FR14, NFR-R4 of fix-operator-blockers
+**Notes**: Where the registered commit comes from is the requirement "Classification reads the factory register".
+**Notes**: The eleven names are the canonical vocabulary every other artifact of this contract refers to rather than restates.
+**Notes**: The distinct `UnsupportedVersion` shape is what lets a version diagnosis name the version rather than a parse failure.
 
 #### Scenario: Every generated tip classifies to exactly one shape
 - **WHEN** property-generated branch tips (arbitrary file subsets, envelope versions and positions) are classified
@@ -79,9 +65,57 @@ The classifier's facts SHALL include the recorded position, so that a tip at a g
 - **WHEN** a base holding an earlier task's cleanup commit is merged into a live task branch after the task started
 - **THEN** the live task does not classify as `Delivered`
 
+#### Scenario: A branch ref with no STARTED commit is Bare
+- **WHEN** the task branch ref exists but carries no STARTED commit
+- **THEN** the shape is `Bare`, and the branch has no delivery whatever its history holds
+
+#### Scenario: A started branch with no completed round is Created
+- **WHEN** the STARTED commit is present, no round has completed, and no decision is recorded
+- **THEN** the shape is `Created`
+
+#### Scenario: A run underway is InProgress
+- **WHEN** rounds are recorded, no outcome is recorded, and the position is at a stage or the pipeline end
+- **THEN** the shape is `InProgress`
+
+#### Scenario: An outcome awaiting a human at a non-gate position is Parked
+- **WHEN** an outcome is recorded at a non-gate position and a human is awaited, with or without the pending-write marker
+- **THEN** the shape is `Parked` in both cases — the marker is a sub-state, not a separate shape
+
+#### Scenario: An appended decision with the outcome cleared is Answered
+- **WHEN** the human's decision is appended and the outcome cleared, with no round run since
+- **THEN** the shape is `Answered`, and the branch is resumable
+
+#### Scenario: A recorded completion awaiting cleanup is CompletedUncleaned
+- **WHEN** a `Completed` outcome is recorded and the cleanup is still pending
+- **THEN** the shape is `CompletedUncleaned`
+
+#### Scenario: A cleanup commit in the task's own history is Delivered
+- **WHEN** the cleanup commit is found in the task's own history and further commits follow it
+- **THEN** the shape is `Delivered` — the post-cleanup commits are tolerated
+
+#### Scenario: Unreadable or self-contradictory content is Corrupt
+- **WHEN** a tip's content is unreadable or self-contradictory
+- **THEN** the shape is `Corrupt(reason)`, the reason naming the offending file and the observed versus expected content
+
+#### Scenario: A legal but unrecognized combination is Unknown
+- **WHEN** a tip's files form a legal combination this contract does not recognize
+- **THEN** the shape is `Unknown`
+
+#### Scenario: An unsupported version never reads as its closest legal shape
+- **WHEN** an envelope at the tip declares an unsupported version while the rest of the tip resembles a legal shape
+- **THEN** the shape is `UnsupportedVersion`, never the closest legal match
+
+#### Scenario: No shape name collides with a domain type
+- **WHEN** the shape names are compared with the existing domain types
+- **THEN** the shape for "awaiting a human" is `Parked` (never `Escalated`, a `TaskOutcome` variant), the shape for a closed gate is `AwaitingApproval` (the word the position carries, since the shape is the position), and the shape for "decision landed" is `Answered` (never `Decision`, the human's answer record)
+
+#### Scenario: An unreachable environment is the classifier's only error
+- **WHEN** git or the daemon is unreachable while a tip is read for classification
+- **THEN** the failure surfaces as an infrastructure error that retries under the existing policy without burning a quality attempt; no content ever makes the classifier throw
+
 ### Requirement: Classifier is the single entry to branch state
-<!-- implements FR2 of harden-task-branch-contract -->
 Every reader of task-branch state — take routing, resume, reconciliation, status, usage, denial-cursor restore — SHALL obtain the shape only through the classifier, and per-shape handling SHALL be exhaustive by construction: adding a shape SHALL force every reader to handle it, with no default or catch-all branch.
+**Implements**: FR2 of harden-task-branch-contract
 
 #### Scenario: No reader bypasses the classifier
 - **WHEN** any reading path inspects a task branch tip
@@ -92,9 +126,9 @@ Every reader of task-branch state — take routing, resume, reconciliation, stat
 - **THEN** every per-shape handler fails to build until it names the new shape explicitly
 
 ### Requirement: One recovery owner per shape
-<!-- implements FR11, NFR-R1, NFR-R2 of make-checkpoint-gate-durable -->
-<!-- implements G1, G2, NFR-R1 of harden-task-branch-contract; FR3, FR5, FR8, NFR-R1 of fix-envelope-medium -->
-Each named shape SHALL have exactly one recovery owner — the component responsible for converging that shape to a clean expected state. The owner of `AwaitingApproval` is the stage engine's run entry: its recovery is to re-deliver the park (record the `paused` outcome if `task.json` lacks it, park on the tracker where one exists, print the stop where none does) and never to run a stage; the gate opens only through the approval write, which a human's return or `--resume` performs. Recovery SHALL be idempotent and convergent: running a recovery on an already-recovered state changes nothing, running any recovery twice equals running it once, and a kill during recovery lands in a shape whose own recovery completes the remaining work. The approval write and the resumed write SHALL refuse — writing nothing — when the tip no longer matches the state they were asked to move from. Convergence SHALL NOT depend on which instance picks the task up: a recovery owner decides from the durable medium — the branch tip and the tracker — never from a local working copy, so the instance whose own working copy froze the state converges it exactly as any other instance does. A working copy the factory keeps between pickups is a staging area for the next write, not an input to any recovery decision, and the build SHALL reject a recovery-path read of a factory-owned envelope file from the working copy.
+Each named shape SHALL have exactly one recovery owner — the component responsible for converging that shape to a clean expected state. Recovery SHALL be idempotent and convergent.
+**Implements**: FR11, NFR-R1, NFR-R2 of make-checkpoint-gate-durable; G1, G2, NFR-R1 of harden-task-branch-contract; FR3, FR5, FR8, NFR-R1 of fix-envelope-medium
+**Notes**: A working copy the factory keeps between pickups is a staging area for the next write, not an input to any recovery decision.
 
 #### Scenario: Recovering a recovered state is a no-op
 - **WHEN** a shape's recovery runs and then runs again on the resulting state
@@ -123,9 +157,22 @@ Each named shape SHALL have exactly one recovery owner — the component respons
   instead of through the tip reader
 - **THEN** the architecture gate fails the build naming the file and the owner to route through
 
+#### Scenario: The gate's owner re-delivers the park where no tracker exists
+- **WHEN** a tip classifies as `AwaitingApproval` and the run that picks it up has no tracker
+- **THEN** the stage engine's run entry records the `paused` outcome if `task.json` lacks it, prints the stop, and runs no stage
+
+#### Scenario: Only the approval write opens a gate
+- **WHEN** a tip classifies as `AwaitingApproval`
+- **THEN** no recovery advances it; the gate opens only through the approval write, which a human's return or `--resume` performs
+
+#### Scenario: A stale resumed write refuses
+- **WHEN** the resumed write is asked to clear an outcome the tip no longer records
+- **THEN** the write refuses and lands no commit
+
 ### Requirement: Claim-epoch fencing
-<!-- implements FR13, NFR-S1 of harden-task-branch-contract; FR2, FR3 of fix-claim-epoch-fence -->
-Each (re)claim SHALL be issued a monotonically increasing epoch, recorded with the claim and stamped into every commit and tracker write of that tenure. On the branch the stamp is provenance — it names the tenure that made a commit — and at the tracker it is the identity a fenced claim operation compares against. A reader SHALL NOT treat an artifact of an earlier tenure as stale: artifacts stamped with older epochs are the branch's history, and a reclaim resumes from them. The branch's fence against a holder whose lease lapsed is the fast-forward-only push — the task branch is never force-pushed, so a late push from a superseded tenure is rejected by the remote — and the tracker's fence is the round-boundary revocation check, which stops a holder whose claim is no longer its own. A holder whose heartbeat cannot be confirmed SHALL stop writing at the next boundary until it re-verifies its claim. Epoch stamps SHALL carry only task identity and counters — no paths, hostnames, or credential material.
+Each (re)claim SHALL be issued a monotonically increasing epoch, recorded with the claim and stamped into every commit and tracker write of that tenure.
+**Implements**: FR13, NFR-S1 of harden-task-branch-contract; FR2, FR3 of fix-claim-epoch-fence
+**Notes**: On the branch the stamp is provenance — it names the tenure that made a commit — and at the tracker it is the identity a fenced claim operation compares against.
 
 #### Scenario: Reclaim increases the epoch
 - **WHEN** a task is reclaimed after its previous holder died
@@ -147,9 +194,16 @@ Each (re)claim SHALL be issued a monotonically increasing epoch, recorded with t
 - **WHEN** a holder cannot confirm its own heartbeat
 - **THEN** it writes nothing past the next boundary until the claim is re-verified
 
+#### Scenario: The round-boundary check stops a holder whose claim is gone
+- **WHEN** a holder reaches a round boundary after its claim has stopped being its own
+- **THEN** the tracker's fence, the round-boundary revocation check, stops it
+
+#### Scenario: An epoch stamp carries no host or credential data
+- **WHEN** any commit or tracker write of a tenure is stamped
+- **THEN** the stamp carries only task identity and counters — no paths, hostnames, or credential material
+
 ### Requirement: Replica-pair reconciliation
-<!-- implements FR8, NFR-R3 of harden-task-branch-contract -->
-Per repository, one task SHALL be one ref and one logical transition one commit; movement across repositories is reconciled, never transactional. Origin is the sole inter-instance source of truth, and the durability point of any transition is its successful push, never the local commit. When the local branch and origin differ and the instance holds a live claim: local ahead of origin keeps local; local behind fast-forwards to origin; true divergence discards local (reset to the origin tip, dropping drafts) and continues automatically, with the reset applied as an explicit compare-and-swap against the tip the decision was made on. The discard SHALL be gated on that claim: where no claim is held, a diverged pair SHALL stop with an operator-facing report instead, while the ungated relations (equal, ahead, behind) reconcile the same way with or without one. No automatic path SHALL force-push or rewrite origin history.
+When the local branch and origin differ and the instance holds a live claim, the pair SHALL reconcile: local ahead of origin keeps local; local behind fast-forwards to origin; true divergence discards local (reset to the origin tip, dropping drafts) and continues automatically, with the reset applied as an explicit compare-and-swap against the tip the decision was made on.
 
 ```mermaid
 flowchart TD
@@ -161,6 +215,8 @@ flowchart TD
     C -->|DIVERGED, no claim| S["stop and report;<br/>local line untouched"]
     D -->|tip moved, CAS fails| R["classify again"]
 ```
+**Implements**: FR8, NFR-R3 of harden-task-branch-contract
+**Notes**: Movement across repositories is reconciled, not transactional.
 
 #### Scenario: Divergence resolves automatically under the lease
 - **WHEN** the local branch and origin have truly diverged and the instance holds a live claim
@@ -178,9 +234,21 @@ flowchart TD
 - **WHEN** any automatic recovery or reconciliation path runs
 - **THEN** origin history is unchanged except by fast-forward pushes
 
+#### Scenario: One task is one ref, one transition one commit
+- **WHEN** a transition of a task is written to a repository
+- **THEN** it lands as one commit on the task's one ref in that repository
+
+#### Scenario: A transition is durable at its push
+- **WHEN** a transition is committed locally and its push has not yet succeeded
+- **THEN** the transition is not yet durable: origin is the sole inter-instance source of truth, and the durability point is the successful push, never the local commit
+
+#### Scenario: Equal, ahead and behind reconcile without a claim
+- **WHEN** the local branch equals origin, is strictly ahead, or is strictly behind, and the instance holds no claim
+- **THEN** the pair reconciles exactly as it would under a live claim
+
 ### Requirement: Budgeted recovery with quarantine
-<!-- implements FR14, FR15, NFR-O1, NFR-O2 of harden-task-branch-contract -->
-Automatic recovery SHALL be budgeted by a persisted per-task counter of recovery attempts with backoff; this budget and the existing crash fuse SHALL be one accounting — one counter model, one quarantine outcome — while quality attempts stay separate. On exhaustion the task quarantines to the needs-human status with its failure history. The three non-recoverable shapes — `Corrupt`, `UnsupportedVersion`, and `Unknown` — SHALL quarantine on first classification, without consuming budget cycles, with a diagnosis naming the offending file and the observed and expected shape (for `UnsupportedVersion`, the observed and supported versions). Every non-trivial repair SHALL emit one structured log line naming the shape, task, epoch, and action taken; repeated repair of the same task within a window SHALL surface as a warning. A quarantine report SHALL name the shape, the diagnosis, and the recovery attempts consumed, readable without factory logs.
+Automatic recovery SHALL be budgeted by a persisted per-task counter of recovery attempts with backoff; this budget and the existing crash fuse SHALL be one accounting — one counter model, one quarantine outcome — while quality attempts stay separate. On exhaustion the task quarantines to the needs-human status with its failure history.
+**Implements**: FR14, FR15, NFR-O1, NFR-O2 of harden-task-branch-contract
 
 #### Scenario: Non-recoverable shape parks once with a diagnosis
 - **WHEN** a tip first classifies as `Corrupt`, `UnsupportedVersion`, or `Unknown`
@@ -194,9 +262,13 @@ Automatic recovery SHALL be budgeted by a persisted per-task counter of recovery
 - **WHEN** any classified shape other than the clean expected one is repaired
 - **THEN** one structured log line records the shape, task, epoch, and action, and a repeated repair of the same task within the window logs a warning
 
+#### Scenario: A quarantine report stands without the logs
+- **WHEN** an operator reads the report of a quarantined task
+- **THEN** it names the shape, the diagnosis, and the recovery attempts consumed, readable without the factory's logs
+
 ### Requirement: The tenure record has one owner
-<!-- implements FR4, FR5, FR6 of fix-claim-epoch-fence -->
-Within one factory process, the record of which epoch it holds on each task SHALL have exactly one owner, and both halves of a tenure — the tracker that records the epoch a claim was issued, and the git writers that stamp it — SHALL be served by that one record. An assembly in which the writers stamp from one record while the tracker fills another SHALL NOT be constructible. A git layer that holds no tenure record at all SHALL exist only in the commands that never claim (`status`, `usage`, `board`, plain `run`); every assembly that claims — the production commands and every end-to-end test of them — SHALL be built through the owner, so a test observes stamped commits and recorded epochs exactly as production does.
+Within one factory process, the record of which epoch it holds on each task SHALL have exactly one owner, and both halves of a tenure — the tracker that records the epoch a claim was issued, and the git writers that stamp it — SHALL be served by that one record.
+**Implements**: FR4, FR5, FR6 of fix-claim-epoch-fence
 
 #### Scenario: A test assembly stamps like production
 - **WHEN** two independently assembled instances drive claim, work, tenure end, and reclaim against one real origin and one shared tracker
@@ -214,9 +286,13 @@ Within one factory process, the record of which epoch it holds on each task SHAL
 - **WHEN** the source tree is scanned for assemblies built with no tenure record
 - **THEN** every hit is one of the claimless commands or a fixture of one, and any other hit fails the build
 
+#### Scenario: A split tenure record cannot be assembled
+- **WHEN** an assembly is written in which the git writers stamp from one tenure record while the tracker fills another
+- **THEN** it does not compile
+
 ### Requirement: A recorded position never implies an authorisation not yet recorded
-<!-- implements FR1, FR3, FR7, FR8 of make-checkpoint-gate-durable -->
-No durable write on the task branch SHALL encode a state a reader interprets as "proceed", "done" or "consumed" before the write that grants it has landed. In particular: a passing round of a `manual` stage records the gate, not the position past it; the approval that opens a gate and the position it advances to land in one commit; a stop the engine will escalate rides the round record that produced it; and a continuation that consumes a recorded outcome clears that outcome in the same commit as the attempt reset it implies. `outcome: null` SHALL have exactly three writers — the decision commit, the approval write and the resumed write — and no component SHALL reset the attempt history in memory without one of them having landed first.
+No durable write on the task branch SHALL encode a state a reader interprets as "proceed", "done" or "consumed" before the write that grants it has landed.
+**Implements**: FR1, FR3, FR7, FR8 of make-checkpoint-gate-durable
 
 #### Scenario: No tip says continue before the approval
 - **WHEN** every commit a `manual` stage's pass and approval produce is inspected in order
@@ -225,3 +301,53 @@ No durable write on the task branch SHALL encode a state a reader interprets as 
 #### Scenario: A consumed outcome does not survive its consumption
 - **WHEN** a parked task is continued by any path — decision, approval, or resumed write — and the process is killed at any later point before the next terminal write
 - **THEN** the tip's `task.json` shows `outcome: null` and the attempt counter the continuation granted, and the next pickup does not walk the decision path again
+
+#### Scenario: An escalating stop rides its round record
+- **WHEN** a round produces a stop the engine will escalate
+- **THEN** the stop is recorded in that round's own record commit, not in a later write
+
+#### Scenario: Only three writes clear the outcome
+- **WHEN** any commit sets `task.json`'s `outcome` to null
+- **THEN** it is the decision commit, the approval write or the resumed write
+
+#### Scenario: No in-memory attempt reset precedes its write
+- **WHEN** a component resets the attempt history in memory
+- **THEN** the decision commit, the approval write or the resumed write that grants the reset has already landed
+
+### Requirement: Classification reads the factory register
+Every reader of task-branch state SHALL take the envelope, the position, the outcome, the base pin and the delivery fact from the task's registered commit — the commit `refs/gnomish-factory/<task>` names — never from the branch tip. The tip SHALL contribute one fact: equal to the registered commit, a descendant of it, or neither. `Delivered` SHALL mean the registered commit is the cleanup commit. A record the gnome writes above the register SHALL change no shape and open no gate.
+**Implements**: FR13, NFR-S2 of tighten-spec-contract
+**Notes**: The register is the one ref only a factory closing push moves (git-task-persistence, "Factory register ref"); a commit id is content-addressed, so the gnome cannot forge one.
+**Notes**: Host mode carries no integrity claim against the gnome (design D19 of tighten-spec-contract); there the register is a detection, not a guarantee.
+
+#### Scenario: The tip equals the register
+- **WHEN** the branch tip and the registered commit are the same commit
+- **THEN** the shape is the one that commit's envelope describes, exactly as a tip read would have described it before the register existed
+
+#### Scenario: A tip above the register is an open gnome range
+- **WHEN** the branch tip descends from the registered commit and is not equal to it
+- **THEN** the shape is the registered commit's, and the commits above the register are the open round's gnome range — salvaged or admitted by the round-close owner, never classified
+
+#### Scenario: A register that is not an ancestor of the tip quarantines
+- **WHEN** the registered commit is neither the tip nor an ancestor of it, or the register ref is missing for a branch that has a STARTED commit
+- **THEN** the shape is `Unknown` with a diagnosis naming the register and the tip, and the existing budgeted recovery owner handles it
+
+#### Scenario: A gnome commit carrying the cleanup subject does not deliver the task
+- **WHEN** the gnome commits on its own branch with a message carrying `gnomish: cleanup`, as the subject or anywhere in the message, and the register names a commit below it
+- **THEN** the branch does not classify as `Delivered`, on every reading path including `status`, take and serve
+
+#### Scenario: A gnome-written Completed outcome is not a pending cleanup
+- **WHEN** a gnome commit above the register rewrites `task.json` with `outcome: COMPLETED`, alone or with a matching `state.json`
+- **THEN** the branch does not classify as `CompletedUncleaned`, no cleanup is written, and no tracker finish is posted
+
+#### Scenario: A gnome-written gate position opens no gate
+- **WHEN** a gnome commit above the register writes an `AwaitingApproval(stage)` position with a `paused` outcome
+- **THEN** the branch does not classify as `AwaitingApproval`, and the pickup performs no approval write
+
+#### Scenario: A gnome-written base pin binds no law
+- **WHEN** a gnome commit above the register rewrites the base pin in `task.json`
+- **THEN** resume binds the law from the pin the registered commit carries, and the rewritten pin is never read
+
+#### Scenario: No reader takes an envelope fact from the tip
+- **WHEN** a production class in the git adapter or the application layer reads a factory-owned envelope file by the branch tip or `HEAD` outside the register owner
+- **THEN** the architecture gate fails the build naming the file

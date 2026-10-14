@@ -12,16 +12,12 @@ reimplementing wait/kill/drain/outcome on its own.
 ## Requirements
 
 ### Requirement: Supervised subprocess invocations
-The factory SHALL supervise its subprocess invocations through one shared mechanism: output
-streams drained concurrently with the running process, an optional hard deadline on the wait, and
-on expiry or interruption a two-phase termination of the whole process tree — a cooperative
-terminate, a short kill grace so the child can remove its lock and temporary files, then a forced
-kill of the re-snapshotted tree — followed by reaping, so no process or descendant survives its
-invocation. Drain completion SHALL be awaited within a bound on the kill path, so a descendant
-holding an inherited pipe open cannot block the return. The outcome SHALL name how the invocation
-ended — ran to exit, expired on its deadline, or was interrupted — distinctly from the exit code,
-carrying whatever output was captured.
-<!-- implements FR2, FR3, FR6, FR9, NFR-R1, NFR-R2, G5 of bound-subprocess-commands -->
+The factory SHALL supervise its subprocess invocations through one shared mechanism: output streams
+drained concurrently with the running process, an optional hard deadline on the wait, and on expiry
+or interruption a termination of the whole process tree followed by reaping, so no process or
+descendant survives its invocation.
+**Implements**: FR2, FR3, FR6, FR9, NFR-R1, NFR-R2, G5 of bound-subprocess-commands
+**Notes**: The short kill grace between the cooperative terminate and the forced kill lets the child remove its lock and temporary files.
 
 #### Scenario: A stalled child cannot outlive its deadline
 - **WHEN** a supervised invocation with a deadline produces no exit while holding its output open
@@ -42,13 +38,27 @@ carrying whatever output was captured.
 - **WHEN** a supervised invocation writes more than an OS pipe buffer to both streams
 - **THEN** the invocation completes normally with both streams captured in full
 
+#### Scenario: A child ignoring the terminate is killed after the grace
+- **WHEN** a supervised invocation is terminated and the child does not exit on the cooperative
+  signal
+- **THEN** after a short kill grace the re-snapshotted process tree is force-killed and reaped
+
+#### Scenario: An inherited pipe cannot block the return
+- **WHEN** a descendant still holds an inherited output pipe open when the invocation is killed
+- **THEN** drain completion is awaited only within a bound, and the invocation returns
+
+#### Scenario: The outcome names how the invocation ended
+- **WHEN** a supervised invocation ends
+- **THEN** its outcome names whether it ran to exit, expired on its deadline, or was interrupted,
+  distinctly from the exit code, and carries whatever output was captured
+
 ### Requirement: The supervision module is dependency-free
 The module carrying the supervision mechanics SHALL depend on nothing — no other module of the
 factory, no framework, no logging library, no domain types — so that domain-independent modules
 can use it without acquiring a dependency on the factory. Callers own their logging and their
 input/output policy (captures, caps, stdin, scrubbing); the module owns only wait, kill, drain,
 and outcome.
-<!-- implements FR9, NFR-S3 of bound-subprocess-commands -->
+**Implements**: FR9, NFR-S3 of bound-subprocess-commands
 
 #### Scenario: The build proves the module stands alone
 - **WHEN** the build's dependency gates run

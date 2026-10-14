@@ -8,6 +8,7 @@ Defines how a factory instance boots as a headless, outbound-only worker: it sta
 
 ### Requirement: Application startup and clean shutdown
 The factory application SHALL run as a headless worker: boot a plain Spring context from `spring-boot-starter` alone, initiate every network exchange itself (outbound-only), and exit with code 0 when no work is requested.
+**Implements**: FR2 of add-project-skeleton
 
 #### Scenario: Clean boot
 - **WHEN** the application is started with a valid configuration
@@ -21,6 +22,7 @@ The factory application SHALL run as a headless worker: boot a plain Spring cont
 
 ### Requirement: Typed configuration binding
 The application SHALL bind configuration from `application.yaml` into an immutable typed properties object and SHALL fail startup on invalid configuration with an error message naming the offending property.
+**Implements**: FR3 of add-project-skeleton
 
 #### Scenario: Valid configuration binds
 - **WHEN** `application.yaml` contains valid factory properties
@@ -33,11 +35,12 @@ The application SHALL bind configuration from `application.yaml` into an immutab
 - **AND** the error message names the property that failed validation
 
 #### Scenario: Environment override
-- **WHEN** a property is set both in `application.yaml` and as an environment variable
-- **THEN** the environment variable value wins
+- **WHEN** a `factory.*` property is set as a `FACTORY_*` environment variable
+- **THEN** startup is refused with exit code 2, naming the variable and the equivalent file line; the environment never overrides `application.yaml`
 
 ### Requirement: Logging through SLF4J and Logback
 All application logging SHALL go through the SLF4J API with Logback as the backend; the log level SHALL be changeable without recompilation.
+**Implements**: FR4 of add-project-skeleton
 
 #### Scenario: Log level from configuration
 - **WHEN** the configured log level is set to DEBUG via configuration or environment

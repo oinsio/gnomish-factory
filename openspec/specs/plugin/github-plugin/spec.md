@@ -12,7 +12,7 @@ SHALL be packaged into a discovered plugin jar built over a private core that is
 NOT part of `gnomish-plugin-api`. The plugin SHALL expose only its SPI factories
 and validators through `META-INF/services`; its shared HTTP client, rate-limit,
 cache, and retry internals SHALL stay private to the jar.
-<!-- implements FR12 of add-plugin-architecture -->
+**Implements**: FR12 of add-plugin-architecture
 
 #### Scenario: GitHub is discovered like any third-party plugin
 - **WHEN** the factory starts with the github plugin jar on the classpath
@@ -30,7 +30,7 @@ factory SHALL load that bundled github jar through exactly the same discovery pa
 a third-party plugin would use — there SHALL be no privileged built-in shortcut.
 Removing the github jar SHALL disable all github providers with no core source
 change while the factory still starts.
-<!-- implements FR12 of add-plugin-architecture -->
+**Implements**: FR12 of add-plugin-architecture
 
 #### Scenario: Removing the github jar cleanly disables github providers
 - **WHEN** the github plugin jar is removed from the distribution
@@ -43,15 +43,12 @@ change while the factory still starts.
   test-double, unaffected by github's extraction
 
 ### Requirement: Loading provider jars has a stated trust posture
-Because a discovered provider jar executes inside the privileged factory process
-with access to credentials, the change SHALL state an explicit trust posture for
-loading such jars: only trusted (first-party or operator-vetted) jars go on the
+The change SHALL state an explicit trust posture for loading discovered
+provider jars: only trusted (first-party or operator-vetted) jars go on the
 classpath, documented as an operator responsibility, with the loaded provider
-set made observable at startup (the plugin-discovery capability). The sandbox /
-`TaskExecutionEnvironment` port SHALL remain first-party and SHALL NOT be
-pluginized under this change, since a self-declared capability passport from an
-untrusted jar would be a trust hole.
-<!-- implements NFR-S3 of add-plugin-architecture -->
+set made observable at startup (the plugin-discovery capability).
+**Implements**: NFR-S3 of add-plugin-architecture
+**Notes**: A discovered provider jar executes inside the privileged factory process with access to credentials; the sandbox port stays first-party because a self-declared capability passport from an untrusted jar would be a trust hole.
 
 #### Scenario: The sandbox port is not pluginized
 - **WHEN** the discovery mechanism is applied across ports

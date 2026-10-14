@@ -16,7 +16,7 @@ first-party `SandboxBindingProvider` contributions, not from a core enum. Each
 provider SHALL expose its config name and its fixed `CapabilityPassport` without
 instantiating a live backend adapter, so binding enumeration and planning-time
 reconciliation stay adapter-instance-free (no docker daemon touched).
-<!-- implements FR1, FR2 of open-adapter-binding-registry -->
+**Implements**: FR1, FR2 of open-adapter-binding-registry
 
 #### Scenario: A backend module contributes a binding without core logic edits
 - **WHEN** a first-party module ships a `SandboxBindingProvider` on the classpath
@@ -32,13 +32,13 @@ reconciliation stay adapter-instance-free (no docker daemon touched).
 
 ### Requirement: First-party trust table ratifies discovery
 Discovery SHALL be gated by a core-owned trust table mapping each trusted
-first-party binding id — a binding's id is its config name; there is no
-separate identifier — to its expected `CapabilityPassport`. A discovered
+first-party binding id to its expected `CapabilityPassport`. A discovered
 provider whose config name is not in the table SHALL be rejected fail-fast at
 startup; a provider whose declared passport differs from the table's expected
 passport SHALL be rejected fail-fast; each error SHALL name the fix. The
 provider's self-declared passport is a cross-check, never the authority.
-<!-- implements FR7, FR10, NFR-S1 of open-adapter-binding-registry -->
+**Implements**: FR7, FR10, NFR-S1 of open-adapter-binding-registry
+**Notes**: A binding's id is its config name; there is no separate identifier.
 
 #### Scenario: Ratified provider is accepted
 - **WHEN** a discovered provider's config name is in the trust table and its
@@ -63,8 +63,7 @@ binding name SHALL fail at startup with the valid discovered options and the fix
 named. Two providers claiming the same config name SHALL fail at startup with
 the conflict and the fix named. Neither case SHALL silently fall back.
 "Startup" means before any stage runs.
-<!-- implements FR5, FR8, NFR-R1 of open-adapter-binding-registry -->
-<!-- implements UX1 of open-adapter-binding-registry -->
+**Implements**: FR5, FR8, NFR-R1 of open-adapter-binding-registry; UX1 of open-adapter-binding-registry
 
 #### Scenario: Unknown binding name lists discovered options
 - **WHEN** `factory.bindings.*` names a binding no provider contributes
@@ -78,7 +77,7 @@ the conflict and the fix named. Neither case SHALL silently fall back.
 `HOST` SHALL be contributed by a provider in `:sandbox:core` and `CONTAINER` by a
 provider in `:sandbox:docker`. Both SHALL keep their current config names
 (`host`, `container`) and their current passports.
-<!-- implements FR3 of open-adapter-binding-registry -->
+**Implements**: FR3 of open-adapter-binding-registry
 
 #### Scenario: Host binding is contributed from core
 - **WHEN** the registry is built with only `:sandbox:core` on the classpath
@@ -96,8 +95,7 @@ ways out (restore the docker module, or explicitly bind `host`) — it SHALL nev
 silently fall back to the host binding, and it SHALL fail even when every stage
 explicitly binds `host` (the declared default is unsatisfiable in that
 distribution).
-<!-- implements FR4 of open-adapter-binding-registry -->
-<!-- implements UX2 of open-adapter-binding-registry -->
+**Implements**: FR4 of open-adapter-binding-registry; UX2 of open-adapter-binding-registry
 
 #### Scenario: Unset default resolves to container
 - **WHEN** `factory.bindings.default` is unset and `:sandbox:docker` is present
@@ -118,7 +116,7 @@ distribution).
 Opening the registry SHALL NOT change reconciliation: the operator binds, the repo
 may only tighten, and an unmet need SHALL be refused fail-closed against the
 bound binding's registry-resolved passport, exactly as before.
-<!-- implements FR6, FR9 of open-adapter-binding-registry -->
+**Implements**: FR6, FR9 of open-adapter-binding-registry
 
 #### Scenario: Unmet need is refused fail-closed
 - **WHEN** a stage declares a sandbox need the bound binding's passport does not
@@ -136,8 +134,7 @@ At startup the factory SHALL report the discovered bindings through the same
 provider-discovery report as the other ports — config name, provider class,
 originating jar, and passport summary — before any stage runs, so an operator
 can see exactly what the classpath loaded.
-<!-- implements NFR-O1 of open-adapter-binding-registry -->
-<!-- implements UX3 of open-adapter-binding-registry -->
+**Implements**: NFR-O1 of open-adapter-binding-registry; UX3 of open-adapter-binding-registry
 
 #### Scenario: Startup reports the discovered bindings with their origin
 - **WHEN** the factory starts with `:sandbox:core` and `:sandbox:docker` present
@@ -146,8 +143,7 @@ can see exactly what the classpath loaded.
 
 ### Requirement: The default-binding key binds from the project file
 The operator's default stage binding SHALL be read from `factory.bindings.default` — the key the operator guides and the factory's own error messages name — set in the resolved project's `project.yaml`. It is a sandbox-boundary key of the operator-configuration capability: set in any other source it SHALL stop startup with the violation report, never bind silently. No other spelling of the key SHALL be required for the value to take effect.
-<!-- implements FR6 of fix-operator-blockers -->
-<!-- implements FR6, NFR-S1 of add-project-registry -->
+**Implements**: FR6 of fix-operator-blockers; FR6, NFR-S1 of add-project-registry
 
 #### Scenario: Project file default binds host
 - **WHEN** the resolved project's `project.yaml` sets `factory.bindings.default: host` and no per-stage overrides

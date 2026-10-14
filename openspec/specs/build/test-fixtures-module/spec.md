@@ -9,7 +9,7 @@ Defines the dedicated module that holds Spock test fixtures shared across module
 ### Requirement: Shared test fixtures in a dedicated module
 Shared Spock test fixtures SHALL live in a dedicated `test-fixtures` module,
 consumed by other modules via `testImplementation`.
-<!-- implements FR7 of split-into-modules -->
+**Implements**: FR7 of split-into-modules
 
 #### Scenario: A module reuses shared fixtures
 - **WHEN** a module's tests need a shared fixture

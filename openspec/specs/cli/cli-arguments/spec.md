@@ -7,9 +7,9 @@ How the `gnomish` command line is parsed and reported: which options each subcom
 ## Requirements
 
 ### Requirement: Unknown options are usage errors
-Every `gnomish` subcommand SHALL reject a `--`-prefixed option it does not accept with a usage error that names the option, names the subcommand, and lists the options it accepts; where the rejected option matches a positional argument of the subcommand, the message SHALL say so. Options whose name contains a dot (Spring properties such as `--factory.*`, `--spring.*`, `--logging.*`) and Spring Boot's own `--debug` and `--trace` switches SHALL pass through to configuration and are not checked by this rule. The check SHALL run before the subcommand claims a task, creates a branch or worktree, or starts an environment. The entrypoint SHALL hand every non-empty command line to its subcommand's parser, so the check cannot be skipped by a command line that names no known option. Exactly two command lines reach no parser: the empty one (no subcommand token and no option), which is the no-op that keeps a Spring test context from driving a run, and the one consisting of the sole token `--version`, which prints the product version and exits 0 before Spring starts (the `release-distribution` capability, "The factory reports its version"). A `--version` accompanied by any other token SHALL reach the parser like any other command line and is rejected as an unknown option.
-<!-- implements FR8, NFR-R1, NFR-O1, UX2 of fix-operator-blockers -->
-<!-- implements FR6 of add-release-pipeline -->
+Every `gnomish` subcommand SHALL reject a `--`-prefixed option it does not accept with a usage error that names the option, names the subcommand, and lists the options it accepts; where the rejected option matches a positional argument of the subcommand, the message SHALL say so. The check SHALL run before the subcommand claims a task, creates a branch or worktree, or starts an environment.
+**Implements**: FR8, NFR-R1, NFR-O1, UX2 of fix-operator-blockers; FR6 of add-release-pipeline
+**Notes**: The empty command line stays a no-op so that a Spring test context does not drive a run; the sole `--version` is owned by the `release-distribution` capability, "The factory reports its version".
 
 #### Scenario: A mistyped task flag fails loudly
 - **WHEN** the operator runs `gnomish status --dir=. --task=github:acme/widgets#7`
@@ -23,6 +23,10 @@ Every `gnomish` subcommand SHALL reject a `--`-prefixed option it does not accep
 #### Scenario: Spring Boot's own switches pass through
 - **WHEN** the operator runs `gnomish serve --dir=. --debug`
 - **THEN** no unknown-option error is raised
+
+#### Scenario: Every dotted option passes through
+- **WHEN** a subcommand is given an option whose name contains a dot, such as `--spring.main.banner-mode=off` or `--logging.level.root=DEBUG`, or Spring Boot's `--trace`
+- **THEN** no unknown-option error is raised and the option reaches configuration unchecked
 
 #### Scenario: Rejected before side effects
 - **WHEN** `gnomish take` is invoked with an unknown option
@@ -51,8 +55,8 @@ Every `gnomish` subcommand SHALL reject a `--`-prefixed option it does not accep
 - **THEN** the command line reaches the `run` parser and exits 2 with the usage error naming `--version` for `'gnomish run'`
 
 ### Requirement: The project directory is resolved once to an absolute path
-Every subcommand that accepts `--dir` SHALL resolve its value — or, for the subcommands where the option is optional (`run`, `take`, `serve`, `board`, `dashboard`), the working directory when it is absent — to an absolute, normalized path when the command line is parsed, and every component SHALL receive that resolved path. Whether `--dir` is required does not change: `status` and `usage` SHALL keep refusing an absent `--dir` with their usage error. A relative `--dir` SHALL behave exactly like the equivalent absolute path.
-<!-- implements FR7 of fix-operator-blockers -->
+Every subcommand that accepts `--dir` SHALL resolve its value — or, for the subcommands where the option is optional (`run`, `take`, `serve`, `board`, `dashboard`), the working directory when it is absent — to an absolute, normalized path when the command line is parsed, and every component SHALL receive that resolved path. A relative `--dir` SHALL behave exactly like the equivalent absolute path.
+**Implements**: FR7 of fix-operator-blockers
 
 #### Scenario: Relative directory starts git mode
 - **WHEN** the operator runs `gnomish run --dir=. --task="fix the flaky spec"` from inside a clone
@@ -66,9 +70,13 @@ Every subcommand that accepts `--dir` SHALL resolve its value — or, for the su
 - **WHEN** the operator runs `gnomish status` with no `--dir`
 - **THEN** the command exits with the usage error saying `--dir` is required, as before
 
+#### Scenario: Usage still requires the directory
+- **WHEN** the operator runs `gnomish usage` with no `--dir`
+- **THEN** the command exits with the usage error saying `--dir` is required, as `status` does
+
 ### Requirement: A reported failure is printed once
-A failure the factory has already reported to the operator — a usage error or any other classified failure, and the exit-code carriers with which `take` and `serve` end — SHALL reach the operator once: its one line on stderr, or nothing more when the command already printed its outcome. The framework SHALL add no failure record of its own for it: no stack trace on stdout or stderr and no record in the log file. The exit code SHALL be the one the factory maps for the failure. An unclassified fault SHALL keep its WARN with the stack trace in the log file, and a failure raised before any command runs SHALL keep the framework's own report.
-<!-- implements FR16, NFR-O1 of fix-operator-blockers -->
+A failure the factory has already reported to the operator — a usage error or any other classified failure, and the exit-code carriers with which `take` and `serve` end — SHALL reach the operator once: its one line on stderr, or nothing more when the command already printed its outcome. The framework SHALL add no failure record of its own for it: no stack trace on stdout or stderr and no record in the log file. The exit code SHALL be the one the factory maps for the failure.
+**Implements**: FR16, NFR-O1 of fix-operator-blockers
 
 #### Scenario: A usage error is one line
 - **WHEN** the operator runs `gnomish status --dir=. --task=x`
@@ -83,3 +91,7 @@ A failure the factory has already reported to the operator — a usage error or 
 #### Scenario: An unclassified fault keeps its trace
 - **WHEN** a command ends with a fault no classification names
 - **THEN** stderr holds `gnomish run failed: <message>` and the log file holds the WARN with the stack trace
+
+#### Scenario: A failure before any command keeps the framework's report
+- **WHEN** a failure is raised before any `gnomish` command runs, such as a context that fails to start
+- **THEN** the framework's own failure report is kept

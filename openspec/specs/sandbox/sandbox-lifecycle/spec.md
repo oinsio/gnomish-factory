@@ -13,7 +13,7 @@ and multiple projects on one Docker host.
 
 ### Requirement: Ownership labels at creation
 Every factory-created Docker object (container, volume, network — box, egress guard, judge box, verification box alike) SHALL be stamped atomically at creation with labels carrying: factory ownership, the sanitized task environment key, the ownership mode (`tracked` for claim-backed tasks, `manual` for `gnomish run`), and the project identity. No factory object SHALL ever exist without these labels — there is no post-creation labelling step. Labels SHALL carry no credentials or secrets.
-<!-- implements FR2, NFR-S1 of add-serve-sandbox-lifecycle -->
+**Implements**: FR2, NFR-S1 of add-serve-sandbox-lifecycle
 
 #### Scenario: Object is born owned
 - **WHEN** a slot creates a task container concurrently with a sweep evaluation
@@ -24,8 +24,17 @@ Every factory-created Docker object (container, volume, network — box, egress 
 - **THEN** they contain only the ownership marker, the sanitized environment key, the mode, and the project identity
 
 ### Requirement: Liveness oracle over claim heartbeat
-Liveness of a `tracked` object SHALL be derived from the tracker's claim-heartbeat lease: the object is alive if and only if the task named by its key currently holds a claim whose heartbeat is fresh per the existing staleness TTL. A stale claim SHALL count as dead, consistent with the claim-heartbeat protocol, under which a stale claim is removed from circulation and the task becomes available to any instance. The live key set SHALL be recomputed forward — from the listed open tasks' claim facts to environment keys — for every sweep evaluation, never reused as a stored result across ticks; each claim's staleness SHALL be judged by the existing claim-heartbeat staleness policy, including its cross-tick observation memory (a claim version is stale only after the TTL has elapsed since this observer first saw that version). One evaluation SHALL cost at most one tracker open-task listing, which MAY be shared with the claim reaper's existing listing.
-<!-- implements FR3, NFR-C2 of add-serve-sandbox-lifecycle -->
+Liveness of a `tracked` object SHALL be derived from the tracker's claim-heartbeat lease: the object is alive if and only if the task named by its key currently holds a claim whose heartbeat is fresh per the existing staleness TTL. A stale claim SHALL count as dead. Each claim's staleness SHALL be judged by the existing claim-heartbeat staleness policy, including its cross-tick observation memory.
+**Implements**: FR3, NFR-C2 of add-serve-sandbox-lifecycle
+**Notes**: A stale claim counts as dead because the claim-heartbeat protocol removes it from circulation and makes the task available to any instance; under the observation memory a claim version is stale only after the TTL has elapsed since this observer first saw that version.
+
+#### Scenario: The live key set is recomputed on every evaluation
+- **WHEN** a sweep evaluation runs after an earlier one, and the open tasks' claim facts changed in between
+- **THEN** the live key set is computed forward again, from the listed open tasks' claim facts to environment keys, and no stored result of an earlier tick is reused
+
+#### Scenario: One evaluation costs at most one open-task listing
+- **WHEN** a sweep evaluation derives the live key set
+- **THEN** it costs at most one tracker open-task listing, which may be the one the claim reaper already made
 
 #### Scenario: Freshly claimed task is protected
 - **WHEN** the sweep evaluates a running box whose task holds a claim with a fresh heartbeat
@@ -40,19 +49,27 @@ Liveness of a `tracked` object SHALL be derived from the tracker's claim-heartbe
 - **THEN** no tracked object is judged unowned until the staleness TTL elapses from that first observation — the grace period of the claim-heartbeat staleness policy holds for the sweep by construction
 
 ### Requirement: Sweep decision matrix
-The sweep SHALL decide per object by ownership × role × state, and escalation SHALL be one-way — running → stopped → disposed — with each step reversible-cheaper than the next:
+The sweep SHALL decide per object by ownership × role × state — the decision matrix, whose rows are this requirement's scenarios — and escalation SHALL be one-way, running → stopped → disposed, each step reversible-cheaper than the next. The main box and its volume are the only possible holders of un-harvested work and SHALL never be disposed directly from the running state.
+**Implements**: FR4, NFR-S2, NFR-C1 of add-serve-sandbox-lifecycle
+**Notes**: Guard, judge, verification, and seed-helper objects are reconstructible by construction and never hold durable work; the seed helper only writes into a task volume that is itself a separate, independently governed object.
+**Notes**: An unrecognized role is a factory-labelled object this build cannot classify, for example one created by a newer build.
+**Notes**: Roles are lifecycle-level concepts; how each runtime adapter realizes them (naming, labels) is that adapter's contract — for the container adapter, see `execution-environment`.
 
-| Ownership | Role | State | Action |
-|---|---|---|---|
-| Alive (fresh claim) | any | any | Untouched |
-| Unowned / stale | main box | running | **Stop** (box, volume, network preserved) |
-| Unowned / stale | main box | stopped | Left to the aged reaper |
-| Unowned / stale | volume or network with no container | — | Left to the aged reaper |
-| Unowned / stale | guard, judge box, verification box, seed helper | any | Disposed immediately |
-| Unowned / stale | unrecognized role | any | Stopped if running, then left to the aged reaper |
+#### Scenario: An alive object is untouched in any role and state
+- **WHEN** the sweep evaluates an object, of any role and in any state, whose task holds a fresh claim
+- **THEN** the object is untouched
 
-Guard, judge, verification, and seed-helper objects are reconstructible by construction and never hold durable work — the seed helper only writes into a task volume that is itself a separate, independently-governed object; the main box and its volume are the only possible holders of un-harvested work and SHALL never be disposed directly from the running state. An unrecognized role (a factory-labelled object this build cannot classify, e.g. one created by a newer build) SHALL take the fail-safe fallback row — never immediate disposal — and SHALL be removed by its own name, never through its environment key: its name matches no known pattern, so the key's own objects belong to something else. Roles are lifecycle-level concepts; how each runtime adapter realizes them (naming, labels) is that adapter's contract — for the container adapter, see `execution-environment`.
-<!-- implements FR4, NFR-S2, NFR-C1 of add-serve-sandbox-lifecycle -->
+#### Scenario: An unowned stopped main box is left to the aged reaper
+- **WHEN** the sweep evaluates a stopped main box whose task holds no fresh claim
+- **THEN** the box is neither restarted nor disposed by the matrix, and its fate is left to the aged reaper
+
+#### Scenario: Unowned guard removed at once
+- **WHEN** the sweep finds a guard whose task holds no fresh claim
+- **THEN** the guard is disposed immediately without waiting for any age threshold
+
+#### Scenario: An unrecognized object is removed by its own name
+- **WHEN** the aged reaper disposes an unowned object of an unrecognized role
+- **THEN** the object is removed by its own name, never through its environment key, since its name matches no known pattern and the key's own objects belong to something else
 
 #### Scenario: Abandoned running box is stopped, not destroyed
 - **WHEN** an instance dies mid-task and a sibling's sweep tick finds the running box after the claim went stale
@@ -76,16 +93,21 @@ Guard, judge, verification, and seed-helper objects are reconstructible by const
 
 ### Requirement: Minimum object age protection
 An object younger than a configured minimum age SHALL never be touched, regardless of any liveness verdict. This bound covers residual races at creation boundaries — an object listable an instant before its claim's first beat is observable — independently of the oracle.
-<!-- implements FR4 of add-serve-sandbox-lifecycle -->
+**Implements**: FR4 of add-serve-sandbox-lifecycle
 
 #### Scenario: Concurrent launch survives a sweep tick
 - **WHEN** a sweep tick runs while another slot is between object creation and its first observable heartbeat
 - **THEN** the just-created objects are under the minimum age and are untouched
 
 ### Requirement: Aged reaper for kept environments
-Unowned stopped environments and container-less remnants SHALL be disposed once their age exceeds a configured threshold (default 7 days): stopped boxes measured by the runtime's finished-at metadata, container-less remnants by the runtime's creation timestamp — never by file mtimes inside volumes. Disposal SHALL be idempotent. The cost of a reaped kept environment is bounded and stated: a later resume falls back to a fresh materialize from the task branch; only the un-salvaged tail of the last round is lost.
-<!-- implements FR5, NFR-R2 of add-serve-sandbox-lifecycle -->
-<!-- implements FR11, NFR-R2 of add-sandbox-core (aged container disposal migrated here from factory-serve's worktree cleaner) -->
+Unowned stopped environments and container-less remnants SHALL be disposed once their age exceeds a configured threshold (default 7 days): stopped boxes measured by the runtime's finished-at metadata, container-less remnants by the runtime's creation timestamp — never by file mtimes inside volumes.
+**Implements**: FR5, NFR-R2 of add-serve-sandbox-lifecycle; FR11, NFR-R2 of add-sandbox-core
+**Notes**: Aged container disposal migrated here from factory-serve's worktree cleaner (add-sandbox-core).
+**Notes**: The cost of a reaped kept environment is bounded: a later resume falls back to a fresh materialize from the task branch, and only the un-salvaged tail of the last round is lost.
+
+#### Scenario: Disposal of an already-gone environment is a no-op
+- **WHEN** the aged reaper disposes a kept environment some of whose objects an earlier pass or another instance already removed
+- **THEN** the disposal completes for what is left, and a second pass over the result issues no further action
 
 #### Scenario: Kept environment survives the human turnaround
 - **WHEN** a task escalates and its stopped environment is 3 days old at the next sweep tick
@@ -97,7 +119,7 @@ Unowned stopped environments and container-less remnants SHALL be disposed once 
 
 ### Requirement: Manual mode is governed by age alone
 Objects labelled `manual` SHALL be exempt from the claim oracle. An unowned running manual box SHALL be stopped only after a configured threshold (default 24 hours) since the runtime's started-at timestamp; stopped manual environments and manual remnants follow the same aged-reaper policy as tracked ones. Manual objects SHALL be policed only by sweeps of their own project.
-<!-- implements FR7 of add-serve-sandbox-lifecycle -->
+**Implements**: FR7 of add-serve-sandbox-lifecycle
 
 #### Scenario: Live manual debugging session is invisible to the daemon
 - **WHEN** a daemon's sweep tick runs while a container `gnomish run` session started an hour ago on the same host
@@ -112,15 +134,17 @@ Sweep and reaper SHALL act only on objects carrying this factory's own project i
 Objects of another project SHALL be excluded at listing and never touched, in any ownership mode or
 state. When the identity derives from the `origin` URL and the digest of the raw, un-normalized URL
 differs from the normalized one, this factory's own identities SHALL include that **legacy**
-identity in addition to the identity it stamps, so objects created before normalization stay in
-scope instead of being orphaned; with an override set or no `origin` configured, no legacy identity
-exists. Objects SHALL be stamped with the normalized identity only, and no object SHALL ever be
-relabelled. The legacy scope SHALL cost at most one extra listing per object kind per pass, and
-only while a legacy identity exists. A failed legacy listing SHALL abort the pass under the existing fail-closed rule
-rather than degrade to a partial object set. When legacy-labelled objects are found, the pass SHALL
-log one INFO naming the count.
-<!-- implements FR8 of add-serve-sandbox-lifecycle -->
-<!-- implements FR3, NFR-R2, NFR-O1, NFR-C1 of normalize-project-identity-url -->
+identity in addition to the identity it stamps.
+**Implements**: FR8 of add-serve-sandbox-lifecycle; FR3, NFR-R2, NFR-O1, NFR-C1 of normalize-project-identity-url
+**Notes**: The legacy identity keeps objects created before normalization in scope instead of orphaning them; with an override set or no `origin` configured, no legacy identity exists.
+
+#### Scenario: Objects are stamped with the normalized identity and never relabelled
+- **WHEN** a legacy identity exists and the factory creates an object, or a pass acts on a legacy-labelled one
+- **THEN** a new object is stamped with the normalized identity only, and no existing object is relabelled
+
+#### Scenario: A legacy identity costs one extra listing per object kind
+- **WHEN** a pass runs while a legacy identity exists
+- **THEN** it issues at most one extra listing per object kind for that identity
 
 #### Scenario: Two projects share one Docker host
 - **WHEN** project A's sweep runs while project B has live and kept objects on the same daemon
@@ -145,26 +169,23 @@ log one INFO naming the count.
 The project identity SHALL be resolved, in precedence order, from: the operator's explicit
 override (`factory.sandbox.project-id`); otherwise a stable truncated digest of the clone's
 **normalized** `origin` remote URL; otherwise a stable truncated digest of the clone's own
-canonical absolute path. Normalization SHALL remove the URL's userinfo, lower-case the scheme and
-host, remove an explicitly written default port of the scheme (`http` 80, `https` 443, `ssh` 22,
-`git` 9418), remove one trailing `/`, remove a trailing `.git`, and render the scp-style
-`[user@]host:path` form in the same shape as the equivalent `ssh://host/path` URL — so one project
-keeps one identity across a credential rotation and across the cosmetic variants that name the
-same remote.
-Normalization SHALL NOT conflate remotes that differ in host, path, non-default port, or scheme
-(beyond case):
-those remain distinct identities. A remote URL in a shape the normalization does not recognize
-SHALL fall back to the raw string rather than failing — an unusual remote costs identity stability,
-never a run or a sweep pass. The raw remote URL SHALL never be used as the identity, since it may
-carry an embedded credential, and no removed userinfo SHALL appear in any label, log line, or error
-message. A clone with no `origin` SHALL NOT fall back to a shared constant — that would place
-every origin-less project on a host into one sweep scope, the exact cross-project reach the label
-exists to prevent. An override SHALL be rejected unless it matches `[A-Za-z0-9._-]+`: the label
-set is rendered and read back as `k1=v1,k2=v2`, so a value carrying a comma or an equals sign
-could forge a second label pair and strip an object of its ownership mode. A rejected override
-SHALL name the property without echoing the offending value.
-<!-- implements FR8 of add-serve-sandbox-lifecycle -->
-<!-- implements FR1, FR2, FR4, NFR-R1, NFR-S1 of normalize-project-identity-url -->
+canonical absolute path. A clone with no `origin` SHALL NOT fall back to a shared constant.
+**Implements**: FR8 of add-serve-sandbox-lifecycle; FR1, FR2, FR4, NFR-R1, NFR-S1 of normalize-project-identity-url
+**Notes**: Normalization keeps one identity for one project across a credential rotation and across the cosmetic variants that name the same remote; an unusual remote costs identity stability, never a run or a sweep pass.
+**Notes**: A shared constant would place every origin-less project on a host into one sweep scope, the exact cross-project reach the label exists to prevent.
+**Notes**: The override's character set exists because the label set is rendered and read back as `k1=v1,k2=v2`, so a value carrying a comma or an equals sign could forge a second label pair and strip an object of its ownership mode.
+
+#### Scenario: Normalization rewrites only the cosmetic parts of the URL
+- **WHEN** the clone's `origin` URL is normalized
+- **THEN** its userinfo is removed, its scheme and host are lower-cased, an explicitly written default port of the scheme (`http` 80, `https` 443, `ssh` 22, `git` 9418) is removed, one trailing `/` and a trailing `.git` are removed, and the scp-style `[user@]host:path` form is rendered in the same shape as the equivalent `ssh://host/path` URL
+
+#### Scenario: No credential reaches the identity, a label, a log line or an error
+- **WHEN** the clone's `origin` URL embeds a credential
+- **THEN** the raw URL is never used as the identity, and the removed userinfo appears in no label, log line, or error message
+
+#### Scenario: An override outside the label-safe set is refused without its value
+- **WHEN** `factory.sandbox.project-id` is set to a value that does not match `[A-Za-z0-9._-]+`
+- **THEN** resolution fails naming the property, and the offending value is not echoed
 
 #### Scenario: A rotated credential keeps the project identity
 - **WHEN** the clone's `origin` URL embeds a credential and that credential is replaced with a new one
@@ -196,18 +217,18 @@ SHALL name the property without echoing the offending value.
 - **THEN** resolution fails naming the property, and no object is created or swept under it
 
 ### Requirement: Fail-closed verdicts
-"No verdict" SHALL be distinct from "no claims": a tracker or runtime error during evaluation SHALL skip the affected decisions — removing nothing, emitting skipped-no-verdict — and SHALL never degrade to an empty live set. A destructive action the runtime refused SHALL likewise emit skipped-no-verdict with the failure as its reason, never the action it did not complete. An object listing that could not be obtained affects every decision at once and SHALL abort the whole pass: no verdicts, and — since a tick that reached no object is not a tick that found no work — no completed tick either. A sweep skip never blocks startup or a slot and is retried on the next scheduled pass.
+"No verdict" SHALL be distinct from "no claims": a tracker or runtime error during evaluation SHALL skip the affected decisions — removing nothing, emitting skipped-no-verdict — and SHALL never degrade to an empty live set.
+**Implements**: NFR-R1, NFR-R3 of add-serve-sandbox-lifecycle; FR5, FR12 of harden-logging-observability
+**Notes**: A pass whose object listing failed publishes no completed tick because a tick that reached no object is not a tick that found no work.
+**Notes**: Verdict sinks grade the line's level by category so that a degraded sweep is distinguishable from a healthy one on the operator plane.
 
-The skipped-no-verdict guarantee SHALL extend to per-object read failures: an
-object whose inspection fails or whose inspected shape cannot be interpreted
-SHALL emit skipped-no-verdict naming the read failure — an enumerated object
-never leaves a pass without a verdict event. Verdict sinks that log SHALL
-grade the line's level by category: steady-state categories (checked-alive,
-kept-under-threshold) below the default level, action categories at INFO, and
-skipped-no-verdict at WARN, so a degraded sweep is distinguishable from a
-healthy one on the operator plane.
-<!-- implements NFR-R1, NFR-R3 of add-serve-sandbox-lifecycle -->
-<!-- implements FR5, FR12 of harden-logging-observability -->
+#### Scenario: A skipped sweep blocks nothing and is retried on the next pass
+- **WHEN** a sweep pass, at startup or on a daemon tick, ends with skipped-no-verdict or no verdicts at all
+- **THEN** neither startup nor any slot is blocked, and the next scheduled pass evaluates the objects again
+
+#### Scenario: Sweep actions log at INFO
+- **WHEN** a logging verdict sink receives a stopped-orphan, disposed-aged or disposed-reconstructible verdict
+- **THEN** the line is logged at INFO
 
 #### Scenario: Tracker outage removes nothing
 - **WHEN** the claims listing fails during a sweep tick
@@ -227,9 +248,11 @@ healthy one on the operator plane.
 
 #### Scenario: Unreadable object still gets a verdict
 - **WHEN** an enumerated object's inspection fails or returns an
-  uninterpretable shape during a pass
+  uninterpretable shape during a pass, and the object still exists
 - **THEN** the object emits skipped-no-verdict naming the read failure instead
   of silently dropping out of the pass
+- **AND** an object gone since the listing gets no verdict, since its absence
+  is not a degradation
 
 #### Scenario: Quiet tick, loud degradation
 - **WHEN** a sweep tick evaluates objects that are all alive and under
@@ -238,13 +261,16 @@ healthy one on the operator plane.
   skipped-no-verdict in the same tick logs at WARN
 
 ### Requirement: Uniform verdict events
-Every sweep evaluation SHALL emit one verdict event per object — category (checked-alive, kept-under-threshold, stopped-orphan, disposed-aged, disposed-reconstructible, skipped-no-verdict), object name, role, ownership mode, task key, reason, and age — through a listener seam. A manual box stopped by the age threshold SHALL emit stopped-orphan with mode `manual`, so sinks can distinguish a routine age-policy stop from a dead-instance symptom. All entry points (`run`, `take`, `serve`) SHALL evaluate the same policy component and differ only in where events sink. A decorator observing the pass SHALL preserve the caller's extra sink: the extra sink passed at an entry point receives every verdict event alongside the decorator's own sinks, never dropped through an inherited default.
-<!-- implements FR9, NFR-O4 of add-serve-sandbox-lifecycle -->
-<!-- implements FR6 of fix-denial-attribution-durability -->
+Every sweep evaluation SHALL emit one verdict event per object — category (checked-alive, kept-under-threshold, stopped-orphan, disposed-aged, disposed-reconstructible, skipped-no-verdict), object name, role, ownership mode, task key, reason, and age when one was measured — through a listener seam. All entry points (`run`, `take`, `serve`) SHALL evaluate the same policy component and differ only in where events sink.
+**Implements**: FR9, NFR-O4 of add-serve-sandbox-lifecycle; FR6 of fix-denial-attribution-durability
+
+#### Scenario: A manual age stop is a stopped-orphan with mode manual
+- **WHEN** the sweep stops a manual box because it ran past the manual threshold
+- **THEN** the verdict is stopped-orphan with mode `manual`, so sinks can distinguish a routine age-policy stop from a dead-instance symptom
 
 #### Scenario: Same vocabulary in daemon and one-shot logs
 - **WHEN** the same unowned stopped box is evaluated by a daemon tick and by a `take` startup pass
-- **THEN** both emit the identical category and reason; the daemon's sinks to its ledger, take's to its log
+- **THEN** both log the identical line, category and reason; the daemon also writes the verdict to its ledger when it is an acting one (stopped-orphan, disposed-aged, disposed-reconstructible), with the same reason and the category in the ledger's wire spelling (`stoppedOrphan`)
 
 #### Scenario: An extra sink survives the observing decorator
 - **WHEN** an entry point runs the sweep pass through the observing decorator and passes an extra verdict sink

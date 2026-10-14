@@ -8,7 +8,7 @@ Load a target project's `.gnomish/` directory — `config.yaml`, `pipeline.yaml`
 
 ### Requirement: Load .gnomish/ into a typed pipeline definition
 The loader SHALL read a `.gnomish/` directory — `config.yaml`, `pipeline.yaml`, and `stages/<name>/stage.yaml` for each stage — and build an immutable, typed `PipelineDefinition`. Loading SHALL be deterministic and read-only.
-<!-- implements FR1, NFR-R1 of load-pipeline-config -->
+**Implements**: FR1, NFR-R1 of load-pipeline-config
 
 #### Scenario: Valid configuration loads
 - **WHEN** the loader is given a `.gnomish/` directory whose files are structurally and semantically valid
@@ -21,9 +21,8 @@ The loader SHALL read a `.gnomish/` directory — `config.yaml`, `pipeline.yaml`
 - **AND** loading the same directory twice yields an equal result
 
 ### Requirement: Stage model mirrors the stage contract and all verify-check types
-Each `StageDefinition` SHALL represent the stage-contract sections (purpose, input, output, control, mechanism/executor, verify, failure/escalation limits, advancement) and SHALL model the four verify-check types — `builtin`, `command`, `external`, `judge` — as distinct typed variants carrying their own configuration. The `external` variant SHALL additionally carry a `provider` discriminator and an opaque `params` map of flat JDK types (Jackson-free, like `builtin` params); its engine-common fields — `interval`, `timeout`, `timeoutClass`, `pinPaths` — remain modeled as before. No new sealed verify-check variant SHALL be introduced.
-<!-- implements FR2 of load-pipeline-config -->
-<!-- implements FR7 of add-plugin-architecture -->
+Each `StageDefinition` SHALL represent the stage-contract sections (purpose, input, output, control, mechanism/executor, verify, failure/escalation limits, advancement) and SHALL model the four verify-check types — `builtin`, `command`, `external`, `judge` — as distinct typed variants carrying their own configuration. The `external` variant SHALL additionally carry a `provider` discriminator and an opaque `params` map of flat JDK types (Jackson-free, like `builtin` params).
+**Implements**: FR2 of load-pipeline-config; FR7 of add-plugin-architecture
 
 #### Scenario: All four check types are modeled distinctly
 - **WHEN** a stage's `verify` list contains a `builtin`, a `command`, an `external`, and a `judge` check
@@ -41,7 +40,7 @@ Each `StageDefinition` SHALL represent the stage-contract sections (purpose, inp
 
 ### Requirement: Stage order is declared, not derived
 `pipeline.yaml` SHALL be the source of truth for stage order as an explicit, non-empty, linear sequence of unique stage names. The artifact dependency graph SHALL be validated for consistency against that order and SHALL NOT be used to derive it.
-<!-- implements FR3 of load-pipeline-config -->
+**Implements**: FR3 of load-pipeline-config
 
 #### Scenario: Order comes from pipeline.yaml
 - **WHEN** `pipeline.yaml` lists stages in a given order
@@ -53,7 +52,7 @@ Each `StageDefinition` SHALL represent the stage-contract sections (purpose, inp
 
 ### Requirement: Artifact references by identifier
 Each stage output SHALL declare a stable `id`, unique across the whole pipeline. An internal input SHALL reference the `id` of an output produced by a stage that appears **earlier** in the pipeline order. A `source` input SHALL declare that it has no producing stage.
-<!-- implements FR4 of load-pipeline-config -->
+**Implements**: FR4 of load-pipeline-config
 
 #### Scenario: Internal input resolves to an earlier output
 - **WHEN** a stage input references an output `id` produced by an earlier stage
@@ -73,7 +72,7 @@ Each stage output SHALL declare a stable `id`, unique across the whole pipeline.
 
 ### Requirement: Structural validation
 The loader SHALL reject invalid YAML schema, missing required fields, unknown enum values (executor type, verify-check type, advancement mode), and type mismatches.
-<!-- implements FR5 of load-pipeline-config -->
+**Implements**: FR5 of load-pipeline-config
 
 #### Scenario: Missing required field is reported
 - **WHEN** a `stage.yaml` omits a required field
@@ -85,7 +84,7 @@ The loader SHALL reject invalid YAML schema, missing required fields, unknown en
 
 ### Requirement: Semantic validation
 The loader SHALL enforce cross-file rules: unique stage names; every `pipeline.yaml` stage has a matching `stages/<name>/stage.yaml`; every stage directory is referenced by `pipeline.yaml` (no dangling definitions); every internal input is satisfied by an earlier stage's output; and every referenced file (`instructions.md`, `judge` acceptance-criteria files) exists.
-<!-- implements FR6 of load-pipeline-config -->
+**Implements**: FR6 of load-pipeline-config
 
 #### Scenario: Pipeline stage without a manifest is rejected
 - **WHEN** `pipeline.yaml` names a stage that has no `stages/<name>/stage.yaml`
@@ -101,8 +100,7 @@ The loader SHALL enforce cross-file rules: unique stage names; every `pipeline.y
 
 ### Requirement: Autonomy limit resolution
 The loader SHALL resolve the stage attempt limit from the `config.yaml` default, with a per-stage override taking precedence. The resolved limit SHALL be an integer ≥ 1. Token budgets are out of scope for this capability version; monetary budgets are out of scope for the project.
-<!-- implements FR7 of load-pipeline-config -->
-<!-- implements FR16 of add-agent-executor -->
+**Implements**: FR7 of load-pipeline-config; FR16 of add-agent-executor
 
 #### Scenario: Stage override wins over default
 - **WHEN** `config.yaml` sets a default attempt limit and a stage overrides it
@@ -118,7 +116,7 @@ The loader SHALL resolve the stage attempt limit from the `config.yaml` default,
 
 ### Requirement: Aggregated, located validation results
 The loader SHALL aggregate all validation problems and return a result that is either a valid `PipelineDefinition` or a non-empty list of `ConfigError`s, each naming its file and location. Validation failure SHALL NOT be signalled by exceptions; exceptions are reserved for I/O faults such as an unreadable file.
-<!-- implements FR8, NFR-O1 of load-pipeline-config -->
+**Implements**: FR8, NFR-O1 of load-pipeline-config
 
 #### Scenario: All problems reported in one pass
 - **WHEN** a `.gnomish/` directory contains several independent validation problems
@@ -131,7 +129,7 @@ The loader SHALL aggregate all validation problems and return a result that is e
 
 ### Requirement: Schema version recognition
 A `schemaVersion` SHALL be declared in `config.yaml` — one version for the whole `.gnomish/` tree. A missing, unknown, or unsupported version SHALL be a validation error.
-<!-- implements FR9 of load-pipeline-config -->
+**Implements**: FR9 of load-pipeline-config
 
 #### Scenario: Unsupported schema version is rejected
 - **WHEN** `config.yaml` declares a `schemaVersion` the loader does not support
@@ -142,16 +140,22 @@ A `schemaVersion` SHALL be declared in `config.yaml` — one version for the who
 - **THEN** validation reports a located error naming `config.yaml`
 
 ### Requirement: Local sanity validation of mechanism and check configs
-The loader SHALL apply catalog-free sanity rules that do not require a live target. The executor `model` SHALL be present and non-blank for every executor type — the model is pinned in the stage manifest so any instance reproduces the stage identically, never left to an executor default — and `settings` SHALL be carried as an opaque, well-formed mapping (not validated by key, value, or range). An `external` check SHALL have a positive `interval`, a positive `timeout`, `interval ≤ timeout`, and a non-blank check identifier. An `external` check SHALL also carry a `provider`, defaulting to `github` when absent; a `provider` absent from the discovered check-provider registry SHALL be a located error naming the provider and the discovered set — provider existence is in-process knowledge, not target liveness; the check's provider-specific `params` SHALL be validated at the seam by that provider's `CheckParamsValidator`, whose problems are aggregated as located `ConfigError` data like every other validation problem. A `judge` check SHALL have `votes ≥ 1` and an odd `votes`. The loader SHALL NOT validate target liveness — whether a CI-check name exists, whether a `model` is real, or whether `judge` criteria are gradeable.
-<!-- implements FR11 of load-pipeline-config -->
-<!-- implements FR6 of add-plugin-architecture -->
-<!-- implements FR13 of add-plugin-architecture -->
-<!-- implements UX1 of add-plugin-architecture -->
+The loader SHALL apply catalog-free sanity rules that do not require a live target. The executor `model` SHALL be present and non-blank for every executor type, and `settings` SHALL be a well-formed mapping whose keys and values only the agent executor's settings schema checks. The loader SHALL NOT validate target liveness — whether a CI-check name exists, whether a `model` is real, or whether `judge` criteria are gradeable.
+**Implements**: FR11 of load-pipeline-config; FR6 of add-plugin-architecture; FR13 of add-plugin-architecture; UX1 of add-plugin-architecture
+**Notes**: The model is pinned in the stage manifest so any instance reproduces the stage identically, never left to an executor default.
+**Notes**: Provider existence is in-process knowledge (the discovered check-provider registry), not target liveness.
 
 #### Scenario: Missing model is rejected
 - **WHEN** a stage's `model` is absent or blank, whatever the executor type
 - **THEN** validation reports a located error
-- **AND** `settings` present as a mapping is accepted without inspecting its keys or values
+- **AND** the sanity rule accepts `settings` present as a mapping without inspecting its keys or values
+
+#### Scenario: Agent settings are checked against the executor's schema
+- **WHEN** an `agent-cli` stage or a `judge` check declares a `settings` key
+  other than `allowedTools`, `disallowedTools`, `maxTurns` or `roundTimeout`,
+  or a malformed value for one of them
+- **THEN** the load fails with a located error naming the stage or check and
+  the key
 
 #### Scenario: External check timing is sane
 - **WHEN** an `external` check has a non-positive `interval` or `timeout`, or `interval > timeout`
@@ -184,12 +188,20 @@ The loader SHALL apply catalog-free sanity rules that do not require a live targ
 - **WHEN** an `external` check names a CI check, or a `judge`/executor declares a model, that does not exist in any live system
 - **THEN** validation does not attempt to confirm its existence and does not fail on that ground
 
+#### Scenario: Settings that are not a mapping are rejected
+- **WHEN** a stage's `settings` is present but is not a mapping
+- **THEN** validation reports a located error
+
+#### Scenario: External check without an identifier is rejected
+- **WHEN** an `external` check's check identifier is absent or blank
+- **THEN** validation reports a located error identifying the check
+
 ### Requirement: External check declarations carry a timeout class
 The external check declaration SHALL accept an optional timeout class —
 `quality` or `infrastructure` — defaulting to `quality` when absent. The
 value SHALL load into the typed model; a value outside the two known
 classes SHALL be a located validation error identifying the check.
-<!-- implements FR9 of add-external-check-github-actions -->
+**Implements**: FR9 of add-external-check-github-actions
 
 #### Scenario: Absent timeout class defaults to quality
 - **WHEN** an `external` check declares no timeout class
@@ -203,7 +215,7 @@ classes SHALL be a located validation error identifying the check.
 
 ### Requirement: No execution and no path traversal
 The loader SHALL NOT execute any command, model call, or external check defined in the configuration, and SHALL reject file references that resolve outside the `.gnomish/` directory root.
-<!-- implements NFR-S1, NFR-S2, NFR-C1 of load-pipeline-config -->
+**Implements**: NFR-S1, NFR-S2, NFR-C1 of load-pipeline-config
 
 #### Scenario: No configured action is executed
 - **WHEN** the configuration defines `command`, `external`, and `judge` checks
@@ -220,7 +232,7 @@ The loader SHALL NOT execute any command, model call, or external check defined 
 
 ### Requirement: Domain purity guarded by ArchUnit
 The `domain` package SHALL remain free of filesystem and Jackson dependencies and SHALL NOT depend on the `adapter` package; an ArchUnit rule wired into `./gradlew check` SHALL fail the build on violation.
-<!-- implements FR10 of load-pipeline-config -->
+**Implements**: FR10 of load-pipeline-config
 
 #### Scenario: Domain dependency on I/O fails the build
 - **WHEN** a `domain` class gains a dependency on `java.nio.file..`, `com.fasterxml.jackson..`, or the `adapter` package
@@ -233,7 +245,7 @@ and `abort-threshold` (positive integer, default 3, the core abort-fuse policy
 shared by all instances). An absent `tracker` section SHALL be valid: tracker
 subcommands are unavailable and all previously specified loading behavior is
 unchanged.
-<!-- implements FR17 of add-tracker-port -->
+**Implements**: FR17 of add-tracker-port
 
 #### Scenario: No tracker section
 - **WHEN** a `.gnomish/` without a `tracker` section is loaded
@@ -256,7 +268,7 @@ delegates subsection validation and never interprets adapter keys. Seam
 violations SHALL be located load errors under the existing aggregation contract:
 `type` naming an unknown adapter; `type` present without its matching subsection;
 a subsection present that does not match `type` (never silently ignored).
-<!-- implements FR17 of add-tracker-port -->
+**Implements**: FR17 of add-tracker-port
 
 #### Scenario: Missing subsection
 - **WHEN** the section declares `type: github` with no `github:` subsection
@@ -280,7 +292,7 @@ protocol constants shared by all instances, beside `abort-threshold`:
 interval, so an inconsistent beat/TTL pair is inexpressible). Validation
 failures SHALL be located load errors under the existing aggregation
 contract.
-<!-- implements FR3 of add-claim-heartbeat -->
+**Implements**: FR3 of add-claim-heartbeat
 
 #### Scenario: Defaults apply
 - **WHEN** a `tracker` section declares `type` but neither heartbeat key
@@ -302,8 +314,7 @@ instances, beside `abort-threshold` and the heartbeat keys, read only from
 the factory's own clone (a gnome must not be able to raise the project's WIP
 limit). Validation failures SHALL be located load errors under the existing
 aggregation contract.
-<!-- implements FR6 of add-factory-serve -->
-<!-- implements NFR-S3 of add-factory-serve -->
+**Implements**: FR6 of add-factory-serve; NFR-S3 of add-factory-serve
 
 #### Scenario: Default applies
 
@@ -317,7 +328,7 @@ aggregation contract.
 
 ### Requirement: Stage sandbox declarations in Mechanism
 The stage model SHALL accept optional sandbox declarations in the `Mechanism` section: needs (e.g. docker-inside, resource asks), `requires-fresh`, and per-command-check `verify-in: same-box | fresh-box`. Declarations SHALL be typed into the immutable `PipelineDefinition`; loading remains read-only and executes nothing.
-<!-- implements FR12, FR13 of add-sandbox-core -->
+**Implements**: FR12, FR13 of add-sandbox-core
 
 #### Scenario: Declarations load into the typed model
 - **WHEN** a stage manifest declares `requires-fresh` and a command check with `verify-in: fresh-box`
@@ -325,7 +336,7 @@ The stage model SHALL accept optional sandbox declarations in the `Mechanism` se
 
 ### Requirement: Repo declarations can only tighten
 Validation SHALL reject any repo-side declaration that weakens isolation: requesting host execution, naming a concrete adapter binding, or relaxing freshness/limits. Adapter binding and any weakening SHALL exist only in factory installation config. Violations SHALL surface as located `ConfigError`s.
-<!-- implements FR14 of add-sandbox-core -->
+**Implements**: FR14 of add-sandbox-core
 
 #### Scenario: Host request from the repo is rejected
 - **WHEN** a stage manifest asks for host execution or a named adapter
@@ -337,9 +348,8 @@ Validation SHALL reject any repo-side declaration that weakens isolation: reques
 
 ### Requirement: External check declarations carry pin paths
 The external check declaration in a stage manifest SHALL accept an optional list of pin paths — repo paths whose content defines the check (workflow files, analyzer configs, local actions). The list SHALL load into the typed model as law; the pin-check guard unions it with adapter-contributed paths. Declaring none is valid — the adapter's own contribution still applies.
-
-Pin paths are repo-relative data, not file references: the loader SHALL NOT read them, and the "No execution and no path traversal" rule confining file references to `.gnomish/` SHALL NOT apply to them — pointing outside `.gnomish/` (e.g. `.github/workflows/ci.yml`) is their normal use. Validation SHALL still reject a pin path that is absolute or not in normalized relative form (containing `.` or `..` segments) as a located `ConfigError` — such a path can never match a repo object and would only pass the pin vacuously.
-<!-- implements FR16 of add-sandbox-core -->
+**Implements**: FR16 of add-sandbox-core
+**Notes**: Pin paths are repo-relative data, not file references, so the `.gnomish/` confinement of "No execution and no path traversal" does not cover them; an absolute or non-normalized path could never match a repo object and would pass the pin vacuously.
 
 #### Scenario: Declared pin paths load into the typed model
 - **WHEN** a stage manifest declares an external check with two pin paths
@@ -353,41 +363,15 @@ Pin paths are repo-relative data, not file references: the loader SHALL NOT read
 - **WHEN** a stage manifest declares a pin path that is absolute or contains `..` segments
 - **THEN** validation reports a located `ConfigError` identifying the check
 
+#### Scenario: A pin path with a dot segment is rejected
+- **WHEN** a stage manifest declares a pin path containing a `.` segment, such as `./ci.yml`
+- **THEN** validation reports a located `ConfigError` identifying the check
+
 ### Requirement: Pipeline law binds per invocation
 Pipeline law — `.gnomish/` stage manifests, stage instructions, and judge
 acceptance criteria — SHALL be bound at invocation start and frozen for the
-invocation's lifetime, including the in-process outcome loop. The law source
-SHALL be read through one law-source abstraction with exactly two
-realizations: **git objects at one commit — the law commit —** in every path
-that resolved a ref (tracker-driven modes, manual `run` with `--base`), and
-the **working tree** in the git-less in-place mode and in manual `run`
-without `--base`. Where a ref was resolved, the factory clone's working tree,
-index, and `HEAD` SHALL play no part in the law. Configuration has two tiers:
-the trusted tier (`tracker:`, `task-branch:`, and future selector sections) binds
-once at startup from the refreshed repository default branch and is never
-re-read per task; the task tier (stages,
-instructions, criteria, the remainder of `config.yaml`) binds from the base's
-law commit — the pinned SHA on a fresh start, the current tip of the pinned
-ref name on resume (a tag or SHA base makes these equal). The external-check
-pin guard SHALL compare against the law commit as a commit id peeled once at
-binding; the guard SHALL NOT resolve a ref name itself. Both realizations SHALL be
-rooted at the **law root** — the `.gnomish/` directory of the law commit or
-of the working tree, the same root the loader validates file references
-against — so a stage file reference that validates at load reads at run in
-every medium; the repository root reaches the pin guard as a separate value
-and is never the law root. A symlink entry at any segment of a reference's
-path under the law root SHALL be refused as an unreadable law file by both
-realizations, never followed and regardless of its target; the verdict SHALL
-come from one shared walk, so both realizations report the same category
-for one tree; an absolute reference SHALL be refused by both. Control files and judge
-acceptance criteria SHALL be read from the law source, never from the
-gnome-writable working copy at use time. Copies of law files in the gnome's
-working copy are project content: editable, but never law for the current
-task. A contract test SHALL enforce the source in git modes — including a
-base that differs from the clone's checked-out ref and the default-branch
-source of the trusted tier.
-<!-- implements FR19, NFR-S2 of add-sandbox-core -->
-<!-- implements FR2, FR11, FR12, NFR-S1, M5 of add-base-ref-resolution -->
+invocation's lifetime, including the in-process outcome loop.
+**Implements**: FR19, NFR-S2 of add-sandbox-core; FR2, FR11, FR12, NFR-S1, M5 of add-base-ref-resolution
 
 #### Scenario: Gnome edits to the law have no effect
 - **WHEN** the gnome branch modifies `.gnomish/` manifests, stage instructions, or judge acceptance criteria
@@ -458,28 +442,29 @@ source of the trusted tier.
   the law — including the remainder of `release/1.18`'s `config.yaml` —
   binds from `release/1.18`'s law commit
 
+#### Scenario: Law has exactly two sources
+- **WHEN** law is bound
+- **THEN** it is read through the one law-source abstraction: from git objects at the law commit in every path that resolved a ref (tracker-driven modes, manual `run` with `--base`), and from the working tree only in the git-less in-place mode and in manual `run` without `--base`
+- **AND** where a ref was resolved, the factory clone's working tree, index, and `HEAD` play no part in the law
+
+#### Scenario: Pin paths are addressed from the repository root
+- **WHEN** the external-check pin guard checks a declared pin path such as `.github/workflows/ci.yml`
+- **THEN** it addresses the path from the repository root it was handed as a separate value, never from the law root
+
+#### Scenario: An absolute law reference is refused in every medium
+- **WHEN** a law reference is an absolute path, in a working tree or in a git tree
+- **THEN** both realizations refuse it as an unreadable law file without touching anything outside the law root
+
 ### Requirement: Optional task-branch base section with allowed patterns
-`.gnomish/config.yaml` SHALL support an optional `task-branch:` section — the
-root key is the glossary term for the branch it configures — holding a `base`
+`.gnomish/config.yaml` SHALL support an optional `task-branch:` section holding a `base`
 subsection: `type` (a discriminator; `patterns` is the only supported value in
 this version, and it is the default when absent), `default` (optional ref
 name), and `allowed` (a list of entries, each `pattern` plus optional `role`
 of `development` | `release`, defaulting to `development`). Patterns SHALL
-compile at load. Located `ConfigError`s under the existing aggregation
-contract SHALL cover: an unknown `type` value, an unknown key anywhere in the
-section — a root-level `base:` and a `menu` key included, since the earlier
-draft shape has no alias — an invalid pattern, an unknown `role`, and a
-`default` that matches no allowed pattern when any is declared. The
-subsection holds no tracker-specific selection rule: how a task names its
-base is the tracker adapter's own configuration (`tracker.<type>.designators`,
-owned and validated by the adapter per tracker-port). An absent section SHALL
-be valid: no allowed bases, no configured default, and all previously
-specified loading behavior unchanged. The loader parses and validates only —
-resolution semantics belong to base-ref-resolution. The `task-branch:`
-section is reserved for settings of the task branch itself; a name-prefix
-override is a named candidate for a later change, not part of this one.
-<!-- implements FR1 of add-base-ref-resolution -->
-<!-- implements UX1 of add-base-ref-resolution -->
+compile at load.
+**Implements**: FR1 of add-base-ref-resolution; UX1 of add-base-ref-resolution
+**Notes**: The root key `task-branch` is the glossary term for the branch it configures; the section is reserved for that branch's own settings (a name-prefix override is a candidate for a later change).
+**Notes**: How a task names its base is the tracker adapter's own configuration (`tracker.<type>.designators`, owned and validated by the adapter per tracker-port); the loader parses and validates, and resolution semantics belong to base-ref-resolution.
 
 #### Scenario: Settled shape loads
 - **WHEN** `task-branch.base` declares `type: patterns`, `default: main`, and
@@ -522,17 +507,23 @@ override is a named candidate for a later change, not part of this one.
 - **THEN** loading fails with a located error naming the unknown key, and
   nothing is silently read from it
 
+#### Scenario: An invalid allowed pattern is a load error
+- **WHEN** an `allowed` entry declares a pattern that does not compile
+- **THEN** loading fails with a located error naming the entry, aggregated with every other validation problem
+
+#### Scenario: An unknown role is a load error
+- **WHEN** an `allowed` entry declares a `role` other than `development` or `release`
+- **THEN** loading fails with a located error naming the unknown role
+
 ### Requirement: Definition validated at startup, bound per task from the base
 `serve` and `take` SHALL load and validate the full definition from the
 refreshed repository default branch at startup — fail-fast for the common
 base, the source of the trusted tier, and the definition `board` and
 `dashboard` display. That load SHALL NOT be authoritative for a task: after
 base resolution the task tier SHALL be loaded from the task's law commit and
-frozen from it, per task. A definition that fails to load from a base SHALL
-park the task with a configuration report naming the base ref, the law
-commit, and the located errors — no stage attempt burned, no claim released
-for retry, because the failure is deterministic.
-<!-- implements FR13, UX5 of add-base-ref-resolution -->
+frozen from it, per task.
+**Implements**: FR13, UX5 of add-base-ref-resolution
+**Notes**: A base whose definition fails to load parks its task rather than retrying it because the failure is deterministic.
 
 #### Scenario: Startup still fails fast on the default branch
 - **WHEN** the default branch's `.gnomish/` carries a malformed stage manifest
@@ -544,3 +535,20 @@ for retry, because the failure is deterministic.
 - **THEN** that task parks with the located errors and the base ref in its
   report, the claim is not released into a retry loop, and other slots keep
   working
+
+#### Scenario: A broken base's report names its law commit and burns no attempt
+- **WHEN** a task's base definition fails to load from its law commit
+- **THEN** the task parks with a configuration report naming the base ref, the law commit, and the located errors, and no stage attempt is burned
+
+### Requirement: Configuration binds in two tiers
+The trusted tier (`tracker:`, `task-branch:`, and future selector sections) SHALL bind once at startup from the refreshed repository default branch and SHALL NOT be re-read per task. The task tier (stages, instructions, criteria, the remainder of `config.yaml`) SHALL bind from the base's law commit — the pinned SHA on a fresh start, the current tip of the pinned ref name on resume.
+**Implements**: FR19, NFR-S2 of add-sandbox-core; FR2, FR11, FR12, NFR-S1, M5 of add-base-ref-resolution; FR4 of tighten-spec-contract
+**Notes**: Split from "Pipeline law binds per invocation". A tag or SHA base makes the fresh-start and resume commits equal.
+
+#### Scenario: The trusted tier binds once at startup
+- **WHEN** a daemon starts and later claims several tasks on different bases
+- **THEN** `tracker:` and `task-branch:` were bound once, at startup, from the refreshed default branch, and no task's binding re-reads them
+
+#### Scenario: The task tier binds from the base's law commit
+- **WHEN** a task starts fresh on base `release/1.18`, pinned at a SHA, and is later resumed after `release/1.18` moved
+- **THEN** the fresh start binds stages, instructions, criteria and the remainder of `config.yaml` from the pinned SHA, and the resume binds them from the current tip of `release/1.18`

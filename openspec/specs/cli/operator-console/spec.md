@@ -12,14 +12,11 @@ production class writes to the process streams directly.
 ### Requirement: Human-readable console output is neutralized visibly
 All non-logger text written to the operator's terminal SHALL pass through one
 console owner. Its human-readable path SHALL render control and escape
-sequences *visibly* rather than dropping them — ESC as `^[`, C0 controls other
-than the line feed and the tab as caret notation, DEL as `^?`, C1 controls and bidirectional-override and
-invisible format characters as their `\uXXXX` escape, carriage return as
-`\r` — while preserving line structure and length, so an operator report of
-any length stays readable and an attempt to drive the terminal is seen as
-text. The end-to-end property SHALL be asserted over the same adversarial
-corpus the log sink uses.
-<!-- implements FR5, NFR-S2, NFR-O1 of harden-untrusted-text-sinks -->
+sequences *visibly* rather than dropping them, while preserving line structure
+and length, so an operator report of any length stays readable and an attempt
+to drive the terminal is seen as text. The end-to-end property SHALL be
+asserted over the same adversarial corpus the log sink uses.
+**Implements**: FR5, NFR-S2, NFR-O1 of harden-untrusted-text-sinks
 
 #### Scenario: A hostile issue title cannot reach the clipboard
 - **WHEN** the board is rendered for a task whose tracker title carries an
@@ -38,6 +35,15 @@ corpus the log sink uses.
 - **THEN** the captured bytes contain no ESC, no C1 byte, no bidi override and
   no carriage return, and every original line break is preserved
 
+#### Scenario: Each control class has its visible form
+- **WHEN** text carrying each class of control character is written through the
+  console owner's human-readable path
+- **THEN** ESC is shown as `^[`, every C0 control other than the line feed and
+  the tab in caret notation, DEL as `^?`, C1 controls and bidirectional-override
+  and invisible format characters as their `\uXXXX` escape, and carriage return
+  as `\r`
+- **AND** the line feed and the tab are kept as themselves
+
 ### Requirement: Machine-readable console output is verbatim
 The console owner's machine-readable path SHALL write its input byte for byte:
 JSON produced for `--json` flags and other machine-parsed output is never
@@ -45,7 +51,7 @@ altered by the console owner, because its consumer is a parser, not a
 terminal, and JSON encoding already bounds its own metacharacters. The
 `--json` subcommand flags are the only machine-readable entry: the console
 owner has no input side, so no in-dialog meta-command exists.
-<!-- implements FR6 of make-run-headless -->
+**Implements**: FR6 of make-run-headless
 
 #### Scenario: JSON survives the console untouched
 - **WHEN** a status report is printed with `--json` for a task whose title
@@ -62,7 +68,7 @@ No production class other than the console owner SHALL write to the process
 standard output or standard error streams; a build gate SHALL fail naming any
 new site. Every pre-existing direct write is routed through the owner and
 classified as human-readable or machine-readable.
-<!-- implements FR6 of harden-untrusted-text-sinks -->
+**Implements**: FR6 of harden-untrusted-text-sinks
 
 #### Scenario: A new direct write fails the build
 - **WHEN** a production class outside the console owner gains a

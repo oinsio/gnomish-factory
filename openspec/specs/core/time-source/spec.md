@@ -13,7 +13,7 @@ behavior without waiting.
 Every production component that reads the current instant SHALL take the
 standard JDK instant source as its time dependency. No project-owned clock
 type SHALL exist, and no adapter between two clock types SHALL remain.
-<!-- implements FR17 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR17 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: A component is handed a time source
 - **WHEN** a component that stamps or measures time is constructed
@@ -30,7 +30,7 @@ not the system instant source, not the system clock, not a direct read of the
 current instant, not the real sleeper, and not a convenience factory that
 wires any of these. Every such component SHALL receive its time source from
 its caller. A build gate SHALL fail on any new construction site.
-<!-- implements FR18 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR18 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: A hidden clock fails the build
 - **WHEN** a production class outside the composition root reads the current
@@ -63,9 +63,11 @@ its caller. A build gate SHALL fail on any new construction site.
 ### Requirement: The two halves of real time travel as one value
 A component that needs both the current instant and waiting SHALL take one
 time-equipment value carrying the instant source and the sleeper, never the
-two as separate parameters. The value SHALL be built once in the composition
-root, and no production factory SHALL assemble real time on a caller's behalf.
-<!-- implements FR22 of supervise-daemon-loops-and-embed-dashboard -->
+two as separate parameters. The value SHALL be built only from the composition
+root's parts — in the root, or re-paired from halves the root supplied — and no
+production factory SHALL assemble real time on a caller's behalf.
+**Implements**: FR22 of supervise-daemon-loops-and-embed-dashboard
+**Notes**: The one re-pairing is the take heartbeat's: the standing reaper's sleeper beside the beat's instant source, both the root's in production.
 
 #### Scenario: A policy is built from the equipment it is handed
 - **WHEN** a retry, a suppressor or a loop wait is constructed in production
@@ -76,8 +78,8 @@ root, and no production factory SHALL assemble real time on a caller's behalf.
 #### Scenario: One value replaces the pair on every signature
 - **WHEN** a production signature is inspected that used to take an instant
   source and a sleeper side by side
-- **THEN** it takes the time-equipment value alone, and its parameter count
-  is lower than before, not higher
+- **THEN** it takes the time-equipment value alone; no production signature
+  other than the value's own declares the two side by side
 
 #### Scenario: A frozen equipment freezes the whole run
 - **WHEN** the shipped composition is assembled on a time-equipment value whose
@@ -90,7 +92,7 @@ root, and no production factory SHALL assemble real time on a caller's behalf.
 A component that stamps its state with an instant and measures an interval
 about that state (a repeat-suppression window, a staleness window) SHALL
 measure the interval on the same instant source it stamps with.
-<!-- implements FR19 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR19 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: Heartbeat suppression follows the heartbeat's time
 - **WHEN** the claim heartbeat runs on a virtual instant source and its beat
@@ -103,10 +105,12 @@ measure the interval on the same instant source it stamps with.
 - **THEN** it constructs no second time source of its own
 
 ### Requirement: Tracker and branch timestamps come from the injected source
-Every timestamp the factory writes into the tracker (claim markers, heartbeat
-comments, decisions, repair and removal markers) or into the task branch (the
-task file's creation time) SHALL be read from the injected instant source.
-<!-- implements FR20 of supervise-daemon-loops-and-embed-dashboard -->
+Every timestamp a production tracker adapter writes into the tracker (claim
+markers, heartbeat comments, decisions, repair and removal markers) and every
+timestamp written into the task branch (the task file's creation time) SHALL be
+read from the injected instant source.
+**Implements**: FR20 of supervise-daemon-loops-and-embed-dashboard
+**Notes**: The in-memory reference tracker is not a production adapter: it versions claims and beats by its own monotonic counter (`ClaimClock`), by design D2 of add-claim-heartbeat.
 
 #### Scenario: A marker carries the virtual instant
 - **WHEN** a tracker adapter built on a virtual instant source writes a claim
@@ -123,7 +127,7 @@ task file's creation time) SHALL be read from the injected instant source.
 The test fixtures SHALL offer one virtual instant source that a spec advances
 by hand, and the test-time gate SHALL fail on any construction of a real clock
 in a test source unless the line carries the in-place justification marker.
-<!-- implements FR21, NFR-R4 of supervise-daemon-loops-and-embed-dashboard -->
+**Implements**: FR21, NFR-R4 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: One fake drives a mixed flow
 - **WHEN** a spec exercises a flow whose components used to take two clock

@@ -11,7 +11,7 @@ The build SHALL expose one command — `./gradlew check` — that compiles
 production and test code, runs the full Spock suite, produces the JaCoCo
 report, and runs PIT mutation testing. With the module tree in place, root
 `check` SHALL aggregate every module's `check`, each running that module's PIT.
-<!-- implements FR11 of split-into-modules -->
+**Implements**: FR11 of split-into-modules
 
 #### Scenario: One command runs everything
 - **WHEN** a developer runs `./gradlew check` on a fresh clone with JDK 25
@@ -26,7 +26,7 @@ report, and runs PIT mutation testing. With the module tree in place, root
 
 ### Requirement: Mutation testing gate
 PIT SHALL mutate Java production classes only and SHALL fail the build when the mutation score is below the threshold (100%; explicitly documented exceptions may lower it to 95% for code unreachable by unit tests). The set of mutated classes MAY be narrowed to an explicit scope (see "Branch-scoped mutation target"); the threshold and documented exceptions apply unchanged to whichever classes are in scope.
-<!-- implements FR1 of scope-pit-to-changed-files -->
+**Implements**: FR1 of scope-pit-to-changed-files
 
 #### Scenario: Surviving mutant fails the build
 - **WHEN** a production class in scope contains logic not killed by any test
@@ -39,6 +39,7 @@ PIT SHALL mutate Java production classes only and SHALL fail the build when the 
 
 ### Requirement: Coverage reporting
 JaCoCo SHALL produce XML and HTML coverage reports on every test run.
+**Implements**: FR6, NFR-O1 of add-project-skeleton
 
 #### Scenario: Reports generated
 - **WHEN** the test task completes
@@ -46,6 +47,7 @@ JaCoCo SHALL produce XML and HTML coverage reports on every test run.
 
 ### Requirement: Code format gate
 The build SHALL enforce a consistent code format via a Spotless check wired into `./gradlew check`; formatting violations SHALL fail the build and be auto-fixable with `spotlessApply`.
+**Implements**: FR8 of add-project-skeleton
 
 #### Scenario: Misformatted code fails the gate
 - **WHEN** a source file violates the configured format
@@ -54,6 +56,7 @@ The build SHALL enforce a consistent code format via a Spotless check wired into
 
 ### Requirement: Static analysis gate
 Compilation SHALL fail on Error Prone bug patterns and NullAway null-safety violations within the production base package; Error Prone's unused-code checks (`UnusedMethod`, `UnusedVariable`) SHALL be treated as errors.
+**Implements**: FR9 of add-project-skeleton
 
 #### Scenario: Null-safety violation fails compilation
 - **WHEN** production code dereferences a value that NullAway cannot prove non-null
@@ -65,6 +68,7 @@ Compilation SHALL fail on Error Prone bug patterns and NullAway null-safety viol
 
 ### Requirement: Dependency hygiene
 The build SHALL detect unused and misdeclared dependencies and fail the gate on violations.
+**Implements**: FR10 of add-project-skeleton
 
 #### Scenario: Unused dependency fails the gate
 - **WHEN** a declared dependency is not used by any source set
@@ -73,21 +77,9 @@ The build SHALL detect unused and misdeclared dependencies and fail the gate on 
 ### Requirement: Continuous integration
 A CI workflow SHALL run `./gradlew check` on every branch push and pull request
 and SHALL publish JaCoCo and PIT reports and a Gradle profile report as build
-artifacts. A tag push SHALL NOT start the check workflow: the release workflow
-judges the run the tagged commit already has on `main`, and a second run for the
-same commit would waste the budget and shadow that verdict. The workflow SHALL
-pass no mutation scope: the build's own scope owner narrows the gate to the
-branch's changes exactly as a local run does, and the whole-tree gate is the
-scheduled run's. The CI build job SHALL NOT declare a per-job timeout: it runs
-to completion under GitHub's 6-hour default, and superseded in-flight runs for
-the same ref SHALL be cancelled by workflow concurrency. Every other CI workflow
-job that supports a per-job timeout SHALL set `timeout-minutes: 30`; a job whose
-reusable-workflow form forbids a per-job timeout is exempt.
-<!-- implements FR5, FR7 of scope-pit-locally -->
-<!-- implements FR2, NFR-C1 of add-release-pipeline -->
-<!-- implements FR1, FR2, NFR-C1 of remove-ci-build-timeout -->
-<!-- implements FR2, FR3, FR4, NFR-C1 of scope-pit-to-changed-files -->
-<!-- implements FR11 of split-into-modules -->
+artifacts.
+**Implements**: FR5, FR7 of scope-pit-locally; FR2, NFR-C1 of add-release-pipeline; FR1, FR2, NFR-C1 of remove-ci-build-timeout; FR2, FR3, FR4, NFR-C1 of scope-pit-to-changed-files; FR11 of split-into-modules
+**Notes**: A tag push starts no check run because the release workflow judges the run the tagged commit already has on `main`; a second run would waste the budget and shadow that verdict. CI passes no mutation scope because the build's own scope owner narrows the gate as a local run does; the whole-tree gate is the scheduled run's. The build job runs to completion under GitHub's 6-hour default.
 
 #### Scenario: CI enforces the gates
 - **WHEN** a commit is pushed with a failing test or a surviving mutant in a
@@ -118,7 +110,7 @@ reusable-workflow form forbids a per-job timeout is exempt.
   artifacts
 
 #### Scenario: A long build run is not cancelled
-- **WHEN** the CI build job runs longer than 30 minutes
+- **WHEN** the CI build job, or the scheduled whole-tree mutation job, runs longer than 30 minutes
 - **THEN** it keeps running and reports its real pass/fail verdict rather than being cancelled by a per-job timeout
 
 #### Scenario: A superseded build run is cancelled
@@ -126,34 +118,18 @@ reusable-workflow form forbids a per-job timeout is exempt.
 - **THEN** the in-flight run for that ref is cancelled by workflow concurrency
 
 #### Scenario: A hung job is bounded by the timeout
-- **WHEN** a CI job other than the build job, one that supports a per-job timeout, runs longer than 30 minutes
+- **WHEN** a CI job other than those two, one that supports a per-job timeout, runs longer than its bound — 30 minutes, or 10 for the Pages deploy job
 - **THEN** GitHub cancels the job with its standard timeout error rather than letting it run to the 6-hour default
 
+#### Scenario: A reusable-workflow job is exempt from the timeout
+- **WHEN** a CI job is a call of a reusable workflow, whose form forbids a per-job timeout
+- **THEN** the job declares no `timeout-minutes` and is not held to the 30-minute bound
+
 ### Requirement: Security scanning
-CI SHALL run security scanning: OSV-Scanner failing the run on known-vulnerable dependency versions and Gitleaks failing the run on committed secrets on every branch push and pull request, never on a tag push; CodeQL analysis of the codebase on every pull request and on pushes to `main`.
-
-The OSV-Scanner gate SHALL evaluate **every** committed Gradle lockfile in the
-repository — root and per-module, project and buildscript — against a **single**
-repository-root suppression allowlist, independent of the directory each
-lockfile lives in. Adding a module that contributes a lockfile SHALL require no
-per-module scan configuration.
-
-A suppression in that allowlist SHALL be permitted only for an artifact confined
-to test or buildscript classpaths, SHALL state the affected scope and why no
-adoptable fix exists, and SHALL carry an expiry date after which the gate fails
-again. No advisory affecting a production runtime classpath may be suppressed;
-it is fixed by pinning a non-vulnerable version instead.
-
-Security version overrides SHALL be declared in the project's single version
-source (`gradle/libs.versions.toml`, or `gradle.properties` for buildscript
-classpaths, which cannot read the catalog), each naming the advisory it clears
-and the condition for dropping the override; the committed lock state SHALL be
-regenerated so the scanned lockfiles reflect them.
-
-The project SHALL document one command that reproduces the CI scan verdict
-locally.
-<!-- implements FR2, NFR-C1 of add-release-pipeline -->
-<!-- implements FR1, FR2, FR6, FR7, FR8, FR9, NFR-S1, NFR-S2, NFR-S3 of fix-osv-dependency-gate -->
+CI SHALL run security scanning: OSV-Scanner failing the run on known-vulnerable dependency versions and Gitleaks failing the run on committed secrets on every branch push and pull request, never on a tag push; CodeQL analysis of the codebase on every pull request and on pushes to `main`. An advisory on an artifact version resolved onto a production runtime classpath SHALL be fixed by a version pin, never allowlisted.
+**Implements**: FR2, NFR-C1 of add-release-pipeline; FR1, FR2, FR6, FR7, FR8, FR9, NFR-S1, NFR-S2, NFR-S3 of fix-osv-dependency-gate
+**Notes**: A superseded conflict candidate, the case the allowlist entry of `A production-scope advisory is fixed, never suppressed` names, is a version whose metadata `gradle/verification-metadata.xml` records although no committed lockfile resolves it.
+**Notes**: Buildscript classpaths take their security overrides from `gradle.properties` because they cannot read the version catalog.
 
 #### Scenario: Vulnerable dependency fails CI
 - **WHEN** a dependency version with a known OSV/CVE advisory is present in the build
@@ -175,10 +151,13 @@ locally.
   to any per-module configuration
 
 #### Scenario: A production-scope advisory is fixed, never suppressed
-- **WHEN** an advisory affects an artifact resolved onto a production runtime
+- **WHEN** an advisory affects an artifact version resolved onto a production runtime
   classpath
-- **THEN** the build pins a non-vulnerable version of that artifact
-- **AND** the allowlist contains no entry for that advisory
+- **THEN** the build pins a non-vulnerable version of that artifact, and no committed lockfile
+  resolves the vulnerable version
+- **AND** an allowlist entry for that advisory exists only for a superseded conflict candidate:
+  its reason names the candidate's version and states that it is metadata-only, and no
+  committed lockfile resolves that version
 
 #### Scenario: A suppression expires
 - **WHEN** the current date passes a suppression's recorded expiry date
@@ -203,12 +182,20 @@ locally.
 - **THEN** the verdict matches what CI reports for the same lock state,
   including which advisories are suppressed
 
-### Requirement: Reproducible build
-The build SHALL be reproducible: the Gradle version is fixed by the wrapper, the Java toolchain is pinned to 25, and dependency versions are declared in a single location. A security override of a BOM-managed or `strictly`-constrained transitive SHALL be applied on every configuration where the affected artifact resolves, and its effect SHALL be visible in the committed lock state rather than implied by build-script intent.
+#### Scenario: Every committed lockfile is scanned
+- **WHEN** the OSV-Scanner job runs
+- **THEN** it evaluates every committed Gradle lockfile in the repository — the root's and each module's, project and buildscript — against the one repository-root allowlist
+- **AND** no lockfile is skipped or judged differently for the directory it lives in
 
-The build's outputs SHALL be reproducible as well as its inputs: every archive task of every module (jars, the boot jar, distribution archives) SHALL write a fixed entry order, no file timestamps and fixed file modes, and no archive SHALL embed a generated file that records when it was made — the boot jar's build info SHALL carry no build time, and the SBOM SHALL stay outside the jar — so that two builds of the same commit with the same version produce byte-identical archives.
-<!-- implements NFR-R1 of add-release-pipeline -->
-<!-- implements FR3, FR4, FR5, NFR-R1, NFR-R2 of fix-osv-dependency-gate -->
+#### Scenario: A security override names its advisory and its exit
+- **WHEN** a security version override is added
+- **THEN** it is declared in `gradle/libs.versions.toml`, or in `gradle.properties` for a buildscript classpath, naming the advisory it clears and the condition for dropping it
+- **AND** the committed lock state is regenerated in the same diff, so the scanned lockfiles carry the overridden version
+
+### Requirement: Reproducible build
+The build SHALL be reproducible: the Gradle version is fixed by the wrapper, the Java toolchain is pinned to 25, and dependency versions are declared in a single location. Its outputs SHALL be reproducible as well as its inputs: two builds of the same commit with the same version SHALL produce byte-identical archives.
+**Implements**: NFR-R1 of add-release-pipeline; FR3, FR4, FR5, NFR-R1, NFR-R2 of fix-osv-dependency-gate
+**Notes**: The override scenarios concern a security override of a BOM-managed or `strictly`-constrained transitive; its effect is read from the committed lock state, not inferred from what the build script intends.
 
 #### Scenario: Wrapper pins the toolchain
 - **WHEN** the project is built on a machine with a different default JDK
@@ -231,60 +218,21 @@ The build's outputs SHALL be reproducible as well as its inputs: every archive t
   same version
 - **THEN** both outputs have the same SHA-256 sum
 
-### Requirement: Source file size cap
-Every production Java source file SHALL stay within the 200-line hard cap of
-`.claude/rules/process-invariants.md`; a file that exceeds it SHALL be split
-along a cohesive seam into focused units, each within the cap, without changing
-observable behaviour. The cap is enforced in review, not by build tooling.
-<!-- implements FR1, FR2 of fix-oversized-adapters -->
+#### Scenario: Archives carry no order, time or mode of the build machine
+- **WHEN** any archive task of any module runs — a jar, the boot jar, a distribution archive
+- **THEN** it writes its entries in a fixed order, with no file timestamps and with fixed file modes
 
-#### Scenario: An oversized adapter is split into compliant units
-- **WHEN** a production source file exceeds the 200-line cap
-- **THEN** it is split so the file and every unit extracted from it is ≤ 200 lines
-- **AND** the extraction is behaviour-preserving — no existing spec is modified
-  and `./gradlew check` stays green
-
-#### Scenario: Extracted units keep the same behaviour and observability
-- **WHEN** logic is moved from an oversized file into a package-private collaborator
-- **THEN** the public entry point's behaviour, exit codes, and log output are unchanged
-- **AND** coverage and PIT mutation score on the affected classes are no lower than before
-
-### Requirement: Shared app-layer assembly fixture
-The test suite SHALL provide a single shared fixture (a plain Groovy
-trait, no Spring test context) that constructs the standard app-layer
-engine-assembly collaborator set and its `FactoryProperties` test
-values; app-layer specs SHALL obtain the assembly through this fixture
-instead of inlining the construction block, keeping exactly one
-construction site for the standard set in test sources.
-<!-- implements FR1, FR2, FR3 of refactor-app-spec-fixtures -->
-
-#### Scenario: One construction site for the standard assembly
-- **WHEN** test sources are searched for direct construction of the
-  standard engine assembly (`new ManualRunAssembly`)
-- **THEN** exactly one site is found — inside the shared fixture trait
-
-#### Scenario: A spec deviates from the fixture defaults
-- **WHEN** an app-layer spec needs a non-default collaborator (custom
-  console streams, agent binary, instance name)
-- **THEN** it passes the deviation as an explicit named argument to the
-  fixture factory method
-- **AND** all defaulted parts remain invisible at the call site
-
-#### Scenario: Fixture adoption preserves behavior
-- **WHEN** the app-layer specs are migrated to the shared fixture
-- **THEN** `./gradlew test` passes with the same number of executed
-  tests as before the migration
-- **AND** no production source changes and no assertion changes are part
-  of the migration
+#### Scenario: No archive records when it was built
+- **WHEN** the boot jar and the other archives are built
+- **THEN** none embeds a generated file that records when it was made: the boot jar's build info carries no build time, and the SBOM stays outside the jar
 
 ### Requirement: Hardware-derived heavy-JVM budget
 The build SHALL limit how many memory-heavy forked JVMs (test JVMs and the mutation engine)
 run concurrently to a budget computed from the host's total RAM and processor count, reserving
 fixed allowances for the build daemon and OS headroom. On hardware where the formula yields
 less than one slot, the budget SHALL clamp to 1 so heavy tasks degrade to serial execution
-instead of failing. Tasks that do not fork heavy JVMs (compilation, static analysis,
-formatting) SHALL NOT be constrained by this budget.
-<!-- implements FR1, FR2, NFR-R1 of adapt-build-load-to-hardware -->
+instead of failing.
+**Implements**: FR1, FR2, NFR-R1 of adapt-build-load-to-hardware
 
 #### Scenario: Concurrency scales with the machine
 - **WHEN** a clean `./gradlew build` runs on a machine whose RAM fits N test JVMs beside the
@@ -307,19 +255,19 @@ formatting) SHALL NOT be constrained by this budget.
 The repository SHALL NOT commit a machine-specific global worker limit
 (`org.gradle.workers.max`); a fresh clone SHALL build green with default Gradle settings on any
 machine meeting the documented hardware minimum, with no edits to committed files.
-<!-- implements FR3 of adapt-build-load-to-hardware -->
+**Implements**: FR3 of adapt-build-load-to-hardware
 
 #### Scenario: Fresh clone needs no tuning
 - **WHEN** a developer clones the repository onto a machine meeting the documented minimum and
   runs `./gradlew build`
 - **THEN** the build passes without modifying any committed configuration
-- **AND** `git grep org.gradle.workers.max` finds no committed occurrence
+- **AND** no committed `gradle.properties` file sets `org.gradle.workers.max`
 
 ### Requirement: Heavy-JVM budget override
 The build SHALL accept a Gradle property that overrides the computed heavy-JVM budget; when
 set (via command line, user-level Gradle properties, or CI environment) it SHALL take
 precedence over the hardware formula.
-<!-- implements FR4 of adapt-build-load-to-hardware -->
+**Implements**: FR4 of adapt-build-load-to-hardware
 
 #### Scenario: Override takes precedence
 - **WHEN** the build runs with the override property set to K
@@ -329,7 +277,7 @@ precedence over the hardware formula.
 The build SHALL log, once per build, the effective heavy-JVM budget together with its inputs —
 detected RAM, detected processor count, and the override property when one is set — so an
 operator can see why a given concurrency was chosen and detect a stale override.
-<!-- implements NFR-O1, UX2 of adapt-build-load-to-hardware -->
+**Implements**: NFR-O1, UX2 of adapt-build-load-to-hardware
 
 #### Scenario: Computed budget is visible
 - **WHEN** the build runs without the override property
@@ -340,8 +288,10 @@ operator can see why a given concurrency was chosen and detect a stale override.
 - **THEN** the log names the override property and its value as the source of the budget
 
 ### Requirement: Delegating decorator completeness gate
-A named ArchUnit rule SHALL fail the build when a production class implements an interface and holds a same-type delegate — a field, constructor parameter, or record component of the interface type, including `Supplier` of it — without overriding every `default` method that interface declares (superinterfaces included). Leaf implementers (no same-type delegate) are out of scope: for a leaf the constant default is a truthful "I don't have this"; only for a delegator is it a silent replacement of the delegate's real behavior. Justified exemptions — self-delegating overloads whose inherited body is the decorator's documented intent — SHALL live in a named allowlist beside the rule, one entry per class and method with the reason. The rule's own spec SHALL seed a violating class and assert the rule fails it.
-<!-- implements FR9 of fix-denial-attribution-durability -->
+A named ArchUnit rule SHALL fail the build when a production class implements an interface and holds a same-type delegate — a field, constructor parameter, or record component of the interface type, including `Supplier` of it — without overriding every `default` method that interface declares (superinterfaces included).
+**Implements**: FR9 of fix-denial-attribution-durability
+**Notes**: A leaf implementer is out of scope because for a leaf the constant default is a truthful "I don't have this"; only for a delegator is it a silent replacement of the delegate's real behavior.
+**Notes**: The allowlist of justified exemptions sits beside the rule, one entry per class and method; a justified exemption is a self-delegating overload whose inherited body is the decorator's documented intent.
 
 #### Scenario: An unforwarded default fails the build
 - **WHEN** a production class holds a delegate of the interface it implements and leaves one of that interface's default methods unoverridden, and it is not in the allowlist
@@ -355,32 +305,17 @@ A named ArchUnit rule SHALL fail the build when a production class implements an
 - **WHEN** a delegating class inherits a default whose body delegates to an abstract method the class does override, and the class is allowlisted with a reason
 - **THEN** the rule passes and the allowlist entry names the class, the method, and the reason
 
+#### Scenario: The rule's own spec proves it can fail
+- **WHEN** the rule's own spec runs
+- **THEN** it seeds a delegating class that leaves an interface default unforwarded and asserts the rule fails it
+
 ### Requirement: Dependency license gate
 CI SHALL run a dependency-license gate over the runtime classpath of every distributed
 module (the factory boot jar's module and the plugin-contract module) on every push and on
-fork pull requests, in a workflow of its own, separate from `./gradlew check`.
-
-The gate SHALL read every license each resolved module declares, normalize license-name
-variants to one canonical name, and fail when a module declares no license the allowlist
-accepts. A module declaring several licenses SHALL pass when at least one is accepted.
-
-One repository file SHALL be the only source of accepted licenses. It SHALL accept the
-licenses known under the SPDX identifiers Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause,
-EPL-1.0, EPL-2.0, MPL-2.0, CDDL-1.0, CDDL-1.1 and GPL-2.0 with Classpath Exception — spelled
-as the gate's normalizer names them — and SHALL NOT accept LGPL, GPL or AGPL in any version.
-Module-scoped exceptions SHALL not be needed for the shipped inventory; adding one SHALL
-state the reason beside it.
-
-A failing gate SHALL name each violating module with its coordinates and every license it
-declares in the job log, SHALL attach the violation report to the run, and every run SHALL
-attach the full generated license inventory of the distributed modules. The gate SHALL be
-covered by a functional build test over a miniature project with an offline repository. The
-project SHALL document one command that reproduces the CI verdict locally.
-
-The gate's build plugin SHALL enter the build through the version catalog and the committed
-lockfiles and verification metadata, so the dependency-verification and OSV gates cover it
-like every other plugin.
-<!-- implements FR4, FR5, FR6, FR7, FR8, FR12, NFR-R1, NFR-R2, NFR-O1, NFR-O2, NFR-S2, NFR-C1, UX1 of add-project-license -->
+fork pull requests, in a workflow of its own, separate from `./gradlew check`. The gate
+SHALL fail when a resolved module declares no license the allowlist accepts.
+**Implements**: FR4, FR5, FR6, FR7, FR8, FR12, NFR-R1, NFR-R2, NFR-O1, NFR-O2, NFR-S2, NFR-C1, UX1 of add-project-license
+**Notes**: The functional build test runs its miniature project against an offline repository. The plugin enters through the catalog, the lockfiles and the verification metadata so that the dependency-verification and OSV gates cover it like every other plugin.
 
 #### Scenario: Copyleft-only dependency fails CI
 - **WHEN** a resolved runtime module declares only LGPL-2.1 (or GPL, or AGPL)
@@ -421,21 +356,31 @@ like every other plugin.
 - **WHEN** a maintainer runs the documented command on the same lock state CI evaluated
 - **THEN** the verdict and the report equal CI's
 
+#### Scenario: One file holds the accepted licenses
+- **WHEN** the gate decides whether a declared license is accepted
+- **THEN** it reads the one repository allowlist file, and no workflow, build script or plugin configuration names an accepted license of its own
+
+#### Scenario: The allowlist accepts the permissive set and no copyleft
+- **WHEN** the allowlist file is read
+- **THEN** it accepts the licenses known under the SPDX identifiers Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, EPL-1.0, EPL-2.0, MPL-2.0, CDDL-1.0, CDDL-1.1 and GPL-2.0 with Classpath Exception, each spelled as the gate's normalizer names it
+- **AND** it accepts no LGPL, GPL or AGPL license in any version
+
+#### Scenario: The shipped inventory needs no module exception
+- **WHEN** the allowlist is read for the shipped inventory
+- **THEN** it holds no rule scoped to one module
+- **AND** a module-scoped exception added later states its reason beside it
+
+#### Scenario: Every run attaches the license inventory
+- **WHEN** a license-gate run completes, green or red
+- **THEN** the full generated license inventory of the distributed modules is attached to the run
+
 ### Requirement: Branch-scoped mutation target
 Each module's `pitest` SHALL target a mutation scope the build computes from one
 owner. With no `pitScope` property the scope is the branch's changes: the
 module's production classes whose source files differ, in the working tree
-(committed, staged, unstaged and untracked) against the scope base. `-PpitScope=all`
-or requesting `pitestAll` selects the module's whole production tree; an explicit
-comma-separated glob list keeps the subset the module owns. A module whose
-resolved scope is empty skips its gate cleanly — its mutation task, its verdict
-task and its report finalizer together, so a report an earlier run left in the
-module's build directory is never judged. The scope is obtained through a
-configuration-cache-validated read, so an edit between two builds re-resolves it;
-its computation runs `git` only — never the test suite, never class files.
-<!-- implements FR1, FR4, FR5, NFR-P1, NFR-R2, NFR-R3, NFR-R4, UX1 of scope-pit-locally -->
-<!-- implements FR1, FR5 of scope-pit-to-changed-files -->
-<!-- implements FR11 of split-into-modules -->
+(committed, staged, unstaged and untracked) against the scope base.
+**Implements**: FR1, FR4, FR5, NFR-P1, NFR-R2, NFR-R3, NFR-R4, UX1 of scope-pit-locally; FR1, FR5 of scope-pit-to-changed-files; FR11 of split-into-modules
+**Notes**: The scope is obtained through a configuration-cache-validated read, which is what makes an edit between two builds re-resolve it.
 
 #### Scenario: Default run mutates the branch's changed classes
 - **WHEN** `./gradlew check` runs with no `pitScope` property on a branch that
@@ -510,7 +455,7 @@ the base SHALL be `HEAD`'s first parent; on any other branch a merge base equal
 to `HEAD` SHALL stay the base. When no base can be resolved — no default-branch
 ref, a root commit, not a git checkout — the scope SHALL be the whole tree.
 Resolution failures SHALL never narrow the scope.
-<!-- implements FR2, NFR-R1 of scope-pit-locally -->
+**Implements**: FR2, NFR-R1 of scope-pit-locally
 
 #### Scenario: Feature branch diffs against its merge base
 - **WHEN** the build runs on a branch that forked from `main` and `main` has
@@ -540,7 +485,7 @@ A changed file under a module's test source tree SHALL widen that module's scope
 to its whole production tree. A changed file under the shared test-fixtures
 module's sources SHALL widen every module's scope to its whole production tree.
 A deleted or renamed-away production file SHALL contribute no class.
-<!-- implements FR3 of scope-pit-locally -->
+**Implements**: FR3 of scope-pit-locally
 
 #### Scenario: A weakened spec is caught
 - **WHEN** a branch changes only a test file in one module (for example deletes
@@ -562,7 +507,7 @@ The build SHALL log one lifecycle line per build naming the scope mode
 (`branch`, `all`, `explicit`), the resolved base commit, the changed-class
 count per module, and any widening or fallback reason. The line SHALL be logged
 even when the scope leaves every module's mutation task skipped.
-<!-- implements NFR-O1, UX2 of scope-pit-locally -->
+**Implements**: NFR-O1, UX2 of scope-pit-locally
 
 #### Scenario: A run that mutates nothing says so
 - **WHEN** a scoped run resolves its base and no module has a changed class
@@ -592,7 +537,7 @@ the failing modules and linking the run. It SHALL skip when `main` is unchanged
 since the previous successful scheduled run, through a mechanism that reads no
 other run's artifacts. Its token SHALL carry only `contents: read` and
 `issues: write`.
-<!-- implements FR6, NFR-S1, NFR-C1, UX4 of scope-pit-locally -->
+**Implements**: FR6, NFR-S1, NFR-C1, UX4 of scope-pit-locally
 
 #### Scenario: Cross-file mutation rot is caught within a day
 - **WHEN** a mutant in an unchanged class stops dying because of a change
@@ -612,8 +557,9 @@ other run's artifacts. Its token SHALL carry only `contents: read` and
 - **THEN** the run skips the gate and reports success
 
 ### Requirement: Forked test JVMs carry no operator-process variables
-The test build SHALL remove every `GNOMISH_*` environment variable it did not set itself from the environment of every forked test JVM — each `Test` task and the `pitest` task, whose minions inherit that JVM's environment — so a test observes only the factory variables its own spawner sets on a child, never those of the process that launched the build. The strip SHALL be subtractive: the machine's Docker, Gradle and Testcontainers variables stay, since the test JVM legitimately depends on them, and only the factory's own namespace is removed. The mechanism SHALL be one build-logic owner applied by the shared test conventions beside the pinned test git configuration, so a module gets it with the rest of its test lifecycle from one plugin id, and a functional spec in build-logic SHALL assert that a build launched with such a variable forks a test JVM that does not see it.
-<!-- implements FR22 of make-checkpoint-gate-durable -->
+The test build SHALL remove every `GNOMISH_*` environment variable it did not set itself from the environment of every forked test JVM — each `Test` task and the `pitest` task, whose minions inherit that JVM's environment.
+**Implements**: FR22 of make-checkpoint-gate-durable
+**Notes**: A test thereby observes only the factory variables its own spawner sets on a child, never those of the process that launched the build. The strip is subtractive because the test JVM legitimately depends on the machine's tooling variables; its owner is applied beside the pinned test git configuration.
 
 #### Scenario: A variable of the launching process does not reach the test JVM
 - **WHEN** a build is launched from a process whose environment holds `GNOMISH_DECISION_FILE` and runs a module's `test` task
@@ -627,6 +573,18 @@ The test build SHALL remove every `GNOMISH_*` environment variable it did not se
 - **WHEN** the launching process holds `DOCKER_HOST` and `TESTCONTAINERS_RYUK_DISABLED`
 - **THEN** the forked test JVM still observes both
 
+#### Scenario: Only the factory's own namespace is removed
+- **WHEN** the launching process holds variables outside the `GNOMISH_` namespace — the machine's Docker, Gradle and Testcontainers variables among them
+- **THEN** the forked test JVM observes each of them unchanged
+
+#### Scenario: A variable the build sets itself survives
+- **WHEN** a build script sets a `GNOMISH_*` variable on a test task on purpose
+- **THEN** the forked test JVM observes that variable
+
+#### Scenario: Every module gets the strip from its test conventions
+- **WHEN** a module applies the shared test conventions plugin
+- **THEN** its `Test` tasks and its `pitest` task strip the variables through the one build-logic owner, with no configuration in the module's own build file
+
 ### Requirement: Mutation cost report
 After every PIT run the build SHALL write a mutation-cost report beside the PIT
 report listing each mutant whose test-execution count exceeds a documented
@@ -634,7 +592,7 @@ threshold — class, method, line, mutator, count and killing test, sorted by
 count descending — and SHALL log one lifecycle line naming the module, the
 threshold, the count above it and the most expensive mutant. The report SHALL
 never fail the build.
-<!-- implements FR3, FR4, NFR-O1, NFR-C1, UX1 of kill-expensive-mutants -->
+**Implements**: FR3, FR4, NFR-O1, NFR-C1, UX1 of kill-expensive-mutants
 
 #### Scenario: Hotspots are listed
 - **WHEN** a module's PIT run produced `mutations.xml` with mutants above the
@@ -666,7 +624,8 @@ nothing else, so the library commits no links. A spec SHALL select a preset by
 name, SHALL NOT write an executable file or shell text, and the only artefact
 made at test time SHALL be a symbolic link to the script, made by the one
 owner fixture.
-<!-- implements FR24, NFR-P2, M11 of supervise-daemon-loops-and-embed-dashboard; design D23, D26, ADR 0015 -->
+**Implements**: FR24, NFR-P2, M11 of supervise-daemon-loops-and-embed-dashboard
+**Notes**: Design provenance: D23, D26 of supervise-daemon-loops-and-embed-dashboard; ADR 0015.
 
 #### Scenario: A spec selects a preset
 - **WHEN** a spec needs a `git` that refuses `fetch` with a documented refusal
@@ -705,7 +664,8 @@ in one word SHALL be one preset taking that word from its link's name; a
 process-shaped fake whose whole behaviour is an exit code, a delay or a stall
 SHALL be a table preset; and the library's own spec SHALL fail on a table row
 that none of its features reaches.
-<!-- implements FR26, M11 of supervise-daemon-loops-and-embed-dashboard; design D26 -->
+**Implements**: FR26, M11 of supervise-daemon-loops-and-embed-dashboard
+**Notes**: Design provenance: D26 of supervise-daemon-loops-and-embed-dashboard.
 
 #### Scenario: A refusal that differs only in its text is one preset
 - **WHEN** a spec needs a fetch refused with one of the refusals in
@@ -722,7 +682,8 @@ A spec whose subject is a class above a subprocess adapter SHALL drive an
 in-process fake of the adapter's role interface, not a stand-in binary. Every
 production holder of the git runner SHALL depend on the role interface, and a
 gate SHALL fail on a holder typed as the class.
-<!-- implements FR27, M13 of supervise-daemon-loops-and-embed-dashboard; design D27 -->
+**Implements**: FR27, M13 of supervise-daemon-loops-and-embed-dashboard
+**Notes**: Design provenance: D27 of supervise-daemon-loops-and-embed-dashboard.
 
 #### Scenario: A first-push spec runs no process
 - **WHEN** `FirstPushSpec` exercises the retry and the remote-tip re-check
@@ -753,7 +714,8 @@ A build gate SHALL fail on any test-source site, outside the owner fixture and
 the stand-in library, that creates an executable file or carries shebang text,
 except in named exemptions each listed with its reason, and SHALL assert that
 its scan reached every exempted file.
-<!-- implements FR24, M11 of supervise-daemon-loops-and-embed-dashboard; design D23 -->
+**Implements**: FR24, M11 of supervise-daemon-loops-and-embed-dashboard
+**Notes**: Design provenance: D23 of supervise-daemon-loops-and-embed-dashboard.
 
 #### Scenario: Only three kinds of file are exempt
 - **WHEN** the gate lists its exemptions
@@ -776,7 +738,8 @@ whose production classes are all covered by in-process specs SHALL be listed
 in the module's excluded test classes with the rationale the `testing.md` bar
 requires; suites that run on the fake sandbox docker over a real bare
 repository SHALL stay in the scan.
-<!-- implements FR25 of supervise-daemon-loops-and-embed-dashboard; design D24 -->
+**Implements**: FR25 of supervise-daemon-loops-and-embed-dashboard
+**Notes**: Design provenance: D24 of supervise-daemon-loops-and-embed-dashboard.
 
 #### Scenario: The nine Docker and Gitea suites are excluded
 - **WHEN** PIT runs for `:bootstrap`
@@ -792,3 +755,158 @@ repository SHALL stay in the scan.
 - **WHEN** PIT runs for `:bootstrap`
 - **THEN** `ContainerResumeEscalationSpec`, `ContainerResumeRunnerSpec` and
   `TransitionKillPointSpec` remain among its covering tests
+
+### Requirement: Spec traceability line
+Every requirement of a Requirement/Scenario spec under `openspec/specs/` or in the delta of an
+unarchived change SHALL carry exactly one `**Implements**:` metadata line, naming the requirement
+ids and the change that introduced them, after the requirement text and before its first
+scenario. The HTML-comment traceability form (an `implements` comment) SHALL NOT appear in those trees; archived changes are
+untouched.
+**Implements**: FR1 of tighten-spec-contract
+**Notes**: The line is metadata for OpenSpec's reader, so it does not count toward its requirement-length limit; `openspec show --json` omits it from the requirement text, which is why the project's checker reads the files rather than the CLI's output.
+
+#### Scenario: A requirement without the line fails the gate
+- **WHEN** a requirement under `openspec/specs/` has no `**Implements**:` line
+- **THEN** `checkSpecContract` fails, naming the spec file, the requirement heading and the line to add
+
+#### Scenario: A retired comment form fails the gate
+- **WHEN** a spec under `openspec/specs/` or an unarchived delta contains an HTML comment opening with `implements`
+- **THEN** `checkSpecContract` fails, naming the file and line and the metadata line that replaces it
+
+#### Scenario: Two traceability lines fail the gate
+- **WHEN** a requirement carries two `**Implements**:` lines
+- **THEN** `checkSpecContract` fails, asking for one line with the ids joined by `;`
+
+#### Scenario: Archived deltas are not read
+- **WHEN** a delta under `openspec/changes/archive/` still carries the comment form
+- **THEN** `checkSpecContract` reports nothing about it
+
+### Requirement: Spec notes are one-line and non-normative
+A `**Notes**:` metadata line of a requirement SHALL be one physical line that contains neither
+`SHALL` nor `MUST`. A line of ordinary text directly after any metadata line SHALL be reported
+as a wrapped note. Notes carry what explains a requirement and belongs nowhere else; a
+normative statement is a requirement or a scenario.
+**Implements**: FR2 of tighten-spec-contract
+
+#### Scenario: A note with a normative word fails the gate
+- **WHEN** a `**Notes**:` line contains the word `SHALL` or `MUST`
+- **THEN** `checkSpecContract` fails, naming the file and line and asking for a scenario or a requirement instead
+
+#### Scenario: A wrapped note fails the gate
+- **WHEN** a `**Notes**:` line is followed by a line of ordinary text before the next scenario
+- **THEN** `checkSpecContract` fails, naming the continuation line as a wrapped note
+
+#### Scenario: Several one-line notes pass
+- **WHEN** a requirement carries three consecutive `**Notes**:` lines, each one physical line without `SHALL` or `MUST`
+- **THEN** `checkSpecContract` reports nothing about them
+
+### Requirement: Scenario-to-test link
+For every scenario of every requirement of a main spec, at least one test source SHALL contain
+the marker `// Scenario: <spec-id> / <title>` with the title verbatim, and every such marker in
+the test sources SHALL name a scenario that exists. A scenario verified by a mechanism that is
+not a test SHALL be listed in the gate's exemption list with that mechanism, and the list is
+asserted reached: an entry naming no scenario fails the gate.
+**Implements**: FR5 of tighten-spec-contract
+**Notes**: `<spec-id>` is the capability path OpenSpec lists (`quality-gates`, `verification/verification-hardening`); the title is the text after `#### Scenario:` with surrounding whitespace trimmed. Test sources are every module's `src/test` (`*/src/test`, `*/*/src/test`), the test trees of the `build-checks` included build (`build-checks/*/src/test`) and `build-logic/src/functionalTest`.
+
+#### Scenario: A scenario with no marker fails the gate
+- **WHEN** a main spec holds a scenario whose title appears in no marker of any test source and in no exemption entry
+- **THEN** `checkSpecContract` fails, naming the spec id, the title and the marker to write above the feature that exercises it
+
+#### Scenario: A dangling marker fails the gate
+- **WHEN** a test source carries a marker whose spec id or title names no scenario of a main spec
+- **THEN** `checkSpecContract` fails, naming the test file and line and the nearest existing title
+
+#### Scenario: A malformed marker fails the gate
+- **WHEN** a test source carries a `// Scenario:` line that is not in the `<spec-id> / <title>` form
+- **THEN** `checkSpecContract` fails, naming the test file and line and the form to write
+
+#### Scenario: A renamed scenario breaks the link on both sides
+- **WHEN** a scenario title is changed in the main spec and its marker is not
+- **THEN** `checkSpecContract` reports the new title as unlinked and the old marker as dangling in the same run
+
+#### Scenario: An exempt scenario passes with its reason
+- **WHEN** a scenario is verified by a CI workflow and the exemption list names the scenario and that workflow
+- **THEN** `checkSpecContract` reports nothing about it
+
+#### Scenario: A stale exemption fails the gate
+- **WHEN** the exemption list names a scenario that no main spec holds
+- **THEN** `checkSpecContract` fails, naming the entry to remove
+
+#### Scenario: Scenarios of unarchived deltas are not linked
+- **WHEN** a delta of an unarchived change holds a scenario with no marker anywhere
+- **THEN** `checkSpecContract` reports nothing about it, with or without `--changes`
+
+### Requirement: One spec-contract checker, two launchers
+The spec-contract rules SHALL be implemented once, as a Gradle task `checkSpecContract` that the
+root `check` task depends on. The manual launcher `scripts/check-spec-contract.sh` and the
+verification commands of the fix-artifacts and archive stages SHALL run that task rather than a
+second implementation; the task SHALL read files only and produce no subprocess.
+**Implements**: FR6, NFR-R1, NFR-O1, NFR-S1, NFR-C1, UX1 of tighten-spec-contract
+
+#### Scenario: Root check runs the gate
+- **WHEN** a developer runs `./gradlew check` on a tree that violates one spec-contract rule
+- **THEN** the build fails in `checkSpecContract` before any module's mutation gate is consulted
+
+#### Scenario: The manual launcher is the same gate
+- **WHEN** a developer runs `scripts/check-spec-contract.sh --changes` on that tree
+- **THEN** the output names the same findings as the Gradle task, plus those of the unarchived deltas for the traceability-line and notes rules
+
+#### Scenario: Findings read like the other gates
+- **WHEN** the gate fails
+- **THEN** every finding names the file, the line, the rule and what to write instead, and the run ends with one summary line of scenarios checked, linked and exempt
+
+#### Scenario: Spec and test text is never executed
+- **WHEN** a spec or test file under a scanned tree contains shell-like text (`$(…)`, backquotes, a pipe) in a requirement, a note or a marker
+- **THEN** `checkSpecContract` reads it as data, starts no process, and quotes it verbatim in any finding it names
+
+#### Scenario: The gate is cacheable
+- **WHEN** `./gradlew check` runs twice with no change under `openspec/` or any test tree
+- **THEN** the second `checkSpecContract` is reported up to date
+
+### Requirement: Production source files stay within the size cap
+A production Java source file that a change adds or modifies SHALL stay within the 200-line
+hard cap of `.claude/rules/process-invariants.md`; a file that exceeds it SHALL be split along
+a responsibility seam into focused units, each within the cap, without changing observable
+behaviour.
+**Implements**: FR1, FR2 of fix-oversized-adapters
+**Notes**: The cap is a review rule, not a build gate: the implementation audit (`/audit-implementation`, project-rule conformance) checks the files a change touches against it, so a file over the cap that no change touches is not reported.
+**Notes**: The scenario `Extracted units keep the same behaviour and observability` was the acceptance of the archived change `fix-oversized-adapters` and left with the old heading `Source file size cap` (FR16 of tighten-spec-contract).
+
+#### Scenario: An oversized adapter is split into compliant units
+- **WHEN** a change adds or grows a production source file past the 200-line cap
+- **THEN** the implementation audit's project-rule conformance step
+  (`.claude/commands/audit-implementation.md`) reports the file against the hard cap of
+  `.claude/rules/process-invariants.md`
+- **AND** the remedy that rule asks for is a split along a responsibility seam, so the file and
+  every unit extracted from it are ≤ 200 lines
+
+### Requirement: App-layer specs build the assembly through one shared fixture
+The test suite SHALL provide a single shared fixture (a plain Groovy
+trait, no Spring test context) that constructs the standard app-layer
+engine-assembly collaborator set and its `FactoryProperties` test
+values; app-layer specs SHALL obtain the assembly through this fixture
+instead of inlining the construction block, keeping one construction
+site for the standard set in test sources, apart from the named
+deviations of `One construction site for the standard assembly`.
+**Implements**: FR1, FR2, FR3 of refactor-app-spec-fixtures
+**Notes**: The two named deviations are the fixture's own full-graph runner builder, which builds the assembly the composition root builds, and `ManualRunAssemblyCheckClientWiringSpec`, whose subject is a collaborator the fixture does not cover.
+**Notes**: The scenario `Fixture adoption preserves behavior` was the acceptance of the archived change `refactor-app-spec-fixtures` and left with the old heading `Shared app-layer assembly fixture` (FR16 of tighten-spec-contract).
+
+#### Scenario: One construction site for the standard assembly
+- **WHEN** test sources are searched for direct construction of the
+  standard engine assembly (`new ManualRunAssembly`)
+- **THEN** the standard set is constructed at one site — the shared fixture's
+  `newAssembly`
+- **AND** every other site is a named deviation: the fixture's full-graph
+  runner builder and `ManualRunAssemblyCheckClientWiringSpec`
+
+#### Scenario: A spec deviates from the fixture defaults
+- **WHEN** an app-layer spec needs a non-default collaborator (custom
+  console streams, agent binary, instance name)
+- **THEN** it passes the deviation as an argument of the fixture factory
+  method, whose parameters are positional with defaults (input, output,
+  properties, time equipment), with overloads taking only the properties,
+  or the properties and the time equipment
+- **AND** the parts after its last deviation remain defaulted and unspelled
+  at the call site; a default before a deviation may be spelled

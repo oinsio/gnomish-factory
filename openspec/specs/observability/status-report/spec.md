@@ -8,16 +8,17 @@ Define `StatusReport`, a single pure model of a task's progress built from `(Tas
 
 ### Requirement: Single report model behind every render
 `StatusReport` SHALL be built by a pure function of `(TaskContext, TaskState)` plus the outcome and last escalation recorded beside them; the human-readable text and the JSON document SHALL both be renders of that one model. Every input is read from the persisted task state — no field is live-only. Consumers SHALL never parse logs or console output to obtain status.
-<!-- implements FR11 of add-manual-run; FR6 of make-run-headless -->
+**Implements**: FR11 of add-manual-run; FR6 of make-run-headless
 
 #### Scenario: Text and JSON agree
 - **WHEN** `gnomish status <task>` and `gnomish status <task> --json` read the same branch tip
 - **THEN** both outputs derive from the same `StatusReport` built from that tip
 
 ### Requirement: JSON contract v1, state-derived
-The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 UTC timestamps, millisecond durations, and a lowerCamel `"type"` discriminator for sealed variants. Sections: `task` (id, title), `position` (`atStage(stage)` | `awaitingApproval(stage)` | `pipelineEnd`), `outcome` (nullable mid-run, and null for any task whose last park was consumed by a decision, an approval or a resumed write: `completed` | `paused(passedStage)` | `escalated(report)` | `aborted(failedAt, cause)`), `currentStage` (nullable: null at `pipelineEnd`, where the attempt history has been reset by advancement; at `awaitingApproval` it describes the stage that passed, with its passing round last; otherwise attemptsUsed, attempts with `round`, `result` = `passed` | `qualityFailure` | `cannotVerify` | `decisionNeeded`, `stop` (`none` | `decisionNeeded(question, options)` | `cannotVerify(check, reason, details)`), `startedAt`, checks with ref/verdict/findings/duration, `denials` with the finding shape, executor `usage`, and `judgeUsage` with per-vote token maps), `totals` (cumulative executor usage for the whole task; judge tokens stay per-attempt in `judgeUsage`), `lastEscalation` (nullable; the five report kinds, including question and options for `decisionNeeded`, and `denials` for `cannotExecute`), `lastDecision` (nullable; text, author, stage, time). Usage objects SHALL carry `wallMillis`, `byTool`, and `tokensByModel` — a map from resolved model id to an object with `input`, `output`, `cacheCreation`, `cacheRead`; an empty map means unreported. Findings SHALL be carried in full — truncation is a text-render concern. The former live-only fields — the `activity` section (`executing`, `verifying`, `awaitingInput`) and `currentStage.attemptLimit` — are withdrawn as a pre-release amendment (no release has shipped contract v1): no producer ever filled them outside a test fixture, and `attemptLimit` was emitted as `0` by every production render; the version stays 1. The `awaitingApproval` position and the attempt `stop` are likewise pre-release amendments; the version stays 1. The text render SHALL show a gate as "awaiting approval after '<stage>'".
-<!-- implements FR11 of add-manual-run; FR6 of make-run-headless -->
-<!-- implements FR10, FR12, UX1 of make-checkpoint-gate-durable -->
+The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 UTC timestamps, millisecond durations, and a lowerCamel `"type"` discriminator for sealed variants, with the sections `task`, `position`, `outcome`, `currentStage`, `totals`, `lastEscalation` and `lastDecision`.
+**Implements**: FR11 of add-manual-run; FR6 of make-run-headless; FR10, FR12, UX1 of make-checkpoint-gate-durable
+**Notes**: The withdrawn live-only fields — the `activity` section (`executing`, `verifying`, `awaitingInput`) and `currentStage.attemptLimit` — were never filled by any producer outside a test fixture, and `attemptLimit` was emitted as `0` by every production render.
+**Notes**: The withdrawal, the `awaitingApproval` position and the attempt `stop` are pre-release amendments: no release has shipped contract v1, so the version stays 1.
 
 #### Scenario: Canonical document
 - **WHEN** a task's branch records one failed round of `implement` after an earlier decision escalation
@@ -79,9 +80,41 @@ The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 U
 - **WHEN** `status` reads a tip whose last park was consumed by an approval or a resumed write and whose process then died mid-stage
 - **THEN** `outcome` is null and the position is the one the continuation advanced to
 
+#### Scenario: The task and position sections
+- **WHEN** any status document is rendered
+- **THEN** `task` carries the id and title, and `position` is one of `atStage(stage)`, `awaitingApproval(stage)` or `pipelineEnd`
+
+#### Scenario: The outcome is null mid-run and after a consumed park
+- **WHEN** `status` reads a tip mid-run, or one whose last park was consumed by a decision, an approval or a resumed write
+- **THEN** `outcome` is null; otherwise it is one of `completed`, `paused(passedStage)`, `escalated(report)` or `aborted(failedAt, cause)`
+
+#### Scenario: No current stage at the pipeline end
+- **WHEN** `status` reads a tip whose position is `pipelineEnd`
+- **THEN** `currentStage` is null, because advancement has reset the attempt history
+
+#### Scenario: An attempt carries its round record
+- **WHEN** `status` reads a tip whose current stage recorded rounds
+- **THEN** `currentStage` carries `attemptsUsed` and `attempts`, each with `round`, `result` (`passed` | `qualityFailure` | `cannotVerify` | `decisionNeeded`), `stop` (`none` | `decisionNeeded(question, options)` | `cannotVerify(check, reason, details)`), `startedAt`, checks with ref, verdict, findings and duration, `denials` with the finding shape, the executor `usage`, and `judgeUsage` with per-vote token maps
+
+#### Scenario: Totals carry the task's executor usage
+- **WHEN** any status document is rendered
+- **THEN** `totals` carries the cumulative executor usage for the whole task, and judge tokens stay per attempt in `judgeUsage`
+
+#### Scenario: The last escalation and the last decision
+- **WHEN** `status` reads a tip that recorded an escalation and a decision
+- **THEN** `lastEscalation` is one of the five report kinds, carrying the question and options for `decisionNeeded` and `denials` for `cannotExecute`, and `lastDecision` carries text, author, stage and time; each is null when none was recorded
+
+#### Scenario: A usage object carries wall time, tools and tokens by model
+- **WHEN** a usage object is rendered
+- **THEN** it carries `wallMillis`, `byTool` and `tokensByModel` — a map from resolved model id to an object with `input`, `output`, `cacheCreation` and `cacheRead` — and an empty map means unreported
+
+#### Scenario: Findings are carried in full
+- **WHEN** a check finding longer than the text render shows is rendered to JSON
+- **THEN** the document carries the finding in full; truncation is a text-render concern
+
 ### Requirement: Attempt denials in the report
-Each attempt in the JSON document SHALL carry a `denials` array of finding objects (same shape as check findings: `message`, `location`, `details`), holding the egress denials recorded during that attempt's round. The field is additive under contract v1: it is present as an empty array when the attempt had no denials, and consumers of older documents without the field SHALL read it as empty. Denials SHALL NOT influence the attempt's `result` or any other derived field, and SHALL carry only structured metadata — never request bodies. The text render SHALL surface an attempt's denials alongside its findings.
-<!-- implements FR4, NFR-O1, NFR-S1, UX1, UX2 of fix-denial-report-attachment -->
+Each attempt in the JSON document SHALL carry a `denials` array of finding objects (same shape as check findings: `message`, `location`, `details`), holding the egress denials recorded during that attempt's round. Denials SHALL NOT influence the attempt's `result` or any other derived field.
+**Implements**: FR4, NFR-O1, NFR-S1, UX1, UX2 of fix-denial-report-attachment
 
 #### Scenario: Passing attempt shows its denial
 - **WHEN** a reviewer reads `status.json` for a task whose passing attempt recorded a denied egress request
@@ -91,9 +124,22 @@ Each attempt in the JSON document SHALL carry a `denials` array of finding objec
 - **WHEN** a task ran with zero guard denials
 - **THEN** every attempt's `denials` array is empty
 
+#### Scenario: An attempt without the denials field reads as empty
+- **WHEN** a consumer reads an older document whose attempts carry no `denials` field
+- **THEN** it reads each attempt's denials as empty — the field is additive under contract v1
+
+#### Scenario: An attempt denial carries no request body
+- **WHEN** an attempt recorded a denied egress request
+- **THEN** its `denials` entry carries only structured metadata, never the request body
+
+#### Scenario: The text render shows attempt denials
+- **WHEN** the text render shows an attempt that recorded denials
+- **THEN** the denials appear alongside the attempt's findings
+
 ### Requirement: Escalation denials in the report
-A `cannotExecute` escalation in the JSON document SHALL carry a `denials` array of finding objects — same shape as check findings and attempt denials — holding the egress denials of the round that could not execute. The round left no attempt behind, so this is that round's only place in the report. The field is additive under contract v1: present as an empty array when there were none, and read as empty in documents written before this addition. It SHALL NOT influence the outcome kind, `attemptsUsed`, the attempt history, or any other derived field, and SHALL carry only structured metadata — never request bodies. The text render SHALL list these denials beside the escalation reason, through the same findings funnel the attempt denials pass.
-<!-- implements FR1, FR2, NFR-O1, NFR-S1, UX1, UX2 of fix-denial-attribution-durability -->
+A `cannotExecute` escalation in the JSON document SHALL carry a `denials` array of finding objects — same shape as check findings and attempt denials — holding the egress denials of the round that could not execute. It SHALL NOT influence the outcome kind, `attemptsUsed`, the attempt history, or any other derived field.
+**Implements**: FR1, FR2, NFR-O1, NFR-S1, UX1, UX2 of fix-denial-attribution-durability
+**Notes**: The round left no attempt behind, so the escalation is that round's only place in the report.
 
 #### Scenario: A hung round's blocked exfiltration is visible
 - **WHEN** a reviewer reads `status.json` for a task parked after a round was killed on its round timeout having attempted a denied egress request
@@ -107,20 +153,30 @@ A `cannotExecute` escalation in the JSON document SHALL carry a `denials` array 
 - **WHEN** the same task history is rendered from live events and from the persisted files
 - **THEN** both carry the same escalation denials, per the reference equivalence contract
 
+#### Scenario: An escalation without the denials field reads as empty
+- **WHEN** a consumer reads a document written before the escalation `denials` field was added
+- **THEN** it reads the `cannotExecute` escalation's denials as empty — the field is additive under contract v1
+
+#### Scenario: An escalation denial carries no request body
+- **WHEN** a `cannotExecute` escalation recorded a denied egress request
+- **THEN** its `denials` entry carries only structured metadata, never the request body
+
+#### Scenario: The text render lists escalation denials beside the reason
+- **WHEN** the text render shows a `cannotExecute` escalation that recorded denials
+- **THEN** the denials are listed beside the escalation reason, through the same findings funnel the attempt denials pass
+
 ### Requirement: Optional usage
-Token and tool-aggregate fields SHALL be optional everywhere in the contract: `tokensByModel` maps may be empty (unreported — never fabricated zero entries) and `byTool` may be empty; a run executed entirely by a human reports empty maps and empty aggregates while remaining valid. The `executing` activity's live detail is nullable — an interactive round reports none. Wall-clock fields are always present.
-<!-- implements NFR-C1 of add-manual-run -->
-<!-- implements FR9, NFR-C1 of add-agent-executor -->
+Token and tool-aggregate fields SHALL be optional everywhere in the contract: `tokensByModel` maps may be empty (unreported — never fabricated zero entries) and `byTool` may be empty; a run executed entirely by a human reports empty maps and empty aggregates while remaining valid. Wall-clock fields are always present.
+**Implements**: NFR-C1 of add-manual-run; FR9, NFR-C1 of add-agent-executor
 
 #### Scenario: Human-only run validates
 - **WHEN** a manual run with zero token usage renders JSON
 - **THEN** the document is contract-valid with empty `tokensByModel` maps and empty `byTool`
 
 ### Requirement: Reference anchor and versioning policy
-The contract SHALL be anchored by two reference documents in test resources, and serializing the deterministic samples (built with an injected clock) SHALL be byte-identical to each: `status-report-v1.reference.json`, one whole canonical document that pins the envelope and every section of a mid-run report; and `status-report-v1.escalations.reference.jsonl`, one compact line per `lastEscalation` kind that pins each sealed variant's own serialized form. Two documents rather than one because the canonical document's `lastEscalation` slot holds exactly one kind: a variant absent from it has nowhere else to be pinned byte-exactly, and replacing the kind the canonical document carries would move the pin rather than add one. The corpus SHALL be complete — a check SHALL fail when the committed line count does not match the number of `EscalationReport` variants — so a newly added kind cannot ship unpinned. Additive fields SHALL NOT bump `version`; renaming, removal, or semantic change SHALL — once a version has been released; a contract whose only consumer ships in this repository and which no archived change has published MAY be amended in place with its reference file regenerated. Future consumers (the external `gnomish status` of the git-workflow change) SHALL verify against the same reference files.
-<!-- implements FR11 of add-manual-run -->
-<!-- implements FR5 of add-agent-executor -->
-<!-- implements FR2 of fix-denial-attribution-durability -->
+The contract SHALL be anchored by two reference documents in test resources, and serializing the deterministic samples (built with an injected clock) SHALL be byte-identical to each: `status-report-v1.reference.json`, one whole canonical document that pins the envelope and every section of a mid-run report; and `status-report-v1.escalations.reference.jsonl`, one compact line per `lastEscalation` kind that pins each sealed variant's own serialized form.
+**Implements**: FR11 of add-manual-run; FR5 of add-agent-executor; FR2 of fix-denial-attribution-durability
+**Notes**: Two documents rather than one because the canonical document's `lastEscalation` slot holds exactly one kind: a variant absent from it has nowhere else to be pinned byte-exactly, and replacing that kind would move the pin rather than add one.
 
 #### Scenario: Contract drift caught
 - **WHEN** a field is renamed in the serializer
@@ -137,3 +193,15 @@ The contract SHALL be anchored by two reference documents in test resources, and
 #### Scenario: A new escalation kind cannot ship unpinned
 - **WHEN** a sixth `EscalationReport` variant is added without a corpus line
 - **THEN** the completeness check fails, naming the count mismatch
+
+#### Scenario: An additive field keeps the version
+- **WHEN** a field is added to the contract
+- **THEN** the document's `version` is unchanged
+
+#### Scenario: A breaking change to a released contract bumps the version
+- **WHEN** a field of a released contract version is renamed, removed, or changes meaning
+- **THEN** the document's `version` is bumped; only a contract whose only consumer ships in this repository and which no archived change has published may instead be amended in place, with its reference file regenerated
+
+#### Scenario: Future consumers verify against the same reference files
+- **WHEN** a future consumer of the contract — the external `gnomish status` of the git-workflow change — is built
+- **THEN** it verifies against the same reference files

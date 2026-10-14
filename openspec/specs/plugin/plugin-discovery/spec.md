@@ -12,7 +12,7 @@ Java `ServiceLoader`, and SHALL NOT hold any hardwired `Map.of(...)` provider
 registry. The discovery mechanism SHALL be identical for built-in and external
 providers — they differ only in packaging (which jar carries the
 `META-INF/services` entry), never in how the factory finds or selects them.
-<!-- implements FR1 of add-plugin-architecture -->
+**Implements**: FR1 of add-plugin-architecture
 
 #### Scenario: A provider on the classpath is discovered without a core edit
 - **WHEN** a jar exposing a tracker or check SPI factory via `META-INF/services`
@@ -31,11 +31,8 @@ public no-argument constructor. Every runtime dependency the host supplies —
 the secrets seam, the resolved configuration, the instance identity, the claim
 epochs, the run context and the time equipment — SHALL reach the factory
 through one context object passed to its single `create` method, never
-captured in its constructor and never split across overloads. A later
-host-provided collaborator SHALL be added as an accessor on the context, not
-as a new `create` signature.
-<!-- implements FR2 of add-plugin-architecture -->
-<!-- implements FR23 of supervise-daemon-loops-and-embed-dashboard -->
+captured in its constructor and never split across overloads.
+**Implements**: FR2 of add-plugin-architecture; FR23 of supervise-daemon-loops-and-embed-dashboard
 
 #### Scenario: Factory is created before its dependencies exist
 - **WHEN** `ServiceLoader` instantiates a discovered factory
@@ -75,7 +72,7 @@ port. Mixing vendors across ports — for example a github tracker with a gitlab
 check provider — SHALL be a supported configuration, and any discovered provider
 that no configuration selects SHALL stay dormant (constructed lazily or not
 exercised).
-<!-- implements FR3 of add-plugin-architecture -->
+**Implements**: FR3 of add-plugin-architecture
 
 #### Scenario: Different vendors serve different ports
 - **WHEN** the tracker discriminator selects `github` and a check declares
@@ -94,8 +91,7 @@ provider serves SHALL fail with a clear error naming the missing provider and th
 port, and a discriminator served by two discovered providers SHALL fail with a
 clear error naming the conflict. The factory SHALL NOT silently fall back to a
 default or arbitrarily pick one of a colliding pair.
-<!-- implements FR1 of add-plugin-architecture -->
-<!-- implements NFR-R1 of add-plugin-architecture -->
+**Implements**: FR1 of add-plugin-architecture; NFR-R1 of add-plugin-architecture
 
 #### Scenario: Unknown provider fails with a named error
 - **WHEN** a configuration selects a discriminator that no discovered provider
@@ -113,8 +109,7 @@ At startup the factory SHALL report the discovered provider set per port,
 including which jar contributed each provider, so an operator can see exactly
 what the classpath loaded and a surprise provider is visible before any task
 runs.
-<!-- implements NFR-O1 of add-plugin-architecture -->
-<!-- implements NFR-S3 of add-plugin-architecture -->
+**Implements**: NFR-O1 of add-plugin-architecture; NFR-S3 of add-plugin-architecture
 
 #### Scenario: Loaded providers are observable to the operator
 - **WHEN** the factory starts
@@ -127,7 +122,7 @@ The change SHALL define and apply, independently per port, a four-point
 discriminator, (b) a `ServiceLoader`-backed registry, (c) a config subsection
 plus a per-provider SPI validator, and (d) discriminator-based selection. The
 tracker and check ports SHALL both satisfy all four points after this change.
-<!-- implements FR4 of add-plugin-architecture -->
+**Implements**: FR4 of add-plugin-architecture
 
 #### Scenario: Tracker and check ports each meet all four points
 - **WHEN** the tracker port and the check port are assessed against the criterion

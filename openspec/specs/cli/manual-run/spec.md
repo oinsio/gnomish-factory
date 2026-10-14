@@ -7,8 +7,9 @@ Provide `gnomish run`, an interactive console CLI that drives the pure stage eng
 ## Requirements
 
 ### Requirement: Manifest-driven mechanism with interactive override
-`gnomish run` SHALL bind mechanisms from the manifest alone: `agent-cli` stages to the CLI stage executor and judge checks to the CLI judge voter (models and settings from the manifest); `external` checks to the configured provider's client. No flag SHALL substitute a human for any of the three roles; `--interactive` in any form SHALL be a usage error like any unknown flag. A pipeline containing an `api` stage, or an `external` check whose provider has no `factory.check.<provider>` section, SHALL fail fast in the startup validation chain — pipeline-load exit code, before any dialog, naming the stage and, for a check, the check and the provider. No confirmation gate precedes the first paid round: the manifest-driven run is the tool's purpose and the operator is present.
-<!-- implements FR1, FR2, FR3 of remove-interactive-console -->
+`gnomish run` SHALL bind mechanisms from the manifest alone: `agent-cli` stages to the CLI stage executor and judge checks to the CLI judge voter (models and settings from the manifest); `external` checks to the configured provider's client. No flag SHALL substitute a human for any of the three roles; `--interactive` in any form SHALL be a usage error like any unknown flag.
+**Implements**: FR1, FR2, FR3 of remove-interactive-console
+**Notes**: No confirmation gate precedes the first paid round because the manifest-driven run is the tool's purpose and the operator is present.
 
 #### Scenario: Flagless run uses real adapters
 - **WHEN** `gnomish run` executes an `agent-cli` manifest with a judge check and no flags
@@ -30,17 +31,22 @@ Provide `gnomish run`, an interactive console CLI that drives the pure stage eng
 - **WHEN** `gnomish run --interactive` is invoked
 - **THEN** the process exits with the usage-error code before loading the pipeline
 
+#### Scenario: The first paid round needs no confirmation
+- **WHEN** `gnomish run` starts a valid manifest-driven pipeline
+- **THEN** the first stage round starts without any confirmation prompt, and stdin is never read
+
 ### Requirement: Agent-raised decisions reach the operator unchanged
 A `DecisionNeeded` raised by the CLI executor through the decision-file protocol SHALL surface as the standard escalation stop — question and options rendered like any engine escalation, the process exiting 10 — and the operator's `--decision` on resume SHALL be recorded as a decision and fed back to the executor.
-<!-- implements FR1, FR3 of make-run-headless -->
+**Implements**: FR1, FR3 of make-run-headless
 
 #### Scenario: Agent question round-trips
 - **WHEN** the agent writes a decision file with a question and two options, the run exits 10, and the operator resumes with `--decision` naming one of them
 - **THEN** the resumed run's executor prompt contains that decision verbatim
 
 ### Requirement: Single-task dialog invocation
-`gnomish run` SHALL run exactly one ad-hoc task per process, with no console dialog: `--dir` (default: current directory) names the target project — the clone in git mode, the workspace in in-place mode; exactly one of `--task` | `--task-file` supplies the description unless `--resume` names an existing task, `--task-id` (optional, filesystem/git-ref-safe charset) overrides the generated `manual-<yyyyMMdd-HHmmss>-<2 chars>` id, `--from-stage` (optional) starts at a named stage, `--decision` (optional, `--resume` only) supplies the operator's answer to a recorded escalation. Validation SHALL run in fixed order: arguments, then pipeline load, then the run. Task title = first non-empty description line (markdown heading markers stripped), body = remainder; decisions start empty.
-<!-- implements FR3, FR9 of make-run-headless -->
+`gnomish run` SHALL run exactly one ad-hoc task per process, with no console dialog: `--dir` (default: current directory) names the target project — the clone in git mode, the workspace in in-place mode; exactly one of `--task` | `--task-file` supplies the description unless `--resume` names an existing task. Validation SHALL run in fixed order: arguments, then pipeline load, then the run.
+**Implements**: FR3, FR9 of make-run-headless
+**Notes**: `--decision`, the operator's answer to a recorded escalation, is specified with `--resume` by the requirement "Resume invocation".
 
 #### Scenario: Default invocation from the project directory
 - **WHEN** `gnomish run --task="fix the flaky spec"` is invoked in a clone with a valid `.gnomish/`
@@ -54,12 +60,31 @@ A `DecisionNeeded` raised by the CLI executor through the decision-file protocol
 - **WHEN** `.gnomish/` fails to load
 - **THEN** the loader errors are printed as-is and the process exits with the pipeline-load exit code
 
+#### Scenario: A malformed command line never loads the pipeline
+- **WHEN** `gnomish run` is invoked with a usage error in a project whose `.gnomish/` would also fail to load
+- **THEN** the process exits with the usage exit code, and the pipeline is not loaded
+
+#### Scenario: An explicit task id replaces the generated one
+- **WHEN** `gnomish run --task="t" --task-id=fix-7` is invoked
+- **THEN** the task id is `fix-7`
+- **AND** without `--task-id` the id is generated as `manual-<yyyyMMdd-HHmmss>-<2 chars>`
+
+#### Scenario: A task id outside the safe charset is a usage error
+- **WHEN** `--task-id` carries a character that is not filesystem- and git-ref-safe
+- **THEN** the process exits with the usage exit code, before the pipeline loads
+
+#### Scenario: A run starts at the named stage
+- **WHEN** `--from-stage=<stage>` names a stage of the loaded definition
+- **THEN** the run starts at that stage instead of the first
+
+#### Scenario: The description's first line becomes the title
+- **WHEN** the description's first non-empty line is `## Fix the flaky spec` and further lines follow
+- **THEN** the task title is `Fix the flaky spec` (heading markers stripped), the body is the remaining lines, and the task starts with no decisions
+
 ### Requirement: Read-only workspace with a definition snapshot
-In git mode the runner SHALL NOT mutate the `--dir` clone: all work — gnome changes and `.gnomish-task/` state — happens in the task working copy owned by the bound task environment. Findings files SHALL live in the environment's scratch area — outside the working copy in every binding; host mode: a factory-private directory outside the worktree, as today; sandboxed mode: inside the task environment, never in factory-owned filesystem. Decision requests live in-branch under `.gnomish-task/decisions/` in git modes (FR23); only the in-place mode keeps the temp-file transport. In in-place mode the runner process SHALL write nothing inside the workspace: findings temp files and logs live outside it; the workspace changes only through the operator and the manifest's own commands, and the runner SHALL NOT require or inspect git. In both modes the pipeline definition SHALL be loaded once at startup; mid-dialog edits of `.gnomish/` take effect on the next invocation.
-<!-- implements FR1, NFR-S1 of add-manual-run -->
-<!-- implements FR10, NFR-S1, NFR-S2 of add-agent-executor -->
-<!-- implements FR7, NFR-S2 of add-git-workflow -->
-<!-- implements FR1, FR4 of add-sandbox-core -->
+In git mode the runner SHALL NOT mutate the `--dir` clone: all work — gnome changes and `.gnomish-task/` state — happens in the task working copy owned by the bound task environment. In in-place mode the runner process SHALL write nothing inside the workspace. In both modes the pipeline definition SHALL be loaded once at startup.
+**Implements**: FR1, NFR-S1 of add-manual-run; FR10, NFR-S1, NFR-S2 of add-agent-executor; FR7, NFR-S2 of add-git-workflow; FR1, FR4 of add-sandbox-core
+**Notes**: The in-branch decision request of the git modes is FR23 of add-sandbox-core (the decision-file protocol).
 
 #### Scenario: No runner artifacts in the workspace
 - **WHEN** an in-place run completes after executing command checks with findings files
@@ -73,10 +98,25 @@ In git mode the runner SHALL NOT mutate the `--dir` clone: all work — gnome ch
 - **WHEN** a command check with findings runs in container mode
 - **THEN** every runner-created temp file lives inside the task environment and none appears in factory-owned filesystem
 
+#### Scenario: Host findings files stay outside the worktree
+- **WHEN** a command check with findings runs in host git mode
+- **THEN** its findings file lives in a factory-private directory outside the worktree, so no findings file lands in the working copy in any binding
+
+#### Scenario: Decision requests travel by the mode's own channel
+- **WHEN** an agent raises a decision request
+- **THEN** in a git mode the request lives in-branch under `.gnomish-task/decisions/`, and only in in-place mode does it travel through a temp file outside the workspace
+
+#### Scenario: In-place mode needs no git
+- **WHEN** an in-place run executes in a workspace that is not a git repository
+- **THEN** the run proceeds, and the runner neither requires nor inspects git
+
+#### Scenario: A definition edit waits for the next run
+- **WHEN** `.gnomish/` is edited while a run is in progress
+- **THEN** the run keeps the definition it loaded at startup, and the edit takes effect on the next invocation
+
 ### Requirement: files_exist builtin runner
 The `files_exist` runner SHALL check existence of the literal workspace-relative paths in its `files` param, producing one finding (message + path as location) per missing path. In sandboxed mode existence SHALL be evaluated against the harvested attempt commit via bare git object reads in the factory clone — no environment access; in host modes it SHALL check the workspace filesystem as today. Malformed params or a path resolving outside the workspace SHALL yield `CannotVerify`.
-<!-- implements FR6 of add-manual-run -->
-<!-- implements FR21 of add-sandbox-core -->
+**Implements**: FR6 of add-manual-run; FR21 of add-sandbox-core
 
 #### Scenario: Missing files enumerated
 - **WHEN** two of three configured paths do not exist
@@ -91,11 +131,9 @@ The `files_exist` runner SHALL check existence of the literal workspace-relative
 - **THEN** the verdict is CannotVerify naming the offending path
 
 ### Requirement: Command check runner
-The command runner SHALL execute the manifest command via `sh -c` through `exec()` of the bound task environment, with the working copy as working directory, merging stderr into stdout and retaining a bounded output tail (~200 lines / 10 KB). The child environment SHALL be the layered allowlist of the execution-environment capability (adapter base set + operator passthrough + factory-set variables) — no factory-process variable is inherited implicitly, so tracker credentials cannot reach a check by construction. Exit 0 → Pass; exit 126/127 → CannotVerify (shell convention for
-not-executable / not-found); any other non-zero exit → Fail.
-<!-- implements FR7 of add-manual-run -->
-<!-- implements FR11, NFR-S1 of add-claim-heartbeat -->
-<!-- implements FR4, FR9 of add-sandbox-core -->
+The command runner SHALL execute the manifest command via `sh -c` through `exec()` of the bound task environment, with the working copy as working directory, merging stderr into stdout and retaining a bounded output tail (~200 lines / 10 KB). Exit 0 → Pass; exit 126/127 → CannotVerify (shell convention for not-executable / not-found); any other non-zero exit → Fail.
+**Implements**: FR7 of add-manual-run; FR11, NFR-S1 of add-claim-heartbeat; FR4, FR9 of add-sandbox-core
+**Notes**: The check's allowlist is the execution-environment capability's layered one: adapter base set, operator passthrough, factory-set variables.
 
 #### Scenario: Red check carries feedback
 - **WHEN** the command exits 1 without a findings file
@@ -109,10 +147,13 @@ not-executable / not-found); any other non-zero exit → Fail.
 - **WHEN** a command check runs while `GNOMISH_GITHUB_TOKEN` and unrelated host variables are set in the factory environment
 - **THEN** the check's process environment contains only the allowlisted variables
 
+#### Scenario: A check inherits no factory variable implicitly
+- **WHEN** a variable is set in the factory process and is in none of the allowlist's layers
+- **THEN** it is absent from the check's environment, so a tracker credential cannot reach a check by construction
+
 ### Requirement: Findings-JSON wire format
-Before starting the command, the runner SHALL allocate a findings-file path in the environment's scratch area — outside the working copy but inside the bound task environment — and pass it as `GNOMISH_FINDINGS_FILE`; after process exit the file SHALL be read back through the environment. After a non-zero exit (other than 126/127), a valid `{"findings":[{message, location?, details?}]}` file SHALL replace the synthetic finding; a malformed file SHALL degrade to the synthetic finding plus a logged warning — the exit-code verdict always stands; a findings file on exit 0 SHALL be ignored with a warning.
-<!-- implements FR8, NFR-R2 of add-manual-run -->
-<!-- implements FR1, FR4 of add-sandbox-core -->
+Before starting the command, the runner SHALL allocate a findings-file path in the environment's scratch area — outside the working copy but inside the bound task environment — and pass it as `GNOMISH_FINDINGS_FILE`; after process exit the file SHALL be read back through the environment. After a non-zero exit (other than 126/127), a valid `{"findings":[{message, location?, details?}]}` file SHALL replace the synthetic finding.
+**Implements**: FR8, NFR-R2 of add-manual-run; FR1, FR4 of add-sandbox-core
 
 #### Scenario: Structured findings win
 - **WHEN** the command exits 1 and wrote two valid findings
@@ -122,9 +163,17 @@ Before starting the command, the runner SHALL allocate a findings-file path in t
 - **WHEN** the command exits 1 and the findings file is unparseable
 - **THEN** the verdict is Fail (not CannotVerify) with the synthetic tail finding
 
+#### Scenario: A malformed findings file is logged
+- **WHEN** the command exits 1 and the findings file is malformed
+- **THEN** a warning is logged and the exit-code verdict stands with the synthetic finding
+
+#### Scenario: A findings file on a green check is ignored
+- **WHEN** the command exits 0 and wrote a findings file
+- **THEN** the verdict is Pass, the file is ignored, and it is noted in the log at DEBUG, not warned about
+
 ### Requirement: Outcome loop with in-process resume
-The runner SHALL handle every `TaskOutcome` exhaustively and SHALL never read the console. `Escalated`: render the report by type and a return-path line naming the resume command in the form the CLI parses, ready to run as printed (`gnomish run --dir=<dir> --resume=<task>` with an optional `--decision="..."`), then terminate with exit code 10. `Paused`: print the checkpoint line naming the passed stage and the resume command, then terminate with exit code 11. `Completed`: print the final status and terminate with exit code 0. `Aborted`: print cause and an unpersisted-state summary to stderr and terminate with exit code 12. `PipelineMismatch` (unreachable in-process) renders and exits as an internal error. In git mode the terminal boundary that receives an `Escalated` or `Paused` outcome — host fresh run, host resume, container fresh run, container resume — SHALL record it on the task branch as a park (`outcome` with `lastEscalation` for an escalation) before the process exits, keeping the worktree or the stopped task environment for the resume and never running the `Completed` cleanup; in-place mode records nothing. The report, the checkpoint line and the return-path line SHALL be rendered by one component whichever path — in-process loop, host resume, container resume, or `take`'s park report for the checkpoint line — reaches the stop.
-<!-- implements FR1, FR2, FR7, FR8, FR10, NFR-R3 of make-run-headless -->
+The runner SHALL handle every `TaskOutcome` exhaustively and SHALL never read the console: each outcome is rendered and ends the process — `Escalated` with exit code 10, `Paused` with 11, `Completed` with 0, `Aborted` with 12, and `PipelineMismatch` (unreachable in-process) as an internal error. In git mode an `Escalated` or `Paused` outcome SHALL be recorded on the task branch as a park before the process exits.
+**Implements**: FR1, FR2, FR7, FR8, FR10, NFR-R3 of make-run-headless
 
 #### Scenario: Decision-carrying resume
 - **WHEN** a run ends with an `AttemptsExhausted` report and the operator runs `--resume <task> --decision="use approach A"`
@@ -154,31 +203,30 @@ The runner SHALL handle every `TaskOutcome` exhaustively and SHALL never read th
 - **WHEN** a git-mode run records an `Escalated` or `Paused` park
 - **THEN** the branch tip's `task.json` carries the outcome with no `trackerWritePending` marker, in one commit, since no tracker write follows a manual run
 
+#### Scenario: A checkpoint ends the process with its resume command
+- **WHEN** the engine returns `Paused` in a git-mode run
+- **THEN** stdout carries the checkpoint line naming the passed stage and the resume command, and the process exits 11
+
+#### Scenario: A completed run ends with its final status
+- **WHEN** the engine returns `Completed`
+- **THEN** the final status is printed and the process exits 0
+
+#### Scenario: An in-place stop records nothing
+- **WHEN** an in-place run ends with `Escalated` or `Paused`
+- **THEN** the stop is rendered and the process exits with its code, and no park or other record is written anywhere
+
 ### Requirement: Status command and auto-summaries
 The runner SHALL print a one-line summary after every finished attempt and a full status at the end; the escalation report render serves as the escalation summary. `gnomish status <task>` and `gnomish status <task> --json` are the only status paths; there is no in-dialog meta-command because there is no dialog. Text and JSON SHALL be renders of one `StatusReport` built by a pure function of `(TaskContext, TaskState, live activity)`, where live activity is `executing` or `verifying`.
-<!-- implements FR6 of make-run-headless -->
+**Implements**: FR6 of make-run-headless
 
 #### Scenario: Status mid-prompt
 - **WHEN** a run is mid-flight and the operator runs `gnomish status <task>` in another process
 - **THEN** the report is printed from the branch and the running process is unaffected; no prompt exists to type into
 
 ### Requirement: Exit codes by outcome family
-Exit codes SHALL split into two families at 10: `< 10` — the tool itself could not do its job (0 reserved for success), `≥ 10` — the factory reached a legitimate non-completed outcome, so a scripted consumer can test `$? -ge 10`. All codes stay outside the shell signal zone (128+n); 1 and 2 keep their conventional roles. Code 4 is retired and SHALL NOT be returned; it stays listed as a gap so that no other code shifts.
-<!-- implements FR5, FR8 of remove-interactive-console -->
-
-| Code | Family       | Meaning                                                                                                                                             |
-|------|--------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| 0    | success      | `Completed`                                                                                                                                         |
-| 1    | tool failure | internal error (unexpected exception; `PipelineMismatch`, unreachable in-process)                                                                   |
-| 2    | tool failure | usage error (bad flags, unknown `--from-stage`)                                                                                                     |
-| 3    | tool failure | pipeline load failure (`.gnomish/` invalid, `api` stage, unconfigured check provider; loader errors printed as-is)                                  |
-| 4    | retired      | used in the MVP for stdin ending inside an interactive adapter; removed as unneeded; kept as a gap so other codes do not shift; may be filled by a future tool failure |
-| 5    | tool failure | diverged branch on a claimless resume                                                                                                               |
-| 6    | tool failure | task not found (`status` / `usage` only)                                                                                                            |
-| 7    | tool failure | branch shape refused on pickup                                                                                                                      |
-| 10   | outcome      | `Escalated` — operator left with the task in escalation                                                                                             |
-| 11   | outcome      | `Paused` — operator left at a manual checkpoint                                                                                                     |
-| 12   | outcome      | `Aborted` — persistence failed                                                                                                                      |
+Exit codes SHALL split into two families at 10: `< 10` — the tool itself could not do its job (0 reserved for success), `≥ 10` — the factory reached a legitimate non-completed outcome, so a scripted consumer can test `$? -ge 10`. All codes stay outside the shell signal zone (128+n); 1 and 2 keep their conventional roles. Code 4 is retired and SHALL NOT be returned; it stays a gap so that no other code shifts.
+**Implements**: FR5, FR8 of remove-interactive-console
+**Notes**: Code 4 was used in the MVP for stdin ending inside an interactive adapter and was removed as unneeded; a future tool failure may fill it.
 
 #### Scenario: Persistence failure is Aborted
 - **WHEN** the persistence port fails (breaking fake)
@@ -188,9 +236,18 @@ Exit codes SHALL split into two families at 10: `< 10` — the tool itself could
 - **WHEN** any run terminates, by any path
 - **THEN** the exit code is one of 0, 1, 2, 3, 5, 6, 7, 10, 11, 12
 
+#### Scenario: Each terminal outcome has its exit code
+- **WHEN** a run ends with `Completed`, `Escalated`, `Paused` or `Aborted`
+- **THEN** the exit code is 0 (success), 10 (the operator is left with the task in escalation), 11 (the operator is left at a manual checkpoint) or 12 (persistence failed) respectively
+
+#### Scenario: Each tool failure has its exit code below 10
+- **WHEN** a command ends because the tool itself could not do its job
+- **THEN** the exit code is 1 for an internal error (an unexpected exception; `PipelineMismatch`, unreachable in-process), 2 for a usage error (bad flags, unknown `--from-stage`), and 3 for a pipeline load failure (`.gnomish/` invalid, an `api` stage, an unconfigured check provider; loader errors printed as-is)
+- **AND** the exit code is 5 for a diverged branch on a claimless resume, 6 for a task not found (`status` / `usage` only), and 7 for a branch shape `status` refuses to inspect (a quarantine shape)
+
 ### Requirement: EOF semantics without a TTY
 Layered on "EOF semantics without a TTY" as modified by `remove-interactive-console` (sequenced before this change). Stdin SHALL be irrelevant to `gnomish run`: no engine port and no runner path reads it, so a closed, empty or absent stdin changes nothing. Exit codes 10 and 11 SHALL be produced from the terminal outcome, never from an EOF.
-<!-- implements FR7 of make-run-headless -->
+**Implements**: FR7 of make-run-headless
 
 #### Scenario: Deliberate exit at an escalation
 - **WHEN** a run escalates with stdin closed from the start
@@ -206,24 +263,17 @@ Layered on "EOF semantics without a TTY" as modified by `remove-interactive-cons
 
 ### Requirement: Port-contract compliance of new adapters
 The CLI adapters SHALL pass the same port-level contract suites the add-stage-engine fakes pass, driven through the fake agent binary where a subprocess is needed. A contract variant an adapter cannot produce SHALL be recorded as a port-shape finding, not worked around.
-<!-- implements FR4, FR6 of remove-interactive-console -->
+**Implements**: FR4, FR6 of remove-interactive-console
 
 #### Scenario: One suite, many adapters
 - **WHEN** the port-contract suite runs against the CLI stage executor with the fake agent
 - **THEN** every suite scenario passes without modification
 
 ### Requirement: Instance-local logging
-Logging SHALL go to a single rolling file (daily/size roll, bounded history and total size) — `GNOMISH_HOME/projects/<name>/logs/<instance>.log` for a command resolved to a registered project, `GNOMISH_HOME/logs/factory.log` for a command that runs with no project — with `taskId`, `stage`, `attempt` MDC on every line — `taskId` set by the runner, `stage`/`attempt` maintained by an event-listener adapter on the engine thread. The file location SHALL be decided by the same owner that computes every other operator path; no separate log-directory variable exists. The console appender SHALL pass WARN and above only, with ERROR duplicated to stderr; engine events SHALL be logged as structured INFO lines. Logs SHALL never be committed to git.
-
-A manual run SHALL end with the canonical per-task summary line — outcome,
-stage, attempts used, wall time, token usage by model — assembled from the
-engine's event stream and rendered by the same renderer the other modes use,
-for every terminal outcome including aborts. Manual mode is the debugging
-mode: the summary and the engine-event INFO lines together SHALL let the
-operator see where a run stalled without raising verbosity.
-<!-- implements NFR-O1, NFR-O2, NFR-S2 of add-manual-run -->
-<!-- implements FR3 of harden-logging-observability -->
-<!-- implements FR11, UX3 of add-project-registry -->
+Logging SHALL go to a single rolling file (daily/size roll, bounded history and total size) — `GNOMISH_HOME/projects/<name>/logs/<instance>.log` for a command resolved to a registered project, `GNOMISH_HOME/logs/factory.log` for a command that runs with no project. Engine events SHALL be logged as structured INFO lines, and a manual run SHALL end with the canonical per-task summary line. Logs SHALL never be committed to git.
+**Implements**: NFR-O1, NFR-O2, NFR-S2 of add-manual-run; FR3 of harden-logging-observability; FR11, UX3 of add-project-registry
+**Notes**: `taskId` is set by the runner; `stage` and `attempt` are maintained by an event-listener adapter on the engine thread.
+**Notes**: Manual mode is the debugging mode: the summary and the engine-event INFO lines together show where a run stalled without raising verbosity.
 
 #### Scenario: Quiet dialog
 - **WHEN** a stage executes and verifies successfully
@@ -238,17 +288,33 @@ operator see where a run stalled without raising verbosity.
 - **WHEN** `take` runs for project `widgets` while `serve` runs for project `gateway` on one host
 - **THEN** their lines land in `~/.gnomish/projects/widgets/logs/default.log` and `~/.gnomish/projects/gateway/logs/default.log` respectively — each path the operator uses daily fits on one line
 
+#### Scenario: Every log line carries the task context
+- **WHEN** a stage attempt logs any line to the file
+- **THEN** the line carries the `taskId`, `stage` and `attempt` MDC values
+
+#### Scenario: The log location has the operator-path owner
+- **WHEN** the log file's location is decided
+- **THEN** it comes from the owner that computes every other operator path, and no separate log-directory variable is read
+
+#### Scenario: The console passes warnings and errors only
+- **WHEN** INFO, WARN and ERROR lines are logged during a run
+- **THEN** the console shows the WARN and ERROR lines only, the ERROR line is duplicated to stderr, and the INFO lines reach the file alone
+
+#### Scenario: The summary uses the shared renderer
+- **WHEN** a manual run writes its summary line
+- **THEN** the line is assembled from the engine's event stream and rendered by the same renderer the other modes use, with outcome, stage, attempts used, wall time and token usage by model
+
 ### Requirement: English dialog with forgiving input
 All renders and summaries SHALL be English. Flags are the only input: an unrecognized flag or combination SHALL exit 2 naming the accepted forms. The process SHALL exit cleanly on every path — farewell line, correct exit code, no stack trace — and SHALL never wait on stdin.
-<!-- implements FR6, FR9 of make-run-headless -->
+**Implements**: FR6, FR9 of make-run-headless
 
 #### Scenario: Typo re-prompts
 - **WHEN** the operator passes `--decison="x"` (misspelled) with `--resume`
 - **THEN** the process exits 2 naming the accepted flags, and no branch write happens
 
 ### Requirement: Run modes
-`gnomish run` SHALL accept `--mode git|in-place`, default `git`. Git mode: the factory creates the task branch and the task working copy through the bound task environment, closes rounds per the bound adapter's round protocol, and pushes; the branch name is printed upfront — together with the worktree path in host mode, or the task-environment identifier in sandboxed mode, whose working-copy location is a private adapter detail and is never printed as a host path. In-place mode: the preserved legacy behavior — no git, in-memory state, no resume — with an honest reminder at start that exiting kills the task and that an escalation or a manual checkpoint ends the task for good, since there is no branch to resume from. Git-only flags (`--base`, `--resume`, `--discard-work`, `--decision`) combined with `--mode in-place` SHALL be a usage error (exit code 2).
-<!-- implements FR9 of make-run-headless -->
+`gnomish run` SHALL accept `--mode git|in-place`, default `git`. Git mode: the factory creates the task branch and the task working copy through the bound task environment, closes rounds per the bound adapter's round protocol, and pushes. In-place mode: the preserved legacy behavior — no git, in-memory state, no resume. Git-only flags (`--base`, `--resume`, `--discard-work`, `--decision`) combined with `--mode in-place` SHALL be a usage error (exit code 2).
+**Implements**: FR9 of make-run-headless
 
 #### Scenario: Git mode is the default
 - **WHEN** `gnomish run --task="t"` runs without `--mode`
@@ -268,7 +334,7 @@ All renders and summaries SHALL be English. Flags are the only input: an unrecog
 
 ### Requirement: Manual ownership mode
 Container environments created by `gnomish run` SHALL be labelled with ownership mode `manual`. Manual objects are governed by the age-only policy of `sandbox-lifecycle` — no claim oracle — so a live manual session is never disturbed by a coexisting daemon, and a forgotten manual zombie is still reclaimed after the configured thresholds.
-<!-- implements FR2, FR7 of add-serve-sandbox-lifecycle -->
+**Implements**: FR2, FR7 of add-serve-sandbox-lifecycle
 
 #### Scenario: Manual session beside a daemon
 - **WHEN** a container `gnomish run` session works on a host where `gnomish serve` also runs
@@ -276,16 +342,15 @@ Container environments created by `gnomish run` SHALL be labelled with ownership
 
 ### Requirement: Run startup sweep degrades without a tracker
 The `run` startup sweep pass SHALL evaluate the shared `sandbox-lifecycle` policy. When no tracker is configured, tracked objects of other tasks SHALL receive skipped-no-verdict (untouched, logged); manual objects follow the age policy, which needs no tracker; the run's own task key keeps its existing `--discard-work` and reattach semantics. Verdicts SHALL be logged in the uniform vocabulary.
-<!-- implements FR6, FR9, NFR-O4, NFR-R1 of add-serve-sandbox-lifecycle -->
+**Implements**: FR6, FR9, NFR-O4, NFR-R1 of add-serve-sandbox-lifecycle
 
 #### Scenario: Trackerless run touches no tracked object
 - **WHEN** a `gnomish run` without tracker configuration starts on a host holding another task's tracked objects
 - **THEN** those objects are reported skipped-no-verdict and untouched, and the run proceeds normally
 
 ### Requirement: Resume invocation
-`gnomish run --dir=<dir> --resume=<task>` SHALL resume the named task from its branch; `--resume` is mutually exclusive with `--task`, `--task-file`, `--task-id`, and `--from-stage` (usage error). `--decision="<text>"` SHALL be accepted only together with `--resume`, never with `--mode=in-place`, and only for a task whose recorded outcome is `escalated`; any other combination is a usage error naming the conflict. Resume SHALL behave by recorded branch state without any prompt, and every continuation SHALL land its one lifecycle commit before the engine runs: escalated with `--decision` → the decision commit (decision appended, attempts reset, outcome cleared), then continue; escalated without `--decision` → the resumed commit (attempts reset, outcome cleared), then continue — unless the recorded report is `DecisionNeeded`, in which case the question is restated, nothing is written, and the process exits 10; at a gate (`AwaitingApproval(stage)`, whether or not the `paused` park was recorded) → the approval commit (position past the gate, outcome cleared), then continue; outcome null at a stage → continue silently from the recorded position; completed → report the task is done and exit with the success code.
-<!-- implements FR4, FR7 of make-checkpoint-gate-durable -->
-<!-- implements FR3, FR4, FR5, FR9 of make-run-headless -->
+`gnomish run --dir=<dir> --resume=<task>` SHALL resume the named task from its branch, behaving by the recorded branch state without any prompt, and every continuation SHALL land its one lifecycle commit before the engine runs. `--decision="<text>"` SHALL be accepted only together with `--resume`, never with `--mode=in-place`, and only for a task whose recorded outcome is `escalated`; any other combination is a usage error naming the conflict.
+**Implements**: FR4, FR7 of make-checkpoint-gate-durable; FR3, FR4, FR5, FR9 of make-run-headless
 
 #### Scenario: Resume of an escalated task
 - **WHEN** `--resume --decision="patch in place"` opens a task parked as Escalated with an `AttemptsExhausted` report
@@ -314,3 +379,20 @@ The `run` startup sweep pass SHALL evaluate the shared `sandbox-lifecycle` polic
 #### Scenario: Decision without a question is a usage error
 - **WHEN** `--resume --decision="x"` opens a task whose branch is at a gate or whose outcome is completed, or `--decision` is given without `--resume`
 - **THEN** the process exits 2 naming the conflict and writes nothing to the branch
+
+#### Scenario: Resume excludes the fresh-start flags
+- **WHEN** `--resume` is combined with `--task`, `--task-file`, `--task-id` or `--from-stage`
+- **THEN** the process exits 2 with a usage error naming the conflict
+
+#### Scenario: An interrupted task resumes silently
+- **WHEN** `--resume` opens a task whose recorded outcome is null at a stage
+- **THEN** the engine continues silently from the recorded position, with no prompt
+
+### Requirement: Stop renders have one owner
+The escalation report, the checkpoint line and the return-path line SHALL be rendered by one component, whichever path reaches the stop: the in-process outcome loop, a host resume, a container resume, or `take`'s park report for the checkpoint line.
+**Implements**: FR8 of make-run-headless; FR4 of tighten-spec-contract
+**Notes**: Split from "Outcome loop with in-process resume".
+
+#### Scenario: Every stop path renders through one component
+- **WHEN** production code is scanned for the literals of the checkpoint line and the return-path line
+- **THEN** each literal is spelled in exactly one production file, the render owner, and every stop path renders through it

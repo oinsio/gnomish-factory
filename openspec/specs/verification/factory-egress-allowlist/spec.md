@@ -8,14 +8,12 @@ Guard the factory's own outbound calls made by the built-in http check. `EgressG
 
 ### Requirement: The http check is governed by an operator-owned egress allowlist
 The http check SHALL be governed by a factory-side egress allowlist owned by
-operator configuration, never by the repo-committed stage manifest. Because
-`EgressGuard` protects only the agent sandbox and not the factory's own outbound
-calls, this allowlist is the sole guard against the http check being used as an
-SSRF / exfiltration vector. A request whose destination is not permitted SHALL be
-refused before any connection is attempted, and the refusal SHALL be reported
-with its reason (scheme, address class, or missing allowlist entry).
-<!-- implements NFR-S2 of add-plugin-architecture -->
-<!-- implements UX2 of add-plugin-architecture -->
+operator configuration, never by the repo-committed stage manifest. A request
+whose destination is not permitted SHALL be refused before any connection is
+attempted, and the refusal SHALL be reported with its reason (scheme, address
+class, or missing allowlist entry).
+**Implements**: NFR-S2 of add-plugin-architecture; UX2 of add-plugin-architecture
+**Notes**: `EgressGuard` protects only the agent sandbox and not the factory's own outbound calls, so this allowlist is the sole guard against the http check being used as an SSRF / exfiltration vector.
 
 #### Scenario: Allowlist lives in operator config, not the manifest
 - **WHEN** a stage manifest names an http target
@@ -33,7 +31,7 @@ and RFC1918 addresses unless a target is explicitly allowlisted; and SHALL bound
 the number of redirects, the response size, and the total time of a request.
 Redirects SHALL be re-checked against the same rules, so a permitted host cannot
 redirect into a blocked address class.
-<!-- implements NFR-S2 of add-plugin-architecture -->
+**Implements**: NFR-S2 of add-plugin-architecture
 
 #### Scenario: Plain http is refused
 - **WHEN** an http check target uses the `http` scheme
@@ -57,7 +55,7 @@ manifest nor operator config can widen. A reference to a variable outside the
 whitelist SHALL be a located validation error, so a manifest cannot smuggle
 arbitrary values (including secrets or attacker-controlled data) into the
 request.
-<!-- implements NFR-S2 of add-plugin-architecture -->
+**Implements**: NFR-S2 of add-plugin-architecture
 
 #### Scenario: Non-whitelisted interpolation is rejected
 - **WHEN** an http check interpolates a `${...}` variable that is not on the

@@ -15,17 +15,9 @@ lifetime.
 The allowed bases (`task-branch.base.allowed`) SHALL be a list of patterns,
 each with a role — `development` or `release`, defaulting to `development` —
 that names the set of refs a task may branch from. A per-task selection SHALL
-be accepted only when it matches an allowed pattern; a selection matching no
-pattern SHALL be rejected as underdetermined input, never silently replaced
-by another base. No allowed bases — the `task-branch.base` section absent or
-declaring no `allowed` entries — accepts no per-task selection:
-configuration that could deliver one is refused at load (see
-pipeline-config), and should a designator reach resolution regardless, it is
-underdetermined input like any disallowed selection. Environment-style
-deploy pointers do not belong in the allowed list: the list classifies
-branch roles precisely so later changes can gate on them, and no role beyond
-the two named ones exists in this version.
-<!-- implements FR1, FR4 of add-base-ref-resolution -->
+be accepted only when it matches an allowed pattern.
+**Implements**: FR1, FR4 of add-base-ref-resolution
+**Notes**: Configuration that could deliver a selection while no base is allowed is refused at load by pipeline-config (its scenario `Selection rule without allowed bases is a load error`); environment-style deploy pointers do not belong in the allowed list, which classifies branch roles so later changes can gate on them.
 
 #### Scenario: An allowed selection is accepted
 - **WHEN** the allowed bases hold `release/*` and the task selects
@@ -46,18 +38,19 @@ the two named ones exists in this version.
 - **THEN** resolution treats the designator as disallowed and escalates
   rather than branching from an unvetted ref
 
+#### Scenario: A role outside development and release is refused
+- **WHEN** an allowed entry declares a role other than `development` or
+  `release`
+- **THEN** the configuration is refused at load with an error naming the
+  accepted roles
+
 ### Requirement: Resolution follows one priority order
 Base resolution SHALL follow exactly one priority order: an explicit `--base`
 argument; else the task's `base` designator validated against the allowed bases; else
 the configured `default`; else the repository default branch discovered from
-the remote. Manual `run` without `--base` SHALL alone fall through to the
-local HEAD of the clone, with no network interaction; autonomous paths SHALL
-never fall back to the local HEAD. The priority chain reserves a named slot
-for a future type-derived tier between the designator and the configured
-default (`add-pipeline-routing`); that tier does not exist in this version.
-The resolved decision SHALL carry the ref, the rule that produced it, and a
-human-readable reason.
-<!-- implements FR4, FR5, FR8 of add-base-ref-resolution -->
+the remote.
+**Implements**: FR4, FR5, FR8 of add-base-ref-resolution
+**Notes**: The chain reserves a named slot for a future type-derived tier between the designator and the configured default (`add-pipeline-routing`); that tier does not exist in this version.
 
 #### Scenario: Explicit base wins over a designator
 - **WHEN** `take <ref> --base v1.2.3` runs on a task carrying a valid
@@ -82,15 +75,25 @@ human-readable reason.
 - **THEN** the take fails as an infrastructure failure instead of silently
   branching from the local HEAD
 
+#### Scenario: Only a manual run without a base uses the local HEAD
+- **WHEN** a manual `run` starts without `--base`
+- **THEN** the task branches from the clone's local HEAD with no network
+  interaction
+- **AND** no autonomous path ever resolves to the local HEAD
+
+#### Scenario: The decision explains itself
+- **WHEN** any tier resolves the base
+- **THEN** the decision carries the ref, the rule that produced it, and a
+  human-readable reason
+
 ### Requirement: Designator conflicts and ambiguity escalate
 A conflicting base designator (more than one value found on the task) SHALL
 escalate with a report listing every value found; resolution SHALL never pick
 one. All escalations of underdetermined base input — conflict or disallowed
-selection — SHALL be quality-of-input escalations that park the task for a human,
-without burning a stage attempt, and the report SHALL name what was found and
-what the configuration allows.
-<!-- implements FR3, FR4 of add-base-ref-resolution -->
-<!-- implements UX2 of add-base-ref-resolution -->
+selection — SHALL park the task for a human under the infrastructure park
+reason (`INFRA`), without burning a stage attempt, and the report SHALL name
+what was found and what the configuration allows.
+**Implements**: FR3, FR4 of add-base-ref-resolution; UX2 of add-base-ref-resolution
 
 #### Scenario: Two base labels park the task
 - **WHEN** a claimed task carries designator values `release/1.18` and
@@ -103,7 +106,7 @@ The repository default branch SHALL be discovered from the remote at
 resolution time. Discovery failure in an autonomous path SHALL classify as an
 infrastructure failure (bounded retries, claim released, no attempt burned),
 never as a fallback to a guessed name.
-<!-- implements FR5, FR9 of add-base-ref-resolution -->
+**Implements**: FR5, FR9 of add-base-ref-resolution
 
 #### Scenario: Renamed default branch is honored
 - **WHEN** the remote's default branch was changed from `main` to `develop`
@@ -114,17 +117,9 @@ never as a fallback to a guessed name.
 ### Requirement: Base configuration is read from the refreshed default branch only
 The `task-branch.base` configuration SHALL be read factory-side from the repository
 default branch, refreshed by fetch, and never from a task branch or a
-gnome-writable working copy. Copies of the configuration in a gnome's working
-copy are project content — law only after a human merge. The read SHALL go
-through the git-objects law source at the refreshed default-branch tip, never
-through a checkout, and SHALL happen once at startup as part of the trusted
-tier (see pipeline-config, "Definition validated at startup, bound per task
-from the base"); a claim SHALL NOT re-fetch the default branch or re-read
-the section. The `task-branch.base` section is trusted-tier configuration; the task
-tier of the law binds from the chosen base's law commit (see pipeline-config,
-"Pipeline law binds per invocation"). This requirement is what breaks the
-"the config picks the base, but which ref holds the config" cycle.
-<!-- implements FR2, NFR-S1, NFR-P1 of add-base-ref-resolution -->
+gnome-writable working copy.
+**Implements**: FR2, NFR-S1, NFR-P1 of add-base-ref-resolution
+**Notes**: This is what breaks the "the config picks the base, but which ref holds the config" cycle; the section is trusted-tier configuration (pipeline-config, "Definition validated at startup, bound per task from the base"), while the task tier of the law binds from the chosen base's law commit (pipeline-config, "Pipeline law binds per invocation").
 
 #### Scenario: A gnome edit to the task-branch section has no effect
 - **WHEN** a gnome branch modifies the `task-branch.base` section in its working copy and
@@ -140,25 +135,17 @@ tier of the law binds from the chosen base's law commit (see pipeline-config,
   its startup (the task parks as disallowed), no default-branch fetch runs
   on the claim path, and the next start of `serve` accepts the entry
 
+#### Scenario: The section is read from git objects, not a checkout
+- **WHEN** the factory starts and reads the `task-branch.base` section
+- **THEN** it reads the section once, through the git-objects law source at
+  the refreshed default-branch tip, and checks nothing out
+
 ### Requirement: The base decision is pinned at claim and never re-resolved
 The resolved base — ref, kind, commit SHA, and source rule — SHALL be pinned
 into the task's durable state in the task-creation commit, before any agent
-runs. The pinned SHA SHALL be the very object the branch was created from and
-the law was bound from — one value, not three resolutions of one name.
-Every resume, on any instance and in any execution mode, SHALL read the pin
-and SHALL NOT re-resolve the base from tracker metadata or configuration; a
-designator or allowed-bases change after the pin affects only tasks not yet pinned.
-Before the pin exists, re-resolution from scratch is the recovery of every
-crash window, and a later resolution answering differently is legal — nothing
-durable references the earlier answer.
-The pinned SHA is the law commit of the fresh start; on resume the law commit
-is the current tip of the pinned ref name (pipeline-config owns that rule),
-which is a law-freshness matter, not a re-resolution of the base. That
-re-fetch SHALL address the pinned ref by its pinned kind — the branch or tag
-namespace the pin names — so a same-named ref appearing later in the other
-namespace neither redirects nor parks the task; a legacy pin without a kind
-is classified against origin as before.
-<!-- implements FR7, FR15, NFR-R2, NFR-S2 of add-base-ref-resolution -->
+runs.
+**Implements**: FR7, FR15, NFR-R2, NFR-S2 of add-base-ref-resolution; FR7 of add-base-ref-resolution
+**Notes**: On resume the law commit is the current tip of the pinned ref name (pipeline-config owns that rule) — a law-freshness matter, not a re-resolution of the base.
 
 #### Scenario: Retargeting a pinned task has no effect
 - **WHEN** a human changes the task's base label after the task branch exists
@@ -177,13 +164,28 @@ is classified against origin as before.
   a tag `release/1.18`, and the task is resumed autonomously
 - **THEN** the resume fetches `refs/heads/release/1.18` only, binds the law
   from its tip, and no collision report is produced
-<!-- implements FR7 of add-base-ref-resolution -->
 
 #### Scenario: A crash before the pin re-resolves cleanly
 - **WHEN** an instance dies after refreshing the base but before the
   task-creation commit, and any instance picks the task up later
 - **THEN** the pickup resolves the base from scratch — possibly to a newer
   tip — and no state anywhere references the first resolution
+
+#### Scenario: Branch, law and pin are one commit
+- **WHEN** a fresh task is created from a resolved base
+- **THEN** the branch's start point, the commit the law was bound from, and
+  the pinned SHA are the same object, never three resolutions of one name
+
+#### Scenario: A configuration change does not reach a pinned task
+- **WHEN** the configured default or the allowed bases change after a task was
+  pinned, and the task is resumed on any instance in any execution mode
+- **THEN** the resume reads the pin and continues on the pinned base; only
+  tasks not yet pinned resolve under the new configuration
+
+#### Scenario: A legacy pin without a kind is classified against origin
+- **WHEN** a task whose pin records no kind is resumed
+- **THEN** the pinned ref name is classified against origin as before the
+  kind existed
 
 ### Requirement: Resolution is declarative and executes no repository code
 Base resolution SHALL be deterministic pattern matching over values — the
@@ -192,7 +194,7 @@ invocation mode. No repository-provided executable, hook, or script SHALL
 run to choose a base. External automation that computes a base and records
 it as task metadata is the supported customization path and SHALL be
 documented in the operator guide.
-<!-- implements FR10, NFR-S3, NFR-C1, UX4 of add-base-ref-resolution -->
+**Implements**: FR10, NFR-S3, NFR-C1, UX4 of add-base-ref-resolution
 
 #### Scenario: Same inputs, same decision
 - **WHEN** two factory instances resolve the same task against the same

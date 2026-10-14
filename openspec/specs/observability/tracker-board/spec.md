@@ -15,15 +15,10 @@ read-only board of three columns in order: Ready, Working, AwaitingHuman.
 It SHALL accept `--dir` (default: current directory) naming the project
 config root and SHALL resolve the tracker section from that root's
 `.gnomish/config.yaml` exactly as `take`/`serve` do (same configuration and
-credentials), SHALL work with zero daemon instances
-running, and SHALL never invoke a tracker write operation (no claim, park,
-finish, marker, or comment writes). To satisfy the tracker adapter
-constructor — which mints an instance id at construction time — the board
-supplies a throwaway instance id purely locally; it is never written to the
-tracker, preserving the read-only guarantee.
-<!-- implements FR1 of add-board-command -->
-<!-- implements NFR-S1 of add-board-command -->
-<!-- implements UX3 of add-board-command -->
+credentials). Its one tracker write SHALL be the GitHub adapter's creation,
+at construction, of a factory state label the repository lacks.
+**Implements**: FR1 of add-board-command; NFR-S1 of add-board-command; UX3 of add-board-command
+**Notes**: The tracker adapter constructor mints an instance id at construction time, so the board supplies a throwaway one purely locally; the id stays in the process.
 
 #### Scenario: Board renders three columns without a daemon
 - **WHEN** `gnomish board` runs against a tracker while no serve instance
@@ -39,28 +34,25 @@ tracker, preserving the read-only guarantee.
 
 #### Scenario: No write operations reach the tracker
 - **WHEN** a board invocation completes against the GitHub adapter fixture
+  on a repository that already carries the factory's state labels
 - **THEN** every recorded HTTP request is a read (GET); no write request
   was issued
+
+#### Scenario: The board never writes to the tracker
+- **WHEN** a board invocation completes against any tracker adapter
+- **THEN** no tracker write operation was invoked: no claim, park, finish,
+  marker, or comment write; the only write a board run can make is the
+  adapter's creation of a missing state label at construction
 
 ### Requirement: Ready column with eligibility annotations
 The Ready column SHALL list ready tasks in the adapter's queue order, each
 row carrying the task id, title, and the returned/fresh distinction. When
 the feed would not claim a task now, the row SHALL carry an eligibility
-annotation naming the reason in the feed's own precedence order: in backoff
-(with the materialized deadline, computed by the same core backoff policy
-and parameter resolution the take feed uses), then `finished` (terminal,
-defensively dropped by the feed), then WIP-held (a fresh task skipped while
-the open-front count is at or above the configured WIP limit; returned tasks
-are never WIP-held). The column SHALL be summarized as total queued, eligible
-now, and the ineligible count broken down by reason, with each ready task
-counted under exactly one reason so the parts sum to total queued. All
-summary counts are scoped to the fetched window: when the window is
-truncated at the requested limit, "total queued" describes the shown window,
-not the tracker's full queue, and the render SHALL both say so and expose a
-`truncated` flag distinguishing a capped window from a fully-shown one.
-<!-- implements FR2 of add-board-command -->
-<!-- implements FR3 of add-board-command -->
-<!-- implements UX2 of add-board-command -->
+annotation naming the reason in the feed's own precedence order: in backoff,
+then `finished`, then WIP-held. The column SHALL be summarized as total
+queued, eligible now, and the ineligible count broken down by reason.
+**Implements**: FR2 of add-board-command; FR3 of add-board-command; UX2 of add-board-command
+**Notes**: `finished` is terminal and defensively dropped by the feed; WIP-held is a fresh task skipped while the open-front count is at or above the configured WIP limit.
 
 #### Scenario: Backed-off task is annotated with its deadline
 - **WHEN** the ready queue holds a task with abort facts placing it in
@@ -96,20 +88,30 @@ not the tracker's full queue, and the render SHALL both say so and expose a
 - **AND** the `--json` document carries `truncated: true`, with the summary
   counts describing that shown window
 
+#### Scenario: The backoff deadline is the feed's own
+- **WHEN** a ready task is in backoff
+- **THEN** its annotated deadline is the one computed by the same core
+  backoff policy and parameter resolution the take feed uses
+
+#### Scenario: Each task counts under exactly one reason
+- **WHEN** a ready task meets several ineligibility reasons at once
+- **THEN** it is annotated and counted under the first reason in the feed's
+  precedence order only, so the parts of the summary sum to total queued
+
+#### Scenario: A full window states no truncation
+- **WHEN** `listReady` returns fewer tasks than the requested limit
+- **THEN** the render states no truncation and the `--json` document carries
+  `truncated: false`
+
 ### Requirement: Working column with holder and claim freshness
 The Working column SHALL list open tasks in `Working` state in the order
 `listOpen` returns them (the adapter's deterministic creation order), each
 row carrying the task id, title, the holder, and the claim-marker freshness
 — the claim version's last-update instant, rendered as an age in text
-output. When the claim marker is absent (`OpenTask.claimVersion` is null — a
-`Working` task whose live marker went missing), the row SHALL show the
-holder with freshness marked unknown instead of an age. The board SHALL NOT
-judge staleness: no stale/healthy verdict is emitted. Working tasks the
-adapter omits from `listOpen` because they carry no claim footprint at all
-(e.g. a human-mislabeled issue with no holder to name) are absent from this
-column by design; the board reports exactly what `listOpen` returns and
-invents no holder.
-<!-- implements FR4 of add-board-command -->
+output. The board SHALL NOT judge staleness: no stale/healthy verdict is
+emitted.
+**Implements**: FR4 of add-board-command
+**Notes**: A Working task with no claim footprint at all (e.g. a human-mislabeled issue) is still reported by `listOpen`, with the adapter's unknown-holder label (`unknown` on GitHub) and no claim version, so it appears in this column with freshness unknown.
 
 #### Scenario: Working rows show holder and claim age
 - **WHEN** a task is `Working` with holder `factory-a-1b2c` and a claim
@@ -123,12 +125,17 @@ invents no holder.
 - **THEN** its Working row shows the holder with freshness marked unknown
   and no age, and still emits no staleness verdict
 
+#### Scenario: The column invents no holder
+- **WHEN** the board builds the Working column
+- **THEN** it holds exactly the `Working` entries `listOpen` returned, each
+  with the holder `listOpen` reported, and no row or holder of its own
+
 ### Requirement: AwaitingHuman column with park reasons
 The AwaitingHuman column SHALL list parked tasks in the order `listOpen`
 returns them (the adapter's deterministic creation order), each row carrying
 the task id, title, and the park reason (`escalation`, `infra`, or
 `checkpoint`).
-<!-- implements FR5 of add-board-command -->
+**Implements**: FR5 of add-board-command
 
 #### Scenario: Park reasons are spelled out
 - **WHEN** the tracker holds one task parked for escalation and one for a
@@ -142,18 +149,9 @@ The board SHALL render human-readable text by default and, under
 `"version": 1`, camelCase fields, ISO-8601 UTC instants, and a
 `generatedAt` timestamp. Both renders SHALL be projections of the same
 underlying board model — no column, row, or annotation is exclusive to
-one surface. Each ready entry's resolved eligibility (eligible, or the skip
-reason: backoff, `finished`, or WIP-held), its backoff deadline, the
-observed open-front count against the WIP limit, claim-version update
-instants (or an explicit unknown when the marker is absent), and a
-`truncated` flag for the ready window SHALL be materialized in the JSON so
-consumers need no factory configuration to interpret the document. Rows in
-every column SHALL appear in the adapter's list order, so the document is
-byte-stable for a fixed tracker state and can be pinned by a reference
-fixture.
-<!-- implements FR6 of add-board-command -->
-<!-- implements NFR-O1 of add-board-command -->
-<!-- implements UX4 of add-board-command -->
+one surface.
+**Implements**: FR6 of add-board-command; NFR-O1 of add-board-command; UX4 of add-board-command
+**Notes**: The JSON materializes every resolved fact so that consumers need no factory configuration to interpret the document.
 
 #### Scenario: JSON is versioned and self-describing
 - **WHEN** `gnomish board --json` runs against a queue with a backed-off
@@ -166,17 +164,26 @@ fixture.
 - **THEN** every task id, title, annotation, and summary count present in
   one render is present in the other
 
+#### Scenario: JSON needs no factory configuration to interpret
+- **WHEN** `gnomish board --json` runs
+- **THEN** the document materializes each ready entry's resolved eligibility
+  (eligible, or the skip reason: backoff, `finished`, or WIP-held), its
+  backoff deadline, the observed open-front count against the WIP limit,
+  claim-version update instants (or an explicit unknown when the marker is
+  absent), and a `truncated` flag for the ready window
+
+#### Scenario: JSON is byte-stable for a fixed tracker state
+- **WHEN** the same tracker state is rendered as JSON twice
+- **THEN** the rows of every column appear in the adapter's list order and
+  the two documents are byte-identical, so a reference fixture can pin them
+
 ### Requirement: Two list port calls, no per-row fetch
 A board invocation SHALL perform exactly one `listReady` port call and one
 `listOpen` port call, and SHALL NOT issue any per-row `fetchTask`,
 regardless of queue size. Title enrichment SHALL add no tracker request
-over each list operation's pre-enrichment shape. The board adds no read
-cost beyond those two list operations; the HTTP-request count of the
-operations themselves is the adapter's existing behavior (for GitHub,
-internal per-task comment fetches absorbed by conditional `304`s) and is
-not a board concern. The ready window SHALL default to 50 and be
-overridable with `--limit`.
-<!-- implements NFR-P1 of add-board-command -->
+over each list operation's pre-enrichment shape.
+**Implements**: NFR-P1 of add-board-command
+**Notes**: The board adds no read cost beyond those two list operations; the HTTP-request count of the operations themselves is the adapter's existing behavior (for GitHub, internal per-task comment fetches absorbed by conditional `304`s) and not a board concern.
 
 #### Scenario: No per-row fetch beyond the two list calls
 - **WHEN** the board renders a tracker holding 30 ready and 5 open tasks
@@ -186,12 +193,17 @@ overridable with `--limit`.
   enrichment match those the two list operations already made before it,
   with no issue-detail request added
 
+#### Scenario: The ready window defaults to 50
+- **WHEN** `gnomish board` runs without `--limit`, and again with `--limit=10`
+- **THEN** the first invocation's `listReady` window is 50 and the second's
+  is 10
+
 ### Requirement: Tracker outage fails plainly
 When the tracker is unreachable or persistently failing, the board SHALL
 print a single clear error line and exit non-zero. Transient-failure
 handling SHALL be whatever the tracker adapter already provides; the board
 SHALL add no retry loop of its own.
-<!-- implements NFR-R1 of add-board-command -->
+**Implements**: NFR-R1 of add-board-command
 
 #### Scenario: Unreachable tracker
 - **WHEN** `gnomish board` runs while the tracker endpoint refuses
@@ -204,8 +216,7 @@ The operator guide SHALL gain a board section: the three columns and their
 sources, the backoff annotation semantics, and a cron-monitor recipe over
 `gnomish board --json` for tracker-side alert rules (queue growth,
 long-waiting escalations) as the complement to the daemon-snapshot rules.
-<!-- implements UX1 of add-board-command -->
-<!-- implements G3 of add-board-command -->
+**Implements**: UX1 of add-board-command; G3 of add-board-command
 
 #### Scenario: Guide enables the external monitor
 - **WHEN** an operator follows the guide's cron recipe

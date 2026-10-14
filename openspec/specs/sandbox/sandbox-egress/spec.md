@@ -8,7 +8,7 @@ The sandbox egress guard is the sole route out of a task container: an internal-
 
 ### Requirement: The guard is the only route out
 A task container SHALL be attached only to its internal-only network; the guard proxy SHALL be the single reachable egress point. Direct connections from the box to the internet or to the host SHALL be impossible by construction, not by convention.
-<!-- implements FR7 of add-sandbox-core -->
+**Implements**: FR7 of add-sandbox-core
 
 #### Scenario: Ignoring proxy settings goes nowhere
 - **WHEN** a process inside the box strips `HTTP_PROXY` variables and dials an external address directly
@@ -16,7 +16,7 @@ A task container SHALL be attached only to its internal-only network; the guard 
 
 ### Requirement: Default-deny allowlist owned by the operator
 The guard SHALL deny every destination not present in the allowlist from factory installation config. The allowlist SHALL live outside the box and outside the target repo; a repo may request additions, only the operator grants them.
-<!-- implements FR7 of add-sandbox-core -->
+**Implements**: FR7 of add-sandbox-core
 
 #### Scenario: Non-allowlisted host is denied
 - **WHEN** a process requests a host absent from the allowlist via the guard
@@ -24,16 +24,17 @@ The guard SHALL deny every destination not present in the allowlist from factory
 
 ### Requirement: DNS resolves only through the guard
 The box SHALL have no direct DNS access; name resolution SHALL happen at the guard. Open port-53 egress is a known exfiltration channel and SHALL NOT exist.
-<!-- implements FR7 of add-sandbox-core -->
+**Implements**: FR7 of add-sandbox-core
 
 #### Scenario: Direct DNS query fails
 - **WHEN** a process inside the box queries an external DNS server directly
 - **THEN** the query gets no answer
 
 ### Requirement: Mandatory fail-closed self-check
-Before the first gnome-product process in every materialized sandboxed environment — round environments and fresh-box verification/judge environments alike; the probes themselves run via `exec()` — the factory SHALL verify from inside the box: the in-box process user is non-root (the channel-write and commit identity D16 depends on), direct egress fails, a non-allowlisted destination is denied, an allowlisted destination succeeds, and the isolation mechanism in effect matches the adapter passport. Any failed probe SHALL be an infrastructure failure: the environment is rejected and no gnome-product process executes in it — at task start the task does not start; at verification time the affected check or judge vote classifies as an infrastructure failure. In the container adapter, a rejected box SHALL be stopped and kept — container, volume, and network retained — rather than disposed, so the operator can inspect why the self-check failed; the operator-facing keep notice in the factory log at the failure site SHALL name the kept container (the rejection exception itself is unchanged). Retention semantics of other execution media are owned by their own changes. The keep-stop is best-effort forensics and SHALL never mask or reclassify the self-check failure itself. Retention of a kept box is governed entirely by the existing `sandbox-lifecycle` sweep policy — no self-check-specific retention exists.
-<!-- implements FR8 of add-sandbox-core -->
-<!-- implements FR3, NFR-R1, NFR-R2, NFR-O1, NFR-C1, UX3 of polish-sandbox-forensics -->
+Before the first gnome-product process in every materialized sandboxed environment — round environments and fresh-box verification/judge environments alike; the probes themselves run via `exec()` — the factory SHALL verify from inside the box: the in-box process user is non-root, direct egress fails, a non-allowlisted destination is denied, an allowlisted destination succeeds, and the isolation mechanism in effect matches the adapter passport.
+**Implements**: FR8 of add-sandbox-core; FR3, NFR-R1, NFR-R2, NFR-O1, NFR-C1, UX3 of polish-sandbox-forensics
+**Notes**: The non-root user is the channel-write and commit identity design D16 depends on; a rejected box is kept so the operator can inspect why the self-check failed, and the keep-stop is best-effort forensics.
+**Notes**: Retention semantics of execution media other than the container adapter are owned by their own changes.
 
 #### Scenario: Silent protection degradation is caught
 - **WHEN** the internal network was created without the internal flag and direct egress unexpectedly succeeds
@@ -60,10 +61,18 @@ Before the first gnome-product process in every materialized sandboxed environme
 - **THEN** it is enumerated and classified exactly like any other kept environment of its role — labels stamped at creation place it in the sweep universe — and no self-check-specific sweep logic exists
 
 ### Requirement: Denials are captured as structured findings
-Every guard denial SHALL be recorded as structured metadata (host, path, method — never request bodies) and readable as findings from the guard, so a blocked attempt is a machine-readable signal rather than silence. The recorded path SHALL carry no query string: a denial finding is committed to the task branch, and a query is gnome-chosen request payload rather than metadata about the destination. Captured denials SHALL reach the task report for the round they occurred in, independently of the round's verdict and independently of whether that round ever closed: attaching a denial SHALL NOT change any check verdict, the stage outcome, or the feedback context of a retry. A round that dies before its close SHALL still have its denials read from the environment and carried out on its escalation, since no attempt record exists to hold them. Attribution assigns a denial to the round whose read collected it; after a crash that may be the round following the one that triggered it — a declared relaxation of event-time attribution, not an accident.
-<!-- implements NFR-O1 of add-sandbox-core -->
-<!-- implements FR3, NFR-O1, NFR-S1 of fix-denial-report-attachment -->
-<!-- implements FR1, FR5, NFR-O1 of fix-denial-attribution-durability -->
+Every guard denial SHALL be recorded as structured metadata (host, path, method — never request bodies) and readable as findings from the guard, so a blocked attempt is a machine-readable signal rather than silence. Captured denials SHALL reach the task report for the round they occurred in, independently of the round's verdict and independently of whether that round ever closed.
+**Implements**: NFR-O1 of add-sandbox-core; FR3, NFR-O1, NFR-S1 of fix-denial-report-attachment; FR1, FR5, NFR-O1 of fix-denial-attribution-durability
+**Notes**: The recorded path carries no query string because a denial finding is committed to the task branch, and a query is gnome-chosen request payload rather than metadata about the destination.
+**Notes**: A round that dies before its close has no attempt record to hold its denials, which is why they are carried out on its escalation.
+
+#### Scenario: A denial changes no verdict, outcome or retry feedback
+- **WHEN** a denial is attached to a round's record
+- **THEN** no check verdict, no stage outcome, and no feedback context of a retry changes because of it
+
+#### Scenario: A denial is attributed to the round whose read collected it
+- **WHEN** a crash leaves a denial unread and the next round's read collects it
+- **THEN** the denial is reported under that next round — a declared relaxation of event-time attribution, not an accident
 
 #### Scenario: A denied request is captured as a structured finding
 - **WHEN** the gnome attempts a request to a non-allowlisted host during a round
@@ -82,8 +91,25 @@ Every guard denial SHALL be recorded as structured metadata (host, path, method 
 - **THEN** the denial is read from the environment and reported under the task's escalation rather than only in the factory log
 
 ### Requirement: Denial read-back is durable across processes
-The read position that makes each denial read a delta SHALL outlive the factory process that advanced it, for as long as the guard log it indexes exists, on every path that records denials: a factory process resuming a task over a surviving guard SHALL start its next read past every denial already recorded against an attempt or an escalation of that task. The position SHALL advance durably only together with the record carrying the denials it delimits — never ahead of it — so a lost write degrades to a re-read (a duplicated denial) and never to a skipped read (a lost one). A position SHALL share the lifetime of the log it indexes: where the guard and its log are gone, starting fresh is correct rather than a fallback, and a position naming a container that is not the live guard SHALL be discarded. Reading the position from the environment SHALL be best-effort: when it cannot be recovered, the read SHALL fall back to reporting more rather than less, and the fallback SHALL be logged so duplicates in a report are explainable. The authoritative position is the one at the branch tip on origin after a successful push; a local-only position is advisory, and the position and its record SHALL ride one commit so a push delivers both or neither. The read SHALL stay bounded in every case by the guard log tail cap.
-<!-- implements FR3, FR4, FR5, NFR-R1, NFR-R2, NFR-R3, NFR-O2, NFR-C1 of fix-denial-attribution-durability -->
+The read position that makes each denial read a delta SHALL outlive the factory process that advanced it, for as long as the guard log it indexes exists, on every path that records denials: a factory process resuming a task over a surviving guard SHALL start its next read past every denial already recorded against an attempt or an escalation of that task.
+**Implements**: FR3, FR4, FR5, NFR-R1, NFR-R2, NFR-R3, NFR-O2, NFR-C1 of fix-denial-attribution-durability
+**Notes**: The fallback to reporting more is logged so that duplicates in a report are explainable.
+
+#### Scenario: The position never advances ahead of its record
+- **WHEN** the write of a record carrying denials is lost after the read that collected them
+- **THEN** the durable position has not moved past those denials, so the next read re-reads them (a duplicated denial) and never skips them (a lost one)
+
+#### Scenario: A position lives only as long as its guard log
+- **WHEN** the guard and its log are gone, or the recorded position names a container that is not the live guard
+- **THEN** the position is discarded and the read starts fresh, which is the correct start rather than a fallback
+
+#### Scenario: The position and its record ride one commit
+- **WHEN** a record carrying denials and the position that delimits them is written
+- **THEN** both land in one commit, so a push delivers both or neither, and the position at the branch tip on origin after a successful push is the authoritative one — a local-only position is advisory
+
+#### Scenario: The read stays bounded by the tail cap
+- **WHEN** a denial read runs with a lost position, a stale one, or an intact one
+- **THEN** it reads no more than the guard log tail cap
 
 #### Scenario: Resume by another instance does not re-report past denials
 - **WHEN** a task whose denials are recorded against attempts and against a `cannotExecute` escalation is parked, and another factory instance resumes it over the surviving guard container
@@ -98,8 +124,17 @@ The read position that makes each denial read a delta SHALL outlive the factory 
 - **THEN** each denial appears under exactly one recorded round or escalation
 
 ### Requirement: Denial identity and idempotent merge
-Every recorded denial SHALL carry a source-assigned identity — the denial source's own event timestamp paired with the source identity — kept from the log line it was parsed from. Attaching denials to a record SHALL merge idempotently by that identity against the denials already recorded at the branch tip: a fallback re-read re-attaches only the denials not already recorded, and the merge outcome is logged ("N already present, M recovered"). The identity is environment bookkeeping: it SHALL be carried in the task branch documents additively under contract v1 (an absent identity reads as "unknown, keep"), and SHALL NOT appear in `status.json` or the text render. Two denials to the same destination remain two events: identity comes from the source's event coordinates, never from the finding's content.
-<!-- implements FR7, NFR-R3 of fix-denial-attribution-durability -->
+Every recorded denial SHALL carry a source-assigned identity — the denial source's own event timestamp paired with the source identity — kept from the log line it was parsed from. Attaching denials to a record SHALL merge idempotently by that identity against the denials already recorded at the branch tip. Identity SHALL come from the source's event coordinates, never from the finding's content.
+**Implements**: FR7, NFR-R3 of fix-denial-attribution-durability
+**Notes**: The identity is environment bookkeeping, not part of what a report shows.
+
+#### Scenario: A merge that dropped denials says how many
+- **WHEN** a fallback re-read's merge finds some of its denials already recorded at the tip
+- **THEN** the merge outcome is logged as "N already present, M recovered"
+
+#### Scenario: The identity stays out of status.json and the text render
+- **WHEN** a recorded denial carrying an identity is written and reported
+- **THEN** the task branch documents carry the identity additively under contract v1, while `status.json` and the text render show the denial without it
 
 #### Scenario: A fallback re-read records no duplicates
 - **WHEN** the durable read position is lost but the recorded denials carry identities, and the read falls back to the full tail
@@ -114,8 +149,17 @@ Every recorded denial SHALL carry a source-assigned identity — the denial sour
 - **THEN** they are kept as-is and the read degrades to the duplicate-tolerant fallback for them alone
 
 ### Requirement: Denial loss is visible in the report
-When the factory can see that denials were lost — the tail cap saturated a read (lines older than the read window are gone), or a committed cursor names a source that no longer holds its log while recorded history says denials existed — it SHALL record a loss marker as a synthetic finding through the same findings channel the denials use, funnel-fenced like any finding, naming the loss window it can bound. A report SHALL thereby distinguish "no denials" from "no data": a task with neither denials nor loss shows nothing. The marker SHALL gate nothing, exactly like the denials it stands in for.
-<!-- implements FR8, NFR-O3, UX3 of fix-denial-attribution-durability -->
+When the factory can see that denials were lost — the tail cap saturated a read (lines older than the read window are gone), or a committed cursor names a source that no longer holds its log while recorded history says denials existed — it SHALL record a loss marker as a synthetic finding through the same findings channel the denials use, funnel-fenced like any finding, naming the loss window it can bound.
+**Implements**: FR8, NFR-O3, UX3 of fix-denial-attribution-durability
+**Notes**: The marker lets a report distinguish "no denials" from "no data".
+
+#### Scenario: A loss marker gates nothing
+- **WHEN** a record carries a loss marker
+- **THEN** no check verdict, no stage outcome, and no feedback context of a retry changes because of it, exactly as for the denials it stands in for
+
+#### Scenario: A source gone with recorded denials surfaces as loss
+- **WHEN** a committed cursor names a denial source that no longer holds its log while the recorded history says denials existed
+- **THEN** the next record carries a loss marker naming the recorded source and the live one
 
 #### Scenario: A saturated tail cap surfaces as loss
 - **WHEN** a read returns the tail cap's maximum and the cursor shows the window began after the last read position
@@ -127,7 +171,7 @@ When the factory can see that denials were lost — the tail cap saturated a rea
 
 ### Requirement: Guard outage is an infrastructure failure
 When the guard is unreachable or down, in-flight checks SHALL classify as infrastructure failures (retried per existing policy, no stage attempt burned), and the factory SHALL restart the guard.
-<!-- implements NFR-R1 of add-sandbox-core -->
+**Implements**: NFR-R1 of add-sandbox-core
 
 #### Scenario: Guard crash burns no attempt
 - **WHEN** the guard dies while a stage round is in progress
@@ -135,7 +179,7 @@ When the guard is unreachable or down, in-flight checks SHALL classify as infras
 
 ### Requirement: Image carries the egress plumbing
 The reference image recipe SHALL bake in everything egress needs at build time: the factory CA certificate (seam for later TLS interception), proxy settings for tools that ignore proxy env vars (JVM: `gradle.properties`, `GRADLE_OPTS`, `settings.xml`), and registry endpoints as build parameters rather than hardcoded values.
-<!-- implements FR7, UX4 of add-sandbox-core -->
+**Implements**: FR7, UX4 of add-sandbox-core
 
 #### Scenario: Gradle build flows through the guard
 - **WHEN** a Gradle build inside the box resolves dependencies

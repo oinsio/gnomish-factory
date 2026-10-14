@@ -14,25 +14,11 @@ The application layer SHALL expose one `Tracker` port with exactly the
 operations `listReady`, `fetchTask`, `collectDecisions`, `claim`, `release`,
 `park`, `finish`, `recordAbort`, `acknowledgeDecision`, `postNote`,
 `recordProgress`, `declineFinished`, plus the lease-maintenance operations
-`listOpen`, `heartbeat`, `removeStaleClaim`, and `repairIndex`.
-`repairIndex` SHALL, given a task and the caller's observed tracker facts,
-bring the task's indexed state to the state its recorded truth implies —
-restoring `Ready` when a working-state task carries no claim footprint
-(`ClaimPending`), or completing the transition toward the newest boundary
-marker (`IndexLagging`) — and SHALL record a structural repair marker naming
-the observed shape. It SHALL re-check the facts before acting and be a safe
-no-op reporting the current facts when they no longer match the observed
-ones, so concurrent repairs converge. It SHALL NOT claim the task for the
-caller and SHALL NOT re-execute any work the markers record as done.
-The port vocabulary SHALL be the factory's (tasks, states, decisions, abort
-facts, claim facts, boundary markers); all tracker-specific mapping SHALL be
-confined to adapters. Report rendering (domain report → text) SHALL happen in
-core: the port accepts finished text plus structural fields, never engine
-domain models.
-<!-- implements FR1 of add-tracker-port -->
-<!-- implements FR5 of add-claim-heartbeat -->
-<!-- implements FR4 of enforce-finish-terminality -->
-<!-- implements FR19, FR12 of harden-task-branch-contract -->
+`listOpen`, `heartbeat`, `removeStaleClaim`, and `repairIndex`. The port
+vocabulary SHALL be the factory's (tasks, states, decisions, abort facts, claim
+facts, boundary markers).
+**Implements**: FR1 of add-tracker-port; FR5 of add-claim-heartbeat; FR4 of enforce-finish-terminality; FR19, FR12 of harden-task-branch-contract
+**Notes**: `repairIndex` re-checks the observed facts before acting, which is what lets concurrent repairs of one task converge.
 
 #### Scenario: Core compiles against the port alone
 - **WHEN** the take runner drives a full task lifecycle
@@ -58,18 +44,24 @@ domain models.
 - **THEN** the task ends `Finished` — the transition the marker implies is
   completed and the finished work is never re-executed
 
+#### Scenario: The repair marker names the observed shape
+- **WHEN** `repairIndex` acts on a task observed as `ClaimPending` or as
+  `IndexLagging`
+- **THEN** the structural repair marker it records names that observed shape
+
+#### Scenario: Index repair never claims the task for the caller
+- **WHEN** `repairIndex` restores a claimless working task to `Ready` or
+  completes a marker's transition
+- **THEN** the caller holds no claim on the task afterwards, and no work the
+  markers record as done is executed again
+
 ### Requirement: Logical task-state dictionary and transition matrix
 Task coordination SHALL follow the state dictionary `Ready`, `Working(holder)`,
 `AwaitingHuman(escalation | checkpoint | infra)`, `Finished`, with tasks failing
 the readiness criterion or closed being outside the factory's world (`Gone`).
 Transitions SHALL be initiated only by the factory or a human — never by the
-gnome. The scheduler-slot state of an instance SHALL never be written to the
-tracker. The engine outcome (`Completed`/`Paused`/`Escalated`/`Aborted`) is the
-event driving factory-initiated transitions; `Paused` SHALL appear in the tracker
-as `AwaitingHuman(checkpoint)`, not as a distinct state. The factory SHALL claim
-tasks only from `Ready`; the only exits from `AwaitingHuman` are human actions —
-returning the task to `Ready` or closing it.
-<!-- implements FR2 of add-tracker-port -->
+gnome. The factory SHALL claim tasks only from `Ready`; the only exits from
+`AwaitingHuman` are human actions — returning the task to `Ready` or closing it.
 
 ```mermaid
 stateDiagram-v2
@@ -81,6 +73,7 @@ stateDiagram-v2
     Working --> [*]: human closes (revocation)
     AwaitingHuman --> [*]: human closes
 ```
+**Implements**: FR2 of add-tracker-port
 
 #### Scenario: Outcome-to-transition mapping
 - **WHEN** an engine run ends with each of Completed, Escalated(report),
@@ -102,6 +95,11 @@ stateDiagram-v2
 - **THEN** no tracker operation was reachable from the gnome process — every
   transition originated in factory core
 
+#### Scenario: The scheduler-slot state never reaches the tracker
+- **WHEN** an instance's slots fill and free while it runs tasks
+- **THEN** no tracker write records the slot state; the tracker sees only the
+  task-state transitions and their markers
+
 ### Requirement: Task facts from fetchTask
 `fetchTask` SHALL return the task snapshot (id, title, body), the logical state
 with its holder (for `Working`) or reason (for `AwaitingHuman`), the abort
@@ -109,8 +107,7 @@ facts (count since last durable progress, last abort time), and the task's
 designators per kind (absent | single | conflict, see "Designators are
 classified once and derived per adapter"). Closed or nonexistent tasks SHALL
 be reported as `Gone`, not as errors.
-<!-- implements FR1 of add-tracker-port -->
-<!-- implements FR3 of add-base-ref-resolution -->
+**Implements**: FR1 of add-tracker-port; FR3 of add-base-ref-resolution
 
 #### Scenario: Full fact set for a working task
 - **WHEN** `fetchTask` is called for a task claimed by instance A with two
@@ -128,7 +125,7 @@ last decision ack, in posting order. `acknowledgeDecision` SHALL post an
 "acting on decision" marker such that a subsequent `collectDecisions` is empty
 until a new human reply arrives. Pairing heuristics (which comments count as
 replies) are adapter freedom under this round-trip law.
-<!-- implements FR12 of add-tracker-port -->
+**Implements**: FR12 of add-tracker-port
 
 #### Scenario: Ack consumes decisions
 - **WHEN** a human posts a decision, the factory calls `acknowledgeDecision`, and
@@ -142,18 +139,13 @@ replies) are adapter freedom under this round-trip law.
 
 ### Requirement: Abort facts round-trip across instances
 `recordAbort` SHALL, as one operation, persist a structural abort marker (cause,
-instance, time) and return the task to `Ready`. `recordProgress` SHALL persist a
-structural durable-progress marker without changing logical state. Abort facts
-SHALL be reconstructable by any instance from the tracker alone: after
-`recordAbort`, a `fetchTask` or `listReady` from a different instance SHALL
-observe the updated count and last-abort time; after `recordProgress`, a
-different instance SHALL observe the count reset. The count semantics is "aborts
-recorded strictly after the last durable-progress marker on the task";
-adapters report facts and SHALL NOT apply backoff or fuse policy.
-<!-- implements FR14 of add-tracker-port -->
-<!-- implements FR1 of fix-abort-progress-reset -->
-<!-- implements FR3 of fix-abort-progress-reset -->
-<!-- implements FR4 of fix-abort-progress-reset -->
+instance, time) and return the task to `Ready`. Abort facts SHALL be
+reconstructable by any instance from the tracker alone: after `recordAbort`, a
+`fetchTask` or `listReady` from a different instance SHALL observe the updated
+count and last-abort time; after `recordProgress`, a different instance SHALL
+observe the count reset.
+**Implements**: FR14 of add-tracker-port; FR1 of fix-abort-progress-reset; FR3 of fix-abort-progress-reset; FR4 of fix-abort-progress-reset
+**Notes**: The count is the aborts recorded strictly after the last durable-progress marker on the task, as the requirement "Abort count resets on durable progress" spells out.
 
 #### Scenario: Fresh instance sees abort history
 - **WHEN** instance A records an abort and instance B calls `fetchTask`
@@ -170,6 +162,12 @@ adapters report facts and SHALL NOT apply backoff or fuse policy.
 - **THEN** the task stays `Working` with the same claim holder, and only its
   abort facts are affected (the durable-progress marker is recorded)
 
+#### Scenario: Abort facts carry no adapter policy
+- **WHEN** a ready task's abort count has reached the fuse threshold and its
+  backoff has not expired
+- **THEN** the adapter still lists it with its abort facts and neither delays
+  nor parks it — backoff and the fuse are applied by core
+
 ### Requirement: Abort count resets on durable progress
 Every adapter SHALL reconstruct `AbortFacts.count` as the number of abort
 markers recorded strictly after the latest durable-progress marker; abort
@@ -177,7 +175,7 @@ markers at or before that marker SHALL NOT be counted. When no durable-progress
 marker exists on the task, the count SHALL fall back to the existing
 claim-streak reconstruction. This holds identically for the `listReady` feed and
 for `fetchTask`.
-<!-- implements FR3 of fix-abort-progress-reset -->
+**Implements**: FR3 of fix-abort-progress-reset
 
 #### Scenario: Progress before an abort resets the count to one
 - **WHEN** a claim is followed by a durable progress and then a single abort
@@ -199,7 +197,7 @@ adapter authors, including: configurable ready queues, human actions (reply,
 return to ready, close) as test operations, and deterministic simulation of
 concurrent claim interleaving for the race contract test. It SHALL require no
 configuration subsection (the minimal case of the config seam).
-<!-- implements FR3 of add-tracker-port -->
+**Implements**: FR3 of add-tracker-port
 
 #### Scenario: Reference passes the contract suite
 - **WHEN** the shared contract spec suite runs against the in-memory adapter
@@ -210,15 +208,14 @@ configuration subsection (the minimal case of the config seam).
 - **THEN** exactly one claim returns Acquired and the other names the winner
 
 ### Requirement: Port contract spec suite binds every adapter
-A single contract spec suite (abstract Spock base class instantiated per adapter)
-SHALL verify at minimum: `listReady` returns only ready tasks (never
-`Working`/`AwaitingHuman`/`Finished`/`Gone`, never non-task artifacts, no
-readiness-criterion failures) in adapter queue order with abort facts, and does
-NOT filter by backoff; observable claim atomicity (two concurrent claims → exactly
-one `Acquired`); and structural-marker round-trip (abort facts and ack semantics
-as specified above). Every shipped adapter SHALL pass the identical suite.
-<!-- implements FR4 of add-tracker-port -->
-<!-- implements NFR-R1 of add-tracker-port -->
+A single contract spec suite SHALL verify at minimum: `listReady` returns only
+ready tasks (never `Working`/`AwaitingHuman`/`Finished`/`Gone`, never non-task
+artifacts, no readiness-criterion failures) in adapter queue order with abort
+facts; observable claim atomicity (two concurrent claims → exactly one
+`Acquired`); and structural-marker round-trip (abort facts and ack semantics as
+specified above). Every shipped adapter SHALL pass the identical suite.
+**Implements**: FR4 of add-tracker-port; NFR-R1 of add-tracker-port
+**Notes**: The suite is an abstract Spock base class instantiated once per adapter.
 
 #### Scenario: Feed filtering property
 - **WHEN** the tracker holds tasks in every logical state plus a non-task artifact
@@ -233,38 +230,47 @@ as specified above). Every shipped adapter SHALL pass the identical suite.
 The change SHALL ship an adapter author guide (`docs/guides/adapter-author-guide.md`)
 covering: the state dictionary and transition matrix with the three-level
 distinction (tracker state / run outcome / scheduler slot); per-operation port
-semantics; the contract suite as law with the in-memory adapter as the worked
-reference; physical state mapping by example (GitHub labels as-built, Redmine
-statuses as a thought-through sketch); snapshot, decision, abort-fact, and
-designator obligations (derive candidates from the tracker's own
-representation, classify only through the port's function, declare the
-configured kinds through the factory seam); config-subsection ownership
-(adapter declares and validates its own subsection, never touches core keys)
-including the mandatory declaration of credential env variables for the
-gnome-environment scrub; and known limitations (branch-name sanitize
-collisions, polling economy with the GitHub analysis as the model, the considered
-and rejected surrogate-id approach).
-<!-- implements FR19 of add-tracker-port -->
-<!-- implements FR3 of add-base-ref-resolution -->
+semantics; and the contract suite as law with the in-memory adapter as the
+worked reference.
+**Implements**: FR19 of add-tracker-port; FR3 of add-base-ref-resolution
 
 #### Scenario: Guide is self-sufficient
 - **WHEN** a developer follows the guide to build a new adapter
 - **THEN** every obligation the contract suite checks is stated in the guide,
   without reading factory core code
 
+#### Scenario: The guide maps physical states by example
+- **WHEN** a developer looks up how logical states become tracker states
+- **THEN** the guide shows the GitHub labels as built and the Redmine statuses
+  as a thought-through sketch
+
+#### Scenario: The guide states the fact obligations
+- **WHEN** a developer looks up what an adapter owes the port's facts
+- **THEN** the guide states the snapshot, decision, abort-fact and designator
+  obligations — derive designator candidates from the tracker's own
+  representation, classify them only through the port's function, and declare
+  the configured kinds through the factory seam
+
+#### Scenario: The guide states the subsection ownership
+- **WHEN** a developer looks up how an adapter is configured
+- **THEN** the guide states that the adapter declares and validates its own
+  configuration subsection, never touches core keys, and must declare its
+  credential env variables for the gnome-environment scrub
+
+#### Scenario: The guide records the known limitations
+- **WHEN** a developer looks up what the port does not solve
+- **THEN** the guide records the branch-name sanitize collisions, the polling
+  economy with the GitHub analysis as the model, and the considered and
+  rejected surrogate-id approach
+
 ### Requirement: Open-task listing with claim versions
 `listOpen` SHALL return the open tasks — `Working` and `AwaitingHuman` — each
 with its tracker facts: the logical state labels present, the claim facts (a
 live claim with holder and opaque version, a dead footprint with its
 last-known holder, or none), and the latest boundary-marker kind. Adapters
-SHALL report facts only and SHALL NOT omit a task whose combination they
-cannot interpret; observation memory, TTL policy, staleness judgment, and
-shape classification live in core. `listReady` SHALL keep its contract — only
-`Ready` tasks — and each entry SHALL additionally carry the same claim facts,
-so core can classify a ready-labeled task that still carries a claim
-footprint.
-<!-- implements FR5 of add-claim-heartbeat -->
-<!-- implements FR19 of harden-task-branch-contract -->
+SHALL report facts only: observation memory, TTL policy, staleness judgment,
+and shape classification live in core.
+**Implements**: FR5 of add-claim-heartbeat; FR19 of harden-task-branch-contract
 
 #### Scenario: Listing carries versions
 - **WHEN** `listOpen` is called while one task is `Working` and one is
@@ -296,7 +302,7 @@ coordination artifact. Its failure mode SHALL distinguish "claim marker gone"
 (the claim was removed or taken over — a protocol signal) from infrastructure
 failure (network, 5xx — retryable); the two are different results, not one
 exception.
-<!-- implements FR5, FR8 of add-claim-heartbeat -->
+**Implements**: FR5, FR8 of add-claim-heartbeat
 
 #### Scenario: Beat refreshes the version
 - **WHEN** the holder calls `heartbeat` with a progress payload
@@ -320,16 +326,9 @@ claim facts — a live claim's stale version, or a dead footprint whose live
 version is absent (`ClaimAbandoned`): record a structural holder-transition
 marker ("stale claim removed", naming the dead or last-known holder), remove
 the dead claim marker, and return the task to `Ready`. It SHALL NOT claim the
-task for the caller. When the current claim facts no longer match the
-observed ones (the claim was beaten, already removed, or replaced by a newer
-live claim), the operation SHALL be a safe no-op reporting the current facts
-rather than an error — making concurrent removals converge. An absent
-observed version is an eligible input, never a filtered-out one: the removal
-of a dead footprint follows the same guard, comparing footprint identity
-instead of a live version.
-<!-- implements FR4, FR5 of add-claim-heartbeat -->
-<!-- implements NFR-R2 of add-claim-heartbeat -->
-<!-- implements FR19, FR12 of harden-task-branch-contract -->
+task for the caller.
+**Implements**: FR4, FR5 of add-claim-heartbeat; NFR-R2 of add-claim-heartbeat; FR19, FR12 of harden-task-branch-contract
+**Notes**: The no-op on changed facts is what makes concurrent removals converge; for a dead footprint the guard compares footprint identity instead of a live version.
 
 #### Scenario: Removal round-trip
 - **WHEN** `removeStaleClaim` succeeds for a stale `Working` task
@@ -355,26 +354,22 @@ instead of a live version.
   claim marker is removed, and the task returns to `Ready` — the absent
   version never disqualifies the removal
 
+#### Scenario: A claim removed or replaced meanwhile is left alone
+- **WHEN** `removeStaleClaim` is called with observed claim facts — a stale
+  version or a dead footprint — and that claim was already removed, or
+  replaced by a newer live claim, before the call
+- **THEN** nothing is removed, no error is raised, and the result reports the
+  current claim facts
+
 ### Requirement: Contract suite covers lease maintenance
-The shared contract spec suite SHALL be extended to verify on every adapter:
-`listOpen` filtering (only `Working`/`AwaitingHuman`, never `Ready`/
-`Finished`/`Gone`, never non-task artifacts); fact reporting for
-out-of-protocol combinations (a working-state task with no claim footprint is
-reported with its facts, never omitted); claim facts on `listReady` entries;
-heartbeat version observability (a beat changes the version another instance
-reads); the heartbeat "claim gone" signal, including a beat against a task
-the tracker no longer holds; `removeStaleClaim` round-trip, version-mismatch
-no-op, dead-footprint removal without a live version, removal of a task the
-tracker no longer holds, and concurrent-removal convergence; `repairIndex`
-restoring a claimless working task and completing a marker's transition, with
-its changed-facts no-op; and the holder-transition marker round-trip. Kill windows of the
-multi-write tracker sequences cannot be expressed against the atomic
-in-memory reference adapter; each adapter whose writes are physically
-non-atomic SHALL cover them in its own suite by fault injection after every
-write (see the kill-point harness).
-<!-- implements FR5 of add-claim-heartbeat -->
-<!-- implements NFR-R2, NFR-R3 of add-claim-heartbeat -->
-<!-- implements FR19 of harden-task-branch-contract -->
+The shared contract spec suite SHALL be extended to verify on every adapter the
+lease-maintenance operations — `listOpen`, `heartbeat`, `removeStaleClaim`,
+`repairIndex` — and the claim facts they report. Each adapter whose writes are
+physically non-atomic SHALL also cover the kill windows of its multi-write
+tracker sequences in its own suite, by fault injection after every write (see
+the kill-point harness).
+**Implements**: FR5 of add-claim-heartbeat; NFR-R2, NFR-R3 of add-claim-heartbeat; FR19 of harden-task-branch-contract
+**Notes**: The kill windows live in each non-atomic adapter's own suite because the atomic in-memory reference adapter cannot express them.
 
 #### Scenario: Suite passes on both adapters
 - **WHEN** the extended contract suite runs against the in-memory reference
@@ -394,6 +389,32 @@ write (see the kill-point harness).
 - **THEN** every frozen intermediate state classifies to a named tracker shape
   owned by a retry or the sweep — none is unreachable by both
 
+#### Scenario: The suite covers the open listing and its facts
+- **WHEN** the lease-maintenance suite runs against an adapter
+- **THEN** it verifies `listOpen` filtering (only `Working`/`AwaitingHuman`,
+  never `Ready`/`Finished`/`Gone`, never non-task artifacts), the fact
+  reporting for out-of-protocol combinations (a working-state task with no
+  claim footprint is reported with its facts, never omitted), and the claim
+  facts on `listReady` entries
+
+#### Scenario: The suite covers the heartbeat
+- **WHEN** the lease-maintenance suite runs against an adapter
+- **THEN** it verifies that a beat changes the version another instance reads,
+  and the "claim gone" signal, including a beat against a task the tracker no
+  longer holds
+
+#### Scenario: The suite covers stale-claim removal
+- **WHEN** the lease-maintenance suite runs against an adapter
+- **THEN** it verifies the `removeStaleClaim` round-trip, the version-mismatch
+  no-op, dead-footprint removal without a live version, removal of a task the
+  tracker no longer holds, concurrent-removal convergence, and the
+  holder-transition marker round-trip
+
+#### Scenario: The suite covers index repair
+- **WHEN** the lease-maintenance suite runs against an adapter
+- **THEN** it verifies `repairIndex` restoring a claimless working task and
+  completing a marker's transition, with its changed-facts no-op
+
 ### Requirement: Ready listing carries the finished fact
 Each `listReady` entry SHALL carry an adapter-derived "finished" fact — true
 when the task's recorded history contains a finish report, regardless of how
@@ -401,7 +422,7 @@ the task came back to `Ready`. The fact SHALL be reconstructed from tracker
 history alone on every listing (no adapter-local state), and `fetchTask`'s
 result SHALL carry the same fact so the explicit-take path can consult it.
 Adapters SHALL report the fact only; refusing and declining is core policy.
-<!-- implements FR1 of enforce-finish-terminality -->
+**Implements**: FR1 of enforce-finish-terminality
 
 #### Scenario: Reopened finished task carries the fact
 - **WHEN** a task is finished with a final report and a human later moves it
@@ -419,12 +440,8 @@ circulation: it restores the task's terminal status (so the task leaves the
 status restore SHALL happen before the explanation is posted, and the
 explanation SHALL be posted only when the call actually performed the
 restore: declining an already-terminal task is a state-level no-op that
-posts nothing. Concurrent declines by racing instances SHALL NOT corrupt
-state (at worst a duplicate explanation, when both observe the task as
-non-terminal before either restores it). The explanation write SHALL NOT
-use a marker kind that feeds the `returned` or `finished` derivations.
-<!-- implements FR4 of enforce-finish-terminality -->
-<!-- implements NFR-R1, NFR-R2, NFR-O1 of enforce-finish-terminality -->
+posts nothing.
+**Implements**: FR4 of enforce-finish-terminality; NFR-R1, NFR-R2, NFR-O1 of enforce-finish-terminality
 
 #### Scenario: Decline round-trip
 - **WHEN** core declines a reopened finished task with an explanation message
@@ -441,18 +458,20 @@ use a marker kind that feeds the `returned` or `finished` derivations.
 - **THEN** the decline explanation contributes to neither the returned nor the
   finished fact — only the original finish report does
 
+#### Scenario: Racing declines leave the task terminal
+- **WHEN** two instances decline the same reopened finished task concurrently
+- **THEN** the task ends in its terminal status with its state intact; the
+  worst outcome is a duplicate explanation, when both observed the task as
+  non-terminal before either restored it
+
 ### Requirement: Ready listing carries the returned fact
 Each `listReady` entry SHALL carry an adapter-derived "returned" fact — true
 when the task's recorded history shows it was previously worked and given
 back for more work: a park report (human-returned) or a holder-transition
 marker (reaper-returned) exists. A finish report SHALL NOT count as
 returned — a finished task is terminal, not given back (see the finished
-fact). All adapters SHALL agree on this derivation. Adapters SHALL report the
-fact only; the prioritization policy (returned first, WIP accounting) lives
-in core. The open-front count remains the size of the existing `listOpen`
-listing — no dedicated counting operation exists.
-<!-- implements FR6, FR7 of add-factory-serve -->
-<!-- implements FR2 of enforce-finish-terminality -->
+fact). All adapters SHALL agree on this derivation.
+**Implements**: FR6, FR7 of add-factory-serve; FR2 of enforce-finish-terminality
 
 #### Scenario: Fresh task is not returned
 - **WHEN** `listReady` lists a task that was never claimed
@@ -472,19 +491,24 @@ listing — no dedicated counting operation exists.
 - **THEN** `listReady` lists it with the returned fact false and the finished
   fact true
 
+#### Scenario: The returned fact carries no prioritization
+- **WHEN** `listReady` lists a returned task alongside fresh ones
+- **THEN** the adapter reports the returned fact in its own queue order and
+  applies no prioritization — returned-first ordering and WIP accounting are
+  core policy
+
+#### Scenario: The open-front count is the open listing's size
+- **WHEN** core needs the number of open tasks for its WIP policy
+- **THEN** it takes the size of the `listOpen` listing; the port has no
+  dedicated counting operation
+
 ### Requirement: Contract suite covers the returned fact
 The shared contract spec suite SHALL be extended to verify on every adapter:
 the returned fact is false for never-claimed tasks, true after a
 park-and-return round-trip, true after a stale-claim removal, and false
-after a finish-and-reopen round-trip; the finished fact is true after a
-finish-and-reopen round-trip and false otherwise; the decline operation
-restores terminal status, removes the task from `listReady`, leaves the
-derivations unpolluted, and is a silent no-op (status and thread unchanged)
-on an already-terminal task; and `listOpen`'s size equals the open-front
-count the WIP policy consumes.
-<!-- implements FR7 of add-factory-serve -->
-<!-- implements NFR-R1 of add-factory-serve -->
-<!-- implements FR6 of enforce-finish-terminality -->
+after a finish-and-reopen round-trip; and the finished fact is true after a
+finish-and-reopen round-trip and false otherwise.
+**Implements**: FR7 of add-factory-serve; NFR-R1 of add-factory-serve; FR6 of enforce-finish-terminality
 
 #### Scenario: Suite passes on both adapters
 - **WHEN** the extended contract suite runs against the in-memory reference
@@ -498,6 +522,17 @@ count the WIP policy consumes.
 - **THEN** both report identical facts (returned false, finished true) —
   the divergence the suite previously missed
 
+#### Scenario: The suite covers the decline operation
+- **WHEN** the extended contract suite runs against an adapter
+- **THEN** it verifies that the decline operation restores terminal status,
+  removes the task from `listReady`, leaves the derivations unpolluted, and is
+  a silent no-op (status and thread unchanged) on an already-terminal task
+
+#### Scenario: The suite binds the open-front count to the open listing
+- **WHEN** the extended contract suite runs against an adapter
+- **THEN** it verifies that `listOpen`'s size equals the open-front count the
+  WIP policy consumes
+
 ### Requirement: List entries carry the task title
 `ReadyTask` and `OpenTask` SHALL carry the task title alongside their
 existing facts. Every adapter SHALL populate the title from the data its
@@ -505,8 +540,7 @@ list calls already receive — enriching a list result SHALL NOT add
 tracker requests (no per-task `fetchTask` fan-out). The port contract
 spec suite SHALL verify title propagation on both list operations for
 every adapter.
-<!-- implements FR7 of add-board-command -->
-<!-- implements NFR-P1 of add-board-command -->
+**Implements**: FR7 of add-board-command; NFR-P1 of add-board-command
 
 #### Scenario: Ready listing carries titles
 - **WHEN** `listReady` is called against a tracker holding ready tasks
@@ -535,12 +569,10 @@ The claim epoch a tenure was issued SHALL be readable by every writer that
 stamps it, through one published read-only seam on the contract — "which epoch
 does this instance hold on this task right now" — filled at the single claim
 choke point and never re-derived. An adapter whose writes are physically
-non-atomic SHALL be handed that seam when it is constructed, so its own writers
-stamp the tenure they write under; an adapter that does not stamp epochs SHALL
-be constructible without one. No component SHALL keep a second tenure record of
-its own: a duplicated fencing token is exactly the divergence the epoch exists
-to detect.
-<!-- implements FR13 of harden-task-branch-contract -->
+non-atomic SHALL be handed that seam when it is constructed. No component SHALL
+keep a second tenure record of its own.
+**Implements**: FR13 of harden-task-branch-contract
+**Notes**: A duplicated fencing token is exactly the divergence the epoch exists to detect.
 
 #### Scenario: An adapter's own writes carry the tenure it holds
 - **WHEN** an instance holding a claim on a task performs a tracker write for
@@ -565,15 +597,11 @@ to detect.
 A successful `claim` SHALL return an opaque claim token that is strictly
 increasing per task across successive (re)claims, and the same token SHALL be
 readable in the claim facts of `listOpen`, `listReady`, and `heartbeat`
-observations. Each adapter chooses its own monotonic source (the GitHub
-adapter uses the tracker-assigned claim comment id); core compares tokens only
-for order — it never interprets their structure. This token is the claim epoch
-of the `task-branch-contract` capability: holders stamp it into commits and
-tracker writes as provenance of the tenure that wrote them, and a fenced
-tracker operation compares it as the holder's identity. No reader classifies
-an older-token artifact as stale; the branch's fence is the fast-forward-only
-push and the tracker's fence is the round-boundary revocation check.
-<!-- implements FR13 of harden-task-branch-contract -->
+observations. Core compares tokens only for order — it never interprets their
+structure.
+**Implements**: FR13 of harden-task-branch-contract
+**Notes**: Each adapter chooses its own monotonic source (the GitHub adapter uses the tracker-assigned claim comment id).
+**Notes**: The token is the claim epoch of the `task-branch-contract` capability: holders stamp it into commits and tracker writes as provenance of the tenure that wrote them, and a fenced tracker operation compares it as the holder's identity.
 
 #### Scenario: Reclaim returns a greater token
 - **WHEN** a task is claimed, reaped, and claimed again by any instance
@@ -584,27 +612,23 @@ push and the tracker's fence is the round-boundary revocation check.
   facts from a listing
 - **THEN** B obtains the same token A was issued, as an opaque ordered value
 
+#### Scenario: An older token never marks an artifact stale
+- **WHEN** a reader meets a commit or a tracker write stamped with a token
+  older than the task's current claim
+- **THEN** it does not classify the artifact as stale on that ground — the
+  branch is fenced by the fast-forward-only push and the tracker by the
+  round-boundary revocation check
+
 ### Requirement: Designators are classified once and derived per adapter
 The port module SHALL publish the designator vocabulary — per kind, exactly
 one of three shapes: absent, a single value, or a conflict listing every
 value found — together with one classification function from candidate
-values to a shape (no candidates → absent; one distinct value → single;
-several distinct values → conflict; equal duplicates collapse). Every adapter
-SHALL derive the candidate values for a kind from its own representation and
-SHALL classify them only through that function — no adapter resolves a
-conflict, invents a value, or classifies on its own. Kinds are open names:
-kind `base` is the first user; `add-pipeline-routing` adds kind `type` with
-no port change. The GitHub adapter SHALL take its rules from its own
-subsection, `tracker.github.designators` (a map of kind → regular expression
-with exactly one capture group), validated on the adapter's config seam like
-its other keys; the in-memory adapter SHALL set designators through a test
-operation and still require no subsection. The adapter factory seam SHALL
-report the set of kinds an adapter is configured to extract, so core can
-validate configuration that depends on it without reading adapter keys. The
-port-level contract suite SHALL cover all three shapes for every adapter,
-including candidates that match with different values (conflict) and data
-that yields no candidate at all (absent).
-<!-- implements FR3 of add-base-ref-resolution -->
+values to a shape. Every adapter SHALL derive the candidate values for a kind
+from its own representation and SHALL classify them only through that
+function — no adapter resolves a conflict, invents a value, or classifies on
+its own.
+**Implements**: FR3 of add-base-ref-resolution
+**Notes**: Kinds are open names: kind `base` is the first user, and `add-pipeline-routing` adds kind `type` with no port change.
 
 #### Scenario: Single designator reported
 - **WHEN** a GitHub task carries exactly one label matching the configured
@@ -631,6 +655,23 @@ that yields no candidate at all (absent).
 - **THEN** the adapter factory reports `base` among its configured kinds, and
   an adapter with no rule reports none
 
+#### Scenario: GitHub designator rules live in the adapter's subsection
+- **WHEN** the GitHub adapter reads its designator rules
+- **THEN** it takes them from `tracker.github.designators`, a map of kind →
+  regular expression with exactly one capture group, validated on the
+  adapter's config seam like its other keys
+
+#### Scenario: The in-memory adapter sets designators by test operation
+- **WHEN** a test needs a task with designators on the in-memory adapter
+- **THEN** it sets them through a test operation, and the adapter still
+  requires no configuration subsection
+
+#### Scenario: The contract suite covers every designator shape
+- **WHEN** the port-level contract suite runs against an adapter
+- **THEN** it covers all three shapes, including candidates that match with
+  different values (conflict) and data that yields no candidate at all
+  (absent)
+
 ### Requirement: An interrupted call is a cancellation, not an outage
 A tracker adapter whose call is interrupted — the calling thread's interrupt
 arrives while the call waits on the tracker — SHALL end the call without a
@@ -639,7 +680,7 @@ returns control, and SHALL NOT report the interrupt as a
 `TrackerUnavailableException` or any other outage the port's callers retry.
 A caller therefore reads "the call failed because this thread was told to
 stop" from the thread's own interrupt, whichever adapter is bound.
-<!-- implements FR11, NFR-R3 of fix-operator-blockers -->
+**Implements**: FR11, NFR-R3 of fix-operator-blockers
 
 #### Scenario: Interrupted read leaves the interrupt set
 - **WHEN** a thread's interrupt arrives while a `listOpen` call waits on the

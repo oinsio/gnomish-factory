@@ -12,7 +12,7 @@ the same `ServiceLoader` registry as any other provider. It is the escape-hatch
 for third-party CI / quality services reachable over HTTP, symmetric to the
 `command` check for local verification — an operator points a stage at a REST
 endpoint without writing an adapter.
-<!-- implements FR9 of add-plugin-architecture -->
+**Implements**: FR9 of add-plugin-architecture
 
 #### Scenario: http provider resolves like any other
 - **WHEN** a stage declares an `external` check with `provider: http`
@@ -22,16 +22,12 @@ endpoint without writing an adapter.
 ### Requirement: The http verdict is a declarative pass-when, with optional pending-when polling
 The http check verdict SHALL be declared, not coded: a `pass-when` condition —
 HTTP 2xx by default, optionally narrowed by a `json-path` and/or `regex`
-extraction compared with `equals` — decides pass versus fail. The `json-path`
-dialect is a deliberate subset of JSONPath — an optional `$` root,
-dot-separated field names, and `[n]` array indexes (e.g.
-`$.projectStatus.conditions[0].status`) — not a full JSONPath engine; anything
-the subset cannot address is `regex` territory. An optional `pending-when`
+extraction compared with `equals` — decides pass versus fail. An optional `pending-when`
 condition SHALL mark a response as not-yet-terminal, causing the check to poll
 (reusing the `External` poll loop, `interval` / `timeout`) until a terminal
-result or the timeout. A check with no `pending-when` is a one-shot probe — a
-degenerate poll of a single request.
-<!-- implements FR10 of add-plugin-architecture -->
+result or the timeout.
+**Implements**: FR10 of add-plugin-architecture
+**Notes**: The `json-path` dialect is a deliberate subset of JSONPath, not a full engine; anything the subset cannot address is `regex` territory. A check with no `pending-when` is a one-shot probe, a degenerate poll of a single request.
 
 #### Scenario: One-shot probe passes on 2xx
 - **WHEN** an http check declares only a `pass-when` of the default 2xx and the
@@ -52,13 +48,19 @@ degenerate poll of a single request.
 - **AND** reaching `timeout` while still pending classifies per the check's
   timeout class, reusing the `External` timeout semantics
 
+#### Scenario: json-path addresses fields and array indexes
+- **WHEN** a `pass-when` declares the `json-path`
+  `$.projectStatus.conditions[0].status`
+- **THEN** the check compares the value at that field, the dialect being an
+  optional `$` root, dot-separated field names, and `[n]` array indexes
+
 ### Requirement: The http provider contributes no pin paths
 The `http` provider SHALL contribute no adapter pin paths: only the
 law-declared `pinPaths` of the check pin it, and when the declaration names
 none the pin-check passes vacuously, per verification-hardening's empty-union
 rule. There is no repo-side definition file an arbitrary REST endpoint could be
 pinned to.
-<!-- implements FR15 of add-plugin-architecture -->
+**Implements**: FR15 of add-plugin-architecture
 
 #### Scenario: Only law-declared paths pin an http check
 - **WHEN** an `external` check with `provider: http` declares `pinPaths` in the
@@ -75,9 +77,7 @@ non-secret request shape, never the secret value. Each resolved http check's
 credential name SHALL join the declared credential set, so it is scrubbed from
 the child environment and barred from the passthrough allowlist like any
 provider-declared name.
-<!-- implements FR11 of add-plugin-architecture -->
-<!-- implements FR17 of add-plugin-architecture -->
-<!-- implements NFR-S1 of add-plugin-architecture -->
+**Implements**: FR11 of add-plugin-architecture; FR17 of add-plugin-architecture; NFR-S1 of add-plugin-architecture
 
 #### Scenario: Secret is injected at request time, never stored in the manifest
 - **WHEN** an http check names an authorization credential

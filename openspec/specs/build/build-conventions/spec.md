@@ -9,7 +9,7 @@ Defines how shared Gradle build logic is organized across the module tree: conve
 ### Requirement: Shared build logic in convention plugins
 Common build configuration SHALL live in `build-logic` convention plugins, and
 each module's build file SHALL stay within the project file-size cap.
-<!-- implements FR6 of split-into-modules -->
+**Implements**: FR6 of split-into-modules
 
 #### Scenario: Module build files are thin
 - **WHEN** each module's build file is measured
@@ -26,7 +26,7 @@ each module's build file SHALL stay within the project file-size cap.
 PIT bound to that module's production Java classes, so a change touching a
 single module mutates only that module's classes, while root `check` aggregates
 every module's run (see the `quality-gates` capability).
-<!-- implements FR6, FR11, NFR-P1 of split-into-modules -->
+**Implements**: FR6, FR11, NFR-P1 of split-into-modules
 
 #### Scenario: Single-module change mutates only that module
 - **WHEN** a developer runs `check` for the one module a change touches
@@ -37,19 +37,10 @@ every module's run (see the `quality-gates` capability).
 - **WHEN** PIT resolves its target classes for any module
 - **THEN** only Java production classes are targeted, never Groovy test bytecode
 
-### Requirement: Full clean-build time not regressed
-Full clean-build wall-time SHALL NOT regress versus the monolith; module-level
-parallelism offsets the multi-module overhead.
-<!-- implements NFR-P2 of split-into-modules -->
-
-#### Scenario: Clean build stays within the monolith baseline
-- **WHEN** a full clean build runs with the module tree in place
-- **THEN** its wall-time is within the pre-split monolith baseline
-
 ### Requirement: Documented single-module mutation invocation
 A developer SHALL be able to run mutation tests for only the module they touched
 via a documented Gradle invocation.
-<!-- implements UX1 of split-into-modules -->
+**Implements**: UX1 of split-into-modules
 
 #### Scenario: Developer runs PIT for one module
 - **WHEN** a developer runs the documented per-module PIT task for the module they
@@ -62,7 +53,7 @@ automated suite in the build-logic project SHALL execute the gate convention in
 an isolated build against a controlled baseline and assert the gate's observable
 behavior. No test SHALL assert the textual content of a convention script as a
 proxy for the gate's behavior.
-<!-- implements FR1, FR8, FR9 of add-functional-api-gate-test -->
+**Implements**: FR1, FR8, FR9 of add-functional-api-gate-test
 
 #### Scenario: An incompatible change fails the isolated build
 - **WHEN** the isolated build's public api surface has a binary-incompatible
@@ -95,20 +86,16 @@ proxy for the gate's behavior.
   observable behavior
 - **THEN** no test fails on the wording or structure of the script
 
-### Requirement: Single-purpose gate convention
+### Requirement: Api-compatibility gate in its own convention plugin
 The api-compatibility gate SHALL live in its own convention plugin with only
 the prerequisites the gate needs, applied by the published-api convention, so
 the functional suite can exercise the gate without the full library convention
 chain and each convention file stays within the project file-size target.
-<!-- implements FR7 of add-functional-api-gate-test -->
+**Implements**: FR7 of add-functional-api-gate-test
+**Notes**: The scenario `The published-api module's build is unchanged` was the acceptance of the archived change `add-functional-api-gate-test` and left with the old heading `Single-purpose gate convention` (FR16 of tighten-spec-contract).
 
 #### Scenario: The gate is exercisable in isolation
 - **WHEN** the functional suite applies the gate convention to a minimal java
   library project
 - **THEN** the gate tasks are available and behave as specified without the
   formatting, static-analysis, or mutation-testing conventions being applied
-
-#### Scenario: The published-api module's build is unchanged
-- **WHEN** the published-api convention is applied to `gnomish-plugin-api`
-- **THEN** the gate, baseline-update, and version-verification tasks behave
-  exactly as before the extraction
