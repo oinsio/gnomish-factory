@@ -27,7 +27,7 @@ import org.jspecify.annotations.Nullable;
  * harden-task-branch-contract): the located ref is read through {@link RefTipSource} into {@link
  * TipEnvelopeReader}, and the resulting {@link BranchShape} says whether a report can be
  * built at all. A shape whose tip carries no readable envelopes — delivered, bare, or one of the
- * three quarantine shapes — comes back as {@link BranchStateResult.Shaped} for the caller to render
+ * four quarantine shapes — comes back as {@link BranchStateResult.Shaped} for the caller to render
  * calmly, so an unknown {@code "version"} or an unparseable {@code state.json} is a named shape
  * here rather than a thrown {@code UnsupportedStateFileVersionException} (NFR-R2). The classifier
  * holds no claim on this path — {@code status} is a reader, never a tenure — and none is needed:

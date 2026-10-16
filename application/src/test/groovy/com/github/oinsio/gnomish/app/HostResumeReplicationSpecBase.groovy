@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.*
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.project.RegisteredClone
@@ -61,8 +62,11 @@ abstract class HostResumeReplicationSpecBase extends Specification implements Ru
         worktree = tempDir.resolve('worktrees').resolve('PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        branches.adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+            new BranchAdoption.AlreadyLocal(taskId)
+        }
         branches.classifyShape(_, _) >> new BranchShape.InProgress()
-        worktrees.ensureWorktree(_, _, _) >> worktree
+        worktrees.ensureWorktree(_, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> new InMemoryAttemptPersistence()

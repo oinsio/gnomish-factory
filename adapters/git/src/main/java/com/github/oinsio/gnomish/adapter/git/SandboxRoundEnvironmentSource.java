@@ -114,7 +114,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
      * path after nothing.
      */
     private RoundToken openTip() {
-        String revision = "refs/heads/" + branch;
+        String revision = TaskBranchRefs.head(taskId);
         return RoundToken.of(VerifiedTip.required(revision, "rev-parse", runner.run(cloneDir, "rev-parse", revision)));
     }
 

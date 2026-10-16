@@ -37,7 +37,7 @@ class OriginReconciliationTipSourceSpec extends Specification implements BareGit
     }
 
     private Optional<String> originTip() {
-        new RemoteBranchTip(runner).read(clone, BRANCH)
+        new RemoteBranchTip(runner).read(clone, 'PROJ-1')
     }
 
     // FR3, design D3 of fix-lifecycle-push: the mode's own reader supplies the tip; a clone ref that

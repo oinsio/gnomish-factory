@@ -106,10 +106,13 @@ final class TakeContainerFreshClaim {
 
         var execution = new TakeContainerEngineExecution(
                 wiring.assembly(),
+                wiring.git().branches(),
                 wiring.outcomeDispatch(),
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),
                 bound.lawBinding());
-        return execution.run(lawBound, support, synthesized.context(), synthesized.initialState(), null);
+        var branch = GitFreshTaskSupport.createdBranch(
+                wiring.git().branches(), lawBound.run().cloneDir(), taskId);
+        return execution.run(lawBound, support, branch, synthesized.context(), synthesized.initialState(), null);
     }
 }

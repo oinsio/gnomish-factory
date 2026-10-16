@@ -33,7 +33,7 @@ nothing durable references them.
 ## 1. The checker, unwired (D5, D6, D7; FR1, FR2, FR5, FR6, NFR-R1, NFR-R3, NFR-O1, NFR-S1, NFR-C1; UX1; M6)
 
 - [x] 1.1 Fix Q1 and write the reader: `SpecContractReader` in
-      `build-logic/src/main/groovy/com/github/oinsio/gnomish/build/` reads one spec file into
+      `build-logic/src/main/groovy/com/github/oinsio/gnomish/buildlogic/` reads one spec file into
       requirement blocks — heading, body lines, metadata lines (`^\*\*[^*]+\*\*:`), scenario
       headings (`^####\s`), with fenced blocks masked — and one test file into its
       `// Scenario: <spec-id> / <title>` markers (also inside block comments). Verify: a Spock
@@ -156,8 +156,8 @@ has one row per normative sentence.
 - [x] 4.9 `agent-executor` (11 of 19).
 - [x] 4.10 `manual-run` (10 of 18), `cli-arguments` (3 of 3), `operator-console` (1 of 3).
 - [x] 4.11 `stage-engine` (12 of 17) and `pipeline-config` (6 of 23).
-- [x] 4.12 `quality-gates` (8 of 29), `module-layering` (4 of 6), `build/sandbox-module-split`
-      (1 of 2); `build/build-conventions` and `build/test-fixtures-module` are already within
+- [x] 4.12 `quality-gates` (8 of 29), `module-layering` (4 of 6), `build-system/sandbox-module-split`
+      (1 of 2); `build-system/build-conventions` and `build-system/test-fixtures-module` are already within
       the limit — confirm in the preview and leave their generated deltas untouched.
 - [x] 4.13 `lifecycle/claim-heartbeat` (8 of 12), `lifecycle/task-branch-contract` (7 of 8),
       `lifecycle/subprocess-supervision` (1 of 2); `lifecycle/factory-bootstrap`,
@@ -377,10 +377,10 @@ is sorted at 8.14. Verify per task: the named specs green; `./gradlew checkSpecC
       `observability/factory-logging` (7), `serve/daemon-supervision` (1).
 - [x] 8.10 `core/time-source` (9), `core/untrusted-text` (6), `cli/task-inspection` (5).
 - [x] 8.11 `cli/manual-run` (6), `pipeline/*` (8), `operator/*` (8), `verification/*` (5),
-      `plugin/*` (3), `build/dependency-verification` (2).
-- [x] 8.12 `build/quality-gates` (25).
-- [x] 8.13 `build/module-layering` (12), `build/build-conventions` (7),
-      `build/sandbox-module-split` (4), `build/test-fixtures-module` (2), `release/*` (5),
+      `plugin/*` (3), `build-system/dependency-verification` (2).
+- [x] 8.12 `build-system/quality-gates` (25).
+- [x] 8.13 `build-system/module-layering` (12), `build-system/build-conventions` (7),
+      `build-system/sandbox-module-split` (4), `build-system/test-fixtures-module` (2), `release/*` (5),
       `lifecycle/factory-bootstrap` (1).
 - [x] 8.14 **Decision point (D9, FR11).** Present every `findings.md` row added by 8.1–8.13;
       the operator sorts each into this change or a new change; the sorted rows are copied
@@ -406,7 +406,7 @@ named specs green; the scoped PIT green; `./gradlew checkSpecContract
 -PspecContractSpecsDir=<preview> -PspecContractScope=<spec-ids>` green for the capability the
 finding names.
 
-- [x] 9.1 F113 — `build/quality-gates` / `An override reaches every configuration that resolves
+- [x] 9.1 F113 — `build-system/quality-gates` / `An override reaches every configuration that resolves
       the artifact`: carry the jackson-bom override (2.22.3, the catalog's pin) to the
       `build-logic` classpaths and the root buildscript `classpath` (a `gradle.properties`
       buildscript override, as for `tools.jackson`), regenerate `build-logic/gradle.lockfile` and
@@ -414,7 +414,7 @@ finding names.
       `SecurityOverrideLockStateSpec` green without `@PendingFeature`; no lockfile in the tree
       names `jackson-bom` or `jackson-databind` 2.22.1 (`grep -rn "2.22.1" --include='*.lockfile' .`
       empty); OSV-Scanner over the regenerated lockfiles reports none of the three GHSA ids.
-- [x] 9.2 F111 — `build/quality-gates` / `Dead private code fails compilation`: first find why
+- [x] 9.2 F111 — `build-system/quality-gates` / `Dead private code fails compilation`: first find why
       `UnusedMethod` and `UnusedVariable` stay silent under `java-conventions` while NullAway fires
       (the probe of the finding: Error Prone 2.50.0, JDK 25 — check the check names, the
       `disableWarningsInGeneratedCode` / `-XepDisableAllChecks` / `allErrorsAsWarnings` settings,
@@ -490,7 +490,7 @@ finding names.
       sites (`ContainerEnvironmentFactory`, `ContainerEnvironmentBuilder`) and their specs. Verify:
       `ContainerEquipmentSplitSpec` green without `@PendingFeature`; the `sandbox/docker`
       environment specs green; scoped PIT of the four classes.
-- [x] 9.10 F119 — `build/module-layering` / `A use case reaches its collaborator through a port`
+- [x] 9.10 F119 — `build-system/module-layering` / `A use case reaches its collaborator through a port`
       (*single-owner*, row `WorkspaceFactory` / `ConsoleIO`): add a `WorkspaceFactory` port owned
       by `:application` (or `:domain`, beside `Workspace`, if the engine consumes it) and hand it,
       with the `ConsoleIO`, to `TakeEngineExecution`, `PipelineStartup`, `GitModeRunner`,
@@ -674,12 +674,12 @@ finding names.
       (`testing.md`). Verify: the new specs green; `checkSpecContract` green for
       `observability/dashboard-page`; the dependency-verification and license gates green.
 - [x] 9.15 F115, F120 — retire the one-time scenarios (D16; FR16): in this change's deltas, turn
-      `Full clean-build time not regressed` (`build/build-conventions`) and `Behavior-preserving
-      split` (`build/module-layering`) into `REMOVED` blocks with **Reason** and **Migration**;
-      turn `Source file size cap`, `Shared app-layer assembly fixture` (`build/quality-gates`),
-      `Use-case dependencies inverted onto ports` (`build/module-layering`), `Single-purpose gate
-      convention` (`build/build-conventions`) and `Sandbox port contract preserved;
-      AdapterBinding opened by change C` (`build/sandbox-module-split`) into a `REMOVED` block
+      `Full clean-build time not regressed` (`build-system/build-conventions`) and `Behavior-preserving
+      split` (`build-system/module-layering`) into `REMOVED` blocks with **Reason** and **Migration**;
+      turn `Source file size cap`, `Shared app-layer assembly fixture` (`build-system/quality-gates`),
+      `Use-case dependencies inverted onto ports` (`build-system/module-layering`), `Single-purpose gate
+      convention` (`build-system/build-conventions`) and `Sandbox port contract preserved;
+      AdapterBinding opened by change C` (`build-system/sandbox-module-split`) into a `REMOVED` block
       plus an `ADDED` requirement under a new heading — the current text (8.15's included) and
       every standing scenario verbatim, the one-time scenario dropped, the `**Implements**:` line
       kept, a `**Notes**:` line naming the archived change whose acceptance the dropped scenario
@@ -754,12 +754,12 @@ Rules decided:
 
 Findings:
 - F1 — tracker/tracker-port / two scenarios `Suite passes on both adapters` — other — new changes `retire-misnamed-scenarios` + `restore-renamed-scenarios` (re-decided after 5.2a: OpenSpec cannot drop a scenario from a MODIFIED block, so a rename is REMOVED then re-ADDED in two changes archived back to back) — until then both scenarios share one marker identity.
-- F2 — build/quality-gates / fix-artifacts stage command — other — this change (5.11) — add a per-change delta filter to `checkSpecContract` and use it in the fix-artifacts command.
+- F2 — build-system/quality-gates / fix-artifacts stage command — other — this change (5.11) — add a per-change delta filter to `checkSpecContract` and use it in the fix-artifacts command.
 - F3 — git/git-task-persistence / `PushBestEffortTaskRepositorySpec` one-push feature — other — new change `add-scenario-tests-git` — the test is rewritten where the area's tests are written; no marker goes on it here. (Revised 2026-10-12: this change, 8.1.)
 - F6 — tracker/tracker-take / claim-time locate fetch on an unreachable origin — revealed defect — this change (5.11) — the code is aligned with the base rule: release the claim outside the abort accounting (production fix by TDD, scoped PIT).
 - F10 — tracker/tracker-port / `Contract suite covers lease maintenance` — other — new change `add-scenario-tests-tracker` — the two shared-contract features are written there. (Revised 2026-10-12: this change, 8.5.)
 - F26 — pipeline/stage-engine / `Failure classification` table — other — this change (5.2a) — rows become scenarios, as in `manual-run`.
-- F29 — build/module-layering / access-log emitter and observer hook — other — new change `add-subprocess-access-log` — the three scenarios named in the finding are `pending-test: add-subprocess-access-log`; they become true when it lands.
+- F29 — build-system/module-layering / access-log emitter and observer hook — other — new change `add-subprocess-access-log` — the three scenarios named in the finding are `pending-test: add-subprocess-access-log`; they become true when it lands.
 - F43 — operator/secrets-provider / permission check scope — other — this change, no edit — the scenario's scope (secrets folders only) matches the code; accepted.
 - F4 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
 - F5 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
@@ -782,7 +782,7 @@ Findings:
 - F24 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
 - F25 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
 - F27 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
-- F28 — build/module-layering / enumerations — spec text vs code — this change (5.2a), text aligned; the title `The baseref leaf stays empty of dependencies` goes to `retire-misnamed-scenarios` + `restore-renamed-scenarios` (as F1).
+- F28 — build-system/module-layering / enumerations — spec text vs code — this change (5.2a), text aligned; the title `The baseref leaf stays empty of dependencies` goes to `retire-misnamed-scenarios` + `restore-renamed-scenarios` (as F1).
 - F30 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
 - F31 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
 - F32 — see `findings.md` — spec text vs code — this change (5.2a) — the text is aligned with the code.
@@ -872,14 +872,14 @@ Findings:
 - F108 — verification/verification-hardening / `Terminal escape attack is neutralized` — spec text vs code — this change (8.15, text) — field-by-field rendering (D6), no fence.
 - F109 — verification/github-external-check / `A green check is auditable from the tracker` — revealed defect — new change `surface-check-urls-and-sweep-sources`.
 - F110 — plugin/plugin-api-contract / re-baseline without a bump — other — this change (8.15, text) — accepted, text clarified.
-- F111 — build/quality-gates / `Dead private code fails compilation` — revealed defect — new change `restore-unused-code-checks`.
-- F112 — build/quality-gates / `A production-scope advisory is fixed, never suppressed` — spec text vs code — this change (8.15, text) — the scenario is scoped to the allowlisted artifacts; the catalog comment is corrected.
-- F113 — build/quality-gates / `An override reaches every configuration that resolves the artifact` — revealed defect — new change `fix-buildscript-jackson-lock`.
-- F114 — build/quality-gates / `Source file size cap` — other — this change (8.15, text) — the cap stays a review rule (`process-invariants.md`); the scenario's THEN is restated to it, or it becomes an exemption naming that review.
+- F111 — build-system/quality-gates / `Dead private code fails compilation` — revealed defect — new change `restore-unused-code-checks`.
+- F112 — build-system/quality-gates / `A production-scope advisory is fixed, never suppressed` — spec text vs code — this change (8.15, text) — the scenario is scoped to the allowlisted artifacts; the catalog comment is corrected.
+- F113 — build-system/quality-gates / `An override reaches every configuration that resolves the artifact` — revealed defect — new change `fix-buildscript-jackson-lock`.
+- F114 — build-system/quality-gates / `Source file size cap` — other — this change (8.15, text) — the cap stays a review rule (`process-invariants.md`); the scenario's THEN is restated to it, or it becomes an exemption naming that review.
 - F115, F120 — one-time migration and refactor scenarios — other — new change `retire-one-time-scenarios` (`pending-test`).
-- F116, F117 — build/quality-gates / `Shared app-layer assembly fixture` — spec text vs code — this change (8.15, text) — one standard site plus named deviations.
-- F118 — build/quality-gates / `Fresh clone needs no tuning` — spec text vs code — this change (8.15, text) — "no `gradle.properties` sets …".
-- F119 — build/module-layering / `A use case reaches its collaborator through a port` — revealed defect — new change `close-assembly-escape-hatches`.
+- F116, F117 — build-system/quality-gates / `Shared app-layer assembly fixture` — spec text vs code — this change (8.15, text) — one standard site plus named deviations.
+- F118 — build-system/quality-gates / `Fresh clone needs no tuning` — spec text vs code — this change (8.15, text) — "no `gradle.properties` sets …".
+- F119 — build-system/module-layering / `A use case reaches its collaborator through a port` — revealed defect — new change `close-assembly-escape-hatches`.
 - F121 — release/release-distribution / `Release build carries the tag's version` — other — this change (8.15, text) — accepted, text clarified.
 
 ### Follow-up 2026-10-12

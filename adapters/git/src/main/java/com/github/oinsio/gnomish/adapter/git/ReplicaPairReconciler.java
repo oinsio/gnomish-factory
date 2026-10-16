@@ -113,8 +113,8 @@ final class ReplicaPairReconciler {
      *     claimless path hands the decision back instead of destroying the local line
      */
     DivergenceOutcome reconcile(String taskId, String branch) {
-        String localRef = "refs/heads/" + branch;
-        String trackingRef = "refs/remotes/origin/" + branch;
+        String localRef = TaskBranchRefs.head(taskId);
+        String trackingRef = TaskBranchRefs.tracking(taskId);
         // The fetch's own outcome is deliberately not read: everything below is decided from refs
         // the clone actually holds, so a fetch killed on its deadline degrades to "no fresher
         // tracking ref", never to a wrong verdict (FR7 of bound-subprocess-commands). Its argv is
@@ -122,7 +122,7 @@ final class ReplicaPairReconciler {
         // one cannot auto-follow a tag or truncate FETCH_HEAD either (ADR 0008).
         // The register rides along into its tracking name (D13 of tighten-spec-contract).
         touchpoint.fetch(
-                repo, taskId, new Refspec(branch + ":" + trackingRef), FactoryRegister.fetchedTracking(taskId));
+                repo, taskId, new Refspec(branch + ":" + trackingRef), FactoryRegisterRefs.fetchedTracking(taskId));
 
         String lastLostSwap = null;
         for (int pass = 0; pass < MAX_PASSES; pass++) {
@@ -182,11 +182,11 @@ final class ReplicaPairReconciler {
      * @throws IllegalStateException when the transaction was cut off before git answered
      */
     private @Nullable String followOriginRegister(String taskId, String localRef, String localTip) {
-        String originRegister = tipOf(FactoryRegister.of(taskId).trackingName());
+        String originRegister = tipOf(FactoryRegisterRefs.of(taskId).trackingName());
         if (originRegister == null) {
             return null;
         }
-        String localRegister = tipOf(FactoryRegister.of(taskId).name());
+        String localRegister = tipOf(FactoryRegisterRefs.of(taskId).name());
         if (originRegister.equals(localRegister)
                 || (localRegister != null && !isAncestor(localRegister, originRegister))
                 || !isAncestor(originRegister, localTip)) {
@@ -230,7 +230,7 @@ final class ReplicaPairReconciler {
         // transaction (D13 of tighten-spec-contract), so no kill separates the two moves. A clone
         // register off origin's line names a commit being given up: with no register at origin to
         // replace it, the same transaction deletes it rather than leave every later read Diverged.
-        String localRegister = tipOf(FactoryRegister.of(taskId).name());
+        String localRegister = tipOf(FactoryRegisterRefs.of(taskId).name());
         String offLineRegister = localRegister != null && !isAncestor(localRegister, remoteTip) ? localRegister : null;
         GitCommandResult swap = register.adopt(repo, taskId, localRef, remoteTip, localTip, offLineRegister);
         if (swap.termination() != Termination.EXITED) {

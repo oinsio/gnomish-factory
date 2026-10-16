@@ -48,7 +48,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
     }
 
     private Optional<String> originTip() {
-        new RemoteBranchTip(runner).read(clone, BRANCH)
+        new RemoteBranchTip(runner).read(clone, TASK_ID)
     }
 
     /** Installs a committed pre-receive hook preset on the bare origin (ADR 0015). */

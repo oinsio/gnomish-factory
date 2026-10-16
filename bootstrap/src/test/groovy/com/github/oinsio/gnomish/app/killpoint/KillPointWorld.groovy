@@ -57,9 +57,9 @@ class KillPointWorld implements BareGitRepoFixture {
     Path worktree
 
     /**
-     * This medium's own recording git stand-in, or {@code null} for a medium whose runner is not
-     * recorded. Only a row making a cost claim reads its record (NFR-P1 of fix-envelope-medium);
-     * the rest ignore it.
+     * The recording git stand-in of the instance whose pickup a row bounds, or {@code null} where
+     * nothing is recorded. Only a row making a cost claim reads its record (NFR-P1 of
+     * fix-envelope-medium): the host finish row, over {@link TakeKillPointWorld#SECOND}'s git.
      */
     Path gitStandIn
 

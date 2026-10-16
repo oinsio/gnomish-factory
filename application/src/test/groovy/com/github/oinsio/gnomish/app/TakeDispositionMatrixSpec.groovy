@@ -3,9 +3,11 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -15,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
@@ -22,6 +25,7 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.file.Path
 import spock.lang.Specification
 
 /**
@@ -43,10 +47,16 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
     private Tracker tracker = Mock(Tracker)
 
     private TakeDisposition disposition() {
-        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
+        disposition(new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+                new BranchAdoption.AlreadyLocal(taskId)
+            }
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit), new ClaimEpochBook())
+        }, Stub(TaskWorktreeGit), new ClaimEpochBook()))
+    }
+
+    private TakeDisposition disposition(TaskGit git) {
         new TakeDisposition(slotWiring(Stub(RunAssembly) {
             timeEquipment() >> VirtualTimeEquipment.on(new VirtualClock(NOW))
         }, git, tracker, CLONE,
@@ -63,6 +73,19 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
 
     private TakeResult dispose(TrackerTask task) {
         disposition().dispose(takeOrder(task, tracker))
+    }
+
+    TaskBranchGit branches = Mock(TaskBranchGit)
+    TaskLifecycleStore store = Mock(TaskLifecycleStore)
+    TaskEnvironmentDisposal worktreeDisposal = Mock(TaskEnvironmentDisposal)
+
+    /** A disposition over the mocked branch port, the host store and the worktree disposal. */
+    private TakeDisposition dispositionOverBranches() {
+        disposition(new TaskGit(Stub(TaskStoreGit) {
+            taskRepository(CLONE) >> store
+        }, branches, Stub(TaskWorktreeGit) {
+            environmentDisposal(CLONE) >> worktreeDisposal
+        }, new ClaimEpochBook()))
     }
 
     private static TrackerTask taskIn(TrackerTaskState state, boolean finished = false) {
@@ -143,5 +166,81 @@ class TakeDispositionMatrixSpec extends Specification implements RunChainFakes {
         state || expected
         new TrackerTaskState.Finished() || 'already done (Finished)'
         new TrackerTaskState.Gone(null) || 'closed or does not exist'
+    }
+
+    // FR4 of fix-terminal-receipt-convergence: the Finished arm converges a delivered branch the
+    // finish left uncleaned over the task it already fetched — the cleanup commit, then the
+    // worktree — writes no claim, and still reports the task done.
+    // Scenario: tracker/tracker-take / A finished task's cleanup converges without a claim
+    def "FR4: a Finished task's uncleaned delivered branch is cleaned without a claim, then skipped as done"() {
+        given:
+        def disposition = dispositionOverBranches()
+
+        when:
+        def result = disposition.dispose(takeOrder(taskIn(new TrackerTaskState.Finished(), true), tracker))
+
+        then:
+        1 * branches.locate(CLONE_DIR, 'PROJ-1') >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        1 * branches.classifyShape(CLONE_DIR, 'PROJ-1', new BranchLocation.Local('refs/heads/gnomish/PROJ-1')) >>
+                new BranchShape.CompletedUncleaned()
+        1 * branches.adopt(CLONE_DIR, 'PROJ-1', _) >> new BranchAdoption.AlreadyLocal('PROJ-1')
+        1 * branches.classifyShape(CLONE_DIR, 'PROJ-1') >> new BranchShape.CompletedUncleaned()
+
+        then:
+        1 * store.finishCleanup('PROJ-1')
+
+        then:
+        1 * worktreeDisposal.dispose('PROJ-1')
+        0 * tracker._
+
+        and:
+        result instanceof TakeResult.Skipped
+        result.reason().contains('already done (Finished)')
+    }
+
+    // FR4, FR5 of enforce-finish-terminality: a reopened finished task is declined first, then its
+    // delivered branch converges — the decline is the arm's tracker write, the cleanup its git one.
+    def "FR4: a reopened finished task is declined, then its uncleaned delivered branch is cleaned"() {
+        given:
+        def disposition = dispositionOverBranches()
+
+        when:
+        def result = disposition.dispose(takeOrder(taskIn(new TrackerTaskState.Ready(), true), tracker))
+
+        then:
+        1 * tracker.declineFinished(REF, _)
+
+        then:
+        1 * branches.locate(CLONE_DIR, 'PROJ-1') >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        1 * branches.classifyShape(CLONE_DIR, 'PROJ-1', new BranchLocation.Local('refs/heads/gnomish/PROJ-1')) >>
+                new BranchShape.CompletedUncleaned()
+        1 * branches.adopt(CLONE_DIR, 'PROJ-1', _) >> new BranchAdoption.AlreadyLocal('PROJ-1')
+        1 * branches.classifyShape(CLONE_DIR, 'PROJ-1') >> new BranchShape.CompletedUncleaned()
+        1 * store.finishCleanup('PROJ-1')
+        1 * worktreeDisposal.dispose('PROJ-1')
+        0 * tracker.claim(_, _)
+
+        and:
+        result instanceof TakeResult.Skipped
+        result.reason().contains('already finished')
+    }
+
+    // FR4: an arm that is not finished never reaches the cleanup — no branch lookup at all
+    def "FR4: a #state.class.simpleName task never looks up the branch"() {
+        given:
+        def disposition = dispositionOverBranches()
+
+        when:
+        disposition.dispose(takeOrder(taskIn(state), tracker))
+
+        then:
+        0 * branches._
+        0 * store._
+
+        where:
+        state << [
+            new TrackerTaskState.Gone(null),
+            new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION)
+        ]
     }
 }

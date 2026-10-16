@@ -1,13 +1,14 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationRefusedException;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
+import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.slf4j.MDC;
@@ -26,7 +27,7 @@ import org.slf4j.MDC;
  * outcome, last escalation, base commit and the durable base pin) from the loaded task record.
  *
  * <p>Implements FR9 of add-tracker-port; FR6 of harden-task-branch-contract; FR9 of
- * add-project-registry.
+ * add-project-registry; FR8 of fix-terminal-receipt-convergence.
  *
  * @param git the task-git capability set: clone hardening, branch lookup, worktree
  *     materialization and divergence reconciliation; never null
@@ -38,7 +39,8 @@ import org.slf4j.MDC;
 record TakeResumeBootstrap(TaskGit git, RegisteredClone registeredClone, String taskIdMdcKey) {
 
     /**
-     * Locates the task branch for {@code taskId} in {@code cloneDir}, materializes its worktree,
+     * Locates the task branch for {@code taskId} in {@code cloneDir}, adopts it when the clone
+     * holds it only as a remote-tracking ref, materializes its worktree over the local branch,
      * reconciles local/origin divergence, and loads the {@code task.json} its {@code HEAD}
      * carries.
      *
@@ -66,42 +68,40 @@ record TakeResumeBootstrap(TaskGit git, RegisteredClone registeredClone, String 
         // worktree materializes, so the shared .git/config carries core.hooksPath from the start
         // (FR17, design D11) — the config-write twin of the fresh path's pruneWorktrees hardening.
         git.branches().harden(cloneDir);
+        // Adopt over the location the lookup just refreshed, before the worktree (design D9, D11
+        // of fix-terminal-receipt-convergence): a branch this clone holds only as a remote-tracking
+        // ref becomes local through the one owner, so the worktree below names an existing branch
+        // and git resolves nothing. The owner keeps the lookup's three refusals apart (FR6 of
+        // harden-task-branch-contract): "origin could not be asked" and "git's validation refused
+        // the branch" throw as themselves, and only a confirmed absence is the usage error — a
+        // network failure reported as a missing branch would send the operator to check the taskId.
         BranchLocation location = git.branches().locate(cloneDir, taskId);
-        // "Origin could not be asked" is not "no such branch" (FR6 of harden-task-branch-contract):
-        // reporting it as a usage error would tell the operator to check their taskId when the
-        // network is what failed.
-        if (location instanceof BranchLocation.Unavailable(UntrustedText reason)) {
-            throw new BranchLocationUnavailableException(taskId, reason);
-        }
-        if (location instanceof BranchLocation.Refused(UntrustedText report)) {
-            throw new BranchLocationRefusedException(taskId, report);
-        }
-        if (location instanceof BranchLocation.NotFound) {
-            throw UsageException.branchNotFound(taskId);
-        }
+        LocalTaskBranch branch =
+                switch (git.branches().adopt(cloneDir, taskId, location)) {
+                    case LocalTaskBranch local -> local;
+                    case BranchAdoption.Nowhere() -> throw UsageException.branchNotFound(taskId);
+                };
 
         String branchName = TaskIdSanitizer.branchName(taskId);
-        Path worktree = git.worktrees().ensureWorktree(registeredClone, taskId, branchName);
+        Path worktree = git.worktrees().ensureWorktree(registeredClone, branch);
         git.worktrees().reconcile(worktree, taskId, branchName);
         // Resume-start touchpoint (FR3 of fix-lifecycle-push): the divergence check above pulls
         // local up to what origin holds; this pushes origin up to what local holds, delivering a
         // commit an earlier instance recorded but never got pushed. Best-effort, never blocking.
         git.branches().reconcileRemote(cloneDir, taskId, "resume-start");
 
-        return git.store()
-                .readTaskRecord(worktree, taskId)
-                .map(content -> bundle(taskId, worktree, branchName, content));
+        return git.store().readTaskRecord(worktree, taskId).map(content -> bundle(branch, worktree, content));
     }
 
-    private ResumeBootstrap bundle(String taskId, Path worktree, String branchName, TaskRecord content) {
+    private ResumeBootstrap bundle(LocalTaskBranch branch, Path worktree, TaskRecord content) {
         MDC.put(taskIdMdcKey, content.context().taskId());
         return new ResumeBootstrap(
-                taskId,
+                branch.taskId(),
                 content.context(),
                 content.outcome(),
                 content.lastEscalation(),
                 worktree,
-                branchName,
+                branch,
                 content.baseCommit(),
                 content.trackerWritePending(),
                 content.pin());

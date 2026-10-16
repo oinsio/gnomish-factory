@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
@@ -16,8 +17,8 @@ import spock.lang.TempDir
  * ContainerResumeBranch} reconciles the local task branch on refs alone — a
  * remote-tracking-only branch becomes a local ref, a branch behind origin is
  * fast-forwarded, ahead is kept, diverged discards the local line and
- * continues from the origin tip, and a branch that exists nowhere reports
- * false. Runs on real local repositories — no git mocking, no checkout of the
+ * continues from the origin tip, and a branch that exists nowhere answers
+ * nowhere. Runs on real local repositories — no git mocking, no checkout of the
  * task branch.
  */
 class ContainerResumeBranchSpec extends Specification implements PlumbingCommitFixture {
@@ -66,29 +67,30 @@ class ContainerResumeBranchSpec extends Specification implements PlumbingCommitF
         new ContainerResumeBranch(runner, ClaimEpochSource.NONE, VirtualTimeGitRetries.gitInfrastructure())
     }
 
-    def "FR6: a branch that exists nowhere reports false, not a phantom resume"() {
+    def "FR6: a branch that exists nowhere answers nowhere, not a phantom resume"() {
         expect: 'no local branch, no remote-tracking ref, nothing to narrow-fetch'
-        !resume().ensureLocalBranch(clone, TASK)
+        resume().ensureLocalBranch(clone, TASK) == new BranchAdoption.Nowhere()
     }
 
+    // FR8 of fix-terminal-receipt-convergence: the remote-tracking arm is the adoption owner's.
     // Scenario: observability/factory-logging / Adopting another instance's work is logged
-    def "FR6: a remote-tracking-only branch becomes a local ref at the tracking tip"() {
+    def "FR6: a remote-tracking-only branch is adopted as a local ref at the tracking tip"() {
         given: 'the branch lives on origin only'
         setOriginBranch(base)
-        def logs = LogCaptureSupport.attach(ContainerResumeBranch)
+        def logs = LogCaptureSupport.attach(TaskBranchAdoption)
 
         when:
         def located = resume().ensureLocalBranch(clone, TASK)
 
         then:
-        located
+        located == new BranchAdoption.Adopted(TASK)
         localTip() == base
 
-        and: 'FR5 of harden-logging-observability: adopting another instance\'s work is an anchor'
+        and: 'FR5 of harden-logging-observability: adopting another instance\'s work is an anchor, logged once'
         def anchors = logs.list.findAll { it.level == Level.INFO }
         anchors.size() == 1
         anchors[0].formattedMessage.contains(TASK)
-        anchors[0].formattedMessage.contains('adopting work pushed by another instance')
+        anchors[0].formattedMessage.contains('adopted branch')
 
         cleanup:
         logs.detach()
@@ -101,7 +103,7 @@ class ContainerResumeBranchSpec extends Specification implements PlumbingCommitF
         setOriginBranch(ahead)
 
         expect: 'resume keeps the branch and its ref now carries the origin tip'
-        resume().ensureLocalBranch(clone, TASK)
+        resume().ensureLocalBranch(clone, TASK) == new BranchAdoption.AlreadyLocal(TASK)
         localTip() == ahead
     }
 
@@ -112,7 +114,7 @@ class ContainerResumeBranchSpec extends Specification implements PlumbingCommitF
         setLocalBranch(ahead)
 
         expect: 'ahead is kept — no fast-forward, no exception'
-        resume().ensureLocalBranch(clone, TASK)
+        resume().ensureLocalBranch(clone, TASK) == new BranchAdoption.AlreadyLocal(TASK)
         localTip() == ahead
     }
 
@@ -131,7 +133,7 @@ class ContainerResumeBranchSpec extends Specification implements PlumbingCommitF
 
         then: 'the run continues, on what origin holds'
         noExceptionThrown()
-        located
+        located == new BranchAdoption.AlreadyLocal(TASK)
         localTip() == originSide
     }
 

@@ -138,19 +138,16 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         subjects[subjects.indexOf('gnomish: task approved') - 1] == 'gnomish: task paused'
     }
 
-    // FR8: outcome completed reports and exits without touching the worktree or branch again — no
-    // engine run, no new commit past task.json's recorded Completed outcome.
-    //
-    // GitTaskRepository#recordOutcome's Completed path also runs the FR15 cleanup commit, which
-    // removes .gnomish-task/ (including task.json itself) from the branch tip and the worktree —
-    // by design, since a genuinely completed task's audit trail lives in branch history, not the
-    // tip. That makes --resume on an already-cleaned-up Completed task a non-scenario (bootstrap
-    // has no task.json left to read). This spec instead models a Completed task.json that has not
-    // yet gone through cleanup — a valid intermediate state the outcome switch must still handle
-    // correctly — by writing task.json directly rather than through the full recordOutcome path.
-    // Scenario: cli/manual-run / Completed task resumes to a no-op
-    def "run() with outcome completed reports and exits without further touching the worktree or branch"() {
-        given: 'a task whose task.json already records Completed, before FR15 cleanup ran'
+    // FR8: outcome completed reports and exits 0 without another engine run. FR4 of
+    // fix-terminal-receipt-convergence: a tip that records Completed while it still carries
+    // .gnomish-task/ — the outcome commit landed, its cleanup commit did not — converges first:
+    // the cleanup commit lands through DeliveredCleanup, the one cleanup owner take uses, and the
+    // worktree is removed; a second --resume then meets the Delivered tip and writes nothing
+    // (task 3.4, F67). The state is modelled by writing task.json directly (the full
+    // recordOutcome path of a manual run would land the cleanup itself).
+    // Scenario: cli/manual-run / Completed task with a lost cleanup converges
+    def "run() with outcome completed lands a lost cleanup, removes the worktree and reports, and a second resume writes nothing"() {
+        given: 'a task whose task.json already records Completed, before its cleanup commit landed'
         def taskId = 'PROJ-13'
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def finalState = TaskState.atStageStart('build')
@@ -170,8 +167,25 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         then: 'a status report was printed, naming the task'
         out.toString('UTF-8').contains(taskId)
 
-        and: 'no new commit landed on the branch beyond bootstrap materializing a worktree'
-        gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}") == tipBefore
+        and: 'exactly one commit landed — the cleanup, no engine round — and the tip carries no envelope'
+        gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}^") == tipBefore
+        gitOutput(cloneDir, 'ls-tree', "gnomish/${taskId}", '--', '.gnomish-task') == ''
+
+        and: 'the worktree is gone'
+        !Files.exists(expectedWorktree(taskId))
+
+        when: 'the task is resumed a second time, over the cleaned-up tip'
+        def cleanedTip = gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}")
+        def registerBefore = gitOutput(cloneDir, 'rev-parse', "refs/gnomish-factory/${taskId}")
+        out.reset()
+        newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out)
+                .run(new RunOrder(cloneDir, null, pipeline(), false), taskId, null)
+
+        then: 'it reports the task done again and writes nothing — no commit, no register move, no worktree'
+        out.toString('UTF-8').contains(taskId)
+        gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}") == cleanedTip
+        gitOutput(cloneDir, 'rev-parse', "refs/gnomish-factory/${taskId}") == registerBefore
+        !Files.exists(expectedWorktree(taskId))
 
         cleanup:
         System.out = originalOut

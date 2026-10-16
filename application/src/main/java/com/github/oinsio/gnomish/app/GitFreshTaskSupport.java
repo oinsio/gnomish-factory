@@ -2,7 +2,10 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
+import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch;
+import com.github.oinsio.gnomish.app.port.git.TaskBranchGit;
 import com.github.oinsio.gnomish.baseref.AllowedBases;
 import com.github.oinsio.gnomish.baseref.BaseDecision;
 import com.github.oinsio.gnomish.baseref.BaseDesignator;
@@ -14,6 +17,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.nio.file.Path;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 
@@ -26,7 +30,8 @@ import org.jspecify.annotations.Nullable;
  * split-into-modules): they parsed the git adapter's own file layout, which no {@code application}
  * class may know.
  *
- * <p>Implements FR6, FR7 of add-git-workflow; FR4, FR10 of add-base-ref-resolution.
+ * <p>Implements FR6, FR7 of add-git-workflow; FR4, FR10 of add-base-ref-resolution; FR8 of
+ * fix-terminal-receipt-convergence.
  */
 final class GitFreshTaskSupport {
 
@@ -76,6 +81,28 @@ final class GitFreshTaskSupport {
                     + " — this is a fresh run, not --resume; pick a different --task-id, fix --base, or resume the"
                     + " existing task instead");
         }
+    }
+
+    /**
+     * The fresh task's local branch, as the adoption owner answers it right after {@link
+     * #createTask} made the head (design D10 of fix-terminal-receipt-convergence): the lookup finds
+     * the head local — one ref read, no fetch — and the owner answers it already local, so a fresh
+     * claim hands its writers' entries the same typed value a resume does, taken from the owner and
+     * never built here.
+     *
+     * @param branches the task-branch port the lookup and the adoption are asked of; never null
+     * @param cloneDir the clone the branch was just created in; never null
+     * @param taskId the tracker's original taskId; never blank
+     * @return the branch, already local
+     * @throws IllegalStateException if the owner finds no branch the creation just made
+     */
+    static LocalTaskBranch createdBranch(TaskBranchGit branches, Path cloneDir, String taskId) {
+        return switch (branches.adopt(cloneDir, taskId, branches.locate(cloneDir, taskId))) {
+            case LocalTaskBranch local -> local;
+            case BranchAdoption.Nowhere() ->
+                throw new IllegalStateException(
+                        "the branch of fresh task \"" + taskId + "\" is not in this clone right after its creation");
+        };
     }
 
     /**

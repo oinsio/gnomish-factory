@@ -8,11 +8,17 @@ import com.github.oinsio.gnomish.app.lease.LivenessOracle
 import com.github.oinsio.gnomish.app.lease.StalenessMemory
 import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
+import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
+import com.github.oinsio.gnomish.app.port.git.TaskListRow
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
@@ -21,9 +27,11 @@ import com.github.oinsio.gnomish.app.serve.RemoteOutageGates
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -101,14 +109,55 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         given:
         def worktrees = Mock(TaskWorktreeGit)
         def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), worktrees, new ClaimEpochBook())
+        def served = new BoundTracker(pipeline(), DEFAULT_TRUSTED_BASE, new TrackerConfig('github', 3),
+                Stub(TrackerAdapterFactory), Stub(Tracker), INSTANCE)
 
         when:
         def janitor = new ServeAssembly(null, SERVE_PROPERTIES, VirtualTimeEquipment.create(), RegisteredCloneFixture.provider(CLONE))
-                .worktreeJanitor(new SlotLedger(1, new VirtualClock()), git)
+                .worktreeJanitor(new SlotLedger(1, new VirtualClock()), git, served, slotWiring(assemblyRunning(null), git, Stub(Tracker)))
 
         then:
         1 * worktrees.environmentDisposal(CLONE) >> Stub(TaskEnvironmentDisposal)
         janitor != null
+    }
+
+    // FR4 of fix-terminal-receipt-convergence: the janitor's branch pass lists the clone's task
+    // branches through the slot's git, fetches a CompletedUncleaned branch's task from the SERVED
+    // tracker, and cleans it through the slot's claimless cleanup.
+    def "builds a worktree janitor whose branch pass reads the served tracker and cleans through the slot's git"() {
+        given:
+        def branches = Mock(TaskBranchGit)
+        def store = Mock(TaskLifecycleStore)
+        def disposal = Mock(TaskEnvironmentDisposal)
+        def slotGit = new TaskGit(Stub(TaskStoreGit) {
+            taskRepository(CLONE) >> store
+        }, branches, Stub(TaskWorktreeGit) {
+            environmentDisposal(CLONE) >> disposal
+        }, new ClaimEpochBook())
+        def servedTracker = Mock(Tracker)
+        def served = new BoundTracker(pipeline(), DEFAULT_TRUSTED_BASE, new TrackerConfig('github', 3),
+                Stub(TrackerAdapterFactory), servedTracker, INSTANCE)
+        def janitor = new ServeAssembly(null, SERVE_PROPERTIES, VirtualTimeEquipment.create(), RegisteredCloneFixture.provider(CLONE))
+                .worktreeJanitor(new SlotLedger(1, new VirtualClock()),
+                new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook()),
+                served, slotWiring(assemblyRunning(null), slotGit, Stub(Tracker)))
+
+        when:
+        janitor.tick()
+
+        then:
+        1 * branches.list(CLONE.clonePath()) >> [
+            new TaskListRow('PROJ-1', null, 0, null, new BranchShape.CompletedUncleaned())
+        ]
+        1 * servedTracker.fetchTask(new TaskRef('PROJ-1')) >>
+                TrackerTaskFixtures.taskWith(new TaskRef('PROJ-1'),
+                new TrackerTaskState.Finished(), true)
+        1 * branches.locate(CLONE.clonePath(), 'PROJ-1') >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        1 * branches.classifyShape(CLONE.clonePath(), 'PROJ-1', _) >> new BranchShape.CompletedUncleaned()
+        1 * branches.adopt(CLONE.clonePath(), 'PROJ-1', _) >> new BranchAdoption.AlreadyLocal('PROJ-1')
+        1 * branches.classifyShape(CLONE.clonePath(), 'PROJ-1') >> new BranchShape.CompletedUncleaned()
+        1 * store.finishCleanup('PROJ-1')
+        1 * disposal.dispose('PROJ-1')
     }
 
     // NFR-O1, NFR-O2 of add-serve-sandbox-lifecycle: a host-only install has no sandbox to sweep,

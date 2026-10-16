@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
+import com.github.oinsio.gnomish.app.serve.BranchPass
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton
 import com.github.oinsio.gnomish.app.serve.FeedAutomatonFixture
@@ -115,7 +116,8 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                 Duration.ofDays(1),
                 { String key -> } as TaskEnvironmentDisposal,
                 time,
-                { -> Set.of() } as OccupiedSlots)
+                { -> Set.of() } as OccupiedSlots,
+                { Set<String> held -> } as BranchPass)
     }
 
     def "assembles a functional ObservabilityWiring: binds the dirty notifier and writes a snapshot reflecting the given collaborators"() {

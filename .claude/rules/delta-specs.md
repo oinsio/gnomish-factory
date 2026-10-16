@@ -66,8 +66,8 @@ scenario.
 **Every new scenario gets a marker.** A scenario added to a spec is matched by
 `// Scenario: <spec-id> / <title>`, the title verbatim, in the test that exercises it
 (`traceability.md`; marker placement and exemptions in `testing.md`, "Every scenario has a
-test"). A delta's scenarios are linked once they merge into `openspec/specs/`; write the marker
-with the test, and the gate holds the link from then on.
+test"). Write the marker with the test: it already resolves through the unarchived delta, needs
+no edit at archive, and the gate requires it once the scenario merges into `openspec/specs/`.
 
 ## Domain-model format: Entity / Use case
 

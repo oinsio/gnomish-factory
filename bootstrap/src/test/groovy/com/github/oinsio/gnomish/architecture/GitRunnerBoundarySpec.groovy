@@ -40,7 +40,7 @@ class GitRunnerBoundarySpec extends Specification {
         'bootstrap/src/main/java/com/github/oinsio/gnomish/app/SandboxLifecyclePassFactory.java',
     ]
 
-    // Scenario: build/quality-gates / A holder typed as the class fails the gate
+    // Scenario: build-system/quality-gates / A holder typed as the class fails the gate
     def "FR27, M13: only the composition side holds the concrete git runner; every other holder takes the role"() {
         given: 'every production source of the scanned trees, comments stripped'
         def sources = RepoSourceTree.productionSources { path ->
@@ -60,7 +60,7 @@ class GitRunnerBoundarySpec extends Specification {
         (holders - COMPOSITION) == [] as Set
     }
 
-    // Scenario: build/quality-gates / A holder typed as the class fails the gate
+    // Scenario: build-system/quality-gates / A holder typed as the class fails the gate
     def "FR27: the detector sees a field, a parameter and a local, and not a construction or a link"() {
         expect:
         CONCRETE_HOLDER.matcher(line).find() == holds

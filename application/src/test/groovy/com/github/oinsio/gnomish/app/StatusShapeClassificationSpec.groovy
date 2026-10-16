@@ -120,4 +120,32 @@ class StatusShapeClassificationSpec extends Specification implements BranchShape
         and: 'the healthy task renders normally'
         rows.find { it.contains('INPROGRESS') }.contains('implement')
     }
+
+    // FR10, UX3 of fix-terminal-receipt-convergence (design D13): a branch the clone holds without
+    //     its register — local or remote-tracking — lists as Unregistered with the command that
+    //     fetches the register, and the listing itself fetches nothing.
+    // Scenario: cli/task-inspection / A branch fetched without its register lists as Unregistered with its remedy
+    def "FR10: a #held branch without its register lists as Unregistered with its remedy, fetching nothing"() {
+        given:
+        unregistered('UNREG-1', tracking)
+        def refsBefore = gitOutput(cloneDir, 'for-each-ref')
+
+        when:
+        def row = status().readLines().find { it.contains('UNREG-1') }
+
+        then:
+        row.contains('Unregistered')
+        row.contains('fetched without its factory register')
+        row.contains('`gnomish status <task>` fetches it')
+        !row.contains('unrecognized')
+
+        and: 'the listing ran no fetch: the clone still holds no register, and no ref moved'
+        gitOutput(cloneDir, 'for-each-ref') == refsBefore
+        !refsBefore.contains('refs/gnomish-factory/UNREG-1')
+
+        where:
+        held | tracking
+        'local' | false
+        'remote-tracking' | true
+    }
 }

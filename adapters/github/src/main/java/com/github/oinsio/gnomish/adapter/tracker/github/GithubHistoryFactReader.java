@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
+import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Derives a {@code Ready} task's {@code returned} and {@code finished} facts
@@ -27,6 +29,12 @@ import java.util.List;
  * facts are independent: a task parked once and later finished reports both
  * {@code returned = true} and {@code finished = true}.
  *
+ * <p>The tenure boundary is the third whole-thread fact: the kind of the last PARK / FINISH /
+ * ABORT / STALE_CLAIM_REMOVED marker in posting order, whatever claim markers follow it (design D1
+ * of fix-terminal-receipt-convergence). It is deliberately not {@link
+ * GithubTrackerFacts#latestBoundary}, which answers only for a boundary posted after the newest
+ * claim and so is null once the next tenure has begun.
+ *
  * <p>Takes an already-fetched {@link ParsedMarker} list rather than fetching
  * its own comments: {@link GithubFeedQuery} fetches the comments thread once
  * per issue (via {@link GithubAbortFactsReader#fetchMarkers}) and reuses it
@@ -35,7 +43,7 @@ import java.util.List;
  * of add-factory-serve).
  *
  * <p>Implements FR7, NFR-P1 of add-factory-serve; FR1, FR2 of
- * enforce-finish-terminality.
+ * enforce-finish-terminality; FR1, NFR-C1 of fix-terminal-receipt-convergence.
  */
 final class GithubHistoryFactReader {
 
@@ -52,6 +60,21 @@ final class GithubHistoryFactReader {
     /** Returns true iff {@code markers} contains a FINISH structural marker anywhere in the thread. */
     static boolean deriveFinished(List<ParsedMarker> markers) {
         return hasKind(markers, GithubMarkerKind.FINISH);
+    }
+
+    /**
+     * Returns the kind of the last boundary marker in {@code markers} (posting order), whatever
+     * claim markers follow it, or {@code null} when the thread carries none (FR1 of
+     * fix-terminal-receipt-convergence).
+     */
+    static @Nullable BoundaryKind deriveTenureBoundary(List<ParsedMarker> markers) {
+        for (int i = markers.size() - 1; i >= 0; i--) {
+            BoundaryKind boundary = GithubTrackerFacts.boundaryOf(markers.get(i).kind());
+            if (boundary != null) {
+                return boundary;
+            }
+        }
+        return null;
     }
 
     private static boolean hasKind(List<ParsedMarker> markers, GithubMarkerKind kind) {

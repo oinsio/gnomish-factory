@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult;
@@ -26,7 +27,7 @@ import java.util.List;
  * capability seam instead of a dozen construction sites.
  *
  * <p>Implements FR2, FR9, FR10, FR13 of add-git-workflow; FR12b of split-into-modules; FR1,
- * FR2 of harden-task-branch-contract.
+ * FR2 of harden-task-branch-contract; FR11 of fix-terminal-receipt-convergence.
  */
 public final class GitTaskBranches implements TaskBranchGit {
 
@@ -35,6 +36,7 @@ public final class GitTaskBranches implements TaskBranchGit {
     private final FactoryCloneHardening hardening;
     private final ContainerResumeBranch resumeBranch;
     private final TaskBranchLocator locator;
+    private final TaskBranchAdoption adoption;
     private final TaskBranchLister lister;
     private final BranchStateReader stateReader;
     private final DeliveredBranchReader deliveredReader;
@@ -62,6 +64,7 @@ public final class GitTaskBranches implements TaskBranchGit {
         this.hardening = new FactoryCloneHardening(runner);
         this.resumeBranch = new ContainerResumeBranch(runner, epochs, retry);
         this.locator = new TaskBranchLocator(runner, retry);
+        this.adoption = new TaskBranchAdoption(runner, locator);
         this.lister = new TaskBranchLister(runner);
         this.stateReader = new BranchStateReader(runner, retry);
         this.deliveredReader = new DeliveredBranchReader(runner, retry);
@@ -82,8 +85,13 @@ public final class GitTaskBranches implements TaskBranchGit {
     }
 
     @Override
-    public boolean ensureLocalTaskBranch(Path cloneDir, String taskId) {
+    public BranchAdoption ensureLocalTaskBranch(Path cloneDir, String taskId) {
         return resumeBranch.ensureLocalBranch(cloneDir, taskId);
+    }
+
+    @Override
+    public BranchAdoption adopt(Path cloneDir, String taskId, BranchLocation location) {
+        return adoption.adopt(cloneDir, taskId, location);
     }
 
     @Override
@@ -93,11 +101,18 @@ public final class GitTaskBranches implements TaskBranchGit {
 
     @Override
     public BranchShape classifyShape(Path cloneDir, String taskId) {
+        // The read over this facade's own lookup, so a location has one parse (design D13 of
+        // fix-terminal-receipt-convergence, as amended for task 6.6; crash-consistency item 14).
+        return classifyShape(cloneDir, taskId, locator.locate(cloneDir, taskId));
+    }
+
+    @Override
+    public BranchShape classifyShape(Path cloneDir, String taskId, BranchLocation location) {
         // The located ref is the medium: no worktree is created, and a branch that lives only on
         // origin classifies from its remote-tracking ref exactly as a local one does (design D3).
         // Either way the envelope is read at the task's registered commit, the located ref giving
         // only its relation to it (design D13 of tighten-spec-contract).
-        return switch (locator.locate(cloneDir, taskId)) {
+        return switch (location) {
             case BranchLocation.Local(String ref) -> shapeAt(cloneDir, taskId, ref);
             case BranchLocation.RemoteTracking(String ref) -> shapeAt(cloneDir, taskId, ref);
             case BranchLocation.NotFound() -> new BranchShape.Bare();

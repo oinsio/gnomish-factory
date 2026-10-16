@@ -1,4 +1,4 @@
-import com.github.oinsio.gnomish.build.StandInLibrary
+import com.github.oinsio.gnomish.buildlogic.StandInLibrary
 
 // The committed stand-in library (ADR 0015, design D23 of supervise-daemon-loops-and-embed-dashboard)
 // reaches every test JVM as the `standInDir` system property, so `StandIn` in `:test-fixtures`

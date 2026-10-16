@@ -350,6 +350,69 @@ that's the "returned" case the factory prioritizes and continues from where
 it parked. Declining only fires for a task whose history already contains a
 *finish* record; a park record never triggers it.
 
+### A finished task whose branch cleanup was cut short
+
+Finishing a task is three steps: the outcome commit, the tracker finish, then
+the cleanup commit that strips `.gnomish-task/` from the branch and disposes
+the task's worktree or container. If the process dies after the tracker finish
+but before the cleanup commit, the tracker already says finished while the
+branch still carries its `.gnomish-task/` files. **No manual cleanup is
+needed.** The next of these to touch the task finishes the job, without
+claiming it:
+
+- `gnomish take <ref>` naming the task — it still declines the finished task
+  as above, and cleans the branch first;
+- `gnomish run --resume=<task>` — see
+  [`operator-guide-run.md`](operator-guide-run.md#resuming-a-task);
+- a `serve` daemon's worktree janitor, which checks the clone's task branches
+  for this state on every tick.
+
+Each lands the cleanup commit, pushes it, and removes the worktree or
+container, then reports the task as already done. If two instances clean the
+same branch at once in one clone, one cleanup commit lands and the other
+instance sees it and stands down without failing. Do not delete
+`.gnomish-task/` or the worktree by hand.
+
+This works from any clone, not only the one that ran the task, and whether or
+not that clone holds the task branch as a local branch. A clone often holds a
+finished task's branch only as a remote-tracking ref (`origin/gnomish/<task>`):
+a `git clone`, your own `git fetch`, or an IDE's periodic background fetch
+leaves it that way, and none of these brings the task's factory register
+(`refs/gnomish-factory/<task>`). Each of the three paths above first fetches
+the branch and its register together from origin, decides from what that
+fetch delivered, and only then makes the branch local (one ref create that
+can only add a branch, never move one) and lands the cleanup commit on it.
+
+Two cases are left for you to look at:
+
+- **A local branch without its register.** If you checked the task branch
+  out in the factory clone yourself after a plain `git fetch`, the clone has
+  the local branch but not its register, and the factory does not fetch for
+  a local branch. The branch stays `Unregistered`: `gnomish status` lists it
+  that way, and the janitor writes nothing to it but names every such branch
+  in one WARN line per pass, `[GF165] worktree janitor: still
+  without a factory register after the touchpoint read, left to the
+  quarantine owner: ...`, with the reason beside each branch: `local head,
+  not fetched`, or `tracking ref: origin delivered no register or could not
+  be reached`. The line does not say which of the last two causes holds; the
+  factory cannot tell them apart.
+- **Another clone delivered the cleanup first.** Two clones can clean the
+  same finished task at about the same time. When the other clone's cleanup
+  reaches origin first, this clone's own cleanup commit is refused by origin
+  (one WARN, like every failed best-effort push) and stays behind on this
+  clone's local branch, beside origin's delivered branch. Nothing deletes
+  that local branch, by design: the clone keeps every finished task's local
+  branch anyway, so this one costs the same single ref a cleanup the clone
+  had won would cost. Every reader treats it as finished: the janitor sees
+  a delivered branch and writes nothing, `take` reports the task as done and
+  leaves the branch as it is, and no touchpoint pushes it again — a touchpoint of that task on this clone logs one
+  `[GF026] origin reconciliation skipped` WARN saying origin's tip is not an
+  ancestor of the local one, and goes on. A manual `gnomish run
+  --resume=<task>` of that task on this clone refuses, because the local and
+  origin branches have diverged (exit code 5, as for any diverged branch on a
+  run without a claim). Nothing removes the branch, and nothing needs to: the
+  task is finished and origin holds its delivered branch.
+
 ## Snapshot Behavior
 
 At the moment a task is first claimed, the factory reads its id, title, and

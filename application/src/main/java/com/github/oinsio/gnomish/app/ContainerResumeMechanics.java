@@ -47,8 +47,8 @@ record ContainerResumeMechanics(
     }
 
     @Override
-    public void finishCleanup(Path cloneDir, ContainerResumeBootstrap branch) {
-        branch.support().finishCleanup();
+    public DeliveredCleanup deliveredCleanup(ContainerResumeBootstrap branch) {
+        return resumeRunner.deliveredCleanup(branch);
     }
 
     @Override

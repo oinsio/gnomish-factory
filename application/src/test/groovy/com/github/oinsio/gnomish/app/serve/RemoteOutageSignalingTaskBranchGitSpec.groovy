@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.serve
 
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
@@ -85,6 +86,33 @@ class RemoteOutageSignalingTaskBranchGitSpec extends Specification {
         'locate' | new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
     }
 
+    // FR11 of fix-terminal-receipt-convergence (design D13 as amended for task 6.6): the read over a
+    //     caller's location is wrapped like the other lookups — its answer is forwarded unchanged with
+    //     the gate left closed, and its outage opens the gate and is rethrown unchanged.
+    def "classifyShape over a location forwards the answer, and its outage opens the gate"() {
+        given:
+        def tracking = new BranchLocation.RemoteTracking('refs/remotes/origin/gnomish/PROJ-1')
+        def unavailable = new BranchLocation.Unavailable(UntrustedText.subprocess(CAUSE))
+        def outage = new BranchLocationUnavailableException(TASK, UntrustedText.subprocess(CAUSE))
+        def answer = new BranchShape.CompletedUncleaned()
+        delegate.classifyShape(CLONE, TASK, tracking) >> answer
+        delegate.classifyShape(CLONE, TASK, unavailable) >> { throw outage }
+
+        expect:
+        decorated.classifyShape(CLONE, TASK, tracking).is(answer)
+        !gate.isOpen()
+
+        when:
+        decorated.classifyShape(CLONE, TASK, unavailable)
+
+        then:
+        def thrown = thrown(BranchLocationUnavailableException)
+        thrown.is(outage)
+        gate.isOpen()
+        gate.health().lastError() == CAUSE
+    }
+
+    // FR7 of fix-terminal-receipt-convergence: the typed answer passes through unchanged.
     def "ensureLocalTaskBranch forwards the delegate's answer: #found"() {
         given:
         delegate.ensureLocalTaskBranch(CLONE, TASK) >> found
@@ -94,7 +122,34 @@ class RemoteOutageSignalingTaskBranchGitSpec extends Specification {
         !gate.isOpen()
 
         where:
-        found << [true, false]
+        found << [
+            new BranchAdoption.Adopted(TASK),
+            new BranchAdoption.AlreadyLocal(TASK),
+            new BranchAdoption.Nowhere()
+        ]
+    }
+
+    // FR8 of fix-terminal-receipt-convergence: the adoption over a located branch asks no remote of
+    // its own, so it passes through and signals nothing — even when the delegate throws Unavailable.
+    def "adopt forwards the delegate's answer and never signals the gate"() {
+        given:
+        def location = new BranchLocation.RemoteTracking('refs/remotes/origin/gnomish/PROJ-1')
+        def adopted = new BranchAdoption.Adopted(TASK)
+        def unavailable = new BranchLocation.Unavailable(UntrustedText.subprocess(CAUSE))
+        delegate.adopt(CLONE, TASK, location) >> adopted
+        delegate.adopt(CLONE, TASK, unavailable) >> {
+            throw new BranchLocationUnavailableException(TASK, UntrustedText.subprocess(CAUSE))
+        }
+
+        expect:
+        decorated.adopt(CLONE, TASK, location).is(adopted)
+
+        when:
+        decorated.adopt(CLONE, TASK, unavailable)
+
+        then:
+        thrown(BranchLocationUnavailableException)
+        !gate.isOpen()
     }
 
     // FR14: the operations that are not lookups pass through untouched.

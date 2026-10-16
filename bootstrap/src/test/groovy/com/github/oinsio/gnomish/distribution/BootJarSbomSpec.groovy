@@ -27,7 +27,7 @@ class BootJarSbomSpec extends Specification {
     @Shared
     String jarPath = TestTaskProperty.required('e2e.jarPath')
 
-    // Scenario: build/quality-gates / No archive records when it was built
+    // Scenario: build-system/quality-gates / No archive records when it was built
     // Scenario: release/release-distribution / The jar carries no SBOM
     def "FR7: the boot jar has no META-INF/sbom/ entry and no Sbom-Location manifest attribute"() {
         expect:

@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
+import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -82,11 +83,12 @@ class TakeParkRetrySpec extends Specification {
     }
 
     // FR10 of harden-task-branch-contract: recovery verifies the effect at the target before
-    // re-driving it — a tracker already awaiting a human carries this park, so no second write goes
-    // out and only the owed receipt is recorded.
+    // re-driving it — a thread whose last boundary is the park carries it (FR2 of
+    // fix-terminal-receipt-convergence: read from history, never the state the pickup's claim
+    // rewrote), so no second write goes out and only the owed receipt is recorded.
     def "a recovered park whose write already landed records the receipt without re-parking"() {
         given:
-        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.AwaitingHuman(ParkReason.ESCALATION))
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.heldAfter(REF, INSTANCE, BoundaryKind.PARK)
 
         when:
         def result = TakeEscalationExit.exit(

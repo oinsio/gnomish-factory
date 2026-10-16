@@ -1,4 +1,4 @@
-import com.github.oinsio.gnomish.build.AdversarialGitConfig
+import com.github.oinsio.gnomish.buildlogic.AdversarialGitConfig
 
 // --- The operator's git configuration under test (own-git-transfer-argv, design D11) ---
 //

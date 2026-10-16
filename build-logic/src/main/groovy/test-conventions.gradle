@@ -1,7 +1,7 @@
-import com.github.oinsio.gnomish.build.HardwareSpec
-import com.github.oinsio.gnomish.build.LogExpectationEvidence
-import com.github.oinsio.gnomish.build.TestTimeInjectionCheck
-import com.github.oinsio.gnomish.build.HeavyJvmBudget
+import com.github.oinsio.gnomish.buildlogic.HardwareSpec
+import com.github.oinsio.gnomish.buildlogic.LogExpectationEvidence
+import com.github.oinsio.gnomish.buildlogic.TestTimeInjectionCheck
+import com.github.oinsio.gnomish.buildlogic.HeavyJvmBudget
 import org.gradle.api.artifacts.VersionCatalogsExtension
 
 // Test-stack conventions shared by every module (FR6, design D9 of
@@ -18,6 +18,8 @@ plugins {
     // No inherited GNOMISH_* variable reaches a Test or pitest JVM (make-checkpoint-gate-durable,
     // design D14).
     id 'test-environment-hygiene-conventions'
+    // The build's own Docker client configuration (fix-terminal-receipt-convergence, design D14).
+    id 'test-docker-environment-conventions'
     // The committed stand-in library's location for every Test and PIT JVM (ADR 0015).
     id 'stand-in-conventions'
 }

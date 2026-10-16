@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -90,6 +91,9 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
         }
         def branches = Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+                new BranchAdoption.AlreadyLocal(taskId)
+            }
             classifyShape(_, _) >> new BranchShape.Bare()
         }
         def git = new TaskGit(

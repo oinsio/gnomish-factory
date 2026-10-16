@@ -80,7 +80,7 @@ class RepoSourceTree {
      *
      * <p>Only the module prefix — the part before the source-set marker — is examined. A plain
      * {@code contains('/build/')} would also drop real sources: {@code build} is a package name
-     * here ({@code build-logic/src/main/groovy/com/github/oinsio/gnomish/build/}), and
+     * here ({@code build-logic/src/main/groovy/com/github/oinsio/gnomish/buildlogic/}), and
      * {@code build-logic} is a real module that every gate must keep scanning.
      */
     private static boolean buildOutput(String relativePath, String sourceSetMarker) {

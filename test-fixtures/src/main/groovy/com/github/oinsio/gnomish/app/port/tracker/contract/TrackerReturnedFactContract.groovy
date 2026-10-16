@@ -48,7 +48,9 @@ abstract class TrackerReturnedFactContract extends TrackerReapContract {
      *
      * @param adapter the tracker adapter arranged by {@link #arrange}
      * @param ref the fixture task's identity; must already be seeded and
-     *     currently {@code AwaitingHuman}
+     *     currently {@code AwaitingHuman} — or {@code Working}, a human pulling a
+     *     claimed task back, which leaves its claim marker in the history too
+     *     (the tenure-boundary properties, FR1 of fix-terminal-receipt-convergence)
      */
     protected abstract void returnToReady(Tracker adapter, TaskRef ref)
 

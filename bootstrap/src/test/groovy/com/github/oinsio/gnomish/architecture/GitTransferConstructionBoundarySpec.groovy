@@ -39,8 +39,8 @@ class GitTransferConstructionBoundarySpec extends Specification {
 
     // FR8, FR9: a production construction outside the owner is a second argv builder that no
     //     literal scan can see — the argv arrives as data.
-    // Scenario: build/module-layering / Two media build one transfer from one leaf
-    // Scenario: build/module-layering / The transfer policy is pure values in gittransfer
+    // Scenario: build-system/module-layering / Two media build one transfer from one leaf
+    // Scenario: build-system/module-layering / The transfer policy is pure values in gittransfer
     def "FR8, FR9: no production source outside the owner constructs a GitTransfer"() {
         given: 'every production source of the build, comments stripped'
         def sources = RepoSourceTree.productionSources()

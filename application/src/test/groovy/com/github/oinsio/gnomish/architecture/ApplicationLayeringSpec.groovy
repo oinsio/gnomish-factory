@@ -81,8 +81,8 @@ class ApplicationLayeringSpec extends Specification {
     .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_JARS)
     .importPackages('com.github.oinsio.gnomish')
 
-    // Scenario: build/module-layering / application module has no adapter imports
-    // Scenario: build/module-layering / An adapter import in application fails the build
+    // Scenario: build-system/module-layering / application module has no adapter imports
+    // Scenario: build-system/module-layering / An adapter import in application fails the build
     def "FR2/M6: no application class depends on the adapter layer"() {
         given: 'the layering rule over every package this module owns'
         def rule = noClasses()

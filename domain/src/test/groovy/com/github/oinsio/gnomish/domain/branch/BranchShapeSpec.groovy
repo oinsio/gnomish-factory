@@ -28,6 +28,7 @@ class BranchShapeSpec extends Specification {
         new BranchShape.Answered() || RecoveryOwner.STAGE_ENGINE | RecoveryDisposition.ROLL_FORWARD
         new BranchShape.CompletedUncleaned() || RecoveryOwner.COMPLETION_FINISH | RecoveryDisposition.ROLL_FORWARD
         new BranchShape.Delivered() || RecoveryOwner.NONE | RecoveryDisposition.TERMINAL
+        new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40) || RecoveryOwner.TOUCHPOINT_FETCH | RecoveryDisposition.QUARANTINE
         new BranchShape.UnsupportedVersion('state.json', 2, 1) || RecoveryOwner.RECOVERY_BUDGET | RecoveryDisposition.QUARANTINE
         new BranchShape.Corrupt('task.json: truncated') || RecoveryOwner.RECOVERY_BUDGET | RecoveryDisposition.QUARANTINE
         new BranchShape.Unknown('state without task') || RecoveryOwner.RECOVERY_BUDGET | RecoveryDisposition.QUARANTINE
@@ -49,6 +50,7 @@ class BranchShapeSpec extends Specification {
         new BranchShape.Bare() || false
         new BranchShape.Parked() || false
         new BranchShape.CompletedUncleaned() || false
+        new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40) || false
         new BranchShape.UnsupportedVersion('task.json', 9, 1) || false
         new BranchShape.Corrupt('task.json: truncated') || false
         new BranchShape.Unknown('state without task') || false
@@ -82,6 +84,7 @@ class BranchShapeSpec extends Specification {
         new BranchShape.CompletedUncleaned() || true
         new BranchShape.Bare() || false
         new BranchShape.Delivered() || false
+        new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40) || false
         new BranchShape.UnsupportedVersion('state.json', 2, 1) || false
         new BranchShape.Corrupt('task.json: truncated') || false
         new BranchShape.Unknown('state without task') || false
@@ -90,7 +93,7 @@ class BranchShapeSpec extends Specification {
     // FR16: the closed set names itself once — a table cell, a log line and a diagnosis all read
     // the same word for the same shape. Labels are load-bearing (the kill-point harness asserts on
     // them), so every shape's label is pinned as a literal, and the pin is checked against the
-    // sealed set itself: a renamed shape fails its row, an twelfth shape fails the coverage check.
+    // sealed set itself: a renamed shape fails its row, a thirteenth shape fails the coverage check.
     // Scenario: lifecycle/task-branch-contract / No shape name collides with a domain type
     def "label() pins every shape of the closed set"() {
         given: 'one instance of every shape, each with its pinned label'
@@ -103,6 +106,7 @@ class BranchShapeSpec extends Specification {
             (new BranchShape.Answered()): 'Answered',
             (new BranchShape.CompletedUncleaned()): 'CompletedUncleaned',
             (new BranchShape.Delivered()): 'Delivered',
+            (new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40)): 'Unregistered',
             (new BranchShape.UnsupportedVersion('state.json', 2, 1)): 'UnsupportedVersion',
             (new BranchShape.Corrupt('task.json: truncated')): 'Corrupt',
             (new BranchShape.Unknown('state without task')): 'Unknown',
@@ -115,5 +119,42 @@ class BranchShapeSpec extends Specification {
 
         and: 'each shape renders its pinned label'
         pinned.every { shape, label -> shape.label() == label }
+    }
+
+    // FR10 of fix-terminal-receipt-convergence (design D5, D13): the janitor's branch pass forwards
+    // exactly the shapes this one table names — a pending cleanup, and a branch only the owner's
+    // touchpoint fetch can classify. Pinned against the sealed set, so a new shape needs a row.
+    def "forwardedByBranchPass() names CompletedUncleaned and Unregistered, and no other shape"() {
+        given: 'one instance of every shape'
+        def every = [
+            new BranchShape.Bare(),
+            new BranchShape.Created(),
+            new BranchShape.InProgress(),
+            new BranchShape.AwaitingApproval(),
+            new BranchShape.Parked(),
+            new BranchShape.Answered(),
+            new BranchShape.CompletedUncleaned(),
+            new BranchShape.Delivered(),
+            new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40),
+            new BranchShape.UnsupportedVersion('state.json', 2, 1),
+            new BranchShape.Corrupt('task.json: truncated'),
+            new BranchShape.Unknown('state without task'),
+        ]
+
+        expect: 'the instances cover the sealed set exactly'
+        every.collect {
+            it.getClass()
+        } as Set == BranchShape.permittedSubclasses as Set
+
+        and: 'the two forwarded shapes are the whole forwarded set'
+        every.findAll {
+            it.forwardedByBranchPass()
+        }.collect {
+            it.getClass()
+        } ==
+        [
+            BranchShape.CompletedUncleaned,
+            BranchShape.Unregistered
+        ]
     }
 }

@@ -16,7 +16,7 @@ import spock.lang.Specification
  */
 class DelegatingDecoratorLeafSpec extends Specification {
 
-    // Scenario: build/quality-gates / A leaf implementer is untouched
+    // Scenario: build-system/quality-gates / A leaf implementer is untouched
     def "FR9: a class implementing an interface with a default, but holding no delegate of it, is not constrained"() {
         expect: 'the leaf inherits the three-argument default and is not reported'
         unforwardedDefaults([LeafPass], []) == []

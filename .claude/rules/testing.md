@@ -194,6 +194,43 @@ Gates, both in `:bootstrap`:
 A new spawner that needs a variable the kept set lacks adds it to `TestChildEnvironment`, not
 at the call site.
 
+### The Docker client configuration is replaced, like git's
+
+The operator's git configuration is a medium the build replaces (`AdversarialGitConfig`, below);
+the operator's Docker client configuration is another. Testcontainers reads registry credentials
+from `$DOCKER_CONFIG` or `~/.docker` and runs the helper it names, on every container it creates
+and once more in every JVM, PIT's minions included; the `docker` CLI a fixture or `DockerCli`
+runs does the same on `docker build` and on implicit pulls, and also applies the operator's
+plugin hooks and injects their `proxies` into every container. None of that is the factory's
+behaviour under test, and on macOS the helper is a system prompt.
+
+The failure this exists for: the final gate of `fix-terminal-receipt-convergence` (task 6.9,
+2026-10-15) ran on a macOS machine whose configuration names `"credsStore": "desktop"`. A PIT
+minion's `docker-credential-desktop get` blocked for over 20 s on a "would like to access data
+from other apps" prompt, and an unattended gate stalls until a human answers.
+
+So `test-conventions` applies `TestDockerEnvironment` (`build-logic`; design D14 of that change)
+to every `Test` task and to `pitest`, beside the strip above:
+
+- `DOCKER_CONFIG` names a per-task copy of the committed
+  `test-fixtures/src/main/resources/docker-config/config.json`, which names no credential helper,
+  hook or proxy; its `cliPluginsExtraDirs` names the operator's `cli-plugins` directory when one
+  exists, so `docker build` still finds `buildx`.
+- `DOCKER_HOST` is the operator's own when set, otherwise the current context's endpoint from one
+  `docker context inspect` per build; `DOCKER_CONTEXT` is removed. On a macOS host with a
+  `unix://` endpoint, `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` is `/var/run/docker.sock` unless the
+  operator set it. A context endpoint one variable cannot carry (`ssh://`, TLS material) fails the
+  build with the variables to set; `DOCKER_HOST`, `DOCKER_CERT_PATH`, `DOCKER_TLS_VERIFY` and
+  `TESTCONTAINERS_*` set by the operator reach the tests unchanged.
+- Only the committed file is a task input. The endpoint, the override and the plugin directory
+  differ per machine and are not inputs, so a cache entry is shared between macOS and Linux.
+
+No spec or fixture sets a Docker configuration of its own or reads `~/.docker`; a child process
+reaches the copy by inheritance or through `TestChildEnvironment`. The gates:
+`TestDockerEnvironmentSpec` in `:bootstrap` asserts the effect in the real test JVM, and
+`TestDockerEnvironmentFunctionalSpec` with `TestDockerConventionsFunctionalSpec` in `build-logic`
+pin each branch of the composition on inner builds.
+
 ## Stand-ins are prepared, not generated
 
 A stand-in binary a spec runs in place of `git`, `docker`, the agent CLI, a hook or a supervised
@@ -285,11 +322,21 @@ read are every module's `src/test`, `build-checks/*/src/test` and `build-logic/s
 
 The gate `checkSpecContract` (`SpecContractCheck` in `build-logic`, also
 `scripts/check-spec-contract.sh`) checks both directions: a scenario with no marker and no
-exemption is a finding, and so is a marker naming no scenario of a main spec (a rename left it
-dangling) and a malformed marker line — any line opening with the marker's lead that does not
-continue as `<spec-id> / <title>`, so no second, informal spelling survives. A delta's scenarios
-are not linked while the change is unarchived; the gate holds the link once they merge into
-`openspec/specs/`. Write the marker with the test anyway.
+exemption is a finding, and so is a dangling marker and a malformed marker line — any line
+opening with the marker's lead that does not continue as `<spec-id> / <title>`, so no second,
+informal spelling survives. A marker may name a scenario of a main spec or one under an ADDED or
+MODIFIED requirement in the delta of an unarchived change; anything else is dangling (a rename
+left it behind, or the title exists only under REMOVED or only in `archive/`). So write the
+marker with the test, while the change is still unarchived: it resolves through the delta, and
+after the archive through the main spec, with no edit. A delta's scenarios never need a marker;
+the gate requires one once they merge into `openspec/specs/`.
+
+A requirement an unarchived delta REMOVES (same title, same capability path; a delta under
+`archive/` retires nothing) retires its main-spec scenarios: they need no link from the change
+that removes them. Retirement only relaxes the gate — a marker or an exemption line still naming
+a retired scenario is neither dangling nor stale before the archive. The removing change deletes
+its leftover markers and exemption lines itself; the archive's own gate run, once the scenario
+has left the main spec, reports any it forgot.
 
 Gotcha: the reader matches the lead at the start of a line, comment prefix allowed, in every file
 of the scanned trees. A fixture string in a test that builds marker text must not start a line
@@ -297,7 +344,7 @@ with the literal; assemble it (`'// ' + 'Scenario: …'`) or indent it inside a 
 
 **The exemption form.** A scenario verified by something other than a test is listed in its
 capability's exemption file, `config/spec-contract-exemptions/<spec-id>.txt` with every `/` of
-the spec id replaced by `-` (`build/ci` → `build-ci.txt`). The header line declares the
+the spec id replaced by `-` (`build-system/ci` → `build-system-ci.txt`). The header line declares the
 capability, and it alone decides the spec id; the file name must match it, or the gate reports
 the file. Blank lines and `#` comments are allowed; nothing else lives in the directory (a stray
 file is a finding), so the form is documented here, not in a README there:

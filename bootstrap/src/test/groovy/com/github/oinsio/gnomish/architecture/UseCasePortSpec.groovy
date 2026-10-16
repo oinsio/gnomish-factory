@@ -66,7 +66,7 @@ class UseCasePortSpec extends Specification {
 
     // FR12 of split-into-modules: the port is owned by the use-case layer, the adapter supplied
     //     by the composition root
-    // Scenario: build/module-layering / A use case reaches its collaborator through a port
+    // Scenario: build-system/module-layering / A use case reaches its collaborator through a port
     def "#port.simpleName is a use-case-layer port that a use case names and the composition root supplies"() {
         expect:
         suppliedThroughPort(port)
@@ -75,7 +75,7 @@ class UseCasePortSpec extends Specification {
         port << USE_CASE_PORTS
     }
 
-    // Scenario: build/module-layering / A use case reaches its collaborator through a port
+    // Scenario: build-system/module-layering / A use case reaches its collaborator through a port
     def "#port.simpleName is supplied by the composition root, not constructed by a use case"() {
         expect:
         suppliedThroughPort(port)
@@ -86,7 +86,7 @@ class UseCasePortSpec extends Specification {
 
     // FR12 of split-into-modules: a port sized to the use case declares nothing only its own adapter
     //     uses — a member no other class calls is a mirror of the adapter's surface
-    // Scenario: build/module-layering / An inverted seam is the smallest capability
+    // Scenario: build-system/module-layering / An inverted seam is the smallest capability
     def "every method #port.simpleName declares is called by a class other than its adapters"() {
         given:
         def type = production.get(port.name)

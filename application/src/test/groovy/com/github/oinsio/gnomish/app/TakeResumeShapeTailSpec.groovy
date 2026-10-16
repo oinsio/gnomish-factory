@@ -3,8 +3,10 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.*
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.project.RegisteredClone
+import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -41,6 +43,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
     TaskLifecycleStore lifecycleStore = Mock(TaskLifecycleStore)
     TaskBranchGit branches = Stub(TaskBranchGit)
     TaskWorktreeGit worktrees = Mock(TaskWorktreeGit)
+    TaskEnvironmentDisposal disposal = Mock(TaskEnvironmentDisposal)
     TaskStoreGit store = Stub(TaskStoreGit)
     ScriptedExecutor executor = new ScriptedExecutor([completedRound()])
 
@@ -62,8 +65,15 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         worktree = tempDir.resolve('worktrees').resolve('PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
-        worktrees.ensureWorktree(_, _, _) >> worktree
+        branches.adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+            new BranchAdoption.AlreadyLocal(taskId)
+        }
+        worktrees.ensureWorktree(_, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
+        worktrees.environmentDisposal(_) >> disposal
+        // The tip a completion's cleanup reads at the registered commit: the Completed envelope
+        // is still there behind every finish these scenarios reach.
+        branches.classifyShape(_, _) >> new BranchShape.CompletedUncleaned()
         store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> { journal }
         store.readRecordedState(_, _) >> { recordedState() }
@@ -121,9 +131,11 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         then: 'the deferred finish is written, then its destructive tail runs'
         1 * tracker.finish(REF, _)
 
-        then:
+        then: 'the one delivered cleanup: the cleanup commit, then the worktree keyed by the task'
         1 * lifecycleStore.finishCleanup('PROJ-1')
-        1 * worktrees.cleanUp(CLONE_DIR, worktree, _ as TaskOutcome.Completed)
+
+        then:
+        1 * disposal.dispose('PROJ-1')
 
         and: 'no paid round was re-run'
         result instanceof TakeResult.Delivered
@@ -160,11 +172,11 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         ((TakeResult.Delivered) result).finalState() == TaskState.atStageStart('deploy')
     }
 
-    // FR9, FR15: the cleanup commit deletes .gnomish-task/ from the worktree, so the final state
+    // FR9, FR15: the cleanup commit deletes .gnomish-task/ from the tip, so the delivered state
     // must be read BEFORE it — a read after the delete finds nothing and falls back to the
-    // pre-contract fabrication, handing disposal a first-stage state for a delivered task.
+    // pre-contract fabrication, reporting a first-stage state for a delivered task.
     // Scenario: tracker/tracker-take / Delivered state is read at the tip while the envelope is still there
-    def "FR9: the disposal outcome carries the state recorded on the tip, read before cleanup deletes it"() {
+    def "FR9: the delivered state is the one recorded on the tip, read before the cleanup deletes it"() {
         given: 'a tip whose recorded state is past the first stage, and a store that loses it on cleanup'
         record = recordWith(new RecordedOutcome.Completed())
         def cleaned = false
@@ -178,12 +190,11 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         }
 
         when:
-        resume(new BranchShape.CompletedUncleaned())
+        def result = resume(new BranchShape.CompletedUncleaned())
 
-        then: 'disposal received the recorded state, not a fabricated first-stage one'
-        1 * worktrees.cleanUp(CLONE_DIR, worktree, { TaskOutcome.Completed outcome ->
-            outcome.finalState() == TaskState.atStageStart('deploy')
-        })
+        then: 'the cleanup ran, and the delivery reports the recorded state, not a fabricated first-stage one'
+        cleaned
+        ((TakeResult.Delivered) result).finalState() == TaskState.atStageStart('deploy')
     }
 
     // FR10: an Aborted run has no external effect to sequence around — its tracker write is

@@ -56,8 +56,8 @@ public final class TaskBranchLister {
 
     private static final Logger log = LoggerFactory.getLogger(TaskBranchLister.class);
 
-    private static final String LOCAL_PREFIX = "refs/heads/gnomish/";
-    private static final String REMOTE_PREFIX = "refs/remotes/origin/gnomish/";
+    private static final String LOCAL_PREFIX = TaskBranchRefs.HEAD_NAMESPACE;
+    private static final String REMOTE_PREFIX = TaskBranchRefs.TRACKING_NAMESPACE;
 
     private final GitRunner runner;
     private final TipEnvelopeReader tipEnvelopeReader = new TipEnvelopeReader();
@@ -77,24 +77,25 @@ public final class TaskBranchLister {
      */
     public List<TaskListRow> list(Path cloneDir) {
         Map<String, TaskListRow> byBranch = new LinkedHashMap<>();
-        for (String ref : listRefs(cloneDir, "refs/heads/", LOCAL_PREFIX)) {
+        for (String ref : listRefs(cloneDir, LOCAL_PREFIX)) {
             byBranch.put(ref.substring(LOCAL_PREFIX.length()), readRow(cloneDir, ref, LOCAL_PREFIX));
         }
-        for (String ref : listRefs(cloneDir, "refs/remotes/origin/", REMOTE_PREFIX)) {
+        for (String ref : listRefs(cloneDir, REMOTE_PREFIX)) {
             byBranch.computeIfAbsent(
                     ref.substring(REMOTE_PREFIX.length()), ignored -> readRow(cloneDir, ref, REMOTE_PREFIX));
         }
         return List.copyOf(byBranch.values());
     }
 
-    private List<String> listRefs(Path cloneDir, String pattern, String prefix) {
-        GitCommandResult result = runner.run(cloneDir, "for-each-ref", "--format=%(refname)", pattern + "gnomish/*");
+    private List<String> listRefs(Path cloneDir, String prefix) {
+        String pattern = prefix + "*";
+        GitCommandResult result = runner.run(cloneDir, "for-each-ref", "--format=%(refname)", pattern);
         // An enumeration that never ran to its own exit established nothing about which branches
         // exist, so it must not answer with an empty listing — the same non-exit-is-not-a-fact
         // rule the tip reads apply ({@code GitShowTip}), one step earlier in the same pipeline.
         if (result.termination() != Termination.EXITED) {
             throw new BranchTipUnavailableException(
-                    pattern + "gnomish/*", "for-each-ref", result.termination().name());
+                    pattern, "for-each-ref", result.termination().name());
         }
         if (result.exitCode() != 0) {
             // An enumeration that git refused established nothing about which branches exist, so
@@ -105,10 +106,10 @@ public final class TaskBranchLister {
             // throwable-not-subject: git reported a status, not a thrown fault.
             log.debug(
                     "ref enumeration of {} exited {}: {}",
-                    pattern + "gnomish/*",
+                    pattern,
                     result.exitCode(),
                     result.stderr().forLog());
-            throw new TaskListingFailedException(pattern + "gnomish/*", result.exitCode(), result.stderr());
+            throw new TaskListingFailedException(pattern, result.exitCode(), result.stderr());
         }
         // @UntrustedParser warrant (design D11): every line kept is a ref name for-each-ref
         //     printed, held to the factory's own gnomish/ prefix below, and used only as a git

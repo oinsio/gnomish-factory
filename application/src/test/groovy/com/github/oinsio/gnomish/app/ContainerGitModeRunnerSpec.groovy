@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
@@ -36,7 +36,7 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes,
     private static final TaskContext CONTEXT = new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
 
     TaskBranchGit branches = Mock(TaskBranchGit)
-    TaskRepository taskRepository = Mock(TaskRepository)
+    TaskLifecycleStore taskRepository = Mock(TaskLifecycleStore)
     SandboxRunSupport support = Mock(SandboxRunSupport)
     ScriptedExecutor executor = new ScriptedExecutor([completedRound()])
 

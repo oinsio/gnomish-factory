@@ -6,7 +6,8 @@ import spock.lang.Specification
  * FR13, NFR-S2 of tighten-spec-contract (design D13): the classifier reads the envelope at the
  * task's registered commit, and the tip contributes one fact — its relation to that commit. A tip
  * above the register is the registered commit's shape; a register that is not an ancestor of the
- * tip, or a missing one under a tip that carries an envelope, quarantines with a diagnosis.
+ * tip quarantines with a diagnosis, and a missing one under a tip that carries an envelope is
+ * Unregistered (FR10 of fix-terminal-receipt-convergence, design D13).
  */
 class BranchShapeRegisterSpec extends Specification {
 
@@ -58,25 +59,42 @@ class BranchShapeRegisterSpec extends Specification {
         }
     }
 
-    // A branch with no register is a STARTED-less branch (Bare) only while its tip carries no
-    // envelope; any other is quarantined, never guessed from content the factory never registered.
-    // Scenario: lifecycle/task-branch-contract / A register that is not an ancestor of the tip quarantines
-    def "a branch with no register and #tip is #expected"() {
+    // FR10 of fix-terminal-receipt-convergence (design D13): a branch with no register is a
+    // STARTED-less branch (Bare) only while its tip carries no envelope; any other is Unregistered —
+    // a state of the clone, named with the register and the tip, never Unknown and never guessed
+    // from content the factory never registered.
+    // Scenario: lifecycle/task-branch-contract / A tip without its register is Unregistered, not Unknown
+    // Scenario: lifecycle/task-branch-contract / A missing register is a state of the clone, not of the branch
+    def "FR10: a branch with no register and #tip is #expected"() {
         when:
         def shapes = atRegister().collect {
             classifier.classify(withRelation(it, new TipRelation.NoRegister(REGISTER_NAME, TIP_ID, carries)))
         }
 
         then:
-        shapes.every { it.class == expected }
-        !carries || shapes.every {
-            def reason = (it as BranchShape.Unknown).reason()
-            reason.contains(REGISTER_NAME) && reason.contains(TIP_ID)
-        }
+        shapes.every { it == expected }
 
         where:
         tip | carries || expected
-        'an envelope at its tip' | true || BranchShape.Unknown
-        'no envelope at its tip' | false || BranchShape.Bare
+        'an envelope at its tip' | true || new BranchShape.Unregistered(REGISTER_NAME, TIP_ID)
+        'no envelope at its tip' | false || new BranchShape.Bare()
+    }
+
+    // FR10 (D13): once the touchpoint fetch lands the register, the same branch classifies by the
+    // registered commit's content exactly as any registered branch does — and a reading with the
+    // register present, repeated, changes nothing.
+    // Scenario: lifecycle/task-branch-contract / A fetched register reclassifies an Unregistered branch by its content
+    def "FR10: the register landing turns every Unregistered tip into the shape its content names"() {
+        given:
+        def tips = atRegister()
+
+        expect:
+        !tips.isEmpty()
+        tips.every {
+            def before = classifier.classify(withRelation(it, new TipRelation.NoRegister(REGISTER_NAME, TIP_ID, true)))
+            def after = classifier.classify(it)
+            before instanceof BranchShape.Unregistered && !(after instanceof BranchShape.Unregistered) &&
+                    after == classifier.classify(it)
+        }
     }
 }

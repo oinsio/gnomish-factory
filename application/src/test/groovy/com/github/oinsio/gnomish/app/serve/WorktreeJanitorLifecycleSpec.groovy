@@ -75,7 +75,7 @@ class WorktreeJanitorLifecycleSpec extends Specification {
             ->
             heldReads.incrementAndGet()
             Set.of()
-        } as OccupiedSlots)
+        } as OccupiedSlots, { Set<String> held -> } as BranchPass)
     }
 
     // The janitor's joining stop on a helper thread; false if it did not return in time.

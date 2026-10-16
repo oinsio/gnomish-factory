@@ -40,15 +40,24 @@ class WorktreeJanitorSpec extends Specification {
     def disposal = { String key -> disposed << key } as TaskEnvironmentDisposal
     def clock = { -> NOW } as InstantSource
     def sleeper = Mock(Sleeper)
+    List<String> events = []
+    List<Set<String>> branchPassHeld = []
+    def branchPass = { Set<String> held ->
+        events << 'branch pass'
+        branchPassHeld << held
+    } as BranchPass
 
     def setup() {
         registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), tempDir.resolve('my-project'))
     }
 
     private WorktreeJanitor janitor(Set<TaskRef> held = Set.of()) {
-        new WorktreeJanitor(registeredClone, AGE_THRESHOLD, disposal, VirtualTimeEquipment.on(clock, sleeper), {
+        new WorktreeJanitor(registeredClone, AGE_THRESHOLD, { String key ->
+            events << 'dispose ' + key
+            disposal.dispose(key)
+        } as TaskEnvironmentDisposal, VirtualTimeEquipment.on(clock, sleeper), {
             -> held
-        })
+        }, branchPass)
     }
 
     private Path environment(String key, Instant lastActivity) {
@@ -94,7 +103,7 @@ class WorktreeJanitorSpec extends Specification {
         when:
         new WorktreeJanitor(registeredClone, AGE_THRESHOLD, scopedDisposal, VirtualTimeEquipment.on(clock, sleeper), {
             -> Set.of()
-        }).tick()
+        }, branchPass).tick()
 
         then:
         logs.list.find {
@@ -216,14 +225,31 @@ class WorktreeJanitorSpec extends Specification {
     }
 
     // FR14, D10: a project folder that does not exist yet (a fresh factory home before any task
-    //     ever ran) is a no-op, not an error.
-    def "does nothing when the project has no worktrees yet"() {
+    //     ever ran) is a no-op for the age pass, not an error — and the branch pass still runs: a
+    //     clone whose tasks all ran in boxes has task branches but no worktree folder.
+    def "does nothing to worktrees when the project has none yet, and still runs the branch pass"() {
         when:
         janitor().tick()
 
         then:
         disposed.isEmpty()
         0 * sleeper._
+        events == ['branch pass']
+    }
+
+    // FR4 of fix-terminal-receipt-convergence (proposal Q1): every tick runs the branch pass after
+    //     the age pass, handing it the same held set the age pass protected, as sanitized keys.
+    def "FR4: every tick runs the branch pass after the age pass, with the held tasks' keys"() {
+        given:
+        environment('aged', NOW - AGE_THRESHOLD - Duration.ofDays(1))
+        def instance = janitor(Set.of(new TaskRef('PROJ 7')))
+
+        when:
+        instance.tick()
+
+        then:
+        events == ['dispose aged', 'branch pass']
+        branchPassHeld == [Set.of('PROJ-7')]
     }
 
     // task 2.5, add-serve-observability FR7: lastRunAt starts at construction time and is
@@ -240,7 +266,7 @@ class WorktreeJanitorSpec extends Specification {
         def laterClock = { -> NOW + Duration.ofMinutes(1) } as InstantSource
         def later = new WorktreeJanitor(registeredClone, AGE_THRESHOLD, disposal, VirtualTimeEquipment.on(laterClock, sleeper), {
             -> Set.of()
-        })
+        }, branchPass)
         later.tick()
 
         then:

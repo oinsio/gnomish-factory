@@ -51,6 +51,7 @@ Active changes: `openspec/changes/`. Archived: `openspec/changes/archive/` (immu
 | `manual-sync-pairs.md`  | hand-synced implementations   | Declared pairs, sync markers, rule-of-three extraction     |
 | `implementation.md`     | global                        | Single-owner mechanisms: consumer list, old-way sweep, DoD |
 | `verification-scope.md`  | task-by-task implementation   | Per-task checks (named specs, scoped PIT); full `check` once at the end |
+| `spec-mismatch.md`      | code cannot meet the spec     | Five answers before the question; no scenario narrowed as a fix; `/architect` first |
 | `review-recommendations.md` | review reports            | Recommendation format, worth-fixing tests, resolution record |
 | `stage-description.md`  | stage docs                    | IDEF0/ICOM + Quality Control format for pipeline stages    |
 | `proposal-format.md`    | `openspec/**/proposal.md`     | Required sections and format for PRD                       |

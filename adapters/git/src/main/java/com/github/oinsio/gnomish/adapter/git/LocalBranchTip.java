@@ -30,11 +30,11 @@ final class LocalBranchTip {
      * Returns the branch's local tip, or empty when the clone has no such branch.
      *
      * @param repo the clone to read the branch ref from; never null
-     * @param branch the task branch name; never blank
+     * @param taskId the tracker's original taskId, whose task branch head is read; never blank
      * @return the branch's local tip, or empty when the clone has no such branch
      */
-    Optional<String> read(Path repo, String branch) {
-        GitCommandResult tip = runner.run(repo, "rev-parse", "--verify", "--quiet", "refs/heads/" + branch);
+    Optional<String> read(Path repo, String taskId) {
+        GitCommandResult tip = runner.run(repo, "rev-parse", "--verify", "--quiet", TaskBranchRefs.head(taskId));
         // @UntrustedParser warrant (design D11): what leaves here is git's own object id for a
         //     ref this factory named — used only as a revision argument and compared for equality,
         //     never rendered to a reader, so no untrusted text escapes as text.

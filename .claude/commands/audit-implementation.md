@@ -59,6 +59,15 @@ Per `traceability.md`: for each FR/NFR/UX from the proposal, grep for an impleme
 the covering test. Report per ID: ✅ implemented+tested (evidence) / ⚠️ implemented, no
 traceability link or no test / ❌ not found. Every ⚠️/❌ gets a specific recommendation.
 
+Then the narrowed-scenario check of `spec-mismatch.md`: diff every delta scenario against its
+text at the change's last commit (`git diff HEAD -- openspec/changes/<name>/specs`) and against
+the main spec; a WHEN clause that grew a condition or a THEN that lost a promise during
+implementation, with no `design.md` decision citing a verified premise (`file:line`), is
+❌ CRITICAL — the spec was narrowed so the code would pass. A fixture that pre-establishes a
+state production never has before driving the consumer (a `locate` the fixture runs so the
+register is already present) is the same finding on the test side (`testing.md`, "Fixtures
+assemble through production owners").
+
 ### 4. Quality gate (skip if `quick`)
 
 Determine affected modules from the diff; run `./gradlew <module>:check` for them (includes

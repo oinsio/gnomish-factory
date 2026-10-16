@@ -14,7 +14,8 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape;
  * difference between "this branch was born unreadable" and "this branch went unreadable after the
  * factory retried it four times", which is the first thing a diagnosis needs.
  *
- * <p>Implements FR15, NFR-O2, UX2 of harden-task-branch-contract.
+ * <p>Implements FR15, NFR-O2, UX2 of harden-task-branch-contract; FR10 of
+ * fix-terminal-receipt-convergence.
  */
 public final class BranchQuarantineReport {
 
@@ -43,7 +44,7 @@ public final class BranchQuarantineReport {
                 + " crashed runs, "
                 + facts.recoveryCount()
                 + " failed branch repairs); this quarantine spent none of them."
-                + nextStep(shape);
+                + nextStep(taskId, shape);
     }
 
     /**
@@ -52,9 +53,16 @@ public final class BranchQuarantineReport {
      * branch, so "inspect and fix it" is actionable. {@link BranchShape.Bare} names no file — it
      * carries no {@code .gnomish-task/} content at all, and it reaches a quarantine only because
      * the factory routed a fresh-claim shape into the resume table. Telling an operator to fix an
-     * offending file there sends them looking for something that does not exist.
+     * offending file there sends them looking for something that does not exist. {@link
+     * BranchShape.Unregistered} names no file either: its remedy is a read that fetches the
+     * register (design D13 of fix-terminal-receipt-convergence).
      */
-    private static String nextStep(BranchShape shape) {
+    private static String nextStep(String taskId, BranchShape shape) {
+        if (shape instanceof BranchShape.Unregistered) {
+            return " Next: run `gnomish status " + taskId + "` to fetch the task's factory register from origin"
+                    + " beside its branch. A branch still Unregistered after it has no factory register at"
+                    + " origin: inspect it before returning the task to the ready state.";
+        }
         if (shape instanceof BranchShape.Bare) {
             return " Next: this branch carries no .gnomish-task/ files to inspect — nothing is wrong"
                     + " with its content. Return the task to the ready state; if it quarantines"

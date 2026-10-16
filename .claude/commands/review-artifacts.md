@@ -26,6 +26,12 @@ actionable tail (step 7).
 
 - `$1` — change name under `openspec/changes/` (not `archive/`). If omitted: when exactly one
   active change exists, take it; otherwise list active changes with AskUserQuestion.
+- `$2` — optional: a decision id (`D8`). Scopes the review to that decision: the decision's own
+  text, its rows in the single-owner and sync-surface tables, the delta-spec requirements and the
+  tasks that cite it. Steps 2–5 run only over those; the coverage matrix is omitted. This is the
+  form `design-decisions.md` ("A decision added during implementation") requires before the
+  task implementing a decision added mid-apply starts — the rest of the design was reviewed
+  already, and re-reading it costs more than it finds.
 
 ## Steps
 
@@ -72,6 +78,11 @@ reality (grep/read; cite file:line):
 - Files, classes, methods, modules, Gradle projects, config keys mentioned as *existing* —
   do they exist under those names and locations now?
 - Descriptions of current behavior ("today the engine does X") — does the code still do X?
+- Wiring claims ("`X.build` opens Y and passes it to Z", "Z gains a parameter") — read the
+  current signature of the constructor, method or port the claim changes and quote it in the
+  finding. A claim modelled on a neighbouring class (the design says "as `W` does") is checked
+  against the class it changes, not against `W`: a value the constructor can already derive
+  from a parameter it holds is not a new parameter, and a decision that says it is, is stale.
 - `MODIFIED`/`REMOVED` requirements in delta specs — does the referenced requirement exist
   verbatim in `openspec/specs/` (delta-specs rule: MODIFIED must restate the current text)?
 - Is any part of the change **already implemented** — by an archived change, by another
@@ -85,7 +96,9 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
 
 - **proposal.md** satisfies `proposal-format.md`: all required sections; requirement IDs
   follow `traceability.md` formats; each FR/NFR/UX is verifiable as written; goals/non-goals
-  present; open questions (Q-IDs) either answered in `design.md` or explicitly left open.
+  present; open questions (Q-IDs) either answered in `design.md` or explicitly left open; a
+  non-goal that defers a known gap names the condition that must pick it up, not a time
+  (⚠️ otherwise).
 - **Delta specs** satisfy `delta-specs.md`: ADDED/MODIFIED/REMOVED structure; every
   requirement has at least one `#### Scenario:`; scenarios are concrete enough to test.
 - **design.md** (when the change alters architecture, ports, or cross-module contracts):
@@ -103,7 +116,11 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
   the design states `Single-owner mechanisms: none`. Verify against reality: grep the
   codebase for the old-way pattern and for call sites the consumer column omits. A row whose
   value type is a primitive a consumer could obtain elsewhere, or whose consumers say "all
-  paths" instead of naming them, is ⚠️; a missing table for such a decision is ❌.
+  paths" instead of naming them, is ⚠️; a missing table for such a decision is ❌. A row that
+  names a construction site ("`X.build` opens it") where the invariant belongs ("opened over
+  its own clone, so no other can be named") is ⚠️ (`design-decisions.md`, "The row names the
+  owner and its invariant, never the construction site"): the fix is to state the invariant
+  and name what enforces it, and to leave the site to the code.
 - **tasks.md**: every FR/NFR/UX maps to at least one task; every task traces back to a
   requirement or decision; verification steps are automated (specs, gates), not manual.
 - **Coverage matrix**: for each requirement ID report proposal → delta spec → task presence;
@@ -135,6 +152,25 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
   sync silently replaces the first
 - Vs other active changes: overlapping files/specs/capabilities → flag the collision and the
   needed ordering.
+- Vs deferrals of archived proposals (`proposal-format.md`, the deferral bullet): list the
+  files, classes and capabilities the change touches (from `design.md` and `tasks.md`), find the
+  archived proposals that name them
+  (`grep -rl --include=proposal.md -e '<File>' openspec/changes/archive/`), and read each one's
+  Non-Goals for a deferral of a known gap — a unification, a second medium, a window left open.
+  For every deferral whose pickup condition this change meets, the change either takes it up (a
+  task, a decision) or re-defers it explicitly in its own Non-Goals with the condition restated.
+  A met deferral the change does neither is ❌ CRITICAL: the next consumer meets the gap
+  unprepared, as task 3.3 of `fix-terminal-receipt-convergence` met NG1 of
+  `fix-envelope-medium`. An archived deferral the change's files touch that names a time ("a
+  later change") instead of a condition is ⚠️: judge whether this change meets it and say so.
+  Report each in the **Deferrals** section, with the archived proposal and its NG-ID.
+- Vs narrowed scenarios (`spec-mismatch.md`): for every MODIFIED requirement, diff each
+  scenario against its main-spec text (and, for a delta revised in place, against the delta's
+  last committed text: `git diff HEAD -- openspec/changes/<name>/specs`). A WHEN clause that
+  grew a condition, or a THEN that lost a promise, is ❌ CRITICAL unless `design.md` records the
+  decision that narrowed it with the premise verified in code (`file:line`) — a promise removed
+  to make the code pass is the patch that rule exists to prevent. Report each in **External
+  consistency** with the scenario title and the decision, or "none".
 - Vs project rules and ADRs: tech choices match ADR 0001 and `.claude/rules/`; scope fits
   the 1–4 week rule (`process-invariants.md`), else recommend a split; naming is
   kebab-case-descriptive; artifacts reference only durable `docs/` files, never scratch
@@ -159,6 +195,7 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
 ### Completeness         — missing sections/scenarios/tasks with the rule they violate
 ### Internal consistency — each contradiction with both citations
 ### External consistency — conflicts with stable specs, code, active changes, rules
+### Deferrals            — each archived deferral the change's files meet: taken up / re-deferred / missing, or "none"
 ### Recommendations, ordered — CRITICAL first, then WARNING, then SUGGESTION
 ### Verdict              — ready to implement / needs revision (blockers listed)
 ```

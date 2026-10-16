@@ -62,12 +62,28 @@ class KillPointTransition {
     /** The expected frozen shape per kill point; one entry per step, in step order. */
     List<String> frozenShapes
 
-    /** The shape every pickup converges the transition to, from any of its kill windows. */
+    /**
+     * The shape every pickup converges the transition to, from any of its kill windows — unless
+     * {@link #convergedShapes} names one per window.
+     */
     String converged
+
+    /**
+     * The shape each kill window's pickup converges to, one entry per step in step order; null where
+     * {@link #converged} holds for every window. A row needs it when what the pickup may do depends
+     * on how far the transition got — a park that landed is answered by its human before the next
+     * take, one that did not is re-delivered (design D3 of fix-terminal-receipt-convergence).
+     */
+    List<String> convergedShapes
 
     /** The number of kill windows: one after each durable step. */
     int killPoints() {
         steps.size()
+    }
+
+    /** The shape kill point {@code k}'s pickup must converge to. */
+    String convergedAt(int k) {
+        convergedShapes == null ? converged : convergedShapes[k]
     }
 
     /** How an assertion message names kill point {@code k}. */

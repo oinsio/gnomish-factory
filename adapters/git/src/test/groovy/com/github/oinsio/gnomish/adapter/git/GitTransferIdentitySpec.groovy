@@ -152,7 +152,7 @@ class GitTransferIdentitySpec extends Specification implements TransferAdversary
         assert !Files.exists(clone.resolve('.git/FETCH_HEAD'))
 
         when: "the owner's Container fetch, in the harvest's refspec shape"
-        def result = runner.run(clone, GitTransfer.harvest(source, BRANCH, FactoryRegister.quarantine('task-1')))
+        def result = runner.run(clone, GitTransfer.harvest(source, BRANCH, FactoryRegisterRefs.quarantine('task-1')))
 
         then:
         result.exitCode() == 0
@@ -180,7 +180,7 @@ class GitTransferIdentitySpec extends Specification implements TransferAdversary
 
         when: 'the box plants a .gitmodules that is a symbolic link on the task branch, and the harvest runs again'
         plantGitmodulesSymlink(box)
-        def refused = runner.run(clone, GitTransfer.harvest(source, BRANCH, FactoryRegister.quarantine('task-1')))
+        def refused = runner.run(clone, GitTransfer.harvest(source, BRANCH, FactoryRegisterRefs.quarantine('task-1')))
 
         then: 'git refuses it, the refusal parses to the validation message id, and the branch ref is unchanged'
         refused.exitCode() != 0

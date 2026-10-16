@@ -8,16 +8,18 @@ rule in the body, moved the kill window into its note and the scenario "A kill d
 leaves the recoverable shape", and gave the tip-or-parent read its two scenarios; this text
 widens the subject from the take to the factory, delivers the finish only when it is still owed,
 adds the claimless convergence of the cleanup to the body, and adds the scenarios "A finished
-task's cleanup converges without a claim" and "Two instances converge on one cleanup commit".
+task's cleanup converges without a claim", "Two instances converge on one cleanup commit" and
+"A finished task's branch held only as remote-tracking converges".
 
 ### Requirement: A Completed-without-cleanup tip is finished, never re-executed
 When the branch tip records the `Completed` outcome but the cleanup commit is
 absent, the factory SHALL finish the delivery — deliver the tracker finish when
 it is still owed, then commit the cleanup and push it — and SHALL NOT re-enter
 the engine: zero rounds, no executor or judge invocation. Once the tracker
-reports the task finished, the cleanup SHALL converge without a claim. The
+reports the task finished, the cleanup SHALL converge without a claim, from any
+clone of origin, whether or not it holds the branch locally. The
 delivered state a recovery reports SHALL be read from the `Completed` commit itself.
-**Implements**: FR3, FR4, NFR-R1 of fix-terminal-receipt-convergence; FR9 of harden-task-branch-contract; FR6 of fix-envelope-medium
+**Implements**: FR3, FR4, FR8, NFR-R1 of fix-terminal-receipt-convergence; FR9 of harden-task-branch-contract; FR6 of fix-envelope-medium
 **Notes**: The order is FR10's: the cleanup is the destructive step, so it runs behind the confirmed finish.
 
 #### Scenario: Kill between Completed and cleanup costs no re-run
@@ -58,8 +60,17 @@ delivered state a recovery reports SHALL be read from the `Completed` commit its
 #### Scenario: Two instances converge on one cleanup commit
 - **WHEN** two instances finish the cleanup of the same finished task's branch at the same time,
   through `take`, `run --resume` or the `serve` janitor
-- **THEN** both go through one owner, one cleanup commit lands, and the loser's ref update fails
-  without force
+- **THEN** both go through one owner, one cleanup commit lands, the loser's ref update fails
+  without force, and neither instance fails: the loser reports the task as already done
+
+#### Scenario: A finished task's branch held only as remote-tracking converges
+- **WHEN** the tracker reports a task finished, its branch is `CompletedUncleaned` at origin, and
+  a clone that holds it only as a remote-tracking ref — brought by the factory's own touchpoint
+  or by an operator's or an IDE's plain `git fetch`, so with or without the register — runs
+  `take <ref>`, `run --resume` or the `serve` janitor's branch pass
+- **THEN** the branch and its register are fetched first, the branch is adopted as a local
+  branch, the cleanup commit lands and is pushed, no claim is written, and the task is reported
+  as already done
 
 ## ADDED Requirements
 

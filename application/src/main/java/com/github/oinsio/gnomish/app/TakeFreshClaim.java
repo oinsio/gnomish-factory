@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
@@ -114,14 +113,13 @@ final class TakeFreshClaim {
         Path worktree = TaskWorktreePath.resolve(clone, taskId);
         TaskRecord content =
                 git.store().readTaskRecord(worktree, taskId).orElseThrow(() -> AbsentEnvelope.task(taskId, worktree));
-        String branchName = TaskIdSanitizer.branchName(taskId);
         var bootstrap = new ResumeBootstrap(
                 taskId,
                 content.context(),
                 content.outcome(),
                 content.lastEscalation(),
                 worktree,
-                branchName,
+                GitFreshTaskSupport.createdBranch(git.branches(), clone.clonePath(), taskId),
                 content.baseCommit(),
                 content.trackerWritePending(),
                 content.pin());

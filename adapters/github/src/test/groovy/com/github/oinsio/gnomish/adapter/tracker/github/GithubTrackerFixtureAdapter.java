@@ -127,7 +127,13 @@ final class GithubTrackerFixtureAdapter implements Tracker {
         // fixture ref this wrapper hides underneath it.
         var snapshot = new TaskSnapshot(ref.id(), result.snapshot().title(), result.snapshot().body());
         return new TrackerTask(
-                ref, snapshot, result.state(), result.abortFacts(), result.finished(), result.designators());
+                ref,
+                snapshot,
+                result.state(),
+                result.abortFacts(),
+                result.finished(),
+                result.designators(),
+                result.tenureBoundary());
     }
 
     @Override
@@ -273,10 +279,14 @@ final class GithubTrackerFixtureAdapter implements Tracker {
      * tracker UI, per {@code TrackerReturnedFactContract.returnToReady}: swaps the
      * needs-human label for the ready label, exactly as a human's own edit would,
      * without touching any comment — the park report and prior claim markers stay in
-     * the issue's history for an adapter's returned-fact derivation to observe.
+     * the issue's history for an adapter's returned-fact derivation to observe. A human may also
+     * pull a claimed issue back (the tenure-boundary contract, FR1 of
+     * fix-terminal-receipt-convergence): the working label goes the same way, and the claim
+     * comment stays in the thread, as it would after a UI relabel.
      */
     void returnToReady(TaskRef ref) {
         relabelToReady(ref, FixtureSeeder.NEEDS_HUMAN_LABEL);
+        issueFor(ref).removeLabel(FixtureSeeder.WORKING_LABEL);
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -55,8 +56,11 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
         worktree = tempDir.resolve('worktrees').resolve('PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        branches.adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+            new BranchAdoption.AlreadyLocal(taskId)
+        }
         branches.classifyShape(_, _) >> new BranchShape.InProgress()
-        worktrees.ensureWorktree(_, _, _) >> worktree
+        worktrees.ensureWorktree(_, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> { journal }

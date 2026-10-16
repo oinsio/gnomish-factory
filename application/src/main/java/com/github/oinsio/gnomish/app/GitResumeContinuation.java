@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.console.DialogConsole;
-import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
@@ -9,8 +8,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
-import com.github.oinsio.gnomish.status.StatusReport;
-import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import java.nio.file.Path;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -27,15 +24,16 @@ import org.jspecify.annotations.Nullable;
  * interrupted round's leftovers (or honours {@code --discard-work}) before continuing; both resolve
  * the escalation through {@link EscalationResume} and land its decision or resumed commit through
  * {@link EscalationResume#land}; both open the gate through {@code TaskRepository.approveCheckpoint}
- * (via {@link CheckpointApproval#continuePause}) before continuing; and {@code completed} prints
- * the same status report with no further engine run. Every continuing arm but {@code null} lands
- * exactly one lifecycle commit before the engine runs. The container arm additionally disposes the
+ * (via {@link CheckpointApproval#continuePause}) before continuing; {@code completed} lands a lost
+ * cleanup through {@link DeliveredCleanup}, the owner {@code take} uses, then prints the one
+ * {@link CompletedResume} report with no engine run. Every continuing arm but {@code null} lands exactly one
+ * lifecycle commit before the engine runs. The container arm additionally disposes the
  * kept box before any branch write or round (its clone is behind the park commit); the host arm has
  * none, since its worktree is the branch. Adding or re-meaning an arm on one side alone is the
  * divergence this pair guards against (UX2).
  *
  * <p>Implements FR5, FR8, UX2 of add-git-workflow; FR4, FR7 of make-checkpoint-gate-durable; FR18 of
- * supervise-daemon-loops-and-embed-dashboard.
+ * supervise-daemon-loops-and-embed-dashboard; FR4 of fix-terminal-receipt-convergence.
  */
 final class GitResumeContinuation {
 
@@ -44,19 +42,21 @@ final class GitResumeContinuation {
     private final TaskLifecycleStore taskRepository;
     private final Path cloneDir;
     private final ResumeBootstrap bootstrap;
-    private final StatusTextRenderer statusRenderer = new StatusTextRenderer();
+    private final DeliveredCleanup deliveredCleanup;
 
     GitResumeContinuation(
             RunAssembly assembly,
             TaskGit git,
             TaskLifecycleStore taskRepository,
             Path cloneDir,
-            ResumeBootstrap bootstrap) {
+            ResumeBootstrap bootstrap,
+            DeliveredCleanup deliveredCleanup) {
         this.assembly = assembly;
         this.git = git;
         this.taskRepository = taskRepository;
         this.cloneDir = cloneDir;
         this.bootstrap = bootstrap;
+        this.deliveredCleanup = deliveredCleanup;
     }
 
     /**
@@ -128,17 +128,12 @@ final class GitResumeContinuation {
     }
 
     /**
-     * Outcome {@code completed}: prints the same final status summary {@code
-     * RunnerOutcomeLoop.handleCompleted} prints in-process, and returns — no engine run, no
-     * further worktree or branch write.
-     *
-     * <p>Implements FR8, UX2 of add-git-workflow.
+     * Outcome {@code completed}: a lost cleanup lands ({@code run} has no tracker to ask), then the
+     * summary prints. Implements FR8, UX2 of add-git-workflow; FR4 of fix-terminal-receipt-convergence.
      */
     void reportCompleted(TaskState finalState) {
-        var report = StatusReport.build(bootstrap.context(), finalState, null, null);
-        // The run's console owner (FR5, FR6 of harden-untrusted-text-sinks): the summary carries the
-        // task's own stage names and decision text.
-        assembly.dialogConsole().print(statusRenderer.renderFull(report) + ConsoleIO.LINE_END);
+        deliveredCleanup.cleanUp(cloneDir, bootstrap.branch());
+        CompletedResume.print(assembly, bootstrap.context(), finalState);
     }
 
     /**

@@ -120,7 +120,7 @@ class TimeSourceOwnerBoundarySpec extends Specification {
     def "FR21: the test-time gate holds the same real-time literal set"() {
         given: 'the check\'s own source, its literal block'
         def check = RepoSourceTree.repoRoot().resolve(
-                'build-logic/src/main/groovy/com/github/oinsio/gnomish/build/TestTimeInjectionCheck.groovy').toFile().text
+                'build-logic/src/main/groovy/com/github/oinsio/gnomish/buildlogic/TestTimeInjectionCheck.groovy').toFile().text
         def block = check.substring(check.indexOf('REAL_TIME = ['), check.indexOf(']', check.indexOf('REAL_TIME = [')))
 
         expect:

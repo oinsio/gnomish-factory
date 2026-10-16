@@ -8,9 +8,10 @@ import java.nio.file.Path;
  * tighten-spec-contract). Not a reader of task-branch state — no pickup decision is made from what
  * it returns. A lifecycle write reads {@code task.json} here to rewrite it ({@link RequiredTaskJson},
  * {@link RequiredTaskState}), the state write the denial cursor it carries forward ({@link
- * StateFileWrite}), the cleanup asks whether the envelope is still there to remove ({@link
- * CleanupCommit}), and the salvage whether there is a state directory to restore ({@link
- * WorktreeSalvage}).
+ * StateFileWrite}), and the salvage whether there is a state directory to restore ({@link
+ * WorktreeSalvage}). The cleanup commit is not among them: it is written over bare objects at the
+ * branch tip ({@link GitObjectsTerminalCommits#cleanUp}, design D8 of
+ * fix-terminal-receipt-convergence).
  *
  * <p>The register, not the worktree's {@code HEAD}: in host mode the gnome commits on the branch
  * between closing commits, so {@code HEAD} may carry an envelope it shaped, and a closing commit
@@ -40,7 +41,7 @@ final class RegisterBase {
      * @return the invocation's own result, exit code and captured streams included
      */
     static GitCommandResult show(GitRunner runner, Path worktree, String taskId, String path) {
-        String register = FactoryRegister.of(taskId).name();
+        String register = FactoryRegisterRefs.of(taskId).name();
         return GitReadGate.answered(register, "show", runner.run(worktree, "show", register + ":" + path));
     }
 
@@ -55,7 +56,7 @@ final class RegisterBase {
      * @return {@code true} when the registered commit's tree carries an entry at that path
      */
     static boolean carries(GitRunner runner, Path worktree, String taskId, String path) {
-        String register = FactoryRegister.of(taskId).name();
+        String register = FactoryRegisterRefs.of(taskId).name();
         GitCommandResult result = GitReadGate.answered(
                 register, "cat-file", runner.run(worktree, "cat-file", "-e", register + ":" + path));
         return result.exitCode() == 0;

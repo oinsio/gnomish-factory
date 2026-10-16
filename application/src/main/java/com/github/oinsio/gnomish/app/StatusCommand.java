@@ -126,7 +126,7 @@ final class StatusCommand {
 
     /**
      * Renders a branch that carries no report at its tip (FR16): every legal shape prints calmly,
-     * and the three quarantine shapes additionally refuse inspection with their diagnosis — nothing
+     * and the four quarantine shapes additionally refuse inspection with their diagnosis — nothing
      * is mutated either way.
      */
     private void printShape(String taskId, BranchShape shape, boolean json) {

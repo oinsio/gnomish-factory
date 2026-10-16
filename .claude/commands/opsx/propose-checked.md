@@ -1,16 +1,17 @@
 ---
 name: "OPSX: Propose Checked"
-description: Propose a new change via /opsx:propose with pre-generation sync-surface and single-owner scouts and the two mandatory decisions (Sync surfaces, Single-owner mechanisms) in design.md
+description: Propose a new change via /opsx:propose with pre-generation sync-surface, single-owner and deferral scouts, the two mandatory decisions (Sync surfaces, Single-owner mechanisms) in design.md, and archived deferrals taken up or re-deferred
 category: Workflow
 tags: [workflow, artifacts, experimental]
 ---
 
-Wrapper around `/opsx:propose` that catches two defect classes at the proposal stage —
+Wrapper around `/opsx:propose` that catches three defect classes at the proposal stage —
 before any code exists: manually-synchronized pairs (`.claude/rules/manual-sync-pairs.md`:
-one rule implemented twice, the project's leading divergence-bug source) and single-owner
+one rule implemented twice, the project's leading divergence-bug source), single-owner
 mechanisms with missing consumers (`.claude/rules/implementation.md`: one implementation
 that only some paths use, the class the 2026-09-10 `add-base-ref-resolution` review
-found). Do not modify `/opsx:propose` itself; it is managed by OpenSpec and updates would
+found), and deferrals of archived proposals that the new change meets and silently ignores
+(`.claude/rules/proposal-format.md`, the deferral bullet). Do not modify `/opsx:propose` itself; it is managed by OpenSpec and updates would
 overwrite the change.
 
 **How it works**: Invoke `/opsx:propose $ARGUMENTS` via the Skill tool, but with the
@@ -62,8 +63,8 @@ following additional constraints injected into the execution:
      the same: list every place that does *not* use it yet, not only X.
 
 5. **Mandatory "Single-owner mechanisms" table in design.md.** Per `design-decisions.md`,
-   each such decision carries the table Owner / Value (type) / Consumers / Old way removed /
-   Enforced by, filled from the scout: consumers named by file (never "all paths"), the
+   each such decision carries the table Owner / Value (type) / Requires / Consumers / Old way
+   removed / Enforced by, filled from the scout: consumers named by file (never "all paths"), the
    raw form the change deletes or each exemption with its reason, and the enforcement
    (parameter type first; else an architecture spec in `:bootstrap` or a grep gate). Where
    the decision claims two values are one by construction, the row names the identity spec
@@ -76,4 +77,18 @@ following additional constraints injected into the execution:
    `apply` sub-agent receives a list it can check, not a claim it must trust
    (`implementation.md`, "For sub-agents implementing one task").
 
-7. Everything else follows `/opsx:propose` unchanged.
+7. **Deferral scout BEFORE writing artifacts.** List the files, classes and capabilities the
+   change will touch, find the archived proposals that name them
+   (`grep -rl --include=proposal.md -e '<File>' openspec/changes/archive/`), and read each
+   one's Non-Goals for a deferral of a known gap — a unification left for later, a second
+   medium not yet aligned, a window left open (`proposal-format.md`, the deferral bullet). For
+   every deferral whose pickup condition this change meets, the generated artifacts either take
+   it up (a decision and its tasks) or re-defer it explicitly in the new proposal's Non-Goals,
+   naming the archived proposal and its NG-ID and restating the condition that must pick it up.
+   A deferral that names a time ("a later change") instead of a condition is judged against
+   this change and the judgement written down the same way. Silence about a met deferral is a
+   format violation: `fix-envelope-medium` NG1 deferred the host/container write-path
+   unification "to a later change", nothing picked it up, and task 3.3 of
+   `fix-terminal-receipt-convergence` met the gap as a race.
+
+8. Everything else follows `/opsx:propose` unchanged.

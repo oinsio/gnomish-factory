@@ -177,6 +177,7 @@ final class ReclaimKillPoints {
         def shape = reclaimingBranches(world).classifyShape(world.repoDir, world.taskId)
         assert !(shape instanceof BranchShape.Bare
         || shape instanceof BranchShape.Unknown
+        || shape instanceof BranchShape.Unregistered
         || shape instanceof BranchShape.Corrupt
         || shape instanceof BranchShape.UnsupportedVersion):
         "${world.taskId}: the reclaiming instance quarantined a tip written by an ended tenure (${shape.label()})"

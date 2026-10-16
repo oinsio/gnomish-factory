@@ -3,11 +3,12 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.CheckpointApprovalRefusedException
 import com.github.oinsio.gnomish.app.port.ResumedWriteRefusedException
-import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
@@ -29,7 +30,7 @@ import spock.lang.Specification
  */
 class ContainerResumeMechanicsCheckpointSpec extends Specification implements RunChainFakes {
 
-    TaskRepository repository = Mock(TaskRepository)
+    TaskLifecycleStore repository = Mock(TaskLifecycleStore)
     SandboxRunSupport support = Mock(SandboxRunSupport)
 
     /** What the bare tip's state.json read answers; reassigned per scenario. */
@@ -52,7 +53,7 @@ class ContainerResumeMechanicsCheckpointSpec extends Specification implements Ru
 
     private ContainerResumeBootstrap branch() {
         new ContainerResumeBootstrap('PROJ-1', CheckpointMechanicsFixtures.context(),
-                new RecordedOutcome.Paused('build'), null, support, 'gnomish/PROJ-1', 'abc123', false,
+                new RecordedOutcome.Paused('build'), null, support, new BranchAdoption.AlreadyLocal('PROJ-1'), 'abc123', false,
                 BasePin.UNPINNED)
     }
 

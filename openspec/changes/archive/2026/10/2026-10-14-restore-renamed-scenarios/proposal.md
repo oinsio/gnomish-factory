@@ -19,7 +19,7 @@ Sequenced after `retire-misnamed-scenarios`.
 - **ADDED** — `Pin-check guards external checks` (`verification/verification-hardening`);
   `Interactive client with nothing declared passes the pin` becomes
   `A check with no declared pin paths passes the pin vacuously`.
-- **ADDED** — `Enforced acyclic dependency direction` (`build/module-layering`);
+- **ADDED** — `Enforced acyclic dependency direction` (`build-system/module-layering`);
   `The baseref leaf stays empty of dependencies` becomes
   `The baseref leaf depends only on the untrustedtext leaf`.
 - Test markers citing the old titles are renamed; the `own-git-invocation-policy` delta, which

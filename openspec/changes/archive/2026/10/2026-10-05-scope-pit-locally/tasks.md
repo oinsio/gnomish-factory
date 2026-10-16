@@ -11,7 +11,7 @@ add-functional-api-gate-test), which is what runs the included build's `function
 - [x] 1.1 Add `MutationScope` (serializable value: mode `BRANCH|ALL|EXPLICIT`, base SHA or
       fallback reason, per-module changed-class sets, per-module widening reason) and
       `MutationScopeSource implements ValueSource<MutationScope, Parameters>` under
-      `build-logic/src/main/groovy/com/github/oinsio/gnomish/build/`, with `ExecOperations`
+      `build-logic/src/main/groovy/com/github/oinsio/gnomish/buildlogic/`, with `ExecOperations`
       injected and the repository root plus module→source-root map as parameters. Every `git`
       argv carries `-c core.quotePath=false -c core.excludesFile=` and every process runs with
       `GIT_OPTIONAL_LOCKS=0` (D2, NFR-R4). Javadoc states the three `git` invocations (D2, D3),

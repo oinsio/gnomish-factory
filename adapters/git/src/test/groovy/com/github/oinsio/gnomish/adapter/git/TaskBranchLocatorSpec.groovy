@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.domain.branch.BranchShape
+import com.github.oinsio.gnomish.domain.branch.BranchShapeClassifier
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.subprocess.Termination
@@ -128,8 +130,12 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
 
     // Scenario: git/git-task-persistence / An unreachable origin falls back to the tracking ref
     def "FR13: an unreachable origin falls back to the tracking ref already present, and lands no register"() {
-        given: 'origin has the branch, and the clone already fetched it once without its register'
+        given: 'origin has the branch with a factory envelope, and the clone already fetched it once without its register'
         def bare = initBareWithBranch(tempDir, 'origin2.git', 'gnomish/PROJ-2', 'f.txt', 'hi')
+        def seed = tempDir.resolve('origin2.git-seed')
+        Files.createDirectories(seed.resolve('.gnomish-task'))
+        commit(seed, '.gnomish-task/task.json', '{}')
+        assert runner.run(seed, 'push', 'origin', 'gnomish/PROJ-2').exitCode() == 0
         def clone = cloneOf(bare, 'clone2')
         fetchFromOrigin(clone, 'refs/heads/gnomish/PROJ-2:refs/remotes/origin/gnomish/PROJ-2')
         def tracked = gitOutput(clone, 'rev-parse', 'refs/remotes/origin/gnomish/PROJ-2')
@@ -141,10 +147,15 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         when:
         def location = locator.locate(clone, 'PROJ-2')
 
-        then: 'the present tracking ref is the answer, unchanged, with no register invented — the reader says Unknown'
+        then: 'the present tracking ref is the answer, unchanged, with no register invented'
         location == new BranchLocation.RemoteTracking('refs/remotes/origin/gnomish/PROJ-2')
         gitOutput(clone, 'rev-parse', 'refs/remotes/origin/gnomish/PROJ-2') == tracked
         gitExitCode(clone, 'rev-parse', '--verify', '--quiet', 'refs/gnomish-factory/PROJ-2') != 0
+
+        and: 'read offline, the branch is Unregistered — the honest answer, never Unknown (FR10 of fix-terminal-receipt-convergence)'
+        new BranchShapeClassifier().classify(new BranchTipFactsReader().read(
+                        RefTipSource.at(runner, clone, 'PROJ-2', (location as BranchLocation.RemoteTracking).ref()))) ==
+                new BranchShape.Unregistered('refs/gnomish-factory/PROJ-2', tracked)
 
         and: 'the fallback leaves a trace naming the branch and the ref it fell back to'
         logs.list.count {

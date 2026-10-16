@@ -175,14 +175,12 @@ record TakeEngineExecution(
                 () -> taskRepository.confirmTerminalWrite(taskId));
         // The completion's durable intent is its outcome commit; the cleanup commit that strips
         // .gnomish-task/ from the tip — and the worktree disposal behind it — is the destructive
-        // last step, run only once the tracker finish has landed (FR9, FR10).
+        // last step, run only once the tracker finish has landed (FR9, FR10), through the one
+        // delivered cleanup every path cleans through (FR4 of fix-terminal-receipt-convergence).
         var finish = new FinishTransition.Fresh(
                 () -> GitOutcomeRecorder.recordIntent(
                         git, taskRepository, cloneDir, taskId, outcome, TrackerWrite.OWED),
-                () -> {
-                    taskRepository.finishCleanup(taskId);
-                    GitOutcomeRecorder.disposeWorkspace(git, cloneDir, worktree, outcome);
-                });
+                () -> DeliveredCleanup.host(git, registeredClone).cleanUp(cloneDir, bootstrap.branch()));
 
         return dispatch.dispatch(
                 outcome, context, bootstrap.branchName(), order, new TerminalTransitions(park, finish));

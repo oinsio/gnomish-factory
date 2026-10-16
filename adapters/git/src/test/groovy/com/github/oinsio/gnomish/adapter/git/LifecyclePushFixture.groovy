@@ -54,7 +54,7 @@ trait LifecyclePushFixture implements BareGitRepoFixture {
 
     /** The commit {@code origin} currently holds the task branch at, if any. */
     Optional<String> remoteTip() {
-        new RemoteBranchTip(git).read(cloneDir, BRANCH)
+        new RemoteBranchTip(git).read(cloneDir, TASK_ID)
     }
 
     /** The {@code LifecyclePush} log events emitted while {@code emit} runs. */

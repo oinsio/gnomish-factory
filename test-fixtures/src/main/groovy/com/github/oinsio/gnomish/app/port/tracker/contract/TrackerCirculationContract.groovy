@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
  * <p>Implements FR2 of add-tracker-port; FR6, FR7 of add-factory-serve; FR4, NFR-R2 of
  * enforce-finish-terminality.
  */
-abstract class TrackerCirculationContract extends TrackerRepairContract {
+abstract class TrackerCirculationContract extends TrackerTenureBoundaryContract {
 
     // FR2 of add-tracker-port: AwaitingHuman is left only by a human — the parked task is absent
     //     from the ready queue until a human returns it, and only then does a claim acquire it

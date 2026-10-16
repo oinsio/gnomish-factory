@@ -131,7 +131,7 @@ class LogContractGateSpec extends Specification {
     }
 
     // FR10: the catalog constant is the only accepted form, now that every module can reach it.
-    // Scenario: build/module-layering / Every operator event head comes from the catalog leaf
+    // Scenario: build-system/module-layering / Every operator event head comes from the catalog leaf
     def "no production source spells a code head as a string literal"() {
         expect: 'the scan really reached the source tree'
         RepoSourceTree.productionSources().size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES

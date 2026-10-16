@@ -50,11 +50,15 @@ public interface ResumeMechanics<B extends ResumedBranch> {
     void confirmTerminalWrite(Path cloneDir, B branch);
 
     /**
-     * Runs the destructive tail of a completion whose finish this pickup delivered: the cleanup
-     * commit removing {@code .gnomish-task/} from the tip, and the workspace disposal behind it
-     * (FR9, FR10 of harden-task-branch-contract). Idempotent — an already-cleaned tip is left alone.
+     * The cleanup of a delivered branch over this medium — the cleanup commit removing {@code
+     * .gnomish-task/} from the tip and the workspace disposal behind it (FR9, FR10 of
+     * harden-task-branch-contract) — as the one owner every path cleans through (FR4, design D2 of
+     * fix-terminal-receipt-convergence). The mechanics only names the medium's store and disposal;
+     * whether and how the cleanup runs is {@link DeliveredCleanup}'s.
+     *
+     * @return the cleanup over this medium for {@code branch}'s task; never null
      */
-    void finishCleanup(Path cloneDir, B branch);
+    DeliveredCleanup deliveredCleanup(B branch);
 
     /**
      * Resumes a tip whose outcome is {@code null} — never recorded (process died mid-visit), or

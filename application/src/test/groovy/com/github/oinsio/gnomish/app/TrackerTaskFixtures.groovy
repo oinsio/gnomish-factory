@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
+import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
+import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -31,6 +33,17 @@ class TrackerTaskFixtures {
 
     static TrackerTask taskWith(TaskRef ref, TrackerTaskState state, boolean finished) {
         new TrackerTask(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('title'), UntrustedText.tracker('body')), state, AbortFacts.none(), finished)
+    }
+
+    /**
+     * The task as every pickup fetches it — {@code Working}, held by {@code instanceId}, since the
+     * pickup's own claim came first — whose thread's last boundary marker is {@code boundary}, or
+     * none when null: the tenure boundary a receipt probe reads (FR2, FR3 of
+     * fix-terminal-receipt-convergence); {@code finished} is the adapter's finished fact.
+     */
+    static TrackerTask heldAfter(TaskRef ref, InstanceId instanceId, BoundaryKind boundary, boolean finished = false) {
+        new TrackerTask(ref, new TaskSnapshot(ref.id(), UntrustedText.tracker('title'), UntrustedText.tracker('body')),
+                new TrackerTaskState.Working(instanceId.value()), AbortFacts.none(), finished, TaskDesignators.none(), boundary)
     }
 
     /**

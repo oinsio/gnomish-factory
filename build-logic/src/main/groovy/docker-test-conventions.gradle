@@ -8,7 +8,7 @@
 // seed-clone helper fails after the clone itself has already succeeded.
 //
 // Every other module's test task is unaffected and still runs in parallel.
-import com.github.oinsio.gnomish.build.DockerDaemonLock
+import com.github.oinsio.gnomish.buildlogic.DockerDaemonLock
 
 def dockerDaemon = gradle.sharedServices.registerIfAbsent('dockerDaemon', DockerDaemonLock) {
     maxParallelUsages = 1

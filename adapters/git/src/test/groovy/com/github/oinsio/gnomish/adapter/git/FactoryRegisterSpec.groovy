@@ -5,9 +5,8 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR13 of tighten-spec-contract (design D13, amended 2026-10-13): the clone's factory register has
- * one name per task, and every move of the task branch and its register is one ref transaction —
- * a closing commit lands both, an admitted gnome range moves the branch alone, an adoption of
+ * FR13 of tighten-spec-contract (design D13, amended 2026-10-13): every move of the task branch and
+ * its register is one ref transaction — a closing commit lands both, an admitted gnome range moves the branch alone, an adoption of
  * origin's line moves the branch with origin's register. Over the port, the transaction each write
  * sends; over a real repository, that a refused compare-and-swap moves neither ref.
  */
@@ -20,14 +19,6 @@ class FactoryRegisterSpec extends Specification implements BareGitRepoFixture {
 
     @TempDir
     Path tempDir
-
-    def "FR13: the register shares the branch's core string, and its fetch refspecs force it"() {
-        expect:
-        FactoryRegister.of('PROJ 7: fix/it').name() == 'refs/gnomish-factory/PROJ-7-fix-it'
-        FactoryRegister.quarantine('PROJ 7: fix/it').name() == 'refs/gnomish-quarantine/PROJ-7-fix-it'
-        FactoryRegister.fetchedInPlace('T-1').value() == '+refs/gnomish-factory/T-1:refs/gnomish-factory/T-1'
-        FactoryRegister.fetchedTracking('T-1').value() == '+refs/gnomish-factory/T-1:refs/remotes/origin/gnomish-factory/T-1'
-    }
 
     def "FR13: a closing commit moves the branch under its compare-and-swap and the register with it"() {
         given:

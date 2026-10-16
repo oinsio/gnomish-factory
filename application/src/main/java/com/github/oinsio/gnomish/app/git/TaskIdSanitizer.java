@@ -23,7 +23,13 @@ public final class TaskIdSanitizer {
     private static final Pattern UNSAFE_CHAR = Pattern.compile("[^A-Za-z0-9._-]");
     private static final Pattern REPEATED_DASH = Pattern.compile("-{2,}");
     private static final Pattern LEADING_TRAILING = Pattern.compile("^[.-]+|[.-]+$");
-    private static final String BRANCH_PREFIX = "gnomish/";
+
+    /**
+     * The namespace every task branch lives under, {@code gnomish/} — the prefix {@link
+     * #branchName} puts before the sanitized core string, and the one a listing of every task
+     * branch enumerates.
+     */
+    public static final String BRANCH_PREFIX = "gnomish/";
 
     private TaskIdSanitizer() {}
 

@@ -16,7 +16,8 @@ import spock.lang.TempDir
  * FR13, D19 of tighten-spec-contract (design D13): the one fact the tip contributes is its relation
  * to the register. A closing write killed at any step leaves no closing commit above the register
  * (the commit and the register land in one ref transaction); a register the tip does not descend
- * from, or a missing one under a started branch, quarantines with both named; and a pickup in
+ * from quarantines with both named, a missing one under a started branch is Unregistered (FR10 of
+ * fix-terminal-receipt-convergence); and a pickup in
  * another clone reads at the register origin holds, fetched with the branch.
  */
 class RegisterRelationSpec extends Specification implements RegisteredRoundFixture {
@@ -118,17 +119,17 @@ class RegisterRelationSpec extends Specification implements RegisteredRoundFixtu
         branches.readState(cloneDir, TASK) == new BranchStateResult.Shaped(shape)
     }
 
-    // A started branch whose register is missing — a branch from before the register, or one whose
-    //     STARTED registration was killed — is quarantined, never classified from the tip.
-    // Scenario: lifecycle/task-branch-contract / A register that is not an ancestor of the tip quarantines
-    def "a started branch with no register is Unknown naming the register"() {
+    // FR10 of fix-terminal-receipt-convergence (design D13): a started branch whose register is
+    //     missing in this clone — a branch from before the register, one whose STARTED registration
+    //     was killed, or one a third party's fetch brought — is Unregistered naming the register,
+    //     never classified from the tip and never Unknown.
+    // Scenario: lifecycle/task-branch-contract / A missing register is a state of the clone, not of the branch
+    def "FR10: a started branch with no register is Unregistered naming the register and the tip"() {
         when:
         assert runner.run(cloneDir, 'update-ref', '-d', 'refs/gnomish-factory/PROJ-1').exitCode() == 0
 
         then:
-        def shape = shape()
-        shape instanceof BranchShape.Unknown
-        (shape as BranchShape.Unknown).reason().contains('refs/gnomish-factory/PROJ-1')
+        shape() == new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', gitOutput(cloneDir, 'rev-parse', TIP_REF))
         store.readTaskRecord(worktree(), TASK).isEmpty()
         store.readRecordedState(worktree(), TASK).isEmpty()
     }

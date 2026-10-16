@@ -1,16 +1,19 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
+import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
@@ -39,7 +42,7 @@ import spock.lang.Specification
 class ContainerResumeRoutingSpec extends Specification implements RunChainFakes {
 
     TaskBranchGit branches = Mock(TaskBranchGit)
-    TaskRepository taskRepository = Mock(TaskRepository)
+    TaskLifecycleStore taskRepository = Mock(TaskLifecycleStore)
     SandboxRunSupport support = Mock(SandboxRunSupport)
     ScriptedExecutor executor = new ScriptedExecutor([completedRound()])
 
@@ -55,7 +58,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     }
 
     def setup() {
-        branches.ensureLocalTaskBranch(_, _) >> true
+        branches.ensureLocalTaskBranch(_, _) >> new BranchAdoption.AlreadyLocal('PROJ-1')
         support.taskRepository() >> taskRepository
         support.persistence() >> new InMemoryAttemptPersistence()
         support.workspace() >> new FakeWorkspace()
@@ -98,7 +101,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
 
         then:
         1 * branches.harden(CLONE_DIR)
-        1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> false
+        1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> new BranchAdoption.Nowhere()
 
         and:
         def ex = thrown(UsageException)
@@ -115,7 +118,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         resume()
 
         then:
-        1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> true
+        1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> new BranchAdoption.AlreadyLocal('PROJ-1')
 
         then:
         1 * branches.reconcileRemote(CLONE_DIR, 'PROJ-1', 'resume-start')
@@ -131,7 +134,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         resume()
 
         then:
-        1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> true
+        1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> new BranchAdoption.AlreadyLocal('PROJ-1')
 
         and:
         lawBindings == [
@@ -207,19 +210,66 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     }
 
     // UX2: outcome `completed` prints the same final status summary as the host path and stops —
-    // no environment, no engine round.
+    // no environment, no engine round. FR4 of fix-terminal-receipt-convergence (task 3.4): a tip
+    // whose cleanup already landed is named Delivered by the classifier and reported from the
+    // history reader take uses — the envelope the tip no longer carries is never read, no support
+    // is built, and nothing is written.
     def "reports a completed branch without starting an environment"() {
+        when:
+        resume()
+
+        then:
+        1 * branches.classifyShape(CLONE_DIR, 'PROJ-1') >> new BranchShape.Delivered()
+        1 * branches.readDelivered(CLONE_DIR, 'PROJ-1') >> new DeliveredBranchState(record.context(), recordedState)
+
+        and: 'the summary reached the operator through the run\'s own console owner'
+        console.printed.join('').contains('Task: PROJ-1')
+        executor.requests.isEmpty()
+        0 * support._
+        0 * taskRepository._
+    }
+
+    // FR9 of make-run-headless over the Delivered route (task 3.4): a --decision over a task whose
+    // cleanup already landed is refused as over any completed outcome, before anything is printed.
+    def "refuses a decision over a completed branch whose cleanup already landed"() {
+        given:
+        branches.classifyShape(CLONE_DIR, 'PROJ-1') >> new BranchShape.Delivered()
+        branches.readDelivered(CLONE_DIR, 'PROJ-1') >> new DeliveredBranchState(record.context(), recordedState)
+
+        when:
+        resume('patch it')
+
+        then:
+        def e = thrown(UsageException)
+        e.message.contains('completed')
+        console.printed.isEmpty()
+        0 * support._
+    }
+
+    // FR4 of fix-terminal-receipt-convergence: a completed tip that still carries its envelope gets
+    // the cleanup commit over bare objects through the one cleanup owner take uses, then the box
+    // disposal — before the summary, and with no environment started.
+    def "FR4: a completed branch whose cleanup was lost converges before the report"() {
         given:
         record = recordWith(new RecordedOutcome.Completed())
 
         when:
         resume()
 
-        then: 'the summary reached the operator through the run\'s own console owner'
+        then: 'the runner routes on the shape, then the cleanup owner reads it for itself'
+        2 * branches.classifyShape(CLONE_DIR, 'PROJ-1') >> new BranchShape.CompletedUncleaned()
+
+        then:
+        1 * taskRepository.finishCleanup('PROJ-1')
+
+        then:
+        1 * support.disposeExistingEnvironment()
+
+        and:
         console.printed.join('').contains('PROJ-1')
         executor.requests.isEmpty()
-        0 * support.sweepOrphans()
         0 * support.reattachFor(_)
+        0 * taskRepository.recordOutcome(_, _, _)
     }
 
     // FR25, D19; FR3 of make-run-headless: outcome `escalated` with --decision is committed

@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Renders single-task {@code gnomish status} for a branch whose tip carries no report to build one
- * from — delivered, bare, pre-contract, or one of the three quarantine shapes (FR16, UX4 of
+ * from — delivered, bare, pre-contract, or one of the four quarantine shapes (FR16, UX4 of
  * harden-task-branch-contract). The shape is the answer, so it is rendered as one: a two-line text
  * block, or the same fields as JSON under {@code --json}.
  *
@@ -41,7 +41,7 @@ final class BranchShapeReportRenderer {
      * @param taskId the task the shape was classified for; never blank
      * @param shape the classifier's verdict; never null
      * @return the pretty-printed JSON object with {@code taskId}, {@code shape} and {@code
-     *     diagnosis} (null unless the shape's name is not the whole answer — the quarantine three
+     *     diagnosis} (null unless the shape's name is not the whole answer — the quarantine four
      *     and {@code Bare}; see {@link BranchShapeDiagnosis#diagnosisFor})
      */
     String renderJson(String taskId, BranchShape shape) {

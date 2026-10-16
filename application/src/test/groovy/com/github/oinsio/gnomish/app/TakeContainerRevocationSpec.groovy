@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
+import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -47,12 +49,13 @@ class TakeContainerRevocationSpec extends Specification implements RunChainFakes
         }
         def execution = new TakeContainerEngineExecution(
                 assemblyRunning(new ScriptedExecutor([completedRound()])),
+                Stub(TaskBranchGit),
                 new TakeOutcomeDispatch(VirtualTimeRetries.terminalWrite(), new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3)),
                 [], new ClaimLossFlag(), LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))
 
         when:
         def result = execution.run(
-                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support,
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, new BranchAdoption.AlreadyLocal('PROJ-1'),
                 new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
                 TaskState.atStageStart('build'), null)
 

@@ -1,0 +1,8 @@
+spec: build-system/dependency-verification
+
+# Verified by a mechanism other than a test: Gradle's dependency verification over the committed metadata, the workflow, or the document named.
+Unlisted artifact fails the build => gradle/verification-metadata.xml (Gradle dependency verification fails any resolution of an unlisted artifact; regeneration command in docs/guides/developer-guide.md, section "Dependency locking and verification")
+Build-logic and plugin artifacts are covered => gradle/verification-metadata.xml (carries the Gradle plugin and build-logic entries; every build, the build-logic included build too, resolves against it)
+Checksum mismatch is fail-closed => gradle/verification-metadata.xml (Gradle dependency verification checks sha256 before an artifact is used and names the artifact with the expected and actual checksums)
+Dependabot PR lands through the documented flow => .github/dependabot.yml, docs/guides/developer-guide.md (section "Dependency locking and verification", "Dependabot flow") and .github/workflows/ci.yml (check on the pull request)
+CI has no bypass => .github/workflows/ci.yml (runs ./gradlew check with no --dependency-verification flag and no lenient or off mode)

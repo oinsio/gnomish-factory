@@ -22,17 +22,19 @@ import spock.lang.Specification
  *       a new push point is added to this list in the change that adds it, never silently;
  *   <li>every move of the task branch and its register in the clone is one ref transaction built
  *       in {@code FactoryRegister} alone ({@code RefTransaction}, whose argv is the one spelling of
- *       {@code update-ref} outside the bare-object writer), held by exactly three callers: the
- *       host closing commit ({@code WorktreeClosingCommit}), the harvest admission, and the replica
- *       reconciler's adoption of origin's line;
+ *       {@code update-ref} outside the bare-object writer), held by exactly four callers: the
+ *       host closing commit ({@code WorktreeClosingCommit}), the harvest admission, the replica
+ *       reconciler's adoption of origin's line, and the branch adoption ({@code
+ *       TaskBranchAdoption}, design D9 of fix-terminal-receipt-convergence);
  *   <li>no production source runs a factory-side {@code git commit}: a closing commit is made as an
  *       object first ({@code commit-tree}, in {@code WorktreeClosingCommit} alone, or the
  *       bare-object writer), so it can land with its register;
  *   <li>the harvest fetch is built by the transfer owner's {@code GitTransfer.harvest} alone, called
  *       by {@code ContainerHarvestFetch} alone, and its destination is a quarantine named by
- *       {@code FactoryRegister} alone — so no harvest names the task branch;
+ *       {@code FactoryRegisterRefs} alone — so no harvest names the task branch;
  *   <li>the register's namespace is spelled in {@code RegisterRef} alone, and a register value is
- *       made from a task id in {@code FactoryRegister} alone;
+ *       made from a task id in {@code FactoryRegisterRefs} alone (the naming half split from
+ *       {@code FactoryRegister} for the file-size cap, which keeps the transactions);
  *   <li>the ref backend those transactions are atomic on is spelled, and read, in
  *       {@code FactoryCloneRefFormat} alone, reached through {@code GitTaskBranches#harden} and
  *       {@code TouchpointFetch} (the first write of every task touchpoint, task 9.13g); the
@@ -92,6 +94,7 @@ class FactoryRegisterOwnerSpec extends Specification {
         'new FactoryRegister(' | [
             'HarvestAdmission.java',
             'ReplicaPairReconciler.java',
+            'TaskBranchAdoption.java',
             'WorktreeClosingCommit.java',
         ]
         'new RefTransaction(' | ['FactoryRegister.java']
@@ -103,10 +106,10 @@ class FactoryRegisterOwnerSpec extends Specification {
             'WorktreeClosingCommit.java',
             OBJECTS_WRITER
         ]
-        'RegisterRef.forTask(' | ['FactoryRegister.java']
+        'RegisterRef.forTask(' | ['FactoryRegisterRefs.java']
         'new RegisterRef(' | []
         'gnomish-factory/' | []
-        'QuarantineRef.forTask(' | ['FactoryRegister.java']
+        'QuarantineRef.forTask(' | ['FactoryRegisterRefs.java']
         'new QuarantineRef(' | []
         'gnomish-quarantine/' | []
         'GitTransfer.harvest(' | ['ContainerHarvestFetch.java']

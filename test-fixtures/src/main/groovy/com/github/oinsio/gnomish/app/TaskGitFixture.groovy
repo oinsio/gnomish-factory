@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import java.time.InstantSource
 import java.util.function.UnaryOperator
 
 /**
@@ -47,6 +48,16 @@ final class TaskGitFixture {
     }
 
     /**
+     * The claim-stamping bundle whose writers date their commits by {@code clock} — for a spec
+     * running two instances that each write one commit over one parent: on one shared virtual
+     * epoch the two would be byte-identical objects, which two real instances' commits never are
+     * (design D12 of fix-terminal-receipt-convergence).
+     */
+    static TaskGit realAt(InstantSource clock) {
+        build(new GitProcessRunner(), new ClaimEpochBook(), clock)
+    }
+
+    /**
      * A {@link TaskGit} for the commands that never claim — {@code status}, {@code usage},
      * {@code board} — where the distinction is the point of the spec; every other spec wants
      * {@link #real()}. The bundle still carries a tenure record, because no {@link TaskGit} may be
@@ -63,11 +74,11 @@ final class TaskGitFixture {
      * The one construction every form shares: the production assembly over one book, which feeds
      * the writers and is the bundle's record alike (design D12 of tighten-spec-contract).
      */
-    private static TaskGit build(GitProcessRunner runner, ClaimEpochBook epochs) {
+    private static TaskGit build(GitProcessRunner runner, ClaimEpochBook epochs, InstantSource clock = new VirtualClock()) {
         // The base-ref capability is real too (FR5, FR6 of add-base-ref-resolution): serve/take
         // startup reads origin's default branch through it. Its retry runs on virtual time, so a
         // dead origin in a spec exhausts the production bound instantly instead of sleeping.
-        GitTaskBackend.taskGit(runner, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock(),
+        GitTaskBackend.taskGit(runner, VirtualTimeGitRetries.gitInfrastructure(), clock,
                 UnaryOperator.identity(), epochs)
     }
 }

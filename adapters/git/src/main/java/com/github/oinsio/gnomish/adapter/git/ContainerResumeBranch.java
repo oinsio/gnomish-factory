@@ -1,14 +1,10 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
-import com.github.oinsio.gnomish.app.port.git.BranchLocationRefusedException;
-import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Locates and reconciles the local task branch for a container-mode resume
@@ -17,24 +13,25 @@ import org.slf4j.LoggerFactory;
  * → narrow fetch of exactly {@code gnomish/<task>} — and, because container
  * mode has no worktree, reconciliation is the shared {@link
  * ReplicaPairReconciler} in its refs-only mode: a remote-tracking-only branch
- * becomes a local branch ref (no checkout), and an existing local branch is
+ * is adopted by {@link TaskBranchAdoption}, the one owner of that step (design
+ * D11 of fix-terminal-receipt-convergence), and an existing local branch is
  * kept, fast-forwarded, or discarded under the claim by the one policy host
  * mode also runs (FR8 of harden-task-branch-contract). The container-local
  * copy of that policy is gone: two implementations of one relation is how the
  * two modes' answers drifted apart.
  *
- * <p>Implements FR6, FR17 of add-sandbox-core; FR8 of harden-task-branch-contract.
+ * <p>Implements FR6, FR17 of add-sandbox-core; FR8 of harden-task-branch-contract;
+ * FR8 of fix-terminal-receipt-convergence.
  */
 // Not a record: this is a behavior-bearing reader over the git seam (a collaborator, not immutable
 // data), kept as a plain final class for parity with its siblings in this package.
 @SuppressWarnings("ClassCanBeRecord")
 public final class ContainerResumeBranch {
 
-    private static final Logger log = LoggerFactory.getLogger(ContainerResumeBranch.class);
-
     private final GitRunner runner;
     private final ClaimEpochSource epochs;
-    private final GitInfrastructureRetry retry;
+    private final TaskBranchLocator locator;
+    private final TaskBranchAdoption adoption;
 
     /**
      * @param runner the shared git subprocess runner; never null
@@ -47,50 +44,28 @@ public final class ContainerResumeBranch {
     public ContainerResumeBranch(GitRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry) {
         this.runner = runner;
         this.epochs = epochs;
-        this.retry = retry;
+        this.locator = new TaskBranchLocator(runner, retry);
+        this.adoption = new TaskBranchAdoption(runner, locator);
     }
 
     /**
-     * Ensures a reconciled local branch for {@code taskId} exists in {@code cloneDir}.
+     * Ensures a reconciled local branch for {@code taskId} exists in {@code cloneDir}: a local
+     * branch is reconciled with origin's, a remote-tracking-only one is adopted by the one owner,
+     * {@link TaskBranchAdoption} (design D9, D11 of fix-terminal-receipt-convergence).
      *
-     * @return true when the branch exists locally after this call; false when it exists nowhere
+     * @return adopted, already local (reconciled), or nowhere
      * @throws com.github.oinsio.gnomish.app.port.git.DivergedBranchException when the pair diverged
      *     and this instance holds no tenure on the task (FR8 of harden-task-branch-contract)
      */
-    public boolean ensureLocalBranch(Path cloneDir, String taskId) {
-        String branch = TaskIdSanitizer.branchName(taskId);
-        return switch (new TaskBranchLocator(runner, retry).locate(cloneDir, taskId)) {
-            case BranchLocation.Local ignored -> {
-                ReplicaPairReconciler.forClone(runner, cloneDir, epochs).reconcile(taskId, branch);
-                yield true;
-            }
-            case BranchLocation.RemoteTracking(String trackingRef) -> {
-                GitCommandResult create = runner.run(cloneDir, "branch", branch, trackingRef);
-                if (create.exitCode() != 0) {
-                    // git's stderr is subprocess output and this message is rendered into a log
-                    // record and into the escalation report, so it leaves the carrier through the
-                    // log exit here — where it enters the message the gate cannot see inside
-                    // (.claude/rules/logging.md).
-                    throw new IllegalStateException("could not create local branch " + branch + " from " + trackingRef
-                            + ": " + create.stderr().forLog());
-                }
-                // An anchor, not chatter: this instance is adopting work another instance pushed,
-                // and nothing else in the log says the local line was recreated rather than
-                // continued (FR5 of harden-logging-observability).
-                log.info(
-                        "recreated local branch {} for task {} from {} — adopting work pushed by another instance",
-                        branch,
-                        taskId,
-                        trackingRef);
-                yield true;
-            }
-            case BranchLocation.NotFound ignored -> false;
-            // Unestablished is not absent: routing this to "create the branch" is the duplicate
-            // fork FR6 removes, so the container resume aborts and the claim goes back to the pool.
-            case BranchLocation.Unavailable(UntrustedText reason) ->
-                throw new BranchLocationUnavailableException(taskId, reason);
-            case BranchLocation.Refused(UntrustedText report) ->
-                throw new BranchLocationRefusedException(taskId, report);
-        };
+    public BranchAdoption ensureLocalBranch(Path cloneDir, String taskId) {
+        BranchLocation location = locator.locate(cloneDir, taskId);
+        if (location instanceof BranchLocation.Local) {
+            ReplicaPairReconciler.forClone(runner, cloneDir, epochs)
+                    .reconcile(taskId, TaskIdSanitizer.branchName(taskId));
+            return new BranchAdoption.AlreadyLocal(taskId);
+        }
+        // Unestablished is not absent: the owner throws on it, so the container resume aborts and
+        // the claim goes back to the pool rather than forking a duplicate branch (FR6).
+        return adoption.adopt(cloneDir, taskId, location);
     }
 }

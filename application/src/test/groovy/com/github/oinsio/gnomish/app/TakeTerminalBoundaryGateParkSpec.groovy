@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -82,7 +83,7 @@ class TakeTerminalBoundaryGateParkSpec extends Specification implements RunChain
         }
         def git = new TaskGit(store, branches, Mock(TaskWorktreeGit), new ClaimEpochBook())
         def bootstrap = new ResumeBootstrap('PROJ-1', CheckpointMechanicsFixtures.context(), null, null, worktree,
-                'gnomish/PROJ-1', 'abc123', false, BasePin.UNPINNED)
+                new BranchAdoption.AlreadyLocal('PROJ-1'), 'abc123', false, BasePin.UNPINNED)
         def execution = new TakeEngineExecution(assemblyRunning(executor), git, CLONE, dispatch(), [], new ClaimLossFlag(),
         LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))
 
@@ -115,11 +116,11 @@ class TakeTerminalBoundaryGateParkSpec extends Specification implements RunChain
             workspace() >> new FakeWorkspace()
             pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
         }
-        def execution = new TakeContainerEngineExecution(assemblyRunning(executor), dispatch(), [], new ClaimLossFlag(),
+        def execution = new TakeContainerEngineExecution(assemblyRunning(executor), Stub(TaskBranchGit), dispatch(), [], new ClaimLossFlag(),
         LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))
 
         when:
-        def result = execution.run(order(), support, CheckpointMechanicsFixtures.context(), gated, null)
+        def result = execution.run(order(), support, new BranchAdoption.AlreadyLocal('PROJ-1'), CheckpointMechanicsFixtures.context(), gated, null)
 
         then: 'the box is kept, never disposed'
         1 * support.keepStopped()

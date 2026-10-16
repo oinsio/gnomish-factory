@@ -24,8 +24,17 @@ class BranchShapeDiagnosisSpec extends Specification {
         new BranchShape.Delivered(),
         new BranchShape.Corrupt('task.json: truncated'),
         new BranchShape.Unknown('state.json without task.json'),
-        new BranchShape.UnsupportedVersion('state.json', 7, 1)
+        new BranchShape.UnsupportedVersion('state.json', 7, 1),
+        new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40)
     ]
+
+    // FR2: the list above is the sealed set, so a new shape cannot slip past the totality feature.
+    def "the shape list covers the sealed set exactly"() {
+        expect:
+        EVERY_SHAPE.collect {
+            it.getClass()
+        } as Set == BranchShape.permittedSubclasses as Set
+    }
 
     // FR2: every shape of the closed set renders a phrase, none of them blank.
     def "every shape of the closed set renders a phrase"() {
@@ -54,7 +63,8 @@ class BranchShapeDiagnosisSpec extends Specification {
         ]
     }
 
-    // UX2: only the three quarantining shapes and Bare carry a diagnosis beside their name.
+    // UX2: only the four quarantining shapes and Bare carry a diagnosis beside their name —
+    // Unregistered by its disposition alone (design D13 of fix-terminal-receipt-convergence).
     def "only the quarantining shapes and Bare carry a diagnosis"() {
         expect:
         (BranchShapeDiagnosis.diagnosisFor(shape) != null) == explains
@@ -64,6 +74,7 @@ class BranchShapeDiagnosisSpec extends Specification {
         new BranchShape.Corrupt('task.json: truncated') || true
         new BranchShape.Unknown('state without task') || true
         new BranchShape.UnsupportedVersion('state.json', 7, 1) || true
+        new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40) || true
         new BranchShape.Bare() || true
         new BranchShape.Created() || false
         new BranchShape.InProgress() || false
@@ -72,5 +83,20 @@ class BranchShapeDiagnosisSpec extends Specification {
         new BranchShape.Answered() || false
         new BranchShape.CompletedUncleaned() || false
         new BranchShape.Delivered() || false
+    }
+
+    // FR10, UX3 of fix-terminal-receipt-convergence (design D13): a branch read without its
+    // register is named as what it is — a missing register and the command that fetches it — never
+    // as an unrecognized combination.
+    def "an Unregistered branch's diagnosis names the register, the tip and the command that fetches it"() {
+        when:
+        def diagnosis = BranchShapeDiagnosis.diagnosisFor(new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40))
+
+        then:
+        diagnosis.startsWith('fetched without its factory register')
+        diagnosis.contains('refs/gnomish-factory/PROJ-1')
+        diagnosis.contains('b' * 40)
+        diagnosis.contains('`gnomish status <task>` fetches it')
+        !diagnosis.contains('unrecognized')
     }
 }

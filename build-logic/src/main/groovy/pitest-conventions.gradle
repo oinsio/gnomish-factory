@@ -1,4 +1,4 @@
-import com.github.oinsio.gnomish.build.MutationEngineLock
+import com.github.oinsio.gnomish.buildlogic.MutationEngineLock
 
 // Mutation-gate conventions shared by every module with production Java (FR6, FR11,
 // design D6/D9 of split-into-modules): PIT wired into the module's own `check`,

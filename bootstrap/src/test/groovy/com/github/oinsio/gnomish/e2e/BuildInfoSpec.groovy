@@ -29,7 +29,7 @@ class BuildInfoSpec extends Specification {
         buildInfo.getProperty('build.version') == expected
     }
 
-    // Scenario: build/quality-gates / No archive records when it was built
+    // Scenario: build-system/quality-gates / No archive records when it was built
     // Scenario: release/release-distribution / The stamp carries no timestamp
     def "NFR-R1: the build info holds no build timestamp, so two builds of one commit agree"() {
         expect:

@@ -49,7 +49,7 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
     }
 
     private Optional<String> originTip() {
-        new RemoteBranchTip(runner).read(clone, BRANCH)
+        new RemoteBranchTip(runner).read(clone, TASK_ID)
     }
 
     private void deliver() {

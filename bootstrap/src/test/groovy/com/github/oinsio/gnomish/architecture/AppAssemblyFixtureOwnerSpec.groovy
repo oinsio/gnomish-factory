@@ -37,7 +37,7 @@ class AppAssemblyFixtureOwnerSpec extends Specification {
     ] as Set
 
     // F116: scenario text aligned to what this test asserts
-    // Scenario: build/quality-gates / One construction site for the standard assembly
+    // Scenario: build-system/quality-gates / One construction site for the standard assembly
     def "FR1: test sources construct the assembly only in the shared fixture and at the named deviations"() {
         given:
         def sources = RepoSourceTree.testSources { !it.endsWith(SELF) }
@@ -60,7 +60,7 @@ class AppAssemblyFixtureOwnerSpec extends Specification {
     }
 
     // F117: scenario text aligned to what this test asserts
-    // Scenario: build/quality-gates / A spec deviates from the fixture defaults
+    // Scenario: build-system/quality-gates / A spec deviates from the fixture defaults
     def "FR2: a call of the fixture's factory spells no default after its last deviation"() {
         given:
         def calls = RepoSourceTree.testSources {

@@ -59,6 +59,22 @@ trait BranchShapeFixture implements SeededCloneFixture {
         }
     }
 
+    /**
+     * A task with one round whose register this clone does not hold — as a plain {@code git fetch}
+     * leaves a task branch (design D13 of fix-terminal-receipt-convergence). With {@code tracking},
+     * the branch is held only as a remote-tracking ref, its local head and worktree gone.
+     */
+    void unregistered(String taskId, boolean tracking = false) {
+        withRound(taskId)
+        String head = 'refs/heads/gnomish/' + taskId
+        if (tracking) {
+            assert runner.run(cloneDir, 'update-ref', 'refs/remotes/origin/gnomish/' + taskId, head).exitCode() == 0
+            assert runner.run(cloneDir, 'worktree', 'remove', '--force', worktreeFor(taskId).toString()).exitCode() == 0
+            assert runner.run(cloneDir, 'update-ref', '-d', head).exitCode() == 0
+        }
+        assert runner.run(cloneDir, 'update-ref', '-d', 'refs/gnomish-factory/' + taskId).exitCode() == 0
+    }
+
     static String versionTwo(Path file) {
         Files.readString(file).replaceFirst(/"version"\s*:\s*1/, '"version":2')
     }
@@ -83,6 +99,7 @@ trait BranchShapeFixture implements SeededCloneFixture {
                     case 'Unknown' -> damaged(taskId) { Path dir ->
                         Files.delete(dir.resolve('task.json'))
                     }
+                    case 'Unregistered' -> unregistered(taskId)
                     case 'UnsupportedVersion' -> damaged(taskId) { Path dir ->
                         Files.writeString(dir.resolve('state.json'), versionTwo(dir.resolve('state.json')))
                     }

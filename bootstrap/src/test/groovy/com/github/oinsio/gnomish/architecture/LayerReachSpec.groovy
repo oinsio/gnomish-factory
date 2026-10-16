@@ -67,7 +67,7 @@ class LayerReachSpec extends Specification {
     .importPackages(ROOT)
 
     // FR10, NFR-S3 of add-base-ref-resolution: the policy is values in, decision out
-    // Scenario: build/module-layering / The base-resolution policy is a pure function in baseref
+    // Scenario: build-system/module-layering / The base-resolution policy is a pure function in baseref
     def "the base-resolution policy types come from :baseref, which reaches no subprocess, port or factory type"() {
         expect: 'grammar, validation, priority and decision are the leaf\'s own types'
         [
@@ -99,7 +99,7 @@ class LayerReachSpec extends Specification {
     }
 
     // FR13 of harden-task-branch-contract: the one tenure record is published through the contract
-    // Scenario: build/module-layering / A vendor adapter reaches the tenure record through the contract
+    // Scenario: build-system/module-layering / A vendor adapter reaches the tenure record through the contract
     def "the github adapter reads the tenure through the contract's seam, and no adapter keeps a record"() {
         expect: 'the vendor adapter stamps from the published read-only seam'
         production.get("${ROOT}.adapter.tracker.github.GithubMarkerWriter").directDependenciesFromSelf
@@ -122,8 +122,8 @@ class LayerReachSpec extends Specification {
     }
 
     // FR2, FR10 of split-into-modules: the vertical adapter modules share no internals
-    // Scenario: build/module-layering / Adapter importing a sibling adapter's internals fails the build
-    // Scenario: build/module-layering / Sibling isolation holds after the vertical split
+    // Scenario: build-system/module-layering / Adapter importing a sibling adapter's internals fails the build
+    // Scenario: build-system/module-layering / Sibling isolation holds after the vertical split
     def "no class of #adapter depends on a sibling adapter's packages"() {
         given:
         def siblings = (VERTICAL_PACKAGES.findAll {
@@ -147,7 +147,7 @@ class LayerReachSpec extends Specification {
     }
 
     // FR8 of split-into-modules: the core holds the port and the backend-neutral policy only
-    // Scenario: build/sandbox-module-split / Core is free of backend-specific code and dependencies
+    // Scenario: build-system/sandbox-module-split / Core is free of backend-specific code and dependencies
     def "the sandbox core declares and reaches no backend mechanics"() {
         given:
         def core = ModuleBuildFile.productionDependencies(ModuleBuildFile.textOf(':sandbox:core'))
@@ -169,7 +169,7 @@ class LayerReachSpec extends Specification {
     }
 
     // FR8 of split-into-modules: the use cases name the core's port, never a backend type
-    // Scenario: build/sandbox-module-split / Use cases reach the port through core
+    // Scenario: build-system/sandbox-module-split / Use cases reach the port through core
     def "the application reaches the execution environment through the core, never a backend module"() {
         given:
         def application = production.findAll {

@@ -100,4 +100,22 @@ class BranchRepairLogSpec extends Specification {
         new BranchShape.Unknown('state.json without task.json') || 'Unknown(state.json without task.json)'
         new BranchShape.UnsupportedVersion('state.json', 7, 1) || 'UnsupportedVersion(state.json: 7, supported 1)'
     }
+
+    // FR10 of fix-terminal-receipt-convergence (design D13): a branch read without its register
+    // names the missing register and the tip, the touchpoint fetch as its owner, and the take's
+    // "parking for a human" action, rendered from its disposition.
+    def "an Unregistered branch's line names the register, its owner and the parking action"() {
+        given:
+        def shape = new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40)
+
+        when:
+        def line = capture {
+            repairLog.classified('PROJ-1', shape, new ClaimEpoch(1), BranchRepairAction.phrase(shape), 0)
+        }.first().formattedMessage
+
+        then:
+        line.contains("shape=Unregistered(no refs/gnomish-factory/PROJ-1 in this clone, tip ${'b' * 40})")
+        line.contains('owner=TOUCHPOINT_FETCH')
+        line.contains('action=parking for a human')
+    }
 }

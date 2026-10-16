@@ -23,7 +23,7 @@ three requirements missing from `main`.
 
 - **REMOVED** — `Contract suite covers the returned fact` from `tracker/tracker-port`.
 - **REMOVED** — `Pin-check guards external checks` from `verification/verification-hardening`.
-- **REMOVED** — `Enforced acyclic dependency direction` from `build/module-layering`.
+- **REMOVED** — `Enforced acyclic dependency direction` from `build-system/module-layering`.
 
 No code, test or build file changes in this change; the markers follow in the second one.
 
@@ -73,4 +73,4 @@ No code, test or build file changes in this change; the markers follow in the se
 ## Impact
 
 `openspec/specs/tracker/tracker-port`, `verification/verification-hardening`,
-`build/module-layering`; no module is touched.
+`build-system/module-layering`; no module is touched.

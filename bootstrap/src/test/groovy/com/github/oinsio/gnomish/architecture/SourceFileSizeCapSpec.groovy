@@ -17,7 +17,7 @@ class SourceFileSizeCapSpec extends Specification {
     static final String AUDIT = '.claude/commands/audit-implementation.md'
 
     // F114: scenario text aligned to what this test asserts
-    // Scenario: build/quality-gates / An oversized adapter is split into compliant units
+    // Scenario: build-system/quality-gates / An oversized adapter is split into compliant units
     def "FR1, FR2: the implementation audit checks a change's files against the rule's 200-line cap, and the rule asks for a responsibility split"() {
         given:
         def rule = Files.readString(RepoSourceTree.repoRoot().resolve(RULE)).replaceAll(/\s+/, ' ')

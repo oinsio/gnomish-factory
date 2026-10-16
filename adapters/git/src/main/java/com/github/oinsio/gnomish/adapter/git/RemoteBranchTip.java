@@ -57,12 +57,12 @@ final class RemoteBranchTip {
      * Reads the commit {@code origin} currently holds for {@code branch}.
      *
      * @param repo the clone the read runs from; never null
-     * @param branch the task branch name; never blank
+     * @param taskId the tracker's original taskId, whose task branch origin is asked about; never blank
      * @return the remote tip's sha, or empty when the remote is unreachable or does not carry the
      *     branch at all
      */
-    Optional<String> read(Path repo, String branch) {
-        return tipOf(lsRemote(repo, branch));
+    Optional<String> read(Path repo, String taskId) {
+        return tipOf(lsRemote(repo, taskId));
     }
 
     /**
@@ -70,12 +70,12 @@ final class RemoteBranchTip {
      * only a remote that actually answered can put a commit's absence on the record.
      *
      * @param repo the clone the read runs from; never null
-     * @param branch the task branch name; never blank
+     * @param taskId the tracker's original taskId, whose task branch origin is asked about; never blank
      * @param commit the commit whose delivery is in question; never blank
      * @return whether {@code origin} carries {@code commit}, demonstrably does not, or did not say
      */
-    Carriage confirm(Path repo, String branch, String commit) {
-        GitCommandResult lsRemote = lsRemote(repo, branch);
+    Carriage confirm(Path repo, String taskId, String commit) {
+        GitCommandResult lsRemote = lsRemote(repo, taskId);
         if (lsRemote.termination() != Termination.EXITED || lsRemote.exitCode() != 0) {
             return Carriage.UNKNOWN;
         }
@@ -112,20 +112,20 @@ final class RemoteBranchTip {
      * harden-task-branch-contract).
      *
      * @param repo the clone the read runs from; never null
-     * @param branch the task branch name; never blank
+     * @param taskId the tracker's original taskId, whose task branch origin is asked about; never blank
      * @return {@link Carriage#CARRIES} when origin holds the branch, {@link Carriage#ABSENT} when
      *     it answered and holds no such ref, {@link Carriage#UNKNOWN} when it did not answer
      */
-    Carriage confirmBranch(Path repo, String branch) {
-        GitCommandResult lsRemote = lsRemote(repo, branch);
+    Carriage confirmBranch(Path repo, String taskId) {
+        GitCommandResult lsRemote = lsRemote(repo, taskId);
         if (lsRemote.termination() != Termination.EXITED || lsRemote.exitCode() != 0) {
             return Carriage.UNKNOWN;
         }
         return lsRemote.stdout().isBlank() ? Carriage.ABSENT : Carriage.CARRIES;
     }
 
-    private GitCommandResult lsRemote(Path repo, String branch) {
-        return LsRemote.refs(runner, repo, "refs/heads/" + branch);
+    private GitCommandResult lsRemote(Path repo, String taskId) {
+        return LsRemote.refs(runner, repo, TaskBranchRefs.head(taskId));
     }
 
     private static Optional<String> tipOf(GitCommandResult lsRemote) {
@@ -145,12 +145,12 @@ final class RemoteBranchTip {
      * ancestor.
      *
      * @param repo the clone the read runs from; never null
-     * @param branch the task branch name; never blank
+     * @param taskId the tracker's original taskId, whose task branch origin is asked about; never blank
      * @param commit the commit whose delivery is in question; never blank
      * @return {@code true} only when the remote tip demonstrably contains {@code commit}
      */
-    boolean carries(Path repo, String branch, String commit) {
-        return confirm(repo, branch, commit) == Carriage.CARRIES;
+    boolean carries(Path repo, String taskId, String commit) {
+        return confirm(repo, taskId, commit) == Carriage.CARRIES;
     }
 
     /**

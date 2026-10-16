@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.lease.LivenessVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdict
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
+import com.github.oinsio.gnomish.app.serve.BranchPass
 import com.github.oinsio.gnomish.app.serve.OccupiedSlots
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor
@@ -71,7 +72,7 @@ class AgedContainerEnvironmentReapSpec extends Specification {
         } as TaskEnvironmentDisposal,
         VirtualTimeEquipment.on(new VirtualClock(NOW), sleeper), {
             -> Set.of()
-        } as OccupiedSlots)
+        } as OccupiedSlots, { Set<String> held -> } as BranchPass)
         janitor.start()
         sleeper.awaitEntered()
         Thread.ofVirtual().start {

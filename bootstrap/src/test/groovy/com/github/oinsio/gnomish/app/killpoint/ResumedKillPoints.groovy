@@ -52,7 +52,13 @@ final class ResumedKillPoints {
                     w.store.resumeFrom(w.taskId, w.tipState().resetAttempts())
                 },
                 shape: { TakeKillPointWorld w -> w.shape() },
-                pickup: { TakeKillPointWorld w -> w.pickup() },
+                // The round re-parks the task, and a parked task is taken by nobody until its human
+                // answers again — which this row does not play — so the second pickup is empty.
+                pickup: { TakeKillPointWorld w ->
+                    if (!w.parked()) {
+                        w.pickup()
+                    }
+                },
                 fingerprint: { TakeKillPointWorld w ->
                     w.fingerprint() + [state: w.tipStateJson()]
                 },

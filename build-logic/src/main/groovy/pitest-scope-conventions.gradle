@@ -1,5 +1,5 @@
-import com.github.oinsio.gnomish.build.MutationScope
-import com.github.oinsio.gnomish.build.MutationScopeSource
+import com.github.oinsio.gnomish.buildlogic.MutationScope
+import com.github.oinsio.gnomish.buildlogic.MutationScopeSource
 
 import java.util.regex.Pattern
 

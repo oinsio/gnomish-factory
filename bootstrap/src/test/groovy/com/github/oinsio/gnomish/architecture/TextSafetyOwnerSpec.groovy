@@ -125,7 +125,7 @@ class TextSafetyOwnerSpec extends Specification {
         'astral character on the cap boundary': ch(0x1F600) * 3_000 + 'a',
     ]
 
-    // Scenario: build/module-layering / Text safety has one owner in untrustedtext
+    // Scenario: build-system/module-layering / Text safety has one owner in untrustedtext
     // Scenario: observability/factory-logging / One table serves both facades
     def "one owner: the three strips are the same function — #label"() {
         expect: 'both facades hand the leaf the text and hand back what it returns, unchanged'
@@ -249,7 +249,7 @@ class TextSafetyOwnerSpec extends Specification {
     // FR1, FR3: identity would stay green if a facade re-acquired a table that happens to agree
     // today. The structural claim is that neither facade can hold one at all — so neither source
     // names an escape character, a control-class boundary or a pattern.
-    // Scenario: build/module-layering / Text safety has one owner in untrustedtext
+    // Scenario: build-system/module-layering / Text safety has one owner in untrustedtext
     // Scenario: observability/factory-logging / One table serves both facades
     // Scenario: plugin/plugin-api-contract / The facade holds no table of its own
     def "no facade holds a character table of its own — #path"() {

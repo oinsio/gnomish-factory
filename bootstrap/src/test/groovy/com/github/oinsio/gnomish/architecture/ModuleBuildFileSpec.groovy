@@ -27,7 +27,7 @@ class ModuleBuildFileSpec extends Specification {
     private static final int KNOWN_BUILD_FILES = 11
 
     // FR6: no build file grows back into a monolith — convention plugins are what absorb the bulk
-    // Scenario: build/build-conventions / Module build files are thin
+    // Scenario: build-system/build-conventions / Module build files are thin
     def "every build file is within the project file-size cap"() {
         given: 'every Gradle script in the build, module build files and convention plugins alike'
         def oversized = gradleScripts()
@@ -41,7 +41,7 @@ class ModuleBuildFileSpec extends Specification {
     }
 
     // M2: the bulk lives in build-logic, so a module build file states only what that module is
-    // Scenario: build/build-conventions / Module build files are thin
+    // Scenario: build-system/build-conventions / Module build files are thin
     def "every module build file applies a build-logic convention plugin"() {
         given: 'the build files of the main build (build-logic is its own included build)'
         def files = moduleBuildFiles()
@@ -134,13 +134,13 @@ class ModuleBuildFileSpec extends Specification {
     // FR6: a shared leaf stays consumable from every layer only while it drags nothing behind it,
     // so its permitted external edges are enumerated by this gate rather than described in a comment
     // Scenario: lifecycle/subprocess-supervision / The build proves the module stands alone
-    // Scenario: build/module-layering / The subprocess leaf stays empty of dependencies
-    // Scenario: build/module-layering / The atomicfile leaf stays empty of dependencies
-    // Scenario: build/module-layering / The untrustedtext and operatorevent leafs stay empty of dependencies
-    // Scenario: build/module-layering / The gittransfer leaf stays empty of dependencies
-    // Scenario: build/module-layering / The logtext leaf carries only the logging API
-    // Scenario: build/module-layering / The baseref leaf depends only on the untrustedtext leaf
-    // Scenario: build/module-layering / The dependency-free leafs depend on nothing internal
+    // Scenario: build-system/module-layering / The subprocess leaf stays empty of dependencies
+    // Scenario: build-system/module-layering / The atomicfile leaf stays empty of dependencies
+    // Scenario: build-system/module-layering / The untrustedtext and operatorevent leafs stay empty of dependencies
+    // Scenario: build-system/module-layering / The gittransfer leaf stays empty of dependencies
+    // Scenario: build-system/module-layering / The logtext leaf carries only the logging API
+    // Scenario: build-system/module-layering / The baseref leaf depends only on the untrustedtext leaf
+    // Scenario: build-system/module-layering / The dependency-free leafs depend on nothing internal
     def "the shared leaf #module declares only its permitted production dependencies"() {
         given: 'the module build file, read as data'
         def code = ModuleBuildFile.textOf(module)

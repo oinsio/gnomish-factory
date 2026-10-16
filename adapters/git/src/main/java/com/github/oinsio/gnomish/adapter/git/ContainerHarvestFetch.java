@@ -94,7 +94,7 @@ public record ContainerHarvestFetch(GitRunner runner, Path cloneDir) implements 
      * which the sanitizer leaves as it is — so the box's branch never lands on the task branch.
      */
     public static QuarantineRef quarantine(String branch) {
-        return FactoryRegister.quarantine(branch.substring(branch.lastIndexOf('/') + 1));
+        return FactoryRegisterRefs.quarantine(branch.substring(branch.lastIndexOf('/') + 1));
     }
 
     /**

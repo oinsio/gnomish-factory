@@ -86,12 +86,24 @@ it". Whenever a decision says that one component is the only source of a value o
 place a step happens ("resolve once", "one funnel", "the adapter peels once", "the only
 sanitizer"), `design.md` MUST carry a table for it:
 
-| Owner | Value (type) | Consumers | Old way removed | Enforced by |
-|-------|--------------|-----------|-----------------|-------------|
+| Owner | Value (type) | Requires | Consumers | Old way removed | Enforced by |
+|-------|--------------|----------|-----------|-----------------|-------------|
 
 - **Value (type)** names the type the result travels as. If it is a primitive a consumer could
   obtain elsewhere (`String`, `Path`, `boolean`), the owner is not enforced — introduce the
   typed value or explain why the primitive cannot be replaced.
+- **Requires** names what the owner needs in order to run: a worktree index, a working copy,
+  a live box, the network, a claim — or none of those. It is what tells a mechanism named by
+  where it was first wired from one bound to that medium: `GitObjects` was "the container
+  medium's writer" through three designs and requires only a `.git`, which the host clone has.
+  It is also what a consumer's conditions are checked against (`manual-sync-pairs.md`, "A new
+  consumer of a declared pair"): an owner that requires a worktree index cannot serve a consumer
+  that may run from two processes at once. The failure this exists for: task 3.3 of
+  `fix-terminal-receipt-convergence` (2026-10-14) gave the host delivered cleanup the host end,
+  `CleanupCommit`, because the bare-object writer was taken to belong to the container; the
+  host end required the task worktree's index, two host cleanups met on its `index.lock`, and
+  the loser failed. Design D8 of that change moved the host onto `GitObjectsTerminalCommits.
+  cleanUp`, opened over the repository's own clone, and its row says "Requires: a `.git`".
 - **Consumers** lists every call site that must take the value from the owner, by file. "All
   paths" is not an entry; the implementer's sub-agent (see `implementation.md`) can only check
   a list.
@@ -100,12 +112,40 @@ sanitizer"), `design.md` MUST carry a table for it:
   path) with its reason.
 - **Enforced by** names the mechanism that keeps it true after the change: the parameter type,
   an architecture spec in `:bootstrap`, or a grep gate. Convention is not an entry.
+- **The row names the owner and its invariant, never the construction site.** "Opened over the
+  repository's own clone, so no other clone can be named" is a design fact; "`GitTaskStore.
+  taskRepository` opens it" is an implementation choice the row must leave to the code. A
+  construction site written into the row turns a correct placement into a deviation the
+  implementer has to ask about, and it is checked against nothing: the enforcement column is
+  where the invariant becomes checkable. The failure this exists for: D8 of
+  `fix-terminal-receipt-convergence` (2026-10-14) placed the `GitObjects` opening in the store
+  by analogy with `ContainerRunSupport`, without reading the constructor it was changing, which
+  already held the clone; the sub-agent opened it there, correctly, and stopped to ask.
 
 Where the decision claims two values "are one by construction" or "cannot diverge", the table
 row is paired with an identity spec on the real medium (`testing.md`, "Invariant specs across
 a flow"). A change with no single-owner mechanism states it: `Single-owner mechanisms: none.`
 `/review-artifacts` checks the table exists; `/audit-implementation` checks the code matches
 every row.
+
+## A decision added during implementation is reviewed before its task runs
+
+A `Dn` that `/opsx:update` adds while the change is being applied — after a task found what the
+plan missed — has skipped the `/review-artifacts` pass the rest of the design went through, and
+it is written under the pressure of the finding, usually by analogy with a neighbouring class.
+So, before the task that implements it starts:
+
+- the update quotes, in the decision or its task, the current signature of every constructor,
+  method or port the decision changes (`GitTaskRepository(GitRunner, RegisteredClone,
+  ClaimEpochSource, InstantSource)`), so a wiring claim is checked against the code it names
+  rather than against the class it was modelled on;
+- `/review-artifacts <change> D<n>` runs scoped to that decision: freshness of its claims
+  against the code, its single-owner row against this file, and the tasks it adds.
+
+The failure this exists for: D8 and task 3.5 of `fix-terminal-receipt-convergence`
+(2026-10-14) were added after task 3.3 raced two host cleanups; no review ran, the decision
+named a construction site that the constructor's own signature contradicted, and the
+implementer stopped to ask.
 
 ## Alternative zero: remove the mechanism
 

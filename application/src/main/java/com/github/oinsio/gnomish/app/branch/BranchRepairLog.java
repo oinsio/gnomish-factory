@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
  * repeat. Callers pass the counter they read; the shared accounting itself lands with the recovery
  * budget.
  *
- * <p>Implements NFR-O1 of harden-task-branch-contract.
+ * <p>Implements NFR-O1 of harden-task-branch-contract; FR10 of fix-terminal-receipt-convergence.
  */
 public final class BranchRepairLog {
 
@@ -65,7 +65,7 @@ public final class BranchRepairLog {
     }
 
     /**
-     * The shape's name, plus the diagnosis the three quarantining shapes carry. Exhaustive by
+     * The shape's name, plus the diagnosis the four quarantining shapes carry. Exhaustive by
      * construction, with no default branch: a shape added to the closed set has to be named here
      * too (FR2).
      */
@@ -74,6 +74,8 @@ public final class BranchRepairLog {
         return switch (shape) {
             case BranchShape.Corrupt(String reason) -> name + "(" + reason + ")";
             case BranchShape.Unknown(String reason) -> name + "(" + reason + ")";
+            case BranchShape.Unregistered(String register, String tip) ->
+                name + "(no " + register + " in this clone, tip " + tip + ")";
             case BranchShape.UnsupportedVersion(String file, int observed, int supported) ->
                 name + "(" + file + ": " + observed + ", supported " + supported + ")";
             // The five clean shapes are listed first on purpose: only a non-clean shape is logged

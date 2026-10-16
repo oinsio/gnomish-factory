@@ -8,7 +8,7 @@ import java.nio.file.Path
  * commit with its register in one ref transaction (design D13 of tighten-spec-contract, amended
  * 2026-10-13). A reader of the branch reads at the registered commit, so such a spec registers the
  * tip it built, as a closing commit's transaction would have. The register's name comes from the
- * production owner, {@link FactoryRegister#of}; a spec of the factory's own writers needs no call
+ * production owner, {@link FactoryRegisterRefs#of}; a spec of the factory's own writers needs no call
  * here, since they register what they commit.
  */
 trait RegisteredBranchFixture {
@@ -16,7 +16,7 @@ trait RegisteredBranchFixture {
     /** Moves the clone's register of {@code taskId} to its task branch's tip — a closing commit. */
     void registerTip(Path repo, String taskId) {
         String branch = 'refs/heads/' + com.github.oinsio.gnomish.app.git.TaskIdSanitizer.branchName(taskId)
-        assert new GitProcessRunner().run(repo, 'update-ref', FactoryRegister.of(taskId).name(), branch).exitCode() == 0
+        assert new GitProcessRunner().run(repo, 'update-ref', FactoryRegisterRefs.of(taskId).name(), branch).exitCode() == 0
     }
 
     /** The commit the clone's register of {@code taskId} names, or null when there is none. */

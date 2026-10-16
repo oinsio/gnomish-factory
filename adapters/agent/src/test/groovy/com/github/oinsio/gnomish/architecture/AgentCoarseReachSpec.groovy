@@ -56,7 +56,7 @@ class AgentCoarseReachSpec extends Specification {
     .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_JARS)
     .importPackages('com.github.oinsio.gnomish.adapter')
 
-    // Scenario: build/module-layering / Adapter importing a sibling adapter's internals fails the build
+    // Scenario: build-system/module-layering / Adapter importing a sibling adapter's internals fails the build
     def "FR2/M4: the agent adapter reaches only the coarse packages it is declared for"() {
         given: 'the reach rule'
         def rule = classes()

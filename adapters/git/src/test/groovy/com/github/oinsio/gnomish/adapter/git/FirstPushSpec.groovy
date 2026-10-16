@@ -100,7 +100,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture, Registe
     }
 
     // Scenario: git/git-task-persistence / First push of a new branch is load-bearing
-    // Scenario: build/quality-gates / A first-push spec runs no process
+    // Scenario: build-system/quality-gates / A first-push spec runs no process
     def "FR7: a push origin never received aborts after the budget, so no round starts on it"() {
         given: 'a git whose pushes fail and whose origin demonstrably lacks the branch'
         def git = pushAbsent()

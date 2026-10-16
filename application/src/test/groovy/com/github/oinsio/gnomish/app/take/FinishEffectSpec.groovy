@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.take
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.TrackerTaskFixtures
+import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
@@ -17,6 +18,10 @@ import spock.lang.Specification
  * FR9, FR10 of harden-task-branch-contract: the completion's own end of the intent→effect→receipt
  * protocol — what its probe answers when the tracker cannot be asked, and the two ways its delivery
  * declines to confirm, both of which must leave the destructive tail unrun.
+ *
+ * <p>FR3 of fix-terminal-receipt-convergence: the probe reads the task's tenure boundary and the
+ * finished fact, never the current state — at a real pickup the pickup's own claim has already made
+ * it {@code Working}, so the probe features below fetch it held by this instance.
  *
  * <p>The destructive tail is the assertion that matters: a cleanup commit that strips {@code
  * .gnomish-task/} from a tip whose finish never landed erases the evidence the next pickup needs to
@@ -79,17 +84,62 @@ class FinishEffectSpec extends Specification {
 
     // FR10: the probe found the finish already at the target — the write landed and only its
     // receipt was lost, so nothing is written again and the tail still runs.
-    def "a finish the probe finds already landed is not written again"() {
-        given:
+    // Scenario: tracker/tracker-take / A finish that already landed is not posted twice
+    def "FR3: a recovered finish over tenure boundary #boundary with finished=#finished is #outcome"() {
+        given: 'the task as a pickup fetches it: Working, held by this instance'
         def cleanupRuns = 0
-        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Finished(), true)
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.heldAfter(REF, INSTANCE, boundary, finished)
 
         when:
         effect({ cleanupRuns++ }).drive()
 
-        then:
-        0 * tracker.finish(*_)
+        then: 'the cleanup is owed either way: after the confirmation, or after the re-drive'
+        finishes * tracker.finish(REF, SUMMARY)
         cleanupRuns == 1
+
+        where:
+        boundary | finished || finishes | outcome
+        BoundaryKind.FINISH | false || 0 | 'confirmed, not re-driven'
+        BoundaryKind.FINISH | true || 0 | 'confirmed, not re-driven'
+        null | true || 0 | 'confirmed by the finished fact'
+        BoundaryKind.PARK | true || 0 | 'confirmed by the finished fact'
+        null | false || 1 | 're-driven'
+        BoundaryKind.STALE_CLAIM_REMOVED | false || 1 | 're-driven'
+        BoundaryKind.PARK | false || 1 | 're-driven, since only FINISH is this finish'
+        BoundaryKind.ABORT | false || 1 | 're-driven, since only FINISH is this finish'
+    }
+
+    def "NFR-O1: a finish confirmed from history leaves one DEBUG line naming the task"() {
+        given:
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.heldAfter(REF, INSTANCE, BoundaryKind.FINISH)
+        def logs = LogCaptureSupport.attach(FinishEffectSpec, Level.DEBUG)
+
+        when:
+        effect({}).observeAtTarget()
+
+        then:
+        logs.list.size() == 1
+        logs.list[0].level == Level.DEBUG
+        logs.list[0].formattedMessage.contains('PROJ-1')
+        logs.list[0].formattedMessage.contains('confirmed')
+
+        cleanup:
+        logs.detach()
+    }
+
+    def "NFR-O1: a finish that is not confirmed leaves no line"() {
+        given:
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.heldAfter(REF, INSTANCE, BoundaryKind.STALE_CLAIM_REMOVED)
+        def logs = LogCaptureSupport.attach(FinishEffectSpec, Level.DEBUG)
+
+        when:
+        effect({}).observeAtTarget()
+
+        then:
+        logs.list.isEmpty()
+
+        cleanup:
+        logs.detach()
     }
 
     // FR7 of add-claim-heartbeat, FR10 here: a claim that moved is not fought — and because the

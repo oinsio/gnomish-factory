@@ -16,20 +16,24 @@ import java.nio.file.Path;
  * backend calls it.
  *
  * <p>Implements FR9, FR10, FR15, NFR-R3 of add-git-workflow; FR12b of split-into-modules; FR9,
- * NFR-R2 of add-project-registry.
+ * NFR-R2 of add-project-registry; FR8 of fix-terminal-receipt-convergence.
  */
 public interface TaskWorktreeGit {
 
     /**
-     * Ensures {@code taskId}'s worktree exists for {@code branchName}, creating it if absent.
+     * Ensures the worktree of {@code branch} exists, creating it if absent over the existing local
+     * branch — the branch is the {@link LocalTaskBranch} {@link TaskBranchGit#ensureLocalTaskBranch}
+     * or {@link TaskBranchGit#adopt} answered, so a clone that holds the branch only as a
+     * remote-tracking ref cannot reach this entry, and git is never left to resolve a name into a
+     * branch of its own making (design D10, D11 of fix-terminal-receipt-convergence). A local
+     * branch that is absent after all fails the call; it is never created here.
      *
      * @param clone the registered clone the worktree is linked to; the worktree is materialized in
      *     its own worktree folder (FR9, NFR-R2 of add-project-registry); never null
-     * @param taskId the tracker's original taskId; never null
-     * @param branchName the task branch to check out; never null
+     * @param branch the task's local branch, as the adoption owner answered it; never null
      * @return the worktree's path; never null
      */
-    Path ensureWorktree(RegisteredClone clone, String taskId, String branchName);
+    Path ensureWorktree(RegisteredClone clone, LocalTaskBranch branch);
 
     /**
      * Reconciles a task's local branch against its remote-tracking counterpart.

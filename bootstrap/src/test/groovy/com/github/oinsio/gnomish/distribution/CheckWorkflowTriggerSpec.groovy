@@ -27,7 +27,7 @@ class CheckWorkflowTriggerSpec extends Specification {
         'gitleaks.yml'
     ]
 
-    // Scenario: build/quality-gates / A tag push starts no check run
+    // Scenario: build-system/quality-gates / A tag push starts no check run
     def "FR2: every push-triggered workflow except release.yml carries a branches filter"() {
         given:
         def pushTriggered = workflows().findAll { name, on ->
@@ -44,7 +44,7 @@ class CheckWorkflowTriggerSpec extends Specification {
         unfiltered.isEmpty()
     }
 
-    // Scenario: build/quality-gates / A tag push starts no check run
+    // Scenario: build-system/quality-gates / A tag push starts no check run
     def "FR2: the branches filter of every check workflow matches every branch"() {
         expect:
         CHECK_WORKFLOWS.every { name ->

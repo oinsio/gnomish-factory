@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.OriginContact
@@ -28,6 +29,7 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.project.RegisteredClone
+import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
@@ -101,6 +103,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     private TaskBranchGit freshBranches() {
         Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
+            adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+                new BranchAdoption.AlreadyLocal(taskId)
+            }
             classifyShape(_, _) >> new BranchShape.Bare()
         }
     }
@@ -182,6 +187,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         }
         def branches = Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+            adopt(_, _, _) >> new BranchAdoption.AlreadyLocal('PROJ-1')
             classifyShape(_, _) >> new BranchShape.InProgress()
         }
         def worktrees = Mock(TaskWorktreeGit)
@@ -197,7 +203,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         }), tracker)
 
         then: 'the existing branch was materialized and reconciled — never created'
-        1 * worktrees.ensureWorktree(CLONE, 'PROJ-1', 'gnomish/PROJ-1') >> worktree
+        1 * worktrees.ensureWorktree(CLONE, new BranchAdoption.AlreadyLocal('PROJ-1')) >> worktree
         1 * worktrees.reconcile(worktree, 'PROJ-1', 'gnomish/PROJ-1')
 
         and:
@@ -215,6 +221,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         def branches = Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+            adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+                new BranchAdoption.AlreadyLocal(taskId)
+            }
             classifyShape(_, _) >> new BranchShape.Corrupt('task.json: bad json')
         }
 
@@ -572,10 +581,19 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         1 * branches.harden(CLONE_DIR)
         // The routing decision is one classification (FR2 of harden-task-branch-contract); the
-        // resume bootstrap then locates the ref it materializes the worktree from.
-        1 * branches.classifyShape(CLONE_DIR, 'PROJ-1') >> new BranchShape.InProgress()
+        // resume bootstrap then locates the ref it materializes the worktree from. The second read
+        // is the completion's delivered cleanup classifying the tip it cleans (FR4 of
+        // fix-terminal-receipt-convergence).
+        2 * branches.classifyShape(CLONE_DIR, 'PROJ-1') >>> [
+            new BranchShape.InProgress(),
+            new BranchShape.CompletedUncleaned()
+        ]
         1 * branches.locate(CLONE_DIR, 'PROJ-1') >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
-        1 * worktrees.ensureWorktree(registeredClone, 'PROJ-1', 'gnomish/PROJ-1') >> resumedWorktree
+        // FR8 of fix-terminal-receipt-convergence: the bootstrap adopts over that location before
+        // the worktree, which is handed the owner's answer.
+        1 * branches.adopt(CLONE_DIR, 'PROJ-1', new BranchLocation.Local('refs/heads/gnomish/PROJ-1')) >>
+                new BranchAdoption.AlreadyLocal('PROJ-1')
+        1 * worktrees.ensureWorktree(registeredClone, new BranchAdoption.AlreadyLocal('PROJ-1')) >> resumedWorktree
         1 * worktrees.reconcile(resumedWorktree, 'PROJ-1', 'gnomish/PROJ-1')
         0 * lifecycleStore.createTask(_, _, _, _)
 
@@ -586,5 +604,9 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         tracker.fetchTask(_) >> heldByUs()
         1 * tracker.finish(REF, _)
         result instanceof TakeResult.Delivered
+
+        and: 'the delivered branch is cleaned behind the finish'
+        worktrees.environmentDisposal(registeredClone) >> Stub(TaskEnvironmentDisposal)
+        1 * lifecycleStore.finishCleanup('PROJ-1')
     }
 }

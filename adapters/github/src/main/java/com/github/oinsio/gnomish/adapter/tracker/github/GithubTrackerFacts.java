@@ -105,8 +105,13 @@ final class GithubTrackerFacts {
         return index > other;
     }
 
-    /** The port kind of an adapter boundary marker; the four boundary kinds map one to one. */
-    private static @Nullable BoundaryKind boundaryOf(GithubMarkerKind kind) {
+    /**
+     * The port kind of an adapter boundary marker; the four boundary kinds map one to one.
+     *
+     * <p>Package-private: {@link GithubHistoryFactReader#deriveTenureBoundary} maps the thread's last
+     * boundary marker with this same table rather than a copy of it.
+     */
+    static @Nullable BoundaryKind boundaryOf(GithubMarkerKind kind) {
         return switch (kind) {
             case ABORT -> BoundaryKind.ABORT;
             case PARK -> BoundaryKind.PARK;

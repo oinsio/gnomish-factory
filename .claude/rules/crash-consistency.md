@@ -37,7 +37,9 @@ change's `design.md` or spec:
    sweeper's own query enumerates.
 7. **External effects follow intent → effect → receipt.** Durable intent
    first, receipt after; recovery of an intent without a receipt probes the
-   target before re-driving it.
+   target before re-driving it, reading the target's durable history, never
+   state a later step rewrote (introduced by
+   `fix-terminal-receipt-convergence`).
 8. **Recovery is idempotent and convergent.** Running it on an
    already-recovered state changes nothing; running it twice equals running it
    once; a kill during recovery lands in a shape whose recovery finishes the
@@ -91,6 +93,24 @@ change's `design.md` or spec:
     of the same medium is a defect, not a check: it cannot fire while the
     record is right, and when the record is wrong it has nothing to compare
     against. Introduced by `make-checkpoint-gate-durable` (D10 as amended).
+15. **An absent companion ref is a state of the reader, not a shape of the pair.**
+    When two refs are only meaningful together (a task branch and its factory
+    register) and a reader finds one without the other, the medium has not
+    been fetched into this copy yet; it is not a broken pair. Name that state
+    as its own shape, never fold it into the shape of a present and diverged
+    pair: the two have different recoveries. An actor on a medium whose
+    consistency only a fetch guarantees (a clone, a cache, a listing) reads
+    through the fetch's owner before a consequential act — a commit, a push,
+    a tracker write, a deletion — never from the local copy alone. A reader
+    that still cannot judge after that read says so (a log line naming what
+    it could not judge, and where) rather than skipping in silence: a skip
+    with no word is a duty that stopped with a green build. The failure this
+    exists for: task 6.5 of `fix-terminal-receipt-convergence` found the
+    `serve` janitor's branch pass skipping, without a word, every task branch
+    a clone held only as a remote-tracking ref — the state an IDE's periodic
+    `git fetch` leaves — because it judged the shape from a local read that
+    had no register. Introduced by `fix-terminal-receipt-convergence`
+    (design D13).
 
 ## Referencing
 

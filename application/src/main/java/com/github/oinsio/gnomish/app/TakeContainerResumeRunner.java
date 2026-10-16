@@ -89,7 +89,8 @@ final class TakeContainerResumeRunner {
                 finalState,
                 order.ref(),
                 order.tracker(),
-                lawBinding -> newExecution(lawBinding).run(order, support, bootstrap.context(), finalState, pending));
+                lawBinding -> newExecution(lawBinding)
+                        .run(order, support, bootstrap.branch(), bootstrap.context(), finalState, pending));
     }
 
     /**
@@ -107,7 +108,8 @@ final class TakeContainerResumeRunner {
                 resetState,
                 order.ref(),
                 order.tracker(),
-                lawBinding -> newExecution(lawBinding).run(order, bootstrap.support(), context, resetState, null));
+                lawBinding -> newExecution(lawBinding)
+                        .run(order, bootstrap.support(), bootstrap.branch(), context, resetState, null));
     }
 
     /**
@@ -126,9 +128,18 @@ final class TakeContainerResumeRunner {
         return ResumeDecisionCommit.appendTo(bootstrap.context(), decision);
     }
 
+    /**
+     * The cleanup of this task's delivered branch over the container medium — the support's store
+     * and box disposal (FR4, design D2 of fix-terminal-receipt-convergence).
+     */
+    DeliveredCleanup deliveredCleanup(ContainerResumeBootstrap bootstrap) {
+        return DeliveredCleanup.container(wiring.git().branches(), bootstrap.support());
+    }
+
     private TakeContainerEngineExecution newExecution(LawBinding lawBinding) {
         return new TakeContainerEngineExecution(
                 wiring.assembly(),
+                wiring.git().branches(),
                 wiring.outcomeDispatch(),
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),

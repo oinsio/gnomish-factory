@@ -35,7 +35,13 @@ public interface Tracker {
      * Returns one task's full fact set: {@link TaskSnapshot}, {@link
      * TrackerTaskState}, and {@link AbortFacts}. A closed or nonexistent task is
      * reported with state {@link TrackerTaskState.Gone}, never thrown (FR1).
-     * <p>Implements FR1 of add-tracker-port.
+     * <p>The fact set carries the task's <b>tenure boundary</b>, {@link
+     * TrackerTask#tenureBoundary()}: the last {@code PARK} / {@code FINISH} / {@code ABORT} /
+     * {@code STALE_CLAIM_REMOVED} marker on the thread in posting order, whatever claim markers
+     * follow it, derived from the history this read already fetches — no extra tracker call. It is
+     * not the claim-scoped {@link TrackerFacts#latestBoundary()} the reaper reads, which is null
+     * once a new claim follows the boundary.
+     * <p>Implements FR1 of add-tracker-port; FR1, NFR-C1 of fix-terminal-receipt-convergence.
      * @param ref the task's canonical identity; never null
      * @return the task's current fact set; never null
      */

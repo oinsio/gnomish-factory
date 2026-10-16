@@ -99,8 +99,8 @@ public final class TaskBranchLocator {
     }
 
     private BranchLocation attempt(Path cloneDir, String taskId, String branchName) {
-        String localRef = "refs/heads/" + branchName;
-        String trackingRef = "refs/remotes/origin/" + branchName;
+        String localRef = TaskBranchRefs.head(taskId);
+        String trackingRef = TaskBranchRefs.tracking(taskId);
 
         if (refExists(cloneDir, localRef)) {
             return new BranchLocation.Local(localRef);
@@ -116,7 +116,10 @@ public final class TaskBranchLocator {
         // tighten-spec-contract). No local branch exists here, so nothing local can be ahead of
         // origin's register: it lands in the clone's register itself.
         GitCommandResult fetch = touchpoint.fetch(
-                cloneDir, taskId, new Refspec(branchName + ":" + trackingRef), FactoryRegister.fetchedInPlace(taskId));
+                cloneDir,
+                taskId,
+                new Refspec(branchName + ":" + trackingRef),
+                FactoryRegisterRefs.fetchedInPlace(taskId));
         if (tracked) {
             return fetch.succeeded()
                     ? new BranchLocation.RemoteTracking(trackingRef)
@@ -139,14 +142,14 @@ public final class TaskBranchLocator {
         if (fetch.termination() == Termination.EXITED && !origin.isConfigured(cloneDir)) {
             return new BranchLocation.NotFound();
         }
-        return classifyFailedFetch(cloneDir, branchName, fetch);
+        return classifyFailedFetch(cloneDir, taskId, branchName, fetch);
     }
 
     /**
      * The tracking ref already present, as the answer when origin could not deliver a fresher one:
      * unreachable, no origin configured at all, or cut off. The clone's register is then whatever
      * an earlier touchpoint fetch left — none for a ref {@code git clone} brought, which the reader
-     * classifies {@code Unknown}, the honest answer offline. Object validation refusing what origin
+     * classifies {@code Unregistered}, the honest answer offline. Object validation refusing what origin
      * served is a fact about the branch's history, not an outage, so it is never fallen back from.
      */
     private BranchLocation fallBack(String branchName, String trackingRef, GitCommandResult fetch) {
@@ -171,7 +174,8 @@ public final class TaskBranchLocator {
                         FetchRefusal.Remedy.BEFORE_RETURNING_THE_TASK)));
     }
 
-    private BranchLocation classifyFailedFetch(Path cloneDir, String branchName, GitCommandResult fetch) {
+    private BranchLocation classifyFailedFetch(
+            Path cloneDir, String taskId, String branchName, GitCommandResult fetch) {
         // Asked first, before origin is asked to confirm the branch (design D4 of
         // own-git-transfer-argv): validation refused what origin served, so the carriage is known
         // and the refusal is the finding — a task-level park, never the unavailable arm (FR5).
@@ -179,7 +183,7 @@ public final class TaskBranchLocator {
         if (refused.isPresent()) {
             return refused.get();
         }
-        return switch (remoteTip.confirmBranch(cloneDir, branchName)) {
+        return switch (remoteTip.confirmBranch(cloneDir, taskId)) {
             case Carriage.ABSENT -> {
                 // The fetch failed and origin confirms the branch does not exist, so absence is
                 // the right answer — but the failed fetch that led here is worth the trace, since

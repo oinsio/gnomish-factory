@@ -138,4 +138,25 @@ class GitObjectsCommitSpec extends Specification implements GitObjectsFixture {
         raw.contains('author gnome <gnome@factory> 1700000000 +0000')
         raw.contains('committer gnome <gnome@factory> 1700000000 +0000')
     }
+
+    // FR25: any instant the injected time source answers is committable — the host cleanup commit
+    //     of fix-terminal-receipt-convergence (design D8) is built over bare objects from the
+    //     specs' virtual clock, which starts at the epoch.
+    def "FR25: a commit stamped at the very start of the epoch is accepted and recorded as such"() {
+        given:
+        def bare = seedBareRepo(tempDir, ['src/App.java': 'class App {}'])
+        def git = openGitObjects(bare, tempDir)
+        def base = git.resolveRef('refs/heads/base').get()
+
+        when:
+        def created = git.commit(new CommitRequest('refs/heads/gnomish/t0', Optional.empty(), base,
+                [
+                    new TreeEdit.PutFile('f.txt', 'x'.bytes)
+                ], metadata(0L)))
+
+        then:
+        def raw = gitOutput(bare, 'cat-file', 'commit', created.hex())
+        raw.contains('author gnome <gnome@factory> 0 +0000')
+        raw.contains('committer gnome <gnome@factory> 0 +0000')
+    }
 }

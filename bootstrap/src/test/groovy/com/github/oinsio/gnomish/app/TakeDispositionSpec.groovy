@@ -688,6 +688,46 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
         0 * tracker.finish(*_)
     }
 
+    // FR4 of fix-terminal-receipt-convergence: the finish landed on the tracker but the cleanup
+    // commit did not (a kill between the two). `take <ref>` on the finished task converges the
+    // branch without a claim — the cleanup commit, the worktree gone — still reports it done, and
+    // a second take writes nothing (NFR-R1).
+    // Scenario: tracker/tracker-take / A finished task's cleanup converges without a claim
+    def "Finished with a delivered branch still owing its cleanup lands the cleanup without a claim, once"() {
+        given: 'a delivered branch whose cleanup commit never landed'
+        def taskId = 'PROJ-6'
+        repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
+        def state = TaskState.atStageStart('build')
+        persistOneRound(taskId, state)
+        repository().recordOutcome(taskId, new TaskOutcome.Completed(state), TrackerWrite.OWED)
+        def tipBefore = gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}")
+        def disposition = newDisposition()
+        def finished = trackerTask(new TrackerTaskState.Finished(), true, taskId)
+
+        when:
+        def result = disposition.dispose(order(finished))
+
+        then: 'reported as done, with no claim and no tracker write'
+        result instanceof TakeResult.Skipped
+        (result as TakeResult.Skipped).reason().forLog().contains('already done')
+        0 * tracker._
+
+        and: 'the cleanup commit is the one commit added, and the tip carries no envelope'
+        gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}^") == tipBefore
+        gitOutput(cloneDir, 'ls-tree', "gnomish/${taskId}", '--', '.gnomish-task') == ''
+
+        and: 'the worktree is gone'
+        !Files.exists(expectedWorktree(taskId))
+
+        when: 'the finished task is taken again'
+        def tipAfter = gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}")
+        disposition.dispose(order(finished))
+
+        then: 'nothing is written'
+        gitOutput(cloneDir, 'rev-parse', "gnomish/${taskId}") == tipAfter
+        0 * tracker._
+    }
+
     // Ready but finished (a human reopened a previously-finished task) refuses the
     // mandate rather than claiming it — the decline protocol runs instead (FR5 of
     // enforce-finish-terminality).

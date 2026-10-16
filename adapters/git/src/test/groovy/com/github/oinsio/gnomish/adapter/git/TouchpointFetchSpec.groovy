@@ -13,7 +13,7 @@ class TouchpointFetchSpec extends Specification {
 
     private static final Path CLONE = Path.of('/clone')
     private static final Refspec BRANCH = new Refspec('gnomish/T-1:refs/remotes/origin/gnomish/T-1')
-    private static final Refspec REGISTER = FactoryRegister.fetchedInPlace('T-1')
+    private static final Refspec REGISTER = FactoryRegisterRefs.fetchedInPlace('T-1')
 
     /** The refspecs one fetch named: what follows the remote. */
     private static List<String> refspecsOf(ScriptedGit.Call call) {

@@ -29,8 +29,16 @@ import org.slf4j.LoggerFactory;
  * (tasks 5.13/5.14, not built here) — {@link #dispose} takes an already-resolved {@link TaskRef};
  * this class is the plain, constructor-injectable entry point command wiring calls into.
  *
+ * <p>The two finished arms — {@code Finished}, and {@code Ready} with {@code finished} — also
+ * converge a delivered branch the finish left uncleaned, before they report as above: the observed
+ * task goes to the slot's {@link ClaimlessDeliveredCleanup} through its overload over an observed
+ * task, which cleans only a branch the clone holds, at a {@code CompletedUncleaned} tip, whose
+ * finish the one finish reading says landed — no second {@code fetchTask}, and no claim (a finished task is never claimed). A cleanup that fails
+ * propagates: the mandate fails loudly, as the decline does (FR4 of
+ * fix-terminal-receipt-convergence).
+ *
  * <p>Implements FR9, UX2, D2, D3 of add-tracker-port; FR6 of add-claim-heartbeat; FR8 of
- * add-factory-serve; FR5 of enforce-finish-terminality.
+ * add-factory-serve; FR5 of enforce-finish-terminality; FR4 of fix-terminal-receipt-convergence.
  */
 final class TakeDisposition {
 
@@ -38,6 +46,7 @@ final class TakeDisposition {
 
     private final TakeClaimAndWork claimAndWork;
     private final TakeTakeover takeover;
+    private final SlotWiring wiring;
 
     /**
      * @param wiring the slot's equipment (D2 of introduce-slot-wiring), fixed for the whole take
@@ -53,6 +62,7 @@ final class TakeDisposition {
         this.claimAndWork = new TakeClaimAndWorkFactory(wiring).forSlot();
         this.takeover = new TakeTakeover(
                 claimAndWork, confirmation, takeoverFlag, wiring.time().clock());
+        this.wiring = wiring;
     }
 
     /**
@@ -72,16 +82,32 @@ final class TakeDisposition {
         TaskRef ref = order.ref();
         return switch (order.trackerTask().state()) {
             case TrackerTaskState.Ready ignored
-            when order.trackerTask().finished() -> refuseFinished(ref, order.tracker());
+            when order.trackerTask().finished() -> cleanedUp(order, refuseFinished(ref, order.tracker()));
             case TrackerTaskState.Ready ignored -> claimAndWork.claimAndWork(order);
             case TrackerTaskState.Working working -> takeover.take(order, working.holder());
             case TrackerTaskState.AwaitingHuman awaitingHuman -> refuseParked(awaitingHuman.reason());
             case TrackerTaskState.Finished ignored ->
-                new TakeResult.Skipped(
-                        UntrustedText.factory("Task " + ref.id() + " is already done (Finished) — nothing to take."));
+                cleanedUp(
+                        order,
+                        new TakeResult.Skipped(UntrustedText.factory(
+                                "Task " + ref.id() + " is already done (Finished) — nothing to take.")));
             case TrackerTaskState.Gone ignored ->
                 new TakeResult.Skipped(UntrustedText.factory("Task " + ref.id() + " is closed or does not exist."));
         };
+    }
+
+    /**
+     * A finished arm's cleanup of a delivered branch the finish left uncleaned, over the task this
+     * order already fetched (FR4 of fix-terminal-receipt-convergence); then the arm's own report.
+     */
+    private TakeResult cleanedUp(TakeOrder order, TakeResult report) {
+        // The overload over the observed task: the claimless sequence skips the tracker read this
+        // order already made (design D13). A branch still Unregistered after the locate is the
+        // quarantine owner's; the arm's report stands either way.
+        ClaimlessDeliveredCleanup.forSlot(wiring, order.tracker())
+                .converge(
+                        order.run().cloneDir(), order.trackerTask(), order.run().definition());
+        return report;
     }
 
     /** A reopened-finished {@code Ready} task: refuses via the decline protocol, never claiming (FR5). */

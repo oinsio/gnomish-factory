@@ -9,6 +9,14 @@ The argument after `/architect` is the subject: a defect report, an idea, or a
 decision/ADR/change to review. Detect the mode from it; when ambiguous, ask one
 question. Work in explore-mode stance: investigate and discuss, do not implement.
 
+**Trigger without being asked:** an implementation flow (`/opsx:apply-sequential`,
+`/fix-from-audit`, `/check-issue`) whose sub-agent reports that the code cannot meet a
+scenario or a design decision runs this skill on that report before any question reaches the
+user — Mode A when the report describes a defect, Mode C when it proposes changing the
+decision. The report is the input; the five answers of `.claude/rules/spec-mismatch.md` are
+the minimum output. The 2026-10-15 question on task 6.5 of `fix-terminal-receipt-convergence`
+("narrow the scenario, no code change") is the case this trigger exists for.
+
 ## Mode A — systemic defect (a bug that smells like a class)
 
 1. **Verify first.** Never design against an unverified report. Fan out parallel

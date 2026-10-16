@@ -18,7 +18,7 @@ import spock.lang.Specification
 class AdapterBindingRegistrySpec extends Specification {
 
     // FR1/FR3: each discovered provider contributes its binding, carrying the ratified passport
-    // Scenario: build/sandbox-module-split / A backend contributes its binding without a core edit
+    // Scenario: build-system/sandbox-module-split / A backend contributes its binding without a core edit
     def "discovered providers become bindings keyed by their config name"() {
         when: 'the host and container providers are indexed'
         def registry = hostAndContainer()

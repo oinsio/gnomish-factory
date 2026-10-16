@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
@@ -94,11 +95,14 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         worktree = tempDir.resolve('worktrees').resolve('PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        branches.adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+            new BranchAdoption.AlreadyLocal(taskId)
+        }
         branches.classifyShape(_, _) >> new BranchShape.InProgress()
         // FR4 of fix-lifecycle-push: the park path runs the delivery fence; a sealed verdict has no
         // Spock dummy, so the routing specs state the delivered case explicitly.
         branches.fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
-        worktrees.ensureWorktree(_, _, _) >> worktree
+        worktrees.ensureWorktree(_, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
@@ -437,7 +441,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         def salvager = Mock(WorktreeSalvager)
         def ownWorktrees = Stub(TaskWorktreeGit) {
-            ensureWorktree(_, _, _) >> worktree
+            ensureWorktree(_, _) >> worktree
             salvage(worktree) >> salvager
         }
         store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))

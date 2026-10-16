@@ -100,7 +100,7 @@ final class FirstPush {
             return new Attempt(true, "pushed");
         }
         logAttemptFailure(taskId, branch, outcome, result.stderr().forLog());
-        return confirmLanded(repo, branch, outcome);
+        return confirmLanded(taskId, repo, branch, outcome);
     }
 
     /**
@@ -149,9 +149,9 @@ final class FirstPush {
      * The re-check FR7 requires before any re-push: only {@code origin} can say whether the push
      * that did not report success nevertheless landed.
      */
-    private Attempt confirmLanded(Path repo, String branch, String outcome) {
-        return localTip.read(repo, branch)
-                .map(tip -> switch (remoteTip.confirm(repo, branch, tip)) {
+    private Attempt confirmLanded(String taskId, Path repo, String branch, String outcome) {
+        return localTip.read(repo, taskId)
+                .map(tip -> switch (remoteTip.confirm(repo, taskId, tip)) {
                     case Carriage.CARRIES -> new Attempt(true, "already landed");
                     case Carriage.ABSENT -> new Attempt(false, outcome + " and origin does not carry " + branch);
                     case Carriage.UNKNOWN ->

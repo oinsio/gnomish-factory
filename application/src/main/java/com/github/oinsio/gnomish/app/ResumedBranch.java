@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -38,8 +40,17 @@ public sealed interface ResumedBranch permits ResumeBootstrap, ContainerResumeBo
     @Nullable
     EscalationReport lastEscalation();
 
-    /** The task branch's short name, e.g. {@code gnomish/PROJ-1}. */
-    String branchName();
+    /**
+     * The task's local branch, as the adoption owner answered it at bootstrap — a fresh task's
+     * included (design D10, D11 of fix-terminal-receipt-convergence); the value a writer's entry
+     * ({@link DeliveredCleanup#cleanUp}) is handed, never rebuilt from the task id.
+     */
+    LocalTaskBranch branch();
+
+    /** The task branch's short name, e.g. {@code gnomish/PROJ-1}, derived from {@link #branch()}. */
+    default String branchName() {
+        return TaskIdSanitizer.branchName(branch().taskId());
+    }
 
     /**
      * {@code true} when the branch's recorded terminal park still has an unconfirmed tracker write

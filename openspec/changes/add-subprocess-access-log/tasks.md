@@ -171,7 +171,7 @@ no holder is retyped to `GitProcessRunner`, or `GitRunnerBoundarySpec` in `:boot
   in logtext", "Access-log emission adds no edge to gitobjects" and "The gitobjects observer hook
   defaults to a no-op" describe this change's emitter and observer hook and carry
   `pending-test: add-subprocess-access-log` in `config/spec-contract-exemptions/build-module-layering.txt`;
-  this change writes their tests with the `// Scenario: build/module-layering / <title>` markers and
+  this change writes their tests with the `// Scenario: build-system/module-layering / <title>` markers and
   removes the three exemption lines.
 
 ## 7. Secrets at the source, minimized child environments

@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
@@ -93,12 +92,6 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
     private static final Logger log = LoggerFactory.getLogger(GitObjectsTaskRepository.class);
 
-    private static final String REF_PREFIX = "refs/heads/";
-
-    /** The factory identity that authors lifecycle commits when none is supplied (design D19). */
-    private static final CommitIdentity DEFAULT_IDENTITY =
-            new CommitIdentity("gnomish-factory", "gnomish-factory@localhost");
-
     private final GitObjects gitObjects;
     private final CommitIdentity identity;
     private final InstantSource clock;
@@ -118,7 +111,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
      */
     public GitObjectsTaskRepository(
             GitObjects gitObjects, InstantSource clock, ClaimEpochSource epochs, DenialCursorSource denialCursors) {
-        this(gitObjects, DEFAULT_IDENTITY, clock, epochs, denialCursors);
+        this(gitObjects, TaskLifecycleCommitWriter.FACTORY_IDENTITY, clock, epochs, denialCursors);
     }
 
     /**
@@ -146,7 +139,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     @Override
     public void createTask(TaskContext context, ObjectId lawCommit, BasePin pin, TaskState initialState) {
         String taskId = context.taskId();
-        String ref = refFor(taskId);
+        String ref = TaskBranchRefs.head(taskId);
         if (gitObjects.resolveRef(ref).isPresent()) {
             throw new GitTaskRepositoryException(
                     taskId,
@@ -179,7 +172,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
     @Override
     public void appendDecision(String taskId, Decision decision, TaskState resetState) {
-        String ref = refFor(taskId);
+        String ref = TaskBranchRefs.head(taskId);
         var writer = writerFor();
         ObjectId tip = writer.requireTip(taskId, ref, TaskLifecycleEvent.RESUMED);
         // Appending the resume decision resets outcome to null in the same commit (FR5/D9 contract).
@@ -211,7 +204,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     @Override
     public void approveCheckpoint(String taskId, Position.AwaitingApproval gate, TaskState approved) {
         TaskLifecycleEvent event = TaskLifecycleEvent.APPROVED;
-        String ref = refFor(taskId);
+        String ref = TaskBranchRefs.head(taskId);
         var writer = writerFor();
         ObjectId tip = writer.requireTip(taskId, ref, event);
         StateJsonDto tipState = writer.readCommittedState(taskId, tip, event);
@@ -240,7 +233,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     @Override
     public void resumeFrom(String taskId, TaskState reset) {
         TaskLifecycleEvent event = TaskLifecycleEvent.RESUMED;
-        String ref = refFor(taskId);
+        String ref = TaskBranchRefs.head(taskId);
         var writer = writerFor();
         ObjectId tip = writer.requireTip(taskId, ref, event);
         TaskJsonDto tipTask = writer.readCommitted(taskId, tip, event).dto();
@@ -259,7 +252,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
     @Override
     public void recordOutcome(String taskId, TaskOutcome outcome, TrackerWrite trackerWrite) {
         TaskLifecycleEvent event = TaskOutcomeLifecycleEvent.of(outcome);
-        String ref = refFor(taskId);
+        String ref = TaskBranchRefs.head(taskId);
         var writer = writerFor();
         ObjectId tip = writer.requireTip(taskId, ref, event);
         // Built from the registered envelope, never the tip's (design D18 of tighten-spec-contract),
@@ -310,7 +303,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
      */
     @Override
     public void confirmTerminalWrite(String taskId) {
-        GitObjectsTerminalCommits.clearPending(gitObjects, writerFor(), taskId, refFor(taskId));
+        GitObjectsTerminalCommits.clearPending(gitObjects, writerFor(), taskId, TaskBranchRefs.head(taskId));
     }
 
     /**
@@ -324,7 +317,7 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
      */
     @Override
     public void finishCleanup(String taskId) {
-        GitObjectsTerminalCommits.cleanUp(gitObjects, writerFor(), taskId, refFor(taskId));
+        GitObjectsTerminalCommits.cleanUp(gitObjects, writerFor(), taskId, TaskBranchRefs.head(taskId));
     }
 
     /**
@@ -340,9 +333,5 @@ public final class GitObjectsTaskRepository implements TaskLifecycleStore {
 
     private TaskLifecycleCommitWriter writerFor() {
         return new TaskLifecycleCommitWriter(gitObjects, identity, clock.instant(), epochs);
-    }
-
-    private static String refFor(String taskId) {
-        return REF_PREFIX + TaskIdSanitizer.branchName(taskId);
     }
 }

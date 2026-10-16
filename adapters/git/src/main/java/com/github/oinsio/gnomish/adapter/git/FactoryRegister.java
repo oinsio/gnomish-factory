@@ -1,9 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
-import com.github.oinsio.gnomish.gittransfer.QuarantineRef;
-import com.github.oinsio.gnomish.gittransfer.Refspec;
-import com.github.oinsio.gnomish.gittransfer.RegisterRef;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,9 +10,9 @@ import org.jspecify.annotations.Nullable;
  * the one owner of every move of the task branch and its register there: which ref names the
  * register, and the ref transactions that move the two. The register names the factory's latest
  * closing commit; the closing push ({@link ClosingPush}) carries it to origin in the same atomic
- * push as the branch, and a touchpoint fetch brings origin's back (the refspecs below). A reader of
- * the registered commit names the ref through {@link #of} too, so the writers and every reader
- * agree on one spelling ({@link RegisterRef} holds the namespace).
+ * push as the branch, and a touchpoint fetch brings origin's back. The ref names — the register's,
+ * its fetch refspecs, the harvest quarantine — are spelled by {@link FactoryRegisterRefs}, the task
+ * branch's by {@link TaskBranchRefs}; this class holds the transactions over them.
  *
  * <p>Every write is one {@link RefTransaction} — {@code git update-ref --stdin}, the branch under a
  * compare-and-swap against the tip it was read at (amended 2026-10-13):
@@ -35,6 +31,9 @@ import org.jspecify.annotations.Nullable;
  *       already holds origin's line (equal or ahead): the register moves forward to origin's under
  *       a compare-and-swap against the clone's own, the branch verified unmoved in the same
  *       transaction (amended 2026-10-13, cross-instance resume finding).
+ *   <li>{@link #createHead} — the branch adoption's create on absence ({@link
+ *       TaskBranchAdoption}; design D9 of fix-terminal-receipt-convergence); an adoption is never
+ *       undone (design D12).
  * </ul>
  *
  * <p>The raw result goes back to the caller, which owns what a refused transaction means (a thrown
@@ -46,54 +45,10 @@ import org.jspecify.annotations.Nullable;
 @SuppressWarnings("ClassCanBeRecord")
 final class FactoryRegister {
 
-    private static final String HEADS = "refs/heads/";
-
     private final GitRunner runner;
 
     FactoryRegister(GitRunner runner) {
         this.runner = runner;
-    }
-
-    /**
-     * The register of the task {@code taskId}: {@code refs/gnomish-factory/<sanitized taskId>}, the
-     * same core string the branch {@code gnomish/<sanitized taskId>} carries.
-     *
-     * @param taskId the tracker's original taskId
-     * @return the register
-     */
-    static RegisterRef of(String taskId) {
-        return RegisterRef.forTask(TaskIdSanitizer.sanitize(taskId));
-    }
-
-    /**
-     * The harvest quarantine of the task {@code taskId} (design D18): {@code
-     * refs/gnomish-quarantine/<sanitized taskId>}, where a harvest lands the box's branch and the
-     * admission ({@link HarvestAdmission}) reads it from.
-     *
-     * @param taskId the tracker's original taskId, or the core string a branch name carries
-     * @return the quarantine
-     */
-    static QuarantineRef quarantine(String taskId) {
-        return QuarantineRef.forTask(TaskIdSanitizer.sanitize(taskId));
-    }
-
-    /**
-     * The refspec a touchpoint fetch that has no local branch to protect lands origin's register
-     * with, straight into the clone's register: {@code +<register>:<register>}.
-     */
-    static Refspec fetchedInPlace(String taskId) {
-        String name = of(taskId).name();
-        return new Refspec("+" + name + ":" + name);
-    }
-
-    /**
-     * The refspec a touchpoint fetch beside a local branch lands origin's register with: its
-     * remote-tracking name, so a clone register ahead of origin's (a closing push origin has not
-     * received yet) is never rolled back by a fetch.
-     */
-    static Refspec fetchedTracking(String taskId) {
-        RegisterRef register = of(taskId);
-        return new Refspec("+" + register.name() + ":" + register.trackingName());
     }
 
     /**
@@ -110,8 +65,8 @@ final class FactoryRegister {
         return runner.run(
                 repo,
                 new RefTransaction(List.of(
-                        new RefTransaction.Update(branchRef(taskId), commit, expectedTip),
-                        new RefTransaction.Update(of(taskId).name(), commit, null))));
+                        new RefTransaction.Update(TaskBranchRefs.head(taskId), commit, expectedTip),
+                        new RefTransaction.Update(FactoryRegisterRefs.of(taskId).name(), commit, null))));
     }
 
     /**
@@ -122,7 +77,9 @@ final class FactoryRegister {
      */
     GitCommandResult advance(Path repo, String taskId, String commit, String expectedTip) {
         return runner.run(
-                repo, new RefTransaction(List.of(new RefTransaction.Update(branchRef(taskId), commit, expectedTip))));
+                repo,
+                new RefTransaction(
+                        List.of(new RefTransaction.Update(TaskBranchRefs.head(taskId), commit, expectedTip))));
     }
 
     /**
@@ -144,9 +101,10 @@ final class FactoryRegister {
         updates.add(new RefTransaction.Update(localRef, remoteTip, localTip));
         String originRegister = originRegister(repo, taskId);
         if (originRegister != null) {
-            updates.add(new RefTransaction.Update(of(taskId).name(), originRegister, null));
+            updates.add(new RefTransaction.Update(FactoryRegisterRefs.of(taskId).name(), originRegister, null));
         } else if (offLineRegister != null) {
-            updates.add(RefTransaction.Update.deletion(of(taskId).name(), offLineRegister));
+            updates.add(RefTransaction.Update.deletion(
+                    FactoryRegisterRefs.of(taskId).name(), offLineRegister));
         }
         return runner.run(repo, new RefTransaction(updates));
     }
@@ -179,7 +137,22 @@ final class FactoryRegister {
                 repo,
                 new RefTransaction(List.of(
                         new RefTransaction.Update(localRef, localTip, localTip),
-                        new RefTransaction.Update(of(taskId).name(), originRegister, expectedRegister))));
+                        new RefTransaction.Update(
+                                FactoryRegisterRefs.of(taskId).name(), originRegister, expectedRegister))));
+    }
+
+    /**
+     * Creates the head of {@code taskId}'s branch at {@code tip} if it does not exist — a
+     * compare-and-swap on absence, git's {@code create} (design D9 of
+     * fix-terminal-receipt-convergence); the register is not touched.
+     *
+     * @return the transaction's result; a non-zero exit created nothing
+     */
+    GitCommandResult createHead(Path repo, String taskId, String tip) {
+        // update-ref reads an all-zero old value as "must not exist", in the object format's width.
+        String absent = "0".repeat(tip.length());
+        return runner.run(
+                repo, new RefTransaction(List.of(new RefTransaction.Update(TaskBranchRefs.head(taskId), tip, absent))));
     }
 
     /**
@@ -188,20 +161,9 @@ final class FactoryRegister {
      * "none", which would move the branch without the register origin holds beside it.
      */
     private @Nullable String originRegister(Path repo, String taskId) {
-        String tracking = of(taskId).trackingName();
+        String tracking = FactoryRegisterRefs.of(taskId).trackingName();
         return VerifiedTip.read(GitReadGate.answered(
                         tracking, "rev-parse", runner.run(repo, "rev-parse", "--verify", "--quiet", tracking)))
                 .orElse(null);
-    }
-
-    /**
-     * The full ref of {@code taskId}'s task branch, {@code refs/heads/gnomish/<sanitized taskId>} —
-     * the one spelling the register's writers and the admission read move together.
-     *
-     * @param taskId the tracker's original taskId, or the core string a branch name carries
-     * @return the branch's full ref name
-     */
-    static String branchRef(String taskId) {
-        return HEADS + TaskIdSanitizer.branchName(taskId);
     }
 }

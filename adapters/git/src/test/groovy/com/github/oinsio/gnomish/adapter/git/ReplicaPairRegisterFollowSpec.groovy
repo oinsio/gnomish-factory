@@ -16,7 +16,7 @@ import spock.lang.TempDir
  * FR13 of tighten-spec-contract (design D13, amended 2026-10-13, cross-instance resume finding):
  * where the clone's branch already holds origin's line — equal or ahead — the replica reconcile
  * brings the clone's register forward to origin's, so a clone that got the branch from
- * {@code git clone} reads the factory's record instead of classifying the branch {@code Unknown}.
+ * {@code git clone} reads the factory's record instead of classifying the branch {@code Unregistered}.
  * The register moves only forward, and only to a commit on the local line.
  */
 class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepoFixture {

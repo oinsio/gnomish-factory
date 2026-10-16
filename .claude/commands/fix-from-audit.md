@@ -43,7 +43,10 @@ worth fixing, otherwise reject it with evidence. For code:
 - A recommendation that the **plan** is wrong — the proposal, design or delta specs must
   change for the fix to be right — is not fixed here: code that departs from the plan is the
   defect `/opsx:apply` exists to prevent. Reject it with that reason; the summary says the
-  plan question needs a human (`/opsx:update`).
+  plan question needs a human (`/opsx:update`) — and states it in the form of
+  `.claude/rules/spec-mismatch.md`: premises verified with `file:line`, the class mapped,
+  alternative zero, options ranked by failure class. Narrowing a scenario to make the code pass
+  is never the fix.
 - "Task `[x]` without evidence" and "task `[ ]` not implemented" are fixed by implementing what
   the task says, under the same rules as `/opsx:apply`. "Task `[ ]` but evidence exists" is
   fixed by ticking it, once you have verified the evidence yourself.

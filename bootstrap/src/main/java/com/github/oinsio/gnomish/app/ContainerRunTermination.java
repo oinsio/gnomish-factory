@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.git.OriginReconciliation;
+import com.github.oinsio.gnomish.adapter.git.TaskBranchRefs;
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict;
 import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
@@ -107,7 +108,7 @@ final class ContainerRunTermination {
      */
     private static void reconcileRemote(ContainerRunSupport support) {
         support.gitObjects
-                .resolveRef("refs/heads/" + support.branch)
+                .resolveRef(TaskBranchRefs.head(support.taskId))
                 .ifPresent(tip -> new OriginReconciliation(support.runner)
                         .reconcile(support.taskId, "terminal-boundary", support.cloneDir, support.branch, tip.hex()));
     }

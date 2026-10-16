@@ -1,42 +1,26 @@
 package com.github.oinsio.gnomish.app.killpoint
 
-import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
-import com.github.oinsio.gnomish.adapter.git.BestEffortClosingPush
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
-import com.github.oinsio.gnomish.adapter.git.EnvironmentAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
-import com.github.oinsio.gnomish.adapter.git.LocalBoxEnvironment
-import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
-import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.git.TaskStart
-import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.KillPointTakeRoutes
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.TaskGitFixture
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
-import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
-import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.*
-import com.github.oinsio.gnomish.domain.engine.fake.*
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.gitobjects.GitObjects
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
-import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -49,20 +33,17 @@ import java.time.Instant
  * its real take routes (NFR-R1, design D8 of make-checkpoint-gate-durable): a registered factory
  * clone with a converged {@code origin}, a task created and claimed by this instance on an
  * in-memory tracker, and one {@link TaskGit} bundle whose tenure record every writer stamps from.
+ * Each world also carries the second instance's own bundle and the take entries over it, so a
+ * pickup can take the task over the way production does (design D3 of
+ * fix-terminal-receipt-convergence).
  *
  * <p>The round writers differ by medium, as production's do. The host lands the round through
- * {@link GitAttemptPersistence} in the task's worktree, as {@code ReclaimKillPoints} does. The
- * container round is the whole production round, driven one layer down the way {@code
- * ContainerContinuationMedium} drives it — the domain {@link Engine} over {@link CliStageExecutor},
- * {@link SandboxRoundEnvironmentSource} and {@link EnvironmentAttemptPersistence} in a {@link
- * LocalBoxEnvironment} — because a box over the scripted docker never closes a round; the engine's
- * outcome is dropped, which is the kill before the park commit.
+ * {@link GitAttemptPersistence} in the task's worktree, as {@code ReclaimKillPoints} does; the
+ * container round is the whole production round, written by {@link ContainerRoundWriter}.
  */
 trait TakeKillPointWorlds implements BareGitRepoFixture {
 
     static final String TAKE_TASK_ID = 'PROJ-1'
-
-    private static final PipelineLaw TAKE_LAW = PipelineLaw.ofContent(['instructions.md': 'build it\n'])
 
     /** The host medium: worktrees, {@link GitTaskRepository}, the host take routes. */
     TakeKillPointWorld takeHostWorld(Path root, PipelineDefinition definition) {
@@ -71,8 +52,12 @@ trait TakeKillPointWorlds implements BareGitRepoFixture {
         def git = TaskGitFixture.real()
         Path argv = root.resolve('plain-round.log')
         def agent = FakeAgentSupport.propertiesCapturingArgv('plain-round', argv)
+        // The second instance's git is the recording stand-in, so a row can bound what its pickup
+        // spends on reads of the worktree's own HEAD (NFR-P1 of fix-envelope-medium).
+        Path gitStandIn = recordingGit(root.resolve('git-invocations.log'))
         def world = new TakeKillPointWorld(definition: definition, repoDir: clone, epochs: git.epochs(),
-        worktree: registered.worktrees().resolve(TAKE_TASK_ID),
+        worktree: registered.worktrees().resolve(TAKE_TASK_ID), gitStandIn: gitStandIn,
+        secondGit: TaskGitFixture.real(new GitProcessRunner(gitStandIn.toString())),
         agentRounds: {
             -> Files.exists(argv) ? FakeAgentSupport.capturedInvocations(argv).size() : 0
         })
@@ -84,30 +69,41 @@ trait TakeKillPointWorlds implements BareGitRepoFixture {
         }
         seedClaim(world)
         world.routes = new KillPointTakeRoutes().host(registered, git, world.tracker, definition, agent)
+        world.secondRoutes = new KillPointTakeRoutes().host(registered, world.secondGit, world.tracker, definition, agent)
         createTask(world)
     }
 
     /** The container medium: the clone's objects, {@link GitObjectsTaskRepository}, the container routes. */
     TakeKillPointWorld takeContainerWorld(Path root, PipelineDefinition definition) {
+        takeContainerWorld(root, definition, DenialCursorSource.NONE)
+    }
+
+    /**
+     * The container medium whose lifecycle writer asks {@code cursors} for the denial read position
+     * an escalation commits (FR5 of fix-denial-attribution-durability).
+     */
+    TakeKillPointWorld takeContainerWorld(Path root, PipelineDefinition definition, DenialCursorSource cursors) {
         Path clone = takeClone(root)
         def registered = RegisteredCloneFixture.registered(root.resolve('home'), clone)
         def git = TaskGitFixture.real()
         def docker = new ScriptedSandboxDocker()
         def objects = GitObjects.open(clone.resolve('.git'), Files.createDirectories(root.resolve('index')))
         def world = new TakeKillPointWorld(definition: definition, repoDir: clone, epochs: git.epochs(),
+        secondGit: TaskGitFixture.real(),
         agentRounds: {
             -> docker.starts.count {
                 it.contains('stream-json')
             } as Integer
         })
         world.store = RegisteringStore.of(
-                new GitObjectsTaskRepository(objects, new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), git.epochs(), DenialCursorSource.NONE),
+                new GitObjectsTaskRepository(objects, new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), git.epochs(), cursors),
                 new GitProcessRunner(), clone)
         world.roundWriter = { TaskState expected ->
-            containerRound(world, root, objects, expected)
+            new ContainerRoundWriter(world, root, objects).write(expected)
         }
         seedClaim(world)
         world.routes = new KillPointTakeRoutes().container(registered, git, world.tracker, definition, docker)
+        world.secondRoutes = new KillPointTakeRoutes().container(registered, world.secondGit, world.tracker, definition, docker)
         createTask(world)
     }
 
@@ -147,42 +143,5 @@ trait TakeKillPointWorlds implements BareGitRepoFixture {
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-10-08T09:00:00Z'), Duration.ofMillis(50))
                 ])
-    }
-
-    /**
-     * One production container round of the world's first stage, the fake agent playing the gnome
-     * {@code expected} describes — asking when its last round carries a stop, passing otherwise —
-     * and the tip it leaves checked against {@code expected}'s position.
-     */
-    private void containerRound(TakeKillPointWorld world, Path root, GitObjects objects, TaskState expected) {
-        boolean asks = expected.attempts().last().stop() instanceof Stop.DecisionNeeded
-        def rounds = new CurrentRound()
-        def box = new LocalBoxEnvironment(world.repoDir, Files.createTempDirectory(root, 'box'))
-        def lease = new EnvironmentLease({
-            -> box
-        }, TaskIdSanitizer.branchName(TAKE_TASK_ID),
-        KillPointTakeRoutes.segments(world.definition))
-        def source = new SandboxRoundEnvironmentSource(lease, new GitProcessRunner(), world.repoDir, TAKE_TASK_ID, rounds,
-                new VirtualClock())
-        def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(asks ? 'decision-needed' : 'plain-round'),
-                new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), TAKE_LAW, source)
-        // Behind the closing push, as ContainerRunSupport#persistence assembles it: the state commit
-        // becomes the factory register (design D13 of tighten-spec-contract).
-        def persistence = new PushBestEffortAttemptPersistence(
-                new EnvironmentAttemptPersistence(box, new GitProcessRunner(), world.repoDir, objects, rounds, world.epochs),
-                new BestEffortClosingPush(new GitProcessRunner()), world.repoDir)
-        def clock = new VirtualClock()
-        def ports = new EnginePorts(executor, new FilesExistCheckRunner(), new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
-                VirtualTimeEquipment.on(clock))
-        new Engine().run(world.definition, context(),
-                TaskState.atStageStart(world.definition.stages().first().name()),
-                new DirectoryWorkspace(Files.createTempDirectory(root, 'workspace')), ports)
-        assert world.tipState().position() == expected.position(): 'the container round left another position'
-        assert world.tipState().attempts().last().stop().class == expected.attempts().last().stop().class
-    }
-
-    private static TaskContext context() {
-        new TaskContext(TAKE_TASK_ID, UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
     }
 }

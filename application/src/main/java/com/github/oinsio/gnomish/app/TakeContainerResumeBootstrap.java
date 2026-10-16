@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption;
+import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -26,7 +27,8 @@ import org.slf4j.MDC;
  * remote on resume-start, and build the same resume bundle shape (context, outcome, last
  * escalation, base commit and the durable base pin) from the loaded task record.
  *
- * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9 of add-tracker-port.
+ * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9 of add-tracker-port; FR8 of
+ * fix-terminal-receipt-convergence.
  *
  * @param git the task-git capability set: clone hardening and branch reconciliation; never null
  * @param containerTakeSupport the container-dispatch collaborators; never null
@@ -50,9 +52,11 @@ record TakeContainerResumeBootstrap(TaskGit git, ContainerTakeSupport containerT
     ContainerResumeBootstrap bootstrap(
             Path cloneDir, String taskId, List<Segment> segments, PipelineDefinition definition) {
         git.branches().harden(cloneDir);
-        if (!git.branches().ensureLocalTaskBranch(cloneDir, taskId)) {
-            throw UsageException.branchNotFound(taskId);
-        }
+        LocalTaskBranch branch =
+                switch (git.branches().ensureLocalTaskBranch(cloneDir, taskId)) {
+                    case LocalTaskBranch local -> local;
+                    case BranchAdoption.Nowhere() -> throw UsageException.branchNotFound(taskId);
+                };
         // Resume-start touchpoint (FR3 of fix-lifecycle-push): ensureLocalTaskBranch above brings
         // local up to what origin holds; this pushes origin up to what local holds, delivering a
         // commit an earlier instance recorded but never got pushed. Best-effort, never blocking.
@@ -80,7 +84,7 @@ record TakeContainerResumeBootstrap(TaskGit git, ContainerTakeSupport containerT
                 content.outcome(),
                 content.lastEscalation(),
                 support,
-                TaskIdSanitizer.branchName(taskId),
+                branch,
                 content.baseCommit(),
                 content.trackerWritePending(),
                 content.pin());

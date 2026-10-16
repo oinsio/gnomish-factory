@@ -36,7 +36,7 @@ class BuildScriptOwnerSpec extends Specification {
     } // spelled apart, so this spec's own source names no gate script
 
     // FR6 of split-into-modules: every external version is declared once, in the shared catalog
-    // Scenario: build/build-conventions / Version catalog is shared
+    // Scenario: build-system/build-conventions / Version catalog is shared
     def "no build script declares a dependency with a version of its own"() {
         given:
         def scripts = gradleScripts().findAll {
@@ -77,7 +77,7 @@ class BuildScriptOwnerSpec extends Specification {
 
     // FR8 of add-functional-api-gate-test: the gate is verified by running it, so no test reads the
     //     convention's text — rewording or restructuring the script cannot fail one
-    // Scenario: build/build-conventions / Refactoring the convention text alone breaks no test
+    // Scenario: build-system/build-conventions / Refactoring the convention text alone breaks no test
     def "no test source reads the text of an api-gate convention script"() {
         given:
         def tests = testTrees()

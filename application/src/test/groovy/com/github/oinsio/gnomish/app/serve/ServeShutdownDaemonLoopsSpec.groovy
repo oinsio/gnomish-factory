@@ -67,7 +67,7 @@ class ServeShutdownDaemonLoopsSpec extends ServeShutdownSpecBase {
             loopThreads << Thread.currentThread()
             janitorTicks.incrementAndGet()
             Set.of()
-        } as OccupiedSlots)
+        } as OccupiedSlots, { Set<String> held -> } as BranchPass)
         def oracle = new LivenessOracle(
                 new CachedOpenTaskListing(), new StalenessMemory(new SystemMonotonicTime(), Duration.ofMinutes(1)))
         def pass = { dir, liveness ->

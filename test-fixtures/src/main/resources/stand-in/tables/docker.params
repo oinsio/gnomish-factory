@@ -39,3 +39,9 @@
 [docker-stall]
 # A docker command that never returns on its own (DockerCliBoundedSpec).
 * stall 600
+
+[docker-context-inspect]
+# A docker client answering `context inspect` with the endpoint its per-run link is named after,
+# recording each run (TestDockerEnvironmentFunctionalSpec, build-logic).
+* record DOCKER_CONFIG DOCKER_CONTEXT
+context,inspect answer data/stdout-docker-context#@name 0

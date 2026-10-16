@@ -21,6 +21,8 @@ class BranchRepairActionSpec extends Specification {
         new BranchShape.Corrupt('task.json: bad') || 'parking for a human on this first classification'
         new BranchShape.Unknown('state without task') || 'parking for a human on this first classification'
         new BranchShape.UnsupportedVersion('s.json', 7, 1) || 'parking for a human on this first classification'
+        // FR10 of fix-terminal-receipt-convergence (D13): by its disposition, with no edit here.
+        new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40) || 'parking for a human on this first classification'
         new BranchShape.Delivered() || 'finishing the delivered branch'
     }
 
@@ -41,7 +43,8 @@ class BranchRepairActionSpec extends Specification {
             new BranchShape.Delivered(),
             new BranchShape.Corrupt('reason'),
             new BranchShape.Unknown('reason'),
-            new BranchShape.UnsupportedVersion('state.json', 7, 1)
+            new BranchShape.UnsupportedVersion('state.json', 7, 1),
+            new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40)
         ]
     }
 }

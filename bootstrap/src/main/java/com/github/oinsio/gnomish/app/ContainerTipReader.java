@@ -3,11 +3,11 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.adapter.git.FactoryRegisterRead;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.RefTipSource;
+import com.github.oinsio.gnomish.adapter.git.TaskBranchRefs;
 import com.github.oinsio.gnomish.adapter.git.TipRecordedDenials;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -111,7 +111,7 @@ final class ContainerTipReader {
      */
     static DenialRestoration restorable(GitProcessRunner runner, Path cloneDir, String taskId) {
         try {
-            String branchRef = "refs/heads/" + TaskIdSanitizer.branchName(taskId);
+            String branchRef = TaskBranchRefs.head(taskId);
             return new TipRecordedDenials().restorable(RefTipSource.at(runner, cloneDir, taskId, branchRef));
         } catch (RuntimeException e) {
             log.debug("no recorded denial cursor to restore", e);

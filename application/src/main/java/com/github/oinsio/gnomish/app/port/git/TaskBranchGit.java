@@ -16,7 +16,8 @@ import java.util.List;
  * git command, a ref format or a process — the vocabulary is task branches and recorded state, so a
  * non-git backend could satisfy the same contract.
  *
- * <p>Implements FR2, FR9, FR10, FR13 of add-git-workflow; FR12b of split-into-modules.
+ * <p>Implements FR2, FR9, FR10, FR13 of add-git-workflow; FR12b of split-into-modules; FR7, FR11 of
+ * fix-terminal-receipt-convergence.
  */
 public interface TaskBranchGit {
 
@@ -33,20 +34,43 @@ public interface TaskBranchGit {
     /**
      * Ensures a reconciled local branch for {@code taskId} exists in {@code cloneDir}, without
      * checking anything out: the branch is looked up locally, then as a remote-tracking ref, then
-     * fetched narrowly; a local branch behind the delivered one is fast-forwarded, ahead is kept.
-     * The ref-only path a container-mode resume takes — it has no worktree (FR6, FR17 of
-     * add-sandbox-core).
+     * fetched narrowly. A local branch behind the delivered one is fast-forwarded, ahead is kept; a
+     * branch held only as a remote-tracking ref is <em>adopted</em> — its head created at the
+     * tracking tip by one ref transaction under a compare-and-swap on absence, the clone's register
+     * untouched — and an adoption lost to another adopter answers already local (design D9, D10 of
+     * fix-terminal-receipt-convergence). The one way a remote-tracking-only branch becomes local.
      *
      * @param cloneDir the clone to reconcile in; never null
      * @param taskId the tracker's original taskId; never null
-     * @return {@code true} when the branch exists locally after this call; {@code false} when it
-     *     exists nowhere
+     * @return {@link BranchAdoption.Adopted} at the tip this call created the head at, {@link
+     *     BranchAdoption.AlreadyLocal}, or {@link BranchAdoption.Nowhere} when the branch exists
+     *     nowhere; the first two are the {@link LocalTaskBranch} a writer's entry accepts
      * @throws BranchLocationUnavailableException if the lookup could not reach origin
+     * @throws BranchLocationRefusedException if git's object validation refused the branch
      * @throws DivergedBranchException if the local and delivered tips share no ancestry
      *     relationship and no claim is held on the task — the discard that resolves divergence is
      *     the claim protocol's arbitration (FR8 of harden-task-branch-contract)
      */
-    boolean ensureLocalTaskBranch(Path cloneDir, String taskId);
+    BranchAdoption ensureLocalTaskBranch(Path cloneDir, String taskId);
+
+    /**
+     * Adopts {@code taskId}'s branch over the location the caller's own {@link #locate} just
+     * answered — the same owner and the same ref transaction as {@link #ensureLocalTaskBranch},
+     * with no second lookup (design D9, D11 of fix-terminal-receipt-convergence): a caller that
+     * already located the branch, so its touchpoint fetch has already refreshed the tracking ref
+     * and the register, adopts over that answer rather than asking origin twice. A local branch
+     * answers already local without being reconciled; the reconcile stays the caller's.
+     *
+     * @param cloneDir the clone the branch was located in; never null
+     * @param taskId the tracker's original taskId; never null
+     * @param location what {@link #locate} answered for {@code taskId} in {@code cloneDir}; never
+     *     null
+     * @return adopted at the tracking tip, already local, or nowhere for {@link
+     *     BranchLocation.NotFound}
+     * @throws BranchLocationUnavailableException for {@link BranchLocation.Unavailable}
+     * @throws BranchLocationRefusedException for {@link BranchLocation.Refused}
+     */
+    BranchAdoption adopt(Path cloneDir, String taskId, BranchLocation location);
 
     /**
      * Finds where {@code taskId}'s branch lives — locally, only as a remote-tracking ref, or
@@ -74,6 +98,26 @@ public interface TaskBranchGit {
      *     not run to its own exit, so no fact about the tip was established (FR6)
      */
     BranchShape classifyShape(Path cloneDir, String taskId);
+
+    /**
+     * Classifies {@code taskId}'s branch tip over the location the caller's own {@link #locate}
+     * just answered — the same classification as {@link #classifyShape(Path, String)}, with no
+     * second lookup (design D13 of fix-terminal-receipt-convergence, as amended for task 6.6): a
+     * caller that decides on the tip, then adopts over the location and names it, reads all three
+     * from one lookup, and pays one touchpoint fetch. The two-argument form is this read over its
+     * own {@link #locate}, so a location has one parse.
+     *
+     * @param cloneDir the clone the branch was located in; never null
+     * @param taskId the tracker's original taskId; never null
+     * @param location what {@link #locate} answered for {@code taskId} in {@code cloneDir}; never
+     *     null
+     * @return the tip's shape — {@link BranchShape.Bare} for {@link BranchLocation.NotFound}; never
+     *     null
+     * @throws BranchLocationUnavailableException for {@link BranchLocation.Unavailable} (FR6)
+     * @throws BranchTipUnavailableException when a read of the located tip did not run to its own
+     *     exit (FR6)
+     */
+    BranchShape classifyShape(Path cloneDir, String taskId, BranchLocation location);
 
     /**
      * Lists one row per task branch reachable from {@code cloneDir}, for {@code gnomish status}.

@@ -111,7 +111,7 @@ durable-progress marker; and the three lease-maintenance operations `listOpen`,
 | Operation                                                                            | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 |--------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `List<ReadyTask> listReady(int limit)`                                               | Returns unclaimed tasks in **your adapter's own queue order**, each paired with `AbortFacts`. This is the raw feed only — it must **never** filter by abort backoff. Deciding whether an entry with unexpired backoff should be skipped is core policy applied over the facts you report; filtering it yourself breaks the contract.                                                                                                                                                                                                                                                                                                                                                                          |
-| `TrackerTask fetchTask(TaskRef ref)`                                                 | Returns the full fact set: frozen `TaskSnapshot`, current `TrackerTaskState` (with holder for `Working`, reason for `AwaitingHuman`), and `AbortFacts`. A closed/nonexistent task returns `TrackerTaskState.Gone` — never an exception.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `TrackerTask fetchTask(TaskRef ref)`                                                 | Returns the full fact set: frozen `TaskSnapshot`, current `TrackerTaskState` (with holder for `Working`, reason for `AwaitingHuman`), `AbortFacts`, and the whole-thread facts `finished` and `tenureBoundary` (§5). A closed/nonexistent task returns `TrackerTaskState.Gone` — never an exception.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `List<HumanReply> collectDecisions(TaskRef ref)`                                     | Returns human reply comments/replies posted **after the last `acknowledgeDecision` call**, in posting order. Empty means either nobody replied yet, or the most recent reply was already consumed — these two cases are indistinguishable by design.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `ClaimResult claim(TaskRef ref, String instanceId)`                                  | Must be **observably atomic**: under a concurrent race, exactly one caller receives `Acquired`, every other caller receives `Held(winner)` naming the actual winner. This is the hardest operation to implement correctly — see §3.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `void release(TaskRef ref)`                                                          | Drops the caller's claim **without changing the logical state otherwise** — used on a revoked/abandoned task, leaving it for a human to inspect as-is. Do not transition state here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -256,6 +256,12 @@ The properties the suite checks, verbatim:
     and concurrent-removal convergence (two reapers racing the same observed
     version both return without error, at least one `Removed`, the task ends
     `Ready` exactly once).
+11. **Tenure boundary** (`TrackerTenureBoundaryContract` in `:test-fixtures`,
+    inherited by `TrackerCirculationContract`, the class both shipped adapter
+    specs extend) — after park, human return and a new claim, `fetchTask` still
+    reports `PARK`, and still does after a second return and claim; a reaped
+    claim followed by a new claim reports `STALE_CLAIM_REMOVED`; and park,
+    finish, abort and stale-claim removal each report their own kind (see §5).
 
 `InMemoryTracker` (`adapter/tracker/inmemory/InMemoryTracker.java`) is the
 **worked reference implementation** — read it as the model of "the smallest
@@ -464,6 +470,32 @@ translation preserves the required semantics.
   by core from the facts you report (`delay = base × 2^(count−1)`, capped) —
   baking any of that arithmetic into your adapter duplicates policy that can
   drift from core's.
+- **Tenure boundary (`TrackerTask.tenureBoundary`).** `fetchTask` reports the
+  kind of the **last boundary marker on the task's whole thread** — `PARK`,
+  `FINISH`, `ABORT` or `STALE_CLAIM_REMOVED` — in posting order, or `null` when
+  the thread carries none. Claim markers posted after it do **not** erase it:
+  park, human return, new claim still reads `PARK`. Core reads it to confirm a
+  park or finish receipt after a pickup that has already claimed the task again
+  — the task's state no longer shows the park by then, but the thread does.
+  Derive it as follows:
+  - **From your parsed structural markers**, never from free text: a human
+    comment that happens to say "parked" is not a boundary.
+  - **Over the whole thread**, not from the newest claim onward.
+  - **The last boundary-kind marker wins**, whatever claims, acks, notes or
+    progress markers follow it.
+  - **With no extra tracker call**: derive it from the thread `fetchTask`
+    already reads for the other facts (GitHub: `GithubHistoryFactReader`
+    beside `finished`/`returned`, from the same parsed marker list;
+    in-memory: the last such entry of the task's recorded thread).
+
+  It is deliberately **not** the claim-scoped boundary the shape facts carry
+  (`TrackerFacts.latestBoundary`). That one reports only a boundary posted
+  after the newest claim and becomes `null` as soon as a new claim follows —
+  the reaper's view of the current tenure. Reusing it for `tenureBoundary`
+  makes every receipt probe after a re-claim read `null` and wrongly conclude
+  the park never landed. Keep the two derivations separate even though both
+  walk the same markers. The contract feature that pins this is
+  `TrackerTenureBoundaryContract` (property 11 in §3).
 
 ## 6. Config-subsection ownership
 

@@ -52,6 +52,27 @@ the marker — a one-directional declaration is a finding.
   the pair at both ends in the same change.
 - A change adding a *third* implementation must extract the abstraction.
 
+## A new consumer of a declared pair
+
+A declared pair is two implementations that were each right for the consumers they had.
+A change that adds a **consumer** to a rule implemented as a pair chooses the end in its
+`design.md` with the reason, and states whether both ends hold under the consumer's conditions
+— the writers it may have at once, the processes it runs from, the medium it needs, the claim
+it holds or does not hold. "Different media" is not a reason when the consumer's condition is
+about something else. An end that fails the condition is the trigger for preference 1 — collapse
+the pair — in the same change, not a reason to pick the other end for one medium.
+
+The failure this exists for: `DeliveredCleanup` (`fix-terminal-receipt-convergence`) became a
+consumer of `CleanupCommit` ↔ `GitObjectsTerminalCommits.cleanUp` with a condition neither end
+had been asked — many writers from different processes, under no claim. It took the host end
+for the host and the container end for the container. The host end serialised on the task
+worktree's index lock, one step before the compare-and-swap that the "both media are CAS" risk
+row relied on, and the loser failed instead of standing down (task 3.3, 2026-10-14). The
+container end needed only a `.git`, which the host has. Design D8 of the same change collapsed
+the pair: both media now write the cleanup commit through `GitObjectsTerminalCommits.cleanUp`,
+`GitTaskRepository` opens its `GitObjects` over its own clone's `.git`, `CleanupCommit` is
+deleted, and `DeliveredCleanupRaceSpec` races two host cleanups on real threads.
+
 ## Initial registry
 
 Known pairs predating this rule. Remove a row once both ends carry the
@@ -99,7 +120,7 @@ navigational index, so these rows stay listed for as long as the pair does.
 | End A                                           | End B                                                | Synchronized invariant                                                                                                                                                                                                                                                                                                                                                     |
 |-------------------------------------------------|------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `adapters/agent/.../HostRoundEnvironmentSource` | `adapters/git/.../SandboxRoundEnvironmentSource`     | round environment contract per mode: both open/close rounds with a decision-file handle, a round listener, and close-round semantics consistent with FR4/FR21; `adapters/agent` and `adapters/git` share no compile edge.                                                                                                                                                  |
-| `build-logic/.../build/AdversarialGitConfig`    | `test-fixtures/.../adapter/git/AdversarialGitConfig` | the variable (`GIT_CONFIG_GLOBAL`) and the committed file path (`test-fixtures/src/main/resources/adversarial-gitconfig`) the test build hands git, and the ref-format variable and value (`GIT_DEFAULT_REF_FORMAT=reftable`, design D13 of `tighten-spec-contract` as amended 2026-10-13) (design D11 of `own-git-transfer-argv`); the build cannot load a test fixture, so both spell the constants. `AdversarialGitConfigSpec` in `:bootstrap` pins the identity: what git lists as global equals the resource, and the variable the test JVM sees equals the fixture's backend. |
+| `build-logic/.../buildlogic/AdversarialGitConfig`    | `test-fixtures/.../adapter/git/AdversarialGitConfig` | the variable (`GIT_CONFIG_GLOBAL`) and the committed file path (`test-fixtures/src/main/resources/adversarial-gitconfig`) the test build hands git, and the ref-format variable and value (`GIT_DEFAULT_REF_FORMAT=reftable`, design D13 of `tighten-spec-contract` as amended 2026-10-13) (design D11 of `own-git-transfer-argv`); the build cannot load a test fixture, so both spell the constants. `AdversarialGitConfigSpec` in `:bootstrap` pins the identity: what git lists as global equals the resource, and the variable the test JVM sees equals the fixture's backend. |
 | `adapters/git/src/test/.../ScriptedGit`         | `test-fixtures/src/main/resources/stand-in/stand-in.sh` | the argv-prefix match rule: the leading `-c <name>=<value>` pairs dropped, each prefix word a shell glob (`*`, `?`) against the argument at its position, first matching row wins, an unmatched invocation refused rather than defaulted (design D27 of `supervise-daemon-loops-and-embed-dashboard`). One is Groovy in a module's test source set, the other a POSIX script in a test resource; neither can name the other with a `{@link}`. |
 | `adapters/.../tracker/inmemory/ClaimLeases`     | `adapters/github/.../tracker/github/GithubIndexRepair` | the index-repair marker's shape phrase (`observedShape`): `claim pending` when no boundary follows the newest claim, `index lagging behind the <boundary> marker` otherwise, so both adapters name the observed shape alike (scenario tracker/tracker-port "The repair marker names the observed shape"; finding F81 of `tighten-spec-contract`). `:adapters` and `:adapters:github` share no compile edge, and moving the phrase into `:gnomish-plugin-api` would grow the published surface for a rendering choice. `InMemoryRepairMarkerSpec` and `GithubRepairMarkerSpec` pin each end. |
-| `build-logic/.../build/TestTimeInjectionCheck`  | `bootstrap/.../architecture/TimeSourceOwnerBoundarySpec` | the real-time literal set (`Clock.systemUTC(`, `Clock.systemDefaultZone(`, `InstantSource.system(`, `Instant.now(`, `new SystemClock(`, `new ThreadSleeper(`, `.system(`), the test side and the production side of one rule (design D17, D20 of `supervise-daemon-loops-and-embed-dashboard`); the build cannot load a test class, so both spell the set. The spec's identity feature reads the check's `REAL_TIME` block from its source and fails when the two sets differ. |
+| `build-logic/.../buildlogic/TestTimeInjectionCheck`  | `bootstrap/.../architecture/TimeSourceOwnerBoundarySpec` | the real-time literal set (`Clock.systemUTC(`, `Clock.systemDefaultZone(`, `InstantSource.system(`, `Instant.now(`, `new SystemClock(`, `new ThreadSleeper(`, `.system(`), the test side and the production side of one rule (design D17, D20 of `supervise-daemon-loops-and-embed-dashboard`); the build cannot load a test class, so both spell the set. The spec's identity feature reads the check's `REAL_TIME` block from its source and fails when the two sets differ. |

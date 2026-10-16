@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.domain.branch;
 
 /**
  * The classification of a task branch tip: its file set and envelope versions mapped to exactly one
- * name from a closed set of eleven. Sealed, so every reader switches without a default branch and
+ * name from a closed set of twelve. Sealed, so every reader switches without a default branch and
  * adding a shape fails the build until each reader names it (FR2).
  *
  * <p>The shapes and their meanings are owned by the {@code task-branch-contract} capability, in its
@@ -10,10 +10,10 @@ package com.github.oinsio.gnomish.domain.branch;
  * restate it. The recovery owner and roll-forward/discard disposition per shape are owned by {@code
  * docs/adr/0003-crash-consistency.md} and realized by {@link #recoveryOwner()} / {@link
  * #disposition()}, which keep the whole mapping readable in one place rather than scattered over
- * ten bodies.
+ * twelve bodies.
  *
  * <p>Implements FR1, FR2, FR15 of harden-task-branch-contract; FR1, FR2 of fix-claim-epoch-fence;
- * FR11 of make-checkpoint-gate-durable.
+ * FR11 of make-checkpoint-gate-durable; FR10 of fix-terminal-receipt-convergence.
  */
 public sealed interface BranchShape {
 
@@ -66,6 +66,21 @@ public sealed interface BranchShape {
     record UnsupportedVersion(String fileName, int observedVersion, int supportedVersion) implements BranchShape {}
 
     /**
+     * The tip carries a factory envelope and the clone holds no register for the task — as an
+     * operator's or an IDE's {@code git fetch}, or a {@code git clone}, leaves a task branch. A state
+     * of the clone, not of the branch: nothing is read at a register that is not there, and the
+     * touchpoint fetch, which lands the register beside the branch, is what converges it (design D13
+     * of fix-terminal-receipt-convergence). Never {@link Unknown}, which is a present and diverged
+     * pair, and never {@link Bare}, which carries no envelope.
+     *
+     * <p>Implements FR10 of fix-terminal-receipt-convergence.
+     *
+     * @param register the register's ref name, which resolved to nothing in this clone
+     * @param tip the branch tip's id
+     */
+    record Unregistered(String register, String tip) implements BranchShape {}
+
+    /**
      * Content is unreadable or self-contradictory.
      *
      * @param reason names the offending file and the observed versus expected content
@@ -91,9 +106,8 @@ public sealed interface BranchShape {
             case Parked() -> RecoveryOwner.TERMINAL_TRANSITION;
             case CompletedUncleaned() -> RecoveryOwner.COMPLETION_FINISH;
             case Delivered() -> RecoveryOwner.NONE;
-            case UnsupportedVersion ignoredVersion -> RecoveryOwner.RECOVERY_BUDGET;
-            case Corrupt ignoredCorrupt -> RecoveryOwner.RECOVERY_BUDGET;
-            case Unknown ignoredUnknown -> RecoveryOwner.RECOVERY_BUDGET;
+            case Unregistered _ -> RecoveryOwner.TOUCHPOINT_FETCH;
+            case UnsupportedVersion _, Corrupt _, Unknown _ -> RecoveryOwner.RECOVERY_BUDGET;
         };
     }
 
@@ -108,18 +122,19 @@ public sealed interface BranchShape {
             case Bare(), Created(), InProgress(), AwaitingApproval(), Parked(), Answered(), CompletedUncleaned() ->
                 RecoveryDisposition.ROLL_FORWARD;
             case Delivered() -> RecoveryDisposition.TERMINAL;
-            case UnsupportedVersion ignoredVersion -> RecoveryDisposition.QUARANTINE;
-            case Corrupt ignoredCorrupt -> RecoveryDisposition.QUARANTINE;
-            case Unknown ignoredUnknown -> RecoveryDisposition.QUARANTINE;
+            // What a reader does after its own read: a branch still Unregistered then has no
+            // register to roll forward from (design D13 of fix-terminal-receipt-convergence).
+            case Unregistered _, UnsupportedVersion _, Corrupt _, Unknown _ -> RecoveryDisposition.QUARANTINE;
         };
     }
 
     /**
      * Whether the tip of a branch of this shape carries the {@code .gnomish-task/} envelopes an
-     * inspector can render a report from (FR16). The three quarantine shapes carry nothing
-     * trustworthy, a {@link Bare} branch carries nothing at all, and a {@link Delivered} branch had
-     * its factory files stripped by the cleanup commit — for those four, inspection reports the
-     * shape itself instead of a report built from files that are absent or unreadable.
+     * inspector can render a report from (FR16). The four quarantine shapes carry nothing
+     * trustworthy — an {@link Unregistered} tip has no register to read the envelope at — a {@link
+     * Bare} branch carries nothing at all, and a {@link Delivered} branch had its factory files
+     * stripped by the cleanup commit — for those six, inspection reports the shape itself instead of
+     * a report built from files that are absent or unreadable.
      *
      * <p>One owner for the question: the branch reader and the branch lister both ask it, and two
      * copies of this table would be a manual synchronization pair with nothing to keep them in step
@@ -131,9 +146,26 @@ public sealed interface BranchShape {
         return switch (this) {
             case Created(), InProgress(), AwaitingApproval(), Parked(), Answered(), CompletedUncleaned() -> true;
             case Bare(), Delivered() -> false;
-            case UnsupportedVersion ignoredVersion -> false;
-            case Corrupt ignoredCorrupt -> false;
-            case Unknown ignoredUnknown -> false;
+            case Unregistered _, UnsupportedVersion _, Corrupt _, Unknown _ -> false;
+        };
+    }
+
+    /**
+     * Whether the {@code serve} janitor's branch pass hands a branch of this shape to the claimless
+     * owner — the one table of that question (design D5, D13 of fix-terminal-receipt-convergence).
+     * Two shapes qualify: {@link CompletedUncleaned}, whose cleanup is owed, and {@link
+     * Unregistered}, which only the owner's touchpoint fetch can classify by its content. Every
+     * other shape is left alone: its owner is a claimed run, or it has nothing left to converge.
+     *
+     * <p>Implements FR10 of fix-terminal-receipt-convergence.
+     *
+     * @return {@code true} when the branch pass forwards a branch of this shape
+     */
+    default boolean forwardedByBranchPass() {
+        return switch (this) {
+            case CompletedUncleaned(), Unregistered _ -> true;
+            case Bare(), Created(), InProgress(), AwaitingApproval(), Parked(), Answered(), Delivered() -> false;
+            case UnsupportedVersion _, Corrupt _, Unknown _ -> false;
         };
     }
 
@@ -159,9 +191,7 @@ public sealed interface BranchShape {
         return switch (this) {
             case Created(), InProgress(), AwaitingApproval(), Answered(), Delivered() -> true;
             case Bare(), Parked(), CompletedUncleaned() -> false;
-            case UnsupportedVersion ignoredVersion -> false;
-            case Corrupt ignoredCorrupt -> false;
-            case Unknown ignoredUnknown -> false;
+            case Unregistered _, UnsupportedVersion _, Corrupt _, Unknown _ -> false;
         };
     }
 }

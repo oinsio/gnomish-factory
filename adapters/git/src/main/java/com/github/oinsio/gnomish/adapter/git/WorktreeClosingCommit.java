@@ -57,7 +57,7 @@ final class WorktreeClosingCommit {
      * @return the commit that landed, or the step that failed
      */
     Outcome commit(Path worktree, String taskId, String message) {
-        String branchRef = FactoryRegister.branchRef(taskId);
+        String branchRef = TaskBranchRefs.head(taskId);
         GitCommandResult base = runner.run(worktree, "rev-parse", branchRef, branchRef + "^{tree}");
         if (!base.succeeded()) {
             return new Outcome.Failed("git rev-parse " + branchRef, base.failureDetail("task branch read"));

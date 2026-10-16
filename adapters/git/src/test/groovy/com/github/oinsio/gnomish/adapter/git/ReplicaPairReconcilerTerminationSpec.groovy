@@ -41,7 +41,7 @@ class ReplicaPairReconcilerTerminationSpec extends Specification {
         thrown instanceof BranchTipUnavailableException
     }
 
-    // Scenario: build/quality-gates / A termination spec interrupts a blocked call, not a sleep
+    // Scenario: build-system/quality-gates / A termination spec interrupts a blocked call, not a sleep
     def "FR8: an interrupted ancestry probe is unavailability, never DIVERGED — the discard needs a compared pair"() {
         when:
         def thrown = interruptDuring(stallingOn('merge-base'))

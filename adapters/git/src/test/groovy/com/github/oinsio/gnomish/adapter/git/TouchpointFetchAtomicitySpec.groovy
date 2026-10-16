@@ -34,7 +34,7 @@ class TouchpointFetchAtomicitySpec extends Specification implements BareGitRepoF
         seedClone(tempDir, origin.toString(), clone, '--branch', BRANCH, '--single-branch')
         def touchpoint = new TouchpointFetch(runner)
         def branchRefspec = new Refspec("${BRANCH}:${TRACKING}")
-        assert touchpoint.fetch(clone, TASK, branchRefspec, FactoryRegister.fetchedInPlace(TASK)).exitCode() == 0
+        assert touchpoint.fetch(clone, TASK, branchRefspec, FactoryRegisterRefs.fetchedInPlace(TASK)).exitCode() == 0
         assert gitOutput(clone, 'rev-parse', TRACKING) == first
         assert gitOutput(clone, 'rev-parse', REGISTER) == first
 
@@ -46,7 +46,7 @@ class TouchpointFetchAtomicitySpec extends Specification implements BareGitRepoF
         assert runner.run(writer, 'push', '--force', 'origin', "${rewrite}:${REGISTER}").exitCode() == 0
 
         when:
-        def result = touchpoint.fetch(clone, TASK, branchRefspec, FactoryRegister.fetchedInPlace(TASK))
+        def result = touchpoint.fetch(clone, TASK, branchRefspec, FactoryRegisterRefs.fetchedInPlace(TASK))
 
         then: 'the fetch reports the rejection'
         result.exitCode() != 0

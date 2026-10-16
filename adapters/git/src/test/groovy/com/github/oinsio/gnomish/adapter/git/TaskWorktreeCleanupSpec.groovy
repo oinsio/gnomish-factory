@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -46,7 +47,7 @@ class TaskWorktreeCleanupSpec extends Specification implements BareGitRepoFixtur
     private Path setUpWorktree(String taskId) {
         def result = branchCreator.createBranch(cloneDir, taskId, TaskStart.commit(cloneDir, 'HEAD'))
         def branchName = (result as BranchCreationResult.Created).branchName()
-        worktreeManager.ensureWorktree(taskId, branchName)
+        worktreeManager.ensureWorktree(new BranchAdoption.AlreadyLocal(taskId))
     }
 
     // Scenario: git/git-task-persistence / Completion removes the working copy and keeps the branch

@@ -57,7 +57,7 @@ class EnvelopeRegisterOwnerSpec extends Specification {
         'RequiredTaskState.java': 'writer base: state.json at the register for the lifecycle rewrite (RegisterBase)',
         'AdmissionRule.java': 'admission rule: the files the factory\'s own in-box state commit may change',
         'TaskLifecycleCommitWriter.java': 'writer and writer base of the container medium, at the clone\'s branch',
-        'GitObjectsTerminalCommits.java': 'writer guard of the container medium: is the envelope still there to clear',
+        'GitObjectsTerminalCommits.java': 'writer guard of the bare-object tail commits: is the envelope still there to clear',
         'HarvestedStateCommitCheck.java': 'writer self-check: the harvested state commit carries what was written',
     ].collectEntries { k, v -> [(GIT + k): v] }
 
@@ -93,7 +93,6 @@ class EnvelopeRegisterOwnerSpec extends Specification {
             'SnapshotTipCheck.java',
         ]
         'RegisterBase.' | [
-            'CleanupCommit.java',
             'EnvelopeRestore.java',
             'RequiredTaskJson.java',
             'StateFileWrite.java',

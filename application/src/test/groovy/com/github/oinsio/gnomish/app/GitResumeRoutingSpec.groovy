@@ -6,7 +6,9 @@ import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.*
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.project.RegisteredClone
+import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.Position
@@ -67,19 +69,31 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         Optional.of(TaskState.atStageStart('build'))
     }
 
+    /** The tip's classified shape, as the delivered cleanup reads it (FR4 of fix-terminal-receipt-convergence). */
+    Closure<BranchShape> shapeRead = {
+        new BranchShape.InProgress()
+    }
+
+    TaskEnvironmentDisposal worktreeDisposal = Mock(TaskEnvironmentDisposal)
+
     def setup() {
         cloneDir = tempDir.resolve('my-project')
         registeredClone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), cloneDir)
         worktree = TaskWorktreePath.resolve(registeredClone, 'PROJ-1')
         Files.createDirectories(worktree)
         branches.locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
-        branches.classifyShape(_, _) >> new BranchShape.InProgress()
-        worktrees.ensureWorktree(_, _, _) >> worktree
+        branches.adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+            new BranchAdoption.AlreadyLocal(taskId)
+        }
+        branches.classifyShape(_, _) >> { shapeRead.call() }
+        worktrees.ensureWorktree(_, _) >> worktree
+        worktrees.environmentDisposal(registeredClone) >> worktreeDisposal
         worktrees.salvage(_) >> salvager
         store.taskRepository(_) >> lifecycleStore
         store.attemptPersistence(_, _) >> { persistence }
         store.readRecordedState(_, _) >> { stateRead.call() }
         store.readTaskRecord(_, _) >> { Optional.ofNullable(record) }
+        branches.readDelivered(_, _) >> new DeliveredBranchState(freshRecord().context(), TaskState.atStageStart('build'))
     }
 
     ScriptedConsoleIO console = unreadableConsole()
@@ -216,20 +230,74 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         executor.requests.size() == 1
     }
 
-    // FR8, UX2: outcome `completed` prints the final status summary and stops — no engine round, no
-    // further worktree or branch write. Re-running a delivered task would be paid work for nothing.
-    def "reports a completed branch without running the engine or writing anything"() {
+    // FR8, UX2: a completed task prints the final status summary and stops — no engine round, no
+    // branch write. Re-running a delivered task would be paid work for nothing. FR4 of
+    // fix-terminal-receipt-convergence (task 3.4): a tip whose cleanup already landed carries no
+    // envelope; the classifier names it Delivered, the summary comes from the history reader take
+    // uses, and the worktree the bootstrap materialized over that tip is disposed again.
+    def "reports a completed branch whose cleanup already landed without running the engine or writing anything"() {
         given:
-        record = recordWith(new RecordedOutcome.Completed())
+        record = null
+        shapeRead = {
+            new BranchShape.Delivered()
+        }
 
         when:
         resume()
 
         then: 'the summary reached the operator through the run\'s own console owner'
+        console.printed.join('').contains('Task: PROJ-1')
+        executor.requests.isEmpty()
+        0 * lifecycleStore._
+        0 * salvager._
+
+        and: 'only the worktree this resume materialized goes again'
+        1 * worktreeDisposal.dispose('PROJ-1')
+    }
+
+    // FR9 of make-run-headless over the Delivered route (task 3.4): a --decision over a task whose
+    // cleanup already landed is refused as over any completed outcome, before anything is printed.
+    def "refuses a --decision over a completed branch whose cleanup already landed, writing nothing"() {
+        given:
+        record = null
+        shapeRead = {
+            new BranchShape.Delivered()
+        }
+
+        when:
+        resume('patch it')
+
+        then:
+        def e = thrown(UsageException)
+        e.message.contains('completed')
+        console.printed.isEmpty()
+        0 * lifecycleStore._
+        0 * worktreeDisposal._
+    }
+
+    // FR4 of fix-terminal-receipt-convergence: a completed tip that still carries its envelope gets
+    // the cleanup commit through the one cleanup owner take uses, then loses its worktree — before
+    // the summary is printed, so the report states a settled task.
+    def "FR4: a completed branch whose cleanup was lost converges before the report"() {
+        given:
+        record = recordWith(new RecordedOutcome.Completed())
+        shapeRead = {
+            new BranchShape.CompletedUncleaned()
+        }
+
+        when:
+        resume()
+
+        then:
+        1 * lifecycleStore.finishCleanup('PROJ-1')
+
+        then:
+        1 * worktreeDisposal.dispose('PROJ-1')
+
+        and:
         console.printed.join('').contains('PROJ-1')
         executor.requests.isEmpty()
         0 * lifecycleStore.recordOutcome(_, _, _)
-        0 * salvager._
     }
 
     // FR5, FR8, UX2; FR3, NFR-R1 of make-run-headless: outcome `escalated` with --decision appends
@@ -458,9 +526,9 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         0 * lifecycleStore.recordOutcome(_, _, _)
     }
 
-    // FR1, design D2 of fix-envelope-medium: on the manual-run paths the envelope was committed by
-    //     this very run, so an empty read at HEAD is an invariant violation, not a route. There is
-    //     no delivered arm here — that one belongs to the tracker-driven mechanics — so each site
+    // FR1, design D2 of fix-envelope-medium: on the manual-run paths an empty read at HEAD is an
+    //     invariant violation, not a route — unless the classifier names the tip Delivered (task 3.4
+    //     of fix-terminal-receipt-convergence, above); here it names a live shape. Each site
     //     reports the application's own impossible-state exception, naming the task and the
     //     worktree whose HEAD should have carried the file.
     def "FR1: #site reports an impossible state when the tip carries no envelope"() {

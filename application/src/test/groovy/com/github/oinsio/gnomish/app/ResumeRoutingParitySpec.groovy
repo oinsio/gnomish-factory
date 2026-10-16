@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
@@ -102,8 +102,11 @@ class ResumeRoutingParitySpec extends Specification implements RunChainFakes {
     private TaskBranchGit branches() {
         Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+            adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+                new BranchAdoption.AlreadyLocal(taskId)
+            }
             classifyShape(_, _) >> new BranchShape.InProgress()
-            ensureLocalTaskBranch(_, _) >> true
+            ensureLocalTaskBranch(_, _) >> new BranchAdoption.AlreadyLocal('PROJ-1')
             fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
             readDelivered(_, _) >> new DeliveredBranchState(
                     new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), []), RECORDED)
@@ -122,7 +125,7 @@ class ResumeRoutingParitySpec extends Specification implements RunChainFakes {
             readTaskRecord(_, _) >> Optional.ofNullable(record)
         }
         def worktrees = Stub(TaskWorktreeGit) {
-            ensureWorktree(_, _, _) >> worktree
+            ensureWorktree(_, _) >> worktree
             salvage(_) >> Stub(WorktreeSalvager)
         }
         def git = new TaskGit(store, branches(), worktrees, UnaryOperator.identity(), resumingBaseRefGit(), new ClaimEpochBook())
@@ -146,7 +149,7 @@ class ResumeRoutingParitySpec extends Specification implements RunChainFakes {
                 record
             }
             readFinalState() >> RECORDED
-            taskRepository() >> Stub(TaskRepository)
+            taskRepository() >> Stub(TaskLifecycleStore)
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
             pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)

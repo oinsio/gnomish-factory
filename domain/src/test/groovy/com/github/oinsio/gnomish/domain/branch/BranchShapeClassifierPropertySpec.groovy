@@ -81,7 +81,7 @@ class BranchShapeClassifierPropertySpec extends Specification {
         shapes.every { it instanceof BranchShape }
         shapes.every { it.recoveryOwner() != null && it.disposition() != null }
 
-        and: 'no generated tip is left unnamed — every shape reached is one of the eleven'
+        and: 'no generated tip is left unnamed — every shape reached is one of the twelve'
         shapes.collect {
             it.class
         }.toSet().every {
@@ -114,11 +114,12 @@ class BranchShapeClassifierPropertySpec extends Specification {
             BranchShape.Answered,
             BranchShape.CompletedUncleaned,
             BranchShape.Delivered,
+            BranchShape.Unregistered,
             BranchShape.UnsupportedVersion,
             BranchShape.Corrupt,
             BranchShape.Unknown
         ])
-        reached.size() == 11
+        reached.size() == 12
     }
 
     // FR11 of make-checkpoint-gate-durable: whenever the tip is readable, carries task.json and is

@@ -63,15 +63,8 @@ record HostResumeMechanics(
     }
 
     @Override
-    public void finishCleanup(Path cloneDir, ResumeBootstrap branch) {
-        var taskRepository = git.store().taskRepository(registeredClone);
-        // Read before the cleanup commit: it removes .gnomish-task/ from the tip, and a read made
-        // after it — the reads resolve at HEAD — finds nothing, which the pre-contract fallback
-        // in readFinalState would
-        // dress up as a fabricated first-stage state for a task that is already delivered.
-        var outcome = new TaskOutcome.Completed(readFinalState(branch));
-        taskRepository.finishCleanup(branch.taskId());
-        git.worktrees().cleanUp(cloneDir, branch.worktreePath(), outcome);
+    public DeliveredCleanup deliveredCleanup(ResumeBootstrap branch) {
+        return DeliveredCleanup.host(git, registeredClone);
     }
 
     @Override

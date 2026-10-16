@@ -54,6 +54,11 @@ import java.util.Optional;
  * without fetching comments for that branch: a gone issue has no meaningful
  * finished fact from this read.
  *
+ * <p>The tenure boundary is derived from the same fetched {@code markers} by {@link
+ * GithubHistoryFactReader#deriveTenureBoundary}: the thread's last boundary marker, whatever claims
+ * follow it — no extra call (FR1, NFR-C1 of fix-terminal-receipt-convergence). A {@link
+ * TrackerTaskState.Gone} result reports none, since that branch fetches no comments.
+ *
  * <p>Both reads {@code fetchTask} makes — the issue and its comments — go
  * through the shared {@link GithubConditionalRequestCache}, so the round-boundary
  * revocation check (FR15) that re-reads an unchanged task pays no rate-limit
@@ -71,7 +76,8 @@ import java.util.Optional;
  * TrackerTaskState.Gone} result carries no designators for the same reason it carries no abort
  * facts: a closed or missing issue has no labels to read.
  *
- * <p>Implements FR2, FR5, FR15, NFR-P1 of add-tracker-port; FR3 of add-base-ref-resolution.
+ * <p>Implements FR2, FR5, FR15, NFR-P1 of add-tracker-port; FR3 of add-base-ref-resolution; FR1,
+ * NFR-C1 of fix-terminal-receipt-convergence.
  *
  * @param cache the shared conditional-request cache; reused across polls so this fetcher's
  *     per-issue and per-comment-thread ETags survive between round-boundary checks (NFR-P1)
@@ -113,7 +119,13 @@ public record GithubTaskFetcher(
         TrackerTaskState state = stateFrom(detail, markers);
         boolean finished = GithubHistoryFactReader.deriveFinished(markers);
         return new TrackerTask(
-                ref, snapshot, state, abortFacts, finished, designatorRules.extract(detail.labelNames()));
+                ref,
+                snapshot,
+                state,
+                abortFacts,
+                finished,
+                designatorRules.extract(detail.labelNames()),
+                GithubHistoryFactReader.deriveTenureBoundary(markers));
     }
 
     /** The instance of the last claim marker in the thread, or the placeholder when there is none. */

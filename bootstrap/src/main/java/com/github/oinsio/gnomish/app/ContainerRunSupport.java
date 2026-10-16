@@ -15,7 +15,6 @@ import com.github.oinsio.gnomish.adapter.git.RemoteAttemptDelivery;
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
-import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
@@ -168,7 +167,7 @@ final class ContainerRunSupport implements SandboxRunSupport {
      * best-effort lifecycle push (FR1 of fix-lifecycle-push).
      */
     @Override
-    public TaskRepository taskRepository() {
+    public TaskLifecycleStore taskRepository() {
         return taskRepository;
     }
 

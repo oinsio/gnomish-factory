@@ -19,6 +19,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
 
     private final GitProcessRunner runner = new GitProcessRunner()
     private final RemoteBranchTip remoteTip = new RemoteBranchTip(runner)
+    private static final String TASK_ID = 'task-1'
     private static final String BRANCH = 'gnomish/task-1'
 
     private Path clone
@@ -49,7 +50,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
         pushBranch()
 
         expect:
-        remoteTip.read(clone, BRANCH) == Optional.of(pushed)
+        remoteTip.read(clone, TASK_ID) == Optional.of(pushed)
     }
 
     def "a branch origin does not carry reads as empty"() {
@@ -57,7 +58,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
         commitChange('one')
 
         expect:
-        remoteTip.read(clone, BRANCH) == Optional.empty()
+        remoteTip.read(clone, TASK_ID) == Optional.empty()
     }
 
     def "an unreachable origin reads as empty rather than throwing"() {
@@ -66,7 +67,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
         gitOutput(unreachable, 'remote', 'add', 'origin', tempDir.resolve('nowhere.git').toString())
 
         expect:
-        remoteTip.read(unreachable, BRANCH) == Optional.empty()
+        remoteTip.read(unreachable, TASK_ID) == Optional.empty()
     }
 
     def "a commit at the delivered tip, and its ancestors, are carried by origin"() {
@@ -76,8 +77,8 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
         pushBranch()
 
         expect:
-        remoteTip.carries(clone, BRANCH, second)
-        remoteTip.carries(clone, BRANCH, first)
+        remoteTip.carries(clone, TASK_ID, second)
+        remoteTip.carries(clone, TASK_ID, first)
     }
 
     def "a commit made after the last delivery is not carried"() {
@@ -87,7 +88,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
         def undelivered = commitChange('two')
 
         expect:
-        !remoteTip.carries(clone, BRANCH, undelivered)
+        !remoteTip.carries(clone, TASK_ID, undelivered)
     }
 
     def "nothing is carried by a branch origin does not have"() {
@@ -95,7 +96,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
         def local = commitChange('one')
 
         expect:
-        !remoteTip.carries(clone, BRANCH, local)
+        !remoteTip.carries(clone, TASK_ID, local)
     }
 
     // FR7 of bound-subprocess-commands: the three-way answer a caller needs when its push did not
@@ -107,7 +108,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
         pushBranch()
 
         expect:
-        remoteTip.confirm(clone, BRANCH, delivered) == RemoteBranchTip.Carriage.CARRIES
+        remoteTip.confirm(clone, TASK_ID, delivered) == RemoteBranchTip.Carriage.CARRIES
     }
 
     def "FR7: an answered read that does not hold the commit is a positive absence"() {
@@ -117,10 +118,10 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
         def undelivered = commitChange('two')
 
         expect:
-        remoteTip.confirm(clone, BRANCH, undelivered) == RemoteBranchTip.Carriage.ABSENT
+        remoteTip.confirm(clone, TASK_ID, undelivered) == RemoteBranchTip.Carriage.ABSENT
 
         and: 'a branch origin does not carry at all is still an answer, so still absence'
-        remoteTip.confirm(clone, 'gnomish/never-pushed', undelivered) == RemoteBranchTip.Carriage.ABSENT
+        remoteTip.confirm(clone, 'never-pushed', undelivered) == RemoteBranchTip.Carriage.ABSENT
     }
 
     def "FR7: a remote that never answered is unknown, not absent"() {
@@ -129,7 +130,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
         gitOutput(unreachable, 'remote', 'add', 'origin', tempDir.resolve('nowhere.git').toString())
 
         expect:
-        remoteTip.confirm(unreachable, BRANCH, '3333333333333333333333333333333333333333') ==
+        remoteTip.confirm(unreachable, TASK_ID, '3333333333333333333333333333333333333333') ==
                 RemoteBranchTip.Carriage.UNKNOWN
     }
 
@@ -140,7 +141,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
         pushDescendantFromAnotherClone()
 
         expect: 'the tip is not in the local object database, so nothing can claim absence'
-        remoteTip.confirm(clone, BRANCH, delivered) == RemoteBranchTip.Carriage.UNKNOWN
+        remoteTip.confirm(clone, TASK_ID, delivered) == RemoteBranchTip.Carriage.UNKNOWN
     }
 
     private void pushDescendantFromAnotherClone() {

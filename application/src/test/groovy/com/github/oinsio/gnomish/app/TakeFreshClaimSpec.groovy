@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
+import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -14,8 +16,10 @@ import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.project.RegisteredClone
+import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.Verdict
@@ -78,7 +82,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         tracker.fetchTask(_) >> heldByUs()
         def attached = []
         UnaryOperator<RoundEnvironmentSource> marker = { rounds -> rounds }
-        def git = new TaskGit(store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), marker, refreshingBaseRefGit(), new ClaimEpochBook())
+        def git = new TaskGit(store, freshBranches(), Mock(TaskWorktreeGit), marker, refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         new TakeFreshClaim(slotWiring(
@@ -100,6 +104,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def lifecycleStore = Mock(TaskLifecycleStore)
         def worktrees = Mock(TaskWorktreeGit)
         def branches = Mock(TaskBranchGit)
+        def disposal = Mock(TaskEnvironmentDisposal)
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> lifecycleStore
             attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
@@ -130,12 +135,23 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         1 * lifecycleStore.createTask({
             it.taskId() == 'PROJ-1'
         }, LAW_COMMIT, DEFAULT_BRANCH_PIN, _)
+
+        then: 'FR8 of fix-terminal-receipt-convergence: the created branch is answered local by the adoption owner'
+        1 * branches.locate(cloneDir, 'PROJ-1') >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        1 * branches.adopt(cloneDir, 'PROJ-1', new BranchLocation.Local('refs/heads/gnomish/PROJ-1')) >>
+                new BranchAdoption.AlreadyLocal('PROJ-1')
+
+        then:
         1 * lifecycleStore.recordOutcome('PROJ-1', _ as TaskOutcome.Completed, TrackerWrite.OWED)
         1 * tracker.finish(REF, _)
 
-        then: 'FR10: the destructive tail — cleanup commit, then worktree disposal — follows the write'
+        then: 'FR10: the destructive tail follows the write — through the one delivered cleanup (FR4 of fix-terminal-receipt-convergence)'
+        1 * branches.classifyShape(cloneDir, 'PROJ-1') >> new BranchShape.CompletedUncleaned()
+        1 * worktrees.environmentDisposal(registeredClone) >> disposal
         1 * lifecycleStore.finishCleanup('PROJ-1')
-        1 * worktrees.cleanUp(cloneDir, _, _ as TaskOutcome.Completed)
+
+        then:
+        1 * disposal.dispose('PROJ-1')
 
         and: 'the engine really ran the stage, and the result is a delivery'
         executor.requests.size() == 1
@@ -158,7 +174,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def executor = new ScriptedExecutor([completedRound()])
         tracker.fetchTask(_) >> heldByUs()
         def git = new TaskGit(
-                store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), UnaryOperator.identity(),
+                store, freshBranches(), Mock(TaskWorktreeGit), UnaryOperator.identity(),
                 refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
@@ -189,7 +205,15 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         and:
         def git = new TaskGit(
-                store, Stub(TaskBranchGit), Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                store, Stub(TaskBranchGit) {
+                    locate(_, _) >> { Path clone, String taskId ->
+                        new BranchLocation.Local('refs/heads/gnomish/' + taskId)
+                    }
+                    adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+                        new BranchAdoption.AlreadyLocal(taskId)
+                    }
+                    classifyShape(_, _) >> new BranchShape.CompletedUncleaned()
+                }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         new TakeFreshClaim(slotWiring(
@@ -218,7 +242,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         }
         tracker.fetchTask(_) >> heldByUs()
         def git = new TaskGit(
-                store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                store, freshBranches(), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         new TakeFreshClaim(slotWiring(
@@ -257,7 +281,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         and:
         def git = new TaskGit(
-                store, Mock(TaskBranchGit), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                store, freshBranches(), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         def result = new TakeFreshClaim(slotWiring(
@@ -268,5 +292,21 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         0 * lifecycleStore.createTask(*_)
         1 * tracker.park(REF, _, _)
         result instanceof TakeResult.AwaitingHuman
+    }
+
+    /**
+     * The task-branch port of a fresh claim: the adoption owner answers the created branch already
+     * local, and the delivered cleanup reads an already-cleaned tip.
+     */
+    private TaskBranchGit freshBranches() {
+        Stub(TaskBranchGit) {
+            classifyShape(_, _) >> new BranchShape.Delivered()
+            locate(_, _) >> { Path clone, String taskId ->
+                new BranchLocation.Local('refs/heads/gnomish/' + taskId)
+            }
+            adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+                new BranchAdoption.AlreadyLocal(taskId)
+            }
+        }
     }
 }

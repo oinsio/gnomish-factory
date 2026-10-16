@@ -53,7 +53,7 @@ trait PlumbingCommitFixture implements BareGitRepoFixture {
      * @return the new quarantined commit's hash; never null
      */
     String harvestLands(Path repo, String taskId, String message) {
-        String quarantine = FactoryRegister.quarantine(taskId).name()
+        String quarantine = FactoryRegisterRefs.quarantine(taskId).name()
         def held = new GitProcessRunner().run(repo, 'rev-parse', '--verify', '--quiet', quarantine)
         String parent = held.exitCode() == 0 ? held.stdout().forParsing().trim()
                 : gitOutput(repo, 'rev-parse', 'refs/heads/' + com.github.oinsio.gnomish.app.git.TaskIdSanitizer.branchName(taskId))

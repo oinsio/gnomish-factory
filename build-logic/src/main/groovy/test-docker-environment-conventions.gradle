@@ -1,0 +1,23 @@
+import com.github.oinsio.gnomish.buildlogic.TestDockerEnvironment
+
+// --- The test build's own Docker client configuration (fix-terminal-receipt-convergence, D14) ---
+//
+// Every forked test JVM — and so Testcontainers, every `docker` process a fixture runs, and the
+// minions PIT forks — reads a per-task copy of the committed client configuration instead of the
+// operator's `~/.docker/config.json`, whose credential helper raised a system prompt per JVM on
+// macOS; the operator's daemon endpoint is handed on as `DOCKER_HOST`. `TestDockerEnvironment`
+// composes the variables and declares the committed file as each task's input. Applied by
+// `test-conventions`, beside `adversarial-gitconfig-conventions`, and for the same tasks.
+
+tasks.withType(Test).configureEach {
+    TestDockerEnvironment.applyTo(project, it)
+}
+
+// `PitestTask` extends `JavaExec`, and the minions PIT forks inherit that JVM's environment, so
+// the variables on the task reach every mutation run. Named rather than typed, as for the git
+// configuration: an application launch someone adds later is not a test.
+pluginManager.withPlugin('info.solidsoft.pitest') {
+    tasks.named('pitest') {
+        TestDockerEnvironment.applyTo(project, it)
+    }
+}

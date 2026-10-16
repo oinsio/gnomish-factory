@@ -128,4 +128,23 @@ class TaskListRendererSpec extends Specification {
         text.readLines()[1].contains('UnsupportedVersion')
         text.readLines()[1].contains('state.json declaring version 2 where this factory supports 1')
     }
+
+    // FR10, UX3 of fix-terminal-receipt-convergence (design D13): the outcome cell decides by the
+    // quarantine disposition, so an Unregistered row carries its remedy with no edit of the renderer.
+    def "FR10: an Unregistered row carries the diagnosis naming the fetching command"() {
+        given:
+        def rows = [
+            new TaskListRow('gnomish/PROJ-9', null, 0, null, new BranchShape.Unregistered('refs/gnomish-factory/PROJ-9', 'b' * 40))
+        ]
+
+        when:
+        def text = renderer.renderText(rows)
+        def json = renderer.renderJson(rows)
+
+        then:
+        text.readLines()[1].contains('Unregistered')
+        text.readLines()[1].contains('`gnomish status <task>` fetches it')
+        json.contains('"shape" : "Unregistered"')
+        json.contains('"diagnosis" : "fetched without its factory register')
+    }
 }

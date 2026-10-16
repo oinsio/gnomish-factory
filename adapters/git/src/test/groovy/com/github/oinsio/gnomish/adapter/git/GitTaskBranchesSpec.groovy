@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.TrackerWrite
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
@@ -63,8 +64,8 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         runner.run(cloneDir, 'checkout', '-q', 'main')
 
         expect:
-        branches.ensureLocalTaskBranch(cloneDir, 'PROJ-1')
-        !branches.ensureLocalTaskBranch(cloneDir, 'NO-SUCH')
+        branches.ensureLocalTaskBranch(cloneDir, 'PROJ-1') == new BranchAdoption.AlreadyLocal('PROJ-1')
+        branches.ensureLocalTaskBranch(cloneDir, 'NO-SUCH') == new BranchAdoption.Nowhere()
     }
 
     def "ensureLocalTaskBranch materializes the local branch from the remote-tracking ref"() {
@@ -74,14 +75,27 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         runner.run(cloneDir, 'remote', 'add', 'origin', bare.toString())
         runner.run(cloneDir, 'push', 'origin', 'gnomish/PROJ-2')
         runner.run(cloneDir, 'checkout', '-q', 'main')
-        runner.run(cloneDir, 'branch', '-D', 'gnomish/PROJ-2')
+        // The seeded worktree holds the branch checked out, so `branch -D` would refuse: drop the ref itself.
+        assert runner.run(cloneDir, 'update-ref', '-d', 'refs/heads/gnomish/PROJ-2').exitCode() == 0
 
         when:
         def usable = branches.ensureLocalTaskBranch(cloneDir, 'PROJ-2')
 
-        then:
-        usable
-        runner.run(cloneDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/gnomish/PROJ-2').exitCode() == 0
+        then: 'FR7 of fix-terminal-receipt-convergence: the head is adopted at the tracking tip'
+        usable == new BranchAdoption.Adopted('PROJ-2')
+        runner.run(cloneDir, 'rev-parse', 'refs/heads/gnomish/PROJ-2').stdout().forParsing().trim() ==
+                runner.run(bare, 'rev-parse', 'refs/heads/gnomish/PROJ-2').stdout().forParsing().trim()
+    }
+
+    // FR8 of fix-terminal-receipt-convergence: the adoption over a caller's own location is the
+    // same owner's, with no second lookup.
+    def "adopt delegates to TaskBranchAdoption over the location it is handed"() {
+        given:
+        seedTask('PROJ-4')
+
+        expect:
+        branches.adopt(cloneDir, 'PROJ-4', branches.locate(cloneDir, 'PROJ-4')) == new BranchAdoption.AlreadyLocal('PROJ-4')
+        branches.adopt(cloneDir, 'NO-SUCH', new BranchLocation.NotFound()) == new BranchAdoption.Nowhere()
     }
 
     def "locate delegates to TaskBranchLocator and returns its verdict"() {

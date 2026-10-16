@@ -30,7 +30,7 @@ class ReachEntrySpec extends Specification {
         ':adapters:git'
     ]
 
-    // Scenario: build/module-layering / A reach entry names the edge it arrives through
+    // Scenario: build-system/module-layering / A reach entry names the edge it arrives through
     def "every undeclared transitive-leaf entry outside :bootstrap carries a comment naming its carrier"() {
         given:
         def modules = ModuleBuildFile.includedProjects() - [':bootstrap']

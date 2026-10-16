@@ -118,10 +118,10 @@ Each finding prints as `<file>:<line>: [<rule>] <what was found>`, then a `fix:`
 | `scenario link: malformed marker`  | Write the marker as `// Scenario: <spec-id> / <title>`, the title copied verbatim, or reword the comment so it does not start with the marker            |
 | `scenario link: exemption`         | Fix the exemption file at the named line: name a real scenario, give it a verifier, remove a stale or duplicate line, or match the file name to `spec:`  |
 
-**Exempting a scenario.** A scenario that something other than a test verifies — a CI workflow, a release script — is listed in its capability's file under `config/spec-contract-exemptions/`, named by the spec id with `/` replaced by `-` (`build/ci` → `build-ci.txt`). The first line declares the capability; each further line is one scenario; blank lines and `#` comments are allowed:
+**Exempting a scenario.** A scenario that something other than a test verifies — a CI workflow, a release script — is listed in its capability's file under `config/spec-contract-exemptions/`, named by the spec id with `/` replaced by `-` (`build-system/ci` → `build-system-ci.txt`). The first line declares the capability; each further line is one scenario; blank lines and `#` comments are allowed:
 
 ```text
-spec: build/ci
+spec: build-system/ci
 A reusable-workflow job is exempt from the timeout => .github/workflows/ci.yml
 Some scenario whose test comes later => pending-test: <change-name>
 ```

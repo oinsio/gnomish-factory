@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
@@ -67,7 +68,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
 
                     def branchName = (branchCreator.createBranch(cloneDir, taskId, TaskStart.commit(cloneDir, 'HEAD'))
                             as BranchCreationResult.Created).branchName()
-                    def worktree = worktreeManager.ensureWorktree(taskId, branchName)
+                    def worktree = worktreeManager.ensureWorktree(new BranchAdoption.AlreadyLocal(taskId))
 
                     new File(worktree.toFile(), "${taskId}.txt").text = "work by ${taskId}"
                     runner.run(worktree, 'add', "${taskId}.txt")

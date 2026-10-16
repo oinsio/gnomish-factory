@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.state.TaskOutcomeDto
+import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
@@ -132,7 +133,7 @@ class RunParkKillPointContainerE2ESpec extends ContainerParkSpecBase {
     private void resumeStartReconciliation() {
         def branches = TaskGitFixture.real().branches()
         branches.harden(cloneDir)
-        assert branches.ensureLocalTaskBranch(cloneDir, taskId)
+        assert branches.ensureLocalTaskBranch(cloneDir, taskId) instanceof LocalTaskBranch
         branches.reconcileRemote(cloneDir, taskId, 'resume-start')
     }
 

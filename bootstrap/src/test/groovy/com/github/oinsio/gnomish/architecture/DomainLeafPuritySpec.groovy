@@ -40,8 +40,8 @@ class DomainLeafPuritySpec extends Specification {
     }
 
     // D5: every project the domain reaches satisfies the JDK-only-leaf definition, both halves
-    // Scenario: build/module-layering / Domain reaches only JDK-only leafs
-    // Scenario: build/module-layering / The domain carries no logging, framework, serialization or filesystem module
+    // Scenario: build-system/module-layering / Domain reaches only JDK-only leafs
+    // Scenario: build-system/module-layering / The domain carries no logging, framework, serialization or filesystem module
     def "#leaf, named by the domain's allowlist, is a JDK-only leaf"() {
         given:
         def code = ModuleBuildFile.textOf(leaf)
@@ -57,7 +57,7 @@ class DomainLeafPuritySpec extends Specification {
     }
 
     // D5: the detector is the gate — a seeded leaf must fail it, or a green run means nothing
-    // Scenario: build/module-layering / Domain reaches only JDK-only leafs
+    // Scenario: build-system/module-layering / Domain reaches only JDK-only leafs
     def "a seeded leaf that acquired an internal edge is detected"() {
         given: 'a leaf build script that reaches a project of its own'
         def seeded = '''
@@ -73,7 +73,7 @@ class DomainLeafPuritySpec extends Specification {
     }
 
     // D5: the other half — an external artifact is what would ride into the domain
-    // Scenario: build/module-layering / Domain reaches only JDK-only leafs
+    // Scenario: build-system/module-layering / Domain reaches only JDK-only leafs
     def "a seeded leaf that acquired a production-scope artifact is detected: #declaration"() {
         given: 'a leaf build script declaring an artifact beside a test-scope one, which is allowed'
         def seeded = """

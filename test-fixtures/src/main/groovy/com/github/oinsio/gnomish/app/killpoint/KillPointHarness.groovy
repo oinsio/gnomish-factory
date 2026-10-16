@@ -29,6 +29,8 @@ final class KillPointHarness {
     static void verify(KillPointTransition transition) {
         assert transition.frozenShapes.size() == transition.killPoints():
         "${transition.name}: ${transition.killPoints()} kill points need as many expected shapes"
+        assert transition.convergedShapes == null || transition.convergedShapes.size() == transition.killPoints():
+        "${transition.name}: ${transition.killPoints()} kill points need as many converged shapes"
         (0..<transition.killPoints()).each { verifyKillPoint(transition, it) }
     }
 
@@ -43,8 +45,8 @@ final class KillPointHarness {
 
         transition.pickup.call(world)
         def converged = transition.shape.call(world)
-        assert converged == transition.converged:
-        "${where}: the pickup left the ${converged} shape, expected ${transition.converged}"
+        assert converged == transition.convergedAt(k):
+        "${where}: the pickup left the ${converged} shape, expected ${transition.convergedAt(k)}"
 
         transition.invariant?.call(world)
 

@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.app.port.run;
 
-import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -26,8 +26,12 @@ import org.jspecify.annotations.Nullable;
  */
 public interface SandboxRunSupport {
 
-    /** The task-lifecycle repository the run creates, decides, and records outcomes through. */
-    TaskRepository taskRepository();
+    /**
+     * The task-lifecycle store the run creates, decides, and records outcomes through — the
+     * lifecycle extension, since the delivered cleanup writes its cleanup commit through it (FR4 of
+     * fix-terminal-receipt-convergence).
+     */
+    TaskLifecycleStore taskRepository();
 
     /** The persistence rounds commit through: strict in-box commits with a best-effort push (FR5, FR21, FR22). */
     AttemptPersistence persistence();

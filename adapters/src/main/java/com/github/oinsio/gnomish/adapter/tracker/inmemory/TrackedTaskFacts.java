@@ -4,19 +4,37 @@ import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts;
 import com.github.oinsio.gnomish.app.port.tracker.StateLabels;
+import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Derives the "returned"/"finished" booleans {@link InMemoryTracker} reports from a task's
- * recorded correspondence history rather than dedicated fields (design D2). Extracted from
- * {@link InMemoryTracker} for file size; the behavior is unchanged.
+ * Derives the "returned"/"finished" booleans and the tenure boundary {@link InMemoryTracker}
+ * reports from a task's recorded correspondence history rather than dedicated fields (design D2).
+ * Extracted from {@link InMemoryTracker} for file size; the behavior is unchanged.
  */
 final class TrackedTaskFacts {
 
     private TrackedTaskFacts() {}
+
+    /**
+     * The fact set {@code fetchTask} reports for a stored task: its record as kept, plus the facts
+     * derived from its thread — {@code finished} and the tenure boundary (FR1 of
+     * fix-terminal-receipt-convergence).
+     */
+    static TrackerTask fetched(TaskRef ref, TrackedTask task) {
+        return new TrackerTask(
+                ref,
+                task.snapshot(),
+                task.state(),
+                task.abortFacts(),
+                finished(task),
+                task.designators(),
+                tenureBoundary(task));
+    }
 
     /**
      * The full {@link TrackerFacts} triple this reference adapter reports for a task: the labels its
@@ -63,7 +81,23 @@ final class TrackedTaskFacts {
         if (boundary < 0 || isAfter(indexOfLast(task, CorrespondenceEntry.Kind.CLAIM), boundary)) {
             return null;
         }
-        return switch (task.thread().get(boundary).kind()) {
+        return boundaryOf(task.thread().get(boundary).kind());
+    }
+
+    /**
+     * The task's tenure boundary (FR1 of fix-terminal-receipt-convergence, design D1): the kind of
+     * the newest boundary entry anywhere in the thread, whatever claim entries follow it, or {@code
+     * null} when the thread carries none. Read from the thread every write op already records — no
+     * entry of its own. Unlike {@link #latestBoundary(TrackedTask)}, a later claim does not hide it.
+     */
+    static @Nullable BoundaryKind tenureBoundary(TrackedTask task) {
+        int boundary = lastBoundaryIndex(task);
+        return boundary < 0 ? null : boundaryOf(task.thread().get(boundary).kind());
+    }
+
+    /** The port kind of a boundary entry; the four boundary kinds map one to one, the rest to null. */
+    private static @Nullable BoundaryKind boundaryOf(CorrespondenceEntry.Kind kind) {
+        return switch (kind) {
             case ABORT -> BoundaryKind.ABORT;
             case PARK -> BoundaryKind.PARK;
             case FINISH -> BoundaryKind.FINISH;

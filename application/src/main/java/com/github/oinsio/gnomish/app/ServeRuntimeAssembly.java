@@ -126,7 +126,7 @@ final class ServeRuntimeAssembly {
                 slotRunner,
                 dirtyNotifier,
                 remoteOutageGate);
-        WorktreeJanitor worktreeJanitor = builders.worktreeJanitor(slotLedger, git);
+        WorktreeJanitor worktreeJanitor = builders.worktreeJanitor(slotLedger, git, served, wiring);
         // NFR-O1 of add-serve-sandbox-lifecycle: built before the observability wiring, which reads
         // it for `vitals.sweep`, and before the tick, which writes it — the log, not the tick
         // thread, is what the two share, so neither construction waits on the other. The reap

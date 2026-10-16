@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.terminal.EffectObservation;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffect;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffectDrive;
@@ -24,8 +23,8 @@ import org.slf4j.Logger;
  *   <li><em>intent</em> — the outcome commit carrying the pending marker, delivered to origin by
  *       the fence, so the park a human is about to be pointed at is durable before the tracker
  *       announces it (FR4, FR5 of fix-lifecycle-push);
- *   <li><em>probe</em> — on a recovered park only: a tracker already reporting the task as awaiting
- *       a human carries the park, so the write is not repeated;
+ *   <li><em>probe</em> — on a recovered park only: a park {@link ParkLanding} finds in the tracker's
+ *       history is not written again (FR2 of fix-terminal-receipt-convergence);
  *   <li><em>effect</em> — the git-unfenced {@code tracker.park}, preceded by {@link
  *       ClaimGuard#stillOurs} (FR7, design D6 of add-claim-heartbeat) so a reaped or taken-over
  *       claim is never clobbered, and bounded by {@link TerminalWriteRetry};
@@ -37,15 +36,13 @@ import org.slf4j.Logger;
  * park, and the next pickup re-drives it — probing the tracker first.
  *
  * <p>This class is also the single owner of the <em>delivery-note append</em>: a caller hands in
- * the head text it composed and never sees the note, so the two exits and the deferred-park
- * reconcile cannot word the same line differently. The note's own sentence is owned one layer down,
- * by the fence that produces {@link ParkDeliveryVerdict.Undelivered}; the append lives here because
- * the verdict is only known once the intent has been recorded. Enforced by the parameter type:
- * {@code attempt} takes a plain head {@code String}, not a report function, so there is no seam a
- * caller could word the note through.
+ * a plain head {@code String} and never sees the note (the parameter type is the enforcement), so no
+ * two callers word the line differently. The sentence itself is owned by the fence that produces
+ * {@link ParkDeliveryVerdict.Undelivered}; the append lives here because the verdict is only known
+ * once the intent has been recorded.
  *
  * <p>Implements FR13, D12 of add-tracker-port; FR7, FR10, D10, NFR-R3 of add-claim-heartbeat; FR10
- * of harden-task-branch-contract.
+ * of harden-task-branch-contract; FR2, NFR-O1 of fix-terminal-receipt-convergence.
  */
 public final class GuardedPark implements TerminalEffect {
 
@@ -86,17 +83,13 @@ public final class GuardedPark implements TerminalEffect {
      * Drives one park to its end and returns the report text it was written with — the same text the
      * caller's {@link TakeResult.AwaitingHuman} carries, whether the write landed or not.
      *
-     * @param order the take order whose task is parked: its tracker, the task's identity, and this
-     *     instance's identity for the pre-write claim check; never null
+     * @param order the parked task's take order: tracker, identity, and this instance; never null
      * @param reason the park reason recorded on the tracker; never null
-     * @param head the operator-facing report as the caller composed it, without the delivery note —
-     *     this class appends that note itself, since the fence produces it only once the intent has
-     *     been recorded; never null
+     * @param head the caller's report without the delivery note, which this class appends; never null
      * @param retry the bounded terminal-write retry the park is made through; never null
      * @param transition the park's branch-side steps — fresh or recovered; never null
      * @param log the caller's logger, so log lines are attributed to the calling class; never null
-     * @param kind a short label distinguishing the two callers' log lines (e.g. {@code "park"},
-     *     {@code "checkpoint park"}); never null
+     * @param kind a label for the callers' log lines ({@code "park"}, {@code "checkpoint park"})
      * @return the report text the park was written with; never null
      */
     public static String attempt(
@@ -124,17 +117,14 @@ public final class GuardedPark implements TerminalEffect {
     }
 
     /**
-     * A tracker already reporting the task as awaiting a human carries this park: the write landed
-     * and only its receipt was lost. Anything else — including a tracker that cannot be asked —
-     * re-drives, which the find-then-upsert write makes safe (FR11 of
-     * harden-task-branch-contract).
+     * Read from the tracker's history by {@link ParkLanding} (FR2 of
+     * fix-terminal-receipt-convergence). A tracker that cannot be asked re-drives: the
+     * find-then-upsert write makes that safe (FR11 of harden-task-branch-contract).
      */
     @Override
     public EffectObservation observeAtTarget() {
         try {
-            return order.tracker().fetchTask(order.ref()).state() instanceof TrackerTaskState.AwaitingHuman
-                    ? EffectObservation.LANDED
-                    : EffectObservation.ABSENT;
+            return ParkLanding.landed(order, log, kind) ? EffectObservation.LANDED : EffectObservation.ABSENT;
         } catch (RuntimeException e) {
             log.warn(
                     OperatorEvent.PARK_LANDING_UNVERIFIED.head()
@@ -177,11 +167,8 @@ public final class GuardedPark implements TerminalEffect {
     }
 
     /**
-     * The report the human reads, built once the delivery fence's verdict is known — an origin that
-     * does not yet carry the recorded park adds one line saying so (FR5, UX2 of fix-lifecycle-push).
-     *
-     * <p>This is the single owner of the append; see the class javadoc for why it lives here rather
-     * than in each caller's report builder.
+     * The report the human reads, built once the fence's verdict is known — an origin that does not
+     * yet carry the park adds one line saying so (FR5, UX2 of fix-lifecycle-push; class javadoc).
      */
     private String reportText() {
         String note = verdict.reportNote();

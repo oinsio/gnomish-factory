@@ -56,4 +56,19 @@ class TrackerTaskSpec extends Specification {
         new TrackerTask(ref, snapshot, state, AbortFacts.none(), false) !=
                 new TrackerTask(ref, snapshot, new TrackerTaskState.Finished(), AbortFacts.none(), false)
     }
+
+    // FR1 of fix-terminal-receipt-convergence: the tenure boundary rides the fact set; a fact set
+    //     assembled through the shorter forms reads from no thread and reports none
+    def "carries the tenure boundary, and the shorter forms report none"() {
+        given:
+        def ref = new TaskRef('github:owner/repo#42')
+        def snapshot = new TaskSnapshot('github:owner/repo#42', UntrustedText.tracker('Fix the thing'), UntrustedText.tracker('body'))
+        def state = new TrackerTaskState.Working('instance-b')
+
+        expect:
+        new TrackerTask(ref, snapshot, state, AbortFacts.none(), false, TaskDesignators.none(), BoundaryKind.PARK)
+                .tenureBoundary() == BoundaryKind.PARK
+        new TrackerTask(ref, snapshot, state, AbortFacts.none(), false, TaskDesignators.none()).tenureBoundary() == null
+        new TrackerTask(ref, snapshot, state, AbortFacts.none(), false).tenureBoundary() == null
+    }
 }

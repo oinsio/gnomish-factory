@@ -50,7 +50,7 @@ class StandInRowReachSpec extends Specification {
         preset << StandInLibrarySpec.presets()
     }
 
-    // Scenario: build/quality-gates / A dead row fails the library spec
+    // Scenario: build-system/quality-gates / A dead row fails the library spec
     def "FR26: every row of every preset was reached — a miss is a dead row, named here"() {
         given:
         Set<String> reached = Files.exists(reachedFile()) ? reachedFile().toFile().readLines().toSet() : [] as Set

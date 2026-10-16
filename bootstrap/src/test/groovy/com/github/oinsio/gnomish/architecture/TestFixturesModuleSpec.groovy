@@ -13,7 +13,7 @@ import spock.lang.Specification
 class TestFixturesModuleSpec extends Specification {
 
     // FR7 of split-into-modules: the shared fixtures reach consumers through testImplementation only
-    // Scenario: build/test-fixtures-module / Fixtures module carries no production dependency
+    // Scenario: build-system/test-fixtures-module / Fixtures module carries no production dependency
     def "no module declares the test fixtures on a production configuration"() {
         given:
         def modules = ModuleBuildFile.includedProjects() - [':test-fixtures']
@@ -31,7 +31,7 @@ class TestFixturesModuleSpec extends Specification {
 
     // FR7 of split-into-modules: a module takes a shared fixture from :test-fixtures through
     //     testImplementation, and keeps no copy of it in its own test tree
-    // Scenario: build/test-fixtures-module / A module reuses shared fixtures
+    // Scenario: build-system/test-fixtures-module / A module reuses shared fixtures
     def "every module importing a shared fixture declares :test-fixtures, and no test tree copies one"() {
         given: 'the shared fixtures, by fully qualified and by simple name'
         def fixtures = fixtureTypes()

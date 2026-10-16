@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener;
 import com.github.oinsio.gnomish.app.serve.DaemonLoops;
+import com.github.oinsio.gnomish.app.serve.DeliveredBranchPass;
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.FeedAssembly;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
@@ -157,19 +158,18 @@ final class ServeAssembly {
     }
 
     /**
-     * FR14, D10: the worktree janitor over the registered clone's own worktree folder (FR9, NFR-R2
-     * of add-project-registry), disposing through the task-git port's own bound disposer (task 4.4
-     * of split-into-modules). Held tasks are read fresh from {@code slotLedger} every tick, so a
-     * task claimed after the janitor starts is still protected.
+     * FR14, D10: the janitor over the clone's own worktree folder (FR9, NFR-R2 of
+     * add-project-registry), held tasks read fresh from {@code slotLedger}; its branch pass (FR4 of
+     * fix-terminal-receipt-convergence) runs on the slot's git and claimless cleanup.
      */
-    WorktreeJanitor worktreeJanitor(SlotLedger slotLedger, TaskGit git) {
+    WorktreeJanitor worktreeJanitor(SlotLedger slotLedger, TaskGit git, BoundTracker served, SlotWiring wiring) {
         RegisteredClone clone = resolvedClone.getObject();
+        var cleanup = ClaimlessDeliveredCleanup.forSlot(wiring, served.tracker());
+        var branchPass =
+                new DeliveredBranchPass(clone.clonePath(), wiring.git().branches(), cleanup, served.definition());
+        var disposal = git.worktrees().environmentDisposal(clone);
         return new WorktreeJanitor(
-                clone,
-                serveProperties.worktreeAgeThreshold(),
-                git.worktrees().environmentDisposal(clone),
-                time,
-                slotLedger);
+                clone, serveProperties.worktreeAgeThreshold(), disposal, time, slotLedger, branchPass);
     }
 
     /**

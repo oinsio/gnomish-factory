@@ -19,10 +19,11 @@ import java.util.Optional;
  * Recovers a delivered task's pre-cleanup {@code .gnomish-task/} state from branch history, for the
  * reconcile-on-resume path (FR10, D10, NFR-C1 of add-claim-heartbeat). On {@code Completed}, {@link
  * GitTaskRepository#recordOutcome} writes the {@code Completed} {@code task.json} in one commit and
- * then adds a follow-up cleanup commit that {@code git rm}s {@code .gnomish-task/} from the tip
- * (FR15 of add-git-workflow) — so a delivered branch whose tracker finish never landed carries no
- * live state at its tip, only in history (M4 of add-git-workflow). This reader reads the delivered
- * {@link com.github.oinsio.gnomish.domain.engine.TaskContext} and final {@link TaskState} from the
+ * then a follow-up cleanup commit removes {@code .gnomish-task/} from the tip ({@link
+ * GitObjectsTerminalCommits#cleanUp}; FR15 of add-git-workflow) — so a delivered branch whose
+ * tracker finish never landed carries no live state at its tip, only in history (M4 of
+ * add-git-workflow). This reader reads the delivered {@link
+ * com.github.oinsio.gnomish.domain.engine.TaskContext} and final {@link TaskState} from the
  * {@code Completed} commit, so the reconcile can post the deferred finish faithfully from the
  * branch's own recorded outcome rather than fabricating one.
  *

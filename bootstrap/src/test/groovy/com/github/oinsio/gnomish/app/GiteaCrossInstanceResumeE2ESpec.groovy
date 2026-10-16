@@ -118,7 +118,7 @@ class GiteaCrossInstanceResumeE2ESpec extends Specification implements GiteaTask
         def cloneB = RegisteredCloneFixture.registered(tempDir.resolve('home-b'), instanceB)
 
         and: 'instance B resumes the same task purely via what reached origin (FR8/D9 locate -> fetch)'
-        def bundle = new GitResumeRunner(assembly(), TaskGitFixture.real(), cloneB, 'taskId').bootstrap(instanceB, taskId)
+        def bundle = new GitResumeRunner(assembly(), TaskGitFixture.real(), cloneB, 'taskId').bootstrap(instanceB, taskId).get()
 
         then: 'instance B sees exactly the round instance A pushed, without ever touching instance A locally'
         Files.exists(bundle.worktreePath().resolve('.gnomish-task').resolve('task.json'))

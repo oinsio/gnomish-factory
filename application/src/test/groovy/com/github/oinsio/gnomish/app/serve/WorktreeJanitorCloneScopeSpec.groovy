@@ -45,7 +45,7 @@ class WorktreeJanitorCloneScopeSpec extends Specification {
             -> NOW
         } as InstantSource, Mock(Sleeper)), {
             -> Set.of()
-        })
+        }, { Set<String> held -> } as BranchPass)
     }
 
     private static Path agedWorktree(Path folder) {

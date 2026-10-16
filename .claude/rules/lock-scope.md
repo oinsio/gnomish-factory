@@ -85,6 +85,34 @@ under a monitor no longer starves the scheduler — and for that same reason, sw
 `synchronized` for `ReentrantLock` is not a fix for anything this rule covers. What this rule
 is about is unchanged: the waiters, who are blocked either way.
 
+## Writers from different processes
+
+A lock in the JVM covers one process. A step that two factory processes may run at once on one
+clone — `take <ref>` beside a `serve` daemon's janitor, two `take`s of one finished task — is
+guarded only by what the medium itself locks, and git locks its media unequally: an object write
+takes no lock (content-addressed), a ref transaction takes the ref store's lock, retries it
+(`reftable.lockTimeout`) and decides by compare-and-swap, and the worktree index takes
+`index.lock` once, with no retry, no compare-and-swap, and no cleanup after a kill.
+
+So a design that claims a step is safe across instances — an NFR "idempotent across instances",
+a risk row "the loser stands down" — lists the step's sequence in `design.md` with the lock each
+step takes and what decides the winner, the way `crash-consistency.md` item 1 lists kill windows.
+**The first step that takes a lock with no compare-and-swap behind it is the race**: a loser
+there has nothing to re-read, because the winner has not committed yet. Such a step is removed
+from the sequence (an object-built commit needs no index) or moved behind the decision, never
+retried. The table is paired with a race spec on real threads, named in the single-owner table
+beside the identity spec. A `synchronized` block, a `ReentrantLock` or any other lock in the JVM
+is no answer to this question: the second writer is another process.
+
+The failure this exists for: the host delivered cleanup
+(`fix-terminal-receipt-convergence`, task 3.3) ran `git rm` in the shared task worktree before
+its compare-and-swap; the design's risk row said "the ref update is compare-and-swap on both
+media", true of the last step only. Two host cleanups met on `index.lock`, and the loser
+re-read a tip the winner had not yet moved and failed. Design D8 of that change removed the
+step: the host cleanup is now built from objects through `GitObjectsTerminalCommits.cleanUp`
+(a private index, no worktree), so the ref transaction is the first and only lock two writers
+share; its step table is the model, and `DeliveredCleanupRaceSpec` is the race spec.
+
 ## Specs
 
 The property is invisible to a single-threaded spec — the one that would catch it drives real
@@ -111,3 +139,6 @@ a change that adds or widens one says in its artifacts which case it is: state-g
 5. On re-entry, revalidate — or say why no revalidation is possible, rather than writing a
    guard that cannot fire.
 6. A spec with real threads pins the waiter's promptness.
+7. A step two factory processes may run at once: `design.md` lists its sequence with the lock
+   each step takes, the first lock with no compare-and-swap behind it is removed or moved
+   behind the decision, and a real-thread race spec is named in the single-owner table.

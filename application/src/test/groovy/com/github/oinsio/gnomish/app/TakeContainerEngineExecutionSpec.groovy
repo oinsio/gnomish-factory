@@ -2,6 +2,9 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.TrackerWrite
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
+import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
@@ -10,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.AbortFuse
 import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
@@ -45,6 +49,8 @@ import spock.lang.Specification
  */
 class TakeContainerEngineExecutionSpec extends Specification implements RunChainFakes {
 
+    private static final BranchAdoption.AlreadyLocal BRANCH = new BranchAdoption.AlreadyLocal('PROJ-1')
+
     private static ExecutionResult.DecisionNeeded decisionRound(String taskId = 'PROJ-1') {
         new ExecutionResult.DecisionNeeded(
                 UntrustedText.agent('which way?'), [], ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
@@ -60,9 +66,14 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])
     }
 
-    private static TakeContainerEngineExecution execution(RunAssembly assembly, Tracker tracker) {
+    private TakeContainerEngineExecution execution(RunAssembly assembly, Tracker tracker) {
+        execution(assembly, tracker, Stub(TaskBranchGit))
+    }
+
+    private static TakeContainerEngineExecution execution(RunAssembly assembly, Tracker tracker, TaskBranchGit branches) {
         new TakeContainerEngineExecution(
                 assembly,
+                branches,
                 new TakeOutcomeDispatch(VirtualTimeRetries.terminalWrite(), new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3)),
                 [], new ClaimLossFlag(), LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))
     }
@@ -73,15 +84,20 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         given:
         def tracker = Mock(Tracker)
         tracker.fetchTask(_) >> heldByUs()
+        def store = Mock(TaskLifecycleStore)
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
             pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            taskRepository() >> store
+        }
+        def branches = Stub(TaskBranchGit) {
+            classifyShape(_, 'PROJ-1') >> new BranchShape.CompletedUncleaned()
         }
 
         when:
-        def result = execution(assemblyRunning(new ScriptedExecutor([completedRound()])), tracker).run(
-        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, trackerContext(), trackerState(), null)
+        def result = execution(assemblyRunning(new ScriptedExecutor([completedRound()])), tracker, branches).run(
+        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, BRANCH, trackerContext(), trackerState(), null)
 
         then:
         // NFR-P1 of add-serve-sandbox-lifecycle: the sweep never runs on the claim (slot) path —
@@ -94,6 +110,12 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         0 * support.recordAborted(_)
         0 * support.revocationSalvageAndPush(_)
         1 * tracker.finish(REF, _)
+
+        then: 'FR4 of fix-terminal-receipt-convergence: behind the finish, the one delivered cleanup over the support'
+        1 * store.finishCleanup('PROJ-1')
+
+        then:
+        1 * support.disposeExistingEnvironment()
         result instanceof TakeResult.Delivered
     }
 
@@ -112,7 +134,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
         when:
         def result = execution(assemblyRunning(new ScriptedExecutor([decisionRound()])), tracker).run(
-        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, trackerContext(), trackerState(), null)
+        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, BRANCH, trackerContext(), trackerState(), null)
 
         then:
         1 * support.keepStopped()
@@ -148,7 +170,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
         when:
         def result = execution(assemblyRunning(new ScriptedExecutor([completedRound()])), tracker).run(
-        takeOrder(heldByUs(), tracker, runOrder(manualCheckpointPipeline())), support, trackerContext(), trackerState(), null)
+        takeOrder(heldByUs(), tracker, runOrder(manualCheckpointPipeline())), support, BRANCH, trackerContext(), trackerState(), null)
 
         then:
         1 * support.keepStopped()
@@ -182,7 +204,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
         when:
         def result = execution(assemblyRunning(new ScriptedExecutor([completedRound()])), tracker).run(
-        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, trackerContext(), trackerState(), null)
+        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, BRANCH, trackerContext(), trackerState(), null)
 
         then:
         1 * support.recordAborted(_)
@@ -212,7 +234,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
         when:
         def result = execution(assemblyRunning(new ScriptedExecutor([completedRound()])), tracker).run(
-        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, trackerContext(), trackerState(), null)
+        takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, BRANCH, trackerContext(), trackerState(), null)
 
         then:
         1 * support.revocationSalvageAndPush('PROJ-1')

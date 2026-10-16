@@ -1,0 +1,32 @@
+spec: build-system/quality-gates
+
+# Verified by a mechanism other than a test: the workflow, build script, data file or document named.
+One command runs everything => .github/workflows/ci.yml (runs ./gradlew check on a fresh checkout with JDK 25)
+Unused dependency fails the gate => build.gradle (dependencyAnalysis issues: onAny severity 'fail'; buildHealth wired into check)
+CI enforces the gates => .github/workflows/ci.yml (runs ./gradlew check on every branch push and pull request)
+Reports are downloadable => .github/workflows/ci.yml (steps "Upload JaCoCo reports", "Upload PIT reports", "Upload Gradle profile", if: !cancelled())
+A long build run is not cancelled => .github/workflows/ci.yml (job build) and .github/workflows/pitest-nightly.yml (job mutation) declare no timeout-minutes
+A superseded build run is cancelled => .github/workflows/ci.yml (concurrency: cancel-in-progress: true per workflow and ref)
+A hung job is bounded by the timeout => timeout-minutes in .github/workflows/gitleaks.yml, license-gate.yml, codeql.yml, cla.yml, release.yml, pitest-nightly.yml (job verified) — 30 — and pages.yml — 10
+A reusable-workflow job is exempt from the timeout => .github/workflows/osv-scan.yml (job osv-scan calls the reusable workflow and declares no timeout-minutes)
+Vulnerable dependency fails CI => .github/workflows/osv-scan.yml
+Committed secret fails CI => .github/workflows/gitleaks.yml
+The allowlist governs a module lockfile => .github/workflows/osv-scan.yml (scan-args --config=osv-scanner.toml -r ./: the one root allowlist applies to every lockfile)
+A newly added module needs no scan wiring => .github/workflows/osv-scan.yml (recursive scan -r ./ with the root osv-scanner.toml)
+A suppression expires => osv-scanner.toml (ignoreUntil on every entry), enforced by .github/workflows/osv-scan.yml
+A reviewer can judge a suppression in place => osv-scanner.toml (each entry's reason states the scope and the missing fix, and ignoreUntil its expiry)
+The failure names the responsible module => .github/workflows/osv-scan.yml (OSV-Scanner reports the package, version, advisory and source lockfile per row)
+A developer reproduces the CI verdict locally => docs/guides/developer-guide.md (section "The vulnerability gate (OSV)")
+Every committed lockfile is scanned => .github/workflows/osv-scan.yml (recursive scan -r ./ against the one root osv-scanner.toml)
+Wrapper pins the toolchain => build-logic/src/main/groovy/java-conventions.gradle (java toolchain languageVersion from the catalog's java version) and gradle/wrapper/gradle-wrapper.properties
+Test-only dependency is outside the gate => build-logic/src/main/groovy/license-gate-conventions.gradle (configurations = runtimeClasspath only), run by .github/workflows/license-gate.yml
+Version bump needs no allowlist edit => config/allowed-licenses.json (rules name licenses only, no module or version)
+The gate plugin is locked and verified => gradle/verification-metadata.xml (Gradle dependency verification, verify-metadata true) and the buildscript lockfile
+Local reproduction => docs/guides/developer-guide.md (section "The license gate")
+One file holds the accepted licenses => config/allowed-licenses.json, the one allowedLicensesFile of build-logic/src/main/groovy/license-gate-conventions.gradle
+The allowlist accepts the permissive set and no copyleft => config/allowed-licenses.json
+The shipped inventory needs no module exception => config/allowed-licenses.json
+Every run attaches the license inventory => .github/workflows/license-gate.yml (step "Upload license report", if: always())
+An unchanged main is not re-mutated => .github/workflows/pitest-nightly.yml (job verified: the nightly-verified cache marker keyed by the commit)
+The nine Docker and Gitea suites are excluded => bootstrap/mutation-scope.gradle (pitest excludedTestClasses, with the in-process twin named per suite)
+The fake-docker suites stay in the scan => bootstrap/mutation-scope.gradle (pitest excludedTestClasses, the "Deliberately KEPT in scope" note)

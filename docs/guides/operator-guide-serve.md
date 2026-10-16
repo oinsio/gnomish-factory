@@ -239,7 +239,15 @@ three — with a CLI override where one exists:
 The last two govern **two disjoint populations with two disjoint cleaners**, and
 neither ever touches the other's objects: the janitor disposes of instance-local
 host worktrees by inactivity alone, while the sandbox sweep governs host-global
-Docker objects by ownership and age. The sweep's own thresholds (`factory.sandbox.minimum-age`, `kept-reap-age`,
+Docker objects by ownership and age. The janitor's age pass reads no tracker
+status. On every tick the janitor also runs a branch pass over the clone's
+`gnomish/*` branches: a branch whose tip still carries `.gnomish-task/` after a
+`Completed` outcome, and whose task the tracker reports finished, gets its
+cleanup commit, the push, and its worktree removed — the recovery for a finish
+whose cleanup was cut short (see "Finished Tasks Are Terminal" in
+[`operator-guide.md`](operator-guide.md#a-finished-task-whose-branch-cleanup-was-cut-short)).
+The branch pass reads the tracker for those branches only, claims nothing, and
+writes nothing once the branch is clean. The sweep's own thresholds (`factory.sandbox.minimum-age`, `kept-reap-age`,
 `manual-running-stop-age`, `project-id`) live with the rest of the sandbox
 configuration — see
 ["Keep, resume, cleanup"](operator-guide-sandbox.md#keep-resume-cleanup) in the

@@ -65,6 +65,8 @@ import java.time.Instant
 // Scenario: tracker/tracker-port / The contract suite covers every designator shape
 // Scenario: tracker/tracker-port / The suite covers stale-claim removal
 // Scenario: tracker/tracker-port / The suite covers index repair
+// Scenario: tracker/tracker-port / Tenure boundary survives a claim on every adapter
+// Scenario: tracker/tracker-port / Every tenure boundary kind is reported on every adapter
 class GithubTrackerContractSpec extends TrackerCirculationContract {
 
     private GithubContractTracker github

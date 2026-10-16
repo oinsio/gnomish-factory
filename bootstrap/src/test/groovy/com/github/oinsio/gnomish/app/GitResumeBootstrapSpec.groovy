@@ -28,7 +28,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         repository().createTask(context('PROJ-1'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
 
         when:
-        def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-1')
+        def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-1').get()
 
         then:
         bundle.taskId() == 'PROJ-1'
@@ -55,7 +55,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         repo.recordOutcome('PROJ-2', new TaskOutcome.Escalated(TaskState.atStageStart('implement'), report), TrackerWrite.OWED)
 
         when:
-        def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-2')
+        def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-2').get()
 
         then:
         bundle.outcome() != null
@@ -80,7 +80,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         assert !Files.exists(worktree)
 
         when:
-        def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-3')
+        def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-3').get()
 
         then:
         Files.isDirectory(bundle.worktreePath())
@@ -149,7 +149,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         Files.writeString(worktree.resolve('leftover.txt'), 'stale')
 
         when:
-        def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-20')
+        def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-20').get()
 
         then: 'the worktree fast-forwarded to the peer\'s pushed commit'
         Files.exists(bundle.worktreePath().resolve('peer-work.txt'))
@@ -173,7 +173,7 @@ class GitResumeBootstrapSpec extends GitResumeSpecBase {
         def localTipBefore = gitOutput(worktree, 'rev-parse', 'HEAD')
 
         when:
-        def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-21')
+        def bundle = newResumeRunner(new ByteArrayInputStream(new byte[0]), System.out).bootstrap(cloneDir, 'PROJ-21').get()
 
         then: 'the worktree is untouched — still at the local, unpushed tip'
         gitOutput(bundle.worktreePath(), 'rev-parse', 'HEAD') == localTipBefore

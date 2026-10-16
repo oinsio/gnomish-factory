@@ -73,7 +73,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
         store.taskRepository(registeredClone).createTask(new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
 
         then:
-        new RemoteBranchTip(runner).read(cloneDir, 'gnomish/PROJ-9')
+        new RemoteBranchTip(runner).read(cloneDir, 'PROJ-9')
                 == Optional.of(gitOutput(worktreeFor('PROJ-9'), 'rev-parse', 'HEAD'))
     }
 

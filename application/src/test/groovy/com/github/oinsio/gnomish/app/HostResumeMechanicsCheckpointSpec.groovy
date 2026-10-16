@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.CheckpointApprovalRefusedException
 import com.github.oinsio.gnomish.app.port.ResumedWriteRefusedException
 import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -58,7 +59,7 @@ class HostResumeMechanicsCheckpointSpec extends Specification implements RunChai
 
     private static ResumeBootstrap branch() {
         new ResumeBootstrap('PROJ-1', CheckpointMechanicsFixtures.context(), new RecordedOutcome.Paused('build'),
-                null, WORKTREE, 'gnomish/PROJ-1', 'abc123', false, BasePin.UNPINNED)
+                null, WORKTREE, new BranchAdoption.AlreadyLocal('PROJ-1'), 'abc123', false, BasePin.UNPINNED)
     }
 
     // FR3: the approval opens the gate the tip records — one repository write naming that gate, the

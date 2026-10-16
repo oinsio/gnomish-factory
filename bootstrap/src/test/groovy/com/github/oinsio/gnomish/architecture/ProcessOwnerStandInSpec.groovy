@@ -14,7 +14,7 @@ class ProcessOwnerStandInSpec extends Specification {
 
     static final String FAKE = 'ScriptedGit'
 
-    // Scenario: build/quality-gates / A process-owning class keeps its stand-in
+    // Scenario: build-system/quality-gates / A process-owning class keeps its stand-in
     def "FR27: the specs of every ProcessBuilder owner drive the owner itself, and no end-to-end suite uses the fake"() {
         given: 'the production classes that construct a process, comments stripped'
         def owners = RepoSourceTree.productionSources { it.endsWith('.java') }

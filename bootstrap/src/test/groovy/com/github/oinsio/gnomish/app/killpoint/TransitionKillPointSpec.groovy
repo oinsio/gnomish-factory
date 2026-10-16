@@ -54,13 +54,15 @@ class TransitionKillPointSpec extends Specification implements KillPointWorlds, 
     // Scenario: git/git-task-persistence / A stale worktree does not change what resume reads
     // Scenario: git/git-task-persistence / Cleanup follows every constructive receipt
     // Scenario: git/git-task-persistence / Kill between outcome and cleanup does not re-run the final stage
-    // Scenario: git/git-task-persistence / Kill between the staged removal and its commit converges on the same worktree
+    // Scenario: git/git-task-persistence / A host worktree already missing .gnomish-task/ does not affect the cleanup
     // Scenario: tracker/tracker-take / A finish that already landed is not posted twice
     // Scenario: tracker/tracker-take / A gate killed before its park is delivered, not run
     // Scenario: tracker/tracker-take / A kill during the finish leaves the recoverable shape
     // Scenario: tracker/tracker-take / Bare return of an exhausted stage resets once
     // Scenario: tracker/tracker-take / Kill between Completed and cleanup costs no re-run
     // Scenario: tracker/tracker-take / Returned checkpoint is approved before the run continues
+    // Scenario: tracker/tracker-take / A landed park with a lost receipt is not re-driven
+    // Scenario: tracker/tracker-take / A lost park is re-driven
     // Scenario: sandbox/execution-environment / Kill between intent and receipt converges
     // Scenario: lifecycle/task-branch-contract / Recovering a recovered state is a no-op
     // Scenario: lifecycle/task-branch-contract / Kill mid-recovery converges on the next pickup
@@ -72,21 +74,26 @@ class TransitionKillPointSpec extends Specification implements KillPointWorlds, 
 
         where:
         transition << [
-            ParkKillPoints.transition('host', { hostWorld(nextRoot()) }),
-            ParkKillPoints.transition('container', {
-                containerWorld(nextRoot())
+            // The park and the finish are picked up by a real take (design D3 of
+            // fix-terminal-receipt-convergence): a second instance claims after the reaper or the
+            // human, and the routes or the finished-task disposition run under its order.
+            ParkKillPoints.transition('host', { d ->
+                takeHostWorld(nextRoot(), d)
+            }),
+            ParkKillPoints.transition('container', { d ->
+                takeContainerWorld(nextRoot(), d)
             }),
             // Container only: the drained read position exists where an egress guard does, and host
             // mode has no guard — its lifecycle rewrites are specced for preservation in
             // GitTaskRepositorySpec instead (FR5 of fix-denial-attribution-durability).
-            ParkKillPoints.denialTransition('container', {
-                containerWorld(nextRoot(), {
-                    Optional.of(ParkKillPoints.DRAINED)
-                })
+            ParkKillPoints.denialTransition('container', { d, cursors ->
+                takeContainerWorld(nextRoot(), d, cursors)
             }),
-            FinishKillPoints.transition('host', { hostWorld(nextRoot()) }),
-            FinishKillPoints.transition('container', {
-                containerWorld(nextRoot())
+            FinishKillPoints.transition('host', { d ->
+                takeHostWorld(nextRoot(), d)
+            }),
+            FinishKillPoints.transition('container', { d ->
+                takeContainerWorld(nextRoot(), d)
             }),
             DecisionKillPoints.transition('host', { hostWorld(nextRoot()) }),
             DecisionKillPoints.transition('container', {

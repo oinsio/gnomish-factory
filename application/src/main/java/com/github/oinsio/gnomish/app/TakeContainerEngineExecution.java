@@ -3,8 +3,10 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.TrackerWrite;
+import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch;
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
+import com.github.oinsio.gnomish.app.port.git.TaskBranchGit;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
@@ -83,6 +85,7 @@ import org.jspecify.annotations.Nullable;
  * (the terminal path is the slot's outcome dispatch, design D22).
  *
  * @param assembly builds the {@code EnginePorts} bundle for the run; never null
+ * @param branches the branch port the delivered cleanup classifies the tip through; never null
  * @param dispatch the slot's outcome dispatch ({@link SlotWiring#outcomeDispatch()}); never null
  * @param credentialEnvVarsToScrub the declared credential variable names scrubbed from agent
  *     environments; never null
@@ -93,6 +96,7 @@ import org.jspecify.annotations.Nullable;
  */
 record TakeContainerEngineExecution(
         RunAssembly assembly,
+        TaskBranchGit branches,
         TakeOutcomeDispatch dispatch,
         List<String> credentialEnvVarsToScrub,
         ClaimLossFlag claimLossFlag,
@@ -105,6 +109,8 @@ record TakeContainerEngineExecution(
      *     own law on a fresh claim, design D6 of introduce-take-order), and the tracker, task identity and instance identity for the revocation check and the
      *     terminal write; never null
      * @param support the sandboxed-run bundle the run executes against; never null
+     * @param branch the task's local branch as the adoption owner answered it — the one the
+     *     delivered cleanup behind a confirmed finish writes to; never null
      * @param context the task context to run with; never null
      * @param state the state to run with; never null
      * @param pending the interrupted verification to re-verify, or {@code null} for a normal run
@@ -113,6 +119,7 @@ record TakeContainerEngineExecution(
     TakeResult run(
             TakeOrder order,
             SandboxRunSupport support,
+            LocalTaskBranch branch,
             TaskContext context,
             TaskState state,
             @Nullable PendingVerification pending) {
@@ -157,7 +164,9 @@ record TakeContainerEngineExecution(
                     return new ParkDeliveryVerdict.Delivered();
                 },
                 support::confirmTerminalWrite);
-        var finish = new FinishTransition.Fresh(() -> {}, support::finishCleanup);
+        var cleanup = DeliveredCleanup.container(branches, support);
+        var finish = new FinishTransition.Fresh(
+                () -> {}, () -> cleanup.cleanUp(order.run().cloneDir(), branch));
         return dispatch.dispatch(outcome, context, branchName, order, new TerminalTransitions(park, finish));
     }
 

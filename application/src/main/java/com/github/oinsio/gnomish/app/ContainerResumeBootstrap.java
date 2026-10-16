@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.git.BasePin;
+import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
@@ -28,7 +29,8 @@ import org.jspecify.annotations.Nullable;
  * @param lastEscalation the last escalation report, or {@code null} if the task was never
  *     escalated
  * @param support the sandbox run support bound to this task's branch; never null
- * @param branchName the task branch's short name, e.g. {@code gnomish/PROJ-1}
+ * @param branch the task's local branch as the adoption owner answered it (design D10 of
+ *     fix-terminal-receipt-convergence); its short name is {@link #branchName()}
  * @param baseCommit the commit the task branch was created from, as recorded in {@code task.json}
  *     (FR12, D13 of add-base-ref-resolution) — the resume law rebind's fallback pinned-ref-name
  *     input, used only when {@code baseRef} is {@code null} (a legacy branch, FR7)
@@ -48,7 +50,7 @@ record ContainerResumeBootstrap(
         @Nullable RecordedOutcome outcome,
         @Nullable EscalationReport lastEscalation,
         SandboxRunSupport support,
-        String branchName,
+        LocalTaskBranch branch,
         String baseCommit,
         boolean trackerWritePending,
         BasePin pin)

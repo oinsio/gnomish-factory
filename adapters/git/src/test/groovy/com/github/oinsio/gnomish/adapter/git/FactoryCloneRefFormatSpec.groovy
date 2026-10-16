@@ -126,7 +126,7 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         then: 'the refusal, and neither the tracking ref nor the register was written'
         thrown(CloneRefFormatRefusedException)
         gitExitCode(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/PROJ-1') != 0
-        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', FactoryRegister.of('PROJ-1').name()) != 0
+        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', FactoryRegisterRefs.of('PROJ-1').name()) != 0
     }
 
     def "F135: routing a take over a files-backend clone is refused before the touchpoint fetch writes a ref"() {
@@ -140,7 +140,7 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         then:
         thrown(CloneRefFormatRefusedException)
         gitExitCode(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/PROJ-1') != 0
-        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', FactoryRegister.of('PROJ-1').name()) != 0
+        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', FactoryRegisterRefs.of('PROJ-1').name()) != 0
     }
 
     def "F135: a replica reconcile on a files-backend clone is refused before the touchpoint fetch writes a ref"() {
@@ -155,7 +155,7 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         then:
         thrown(CloneRefFormatRefusedException)
         gitExitCode(clone, 'rev-parse', '--verify', '--quiet', 'refs/remotes/origin/gnomish/PROJ-1') != 0
-        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', FactoryRegister.of('PROJ-1').trackingName()) != 0
+        gitExitCode(clone, 'rev-parse', '--verify', '--quiet', FactoryRegisterRefs.of('PROJ-1').trackingName()) != 0
     }
 
     /** A files-backend clone of an origin that holds the task branch and its factory register. */
@@ -164,7 +164,7 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         Path work = initTaskWorkingRepo(tempDir)
         String tip = gitOutput(work, 'rev-parse', 'HEAD')
         assert gitExitCode(work, 'push', origin.toString(),
-        "${tip}:refs/heads/gnomish/PROJ-1", "${tip}:${FactoryRegister.of('PROJ-1').name()}") == 0
+        "${tip}:refs/heads/gnomish/PROJ-1", "${tip}:${FactoryRegisterRefs.of('PROJ-1').name()}") == 0
         Path clone = filesClone()
         commit(clone, 'local.txt', 'local')
         addRemote(clone, 'origin', origin.toString())

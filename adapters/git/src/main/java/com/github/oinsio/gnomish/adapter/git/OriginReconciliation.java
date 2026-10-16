@@ -64,7 +64,7 @@ public final class OriginReconciliation {
         if (!origin.isConfigured(repo)) {
             return;
         }
-        Optional<String> remote = remoteTip.read(repo, branch);
+        Optional<String> remote = remoteTip.read(repo, taskId);
         // The relation is computed in one place for all three of its askers (design D8): this
         // touchpoint keeps its own cheap ls-remote read — one round trip, no fetch — and hands the
         // two tips it already holds to the shared classifier instead of re-deriving the verdict.

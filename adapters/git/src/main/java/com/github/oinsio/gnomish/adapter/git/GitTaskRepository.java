@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson;
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.TrackerWrite;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
@@ -22,11 +21,13 @@ import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.InstantSource;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,8 +40,9 @@ import org.slf4j.LoggerFactory;
  * TaskOutcome} — populating {@code lastEscalation} for {@code Escalated} — at completion or parking.
  * Shares the branch with {@link GitAttemptPersistence}, split by file (D3): this class owns {@code
  * task.json} exclusively. Worktree setup is an internal concern (not on the port): every method
- * resolves the deterministic worktree via {@link TaskWorktreeManager#ensureWorktree}, idempotent
- * for both fresh start and resume.
+ * resolves the deterministic worktree via {@link TaskWorktreeManager#storeWorktree}, idempotent
+ * for both fresh start and resume, over a local branch that must already exist — never created
+ * there (design D10 of fix-terminal-receipt-convergence).
  *
  * <p>Strict port: any failure to durably record a lifecycle event is thrown as {@link
  * GitTaskRepositoryException}. The {@code Completed} envelope removal is {@link #finishCleanup},
@@ -89,6 +91,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     private final TaskWorktreeManager worktreeManager;
     private final ClaimEpochSource epochs;
     private final InstantSource clock;
+    private final GitObjects gitObjects;
 
     /**
      * @param runner the git subprocess runner
@@ -106,6 +109,12 @@ public final class GitTaskRepository implements TaskLifecycleStore {
         this.worktreeManager = new TaskWorktreeManager(runner, clone);
         this.epochs = epochs;
         this.clock = clock;
+        // The bare-object facade over the clone's own .git, its private indexes in the JVM temp
+        // dir — the medium the cleanup commit is written through (design D8 of
+        // fix-terminal-receipt-convergence), opened from the one clone this repository is bound
+        // to, so it cannot name another; opening runs no git.
+        this.gitObjects = GitObjects.open(
+                cloneDir.resolve(".git"), Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir"))));
     }
 
     @Override
@@ -225,14 +234,25 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      * Commits the {@code Completed} cleanup commit — the destructive last step of the completion
      * sequence, run only behind the constructive receipts (FR10 of harden-task-branch-contract).
      * Removing {@code .gnomish-task/} takes the pending marker with it, so the cleaned tip needs no
-     * separate receipt, and an already-cleaned tip is left alone ({@link CleanupCommit}).
+     * separate receipt, and an already-cleaned tip is left alone.
+     *
+     * <p>The commit is written by the one writer both media share, {@link
+     * GitObjectsTerminalCommits#cleanUp}, over bare objects in the clone's {@code .git} (design D8
+     * of fix-terminal-receipt-convergence): no worktree, no index lock, and the branch moves with
+     * its register in one compare-and-swap ref transaction, so two instances cleaning one task at
+     * once are decided there — the loser finds the branch already moved. The task worktree is not
+     * touched; the caller's disposal removes it behind this commit.
      *
      * @param taskId the completed task whose envelope is removed from the branch tip; never blank
      */
     @Override
     public void finishCleanup(String taskId) {
-        CleanupCommit.commit(
-                runner, ensureWorktree(taskId), taskId, epochs.epochFor(taskId).orElse(null));
+        GitObjectsTerminalCommits.cleanUp(
+                gitObjects,
+                new TaskLifecycleCommitWriter(
+                        gitObjects, TaskLifecycleCommitWriter.FACTORY_IDENTITY, clock.instant(), epochs),
+                taskId,
+                TaskBranchRefs.head(taskId));
     }
 
     /**
@@ -256,8 +276,7 @@ public final class GitTaskRepository implements TaskLifecycleStore {
     }
 
     private Path ensureWorktree(String taskId) {
-        String branchName = TaskIdSanitizer.branchName(taskId);
-        return worktreeManager.ensureWorktree(taskId, branchName);
+        return worktreeManager.storeWorktree(taskId);
     }
 
     /**
@@ -348,8 +367,8 @@ public final class GitTaskRepository implements TaskLifecycleStore {
      * The host medium's task-lifecycle commit choke point for the transitions this class commits
      * itself — start, the outcome-clearing writes, outcome, terminal-write receipt — which is why the
      * FR2 anchor of harden-logging-observability sits here and not at each of those callers. The {@code
-     * Completed} cleanup stages with {@code git rm -r} rather than {@code git add -A}, so it
-     * commits and emits the same anchor inside {@link CleanupCommit} instead.
+     * Completed} cleanup is written over bare objects, so it emits the same anchor inside {@link
+     * TaskLifecycleCommitWriter#build} instead.
      *
      * <p>The commit lands with the factory register in one ref transaction ({@link
      * WorktreeClosingCommit}, design D13 of tighten-spec-contract), so every lifecycle commit is

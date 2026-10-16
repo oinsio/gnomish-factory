@@ -299,7 +299,7 @@ and by the functional spec of the checker.
 
 ## Impact
 
-- `build-logic/src/main/groovy/com/github/oinsio/gnomish/build/` — `SpecContractCheck` and its
+- `build-logic/src/main/groovy/com/github/oinsio/gnomish/buildlogic/` — `SpecContractCheck` and its
   reader; `build-logic/src/functionalTest` — its functional spec; the `spec-contract-conventions` plugin, applied by the root build, wires
   the task into `check`.
 - `scripts/check-spec-contract.sh` — the manual launcher; `scripts/generate-spec-deltas.sh` —

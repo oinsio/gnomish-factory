@@ -26,7 +26,8 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape;
  * <p>Implements FR9, D3 of add-tracker-port; FR10, D10, NFR-C1 of add-claim-heartbeat; FR1 of
  * add-serve-sandbox-lifecycle; FR2, FR15 of harden-task-branch-contract; FR11 of
  * make-checkpoint-gate-durable (a gate loads the branch like any resumable shape; the loaded
- * routes decide approve-and-continue versus re-delivering a lost park).
+ * routes decide approve-and-continue versus re-delivering a lost park); FR10 of
+ * fix-terminal-receipt-convergence.
  *
  * @param <B> the loaded-branch bundle {@code mechanics} produces
  * @param retry the bounded terminal-write retry every reconciled tracker write runs under — the
@@ -74,9 +75,12 @@ record TakeDispositionResume<B extends ResumedBranch>(
                     BranchShape.Parked(),
                     BranchShape.CompletedUncleaned() -> routes().route(order);
             // Bare is routed to the fresh-claim path before resume is ever reached (TakeWorkRouter),
-            // so arriving here with it is a routing defect, not a branch state — and the three
-            // non-recoverable shapes stop the run with their own diagnosis (FR15).
+            // so arriving here with it is a routing defect, not a branch state — and the four
+            // non-recoverable shapes stop the run with their own diagnosis (FR15). Unregistered is
+            // one of them here: the locate's touchpoint fetch already ran (none for a local head,
+            // NG5 of fix-terminal-receipt-convergence), so no register is left to roll forward from.
             case BranchShape.Bare() -> throw new BranchQuarantineException(taskId, shape);
+            case BranchShape.Unregistered ignoredUnregistered -> throw new BranchQuarantineException(taskId, shape);
             case BranchShape.UnsupportedVersion ignoredVersion -> throw new BranchQuarantineException(taskId, shape);
             case BranchShape.Corrupt ignoredCorrupt -> throw new BranchQuarantineException(taskId, shape);
             case BranchShape.Unknown ignoredUnknown -> throw new BranchQuarantineException(taskId, shape);

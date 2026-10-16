@@ -38,6 +38,6 @@ final class ClosingPush {
      * @return the raw command result — a non-zero exit code is a normal outcome here
      */
     GitCommandResult push(Path repo, String taskId) {
-        return runner.run(repo, GitPush.closing(TaskIdSanitizer.branchName(taskId), FactoryRegister.of(taskId)));
+        return runner.run(repo, GitPush.closing(TaskIdSanitizer.branchName(taskId), FactoryRegisterRefs.of(taskId)));
     }
 }

@@ -1,0 +1,22 @@
+# Gitleaks configuration (NFR-S1 of add-project-skeleton): the default rule set,
+# plus allowlists for proven false-positive shapes.
+#
+# A shape-based allowlist lives here rather than as fingerprints in
+# `.gitleaksignore`: a fingerprint pins one commit, and a squash merge
+# re-introduces the same line in a new commit on `main` (87662b76 failed the
+# scan that way), as does an archive move of an OpenSpec change. A shape is
+# commit- and path-independent.
+#
+# Every entry must be a proven false positive, matched as narrowly as the shape
+# allows. Never allowlist a real credential — rotate it and rewrite history.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Round token in spec examples: a 40-hex git commit SHA, not a secret"
+regexTarget = "line"
+# The round token is the commit a round opened on; `roundToken` trips
+# generic-api-key by its key name. Only a bare 40-hex value under that exact
+# key is allowed.
+regexes = ['''"roundToken":\s*"[0-9a-f]{40}"''']

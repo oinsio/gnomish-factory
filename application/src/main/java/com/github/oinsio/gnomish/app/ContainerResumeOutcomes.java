@@ -1,13 +1,12 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
+import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
-import com.github.oinsio.gnomish.status.StatusReport;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -21,15 +20,17 @@ import org.jspecify.annotations.Nullable;
  * interrupted round's leftovers (or honours {@code --discard-work}) before continuing; both resolve
  * the escalation through {@link EscalationResume} and land its decision or resumed commit through
  * {@link EscalationResume#land}; both open the gate through {@code TaskRepository.approveCheckpoint}
- * (via {@link CheckpointApproval#continuePause}) before continuing; and {@code completed} prints
- * the same status report with no further engine run. Every continuing arm but {@code null} lands
- * exactly one lifecycle commit before the engine runs. The container arm additionally disposes the
+ * (via {@link CheckpointApproval#continuePause}) before continuing; {@code completed} lands a lost
+ * cleanup through {@link DeliveredCleanup}, the owner {@code take} uses, then prints the one
+ * {@link CompletedResume} report with no engine run. Every continuing arm but {@code null} lands exactly one
+ * lifecycle commit before the engine runs. The container arm additionally disposes the
  * kept box before any branch write or round (its clone is behind the park commit); the host arm has
  * none, since its worktree is the branch. Adding or re-meaning an arm on one side alone is the
  * divergence this pair guards against (UX2).
  *
  * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core; FR3, FR4, FR5 of make-run-headless; FR4,
- * FR7, FR18 of make-checkpoint-gate-durable; FR18 of supervise-daemon-loops-and-embed-dashboard.
+ * FR7, FR18 of make-checkpoint-gate-durable; FR18 of supervise-daemon-loops-and-embed-dashboard; FR4
+ * of fix-terminal-receipt-convergence.
  */
 final class ContainerResumeOutcomes {
 
@@ -139,12 +140,20 @@ final class ContainerResumeOutcomes {
                 null);
     }
 
-    /** Outcome {@code completed}: the same final status summary as the host path, no engine run. */
-    static void reportCompleted(ContainerResumeRunner runner, TaskRecord taskJson, TaskState state) {
-        var report = StatusReport.build(taskJson.context(), state, null, null);
-        // The run's console owner (FR5, FR6 of harden-untrusted-text-sinks), mirroring the host
-        // path's own summary print.
-        runner.assembly.dialogConsole().print(runner.statusRenderer.renderFull(report) + ConsoleIO.LINE_END);
+    /**
+     * Outcome {@code completed}: a tip still carrying its envelope gets the cleanup commit over bare
+     * objects and the box disposal through {@code cleanup} — no tracker, so the recorded completion
+     * is the whole settlement — then the same final status summary as the host path, no engine run.
+     */
+    static void reportCompleted(
+            ContainerResumeRunner runner,
+            DeliveredCleanup cleanup,
+            RunOrder order,
+            LocalTaskBranch branch,
+            TaskRecord taskJson,
+            TaskState state) {
+        cleanup.cleanUp(order.cloneDir(), branch);
+        CompletedResume.print(runner.assembly, taskJson.context(), state);
     }
 
     /** Where this task resumes from: the {@code --dir} clone and the task id (FR1 of make-run-headless). */

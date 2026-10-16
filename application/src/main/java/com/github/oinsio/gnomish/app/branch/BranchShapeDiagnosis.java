@@ -13,7 +13,8 @@ import org.jspecify.annotations.Nullable;
  * <p>Exhaustive by construction with no default branch: a shape added to the closed set has to be
  * named here too (FR2).
  *
- * <p>Implements FR15, NFR-O2, UX2 of harden-task-branch-contract.
+ * <p>Implements FR15, NFR-O2, UX2 of harden-task-branch-contract; FR10, UX3 of
+ * fix-terminal-receipt-convergence.
  */
 public final class BranchShapeDiagnosis {
 
@@ -21,7 +22,8 @@ public final class BranchShapeDiagnosis {
 
     /**
      * Describes {@code shape} as a noun phrase that fits after "classifies as", naming the offending
-     * file and the observed versus expected content for the three shapes that carry a diagnosis.
+     * file and the observed versus expected content for the three envelope diagnoses, and the
+     * missing register with the command that fetches it for {@link BranchShape.Unregistered}.
      *
      * @param shape the classifier's verdict; never null
      * @return the human-readable phrase; never blank
@@ -32,6 +34,11 @@ public final class BranchShapeDiagnosis {
                 file + " declaring version " + observed + " where this factory supports " + supported;
             case BranchShape.Corrupt(String reason) -> "corrupt content (" + reason + ")";
             case BranchShape.Unknown(String reason) -> "an unrecognized combination (" + reason + ")";
+            // A state of the clone, not of the branch: the remedy is a read, not a repair (design
+            // D13 of fix-terminal-receipt-convergence).
+            case BranchShape.Unregistered(String register, String tip) ->
+                "fetched without its factory register (" + register + " is absent in this clone, branch tip " + tip
+                        + ") — `gnomish status <task>` fetches it";
             // Bare is the one non-quarantine shape whose name explains nothing to an operator: it
             // is what `status` prints for a branch nobody has started work on, and "Bare" alone
             // reads as a fault rather than as the ordinary empty state it is.
@@ -54,7 +61,7 @@ public final class BranchShapeDiagnosis {
      * where it is — the one owner of that question, so the single-task renderer and the list
      * renderer cannot disagree about which shapes explain themselves.
      *
-     * <p>Two kinds qualify: the three {@link RecoveryDisposition#QUARANTINE} shapes, whose whole
+     * <p>Two kinds qualify: the four {@link RecoveryDisposition#QUARANTINE} shapes, whose whole
      * point is the observed-versus-expected detail, and {@link BranchShape.Bare}, an ordinary empty
      * state whose bare name reads to an operator like a fault.
      *

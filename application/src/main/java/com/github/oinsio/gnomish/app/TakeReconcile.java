@@ -35,21 +35,24 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>The {@code Escalated}/{@code Paused} -> deferred-park cases are reconciled by {@link
  * #deliverPark} (task 6.5). {@code resumeExisting} runs only after {@code tracker.claim} has already
- * succeeded, so the tracker always reports {@code Working} held by this instance at this point and
- * cannot itself tell an orphaned park (the park write never landed → the claim went stale → a reaper
- * returned it to {@code Ready} → it was re-claimed) from a legitimate human-returned park (the park
- * landed → the human answered and returned it to {@code Ready}). The durable "tracker-write pending"
- * marker on the branch ({@code task.json}, {@link
- * com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore#confirmTerminalWrite}) is exactly the
- * "counterpart landed" signal the tracker lacks: {@code recordOutcome} sets it when a park is
- * recorded and clears it once the park write confirms, so at resume an {@code Escalated}/{@code
- * Paused} branch whose marker is still set means "the park never landed" (fire the deferred park,
- * zero engine rounds), and a cleared marker means "the park landed" (ordinary resume proceeds,
- * including the human's decision). A {@code DecisionNeeded} the human already answered has a cleared
- * marker, so it resumes through {@link TakeDecisionResume} rather than being wrongly re-parked (see
- * {@code InMemoryTakeLifecycleEscalateResumeSpec}).
+ * succeeded, so the tracker's current state is always {@code Working} held by this instance here and
+ * says nothing about the park. The durable "tracker-write pending" marker on the branch ({@code
+ * task.json}, {@link com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore#confirmTerminalWrite})
+ * says only that the park's <em>receipt</em> is owed: {@code recordOutcome} sets it when a park is
+ * recorded and clears it once the park write confirms, so a kill after the tracker write and before
+ * the receipt leaves exactly the branch a write that never happened leaves. A set marker therefore
+ * cannot by itself tell an orphaned park (the write never landed → the claim went stale → a reaper
+ * returned it to {@code Ready} → it was re-claimed) from a landed park whose receipt was lost (a
+ * human answered and returned it). The tracker's <b>tenure boundary</b> — the thread's last boundary
+ * marker, whatever claims follow it — does: {@code PARK} means the park landed, so {@link
+ * com.github.oinsio.gnomish.app.take.ParkLanding#confirmFromHistory} records the receipt and the
+ * ordinary resume consumes the human's reply; {@code STALE_CLAIM_REMOVED} or none means it did not,
+ * so the deferred park is fired here with zero engine rounds (FR2 of
+ * fix-terminal-receipt-convergence). A cleared marker means the park landed and its receipt too; a
+ * {@code DecisionNeeded} the human already answered resumes through {@link TakeDecisionResume}
+ * rather than being wrongly re-parked (see {@code InMemoryTakeLifecycleEscalateResumeSpec}).
  *
- * <p>Implements FR10, D10, NFR-C1 of add-claim-heartbeat.
+ * <p>Implements FR10, D10, NFR-C1 of add-claim-heartbeat; FR2 of fix-terminal-receipt-convergence.
  */
 final class TakeReconcile {
 

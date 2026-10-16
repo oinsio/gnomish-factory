@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 /**
  * The admission gate at the harvest (design D18 of tighten-spec-contract): the one way gnome content
  * from a box enters the task branch. A harvest only fetches the box's branch into the task's
- * quarantine ({@link FactoryRegister#quarantine}); this class reads what landed there, requires it
+ * quarantine ({@link FactoryRegisterRefs#quarantine}); this class reads what landed there, requires it
  * to descend from the current branch tip, judges {@code register..top} with the one {@link
  * GnomeRangeInspection}, and only then moves the branch to it — with the register, in one ref
  * transaction, when the top is the factory's own in-box closing commit ({@link
@@ -58,7 +58,7 @@ final class HarvestAdmission {
      *     resolve
      */
     String quarantined(String taskId) {
-        String quarantine = FactoryRegister.quarantine(taskId).name();
+        String quarantine = FactoryRegisterRefs.quarantine(taskId).name();
         return VerifiedTip.required(
                 quarantine, "rev-parse", runner.run(cloneDir, "rev-parse", "--verify", "--quiet", quarantine));
     }
@@ -73,8 +73,8 @@ final class HarvestAdmission {
      * @return the branch tip carrying it, or why the branch did not move
      */
     AdmittedRange admit(String taskId, String top, AdmissionRule rule) {
-        GitCommandResult registerRead = read(FactoryRegister.of(taskId).name());
-        GitCommandResult branchRead = read(FactoryRegister.branchRef(taskId));
+        GitCommandResult registerRead = read(FactoryRegisterRefs.of(taskId).name());
+        GitCommandResult branchRead = read(TaskBranchRefs.head(taskId));
         Optional<String> registered = VerifiedTip.read(registerRead);
         Optional<String> branchTip = VerifiedTip.read(branchRead);
         if (registered.isEmpty() || branchTip.isEmpty()) {
@@ -90,7 +90,7 @@ final class HarvestAdmission {
         if (descends.termination() == Termination.EXITED && descends.exitCode() == 1) {
             return new AdmittedRange.Refused(UntrustedText.factory("the harvested " + top
                     + " does not descend from the branch tip " + tip + " (history rewrite); it"
-                    + " is held at " + FactoryRegister.quarantine(taskId).name() + " in " + cloneDir
+                    + " is held at " + FactoryRegisterRefs.quarantine(taskId).name() + " in " + cloneDir
                     + " until the next harvest"));
         }
         if (!descends.succeeded()) {

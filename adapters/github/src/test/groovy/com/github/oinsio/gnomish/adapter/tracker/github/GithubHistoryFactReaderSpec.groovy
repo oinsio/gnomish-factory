@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.github
 
+import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
@@ -81,5 +82,50 @@ class GithubHistoryFactReaderSpec extends Specification {
         expect:
         !GithubHistoryFactReader.derive(markers)
         !GithubHistoryFactReader.deriveFinished(markers)
+    }
+
+    // FR1 of fix-terminal-receipt-convergence: the tenure boundary is the thread's last boundary
+    //     marker, whatever claims follow it — the claims a pickup posts after a park never hide it
+    def "the tenure boundary is the last boundary marker, whatever claims follow it"() {
+        expect:
+        GithubHistoryFactReader.deriveTenureBoundary(kinds.collect {
+            marker(it)
+        }) == expected
+
+        where:
+        kinds | expected
+        [] | null
+        [
+            GithubMarkerKind.CLAIM,
+            GithubMarkerKind.PROGRESS,
+            GithubMarkerKind.ACK,
+            GithubMarkerKind.NOTE
+        ] | null
+        [
+            GithubMarkerKind.PARK,
+            GithubMarkerKind.CLAIM,
+            GithubMarkerKind.CLAIM
+        ] | BoundaryKind.PARK
+        [
+            GithubMarkerKind.ABORT,
+            GithubMarkerKind.CLAIM,
+            GithubMarkerKind.PARK,
+            GithubMarkerKind.CLAIM
+        ] | BoundaryKind.PARK
+        [
+            GithubMarkerKind.CLAIM,
+            GithubMarkerKind.FINISH,
+            GithubMarkerKind.INDEX_REPAIR
+        ] | BoundaryKind.FINISH
+        [
+            GithubMarkerKind.PARK,
+            GithubMarkerKind.CLAIM,
+            GithubMarkerKind.ABORT
+        ] | BoundaryKind.ABORT
+        [
+            GithubMarkerKind.PARK,
+            GithubMarkerKind.STALE_CLAIM_REMOVED,
+            GithubMarkerKind.CLAIM
+        ] | BoundaryKind.STALE_CLAIM_REMOVED
     }
 }

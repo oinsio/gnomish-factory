@@ -24,7 +24,7 @@ class SecurityOverrideLockStateSpec extends Specification {
 
     static final String ADVISORY = /GHSA(-[0-9a-z]{4}){3}/
 
-    // Scenario: build/quality-gates / A security override names its advisory and its exit
+    // Scenario: build-system/quality-gates / A security override names its advisory and its exit
     def "FR3: every security override names the advisory it clears, and its block says when to drop it"() {
         given:
         def catalog = catalogOverrides()
@@ -49,8 +49,8 @@ class SecurityOverrideLockStateSpec extends Specification {
         }
     }
 
-    // Scenario: build/quality-gates / A security override names its advisory and its exit
-    // Scenario: build/quality-gates / The scan reads regenerated lock state
+    // Scenario: build-system/quality-gates / A security override names its advisory and its exit
+    // Scenario: build-system/quality-gates / The scan reads regenerated lock state
     def "FR4, NFR-R1: the lockfiles an override is applied to record exactly the version its single source pins"() {
         expect: 'every module lockfile of the main build carries the catalog\'s version'
         def moduleLocks = lockfiles().findAll {
@@ -67,14 +67,14 @@ class SecurityOverrideLockStateSpec extends Specification {
         } == []
     }
 
-    // Scenario: build/quality-gates / An override reaches every configuration that resolves the artifact
+    // Scenario: build-system/quality-gates / An override reaches every configuration that resolves the artifact
     def "FR4: an override reaches every committed lockfile listing its artifact, the separate builds included"() {
         expect: 'a lockfile the override does not reach is named as a stale entry'
         stale(catalogPins(), lockfiles()) == []
     }
 
     // F112: scenario text aligned to what this test asserts
-    // Scenario: build/quality-gates / A production-scope advisory is fixed, never suppressed
+    // Scenario: build-system/quality-gates / A production-scope advisory is fixed, never suppressed
     def "NFR-S1: an advisory a production-scope override clears is allowlisted only for a metadata-only candidate no lockfile resolves"() {
         given: 'the advisories of the overrides whose artifact sits on a production runtime classpath'
         def locks = lockLines(lockfiles())

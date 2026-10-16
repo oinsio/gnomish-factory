@@ -25,7 +25,7 @@ class HarvestNetworkRefusalSpec extends Specification implements BareGitRepoFixt
     // Scenario: git/git-transfer / A harvest cannot reach the network
     def "FR4: the harvest argv with a #protocol URL in place of its ext:: URL is refused by git"() {
         given: "the owner's harvest value, whose allowlist names ext alone"
-        def harvest = GitTransfer.harvest(new TransferSource.Container(EXT_URL), 'gnomish/T-1', FactoryRegister.quarantine('T-1'))
+        def harvest = GitTransfer.harvest(new TransferSource.Container(EXT_URL), 'gnomish/T-1', FactoryRegisterRefs.quarantine('T-1'))
         assert harvest.environment().get('GIT_ALLOW_PROTOCOL') == Optional.of('ext')
         Path clone = initWorkingRepo(tempDir, 'factory-clone')
 

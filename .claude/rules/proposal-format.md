@@ -41,5 +41,18 @@ Include only the NFR subsections that apply — but consider each of them explic
 - Every requirement MUST have an ID (FR1, NFR-R1, UX1, etc.)
 - Success metrics must be concrete and measurable (not "feature works")
 - Non-Goals are as important as Goals — they prevent scope creep
+- A non-goal that **defers a known gap** — a unification left for later, a second medium not yet
+  aligned, a window left open — names the condition that must pick it up: the kind of change
+  that may not land without it ("the next change that adds a writer without a claim", "the
+  change that adds a third medium"), never a time ("a later change", "after this is audited").
+  `/review-artifacts` (step 5, "Vs deferrals of archived proposals") and `/opsx:propose-checked`
+  (constraint 7, "Deferral scout") check a new change against the deferrals in the archived
+  proposals (`openspec/changes/archive/**/proposal.md`) whose files it touches: a deferral whose
+  pickup condition the new change meets is either taken up in the change or re-deferred
+  explicitly, in the new proposal's Non-Goals, with its condition restated. The failure this exists for: NG1 of
+  `fix-envelope-medium` (2026-09-22) deferred the host/container write-path unification "to a
+  later change, after this one is audited"; nothing picked it up, and the next consumer of the
+  divergent pair (`fix-terminal-receipt-convergence`, task 3.3) found the host writer racing on
+  the worktree index lock
 - No implementation *choices* — picking a library or schema belongs in design.md. Referencing already-fixed decisions (the ADR 0001 tech stack, an existing ADR) is fine: that is context, not a choice
 - Operator Experience criteria describe subjective expectations that must be explicitly agreed upon

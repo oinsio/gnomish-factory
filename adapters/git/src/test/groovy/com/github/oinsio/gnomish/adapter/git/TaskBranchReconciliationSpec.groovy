@@ -57,7 +57,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
     }
 
     private Optional<String> originTip() {
-        new RemoteBranchTip(runner).read(cloneDir, BRANCH)
+        new RemoteBranchTip(runner).read(cloneDir, TASK_ID)
     }
 
     /**
@@ -148,6 +148,6 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
         then:
         noExceptionThrown()
         events.isEmpty()
-        new RemoteBranchTip(runner).read(cloneDir, 'gnomish/NO-SUCH') == Optional.empty()
+        new RemoteBranchTip(runner).read(cloneDir, 'NO-SUCH') == Optional.empty()
     }
 }

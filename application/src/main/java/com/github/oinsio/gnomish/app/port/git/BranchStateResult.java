@@ -12,7 +12,7 @@ import com.github.oinsio.gnomish.status.StatusReport;
  * on.
  *
  * <p>A branch whose tip carries no readable {@code .gnomish-task/} envelopes — delivered, bare, or
- * one of the three quarantine shapes — is neither of those two: it is a {@link Shaped} answer
+ * one of the four quarantine shapes — is neither of those two: it is a {@link Shaped} answer
  * naming what the classifier saw, so inspection reports every legal shape calmly instead of failing
  * on the files a shape does not have (FR16 of harden-task-branch-contract).
  *
@@ -31,7 +31,7 @@ public sealed interface BranchStateResult {
      * The task branch was found and classified, but its tip carries no report to render — {@link
      * BranchShape#tipCarriesState()} is false, or the tip is a pre-contract {@link
      * BranchShape.Created} one holding {@code task.json} without {@code state.json} (FR3). The
-     * caller renders the shape; the three quarantine shapes are the ones that refuse inspection.
+     * caller renders the shape; the four quarantine shapes are the ones that refuse inspection.
      *
      * @param shape the classifier's verdict for this branch; never null
      */

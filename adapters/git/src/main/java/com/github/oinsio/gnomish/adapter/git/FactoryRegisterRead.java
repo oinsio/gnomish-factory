@@ -9,13 +9,13 @@ import java.util.Optional;
  * The read half of the factory register (design D13 of tighten-spec-contract), and the one
  * producer of {@link RegisteredCommit}: which commit the clone's {@code refs/gnomish-factory/<task>}
  * names, and where a branch tip stands relative to it. The register's name comes from {@link
- * FactoryRegister#of}, the write half's one spelling, so the reader and the writer cannot disagree
+ * FactoryRegisterRefs#of}, the spelling the writers use too, so the reader and the writer cannot disagree
  * on where it lives; the touchpoint fetch ({@link TouchpointFetch}) brought origin's into the clone
  * before any of these reads.
  *
  * <p>Every read passes {@link GitReadGate#answered} or {@link VerifiedTip}: an invocation cut off
  * before its own exit is unavailability, never "no register" — reading it as absence would turn a
- * live task {@code Unknown} on a shutdown.
+ * live task {@code Unregistered} on a shutdown.
  *
  * <p>Implements FR13, NFR-S2 of tighten-spec-contract.
  */
@@ -41,7 +41,7 @@ public final class FactoryRegisterRead {
      *     not run to its own exit
      */
     public Optional<RegisteredCommit> registered(Path repo, String taskId) {
-        String name = FactoryRegister.of(taskId).name();
+        String name = FactoryRegisterRefs.of(taskId).name();
         return VerifiedTip.read(GitReadGate.answered(
                         name, "rev-parse", runner.run(repo, "rev-parse", "--verify", "--quiet", name + "^{commit}")))
                 .map(RegisteredCommit::new);
@@ -61,7 +61,7 @@ public final class FactoryRegisterRead {
                 tipRef, "rev-parse", runner.run(repo, "rev-parse", "--verify", "--quiet", tipRef + "^{commit}"));
         Optional<RegisteredCommit> registered = registered(repo, taskId);
         if (registered.isEmpty()) {
-            String name = FactoryRegister.of(taskId).name();
+            String name = FactoryRegisterRefs.of(taskId).name();
             return new RegisterReading(registered, new TipRelation.NoRegister(name, tip, carriesEnvelope(repo, tip)));
         }
         String id = registered.get().id();

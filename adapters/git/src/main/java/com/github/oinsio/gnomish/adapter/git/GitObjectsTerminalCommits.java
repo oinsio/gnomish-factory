@@ -13,37 +13,44 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The two tail commits of a container-mode terminal transition, built factory-side over bare
- * objects (FR10 of harden-task-branch-contract): the receipt that clears a park's "terminal write
- * pending" marker, and the destructive cleanup commit that strips {@code .gnomish-task/} from a
- * completed tip. The bare-object twins of the host-side {@link TerminalWriteMarker} and {@link
- * CleanupCommit}, extracted from {@link GitObjectsTaskRepository} for the same reason those two were
- * extracted from {@link GitTaskRepository} — file size; the repository still owns ref resolution.
+ * The two tail commits of a terminal transition, built factory-side over bare objects (FR10 of
+ * harden-task-branch-contract): the receipt that clears a park's "terminal write pending" marker,
+ * and the destructive cleanup commit that strips {@code .gnomish-task/} from a completed tip.
+ * Extracted from {@link GitObjectsTaskRepository} for file size; the repositories still own ref
+ * resolution.
+ *
+ * <p>{@link #cleanUp} is the one writer of the cleanup commit on both media (design D8 of
+ * fix-terminal-receipt-convergence): {@link GitObjectsTaskRepository#finishCleanup} calls it in
+ * container mode, {@link GitTaskRepository#finishCleanup} on the host, over the host clone's own
+ * {@code .git}. It needs no worktree, takes no index lock, and decides between two writers at the
+ * ref transaction's compare-and-swap — the step the former host writer, which removed the
+ * directory in the task worktree with {@code git rm -r}, reached only after the worktree's {@code
+ * index.lock}, a lock with no compare-and-swap behind it. {@link #clearPending} stays the
+ * container's: its host twin is {@link TerminalWriteMarker}.
  *
  * <p>Both are idempotent, each guarding on exactly what it edits: the receipt skips a tip carrying
  * no {@code task.json}, the cleanup skips a tip carrying no {@code .gnomish-task/}. A tip whose
  * envelope is already gone has nothing left to clear or remove, so the call changes nothing. That
- * is what lets a recovery run twice and equal running once. The cleanup's test is the one its host
- * twin {@link CleanupCommit} runs too; the receipt's has no host counterpart, because {@link
- * TerminalWriteMarker#clearPending} reads its worktree envelope unguarded and reports a missing one
- * as a fault — a receipt runs only on a park, whose envelope is still present.
+ * is what lets a recovery run twice and equal running once. The receipt's guard has no host
+ * counterpart, because {@link TerminalWriteMarker#clearPending} reads its envelope unguarded and
+ * reports a missing one as a fault — a receipt runs only on a park, whose envelope is still present.
  *
  * <p>Crash consistency ({@code .claude/rules/crash-consistency.md}). Neither method is a transition
  * of its own: each is the tail step of one of the two terminal sequences the take flow orders, and
  * the outcome decides which of the two runs. A park goes outcome commit (intent), tracker write,
  * {@link #clearPending} (receipt). A completion goes outcome commit (intent), tracker write, {@link
  * #cleanUp} (the destructive last step) — removing the envelope takes the pending marker with it,
- * so a completion needs no separate receipt and never calls {@link #clearPending}, exactly as its
- * host twin {@link CleanupCommit} states. Each lands as a single compare-and-swap
- * commit inside {@link TaskLifecycleCommitWriter#build}, so the only kill window either opens is
- * "before the commit": the next pickup resolves the ref and reads the previous tip — a park whose
- * marker is still set, or a {@code Completed} tip still carrying its envelope. Both are named
- * shapes of the {@code task-branch-contract} capability, and their recovery owner is
- * reconcile-on-resume, which rolls forward by re-driving the step. The destructive {@link #cleanUp}
- * runs only behind the confirmed tracker finish, so no window ever removes the envelope a pickup
- * would still need to classify the branch.
+ * so a completion needs no separate receipt and never calls {@link #clearPending}. Each lands as a
+ * single compare-and-swap commit, with the factory register, inside {@link
+ * TaskLifecycleCommitWriter#build}, so the only kill window either opens is "before the commit":
+ * the next pickup resolves the ref and reads the previous tip — a park whose marker is still set,
+ * or a {@code Completed} tip still carrying its envelope. Both are named shapes of the {@code
+ * task-branch-contract} capability, and their recovery owner is reconcile-on-resume, which rolls
+ * forward by re-driving the step. The destructive {@link #cleanUp} runs only behind the confirmed
+ * tracker finish, so no window ever removes the envelope a pickup would still need to classify the
+ * branch.
  *
- * <p>Implements FR10 of harden-task-branch-contract.
+ * <p>Implements FR10 of harden-task-branch-contract; FR4, NFR-R1 of fix-terminal-receipt-convergence.
  */
 final class GitObjectsTerminalCommits {
 
@@ -100,14 +107,10 @@ final class GitObjectsTerminalCommits {
 
     /**
      * Removes {@code .gnomish-task/} from the tip in one commit, leaving every prior commit
-     * reachable as the audit trail.
-     *
-     * <p>Kept in sync with {@link CleanupCommit#commit}: both media test the tip for {@code
-     * .gnomish-task/}, the directory this step removes, rather than any single file inside it —
-     * so an already-cleaned branch is the same no-op in either mode; and both log the FR2 anchor
-     * line ({@code task lifecycle commit written for task {}: event={}}) after the cleanup commit
-     * succeeds, via {@link TaskLifecycleCommitWriter#build}
-     * here and directly there (harden-logging-observability).
+     * reachable as the audit trail. The tip is tested for the directory, the thing this step
+     * removes, rather than any single file inside it, so an already-cleaned branch is a no-op; the
+     * FR2 anchor line ({@code task lifecycle commit written for task {}: event={}}) is logged by
+     * {@link TaskLifecycleCommitWriter#build} after the commit lands (harden-logging-observability).
      *
      * @param gitObjects the bare-object facade the tip is read and written through
      * @param writer the lifecycle commit builder bound to this write's timestamp and identity
@@ -117,7 +120,7 @@ final class GitObjectsTerminalCommits {
     static void cleanUp(GitObjects gitObjects, TaskLifecycleCommitWriter writer, String taskId, String ref) {
         ObjectId tip = writer.requireTip(taskId, ref, TaskLifecycleEvent.COMPLETED);
         // The directory, not task.json: this step removes the directory, so the directory is what
-        // "already cleaned" means — and it is the test the host twin CleanupCommit runs.
+        // "already cleaned" means.
         if (!gitObjects.exists(tip, EnvelopePaths.DIR_NAME)) {
             log.debug("cleanup commit for task {} is a no-op: the tip carries no envelope", taskId);
             return;

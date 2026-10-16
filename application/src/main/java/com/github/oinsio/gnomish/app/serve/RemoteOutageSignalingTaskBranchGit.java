@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.serve;
 
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult;
@@ -51,8 +52,17 @@ record RemoteOutageSignalingTaskBranchGit(TaskBranchGit delegate, RemoteOutageGa
     }
 
     @Override
-    public boolean ensureLocalTaskBranch(Path cloneDir, String taskId) {
+    public BranchAdoption ensureLocalTaskBranch(Path cloneDir, String taskId) {
         return signalingOutage(() -> delegate.ensureLocalTaskBranch(cloneDir, taskId));
+    }
+
+    /**
+     * Passes through: the adoption asks no remote of its own — the caller's {@link #locate}, which
+     * already signalled an outage it met, is the only lookup behind the location it is handed.
+     */
+    @Override
+    public BranchAdoption adopt(Path cloneDir, String taskId, BranchLocation location) {
+        return delegate.adopt(cloneDir, taskId, location);
     }
 
     @Override
@@ -67,6 +77,16 @@ record RemoteOutageSignalingTaskBranchGit(TaskBranchGit delegate, RemoteOutageGa
     @Override
     public BranchShape classifyShape(Path cloneDir, String taskId) {
         return signalingOutage(() -> delegate.classifyShape(cloneDir, taskId));
+    }
+
+    /**
+     * Wrapped like the other lookups: the read over a caller's location throws the outage only for
+     * an {@link BranchLocation.Unavailable} the caller's {@link #locate} already signalled, and a
+     * second signal while the gate is open is the gate's own no-op.
+     */
+    @Override
+    public BranchShape classifyShape(Path cloneDir, String taskId, BranchLocation location) {
+        return signalingOutage(() -> delegate.classifyShape(cloneDir, taskId, location));
     }
 
     @Override

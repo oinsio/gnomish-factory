@@ -64,8 +64,8 @@ class GitTransferBoundarySpec extends Specification {
     // FR9, M1, M3: a transfer literal outside the owner is a second argv builder — the shape
     //     the origin fetch builder and the literal harvest argv had before this change, whose flags then
     //     drifted apart (the 2026-09-13 reproductions).
-    // Scenario: build/module-layering / Two media build one transfer from one leaf
-    // Scenario: build/module-layering / The transfer policy is pure values in gittransfer
+    // Scenario: build-system/module-layering / Two media build one transfer from one leaf
+    // Scenario: build-system/module-layering / The transfer policy is pure values in gittransfer
     // Scenario: git/git-transfer / A new fetch site fails the build
     // Scenario: git/git-task-persistence / No path pulls
     def "FR9, M1, M3: no production source outside the owner spells a transfer subcommand"() {

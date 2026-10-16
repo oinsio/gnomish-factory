@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.port.TaskRepository
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
@@ -105,8 +106,8 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
     // methods already thread through is honored uniformly for a batch's every ref too.
     def "batch take routes every ref through the container fresh-claim path, not just one"() {
         given:
-        def repoOne = Mock(TaskRepository)
-        def repoTwo = Mock(TaskRepository)
+        def repoOne = Mock(TaskLifecycleStore)
+        def repoTwo = Mock(TaskLifecycleStore)
 
         when:
         dispatch(['PROJ-1', 'PROJ-2'], ['PROJ-1': repoOne, 'PROJ-2': repoTwo])

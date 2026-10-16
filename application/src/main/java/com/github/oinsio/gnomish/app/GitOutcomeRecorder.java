@@ -109,18 +109,4 @@ final class GitOutcomeRecorder {
             git.branches().reconcileRemote(cloneDir, taskId, "terminal-boundary");
         }
     }
-
-    /**
-     * The workspace half of the destructive tail: the outcome-driven worktree disposal (FR6 —
-     * {@code Completed} removes the worktree; {@code Escalated}/{@code Paused} keep it for a fast
-     * resume; {@code Aborted} always keeps it for forensics).
-     *
-     * @param git the task-git capability set the disposal runs through; never null
-     * @param cloneDir the {@code --dir} project clone that owns the worktree registration
-     * @param worktree the task's worktree path; never null
-     * @param outcome the terminal outcome that decides the disposal; never null
-     */
-    static void disposeWorkspace(TaskGit git, Path cloneDir, Path worktree, TaskOutcome outcome) {
-        git.worktrees().cleanUp(cloneDir, worktree, outcome);
-    }
 }

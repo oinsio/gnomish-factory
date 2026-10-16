@@ -117,8 +117,10 @@ Choose exactly one:
 5. Re-run the red spec — it must pass — then run `./gradlew <module>:check` for every affected
    module (Spotless, Error Prone/NullAway, Spock, JaCoCo, PIT). A long PIT run is normal; do
    not abort it. If a gate fails, fix it or report it as failing — never as passed.
-6. If the fix would require changing a spec's expectations, treat that as a design question:
-   explain why the old expectation was wrong, or stop and ask.
+6. If the fix would require changing a spec's expectations, treat that as a design question
+   under `.claude/rules/spec-mismatch.md`: verify every premise in code with `file:line`, map
+   the class, state alternative zero and rank the options by failure class before you stop and
+   ask; explain why the old expectation was wrong, never narrow it so the code passes.
 7. **Never commit** (project invariant). End with a recommended Conventional Commits subject
    line per `process-invariants.md`.
 

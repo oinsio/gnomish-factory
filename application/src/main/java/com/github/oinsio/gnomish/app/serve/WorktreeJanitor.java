@@ -33,10 +33,15 @@ import org.slf4j.LoggerFactory;
  * environment whose most recent file activity is older than the age threshold — except one
  * occupying a slot of THIS instance, skipped regardless of age. Held tasks are read fresh on every
  * tick ({@code heldRefs}, typically {@code SlotLedger::occupiedRefs}), so a task claimed after the
- * janitor started is still protected. There is no "is this task ended" check against the tracker:
- * age plus "not held here" is the whole policy, deliberately simple, since a disposal too early
- * only costs a re-clone on resume (design D10 risk note). Worktrees are instance-local, and another
- * clone's folder is never listed (FR9, NFR-R2 of add-project-registry).
+ * janitor started is still protected. The age pass has no "is this task ended" check against the
+ * tracker: age plus "not held here" is its whole policy, deliberately simple, since a disposal too
+ * early only costs a re-clone on resume (design D10 risk note). Worktrees are instance-local, and
+ * another clone's folder is never listed (FR9, NFR-R2 of add-project-registry).
+ *
+ * <p>After the age pass, every tick runs its {@link BranchPass} — {@link DeliveredBranchPass} — over the clone's task
+ * branches (FR4 of fix-terminal-receipt-convergence, proposal Q1): it, and only it, reads the
+ * tracker — for {@code CompletedUncleaned} branches only — and converges those whose finish landed
+ * through the claimless cleanup owner, skipping the same held tasks the age pass skips.
  *
  * <p><b>The thread is a supervised daemon loop</b> (design D1, D7 of
  * supervise-daemon-loops-and-embed-dashboard). This class owns only its tick and its {@code
@@ -48,7 +53,7 @@ import org.slf4j.LoggerFactory;
  * the tick's own scan and held-ref lines keep their codes.
  *
  * <p>Implements FR14 of add-factory-serve (design D10); FR9, NFR-R2 of add-project-registry; FR6
- * of supervise-daemon-loops-and-embed-dashboard.
+ * of supervise-daemon-loops-and-embed-dashboard; FR4 of fix-terminal-receipt-convergence.
  */
 public final class WorktreeJanitor {
 
@@ -62,6 +67,7 @@ public final class WorktreeJanitor {
     private final TaskEnvironmentDisposal disposal;
     private final InstantSource clock;
     private final OccupiedSlots heldRefs;
+    private final BranchPass branchPass;
     private final SupervisedLoop loop;
     private volatile Instant lastRunAt;
 
@@ -74,19 +80,23 @@ public final class WorktreeJanitor {
      *     comparison reads and times the loop's failure roll-ups, its sleeper waits the tick interval
      *     and the restart backoff (design D2, D20 of supervise-daemon-loops-and-embed-dashboard)
      * @param heldRefs answers, fresh on every tick, the tasks currently occupying a slot of this
-     *     instance — never disposed regardless of age
+     *     instance — never disposed regardless of age, and never cleaned by the branch pass
+     * @param branchPass the pass over the clone's task branches every tick runs after the age pass
+     *     (FR4 of fix-terminal-receipt-convergence)
      */
     public WorktreeJanitor(
             RegisteredClone clone,
             Duration ageThreshold,
             TaskEnvironmentDisposal disposal,
             TimeEquipment time,
-            OccupiedSlots heldRefs) {
+            OccupiedSlots heldRefs,
+            BranchPass branchPass) {
         this.cloneWorktrees = clone.worktrees();
         this.ageThreshold = ageThreshold;
         this.disposal = disposal;
         this.clock = time.clock();
         this.heldRefs = heldRefs;
+        this.branchPass = branchPass;
         this.lastRunAt = clock.instant();
         LoopShape shape = new LoopShape(
                 DaemonComponent.JANITOR,
@@ -120,10 +130,15 @@ public final class WorktreeJanitor {
     // Package-private: the policy spec drives this directly, with no thread and no real sleeping.
     void tick() {
         lastRunAt = clock.instant();
+        Set<String> held = heldEnvironmentKeys();
+        agePass(held);
+        branchPass.run(held);
+    }
+
+    private void agePass(Set<String> held) {
         if (!Files.isDirectory(cloneWorktrees)) {
             return;
         }
-        Set<String> held = heldEnvironmentKeys();
         Instant now = clock.instant();
         try (Stream<Path> children = Files.list(cloneWorktrees)) {
             children.filter(Files::isDirectory).forEach(dir -> disposeIfAged(dir, held, now));

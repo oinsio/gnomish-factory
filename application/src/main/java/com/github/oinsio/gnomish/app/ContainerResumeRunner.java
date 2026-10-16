@@ -1,13 +1,16 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption;
+import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState;
+import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch;
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
+import com.github.oinsio.gnomish.domain.branch.BranchShape;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.Segment;
-import com.github.oinsio.gnomish.status.StatusTextRenderer;
 import java.nio.file.Path;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -27,7 +30,8 @@ import org.slf4j.MDC;
  * escalated} resolves the operator's {@code --decision} through the same {@link
  * EscalationResume}; {@code paused} continues without a prompt; {@code null} salvages the interrupted round
  * in-box (or {@code --discard-work} disposes and re-materializes fresh) and
- * continues; {@code completed} reports. A snapshot commit found unrecorded at
+ * continues; {@code completed} lands a cleanup still owed and reports; a tip whose cleanup already
+ * landed reports the task done and writes nothing. A snapshot commit found unrecorded at
  * the tip resumes as an interrupted verification — re-verified against exactly
  * that attempt commit, no agent re-run, no attempt burned (FR21, D15). The
  * resume decision is committed factory-side before any environment
@@ -43,14 +47,20 @@ import org.slf4j.MDC;
  * make-checkpoint-gate-durable): {@code null} salvages the interrupted round and
  * continues from the recorded position (honouring {@code --discard-work}), {@code escalated}
  * resolves the {@code --decision} through the same {@link EscalationResume}, {@code paused}
- * lands the approval commit and continues without a prompt, {@code completed} reports without another engine run, and {@code
- * aborted} refuses with a usage error naming the kept working copy; both refuse a {@code
+ * lands the approval commit and continues without a prompt, {@code completed} lands a cleanup still owed through
+ * {@link DeliveredCleanup} and reports without another engine run, and {@code
+ * aborted} refuses with a usage error naming the kept working copy; a {@code Delivered} tip —
+ * named by {@link com.github.oinsio.gnomish.app.port.git.TaskBranchGit#classifyShape}, never by
+ * a file probe — prints the {@link CompletedResume} report read from history and writes no
+ * commit, and any other envelopeless tip stays an impossible state (the host disposes the
+ * worktree its bootstrap materialized over that tip; this side materializes no environment for
+ * it); both refuse a {@code
  * --decision} over a gate or a non-escalated outcome through {@link ResumeDecisionGuard} before any branch
  * write (FR9 of make-run-headless). Adding or re-meaning an arm on one side alone is the
  * divergence this pair guards against (UX2).
  *
  * <p>Implements FR6, FR17, FR21, FR25 of add-sandbox-core; FR3, FR9 of make-run-headless; FR11 of
- * make-checkpoint-gate-durable.
+ * make-checkpoint-gate-durable; FR4 of fix-terminal-receipt-convergence.
  */
 final class ContainerResumeRunner {
 
@@ -58,7 +68,6 @@ final class ContainerResumeRunner {
     private final TaskGit git;
     private final String taskIdMdcKey;
     private final ContainerSupportFactory supportFactory;
-    final StatusTextRenderer statusRenderer = new StatusTextRenderer();
 
     /**
      * The support factory is injected ({@link ContainerSupportFactory}): the composition root binds
@@ -90,14 +99,26 @@ final class ContainerResumeRunner {
         Path cloneDir = order.cloneDir();
         PipelineDefinition definition = order.definition();
         git.branches().harden(cloneDir);
-        if (!git.branches().ensureLocalTaskBranch(cloneDir, taskId)) {
-            throw new UsageException("no task branch found for \"" + taskId
-                    + "\" — locally, as a remote-tracking ref, or on origin; nothing to resume");
-        }
+        LocalTaskBranch branch =
+                switch (git.branches().ensureLocalTaskBranch(cloneDir, taskId)) {
+                    case LocalTaskBranch local -> local;
+                    case BranchAdoption.Nowhere() ->
+                        throw new UsageException("no task branch found for \"" + taskId
+                                + "\" — locally, as a remote-tracking ref, or on origin; nothing to resume");
+                };
         // Resume-start touchpoint (FR3 of fix-lifecycle-push): the reconcile above brings local up
         // to what origin holds; this pushes origin up to what local holds, delivering a commit an
         // earlier instance recorded but never got pushed. Best-effort, never blocking.
         git.branches().reconcileRemote(cloneDir, taskId, "resume-start");
+        // A tip whose cleanup already landed carries no envelope to read: the classifier at the
+        // registered commit names it, and the done report comes from history with no environment
+        // and no write (FR4 of fix-terminal-receipt-convergence). Every other shape reads on.
+        if (git.branches().classifyShape(cloneDir, taskId) instanceof BranchShape.Delivered) {
+            DeliveredBranchState delivered = CompletedResume.readDelivered(git.branches(), cloneDir, taskId, decision);
+            MDC.put(taskIdMdcKey, delivered.context().taskId());
+            CompletedResume.print(assembly, delivered.context(), delivered.finalState());
+            return;
+        }
 
         var support = supportFactory.create(cloneDir, taskId, segments, definition, List.of());
         TaskRecord taskJson = support.readTaskJson();
@@ -119,7 +140,9 @@ final class ContainerResumeRunner {
             return;
         }
         switch (outcome) {
-            case RecordedOutcome.Completed ignored -> ContainerResumeOutcomes.reportCompleted(this, taskJson, state);
+            case RecordedOutcome.Completed ignored ->
+                ContainerResumeOutcomes.reportCompleted(
+                        this, DeliveredCleanup.container(git.branches(), support), order, branch, taskJson, state);
             case RecordedOutcome.Escalated ignored ->
                 ContainerResumeOutcomes.resumeEscalated(this, support, order, taskJson, state, decision);
             case RecordedOutcome.Paused ignored ->

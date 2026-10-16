@@ -269,7 +269,15 @@ public enum OperatorEvent {
     // sandbox image git floor (tighten-spec-contract, design D13 as amended 2026-10-13): the image
     // a box is about to be seeded on carries a git below the floor (or none), so its seed clone
     // could not read the reftable factory clone; the box is refused before any object exists.
-    BOX_GIT_VERSION_REFUSED("GF163");
+    BOX_GIT_VERSION_REFUSED("GF163"),
+    // worktree janitor branch pass (fix-terminal-receipt-convergence, design D2): one or more
+    // finished tasks' delivered branches could not be cleaned on this tick; the next tick retries.
+    WORKTREE_JANITOR_BRANCH_CLEANUP_FAILED("GF164"),
+    // worktree janitor branch pass (fix-terminal-receipt-convergence, design D13, FR12): one or more
+    // forwarded branches are still Unregistered after the claimless owner's touchpoint read — a
+    // local head the locate does not fetch, or a tracking ref for which origin delivered no
+    // register or could not be reached; nothing is written, the quarantine owner keeps them.
+    WORKTREE_JANITOR_BRANCH_UNREGISTERED("GF165");
 
     private final String code;
     private final String head;

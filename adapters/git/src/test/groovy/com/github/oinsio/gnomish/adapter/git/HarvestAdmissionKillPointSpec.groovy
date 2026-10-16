@@ -70,7 +70,7 @@ class HarvestAdmissionKillPointSpec extends Specification implements LifecyclePu
         def peer = tempDir.resolve('peer')
         seedClone(tempDir, origin.toString(), peer, '-q')
         new TouchpointFetch(git).fetch(peer, TASK_ID,
-                new com.github.oinsio.gnomish.gittransfer.Refspec("+${BRANCH}:refs/heads/${BRANCH}"), FactoryRegister.fetchedInPlace(TASK_ID))
+                new com.github.oinsio.gnomish.gittransfer.Refspec("+${BRANCH}:refs/heads/${BRANCH}"), FactoryRegisterRefs.fetchedInPlace(TASK_ID))
 
         then: 'the register names the last closing commit there'
         registeredId(peer, TASK_ID) == closing

@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app.take;
 
 import com.github.oinsio.gnomish.app.TakeOrder;
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
 import com.github.oinsio.gnomish.app.terminal.EffectObservation;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffect;
 import com.github.oinsio.gnomish.app.terminal.TerminalEffectDrive;
@@ -19,7 +18,8 @@ import org.slf4j.Logger;
  * intact: the {@code CompletedUncleaned} shape, whose recovery probes the tracker and finishes what
  * is left, never re-entering the engine (FR9).
  *
- * <p>Implements FR9, FR10 of harden-task-branch-contract; FR18, D11 of add-tracker-port.
+ * <p>Implements FR9, FR10 of harden-task-branch-contract; FR18, D11 of add-tracker-port; FR3, NFR-O1 of
+ * fix-terminal-receipt-convergence.
  *
  * @param order the take order whose task is finished: its tracker, the task's identity, and this
  *     instance's identity for the pre-write claim check; never null
@@ -56,17 +56,21 @@ public record FinishEffect(
     }
 
     /**
-     * A tracker already reporting the task as finished carries this finish. Anything else —
-     * including a tracker that cannot be asked — re-drives, which the find-then-upsert write makes
-     * safe (FR11).
+     * A finish the task's history already carries — read by {@link FinishLanding}, never from the
+     * current state — is this finish, and its confirmation leaves one DEBUG line (FR3, NFR-O1 of
+     * fix-terminal-receipt-convergence). Anything else — including a tracker that cannot be asked —
+     * re-drives, which the find-then-upsert write makes safe (FR11).
      */
     @Override
     public EffectObservation observeAtTarget() {
         try {
-            var task = order.tracker().fetchTask(order.ref());
-            return task.finished() || task.state() instanceof TrackerTaskState.Finished
-                    ? EffectObservation.LANDED
-                    : EffectObservation.ABSENT;
+            if (!FinishLanding.landed(order.tracker().fetchTask(order.ref()))) {
+                return EffectObservation.ABSENT;
+            }
+            log.debug(
+                    "finish of {} confirmed from its tenure history",
+                    order.ref().id());
+            return EffectObservation.LANDED;
         } catch (RuntimeException e) {
             log.warn(
                     OperatorEvent.FINISH_LANDING_UNVERIFIED.head()

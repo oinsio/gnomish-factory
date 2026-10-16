@@ -116,7 +116,7 @@ class ApplicationBeanInventorySpec extends Specification {
     }
 
     // NFR-R2 of collapse-composition-roots: the inventory is exactly the declared list
-    // Scenario: build/module-layering / Startup wiring is unchanged by the split
+    // Scenario: build-system/module-layering / Startup wiring is unchanged by the split
     def "the context holds exactly the declared first-party beans"() {
         expect:
         firstPartyBeanNames() == EXPECTED.toSorted()

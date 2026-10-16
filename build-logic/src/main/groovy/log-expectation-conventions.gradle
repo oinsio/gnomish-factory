@@ -1,4 +1,4 @@
-import com.github.oinsio.gnomish.build.LogExpectationGateCheck
+import com.github.oinsio.gnomish.buildlogic.LogExpectationGateCheck
 
 // The build-wide verdict of the runtime log-expectation gate (FR17, design D16 of
 // harden-logging-observability). Applied to the root project only: the evidence is written

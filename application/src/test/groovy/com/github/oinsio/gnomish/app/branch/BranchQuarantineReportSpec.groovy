@@ -79,4 +79,22 @@ class BranchQuarantineReportSpec extends Specification {
         report.contains('routing defect')
         report.toLowerCase().contains('ready')
     }
+
+    // FR10 of fix-terminal-receipt-convergence (design D13): an Unregistered branch names no file
+    // either — its remedy is the read that fetches the register, and the inspection a branch still
+    // Unregistered after it needs before the task returns to ready.
+    def "an Unregistered branch is told to fetch its register, not to fix a file"() {
+        when:
+        def report = BranchQuarantineReport.of('PROJ-1', new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40), FACTS)
+
+        then: 'the diagnosis names the missing register'
+        report.contains('fetched without its factory register')
+        report.contains('refs/gnomish-factory/PROJ-1')
+
+        and: 'the next step is the fetching read of this task, then an inspection if it stays Unregistered'
+        report.contains('run `gnomish status PROJ-1` to fetch')
+        report.contains('still Unregistered after it has no factory register at origin')
+        report.toLowerCase().contains('ready')
+        !report.contains('fix or remove the offending file')
+    }
 }

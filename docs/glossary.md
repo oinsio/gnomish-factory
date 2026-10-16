@@ -234,9 +234,9 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   envelope versions of its **registered commit** mapped to exactly one name
   from a closed set. Classified at the registered commit, never at the tip;
   the tip contributes one fact, its relation to the register (at it, above it,
-  diverged from it, or no register at all — type `TipRelation`), and a
-  diverged tip or a missing register over an envelope classifies `Unknown`
-  with a diagnosis. Classified by content alone — the claim epoch is
+  diverged from it, or no register at all — type `TipRelation`). A diverged
+  tip classifies `Unknown` with a diagnosis; a missing register over an
+  envelope classifies `Unregistered`, and over no envelope `Bare`. Classified by content alone — the claim epoch is
   provenance, not an input. Total by construction — every combination classifies, `Unknown`
   included, and classification never throws on content. The closed set and the
   meaning of each name are owned by the `task-branch-contract` capability, in
@@ -248,6 +248,34 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   for the `Answered` shape (that name belongs to the human's answer record),
   `Paused` for the `AwaitingApproval` shape (that name belongs to a
   `TaskOutcome` variant).
+- **Unregistered** — the **branch shape** of a task branch whose tip carries a
+  factory **envelope** while this clone holds no **factory register** for the
+  task, as an operator's or an IDE's `git fetch`, or a `git clone`, leaves one.
+  A state of the clone, not of the branch: nothing is read at a register that
+  is not there, its **recovery owner** is the touchpoint fetch, which lands the
+  register beside the branch, and the branch then classifies by its content. A
+  branch still `Unregistered` after a reader's own read is quarantined like
+  any shape no register can roll forward from. Only a branch the clone holds
+  as a remote-tracking ref is fetched that way; a local head without its
+  register is not, and stays `Unregistered` (a deferral of the same change,
+  its proposal NG5). Type:
+  `BranchShape.Unregistered(register, tip)` (introduced by
+  `fix-terminal-receipt-convergence`, design D13). *Not:* `Unknown`, which is a
+  present and diverged pair (or a legal but unrecognized combination); *Not:*
+  `Bare`, whose tip carries no envelope at all.
+- **Branch adoption** — making a task branch that a clone holds only as a
+  remote-tracking ref (`refs/remotes/origin/gnomish/<task>`) a local branch,
+  by one compare-and-swap ref create: one `git update-ref --stdin` transaction
+  creates `refs/heads/gnomish/<task>` at the tracking tip only if no such head
+  exists yet. The factory register is not touched: the touchpoint fetch that
+  located the branch already landed it. Two adopters in one clone race only at
+  that create; the loser finds the winner's head and continues on it. Nothing
+  undoes an adoption. Owner: `TaskBranchAdoption`, behind the git port's
+  `ensureLocalTaskBranch` and `adopt`; answer type `BranchAdoption` (`Adopted`, `AlreadyLocal`,
+  `Nowhere`) (introduced by `fix-terminal-receipt-convergence`, design D9,
+  D12). *Not:* a checkout (no working copy is touched, and git resolves no
+  name); *Not:* a fresh task's branch creation, which makes a branch that
+  exists nowhere yet.
 - **Tracker shape** — the same total classification applied to the tracker
   medium: state labels, claim footprint, and boundary markers mapped to
   exactly one name, `Foreign` included for out-of-protocol combinations.
@@ -255,6 +283,14 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   its table are owned by the `claim-heartbeat` capability, in its "Total
   tracker-shape classification with one recovery owner" requirement
   (`openspec/specs/lifecycle/claim-heartbeat/spec.md`).
+- **Tenure boundary** — the kind of the last boundary marker (park, finish,
+  abort, stale-claim removal) on a task's whole tracker thread, in posting
+  order, whatever claim markers follow it; null when the thread has none.
+  Reported by `fetchTask` as `TrackerTask.tenureBoundary`, and the one fact a
+  receipt probe reads to confirm a park or finish after its own pickup has
+  claimed the task again. *Not:* the claim-scoped boundary the shape facts
+  carry for the reaper (`TrackerFacts.latestBoundary`), which is null once a
+  claim follows the boundary.
 - **Sweep universe** — the set of tasks a sweep's own listing queries
   enumerate (the union of the ready and open listings). The ordering rule that
   keeps every kill window inside it: the label write admitting a task into the
@@ -277,7 +313,8 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   register together. It is the trust anchor of the branch's record in the
   container tier; in host mode the gnome can move it, so it carries no
   integrity claim there, and its anomalies are signals only. Owner in the
-  clone: `FactoryRegister`; ref name: `RegisterRef` (introduced by
+  clone: `FactoryRegister`; ref name: `RegisterRef`, spelled from a task id by
+  `FactoryRegisterRefs` (introduced by
   `tighten-spec-contract`, design D13, D19). *Not:* a **registered clone** of
   Operator configuration, which is a clone directory listed in a project
   file.

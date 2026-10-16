@@ -1,11 +1,13 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.port.TaskRepository
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
+import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
@@ -15,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
@@ -26,6 +29,7 @@ import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
+import java.nio.file.Path
 import java.util.function.UnaryOperator
 import spock.lang.Specification
 
@@ -62,7 +66,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         def git = new TaskGit(
                 Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
                 UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
-        def repository = Mock(TaskRepository)
+        def repository = Mock(TaskLifecycleStore)
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
@@ -85,9 +89,18 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
             it.taskId() == 'PROJ-1'
         }, LAW_COMMIT, DEFAULT_BRANCH_PIN, _)
 
+        then: 'FR8 of fix-terminal-receipt-convergence: the created branch is answered local by the adoption owner'
+        1 * branches.locate(CLONE_DIR, 'PROJ-1') >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
+        1 * branches.adopt(CLONE_DIR, 'PROJ-1', new BranchLocation.Local('refs/heads/gnomish/PROJ-1')) >>
+                new BranchAdoption.AlreadyLocal('PROJ-1')
+
         and: 'the engine really ran the stage, and the run finished on the tracker'
         1 * tracker.finish(_, _)
         result instanceof TakeResult.Delivered
+
+        then: 'FR4 of fix-terminal-receipt-convergence: the delivered branch is cleaned behind the finish'
+        1 * branches.classifyShape(CLONE_DIR, 'PROJ-1') >> new BranchShape.CompletedUncleaned()
+        1 * repository.finishCleanup('PROJ-1')
     }
 
     // D6 of introduce-take-order (FR13 of add-base-ref-resolution): the container twin re-binds the
@@ -97,10 +110,10 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         given:
         def tracker = Mock(Tracker)
         def git = new TaskGit(
-                Stub(TaskStoreGit), Mock(TaskBranchGit), Stub(TaskWorktreeGit),
+                Stub(TaskStoreGit), freshBranches(), Stub(TaskWorktreeGit),
                 UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
         def support = Stub(SandboxRunSupport) {
-            taskRepository() >> Mock(TaskRepository)
+            taskRepository() >> Mock(TaskLifecycleStore)
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
             pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
@@ -125,9 +138,17 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         given:
         def tracker = Mock(Tracker)
         def git = new TaskGit(
-                Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit),
+                Stub(TaskStoreGit), Stub(TaskBranchGit) {
+                    locate(_, _) >> { Path clone, String taskId ->
+                        new BranchLocation.Local('refs/heads/gnomish/' + taskId)
+                    }
+                    adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+                        new BranchAdoption.AlreadyLocal(taskId)
+                    }
+                    classifyShape(_, _) >> new BranchShape.Delivered()
+                }, Stub(TaskWorktreeGit),
                 UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
-        def repository = Mock(TaskRepository)
+        def repository = Mock(TaskLifecycleStore)
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
@@ -158,9 +179,9 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         given:
         def tracker = Mock(Tracker)
         def git = new TaskGit(
-                Stub(TaskStoreGit), Mock(TaskBranchGit), Stub(TaskWorktreeGit),
+                Stub(TaskStoreGit), freshBranches(), Stub(TaskWorktreeGit),
                 UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
-        def repository = Mock(TaskRepository)
+        def repository = Mock(TaskLifecycleStore)
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> repository
         }
@@ -184,5 +205,21 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         0 * repository.createTask(*_)
         1 * tracker.park(REF, _, _)
         result instanceof TakeResult.AwaitingHuman
+    }
+
+    /**
+     * The task-branch port of a fresh claim: the adoption owner answers the created branch already
+     * local, and the delivered cleanup reads an already-cleaned tip.
+     */
+    private TaskBranchGit freshBranches() {
+        Stub(TaskBranchGit) {
+            classifyShape(_, _) >> new BranchShape.Delivered()
+            locate(_, _) >> { Path clone, String taskId ->
+                new BranchLocation.Local('refs/heads/gnomish/' + taskId)
+            }
+            adopt(_, _, _) >> { Path clone, String taskId, BranchLocation location ->
+                new BranchAdoption.AlreadyLocal(taskId)
+            }
+        }
     }
 }

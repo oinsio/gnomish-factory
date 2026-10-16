@@ -30,8 +30,14 @@ public record CommitMetadata(
         }
     }
 
-    /** The git "raw" date form {@code <epoch-seconds> +0000} that {@code commit-tree} reads from env. */
+    /**
+     * The git "raw" date form {@code @<epoch-seconds> +0000} that {@code commit-tree} reads from
+     * env. The {@code @} tells git the number is a timestamp whatever its size: without it git
+     * reads a number below {@code 100000000} as a calendar field and refuses the date, so an
+     * instant early in the epoch — the start of a virtual clock — could not be committed. The
+     * commit object records the bare number either way, so the ids are unchanged.
+     */
     static String gitDate(Instant instant) {
-        return instant.getEpochSecond() + " +0000";
+        return "@" + instant.getEpochSecond() + " +0000";
     }
 }

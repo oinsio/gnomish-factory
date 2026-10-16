@@ -19,9 +19,11 @@ import org.jspecify.annotations.Nullable;
  * <p>The order the rules are applied in is itself contract:
  *
  * <ol>
- *   <li>the register first — a tip the registered commit is not an ancestor of, or a branch with no
- *       register whose tip carries an envelope, is {@link BranchShape.Unknown} with a diagnosis
- *       naming the register and the tip, and a branch with no register and no envelope is {@link
+ *   <li>the register first — a tip the registered commit is not an ancestor of is {@link
+ *       BranchShape.Unknown} with a diagnosis naming the register and the tip, a branch with no
+ *       register whose tip carries an envelope is {@link BranchShape.Unregistered} (a state of the
+ *       clone, which the touchpoint fetch converges — design D13 of
+ *       fix-terminal-receipt-convergence), and a branch with no register and no envelope is {@link
  *       BranchShape.Bare}; a tip at or above the register classifies by the registered commit alone,
  *       so a record the gnome wrote above it changes nothing (FR13, NFR-S2 of tighten-spec-contract);
  *   <li>then delivery — the registered commit is the cleanup commit — a delivered branch is finished, so a stray post-cleanup file never
@@ -40,7 +42,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR1, FR2, FR3, FR13, FR15, NFR-R2 of harden-task-branch-contract; FR1, FR2 of
  * fix-claim-epoch-fence; FR11 of make-checkpoint-gate-durable; FR13, NFR-S2 of
- * tighten-spec-contract.
+ * tighten-spec-contract; FR10 of fix-terminal-receipt-convergence.
  */
 public final class BranchShapeClassifier {
 
@@ -98,10 +100,7 @@ public final class BranchShapeClassifier {
                 new BranchShape.Unknown(
                         "the factory register " + register + " is not an ancestor of the branch tip " + tip);
             case TipRelation.NoRegister(String register, String tip, boolean tipCarriesEnvelope) ->
-                tipCarriesEnvelope
-                        ? new BranchShape.Unknown(
-                                "no factory register " + register + " names a commit of the branch tip " + tip)
-                        : new BranchShape.Bare();
+                tipCarriesEnvelope ? new BranchShape.Unregistered(register, tip) : new BranchShape.Bare();
         };
     }
 

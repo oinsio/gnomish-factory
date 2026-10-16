@@ -17,8 +17,10 @@ package com.github.oinsio.gnomish.domain.branch;
  *   <li>{@link Diverged} — the registered commit is not an ancestor of the tip: the branch is
  *       quarantined, never guessed;
  *   <li>{@link NoRegister} — the clone holds no register for the task: a branch that never had a
- *       factory closing commit, or one from before the register existed. Only a tip that carries no
- *       envelope at all is the {@code Bare} branch it then can be; any other is quarantined.
+ *       factory closing commit, one from before the register existed, or one a third party's fetch
+ *       brought without its register. A tip that carries no envelope at all is the {@code Bare}
+ *       branch it then can be; any other is {@code Unregistered} until a touchpoint fetch lands the
+ *       register (design D13 of fix-terminal-receipt-convergence).
  * </ul>
  *
  * <p>Implements FR13, NFR-S2 of tighten-spec-contract.

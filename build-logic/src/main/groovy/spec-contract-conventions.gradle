@@ -1,4 +1,4 @@
-import com.github.oinsio.gnomish.build.SpecContractCheck
+import com.github.oinsio.gnomish.buildlogic.SpecContractCheck
 
 plugins {
     id 'base'

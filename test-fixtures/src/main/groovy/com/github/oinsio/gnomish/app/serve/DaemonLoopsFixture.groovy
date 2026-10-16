@@ -40,7 +40,9 @@ final class DaemonLoopsFixture {
         } as LiveClaims, time)
         def clone = RegisteredCloneFixture.unregistered(root.resolve('home'), root.resolve('clone'))
         def janitor = new WorktreeJanitor(clone, Duration.ofDays(14), { String key -> } as TaskEnvironmentDisposal,
-        time, { -> Set.of() } as OccupiedSlots)
+        time, {
+            -> Set.of()
+        } as OccupiedSlots, { Set<String> held -> } as BranchPass)
         def oracle = new LivenessOracle(
                 new CachedOpenTaskListing(), new StalenessMemory(new SystemMonotonicTime(), Duration.ofMinutes(1)))
         def sweep = new SandboxLifecycleTick(SandboxLifecyclePass.NONE, oracle, root, Duration.ofMinutes(5), time)

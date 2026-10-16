@@ -53,7 +53,10 @@ flowchart LR
    and carries no marker, so no receipt follows it.
 2. **Intent → effect → receipt for every external effect.** A durable intent
    is recorded before the effect, a receipt after it; recovery of an
-   intent-without-receipt probes the target before re-driving. The
+   intent-without-receipt probes the target before re-driving. The probe
+   reads the target's durable history (the tracker's tenure boundary), never
+   current state that a later step — the pickup's own claim among them — may
+   have rewritten (provenance: `fix-terminal-receipt-convergence`). The
    destructive step of a sequence (cleanup, label removal, box disposal) runs
    after all constructive receipts.
 3. **The tracker medium is classified and swept like the branch medium.**
@@ -192,11 +195,23 @@ returns to a known-good tip.
 | `UnsupportedVersion` | recovery budget → quarantine                  | neither: quarantine on first classification                             |
 | `Corrupt(reason)`    | recovery budget → quarantine                  | neither: quarantine on first classification                             |
 | `Unknown`            | recovery budget → quarantine                  | neither: quarantine on first classification                             |
+| `Unregistered`       | touchpoint fetch                              | quarantine after the fetch: the fetch lands the register and the branch then classifies by its content; a claimed take quarantines a branch still `Unregistered` after it |
 
 Automatic recovery is budgeted by one persisted counter shared with the crash
 fuse; exhaustion quarantines with the failure history. The three
 non-recoverable shapes bypass the counter — one classification, one
-diagnosis, one park.
+diagnosis, one park — and so does a branch still `Unregistered` after the
+touchpoint fetch.
+
+`Unregistered` is a state of the clone, not of the branch: the tip carries an
+envelope, and the clone holds no factory register for the task, as a
+`git clone` or a plain `git fetch` leaves it. Its owner is a read, not a
+repair: the touchpoint fetch brings branch and register together, after which
+the branch is whatever its content says. A local head is not fetched, so on a
+local head the quarantine follows at once (a deferral of
+`fix-terminal-receipt-convergence`, its proposal NG5). Provenance:
+`fix-terminal-receipt-convergence` (design D13), after the `serve` janitor
+skipped every branch an IDE's background fetch had brought.
 
 `AwaitingApproval` is a shape of its own rather than `InProgress` refined by
 position because the recovery owners differ: the stage engine *runs* an
@@ -337,9 +352,9 @@ accepted.
 ## See also
 
 - `.claude/rules/crash-consistency.md` — the checklist every new multi-step
-  transition passes; items 12–14 carry the gate rule, the
-  liveness-by-identity corollary and the recovery-through-the-live-parse
-  corollary.
+  transition passes; items 12–15 carry the gate rule, the
+  liveness-by-identity corollary, the recovery-through-the-live-parse
+  corollary and the read-through-the-fetch corollary.
 - `docs/glossary.md` — branch shape, tracker shape, sweep universe, recovery
   owner, claim epoch, intent/receipt, quarantine, gate, awaiting approval,
   approval, resumed write, round token.

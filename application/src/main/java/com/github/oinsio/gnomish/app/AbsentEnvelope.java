@@ -11,7 +11,9 @@ import java.nio.file.Path;
  * recorded state, so these paths raise it rather than growing a port-level exception whose only
  * throw sites would be these lambdas. The two legal absences — a delivered branch whose cleanup
  * commit removed the envelope, and a pre-contract tip carrying no state — are routed on the empty
- * {@code Optional} in {@link HostResumeMechanics} instead.
+ * {@code Optional} in {@link HostResumeMechanics} instead, and {@link GitResumeRunner#run} raises
+ * this only after the branch classifier has refused to name the envelopeless tip {@code
+ * Delivered} (FR4 of fix-terminal-receipt-convergence).
  *
  * <p>Implements FR1 of fix-envelope-medium.
  */

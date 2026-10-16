@@ -34,7 +34,7 @@ final class TaskBranchReconciliation {
      */
     void reconcile(Path cloneDir, String taskId, String touchpoint) {
         String branch = TaskIdSanitizer.branchName(taskId);
-        localTip.read(cloneDir, branch)
+        localTip.read(cloneDir, taskId)
                 .ifPresent(tip -> reconciliation.reconcile(taskId, touchpoint, cloneDir, branch, tip));
     }
 }

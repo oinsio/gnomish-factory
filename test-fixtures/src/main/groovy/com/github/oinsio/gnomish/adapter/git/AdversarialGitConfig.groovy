@@ -48,7 +48,7 @@ import java.nio.file.Path
  * <p>Every other key of an operator's real {@code ~/.gitconfig} — aliases, colours, includes —
  * is absent, and the developer's own identity is replaced by the one above.
  *
- * <p>Kept in sync with {@code com.github.oinsio.gnomish.build.AdversarialGitConfig} in
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.buildlogic.AdversarialGitConfig} in
  * {@code build-logic}: both name the same variable ({@link #VARIABLE}) and the same committed
  * file ({@link #RELATIVE_PATH}). The build end sets them on every forked test JVM; this end
  * reads them back. No classpath joins the two, so {@code AdversarialGitConfigSpec} is what pins

@@ -11,6 +11,8 @@ import com.github.oinsio.gnomish.app.lease.StandingReaper
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
+import com.github.oinsio.gnomish.app.serve.BranchPass
+import com.github.oinsio.gnomish.app.serve.OccupiedSlots
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -68,7 +70,8 @@ class VitalsSnapshotAssemblerSpec extends Specification {
                 Duration.ofDays(1),
                 { String key -> } as TaskEnvironmentDisposal,
                 VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper),
-                { -> Set.of() })
+                { -> Set.of() } as OccupiedSlots,
+                { Set<String> held -> } as BranchPass)
     }
 
     // FR7: the assembled vitals carry every field verbatim from the three collaborators.

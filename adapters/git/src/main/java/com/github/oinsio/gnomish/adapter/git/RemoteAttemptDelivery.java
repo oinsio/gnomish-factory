@@ -79,7 +79,7 @@ public final class RemoteAttemptDelivery implements AttemptDelivery {
                             + " attempt commit " + attempt));
         }
 
-        if (remoteTip.carries(cloneRoot, branch, attempt)) {
+        if (remoteTip.carries(cloneRoot, taskId, attempt)) {
             return new Outcome.Delivered();
         }
 

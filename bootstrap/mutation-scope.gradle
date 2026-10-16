@@ -86,6 +86,10 @@ pitest {
         'com.github.oinsio.gnomish.app.SandboxLifecycleCrossInstanceE2ESpec',
         'com.github.oinsio.gnomish.app.SandboxLifecycleLegacyIdentityE2ESpec',
         'com.github.oinsio.gnomish.app.SandboxLifecycleRemnantReapE2ESpec',
+        //   DeliveredCleanupContainerE2ESpec (task 3.3 of fix-terminal-receipt-convergence) — the
+        //     :bootstrap classes it reaches (ContainerRunSupport, ContainerRunTermination):
+        //     ContainerRunSupportSpec and the daemon-free container rows of DeliveredCleanupIdentitySpec
+        'com.github.oinsio.gnomish.app.DeliveredCleanupContainerE2ESpec',
         //   GiteaActionsStageVerifyE2ESpec (outside app.*) — CheckEquipment:
         //     CheckEquipmentCommandRunnerSpec, ManualRunAssemblyCheckClientWiringSpec
         'com.github.oinsio.gnomish.domain.engine.GiteaActionsStageVerifyE2ESpec',

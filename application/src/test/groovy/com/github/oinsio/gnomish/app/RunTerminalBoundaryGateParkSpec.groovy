@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -12,6 +13,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
+import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
@@ -107,8 +109,9 @@ class RunTerminalBoundaryGateParkSpec extends Specification implements RunChainF
         Path worktree = Files.createDirectories(tempDir.resolve('worktree'))
         worktrees.salvage(worktree) >> Stub(WorktreeSalvager)
         def bootstrap = new ResumeBootstrap('PROJ-1', CheckpointMechanicsFixtures.context(), null, null, worktree,
-                'gnomish/PROJ-1', 'abc123', false, BasePin.UNPINNED)
-        def continuation = new GitResumeContinuation(assemblyRunningLoop(executor, io), git(), lifecycleStore, cloneDir, bootstrap)
+                new BranchAdoption.AlreadyLocal('PROJ-1'), 'abc123', false, BasePin.UNPINNED)
+        def continuation = new GitResumeContinuation(assemblyRunningLoop(executor, io), git(), lifecycleStore, cloneDir, bootstrap,
+                new DeliveredCleanup(Stub(TaskBranchGit), lifecycleStore, { String key -> } as TaskEnvironmentDisposal))
 
         when:
         continuation.resumeFromRecordedPosition(order(), gated)

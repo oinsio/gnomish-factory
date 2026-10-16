@@ -15,7 +15,7 @@ import org.jspecify.annotations.Nullable;
  * status.json}/{@code usage.json} as versioned contracts) — it is a CLI convenience view over
  * {@link TaskListRow}, camelCase fields, kept simple per the task's own guidance.
  *
- * <p>Every row names its branch shape (FR16, UX4 of harden-task-branch-contract), and the three
+ * <p>Every row names its branch shape (FR16, UX4 of harden-task-branch-contract), and the four
  * quarantine shapes carry the diagnosis {@link BranchShapeDiagnosis} renders for every other
  * consumer — one bad branch is one row that says what is wrong with it, never a failed listing.
  *

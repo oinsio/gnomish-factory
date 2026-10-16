@@ -2,14 +2,17 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -37,18 +40,20 @@ import spock.lang.Specification
  * order, and that a gate whose park was lost runs nothing.
  *
  * FR9, D3 of add-tracker-port; FR9, D12, FR10 of add-claim-heartbeat; FR4, FR7, FR11 of
- * make-checkpoint-gate-durable.
+ * make-checkpoint-gate-durable; FR2 of fix-terminal-receipt-convergence.
  */
 class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes {
 
     ResumeMechanics<ResumeBootstrap> mechanics = Mock(ResumeMechanics)
     Tracker tracker = Mock(Tracker)
 
-    private TakeResult route(ResumeBootstrap branch, TaskState recorded) {
+    private TakeResult route(ResumeBootstrap branch, TaskState recorded, TrackerTask fetched = heldByUs()) {
         mechanics.loadBranch(_, 'PROJ-1') >> branch
         mechanics.readFinalState(branch) >> recorded
-        tracker.fetchTask(_) >> heldByUs()
-        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
+        tracker.fetchTask(_) >> fetched
+        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit) {
+            fenceParkDelivery(_, _) >> new ParkDeliveryVerdict.Delivered()
+        }, Stub(TaskWorktreeGit), new ClaimEpochBook())
         new TakeLoadedBranchRoutes<ResumeBootstrap>(mechanics, new TakeDecisionResume<ResumeBootstrap>(mechanics), git,
                 VirtualTimeRetries.terminalWrite())
                 .route(takeOrder(heldByUs(), tracker))
@@ -74,7 +79,7 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
                 outcome,
                 null,
                 Path.of('/tmp/unused'),
-                'gnomish/PROJ-1',
+                new BranchAdoption.AlreadyLocal('PROJ-1'),
                 'base-commit',
                 pending,
                 BasePin.UNPINNED)
@@ -191,7 +196,7 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
         def report = new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('tests')),
                 UntrustedText.subprocess('down'), UntrustedText.subprocess(''))
         def branch = new ResumeBootstrap('PROJ-1', CheckpointMechanicsFixtures.context(),
-                new RecordedOutcome.Escalated(report), report, Path.of('/tmp/unused'), 'gnomish/PROJ-1',
+                new RecordedOutcome.Escalated(report), report, Path.of('/tmp/unused'), new BranchAdoption.AlreadyLocal('PROJ-1'),
                 'base-commit', false, BasePin.UNPINNED)
         def calls = []
 
@@ -235,7 +240,7 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
         given:
         def exhausted = exhaustedAt('build')
         def branch = new ResumeBootstrap('PROJ-1', CheckpointMechanicsFixtures.context(), escalated(),
-                new EscalationReport.AttemptsExhausted(3), Path.of('/tmp/unused'), 'gnomish/PROJ-1',
+                new EscalationReport.AttemptsExhausted(3), Path.of('/tmp/unused'), new BranchAdoption.AlreadyLocal('PROJ-1'),
                 'base-commit', false, BasePin.UNPINNED)
         def calls = []
 
@@ -268,5 +273,92 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
         then:
         0 * mechanics.resumeFrom(*_)
         1 * mechanics.resumeWithoutDecision(_, branch, recorded)
+    }
+
+    private static TrackerTask heldAfter(BoundaryKind boundary) {
+        TrackerTaskFixtures.heldAfter(REF, INSTANCE, boundary)
+    }
+
+    // FR2, design D6: a checkpoint park that landed on the tracker, whose receipt was lost, then was
+    //      returned by the human and claimed again — the receipt is recorded from history and the
+    //      approval is consumed in the same pickup; nothing is re-parked
+    // Scenario: tracker/tracker-take / A landed park with a lost receipt is not re-driven
+    def "FR2: a pending gate park whose tenure boundary is PARK clears the marker and continues with the approval"() {
+        given:
+        def approved = TaskState.atStageStart('test')
+        def continued = new TakeResult.AwaitingHuman(approved, ParkReason.CHECKPOINT, 'next gate')
+        def calls = []
+
+        when:
+        def result = route(bootstrap(paused(), true), CheckpointMechanicsFixtures.gatedAt('build'), heldAfter(BoundaryKind.PARK))
+
+        then:
+        1 * mechanics.confirmTerminalWrite(_, _) >> { calls << 'receipt' }
+        1 * mechanics.approveCheckpoint(_, _) >> {
+            calls << 'approve'; approved
+        }
+        1 * mechanics.resumeWithoutDecision(_, _, approved) >> {
+            calls << 'run'; continued
+        }
+        0 * tracker.park(*_)
+        0 * mechanics.recordPark(*_)
+        calls == ['receipt', 'approve', 'run']
+        result.is(continued)
+    }
+
+    // FR2, design D6: the same for an escalation — the human's reply is consumed after the receipt
+    def "FR2: a pending escalation park whose tenure boundary is PARK clears the marker and continues with the reply"() {
+        given:
+        def exhausted = exhaustedAt('build')
+        def branch = new ResumeBootstrap('PROJ-1', CheckpointMechanicsFixtures.context(), escalated(),
+                new EscalationReport.AttemptsExhausted(3), Path.of('/tmp/unused'), new BranchAdoption.AlreadyLocal('PROJ-1'),
+                'base-commit', true, BasePin.UNPINNED)
+        def calls = []
+
+        when:
+        route(branch, exhausted, heldAfter(BoundaryKind.PARK))
+
+        then:
+        1 * mechanics.confirmTerminalWrite(_, branch) >> { calls << 'receipt' }
+        1 * tracker.collectDecisions(REF) >> { calls << 'reply'; [] }
+        1 * mechanics.resumeFrom(_, branch, exhausted.resetAttempts()) >> {
+            calls << 'resumed'
+        }
+        1 * mechanics.resumeDecided(_, branch, branch.context(), exhausted.resetAttempts()) >> {
+            calls << 'run'; null
+        }
+        0 * tracker.park(*_)
+        calls == [
+            'receipt',
+            'reply',
+            'resumed',
+            'run'
+        ]
+    }
+
+    // FR2: a park the tracker never carried (the reaper removed the dead claim, or no boundary at
+    //      all) is re-driven and the run exits without running a stage
+    // Scenario: tracker/tracker-take / A lost park is re-driven
+    def "FR2: a pending gate park whose tenure boundary is #boundary is re-driven and runs nothing"() {
+        given:
+        def calls = []
+
+        when:
+        def result = route(bootstrap(paused(), true), CheckpointMechanicsFixtures.gatedAt('build'), heldAfter(boundary))
+
+        then:
+        1 * tracker.park(REF, ParkReason.CHECKPOINT, _) >> { calls << 'park' }
+        1 * mechanics.confirmTerminalWrite(_, _) >> { calls << 'receipt' }
+        0 * mechanics.approveCheckpoint(*_)
+        0 * mechanics.resumeWithoutDecision(*_)
+        0 * mechanics.resumeFrom(*_)
+        calls == ['park', 'receipt']
+        result instanceof TakeResult.AwaitingHuman
+
+        where:
+        boundary << [
+            BoundaryKind.STALE_CLAIM_REMOVED,
+            null
+        ]
     }
 }

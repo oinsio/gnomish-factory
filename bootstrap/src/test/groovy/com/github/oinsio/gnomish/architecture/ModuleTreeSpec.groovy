@@ -45,7 +45,7 @@ class ModuleTreeSpec extends Specification {
 
     // FR1 of split-into-modules: every layer is its own Gradle project with its own build file, and
     //     the former single root module keeps no production source
-    // Scenario: build/module-layering / Modules resolve as distinct Gradle projects
+    // Scenario: build-system/module-layering / Modules resolve as distinct Gradle projects
     def "every named module is a separate project of the build, and the root holds no source"() {
         given:
         def included = ModuleBuildFile.includedProjects()
@@ -61,7 +61,7 @@ class ModuleTreeSpec extends Specification {
 
     // FR10 of split-into-modules: the github bundle is one module, and its shared HTTP core is a
     //     package inside it rather than a module another adapter could depend on
-    // Scenario: build/module-layering / The github vendor bundle is one module
+    // Scenario: build-system/module-layering / The github vendor bundle is one module
     def "the github bundle is one module whose HTTP core no other production module can reach"() {
         given:
         def coreSources = RepoSourceTree.productionSources {
@@ -83,8 +83,8 @@ class ModuleTreeSpec extends Specification {
 
     // FR2, FR10 of split-into-modules: an undeclared sibling is absent from the compile classpath, so
     //     no vertical adapter declares another — an import of its internals cannot compile
-    // Scenario: build/module-layering / Adapter importing a sibling adapter's internals fails the build
-    // Scenario: build/module-layering / Sibling isolation holds after the vertical split
+    // Scenario: build-system/module-layering / Adapter importing a sibling adapter's internals fails the build
+    // Scenario: build-system/module-layering / Sibling isolation holds after the vertical split
     def "#adapter declares no sibling adapter module, neither as a dependency nor in its layering allowlist"() {
         given:
         def code = ModuleBuildFile.textOf(adapter)
@@ -101,7 +101,7 @@ class ModuleTreeSpec extends Specification {
     }
 
     // FR8 of split-into-modules: the backend builds on the core, and the core names no backend
-    // Scenario: build/sandbox-module-split / Backend depends on core, not the reverse
+    // Scenario: build-system/sandbox-module-split / Backend depends on core, not the reverse
     def "the docker backend depends on the sandbox core, and the core on no backend"() {
         given:
         def docker = ModuleBuildFile.textOf(':sandbox:docker')

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -45,7 +46,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
         def branch = createTaskBranch(cloneDir, 'PROJ-1')
 
         when:
-        def path = worktrees.ensureWorktree(registeredClone, 'PROJ-1', branch)
+        def path = worktrees.ensureWorktree(registeredClone, new BranchAdoption.AlreadyLocal('PROJ-1'))
 
         then:
         path == registeredClone.worktrees().resolve('PROJ-1')
@@ -55,7 +56,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
     def "reconcile delegates to the replica-pair reconciler and returns its verdict"() {
         given:
         def branch = createTaskBranch(cloneDir, 'PROJ-2')
-        def worktree = worktrees.ensureWorktree(registeredClone, 'PROJ-2', branch)
+        def worktree = worktrees.ensureWorktree(registeredClone, new BranchAdoption.AlreadyLocal('PROJ-2'))
 
         expect: 'no remote-tracking ref to diverge from — the check reports the local tip stands'
         worktrees.reconcile(worktree, 'PROJ-2', branch) == DivergenceOutcome.NO_REMOTE_TRACKING_REF
@@ -64,7 +65,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
     def "salvage delegates to WorktreeSalvage and returns a salvager bound to the worktree"() {
         given:
         def branch = createTaskBranch(cloneDir, 'PROJ-3')
-        def worktree = worktrees.ensureWorktree(registeredClone, 'PROJ-3', branch)
+        def worktree = worktrees.ensureWorktree(registeredClone, new BranchAdoption.AlreadyLocal('PROJ-3'))
         Files.writeString(worktree.resolve('leftover.txt'), 'uncommitted')
 
         when:
@@ -77,7 +78,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
     def "cleanUp delegates to TaskWorktreeCleanup — a completed task's worktree is removed"() {
         given:
         def branch = createTaskBranch(cloneDir, 'PROJ-4')
-        def worktree = worktrees.ensureWorktree(registeredClone, 'PROJ-4', branch)
+        def worktree = worktrees.ensureWorktree(registeredClone, new BranchAdoption.AlreadyLocal('PROJ-4'))
         assert Files.isDirectory(worktree)
 
         when:
@@ -90,7 +91,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
     def "pruneWorktrees delegates to TaskWorktreeCleanup — a stale administrative entry is dropped"() {
         given: 'a worktree whose directory was removed behind git\'s back'
         def branch = createTaskBranch(cloneDir, 'PROJ-5')
-        def worktree = worktrees.ensureWorktree(registeredClone, 'PROJ-5', branch)
+        def worktree = worktrees.ensureWorktree(registeredClone, new BranchAdoption.AlreadyLocal('PROJ-5'))
         worktree.toFile().deleteDir()
         assert runner.run(cloneDir, 'worktree', 'list').stdout().forParsing().contains('PROJ-5')
 
@@ -104,7 +105,7 @@ class GitTaskWorktreesSpec extends Specification implements BareGitRepoFixture {
     def "FR9 of add-project-registry: environmentDisposal removes the keyed worktree from the clone's own folder"() {
         given:
         def branch = createTaskBranch(cloneDir, 'PROJ-6')
-        def worktree = worktrees.ensureWorktree(registeredClone, 'PROJ-6', branch)
+        def worktree = worktrees.ensureWorktree(registeredClone, new BranchAdoption.AlreadyLocal('PROJ-6'))
         assert worktree.parent == registeredClone.worktrees()
 
         when:

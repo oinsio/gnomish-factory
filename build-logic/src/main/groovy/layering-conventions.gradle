@@ -27,7 +27,7 @@
 // classpath (design D8), while FR7 constrains production modules only. Keeping
 // the gate on production scope is also what makes it prove FR7 — `:test-fixtures`
 // never appears on a production classpath.
-import com.github.oinsio.gnomish.build.LayeringExtension
+import com.github.oinsio.gnomish.buildlogic.LayeringExtension
 
 def layering = extensions.create('layering', LayeringExtension)
 layering.allowedProjects.convention([] as Set)

@@ -76,7 +76,7 @@ class TakeClaimLocateOutageSpec extends Specification implements RunChainFakes {
 
         and: 'neither route ran: no branch was created and no worktree was materialized'
         0 * store.taskRepository(_)
-        0 * worktrees.ensureWorktree(_, _, _)
+        0 * worktrees.ensureWorktree(_, _)
 
         and: 'the deciding layer states the release once, as a WARN'
         def event = logs.list.find {
@@ -100,6 +100,11 @@ class TakeClaimLocateOutageSpec extends Specification implements RunChainFakes {
         def branches = Stub(TaskBranchGit) {
             classifyShape(_, _) >> new BranchShape.InProgress()
             locate(_, _) >> new BranchLocation.Unavailable(UntrustedText.factory(CAUSE))
+            // The adoption owner keeps "origin could not be asked" apart from absence (FR8 of
+            // fix-terminal-receipt-convergence): over an unestablished location it throws.
+            adopt(_, _, _) >> {
+                throw new BranchLocationUnavailableException('PROJ-1', UntrustedText.factory(CAUSE))
+            }
         }
 
         when:
@@ -114,7 +119,7 @@ class TakeClaimLocateOutageSpec extends Specification implements RunChainFakes {
 
         and: 'neither route ran: no branch was created and no worktree was materialized'
         0 * store.taskRepository(_)
-        0 * worktrees.ensureWorktree(_, _, _)
+        0 * worktrees.ensureWorktree(_, _)
     }
 
     // F6, NFR-R2 of add-tracker-port: a release that itself fails is logged and swallowed — the
@@ -183,7 +188,7 @@ class TakeClaimLocateOutageSpec extends Specification implements RunChainFakes {
         and: 'no stage ran: no repository was opened and no worktree materialized, so no attempt was recorded'
         0 * store.taskRepository(_)
         0 * store.attemptPersistence(*_)
-        0 * worktrees.ensureWorktree(_, _, _)
+        0 * worktrees.ensureWorktree(_, _)
     }
 
     private TakeClaimAndWork subject(TaskGit git, Tracker tracker) {

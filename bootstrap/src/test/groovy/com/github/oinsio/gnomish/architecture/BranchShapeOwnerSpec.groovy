@@ -18,7 +18,7 @@ import spock.lang.Specification
  *       exists to classify ({@code Bare} for no branch, {@code Corrupt} for one git refused); the
  *       classifier itself is built only by the two tip readers. A reader that decided a shape from
  *       a file-presence check of its own would have to construct the shape, and fails here.
- *   <li><b>No silent default.</b> {@code BranchShape} is sealed over the eleven names, and no
+ *   <li><b>No silent default.</b> {@code BranchShape} is sealed over the twelve names, and no
  *       production switch over it carries a {@code default} arm, so a twelfth shape fails to
  *       compile in every handler until each names it.
  * </ul>
@@ -53,7 +53,7 @@ class BranchShapeOwnerSpec extends Specification {
     ]
 
     private static final String SHAPE_NAMES =
-    'Bare|Created|InProgress|AwaitingApproval|Parked|Answered|CompletedUncleaned|Delivered|UnsupportedVersion|Corrupt|Unknown'
+    'Bare|Created|InProgress|AwaitingApproval|Parked|Answered|CompletedUncleaned|Delivered|Unregistered|UnsupportedVersion|Corrupt|Unknown'
 
     // FR2: a shape comes from the classifier's verdict, never from a reader's own file check
     // Scenario: lifecycle/task-branch-contract / No reader bypasses the classifier
@@ -75,8 +75,8 @@ class BranchShapeOwnerSpec extends Specification {
 
     // FR2: the closed set is sealed, and every handler names each shape — no catch-all arm
     // Scenario: lifecycle/task-branch-contract / New shape cannot be silently ignored
-    def "FR2: the shape set is sealed over eleven names and no production switch over it has a default arm"() {
-        expect: 'sealed: a twelfth shape must be declared in the one file, and the compiler then sees it'
+    def "FR2: the shape set is sealed over twelve names and no production switch over it has a default arm"() {
+        expect: 'sealed: a thirteenth shape must be declared in the one file, and the compiler then sees it'
         BranchShape.isSealed()
         BranchShape.permittedSubclasses*.simpleName.sort() == SHAPE_NAMES.split(/\|/).toList().sort()
 

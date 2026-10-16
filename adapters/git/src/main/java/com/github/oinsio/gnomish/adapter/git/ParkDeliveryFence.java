@@ -73,7 +73,7 @@ public final class ParkDeliveryFence {
             return new ParkDeliveryVerdict.Delivered();
         }
         String branch = TaskIdSanitizer.branchName(taskId);
-        Optional<String> tip = localTip.read(cloneDir, branch);
+        Optional<String> tip = localTip.read(cloneDir, taskId);
         if (tip.isEmpty()) {
             // A park always records its outcome on this branch first, so by the time the fence runs
             // the branch is there — an unreadable tip means the ref read itself failed (a branch
@@ -88,7 +88,7 @@ public final class ParkDeliveryFence {
                     cloneDir);
             return new ParkDeliveryVerdict.Delivered();
         }
-        if (remoteTip.carries(cloneDir, branch, tip.get())) {
+        if (remoteTip.carries(cloneDir, taskId, tip.get())) {
             return new ParkDeliveryVerdict.Delivered();
         }
 
@@ -136,7 +136,7 @@ public final class ParkDeliveryFence {
             return new ParkDeliveryVerdict.Undelivered(
                     ParkDeliveryNotes.unverified(branch, "was interrupted before it finished"));
         }
-        RemoteBranchTip.Carriage carriage = remoteTip.confirm(cloneDir, branch, tip);
+        RemoteBranchTip.Carriage carriage = remoteTip.confirm(cloneDir, taskId, tip);
         if (carriage == RemoteBranchTip.Carriage.CARRIES) {
             // FR12: a recovered transient. The push did not report success, but origin has the
             //     park — nothing is degraded and there is nothing to act on.

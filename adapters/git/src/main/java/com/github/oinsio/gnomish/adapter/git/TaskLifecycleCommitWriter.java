@@ -42,12 +42,21 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Every message it builds goes out through {@link #metadata(String, String)}, which stamps the
  * tenure's claim epoch as a trailer (FR13 of harden-task-branch-contract) — the container-mode twin
- * of what {@link GitTaskRepository} does on the host, and the reason there is one message-building
- * method here rather than a stamp at each call site.
+ * of what {@link GitTaskRepository} does on the host for the commits it writes in its worktree, and
+ * the reason there is one message-building method here rather than a stamp at each call site. The
+ * host's cleanup commit is not one of those: {@link GitTaskRepository#finishCleanup} builds it
+ * through this writer too (design D8 of fix-terminal-receipt-convergence).
  */
 record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity, Instant now, ClaimEpochSource epochs) {
 
     private static final Logger log = LoggerFactory.getLogger(TaskLifecycleCommitWriter.class);
+
+    /**
+     * The factory's own identity, the author and committer of every lifecycle commit written over
+     * bare objects when none is supplied (design D19) — the container's, and the host's cleanup
+     * commit since it moved onto this writer (design D8 of fix-terminal-receipt-convergence).
+     */
+    static final CommitIdentity FACTORY_IDENTITY = new CommitIdentity("gnomish-factory", "gnomish-factory@localhost");
 
     /** {@code task.json} is a small factory-authored document; a 1&nbsp;MiB read cap is generous. */
     private static final long TASK_JSON_SIZE_CAP = 1L << 20;
@@ -70,7 +79,7 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
      * admission ({@link HarvestAdmission}), which refuses a range that changes a factory-owned path.
      */
     ObjectId requireRegistered(String taskId, TaskLifecycleEvent event) {
-        String register = FactoryRegister.of(taskId).name();
+        String register = FactoryRegisterRefs.of(taskId).name();
         return gitObjects
                 .resolveRef(register)
                 .orElseThrow(() -> new GitTaskRepositoryException(
@@ -237,7 +246,7 @@ record TaskLifecycleCommitWriter(GitObjects gitObjects, CommitIdentity identity,
         try {
             // A lifecycle commit is a closing commit: the branch and the factory register move to
             // it in one ref transaction (design D13 of tighten-spec-contract, amended 2026-10-13).
-            gitObjects.commit(request.alongside(FactoryRegister.of(taskId).name()));
+            gitObjects.commit(request.alongside(FactoryRegisterRefs.of(taskId).name()));
         } catch (StaleTipException e) {
             throw new GitTaskRepositoryException(taskId, event, "advancing task branch (tip moved concurrently)", e);
         } catch (RuntimeException e) {

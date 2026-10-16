@@ -177,3 +177,12 @@ tasks.named('functionalTest') {
     inputs.file(deltaSpecsRule).withPropertyName('deltaSpecsRule').withPathSensitivity(PathSensitivity.NONE)
     systemProperty 'gnomish.deltaSpecsRule', deltaSpecsRule.asFile.absolutePath
 }
+
+// FR14 of fix-terminal-receipt-convergence (design D14): the Docker endpoint scenarios run the
+// REAL committed stand-in library as the `docker` the inner build resolves a context through, so a
+// preset that changes its answer turns them red. The library is an input by content.
+def standInLibrary = layout.projectDirectory.dir('../test-fixtures/src/main/resources/stand-in')
+tasks.named('functionalTest') {
+    inputs.files(fileTree(standInLibrary)).withPropertyName('standInLibrary').withPathSensitivity(PathSensitivity.RELATIVE)
+    systemProperty 'gnomish.standInLibrary', standInLibrary.asFile.absolutePath
+}

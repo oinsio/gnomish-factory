@@ -20,8 +20,8 @@ import java.nio.file.Path;
  * <p>Crash consistency ({@code .claude/rules/crash-consistency.md}, item 4): the removal is staged
  * into the outcome-clearing write's own commit, never a commit of its own, so no kill window
  * freezes a tip with the outcome cleared and the request still present, or the reverse. {@link
- * CleanupCommit} stays the terminal sweep of the whole envelope; this class is the second remover,
- * scoped to the subtree a consuming write has made obsolete.
+ * GitObjectsTerminalCommits#cleanUp} stays the terminal sweep of the whole envelope; this class is
+ * the second remover, scoped to the subtree a consuming write has made obsolete.
  *
  * <p>The subtree's spelling is not owned here: it is {@link FactoryOwnedPaths#GNOME_WRITABLE},
  * itself derived from the one owner of the envelope's paths.

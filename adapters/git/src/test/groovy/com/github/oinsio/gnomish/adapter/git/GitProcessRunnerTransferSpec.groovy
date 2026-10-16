@@ -99,7 +99,7 @@ class GitProcessRunnerTransferSpec extends Specification {
         where:
         kind | transfer | allow | global
         'origin' | GitTransfer.fetch(TransferSource.ORIGIN, new Refspec(REFSPEC)) | 'https:http:ssh:file' | System.getenv('GIT_CONFIG_GLOBAL')
-        'container' | GitTransfer.harvest(new TransferSource.Container('ext::docker exec -i box %S /work'), 'gnomish/T-1', FactoryRegister.quarantine('T-1')) | 'ext' | '/dev/null'
+        'container' | GitTransfer.harvest(new TransferSource.Container('ext::docker exec -i box %S /work'), 'gnomish/T-1', FactoryRegisterRefs.quarantine('T-1')) | 'ext' | '/dev/null'
         'seed' | GitTransfer.clone(new TransferSource.SeedPath(Path.of('/seed/src'), Path.of('/seed/dst'))) | 'file' | TransferSource.SeedPath.SAFE_DIRECTORY_CONFIG
     }
 

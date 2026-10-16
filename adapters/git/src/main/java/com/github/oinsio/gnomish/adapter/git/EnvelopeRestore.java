@@ -69,7 +69,7 @@ final class EnvelopeRestore {
         if (!RegisterBase.carries(runner, worktree, taskId, FactoryOwnedPaths.STATE_DIR)) {
             return Optional.empty();
         }
-        String source = "--source=" + FactoryRegister.of(taskId).name();
+        String source = "--source=" + FactoryRegisterRefs.of(taskId).name();
         GitCommandResult restore = runner.run(worktree, args("restore", source, "--staged", "--worktree", "--"));
         if (restore.exitCode() != 0) {
             return Optional.of(restore.failureDetail("restore of the factory-owned paths"));

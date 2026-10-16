@@ -87,6 +87,10 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 // Scenario: tracker/tracker-port / Racing declines leave the task terminal
 // Scenario: tracker/tracker-port / The returned fact carries no prioritization
 // Scenario: tracker/tracker-port / An adapter that does not stamp epochs is still constructible
+// Scenario: tracker/tracker-port / A park survives the claim that follows it
+// Scenario: tracker/tracker-port / A reaped claim is not a park
+// Scenario: tracker/tracker-port / Tenure boundary survives a claim on every adapter
+// Scenario: tracker/tracker-port / Every tenure boundary kind is reported on every adapter
 class InMemoryTrackerContractSpec extends TrackerCirculationContract {
 
     private InMemoryTrackerHarness harness

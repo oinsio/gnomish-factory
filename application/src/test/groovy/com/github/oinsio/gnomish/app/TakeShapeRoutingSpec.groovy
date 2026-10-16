@@ -14,7 +14,7 @@ import spock.lang.Specification
 
 /**
  * FR2, FR15 of harden-task-branch-contract: the resume table routes on the branch's classified
- * shape and nothing else, and the three shapes no automatic recovery can converge stop the run
+ * shape and nothing else, and the four shapes no automatic recovery can converge stop the run
  * with their own diagnosis rather than being resumed into a parse failure.
  */
 class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
@@ -26,7 +26,7 @@ class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
                 .resumeExisting(takeOrder(heldByUs(), Stub(Tracker)), shape)
     }
 
-    // All three shapes are non-clean, so each verdict is raised inside the repair boundary of
+    // All four shapes are non-clean, so each verdict is raised inside the repair boundary of
     // resumeExisting: the assertion below is also FR15's "a quarantine keeps its own
     // classification" — it is a decision about the branch, never a failed repair to be retried.
     // Scenario: git/git-task-persistence / Unknown version refuses resume
@@ -46,6 +46,9 @@ class TakeShapeRoutingSpec extends Specification implements RunChainFakes {
         'an unsupported state version' | new BranchShape.UnsupportedVersion('state.json', 9, 1) | 'state.json declaring version 9'
         'unreadable content' | new BranchShape.Corrupt('task.json: bad json') | 'corrupt content'
         'an unrecognized combination' | new BranchShape.Unknown('state without task') | 'unrecognized combination'
+        // FR10 of fix-terminal-receipt-convergence (D13): still Unregistered after the locate's
+        // touchpoint fetch, a branch has no register to roll forward from.
+        'a branch without its register' | new BranchShape.Unregistered('refs/gnomish-factory/PROJ-1', 'b' * 40) | 'fetched without its factory register'
     }
 
     // FR14 of harden-task-branch-contract: a failure while repairing a non-clean shape is named as

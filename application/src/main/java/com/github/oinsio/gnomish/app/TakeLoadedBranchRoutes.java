@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.take.DecisionAck;
+import com.github.oinsio.gnomish.app.take.ParkLanding;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry;
@@ -14,6 +15,8 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The routes a resumable branch takes once it is loaded — the second half of {@link
@@ -31,7 +34,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR9, D3 of add-tracker-port; FR10, D10, NFR-C1 of add-claim-heartbeat; FR1 of
  * add-serve-sandbox-lifecycle; FR2, FR9, FR12 of harden-task-branch-contract; FR4, FR7, FR11 of
- * make-checkpoint-gate-durable.
+ * make-checkpoint-gate-durable; FR2 of fix-terminal-receipt-convergence.
  *
  * @param <B> the loaded-branch bundle {@code mechanics} produces
  * @param retry the bounded terminal-write retry every reconciled tracker write runs under — the
@@ -40,6 +43,8 @@ import org.jspecify.annotations.Nullable;
  */
 record TakeLoadedBranchRoutes<B extends ResumedBranch>(
         ResumeMechanics<B> mechanics, TakeDecisionResume<B> decisionResume, TaskGit git, TerminalWriteRetry retry) {
+
+    private static final Logger log = LoggerFactory.getLogger(TakeLoadedBranchRoutes.class);
 
     /**
      * The loaded-branch routes: the shapes above all resume from what the branch itself records,
@@ -66,25 +71,27 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
         TaskState finalState = mechanics.readFinalState(branch);
 
         // Reconcile-on-resume, the park case: an Escalated/Paused branch whose durable
-        // "tracker-write pending" marker is still set means its park write never landed (a dead
-        // instance/tracker at the park line, then a reaper returned the stale claim to Ready).
-        // Complete the deferred park and exit — zero engine rounds, no paid gnome run — while a
-        // cleared marker (the park did land, e.g. a human answered and returned the task) falls
-        // through to the ordinary resume below. This is exactly the distinction the tracker alone
-        // cannot make post-claim.
+        // "tracker-write pending" marker is still set recorded a park whose receipt never landed.
+        // The marker alone cannot say whether the tracker write did: a kill between the write and
+        // its receipt leaves the same branch as a write that never happened. The tracker's tenure
+        // history can (FR2 of fix-terminal-receipt-convergence): a PARK boundary means the park
+        // landed and a human has since returned the task, so the receipt is recorded and the run
+        // falls through to the ordinary resume below, consuming the human's reply or approval
+        // (design D6: roll forward, no re-drive). Otherwise the deferred park is completed and the
+        // run exits — zero engine rounds, no paid gnome run.
         if (isOrphanedPark(branch)) {
-            // The same fence a fresh park runs (FR4, FR5 of fix-lifecycle-push). The resume-start
-            // touchpoint already tried to bring origin up to this tip, but that catch-up is
-            // best-effort and swallows its own failure — so when origin is genuinely unreachable
-            // the re-posted park carries the origin-behind line instead of reading as replicated.
-            // An origin that does hold the tip costs one refs read and nothing else.
-            return TakeReconcile.deliverPark(
-                    branch,
-                    finalState,
-                    () -> mechanics.confirmTerminalWrite(cloneDir, branch),
-                    order,
-                    git.branches().fenceParkDelivery(cloneDir, taskId),
-                    retry);
+            Runnable clearMarker = () -> mechanics.confirmTerminalWrite(cloneDir, branch);
+            if (!ParkLanding.confirmFromHistory(order, clearMarker, log)) {
+                // The same fence a fresh park runs (FR4, FR5 of fix-lifecycle-push): the resume-start
+                // catch-up is best-effort, so an unreachable origin still shows in the re-posted park.
+                return TakeReconcile.deliverPark(
+                        branch,
+                        finalState,
+                        clearMarker,
+                        order,
+                        git.branches().fenceParkDelivery(cloneDir, taskId),
+                        retry);
+            }
         }
 
         // The CompletedUncleaned shape (FR9, FR10 of harden-task-branch-contract): the tip records
@@ -93,8 +100,9 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
         // genuinely absent, then commit the cleanup — and never re-enter the engine: every stage
         // passed already, and re-running the last one would pay for delivered work (NFR-C1).
         if (branch.outcome() instanceof RecordedOutcome.Completed) {
+            DeliveredCleanup cleanup = mechanics.deliveredCleanup(branch);
             return TakeReconcileFinish.finishUncleaned(
-                    branch, finalState, () -> mechanics.finishCleanup(cloneDir, branch), order, retry);
+                    branch, finalState, () -> cleanup.cleanUp(cloneDir, branch.branch()), order, retry);
         }
 
         // The AwaitingApproval shape (FR4, FR11 of make-checkpoint-gate-durable): a manual stage
@@ -130,7 +138,7 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
 
     /**
      * A tip at a gate (FR4, FR11, design D2, D8 of make-checkpoint-gate-durable). When the gate's
-     * own park is recorded — and, since an orphaned park was delivered above, its marker cleared —
+     * own park is recorded — and, since an orphaned park was settled above, its marker cleared —
      * a human returned the checkpoint: the approval write opens the gate and the engine continues
      * from the approved state. Otherwise the park was lost before it was recorded (a kill between
      * the round commit and the park commit, or a stale earlier outcome on the tip): the park the
@@ -165,14 +173,10 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
     }
 
     /**
-     * A just-claimed branch is an ORPHANED park to reconcile (deferred park, zero engine rounds)
-     * when its durable "tracker-write pending" marker is still set AND its recorded outcome is a
-     * park ({@code Escalated}/{@code Paused}) — the park write never landed before the holder died
-     * (FR10, D10, NFR-C1). A cleared marker, or any non-park outcome, is not reconciled here.
-     *
-     * <p>Package-private (not private) so the guard is unit-testable directly over the
-     * pending/outcome matrix — the branch reroutes to the ordinary resume path when negated, which
-     * a fast unit test over this predicate pins deterministically rather than a slow lifecycle spec.
+     * A just-claimed branch carries a park whose receipt is owed when its durable "tracker-write
+     * pending" marker is still set AND its recorded outcome is a park ({@code Escalated}/{@code
+     * Paused}) (FR10, D10, NFR-C1); whether the tracker write itself landed is the tracker's
+     * history to say. Package-private so the guard is unit-tested over the pending/outcome matrix.
      */
     static boolean isOrphanedPark(ResumedBranch branch) {
         return branch.trackerWritePending()

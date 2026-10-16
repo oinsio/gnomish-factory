@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
+import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch;
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit;
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
@@ -46,8 +47,8 @@ public final class GitTaskWorktrees implements TaskWorktreeGit {
     }
 
     @Override
-    public Path ensureWorktree(RegisteredClone clone, String taskId, String branchName) {
-        return new TaskWorktreeManager(runner, clone).ensureWorktree(taskId, branchName);
+    public Path ensureWorktree(RegisteredClone clone, LocalTaskBranch branch) {
+        return new TaskWorktreeManager(runner, clone).ensureWorktree(branch);
     }
 
     @Override

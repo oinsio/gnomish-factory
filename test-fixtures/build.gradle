@@ -134,7 +134,7 @@ dependencies {
 // live in `src/main`, not `src/test` — but it is exactly where a fixture handed to every other
 // module would wire a real sleeper, so it registers the same check over its own sources.
 def testTimeInjection = tasks.register('checkTestTimeInjection',
-        com.github.oinsio.gnomish.build.TestTimeInjectionCheck) {
+        com.github.oinsio.gnomish.buildlogic.TestTimeInjectionCheck) {
     group = 'verification'
     description = 'Fails when a shared fixture wires production real time instead of injecting it.'
     testSources.from(fileTree('src/main') {

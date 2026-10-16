@@ -1,4 +1,4 @@
-import com.github.oinsio.gnomish.build.TestEnvironmentHygiene
+import com.github.oinsio.gnomish.buildlogic.TestEnvironmentHygiene
 
 // --- The operator's GNOMISH_* variables never reach a test JVM (make-checkpoint-gate-durable, D14) ---
 //

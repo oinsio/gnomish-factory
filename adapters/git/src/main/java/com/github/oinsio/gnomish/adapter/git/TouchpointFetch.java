@@ -14,13 +14,13 @@ import org.slf4j.LoggerFactory;
  * instance made lands here whole. Shared by the two touchpoints that fetch a task branch — the
  * locate of a take, resume or status read ({@link TaskBranchLocator}) and the replica reconcile
  * ({@link ReplicaPairReconciler}); each names where the register lands ({@link
- * FactoryRegister#fetchedInPlace}, {@link FactoryRegister#fetchedTracking}).
+ * FactoryRegisterRefs#fetchedInPlace}, {@link FactoryRegisterRefs#fetchedTracking}).
  *
  * <p>One fallback, and only one: when origin carries no register for the task, git refuses the
  * whole fetch ("couldn't find remote ref", read under the runner's pinned {@code C} locale), so the
  * branch is fetched alone. That is a branch no factory closing push ever reached — created before
  * the register existed, or written by something other than the factory — and the clone then holds
- * no register for it: the reader classifies such a branch {@code Unknown} rather than guessing
+ * no register for it: the reader classifies such a branch {@code Unregistered} rather than guessing
  * (git-task-persistence, "The touchpoint fetch carries the register"). Any other failure is the
  * caller's to classify, exactly as before, so an unreachable origin still costs one fetch.
  *
@@ -65,7 +65,7 @@ final class TouchpointFetch {
         refFormat.require(repo);
         GitCommandResult both = runner.run(repo, GitTransfer.fetch(TransferSource.ORIGIN, branch, register));
         if (!both.stderr()
-                .contains(MISSING_REMOTE_REF + FactoryRegister.of(taskId).name())) {
+                .contains(MISSING_REMOTE_REF + FactoryRegisterRefs.of(taskId).name())) {
             return both;
         }
         // throwable-not-subject: git reported a status; nothing was thrown.
