@@ -42,6 +42,7 @@ class ResumeBootstrapAdoptionSpec extends Specification implements RunChainFakes
         new TaskGit(store, branches, worktrees, new ClaimEpochBook())
     }
 
+    // Scenario: git/git-task-persistence / The host worktree is added on an existing local branch
     def "FR8: the host bootstrap adopts a remote-tracking-only branch, then materializes the worktree over it"() {
         when:
         def bundle = new TakeResumeBootstrap(git(), CLONE, 'taskId').bootstrap(CLONE_DIR, 'PROJ-1')
