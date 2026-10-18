@@ -3,28 +3,37 @@
 ## Context
 
 Driven by FR1–FR8, NFR-R1, NFR-R2, NFR-S1 and NFR-S2 of the proposal. The principle that
-outlives this change goes into ADR 0011 ("the clone's configuration is untrusted input, not
+outlives this change goes into ADR 0012 ("the clone's configuration is untrusted input, not
 storage"). This file records only the local decisions.
 
 The factory starts git from exactly two places today: `GitProcessRunner` (`:adapters:git`) and
-`GitExec` (`:gitobjects`). A third place owns flags without launching anything: `GitTransfer`
-(`:gittransfer`), which the runner and the seed helper script render. Their policies differ:
+`GitExec` (`:gitobjects`); both hand their `ProcessBuilder` to the `:subprocess` launch owner,
+`ProcessLaunch` (design D19 of fix-terminal-receipt-convergence). A third place owns flags without
+launching anything: `GitTransfer` (`:gittransfer`), built by its own `fetch`/`harvest`/`clone`
+factories and by `GitPush` for origin's two pushes (design D13 of tighten-spec-contract), which the
+runner and the seed helper script render. Their policies differ:
 
 | Launcher / owner | Hooks | Signing, fsmonitor, replace refs | Maintenance | Inherited `GIT_CONFIG_*` | Global/system config |
 |---|---|---|---|---|---|
 | `GitProcessRunner`, string entry | local config decides | local config decides | on | inherited | ambient |
-| `GitExec` (plumbing) | local config decides (`update-ref` runs `reference-transaction`) | local config decides | on | inherited | `/dev/null` |
+| `GitExec` (plumbing) | off, by its own `-c core.hooksPath=/dev/null` literal (design D19 of add-sandbox-core, since 2026-08-16) | local config decides | on | inherited | `/dev/null` |
 | `GitTransfer` (fetch, clone) | local config decides | local config decides | off (`-c`) | stripped | ambient for origin, isolated for others |
+| `GitTransfer` built by `GitPush` (push) | local config decides (`pre-push` runs) | local config decides | on | stripped | ambient |
 
 Verified on git 2.55 while preparing this change:
 
 - `-c core.hooksPath=/dev/null` suppresses a hook planted through local config, the
-  `reference-transaction` hook of `update-ref` included.
+  `reference-transaction` hook of `update-ref` included — which is why `GitExec` already carries
+  that one literal; nothing else of the set.
 - `-c maintenance.auto=false` stops `git commit` from spawning `maintenance run --auto --detach`.
 - Without `core.useReplaceRefs=false`, a local `refs/replace/` entry changes what `cat-file` and
   `log` return for a commit id.
-- `branch <n> refs/remotes/origin/<n>` writes `branch.<n>.*`. If that write fails on the lock, the
-  ref is created anyway and the command exits 1.
+- `branch <n> refs/remotes/origin/<n>` writes `branch.<n>.*` under `branch.autoSetupMerge`'s
+  default. If that write fails on the lock, the ref is created anyway and the command exits 1. The
+  factory no longer runs that form: since design D9 of fix-terminal-receipt-convergence
+  `TaskBranchAdoption` creates the local branch by one `update-ref --stdin` transaction, which
+  writes no configuration. The key stays in the set as a pre-emption, so no future `branch`
+  invocation can reintroduce the write.
 
 ## Decisions
 
@@ -48,8 +57,10 @@ empty. That is the escape hatch `implementation.md` item 3 forbids.
 `GitInvocation.commandLine(gitBinary, args)`. It returns the binary, then the policy pairs, then
 the caller's arguments. Both launchers pass what it returns straight to `ProcessBuilder`, and
 their private `commandLine` builders are deleted. `GitTransfer.argv()` begins with the same
-pairs; its compact constructor asserts this, so a transfer built any other way cannot exist. The
-runner's typed transfer entry therefore does not prefix the pairs a second time. Classification
+pairs for every construction site — the `fetch`/`harvest`/`clone` factories and `GitPush.closing`
+and `GitPush.branchOnly`, whose `start()` opens with the owner's pairs; the compact constructor
+asserts this, so a transfer built any other way cannot exist. The runner's typed transfer entry
+therefore does not prefix the pairs a second time. Classification
 (`isRepoLevelMutating`, `GitNetworkCommands`) keeps running on the caller's arguments. For
 transfers it already skips leading `-c` pairs.
 *Rationale:* when the owner produces the command line, a launcher cannot forget the policy. It
@@ -133,12 +144,16 @@ command-scope value `/dev/null`. The doctor check for the stale line (UX2) must 
   ones. The floor stays where `tighten-spec-contract` put it (2.51.0, design D13 as amended
   2026-10-13).
 
-**D5 — `ContainerResumeBranch` keeps its code; a spec pins the corrected behavior.** With
-`branch.autoSetupMerge=false` the creation writes no configuration, so the "ref created, exit 1"
-failure disappears at its source. A spec on the adversarial posture (`autoSetupMerge=always`
-planted) asserts that the branch exists, the command exits 0 and the config is unchanged
-(NFR-R2). A `--no-track` flag at the call site was rejected: it would be a second, local
-statement of a policy the owner already carries.
+**D5 — The container resume path is pinned, not changed.** The "ref created, exit 1" failure of
+`git branch <n> refs/remotes/origin/<n>` already disappeared when `TaskBranchAdoption` (design D9
+of fix-terminal-receipt-convergence) replaced that form with one `update-ref --stdin` transaction,
+so NFR-R2 is met by landed code. This change adds the pin: a spec on the adversarial posture
+(`autoSetupMerge=always` planted) drives `ContainerResumeBranch.ensureLocalBranch` over a
+remote-only branch and asserts that the branch exists, the adoption is reported and `.git/config`
+is byte-identical. It is expected green before this change's code lands; its value is that a
+future return to `git branch` fails it. *Alternative rejected:* a `--no-track` flag at any future
+`branch` call site — a second, local statement of a policy the owner already carries
+(`branch.autoSetupMerge=false`, D3).
 
 **D6 — Adversarial local-configuration posture in the shared clone fixture.**
 
@@ -154,9 +169,13 @@ statement of a policy the owner already carries.
 - **Failures are loud.** Because every planted program fails, any factory path that runs without
   the policy turns an existing spec red — the "adversarial by default" rule of `testing.md`,
   extended from refs and global config to local config.
-- **Fixture writes.** The fixture's own configuration writes (`remote add`, the plants
-  themselves) no longer pass the runner, which now refuses them. They go through a test-only
-  `FixtureGitConfig` writer in `:test-fixtures`. The gate in D7 scans production sources only.
+- **Fixture writes.** Configuration writes from test code no longer pass the runner, which now
+  refuses them: the fixture's own (`remote add`, the plants themselves) and the roughly 70 calls in
+  about 44 test files that run `config <key> <value>`, `remote add` or `remote set-url` through
+  `GitProcessRunner` today — `LocalBoxEnvironment` (`config gc.auto 0`), `KillPointWorlds`,
+  `PushBlackout`, `E2eGitTree`, the Gitea end-to-end fixtures and some 25 specs of `adapters/git`.
+  Every one goes through a test-only `FixtureGitConfig` writer in `:test-fixtures` (task 4.1 carries
+  the grep). The gate in D7 scans production sources only.
 - **Opt-out by name.** A spec that needs a plain clone asks for `initPlainWorkingRepo`.
 - **Plumbing path.** `LocalGitRepoFixture` (`:gitobjects`) gets the hook plant for the
   `update-ref` path.
@@ -169,13 +188,22 @@ classes).
 
 1. The set of classes depending on `java.lang.ProcessBuilder` equals an allowlist, each entry
    with its reason:
-   - `GitProcessRunner`, `GitExec`: git launchers;
-   - `DockerCli`: docker;
-   - `HostTaskExecutionEnvironment`: gnome-product processes, not factory git;
-   - `CaptureRunner` (`:subprocess`): starts a builder a caller already constructed, so it
-     constructs none itself.
+   - `GitProcessRunner` (`:adapters:git`), `GitExec` (`:gitobjects`): the two git launchers, the
+     only builders of a git command line;
+   - `DockerCli` (`:sandbox:docker`): the docker client;
+   - `HostTaskExecutionEnvironment` (`:sandbox:docker`): gnome-product processes, not factory git;
+   - `StderrPolicy` (`:sandbox:core`): applies a stderr redirect to a builder an adapter built
+     (design D18 of fix-terminal-receipt-convergence), constructs none;
+   - `CaptureRunner`, `ProcessLaunch`, `GroupedLaunch`, `StdinSource` (`:subprocess`): the launch
+     owner and its helpers — they take a builder a caller constructed, prefix the launcher, set its
+     stdin and start it (design D16, D19, D20 of fix-terminal-receipt-convergence); none names a
+     binary.
 
    Asserting equality, rather than a subset, makes a new spawn site fail until it is classified.
+   The gate asks "who builds a command line" and nothing else: who may call `start()` is
+   `LaunchOwnerGateSpec`'s question (FR18 of fix-terminal-receipt-convergence, NG14 of the same:
+   the launch owner alone), and which packages may touch `ProcessBuilder` at all is
+   `ProcessSpawnBoundarySpec`'s. The three gates overlap on no assertion.
 2. Both git launchers call `GitInvocation.commandLine`.
 3. Seeded scenarios prove the detector fires; `GitTransferBoundarySpec` is the model.
 
@@ -189,10 +217,12 @@ by D2's constructor invariant.
   posture).** It drives the git operations of the factory's own flows:
   - commit in a worktree (`GitAttemptPersistence`);
   - lifecycle commit (`GitTaskRepository`);
-  - `update-ref` (`ReplicaPairReconciler`);
+  - `update-ref --stdin` through `RefTransaction` (`FactoryRegister`, the register's writer);
   - a bare-object commit (`gitobjects` `CommitBuilder`);
   - `worktree add`;
-  - branch creation from a tracking ref (`ContainerResumeBranch`);
+  - branch creation from a tracking ref (`ContainerResumeBranch` over `TaskBranchAdoption`);
+  - a push of the task branch to a bare origin (`GitPush.branchOnly`), with an executable
+    `pre-push` hook planted;
   - a state read under a planted replace ref.
 
   It asserts no marker exists and `.git/config` is byte-identical (FR8, M4).
@@ -229,8 +259,8 @@ No row of the `manual-sync-pairs.md` registry is touched.
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |---|---|---|---|---|
-| `GitInvocation` (`:gittransfer`) | The full git command line (`List<String>`, produced only by `GitInvocation.commandLine(gitBinary, args)`) and the environment-removal set. The list is a primitive because `ProcessBuilder` consumes exactly that; the owner is enforced by being the only producer (gate item 2), not by the type. | `adapters/git/.../GitProcessRunner.java` (`execute`); `gitobjects/.../GitExec.java` (`run`); `gittransfer/.../GitTransfer.java` (`fetch`, `clone`), and through it the runner's typed entry and `sandbox/docker/.../DockerSeedCloneCommand.java` | `GitProcessRunner.commandLine` and `GitExec.commandLine` (private builders) deleted; `GitTransfer.CONFIG_KEYS` loses `maintenance.auto`/`gc.auto`; `GitTransfer.STRIPPED` loses the two configuration variables. Old-way grep: `commandLine(` defined outside `GitInvocation`, and `"gc.auto=0"`/`"maintenance.auto=false"` literals outside it — both expected empty | `GitLaunchBoundarySpec` (D7); `GitTransfer` compact-constructor invariant (D2) |
-| "No repository-configuration write" (runner refusal plus the owner's `branch.autoSetupMerge=false`) | none — the absence of a write, checked on the medium | Previous writers: `adapters/git/.../FactoryCloneHardening.java` (removed); `adapters/git/.../GitTaskBranches.java` `harden` (removed); `application/.../port/git/TaskBranchGit.java` `harden` (removed); call sites `TakeFreshClaim.java:65`, `TakeContainerFreshClaim.java:58`, `TakeResumeBootstrap.java:66`, `TakeContainerResumeBootstrap.java:52`, `GitModeRunner.java:112`, `ContainerGitModeRunner.java:71`, `ContainerResumeRunner.java:94` (all removed); `adapters/git/.../ContainerResumeBranch.java:64` (kept, writes nothing under the owner) | `git config core.hooksPath` and the port method, both deleted. Old-way grep: `harden(` and `"config"` in production Java — expected empty apart from the refusal classifier. Exemption: `sandbox/docker/.../DockerSeedCloneCommand.java` script writes `git config gc.auto 0` in the **box's** fresh seed clone, outside the operator clone and the factory trust domain (NG6) | Runner refusal (FR5); identity spec `GitInvocationIdentitySpec` asserting a byte-identical `.git/config` on the real medium (D8) |
+| `GitInvocation` (`:gittransfer`) | The full git command line (`List<String>`, produced only by `GitInvocation.commandLine(gitBinary, args)`) and the environment-removal set. The list is a primitive because `ProcessBuilder` consumes exactly that; the owner is enforced by being the only producer (gate item 2), not by the type. | `adapters/git/.../GitProcessRunner.java` (`execute`); `gitobjects/.../GitExec.java` (`run`); `gittransfer/.../GitTransfer.java` (`fetch`, `harvest`, `clone`) and `gittransfer/.../GitPush.java` (`closing`, `branchOnly`, through `start()`), and through them the runner's typed entry and `sandbox/docker/.../DockerSeedCloneCommand.java` | `GitProcessRunner.commandLine` and `GitExec.commandLine` (private builders) deleted, `GitExec`'s own `-c core.hooksPath=/dev/null` literal with the latter; `GitTransfer.CONFIG_KEYS` loses `maintenance.auto`/`gc.auto`; `GitTransfer.STRIPPED` loses the two configuration variables. Old-way grep: `commandLine(` defined outside `GitInvocation`, and `"gc.auto=0"`/`"maintenance.auto=false"`/`"core.hooksPath=` literals outside it — all expected empty | `GitLaunchBoundarySpec` (D7); `GitTransfer` compact-constructor invariant (D2) |
+| "No repository-configuration write" (runner refusal plus the owner's `branch.autoSetupMerge=false`) | none — the absence of a write, checked on the medium | Previous writers: `adapters/git/.../FactoryCloneHardening.java` (removed); `adapters/git/.../GitTaskBranches.java` `harden` (removed); `application/.../port/git/TaskBranchGit.java` `harden` (removed); the decorator `application/.../app/serve/RemoteOutageSignalingTaskBranchGit.java` `harden` (removed); call sites `TakeFreshClaim`, `TakeContainerFreshClaim`, `TakeResumeBootstrap`, `TakeContainerResumeBootstrap`, `GitModeRunner`, `ContainerGitModeRunner`, `ContainerResumeRunner` (`application/.../app/`, one `git.branches().harden(cloneDir)` each, all removed); `adapters/git/.../TaskBranchAdoption.java` (kept: creates the local branch by `update-ref --stdin`, which writes no configuration) | `git config core.hooksPath` and the port method, both deleted. Old-way grep: `harden(` and `"config"` in production Java — expected empty apart from the refusal classifier. Exemption: the `sandbox/docker/.../DockerSeedCloneCommand.java` script writes five configuration lines in the **box** — `--global --add safe.directory` twice, `user.name`, `user.email`, `gc.auto 0` — into the box's own global file and its fresh seed clone, outside the operator clone and the factory trust domain (NG6) | Runner refusal (FR5); identity spec `GitInvocationIdentitySpec` asserting a byte-identical `.git/config` on the real medium (D8) |
 
 ## Risks / Trade-offs
 
@@ -247,7 +277,7 @@ No row of the `manual-sync-pairs.md` registry is touched.
 - **`/dev/null` is POSIX.** The factory already requires a POSIX host (Docker CLI, `sh`
   scripts). A Windows port would change the value in one place.
 - **Keys the policy cannot pre-empt** (attribute-selected filter drivers, `info/attributes`,
-  alternates) remain open for the host-mode shared `.git` → NG1; this is the ADR 0011 boundary
+  alternates) remain open for the host-mode shared `.git` → NG1; this is the ADR 0012 boundary
   statement, handed to `add-sandbox-hardening`.
 
 ## Migration Plan

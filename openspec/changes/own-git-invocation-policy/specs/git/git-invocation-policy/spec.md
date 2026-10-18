@@ -54,14 +54,19 @@ Every factory git process SHALL be started with inherited `GIT_CONFIG_PARAMETERS
 - **THEN** no hook in that directory runs
 
 ### Requirement: Transfers layer on the invocation policy
-A git transfer SHALL carry every key of the invocation policy plus the transfer's own set. A
-key both sets name SHALL have the same value in both.
+A git transfer — a fetch, a clone or a push — SHALL carry every key of the invocation policy plus
+the transfer's own set. A key both sets name SHALL have the same value in both.
 **Implements**: FR4 of own-git-invocation-policy
 
 #### Scenario: A transfer carries the invocation policy
-- **WHEN** the transfer owner builds a fetch or a clone for any source kind
+- **WHEN** the transfer owner builds a fetch or a clone for any source kind, or a push to origin
 - **THEN** its argument list contains every configuration pair of the invocation policy,
   before the subcommand
+
+#### Scenario: A planted pre-push hook does not run on a factory push
+- **WHEN** the clone's local configuration points `core.hooksPath` at a directory holding an
+  executable `pre-push` hook and the factory pushes a task branch to a bare origin
+- **THEN** the hook does not run and the push lands
 
 ### Requirement: The factory writes no repository configuration
 The factory SHALL write nothing to a clone's repository configuration. The factory git

@@ -4,9 +4,9 @@ Sequenced before `add-subprocess-access-log` (same `GitProcessRunner.execute`; p
 Impact). Build order: groups 1 → 2 → 3 → 4 → 5 → 6 → 7, where 2 depends on 1 and 5 needs 2–4
 green. Every group lands its own specs and docs.
 
-Runs after group 14 of `supervise-daemon-loops-and-embed-dashboard`: every holder of the git runner
-is typed as the package-private `GitRunner` role (`adapters/git`), and `GitProcessRunner` is its
-one production implementation. Group 2 rewrites `GitProcessRunner.execute` only; no holder is
+Group 14 of `supervise-daemon-loops-and-embed-dashboard` has landed (archived 2026-10-11): every
+holder of the git runner is typed as the package-private `GitRunner` role (`adapters/git`), and
+`GitProcessRunner` is its one production implementation. Group 2 rewrites `GitProcessRunner.execute` only; no holder is
 retyped to `GitProcessRunner`, or `GitRunnerBoundarySpec` in `:bootstrap` fails. Specs above the
 adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
@@ -22,16 +22,19 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       Verify: red against a stub, green after 1.2.
 - [ ] 1.2 Implement `GitInvocation` (JDK-only; javadoc `Implements FR1, FR2, FR3 of
       own-git-invocation-policy`). Verify: 1.1 green; `:gittransfer:check` green (PIT 100%).
-- [ ] 1.3 TDD then refactor `GitTransfer` to compose the owner (FR4, design D2, D3):
-      - `argv()` begins with the owner's pairs;
+- [ ] 1.3 TDD then refactor `GitTransfer` and `GitPush` to compose the owner (FR4, design D2, D3):
+      - `argv()` begins with the owner's pairs for every construction site: the
+        `fetch`/`harvest`/`clone` factories and `GitPush.closing`/`branchOnly` (their `start()`
+        opens with the pairs);
       - the compact constructor refuses an argv that does not begin with them;
       - `CONFIG_KEYS` drops `maintenance.auto`/`gc.auto`;
       - `STRIPPED` drops the two configuration variables and applies the owner's set instead.
 
-      A data-driven spec over every source kind asserts that every invocation pair is present
-      before the subcommand and that no key has two values. Verify: `GitTransferSpec`, the new
-      spec and `SeedTransferFixture`-based specs are green; `:gittransfer:check` and
-      `:sandbox:docker:check` are green.
+      A data-driven spec over every source kind and both pushes asserts that every invocation pair
+      is present before the subcommand and that no key has two values. Verify: `GitTransferSpec`,
+      `GitPushSpec`, the new spec and `SeedTransferFixture`-based specs are green;
+      `DockerSeedCloneCommandSpec`'s rendered script expectation is updated; `:gittransfer:check`
+      and `:sandbox:docker:check` are green.
 
 ## 2. Both launchers take the owner's command line
 
@@ -46,14 +49,20 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       hook (FR3 scenario). Verify: `:adapters:git:check` green.
 - [ ] 2.2 TDD then wire `GitExec` (FR1, FR3, design D1, D2):
       - `:gitobjects` gains `implementation project(':gittransfer')` and its layering allowlist
-        entry with a comment naming the edge;
+        entry with a comment naming the edge; `:application` gains the reach entry `:gittransfer`
+        with a comment naming `:gitobjects` as the edge it arrives through (`:adapters`,
+        `:adapters:agent` and `:bootstrap` already list it); `GitObjectsBoundarySpec`'s permitted
+        set admits `gittransfer`;
       - `run` builds its command line from the owner and removes the owner's environment set;
       - `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` isolation is kept;
-      - the private `commandLine` is deleted.
+      - the private `commandLine` is deleted, its `-c core.hooksPath=/dev/null` literal with it.
 
-      `LocalGitRepoFixture` plants a `reference-transaction` hook that writes a marker and
-      exits 1; a `CommitBuilder` spec asserts the ref moved and no marker exists. Verify:
-      `:gitobjects:check` green, and the layering gate is green.
+      Red first on a vector `GitExec` does not close today: `LocalGitRepoFixture` plants a
+      `refs/replace/` entry substituting a commit, and a `GitObjects` read spec asserts the original
+      object comes back (hooks are already neutralized by the literal being deleted, so a hook
+      marker cannot go red). `LocalGitRepoFixture` also plants a `reference-transaction` hook that
+      writes a marker and exits 1 as the regression pin for the moved literal. Verify:
+      `:gitobjects:check` green, and the layering gate is green in every module.
 - [ ] 2.3 Old-way sweep for row 1 of the D10 table. Run
       `grep -rn "commandLine(" --include=*.java */src/main */*/src/main` (expected: definitions
       only in `GitInvocation`) and
@@ -74,10 +83,11 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       - delete `FactoryCloneHardening`, `FactoryCloneHardeningException`, their spec
         `FactoryCloneHardeningSpec`, `GitTaskBranches.harden` and the port method
         `TaskBranchGit.harden`;
-      - the compiler then forces removal at `TakeFreshClaim.java:65`,
-        `TakeContainerFreshClaim.java:58`, `TakeResumeBootstrap.java:66`,
-        `TakeContainerResumeBootstrap.java:52`, `GitModeRunner.java:112`,
-        `ContainerGitModeRunner.java:71` and `ContainerResumeRunner.java:94`;
+      - the compiler then forces removal of `RemoteOutageSignalingTaskBranchGit.harden` (the
+        port decorator, `application/.../app/serve/`) and of the one `git.branches().harden(cloneDir)`
+        call in each of `TakeFreshClaim`, `TakeContainerFreshClaim`, `TakeResumeBootstrap`,
+        `TakeContainerResumeBootstrap`, `GitModeRunner`, `ContainerGitModeRunner` and
+        `ContainerResumeRunner` (`application/.../app/`);
       - update the fakes and specs that stub or assert `harden`: `RunChainFakes`,
         `TakeFreshClaimSpec`, `TakeContainerFreshClaimSpec`, `TakeClaimAndWorkSpec`,
         `GitModeRunnerFreshRunSpec`, `ContainerGitModeRunnerSpec`, `GitTaskBranchesSpec`,
@@ -103,9 +113,16 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 ## 4. Adversarial local-configuration posture
 
 - [ ] 4.1 Add `FixtureGitConfig` to `:test-fixtures`, a test-only raw writer for fixture
-      configuration setup (design D6). Move `BareGitRepoFixture.addRemote` onto it, because the
-      runner now refuses `remote add`. Verify: `:test-fixtures` builds, and the existing
-      `addOrigin` specs are green.
+      configuration setup (design D6). Move every test-side configuration write onto it, because
+      the runner now refuses them (FR5): `BareGitRepoFixture.addRemote`, `LocalBoxEnvironment`'s
+      `config gc.auto 0`, and every hit of
+      `grep -rn "'config', '[a-zA-Z-]\|'remote', 'add'\|'remote', 'set-url'" --include='*.groovy'`
+      over the test trees and `test-fixtures/src/main` that runs through `GitProcessRunner`
+      (about 70 calls in about 44 files on 2026-10-18: `KillPointWorlds`, `PushBlackout`,
+      `E2eGitTree`, the Gitea fixtures, some 25 specs of `adapters/git`); read forms
+      (`--get`, `--list`) stay. Record the grep and its hit count in the task report. Verify:
+      `:test-fixtures` builds, the existing `addOrigin` specs are green, and the grep shows no
+      write through the runner.
 - [ ] 4.2 Plant the posture in `BareGitRepoFixture.initWorkingRepo` (FR8, design D6):
       - a hook directory with marker-writing `pre-commit`, `post-checkout` and
         `reference-transaction` hooks that exit 1;
@@ -129,18 +146,22 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       M4, NFR-S1, design D8). It drives:
       - the worktree attempt commit;
       - the lifecycle commit;
-      - `update-ref` through the reconciler;
+      - `update-ref --stdin` through `RefTransaction` (`FactoryRegister`);
       - a `gitobjects` commit;
       - `worktree add`;
-      - branch creation from a tracking ref;
+      - branch creation from a tracking ref (`ContainerResumeBranch` over `TaskBranchAdoption`);
+      - a push of the task branch to a bare origin (`GitPush.branchOnly`) with an executable
+        `pre-push` hook planted;
       - a state-file read with a planted `refs/replace/` substitution.
 
       It asserts that no marker exists, that the read returns the original content, and that
       `.git/config` is byte-identical. Verify: green, and red with the owner's pairs emptied
       (record the red run in the task report).
-- [ ] 5.2 Container-resume spec (NFR-R2, design D5). With `branch.autoSetupMerge=always` planted,
-      `ContainerResumeBranch.ensureLocalBranch` on a remote-only branch returns true, the local
-      ref exists, and the config is byte-identical. Verify: green.
+- [ ] 5.2 Container-resume pin (NFR-R2, design D5). With `branch.autoSetupMerge=always` planted,
+      `ContainerResumeBranch.ensureLocalBranch` on a remote-only branch reports the adoption, the
+      local ref exists, and `.git/config` is byte-identical. A pin, not a red-first test: it is
+      expected green before this change's code lands (`TaskBranchAdoption` already creates the
+      branch by `update-ref --stdin`). Verify: green; record that it was green before task 2.1.
 - [ ] 5.3 `ConcurrentCloneConfigSpec` (`:adapters:git`; NFR-R1, lock-scope rule "Specs"). Eight
       virtual threads released by one latch each run the fresh-claim git sequence (branch create,
       worktree add, commit) on one clone. It asserts that no result carries `could not lock
@@ -157,9 +178,11 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
 - [ ] 6.1 `GitLaunchBoundarySpec` in `:bootstrap` (FR7, design D7), an ArchUnit spec over all
       production classes:
-      - the set of classes depending on `java.lang.ProcessBuilder` equals the allowlist
-        `GitProcessRunner`, `GitExec`, `DockerCli`, `HostTaskExecutionEnvironment` and
-        `CaptureRunner`, each entry carrying its reason;
+      - the set of classes depending on `java.lang.ProcessBuilder` equals the allowlist of D7 —
+        `GitProcessRunner`, `GitExec`, `DockerCli`, `HostTaskExecutionEnvironment`, `StderrPolicy`,
+        `CaptureRunner`, `ProcessLaunch`, `GroupedLaunch`, `StdinSource` — each entry carrying its
+        reason, and the spec's javadoc names what `LaunchOwnerGateSpec` and
+        `ProcessSpawnBoundarySpec` own instead;
       - `GitProcessRunner` and `GitExec` both call `GitInvocation.commandLine`;
       - seeded scenarios show the detector fails on a synthetic extra spawn site and on a
         launcher that skips the owner.
@@ -168,7 +191,8 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
 ## 7. Docs and hand-offs
 
-- [ ] 7.1 Write `docs/adr/0011-git-invocation-policy.md`. Content:
+- [ ] 7.1 Write `docs/adr/0012-git-invocation-policy.md` (0011 is taken by
+      `0011-operator-configuration-levels.md`; 0012 is the free number). Content:
       - the clone configuration is untrusted input, not storage;
       - one command-scope policy for every factory git process;
       - the no-write rule;
@@ -180,17 +204,21 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 - [ ] 7.2 Update `docs/sandbox-threat-registry.md`:
       - row 38: "core.hooksPath points at an empty location in all factory copies" → "every
         factory git invocation neutralizes hooks by command-scope configuration";
-      - new row 49: program execution and read substitution through the clone's local
-        configuration (`gpg.program` with signing, `core.fsmonitor`, `refs/replace/`), mitigated
-        by the invocation policy, status `shipped (own-git-invocation-policy, ADR 0011)`.
+      - new row 50 (49 is `tighten-spec-contract`'s): program execution and read substitution
+        through the clone's local configuration (`gpg.program` with signing, `core.fsmonitor`,
+        `pre-push`, `refs/replace/`), mitigated by the invocation policy, status
+        `shipped (own-git-invocation-policy, ADR 0012)`.
 
       Update `docs/glossary.md` with the entry **git invocation policy**, and a *Not:* note
       that it is not the transfer set. Verify: both files updated, glossary term used verbatim
       in the ADR.
 - [ ] 7.3 Hand-offs:
-      - add one sentence to `add-subprocess-access-log/proposal.md` (Capabilities →
-        `module-layering`) naming this change's `gittransfer`/`gitobjects` sentences among those
-        its re-layering must keep, and noting that argv records now carry the policy pairs;
+      - add one sentence to `add-subprocess-access-log/proposal.md` noting that git argv records
+        now carry the eight policy pairs (that change may render them as one token); it carries no
+        `module-layering` delta any more, so nothing of this change's layering text needs keeping
+        there;
+      - renumber `fix-docker-exec-env-argv`'s planned `docs/adr/0011-secret-channels-to-child-processes.md`
+        to 0017 via `/opsx:update` on that change (0011 is taken, 0012 is this change's);
       - record the UX2 doctor check for `add-doctor-command` (read with `--local`; print the
         `git config --local --unset core.hooksPath` line only when the value ends in
         `/gnomish-empty-hooks`) via `/opsx:update` on that change;
@@ -200,9 +228,3 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 - [ ] 7.4 Integration check: root `./gradlew check` green; the `openspec validate
       own-git-invocation-policy` result is clean; an FR/NFR/UX grep shows every proposal ID
       referenced by at least one spec or code unit (`traceability.md`).
-
-## Follow-ups from tighten-spec-contract
-
-- F68: the edge `:gitobjects` → `:gittransfer` forces reach entries in every module that reaches `:gitobjects` (`:application`, the adapters, `:bootstrap`), not only `:gitobjects`' own (task 2.2); rewrite the enumerations of `A transitive leaf is listed by every module that reaches it` and `A reach entry names the edge it arrives through` from the build files when this change lands.
-- F69: renumber the planned ADR `docs/adr/0011-git-invocation-policy.md` — 0011 is taken by `0011-operator-configuration-levels.md`, and `fix-docker-exec-env-argv` plans another 0011 (text-only, before apply).
-- F70: narrow task 7.3's first hand-off to the note that argv records carry the policy pairs — `add-subprocess-access-log` no longer carries a `module-layering` delta (F63), so there is nothing for its re-layering to keep.

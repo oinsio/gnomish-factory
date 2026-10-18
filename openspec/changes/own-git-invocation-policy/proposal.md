@@ -9,15 +9,17 @@ The factory treats the operator clone's shared `.git/config` as two things it is
   with no wait before git 2.56, so two serve slots claiming at the same moment race, and one
   claim fails at random. CI went red on 2026-09-29 on exactly this
   (`TakeSlotRunnerContainerConcurrencySpec`). A `git branch <name> refs/remotes/origin/<name>`
-  on the container resume path writes `branch.<name>.*` into the same file, so it races too. It
-  also fails confusingly: the ref is created and git still exits 1, and the factory then reports
-  "could not create local branch".
+  on the container resume path used to write `branch.<name>.*` into the same file and to fail
+  confusingly — the ref created, git exiting 1. `fix-terminal-receipt-convergence` replaced that
+  form with one `update-ref --stdin` transaction; this change pins the result and pre-empts the
+  write by policy.
 - **A trusted source of policy.** Every factory git command reads that file. The operator, the
   operator's tools (husky rewrites `core.hooksPath` on every `npm install`), or a host-mode gnome
   can all write to it. A one-time write does not hold. Verified on git 2.55:
   - `core.hooksPath` pointing at a planted hook runs it during the factory's `git commit`.
-  - The planted hook runs in `update-ref`, both the runner's and `gitobjects`' own (the
-    `reference-transaction` hook).
+  - The planted hook runs in the runner's `update-ref` (the `reference-transaction` hook) and in
+    the runner's `push` (`pre-push`). `gitobjects`' own `update-ref` is the one place already
+    guarded: `GitExec` carries `-c core.hooksPath=/dev/null` — and nothing else of the set.
   - `commit.gpgSign` together with `gpg.program` runs an arbitrary program during the factory's
     `git commit`.
   - Separately, every factory `git commit` starts a detached `git maintenance run --auto` in the
@@ -26,7 +28,8 @@ The factory treats the operator clone's shared `.git/config` as two things it is
 ADR 0008 already solved this for fetch and clone. The factory states its policy on every
 invocation with `-c` pairs (command-line configuration, which beats every file scope) and
 strips inherited per-process configuration. The other git commands — commit, branch,
-update-ref, worktree, and the `gitobjects` plumbing — get none of that. The factory runs git
+update-ref, worktree, the pushes built by `GitPush`, and the `gitobjects` plumbing — get none of
+that beyond the one hooks literal of `GitExec`. The factory runs git
 through two launchers with two different policies, and a third policy lives in the transfer
 owner. The race is the visible symptom. The systemic defect is that the factory has no single
 statement of how it invokes git.
@@ -39,7 +42,7 @@ statement of how it invokes git.
   - The set neutralizes hooks, commit and tag signing, fsmonitor, upstream auto-setup,
     automatic maintenance/gc and replace refs.
   - Inherited per-process configuration is stripped for every command, not only for transfers.
-  - Transfers layer their existing set on top.
+  - Transfers — fetch, clone and push — layer their existing set on top.
   - The factory writes no repository configuration: the runner refuses a config write the way it
     refuses an unowned transfer.
 - **MODIFIED** `git-task-persistence`, "Factory git executes no untrusted content": the clause
@@ -49,12 +52,12 @@ statement of how it invokes git.
 - **MODIFIED** `module-layering`: `gitobjects` may depend on `gittransfer`, which now also holds
   the invocation policy, so the plumbing launcher applies the same set.
 - **REMOVED** (code): `FactoryCloneHardening`, `FactoryCloneHardeningException`,
-  `TaskBranchGit.harden` and its seven call sites. This is **BREAKING** only for an operator
+  `TaskBranchGit.harden`, its decorator method and its seven call sites. This is **BREAKING** only for an operator
   who relied on the factory persisting `core.hooksPath` into their clone. That write stops; see
   UX2.
 - Test build: the shared clone fixture gains an adversarial **local** configuration posture.
   The temporary `@Retry` on the concurrency spec is removed.
-- Docs: ADR 0011; `docs/sandbox-threat-registry.md` row 38 revised and row 49 added;
+- Docs: ADR 0012; `docs/sandbox-threat-registry.md` row 38 revised and row 50 added;
   glossary entry.
 
 ## Capabilities
@@ -101,9 +104,9 @@ statement of how it invokes git.
 - **U2**: An operator's clone has husky installed (`core.hooksPath=.husky/_`) and a
   `commit.gpgSign=true` setting. Factory commits, ref updates and worktree operations run no
   hook and invoke no signing program. The operator's own commits keep their hooks.
-- **U3**: An instance resumes a task another instance pushed. The local branch is recreated
-  with no configuration written, so no misleading "could not create local branch" error
-  appears.
+- **U3**: An instance resumes a task another instance pushed, in a clone whose local
+  configuration forces upstream auto-setup on. The local branch is adopted with no configuration
+  written and no hook run.
 
 ## Requirements
 
@@ -121,8 +124,8 @@ statement of how it invokes git.
   - replace refs.
 - **FR3**: Every factory git process SHALL be started with inherited `GIT_CONFIG_PARAMETERS`
   and `GIT_CONFIG_COUNT` removed.
-- **FR4**: The transfer owner SHALL build a transfer on top of the invocation set. A transfer
-  SHALL carry every key of the invocation set plus its own. Keys the transfer set re-asserts
+- **FR4**: The transfer owner SHALL build every transfer — fetch, clone and push — on top of the
+  invocation set. A transfer SHALL carry every key of the invocation set plus its own. Keys the transfer set re-asserts
   SHALL NOT diverge from the base set.
 - **FR5**: The factory git runner SHALL refuse, before launching a process, a subcommand that
   writes repository configuration (`config` in a write form, `remote` in a write form), with an
@@ -141,8 +144,9 @@ statement of how it invokes git.
 - **NFR-R1**: N concurrent fresh claims on one clone SHALL NOT fail on any `.git/config` lock.
   A spec with real threads pins this, and the concurrency spec passes without `@Retry`.
 - **NFR-R2**: The container resume path SHALL create a local branch from a remote-tracking ref
-  without writing configuration. A failing creation SHALL report a failure only when the ref
-  was actually not created.
+  without writing configuration, whatever upstream auto-setup the clone's local configuration
+  forces. Met by landed code (`TaskBranchAdoption`, `fix-terminal-receipt-convergence`); this
+  change pins it under the adversarial posture.
 
 ### Non-Functional Security
 
@@ -171,8 +175,8 @@ statement of how it invokes git.
 
 ## Success Metrics
 
-- **M1**: `git.branches().harden` / `FactoryCloneHardening` occurrences in production: 7 call
-  sites + 2 classes → 0.
+- **M1**: `harden` occurrences in production: 7 call sites + 1 port decorator + 1 port method +
+  2 classes → 0.
 - **M2**: Git process launchers applying the policy: 2 of 2 (today 0 of 2 for non-transfer
   commands).
 - **M3**: `TakeSlotRunnerContainerConcurrencySpec` passes 20 consecutive local runs without
@@ -189,20 +193,25 @@ statement of how it invokes git.
 
 ## Impact
 
-- `:gittransfer`: new `GitInvocation` owner; `GitTransfer` composes it.
+- `:gittransfer`: new `GitInvocation` owner; `GitTransfer` and `GitPush` compose it.
 - `:gitobjects`: `GitExec` applies the policy; new edge to `:gittransfer`.
 - `:adapters:git`: `GitProcessRunner` applies the policy and refuses configuration writes.
   `FactoryCloneHardening*` is removed, and `GitTaskBranches.harden` with it.
-- `:application`: `TaskBranchGit.harden` is removed, along with its 7 call sites. Three declared
-  sync pairs have their markers reworded.
+- `:application`: `TaskBranchGit.harden` is removed, along with its 7 call sites and the
+  `RemoteOutageSignalingTaskBranchGit` decorator's method; `:application` gains a layering reach
+  entry for `:gittransfer` through `:gitobjects`. Three declared sync pairs have their markers
+  reworded.
 - `:bootstrap`: the new boundary spec and the concurrency spec; `RunnerStartHardeningSpec` is
   retired or rewritten.
 - `:test-fixtures`: an adversarial local-configuration posture in `BareGitRepoFixture`.
-- Docs: `docs/adr/0011-git-invocation-policy.md`, `docs/sandbox-threat-registry.md`,
+- Docs: `docs/adr/0012-git-invocation-policy.md` (0011 is `operator-configuration-levels`;
+  `fix-docker-exec-env-argv`, which also planned 0011, takes 0017), `docs/sandbox-threat-registry.md`,
   `docs/glossary.md`.
 - Sequencing: this change lands before `add-subprocess-access-log`, which touches the same
   `GitProcessRunner.execute`.
-- Sequenced after `tighten-spec-contract`: the MODIFIED blocks of `git-task-persistence` and
-  `module-layering` are layered on that change's text (its rewritten module enumerations among
-  them), which must sync first. `add-subprocess-access-log` no longer carries a `module-layering`
-  delta, so the two changes no longer overlap there.
+- Layered on `tighten-spec-contract` (archived 2026-10-14; `GitPush`, the rewritten module
+  enumerations) and `fix-terminal-receipt-convergence` (archived 2026-10-18; `TaskBranchAdoption`,
+  the `:subprocess` edge of `:sandbox:core`, `ProcessLaunch`): the MODIFIED blocks of
+  `git-task-persistence` and `module-layering` are written over the main spec as both left it.
+  `add-subprocess-access-log` no longer carries a `module-layering` delta, so the two changes no
+  longer overlap there.

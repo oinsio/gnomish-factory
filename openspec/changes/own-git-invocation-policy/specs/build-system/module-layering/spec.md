@@ -2,16 +2,16 @@
 
 ## MODIFIED Requirements
 
-Layered on `Layered Gradle module tree` and `Enforced acyclic dependency direction` as modified by
-`tighten-spec-contract` (sequenced before this change). That delta cut both bodies to the one
-behavior each heading names, rewrote the module enumerations from the build files (its finding
-F28: `:operatorconfig`, the `:untrustedtext` edges) and moved every per-leaf and per-module
-statement into scenarios. This text adds the git invocation policy to `:gittransfer` and the
+Layered on `Layered Gradle module tree` and `Enforced acyclic dependency direction` as they stand
+in the main spec after `tighten-spec-contract` (archived 2026-10-14) and
+`fix-terminal-receipt-convergence` (archived 2026-10-18); every other sentence of both bodies is
+the main spec's own. This text adds the git invocation policy to `:gittransfer` and the
 `:gitobjects` edge to it: the scenarios "Both git launchers take one invocation policy", "The
 invocation policy is pure values in gittransfer" and "The git-object library depends only on
-subprocess and gittransfer", a note on extraction, and `:gittransfer` in the dependency set of
-"Access-log emission adds no edge to gitobjects". `add-subprocess-access-log` no longer
-MODIFIES these requirements (its re-layering, task 6.2 of `tighten-spec-contract`).
+subprocess and gittransfer", a note on extraction, `:gittransfer` in the dependency set of
+"Access-log emission adds no edge to gitobjects", and `:application` reaching `:gittransfer`
+through `:gitobjects` in "A transitive leaf is listed by every module that reaches it" and "A
+reach entry names the edge it arrives through". No other active change MODIFIES these requirements.
 
 ### Requirement: Layered Gradle module tree
 The build SHALL be organized into layered Gradle modules by hexagonal layer:
@@ -78,13 +78,13 @@ The build SHALL be organized into layered Gradle modules by hexagonal layer:
 - **WHEN** any factory git process is started
 - **THEN** the one command-scope configuration set and the stripped environment it carries come
   from the git invocation policy held by the JDK-only `:gittransfer` leaf, as pure values
-- **AND** the git transfer owner in the same leaf is layered on that policy
+- **AND** the git transfer owner in the same leaf — fetch, clone and push alike — is layered on that policy
 
 ### Requirement: Enforced acyclic dependency direction
 The module dependency direction SHALL be acyclic and enforced by the build: each
 module SHALL declare only the internal edges its layer permits, and the layering
 gate SHALL fail the build naming any declared edge outside that set.
-**Implements**: FR9, NFR-S3 of bound-subprocess-commands; FR2 of split-into-modules; FR5 of harden-task-branch-contract; FR4, FR6, FR8 of harden-logging-observability; FR2, FR3 of add-subprocess-access-log; FR10, NFR-S3 of add-base-ref-resolution; FR6, FR7, FR11, NFR-S1 of split-logtext-leaves; FR2 of own-git-transfer-argv; FR1 of own-git-invocation-policy
+**Implements**: FR9, NFR-S3 of bound-subprocess-commands; FR2 of split-into-modules; FR5 of harden-task-branch-contract; FR4, FR6, FR8 of harden-logging-observability; FR2, FR3 of add-subprocess-access-log; FR10, NFR-S3 of add-base-ref-resolution; FR6, FR7, FR11, NFR-S1 of split-logtext-leaves; FR2 of own-git-transfer-argv; FR19 of fix-terminal-receipt-convergence; FR1 of own-git-invocation-policy
 **Notes**: "Depends only on" in the scenarios describes declared edges; a module's layering allowlist describes reach, since the gate walks the transitive production graph.
 **Notes**: The dependency-free leafs stay empty because any edge added to one is pushed into every consumer: the emptiness of `subprocess` and `atomicfile` keeps their consumers free of transitive coupling, the domain reaches the event catalog and the published contract reaches both text leafs, and the git adapter and a sandbox backend reach `gittransfer` from opposite sides of the layering. `baseref` takes and returns plain values, which constructively keeps the resolution policy ignorant of subprocesses, trackers and configuration formats.
 **Notes**: The git-object library reaches `gittransfer` for the invocation policy alone, so extracting that library means moving it with its two JDK-only leafs, `subprocess` and `gittransfer`.
@@ -133,7 +133,8 @@ gate SHALL fail the build naming any declared edge outside that set.
   `:domain`, the sample plugin reaching `:operatorevent` and `:untrustedtext`
   through `:gnomish-plugin-api`, `:adapters`, `:adapters:agent` and
   `:bootstrap` reaching `:gittransfer` through `:sandbox:docker` or
-  `:adapters:git`, and `:sandbox:docker`, `:adapters`, `:adapters:git` and
+  `:adapters:git`, `:application` reaching `:gittransfer` through
+  `:gitobjects`, and `:sandbox:docker`, `:adapters`, `:adapters:git` and
   `:adapters:agent` reaching `:operatorconfig` through `:application` or
   `:sandbox:core`
 - **THEN** the gate passes only because that module's allowlist names the
@@ -199,7 +200,7 @@ gate SHALL fail the build naming any declared edge outside that set.
 
 #### Scenario: The sandbox core depends only on domain and two leafs
 - **WHEN** the layering gate runs against `:sandbox:core`
-- **THEN** its only internal edges are `:domain`, the `:untrustedtext` leaf its exec results carry, and the `:operatorconfig` leaf its configuration records name
+- **THEN** its only internal edges are `:domain`, the `:untrustedtext` leaf its exec results carry, the `:operatorconfig` leaf its configuration records name, and the dependency-free `:subprocess` leaf its exec capture drains the output on
 
 #### Scenario: The application layer declares only its permitted edges
 - **WHEN** the layering gate runs against `:application`
@@ -212,7 +213,7 @@ gate SHALL fail the build naming any declared edge outside that set.
 
 #### Scenario: A sandbox backend declares only its permitted edges
 - **WHEN** the layering gate runs against a sandbox backend module
-- **THEN** it depends on `:sandbox:core`, `:domain`, `:subprocess` and `:untrustedtext`, plus `:atomicfile` for its non-atomic-write marker, plus `:logtext` and `:operatorevent` where it logs untrusted text or emits subprocess access-log records or coded operator lines, plus `:gittransfer` where it renders a git transfer into a helper script, plus `:application` where the backend realizes an application-owned port
+- **THEN** it depends on `:sandbox:core`, `:domain`, `:subprocess` and `:untrustedtext`, plus `:logtext` and `:operatorevent` where it logs untrusted text or emits subprocess access-log records or coded operator lines, plus `:gittransfer` where it renders a git transfer into a helper script, plus `:application` where the backend realizes an application-owned port
 
 #### Scenario: No production module depends on the test fixtures
 - **WHEN** the layering gate runs against any production module
@@ -229,7 +230,7 @@ gate SHALL fail the build naming any declared edge outside that set.
 
 #### Scenario: A reach entry names the edge it arrives through
 - **WHEN** a module's production classpath reaches `:untrustedtext`, `:operatorevent`, `:operatorconfig` or `:gittransfer` without declaring the edge
-- **THEN** its layering allowlist lists the leaf, and outside the composition root `:bootstrap` with a comment naming the edge it arrives through — `:domain`, `:gnomish-plugin-api`, `:application`, `:sandbox:core`, `:logtext`, `:sandbox:docker`, `:adapters:git`, or a direct declaration
+- **THEN** its layering allowlist lists the leaf, and outside the composition root `:bootstrap` with a comment naming the edge it arrives through — `:domain`, `:gnomish-plugin-api`, `:application`, `:sandbox:core`, `:logtext`, `:gitobjects`, `:sandbox:docker`, `:adapters:git`, or a direct declaration
 
 #### Scenario: The gitobjects observer hook defaults to a no-op
 - **WHEN** `:gitobjects` runs a git command and no observer was supplied

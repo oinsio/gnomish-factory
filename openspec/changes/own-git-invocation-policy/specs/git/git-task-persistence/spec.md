@@ -2,15 +2,15 @@
 
 ## MODIFIED Requirements
 
-Layered on `Factory git executes no untrusted content` as modified by `tighten-spec-contract`
-(sequenced before this change). That delta gives the block its `**Implements**:` line and changes
-nothing else; this text replaces the persisted `core.hooksPath` sentence with the per-invocation
+Layered on `Factory git executes no untrusted content` as it stands in the main spec after
+`tighten-spec-contract` (archived 2026-10-14), which gave the block its `**Implements**:` line and
+changed nothing else; this text replaces the persisted `core.hooksPath` sentence with the per-invocation
 hooks neutralization and adds the scenarios "A hook path set in the clone after startup runs
 nothing" and "The clone's configuration is not written".
 
 ### Requirement: Factory git executes no untrusted content
 The factory SHALL never check out gnome-branch content into its own filesystem namespace: reading gnome branches happens via bare git object access, and materialization of untrusted content happens only inside task environments. Every factory git invocation SHALL carry the invocation policy's hooks neutralization, so no hook runs for any factory git operation whatever the clone's own configuration names; the factory SHALL persist no setting into a clone to achieve this.
-**Implements**: FR17 of add-sandbox-core; FR1, FR2, FR6, NFR-S1 of own-git-invocation-policy
+**Implements**: FR17 of add-sandbox-core; FR1, FR2, FR6, NFR-S1, UX1 of own-git-invocation-policy
 
 #### Scenario: Reading a gnome branch runs nothing
 - **WHEN** the factory reads state files or artifacts from a gnome branch
