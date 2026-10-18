@@ -138,7 +138,7 @@ engine already consumes it) that `bootstrap` binds to the concrete adapter.
 The module dependency direction SHALL be acyclic and enforced by the build: each
 module SHALL declare only the internal edges its layer permits, and the layering
 gate SHALL fail the build naming any declared edge outside that set.
-**Implements**: FR9, NFR-S3 of bound-subprocess-commands; FR2 of split-into-modules; FR5 of harden-task-branch-contract; FR4, FR6, FR8 of harden-logging-observability; FR2, FR3 of add-subprocess-access-log; FR10, NFR-S3 of add-base-ref-resolution; FR6, FR7, FR11, NFR-S1 of split-logtext-leaves; FR2 of own-git-transfer-argv
+**Implements**: FR9, NFR-S3 of bound-subprocess-commands; FR2 of split-into-modules; FR5 of harden-task-branch-contract; FR4, FR6, FR8 of harden-logging-observability; FR2, FR3 of add-subprocess-access-log; FR10, NFR-S3 of add-base-ref-resolution; FR6, FR7, FR11, NFR-S1 of split-logtext-leaves; FR2 of own-git-transfer-argv; FR19 of fix-terminal-receipt-convergence
 **Notes**: "Depends only on" in the scenarios describes declared edges; a module's layering allowlist describes reach, since the gate walks the transitive production graph.
 **Notes**: The dependency-free leafs stay empty because any edge added to one is pushed into every consumer: the emptiness of `subprocess` and `atomicfile` keeps their consumers free of transitive coupling, the domain reaches the event catalog and the published contract reaches both text leafs, and the git adapter and a sandbox backend reach `gittransfer` from opposite sides of the layering. `baseref` takes and returns plain values, which constructively keeps the resolution policy ignorant of subprocesses, trackers and configuration formats.
 
@@ -252,7 +252,7 @@ gate SHALL fail the build naming any declared edge outside that set.
 
 #### Scenario: The sandbox core depends only on domain and two leafs
 - **WHEN** the layering gate runs against `:sandbox:core`
-- **THEN** its only internal edges are `:domain`, the `:untrustedtext` leaf its exec results carry, and the `:operatorconfig` leaf its configuration records name
+- **THEN** its only internal edges are `:domain`, the `:untrustedtext` leaf its exec results carry, the `:operatorconfig` leaf its configuration records name, and the dependency-free `:subprocess` leaf its exec capture drains the output on
 
 #### Scenario: The application layer declares only its permitted edges
 - **WHEN** the layering gate runs against `:application`
@@ -265,7 +265,7 @@ gate SHALL fail the build naming any declared edge outside that set.
 
 #### Scenario: A sandbox backend declares only its permitted edges
 - **WHEN** the layering gate runs against a sandbox backend module
-- **THEN** it depends on `:sandbox:core`, `:domain`, `:subprocess` and `:untrustedtext`, plus `:atomicfile` for its non-atomic-write marker, plus `:logtext` and `:operatorevent` where it logs untrusted text or emits subprocess access-log records or coded operator lines, plus `:gittransfer` where it renders a git transfer into a helper script, plus `:application` where the backend realizes an application-owned port
+- **THEN** it depends on `:sandbox:core`, `:domain`, `:subprocess` and `:untrustedtext`, plus `:logtext` and `:operatorevent` where it logs untrusted text or emits subprocess access-log records or coded operator lines, plus `:gittransfer` where it renders a git transfer into a helper script, plus `:application` where the backend realizes an application-owned port
 
 #### Scenario: No production module depends on the test fixtures
 - **WHEN** the layering gate runs against any production module

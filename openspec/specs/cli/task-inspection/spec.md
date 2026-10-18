@@ -48,7 +48,7 @@ Provide read-only `status` and `usage` commands that inspect a task's git-persis
 
 ### Requirement: Task list mode
 `gnomish status --dir <clone>` without a task argument SHALL print a minimal table over all `gnomish/*` branches — local and remote-tracking, deduplicated per task with the local tip preferred when both exist — task, stage, attempts, outcome — with a `--json` variant.
-**Implements**: FR13 of add-git-workflow; FR16 of harden-task-branch-contract; FR13 of harden-logging-observability
+**Implements**: FR10, UX3 of fix-terminal-receipt-convergence; FR13 of add-git-workflow; FR16 of harden-task-branch-contract; FR13 of harden-logging-observability
 **Notes**: An empty table means "verified: no tasks", never "could not look".
 
 #### Scenario: Overview of all tasks
@@ -71,6 +71,10 @@ Provide read-only `status` and `usage` commands that inspect a task's git-persis
 - **WHEN** the ref listing behind the table cannot be obtained at all
 - **THEN** the command fails naming the git failure, and no empty "no tasks"
   table is printed
+
+#### Scenario: A branch fetched without its register lists as Unregistered with its remedy
+- **WHEN** the clone holds a `gnomish/*` branch, local or remote-tracking, for which it holds no factory register — as a plain `git fetch` leaves it
+- **THEN** its row names the shape `Unregistered` and the `gnomish status <task>` command that fetches the register, never "an unrecognized combination", and the listing itself runs no fetch
 
 #### Scenario: Every refusing shape is one diagnostic row
 - **WHEN** the clone holds a `Corrupt`, an `UnsupportedVersion`, and an `Unknown` branch beside a healthy one

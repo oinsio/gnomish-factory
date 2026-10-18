@@ -84,52 +84,6 @@ In git modes the decision request SHALL live in the working copy at `.gnomish-ta
 - **WHEN** a round runs in the git-less in-place mode
 - **THEN** `$GNOMISH_DECISION_FILE` names a per-round temp file outside the workspace, and the file is deleted after the adapter reads it
 
-### Requirement: Stdout is drained continuously from launch
-Both CLI round executions (executor and judge) SHALL consume and parse the process's stream-json stdout concurrently with the running process, starting immediately after launch — never deferring the read until after process exit. The drain mechanism SHALL be one shared implementation used by both executions.
-**Implements**: FR1, FR2, FR3, FR6, FR7, NFR-R1, NFR-R2, NFR-P1, UX3 of fix-round-stdout-drain
-**Notes**: A `roundTimeout` kill closes the stream, so EOF is the drain's expected end signal there, not an error.
-
-#### Scenario: Megabyte stream keeps its result event
-- **WHEN** a round's CLI emits over 1 MB of stream-json noise followed by a valid result event and exits
-- **THEN** the round completes normally with the result event, usage, and trace extracted
-
-#### Scenario: Chatty synchronous writer does not hang
-- **WHEN** the CLI writes more than the pipe buffer synchronously before exiting
-- **THEN** the process is never blocked on a full pipe and the round completes well within `roundTimeout`
-
-#### Scenario: Timeout kill still classifies as infrastructure
-- **WHEN** the process outlives `roundTimeout` and is killed mid-stream
-- **THEN** the drain ends without error and the round is an infrastructure failure, exactly as before this change
-
-#### Scenario: An interrupted wait is not blamed on the grace
-- **WHEN** the round thread is interrupted while waiting for its drain to finish
-- **THEN** the round is an infrastructure failure of its own kind — reported as an interruption, never as an expired tail-drain grace an operator is advised to raise
-
-#### Scenario: No reader outlives the round
-- **WHEN** a round ends by any path — normal exit, timeout kill, or adapter exception
-- **THEN** the drain thread is finished or terminated and the stdout stream is closed
-
-#### Scenario: Tail-drain grace is operator-tunable with a safe default
-- **WHEN** no tail-drain-grace property is configured
-- **THEN** rounds use a 5-second grace
-- **AND** a configured value overrides it, while a non-positive or malformed value fails startup before any dialog
-
-#### Scenario: The round waits for its drain after exit
-- **WHEN** the process exits while the tail of its stream is still in the pipe
-- **THEN** the round completes only after the drain has consumed that tail, waiting at most the tail-drain grace
-
-#### Scenario: A drain unfinished after the grace is infrastructure
-- **WHEN** the drain has not finished when the tail-drain grace after process exit runs out
-- **THEN** the round is an infrastructure failure, never a round completed on a partial stream
-
-#### Scenario: The grace is not a manifest setting
-- **WHEN** a stage's `settings` name a tail-drain grace
-- **THEN** startup fails before any dialog with the unknown-settings-key error, since the grace is an installation-level application property
-
-#### Scenario: The grace is documented for operators
-- **WHEN** the operator guide's installation-properties table is read
-- **THEN** it lists the tail-drain-grace property with its 5-second default and its startup validation
-
 ### Requirement: Result event is essential, telemetry is best-effort
 The adapter SHALL treat the stream-json result event as essential — a missing or unparseable result event is an infrastructure failure of the round — while telemetry parsing is best-effort: on telemetry parse trouble the round SHALL still complete with no tool usage and no token usage — the wall time is still the adapter's own measurement — and an empty trace.
 **Implements**: FR4, NFR-R1, NFR-R2, D3 of add-agent-executor; FR5, NFR-R2, UX2 of fix-round-stdout-drain; FR15 of fix-operator-blockers
@@ -465,3 +419,63 @@ Round and judge prompts SHALL be passed to the agent CLI via stdin, never as an 
 #### Scenario: Prompt content is absent from the command line
 - **WHEN** a round or judge process is inspected while running
 - **THEN** its command line contains transport flags only — no prompt text, no findings
+
+### Requirement: The round's stderr is kept
+The agent round SHALL direct the CLI process's stderr to a file in the round scratch directory — a host directory the round owns, on the host as for a box round — never to a pipe nothing reads, and SHALL read that file after the exit into the round's diagnostics as untrusted text; the round SHALL remove the scratch directory on every exit path.
+**Implements**: FR20, NG12 of fix-terminal-receipt-convergence
+**Notes**: The stdout stays a live pipe because the stream-json events are parsed per line while the process runs; a file has no live tail.
+**Notes**: The decision file is not the neighbour: in container mode it lives in the task branch, which is the envelope and no place for a host diagnostic; the scratch directory is the one host place a round writes outside the branch.
+
+#### Scenario: A chatty stderr cannot block the round
+- **WHEN** the CLI writes more than an OS pipe buffer to its stderr during a round
+- **THEN** the round completes on the CLI's exit, and the diagnostics carry the tail of that
+  stderr
+
+#### Scenario: The stderr file leaves with the round
+- **WHEN** a round ends, however it ended — on the host or for a box
+- **THEN** no file of the round remains on the host: the round scratch directory and the stderr
+  file in it are removed by the round itself
+
+#### Scenario: A failed round carries its stderr tail
+- **WHEN** a round ends without success — the CLI failed to start, exited without a result event,
+  timed out, or was interrupted
+- **THEN** the failure's detail carries the tail of the CLI's stderr as untrusted text, and a
+  successful round logs that tail at DEBUG only
+
+Added 2026-10-17 (design D17 as amended): the round's post-exit wait takes the bound of its
+handle; it replaces "Stdout is drained continuously from launch", removed below with the
+installation property it named.
+
+### Requirement: The round drains its stdout from launch within the handle's post-exit bound
+Both CLI round executions (executor and judge) SHALL consume and parse the process's stream-json stdout concurrently with the running process, starting immediately after launch — never deferring the read until after process exit — through one shared drain; after the exit the round SHALL wait for that drain at most the post-exit bound of the round's handle, never a bound of its own.
+**Implements**: FR1, FR2, FR3, FR6, FR7, NFR-R1, NFR-R2, NFR-P1 of fix-round-stdout-drain; FR19 of fix-terminal-receipt-convergence
+**Notes**: A `roundTimeout` kill closes the stream, so EOF is the drain's expected end signal there, not an error.
+**Notes**: The bound replaces the retired installation property `factory.agent-cli-tail-drain-grace`; after the exit only one pipe buffer remains to read.
+
+#### Scenario: Megabyte stream keeps its result event
+- **WHEN** a round's CLI emits over 1 MB of stream-json noise followed by a valid result event and exits
+- **THEN** the round completes normally with the result event, usage, and trace extracted
+
+#### Scenario: Chatty synchronous writer does not hang
+- **WHEN** the CLI writes more than the pipe buffer synchronously before exiting
+- **THEN** the process is never blocked on a full pipe and the round completes well within `roundTimeout`
+
+#### Scenario: Timeout kill still classifies as infrastructure
+- **WHEN** the process outlives `roundTimeout` and is killed mid-stream
+- **THEN** the drain ends without error and the round is an infrastructure failure, exactly as before this change
+
+#### Scenario: An interrupted wait is not blamed on the bound
+- **WHEN** the round thread is interrupted while waiting for its drain to finish
+- **THEN** the round is an infrastructure failure of its own kind — reported as an interruption, never as an expired post-exit bound
+
+#### Scenario: No reader outlives the round
+- **WHEN** a round ends by any path — normal exit, timeout kill, or adapter exception
+- **THEN** the drain thread is finished or terminated and the stdout stream is closed
+
+#### Scenario: The round waits for its drain after exit
+- **WHEN** the process exits while the tail of its stream is still in the pipe
+- **THEN** the round completes only after the drain has consumed that tail, waiting at most the post-exit bound of the round's handle
+
+#### Scenario: A drain unfinished after the post-exit bound is infrastructure
+- **WHEN** the drain has not finished when the post-exit bound of the round's handle runs out
+- **THEN** the round is an infrastructure failure, never a round completed on a partial stream

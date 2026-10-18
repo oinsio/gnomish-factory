@@ -7,7 +7,7 @@ Define the contract every task branch obeys between factory transitions: a total
 ## Requirements
 
 ### Requirement: Total branch-shape classification
-A classifier SHALL map any task branch — its registered commit's envelope, file set, versions and position, and the tip's relation to it — to exactly one shape of a closed set of eleven: `Bare`, `Created`, `InProgress`, `AwaitingApproval`, `Parked`, `Answered`, `CompletedUncleaned`, `Delivered`, `UnsupportedVersion`, `Corrupt(reason)` and `Unknown`. The set SHALL be a sealed hierarchy so readers switch without a default branch.
+A classifier SHALL map any task branch — its registered commit's envelope, file set, versions and position, and the tip's relation to it — to exactly one shape of a closed set of twelve: `Bare`, `Created`, `InProgress`, `AwaitingApproval`, `Parked`, `Answered`, `CompletedUncleaned`, `Delivered`, `Unregistered`, `UnsupportedVersion`, `Corrupt(reason)` and `Unknown`. The set SHALL be a sealed hierarchy so readers switch without a default branch.
 
 The happy path and the group quarantined on first classification:
 
@@ -31,10 +31,15 @@ stateDiagram-v2
         UnsupportedVersion
         Unknown
     }
+    state "Not yet fetched" as U {
+        Unregistered
+    }
+    U --> InProgress: touchpoint fetch lands the register (any shape, by its content)
+    note right of U: still no register after the read: quarantined on a claimed take
 ```
-**Implements**: FR11 of make-checkpoint-gate-durable; FR1, FR3, FR15, NFR-R2 of harden-task-branch-contract; FR1, FR2 of fix-claim-epoch-fence; FR14, NFR-R4 of fix-operator-blockers
+**Implements**: FR10 of fix-terminal-receipt-convergence; FR11 of make-checkpoint-gate-durable; FR1, FR3, FR15, NFR-R2 of harden-task-branch-contract; FR1, FR2 of fix-claim-epoch-fence; FR14, NFR-R4 of fix-operator-blockers
 **Notes**: Where the registered commit comes from is the requirement "Classification reads the factory register".
-**Notes**: The eleven names are the canonical vocabulary every other artifact of this contract refers to rather than restates.
+**Notes**: The twelve names are the canonical vocabulary every other artifact of this contract refers to rather than restates.
 **Notes**: The distinct `UnsupportedVersion` shape is what lets a version diagnosis name the version rather than a parse failure.
 
 #### Scenario: Every generated tip classifies to exactly one shape
@@ -100,6 +105,14 @@ stateDiagram-v2
 #### Scenario: A legal but unrecognized combination is Unknown
 - **WHEN** a tip's files form a legal combination this contract does not recognize
 - **THEN** the shape is `Unknown`
+
+#### Scenario: A tip without its register is Unregistered, not Unknown
+- **WHEN** the tip carries a factory envelope and the clone holds no `refs/gnomish-factory/<task>` for the task — as an operator's or an IDE's `git fetch`, or a `git clone`, leaves a task branch
+- **THEN** the shape is `Unregistered`, its diagnosis names the register and the command that fetches it, its recovery owner is the touchpoint fetch, and it is never `Unknown`
+
+#### Scenario: A fetched register reclassifies an Unregistered branch by its content
+- **WHEN** the touchpoint fetch lands origin's register for an `Unregistered` branch
+- **THEN** the branch classifies by that register as any other branch does, and a second fetch changes nothing
 
 #### Scenario: An unsupported version never reads as its closest legal shape
 - **WHEN** an envelope at the tip declares an unsupported version while the rest of the tip resembles a legal shape
@@ -316,7 +329,7 @@ No durable write on the task branch SHALL encode a state a reader interprets as 
 
 ### Requirement: Classification reads the factory register
 Every reader of task-branch state SHALL take the envelope, the position, the outcome, the base pin and the delivery fact from the task's registered commit — the commit `refs/gnomish-factory/<task>` names — never from the branch tip. The tip SHALL contribute one fact: equal to the registered commit, a descendant of it, or neither. `Delivered` SHALL mean the registered commit is the cleanup commit. A record the gnome writes above the register SHALL change no shape and open no gate.
-**Implements**: FR13, NFR-S2 of tighten-spec-contract
+**Implements**: FR10 of fix-terminal-receipt-convergence; FR13, NFR-S2 of tighten-spec-contract
 **Notes**: The register is the one ref only a factory closing push moves (git-task-persistence, "Factory register ref"); a commit id is content-addressed, so the gnome cannot forge one.
 **Notes**: Host mode carries no integrity claim against the gnome (design D19 of tighten-spec-contract); there the register is a detection, not a guarantee.
 
@@ -329,8 +342,12 @@ Every reader of task-branch state SHALL take the envelope, the position, the out
 - **THEN** the shape is the registered commit's, and the commits above the register are the open round's gnome range — salvaged or admitted by the round-close owner, never classified
 
 #### Scenario: A register that is not an ancestor of the tip quarantines
-- **WHEN** the registered commit is neither the tip nor an ancestor of it, or the register ref is missing for a branch that has a STARTED commit
+- **WHEN** the registered commit is neither the tip nor an ancestor of it
 - **THEN** the shape is `Unknown` with a diagnosis naming the register and the tip, and the existing budgeted recovery owner handles it
+
+#### Scenario: A missing register is a state of the clone, not of the branch
+- **WHEN** the register ref is missing in the clone for a branch that has a STARTED commit
+- **THEN** the shape is `Unregistered`, nothing is read at a register that is not there, and the budgeted recovery owner takes it only after a touchpoint fetch still landed no register — or at once for a local head, which the locate does not fetch
 
 #### Scenario: A gnome commit carrying the cleanup subject does not deliver the task
 - **WHEN** the gnome commits on its own branch with a message carrying `gnomish: cleanup`, as the subject or anywhere in the message, and the register names a commit below it

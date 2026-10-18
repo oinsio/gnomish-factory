@@ -350,7 +350,7 @@ The `run` startup sweep pass SHALL evaluate the shared `sandbox-lifecycle` polic
 
 ### Requirement: Resume invocation
 `gnomish run --dir=<dir> --resume=<task>` SHALL resume the named task from its branch, behaving by the recorded branch state without any prompt, and every continuation SHALL land its one lifecycle commit before the engine runs. `--decision="<text>"` SHALL be accepted only together with `--resume`, never with `--mode=in-place`, and only for a task whose recorded outcome is `escalated`; any other combination is a usage error naming the conflict.
-**Implements**: FR4, FR7 of make-checkpoint-gate-durable; FR3, FR4, FR5, FR9 of make-run-headless
+**Implements**: FR4 of fix-terminal-receipt-convergence; FR4, FR7 of make-checkpoint-gate-durable; FR3, FR4, FR5, FR9 of make-run-headless
 
 #### Scenario: Resume of an escalated task
 - **WHEN** `--resume --decision="patch in place"` opens a task parked as Escalated with an `AttemptsExhausted` report
@@ -369,8 +369,12 @@ The `run` startup sweep pass SHALL evaluate the shared `sandbox-lifecycle` polic
 - **THEN** the run behaves exactly as for a recorded `paused` park: it approves and continues
 
 #### Scenario: Completed task resumes to a no-op
-- **WHEN** `--resume` names a task whose outcome is completed
-- **THEN** the process reports the task is done and exits 0
+- **WHEN** `--resume` names a task whose outcome is completed and whose cleanup commit is already on the branch
+- **THEN** the process reports the task is done, writes nothing, and exits 0
+
+#### Scenario: Completed task with a lost cleanup converges
+- **WHEN** `--resume` names a task whose tip records `Completed` and still carries `.gnomish-task/`
+- **THEN** the cleanup commit lands and is pushed through the same cleanup owner `take` uses, the worktree is removed, the process reports the task is done and exits 0, and a second `--resume` writes nothing
 
 #### Scenario: Unanswered question is restated
 - **WHEN** `--resume` without `--decision` opens a task whose recorded report is `DecisionNeeded`
