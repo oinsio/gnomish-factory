@@ -51,10 +51,10 @@ final class CommitBuilder {
             for (TreeEdit edit : request.edits()) {
                 applyEdit(edit, indexEnv, oidLength);
             }
-            String tree = output(exec.run(List.of("write-tree"), null, indexEnv, -1), "write-tree");
-            String newCommit = commitTree(tree, request);
-            advanceRef(request, newCommit);
-            return ObjectId.of(newCommit);
+            ObjectId tree = objectId(exec.run(List.of("write-tree"), null, indexEnv, -1), "write-tree");
+            ObjectId newCommit = commitTree(tree, request);
+            advanceRef(request, newCommit.hex());
+            return newCommit;
         } finally {
             deleteQuietly(index);
         }
@@ -75,11 +75,11 @@ final class CommitBuilder {
     private void applyEdit(TreeEdit edit, Map<String, String> indexEnv, int oidLength) {
         switch (edit) {
             case TreeEdit.PutFile put -> {
-                String blob = output(
+                ObjectId blob = objectId(
                         exec.run(List.of("hash-object", "-w", "--stdin"), put.content(), indexEnv, -1), "hash-object");
                 check(
                         exec.run(
-                                List.of("update-index", "--add", "--cacheinfo", "100644", blob, put.path()),
+                                List.of("update-index", "--add", "--cacheinfo", "100644", blob.hex(), put.path()),
                                 null,
                                 indexEnv,
                                 -1),
@@ -111,7 +111,7 @@ final class CommitBuilder {
                 "update-index --index-info");
     }
 
-    private String commitTree(String tree, CommitRequest request) {
+    private ObjectId commitTree(ObjectId tree, CommitRequest request) {
         CommitMetadata meta = request.metadata();
         Map<String, String> env = new HashMap<>();
         env.put("GIT_AUTHOR_NAME", meta.author().name());
@@ -121,8 +121,9 @@ final class CommitBuilder {
         env.put("GIT_COMMITTER_EMAIL", meta.committer().email());
         env.put("GIT_COMMITTER_DATE", CommitMetadata.gitDate(meta.committerTime()));
         byte[] message = meta.message().getBytes(StandardCharsets.UTF_8);
-        return output(
-                exec.run(List.of("commit-tree", tree, "-p", request.parent().hex()), message, env, -1), "commit-tree");
+        List<String> argv =
+                List.of("commit-tree", tree.hex(), "-p", request.parent().hex());
+        return objectId(exec.run(argv, message, env, -1), "commit-tree");
     }
 
     private void advanceRef(CommitRequest request, String newCommit) {
@@ -183,8 +184,13 @@ final class CommitBuilder {
         }
     }
 
-    private static String output(GitExec.Result result, String what) {
+    /** The id {@code what} printed, refused unless whole (FR17, D15); {@link GitObjects} too. */
+    static ObjectId objectId(GitExec.Result result, String what) {
         check(result, what);
-        return result.stdoutText().trim();
+        try {
+            return ObjectId.of(result.stdoutText());
+        } catch (IllegalArgumentException malformed) {
+            throw new GitObjectsException("git " + what + " exited 0 without printing a full object id", malformed);
+        }
     }
 }

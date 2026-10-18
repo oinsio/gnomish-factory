@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
+import com.github.oinsio.gnomish.subprocess.StdinSource
+
 /**
  * A hand-rolled fake {@link DockerCli} for the container adapter's daemon-free
  * unit specs: Spock cannot mock a concrete class here (no byte-buddy on the
@@ -67,7 +70,7 @@ class RecordingDockerCli extends DockerCli {
     }
 
     @Override
-    Process start(List<String> args, boolean mergeStderr) {
+    Process start(List<String> args, StderrPolicy stderr, StdinSource stdin) {
         starts << args
         throw new IllegalStateException('start() not expected in a daemon-free unit spec: ' + args)
     }

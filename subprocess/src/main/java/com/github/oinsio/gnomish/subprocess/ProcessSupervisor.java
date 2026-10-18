@@ -45,6 +45,12 @@ public final class ProcessSupervisor {
     static final Duration DEFAULT_KILL_GRACE = Duration.ofSeconds(5);
 
     /**
+     * What the post-exit bound adds to the kill grace: seconds, not milliseconds, so a slow but
+     * legitimate tail after a clean exit is kept (design D15 of fix-terminal-receipt-convergence).
+     */
+    static final Duration POST_EXIT_MARGIN = Duration.ofSeconds(2);
+
+    /**
      * Reported when a terminated process could not be observed to exit — the reap itself was
      * interrupted, or a handle outlived its bound. Diagnostic context only: {@link
      * Supervision#termination()} already says the invocation did not run to completion.
@@ -64,6 +70,16 @@ public final class ProcessSupervisor {
      */
     public ProcessSupervisor(Duration killGrace) {
         this.killGrace = killGrace;
+    }
+
+    /**
+     * How long a reader may wait for the process's output once the wait has resolved, on every
+     * termination, before closing its ends of the pipes: the kill grace plus {@link
+     * #POST_EXIT_MARGIN}, derived here so no reader holds a constant of its own (design D15, D17).
+     * Implements FR16, FR19, NFR-P1 of fix-terminal-receipt-convergence.
+     */
+    public Duration postExitBound() {
+        return killGrace.plus(POST_EXIT_MARGIN);
     }
 
     /**
@@ -122,6 +138,13 @@ public final class ProcessSupervisor {
      * no exit value to report. What the shared discipline adds over a hand-rolled destroy-sleep-
      * force is the reap — the method does not return while something it signalled is still dying —
      * and the re-snapshot that catches a child forked inside the grace (FR14, design D14).
+     *
+     * <p>A backstop over what the snapshot sees, not the owner of the orphans (design D4, D19 of
+     * fix-terminal-receipt-convergence): a member of a launch's process group that the child lost
+     * to reparenting is no descendant of {@code parent} any longer, and this kill does not reach
+     * it; its waiter's sweep runs only once the post-exit bound allows, never when the JVM exits
+     * first. So this kill is the shutdown step's first half, and {@link ProcessGroupSweep#sweepLive()}
+     * its second (design D19, fourth amendment; FR21 of fix-terminal-receipt-convergence).
      *
      * @param parent the process whose descendants are to be terminated; not itself signalled
      */

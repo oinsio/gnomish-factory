@@ -67,8 +67,13 @@ of the child environment the host adapter composes, and `AgentCredentials`
 (`:adapters:agent`) reports which of the AI-seam credential names are present
 (names only). `FactoryHome.legacyFolders()` (`:application`) lists the old
 `logs/gnomish.log`, `serve/`, `worktrees/` and `secrets/` entries at the home
-root. Each is the only code that knows its answer, so `doctor` reads no
-environment and lists no folder name itself (FR4).
+root. The host launch owner of `fix-terminal-receipt-convergence` (D19 there; the
+only code that knows which helper the platform needs — `setsid`, or macOS's own
+Perl — and that the group sweep signals through `/bin/kill` on both) gains
+`assessHelper()`, a non-refusing verdict its launching form is built
+on (D1), so `doctor` reads no `os.name` and probes no `PATH` itself. Each is the
+only code that knows its answer, so `doctor` reads no environment and lists no
+folder name itself (FR4).
 *Alternative rejected:* a `which` subprocess from `doctor` — a subprocess and a
 `PATH` read in the doctor package, both of which M2 forbids.
 
@@ -95,6 +100,7 @@ forms are rebuilt on the same `assess` (D1). It touches no declared pair.
 | `ImageContractCheck.assess` | contract verdict (`ImageContractVerdict`) | the environment builder's refusal, `SandboxImageDoctorCheck` | the inline comparison moves into `assess` | spec: refusal iff `assess` fails |
 | `ProjectRegistry`, `PipelineLoader`, `BoundTracker` + `CheckEquipment` + `SecretsProvider`, `BindingResolver`, `DockerRuntimeProbe`, `FactoryVersion` | their existing values | the startup path, the matching doctor checks | none | M1 table row per check |
 | `AgentCliBinary`, `AgentCredentials`, `FactoryHome.legacyFolders` (new) | binary location, present credential names, legacy entries | the matching doctor checks | none — no other code answers these | `DoctorBoundarySpec` |
+| the host launch owner's `assessHelper` (`:subprocess`, from `fix-terminal-receipt-convergence` D19) | launcher helper verdict (present, or the missing tool — the platform's launcher or `/bin/kill` — and the package to install) | the launching form's refusal (FR21 there), `LauncherHelperDoctorCheck` | none — the launching form is built on it | `DoctorBoundarySpec`; M1 table row: the launch refuses exactly when `assessHelper` fails |
 
 `DoctorBoundarySpec` in `:bootstrap` (M2): no source in the doctor package
 references `ProcessBuilder`, `Runtime.exec`, `System.getenv`,

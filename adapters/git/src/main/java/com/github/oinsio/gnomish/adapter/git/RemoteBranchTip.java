@@ -60,9 +60,11 @@ final class RemoteBranchTip {
      * @param taskId the tracker's original taskId, whose task branch origin is asked about; never blank
      * @return the remote tip's sha, or empty when the remote is unreachable or does not carry the
      *     branch at all
+     * @throws com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException if origin answered
+     *     with a line whose first field is not one full object id
      */
     Optional<String> read(Path repo, String taskId) {
-        return tipOf(lsRemote(repo, taskId));
+        return tipOf(TaskBranchRefs.head(taskId), lsRemote(repo, taskId));
     }
 
     /**
@@ -80,7 +82,7 @@ final class RemoteBranchTip {
             return Carriage.UNKNOWN;
         }
         // An answered read with no ref for the branch is a positive fact: origin does not have it.
-        return tipOf(lsRemote)
+        return tipOf(TaskBranchRefs.head(taskId), lsRemote)
                 .map(remoteTip -> ancestryVerdict(runner.run(repo, "merge-base", "--is-ancestor", commit, remoteTip)))
                 .orElse(Carriage.ABSENT);
     }
@@ -128,15 +130,17 @@ final class RemoteBranchTip {
         return LsRemote.refs(runner, repo, TaskBranchRefs.head(taskId));
     }
 
-    private static Optional<String> tipOf(GitCommandResult lsRemote) {
+    private static Optional<String> tipOf(String ref, GitCommandResult lsRemote) {
         if (lsRemote.termination() != Termination.EXITED
                 || lsRemote.exitCode() != 0
                 || lsRemote.stdout().isBlank()) {
             return Optional.empty();
         }
-        // @UntrustedParser warrant (design D11): the first field of an ls-remote line is an object
-        //     id — compared for equality and passed to git, never rendered.
-        return Optional.of(lsRemote.stdout().forParsing().strip().split("\\s+", 2)[0]);
+        // @UntrustedParser warrant (design D11): the first field of an ls-remote line, refused
+        //     unless it is one full object id (FR17 of fix-terminal-receipt-convergence) — compared
+        //     for equality and passed to git, never rendered.
+        String field = lsRemote.stdout().forParsing().strip().split("\\s+", 2)[0];
+        return Optional.of(VerifiedTip.shaped(ref, LsRemote.COMMAND, field, lsRemote));
     }
 
     /**

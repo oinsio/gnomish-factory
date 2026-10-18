@@ -22,6 +22,13 @@ import spock.lang.Specification
  * <em>no</em> production class reaches a {@code Files} write method unless it lives in
  * the leaf or carries {@code @NonAtomicWrite} with its reason.
  *
+ * <p>The marker is matched by its fully qualified name,
+ * {@code com.github.oinsio.buildchecks.atomicwrite.NonAtomicWrite}: it lives in the
+ * {@code build-checks} included build, put {@code compileOnly} on every module by
+ * {@code java-conventions}, so a dependency-free leaf such as {@code :subprocess} wears it
+ * with no edge to {@code :atomicfile} (design D20 of fix-terminal-receipt-convergence, amended
+ * 2026-10-18). An annotation of the same simple name in any other package does not pass.
+ *
  * <p>The container-side persisters are deliberately absent from the second rule: they
  * reach durability at commit granularity, per the per-medium table of
  * {@code docs/adr/0003-crash-consistency.md}, and consume no host filesystem writer.
@@ -92,7 +99,7 @@ class AtomicWriteBoundarySpec extends Specification {
         and: 'the rule: only the leaf itself, or a class that declares why it may not use it'
         def rule = noClasses()
                 .that().resideOutsideOfPackage('com.github.oinsio.gnomish.atomicfile')
-                .and().areNotAnnotatedWith('com.github.oinsio.gnomish.atomicfile.NonAtomicWrite')
+                .and().areNotAnnotatedWith('com.github.oinsio.buildchecks.atomicwrite.NonAtomicWrite')
                 .should().callMethodWhere(filesWrite)
 
         expect: 'every file write in the build goes through AtomicFileWriter or carries its reason'

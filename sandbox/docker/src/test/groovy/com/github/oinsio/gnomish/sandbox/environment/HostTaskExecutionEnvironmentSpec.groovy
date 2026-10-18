@@ -5,7 +5,9 @@ import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.IsolationLevel
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -34,7 +36,7 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
 
     @Override
     protected Optional<TaskExecutionEnvironment> arrange() {
-        def e = new HostTaskExecutionEnvironment(workingCopy, clock, TestChildEnvironment.hostAllowlist())
+        def e = new HostTaskExecutionEnvironment(workingCopy, clock, TestChildEnvironment.hostAllowlist(), ProcessLaunch.grouped())
         e.materialize('task/contract', null)
         Optional.of(e)
     }
@@ -45,7 +47,7 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
     }
 
     private HostTaskExecutionEnvironment hostEnv(ChildEnvAllowlist allowlist = TestChildEnvironment.hostAllowlist()) {
-        new HostTaskExecutionEnvironment(workingCopy, clock, allowlist)
+        new HostTaskExecutionEnvironment(workingCopy, clock, allowlist, ProcessLaunch.grouped())
     }
 
     // FR2: the host passport declares no isolation
@@ -64,7 +66,7 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
         def e = hostEnv()
 
         when: 'a command echoes a base variable'
-        def handle = e.exec(new ExecCommand(['sh', '-c', 'echo "[$PATH]"'], [:], null, false))
+        def handle = e.exec(new ExecCommand(['sh', '-c', 'echo "[$PATH]"'], [:], null, StderrPolicy.PIPED))
         def out = readFully(handle.output())
         handle.waitForExit()
 
@@ -98,7 +100,7 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
                             'sh',
                             '-c',
                             'env | cut -d= -f1'
-                        ], [GNOMISH_PROBE: 'x'], null, false))
+                        ], [GNOMISH_PROBE: 'x'], null, StderrPolicy.PIPED))
         def names = readFully(handle.output()).readLines().findAll {
             !it.isEmpty()
         } as Set
@@ -119,7 +121,7 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
 
         when: 'a command reports both'
         def report = 'if [ -n "${HOME:-}" ]; then echo HOME=present; else echo HOME=absent; fi; if [ -n "${USER:-}" ]; then echo USER=present; else echo USER=absent; fi'
-        def handle = e.exec(new ExecCommand(['sh', '-c', report], [:], null, false))
+        def handle = e.exec(new ExecCommand(['sh', '-c', report], [:], null, StderrPolicy.PIPED))
         def lines = readFully(handle.output()).readLines()
         handle.waitForExit()
 
@@ -138,9 +140,9 @@ class HostTaskExecutionEnvironmentSpec extends TaskExecutionEnvironmentContract 
 
         when: 'the factory value changes between execs'
         def report = 'echo "[$GNOMISH_TOOLCHAIN]"'
-        def first = readFully(e.exec(new ExecCommand(['sh', '-c', report], [:], null, false)).output()).trim()
+        def first = readFully(e.exec(new ExecCommand(['sh', '-c', report], [:], null, StderrPolicy.PIPED)).output()).trim()
         factoryEnv.GNOMISH_TOOLCHAIN = 'second'
-        def second = readFully(e.exec(new ExecCommand(['sh', '-c', report], [:], null, false)).output()).trim()
+        def second = readFully(e.exec(new ExecCommand(['sh', '-c', report], [:], null, StderrPolicy.PIPED)).output()).trim()
 
         then: 'each child observed the value current at its exec'
         first == '[first]'

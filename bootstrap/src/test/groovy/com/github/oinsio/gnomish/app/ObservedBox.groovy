@@ -24,9 +24,6 @@ import org.jspecify.annotations.Nullable
  */
 class ObservedBox implements TaskExecutionEnvironment {
 
-    /** One file-channel call: the operation, the path, and the processes running at that moment. */
-    static record ChannelCall(String operation, String path, int running) {}
-
     final TaskExecutionEnvironment box
     final List<ChannelCall> channelCalls = [].asSynchronized()
     private final Set<Object> running = ConcurrentHashMap.newKeySet()
@@ -89,6 +86,11 @@ class ObservedBox implements TaskExecutionEnvironment {
                         } finally {
                             running.remove(token)
                         }
+                    }
+
+                    @Override
+                    Duration postExitBound() {
+                        handle.postExitBound()
                     }
                 }
     }
@@ -156,3 +158,6 @@ class ObservedBox implements TaskExecutionEnvironment {
         box.restoreDenials(restoration)
     }
 }
+
+/** One file-channel call seen by an {@link ObservedBox}: the operation, the path, and the processes running at that moment. */
+record ChannelCall(String operation, String path, int running) {}

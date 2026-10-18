@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
+import com.github.oinsio.gnomish.subprocess.StdinSource
 import spock.lang.Specification
 
 /**
@@ -215,7 +216,7 @@ class DockerCommandsSpec extends Specification {
 
     def "FR4: exec sets the workdir, per-entry env, and container, then appends the argv"() {
         when:
-        def argv = DockerCommands.exec(KEY, '/gnomish/work', [FOO: 'bar', BAZ: 'qux'], false, ['echo', 'hi'])
+        def argv = DockerCommands.exec(KEY, '/gnomish/work', [FOO: 'bar', BAZ: 'qux'], StdinSource.NONE, ['echo', 'hi'])
 
         then:
         argv.subList(0, 3) == ['exec', '-w', '/gnomish/work']
@@ -233,10 +234,13 @@ class DockerCommandsSpec extends Specification {
         ]
     }
 
-    def "FR24: exec adds -i only when interactive"() {
+    // FR23, D20 of fix-terminal-receipt-convergence: -i follows from the input source, never
+    //     chosen beside it, so input cannot travel to a client that does not forward it
+    def "FR24: exec adds -i exactly when the source carries input"() {
         expect:
-        DockerCommands.exec(KEY, '/w', [:], true, ['cat']).contains('-i')
-        !DockerCommands.exec(KEY, '/w', [:], false, ['cat']).contains('-i')
+        DockerCommands.exec(KEY, '/w', [:], StdinSource.of('x'.bytes), ['cat']).contains('-i')
+        DockerCommands.exec(KEY, '/w', [:], StdinSource.of(new byte[0]), ['cat']).contains('-i')
+        !DockerCommands.exec(KEY, '/w', [:], StdinSource.NONE, ['cat']).contains('-i')
     }
 
     // FR1 of fix-image-declared-volumes: the template is one argv element and carries no shell

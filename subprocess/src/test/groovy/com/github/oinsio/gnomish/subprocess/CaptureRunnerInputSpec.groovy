@@ -8,8 +8,9 @@ import spock.lang.Specification
 /**
  * FR13 of tighten-spec-contract (design D13, amended 2026-10-13): the factory's closing commit and
  * its register land in one {@code git update-ref --stdin} transaction, so the capture-shaped runner
- * hands a command its whole input and closes the stream — and a command that stops reading early is
- * judged by its exit, not by the broken pipe.
+ * hands a command its whole input — as a file the launch owner writes (design D20 of
+ * fix-terminal-receipt-convergence), not through a pipe — and a command that stops reading early is
+ * judged by its exit.
  *
  * <p>A command given no input sees end-of-input at once (task 9.17 of tighten-spec-contract): a git
  * command that falls back to reading standard input — {@code commit-tree} with an empty message —
@@ -32,7 +33,7 @@ class CaptureRunnerInputSpec extends Specification {
         captured.stdout() == 'start\nprepare\ncommit\n'
     }
 
-    def "FR13: a command that exits without reading is judged by its exit, not by the broken pipe"() {
+    def "FR13: a command that exits without reading is judged by its exit"() {
         given: 'a command that reads nothing, and more input than any pipe buffer holds'
         ProcessBuilder builder = new ProcessBuilder('sh', '-c', 'exit 3')
         TestChildEnvironment.cleared(builder)

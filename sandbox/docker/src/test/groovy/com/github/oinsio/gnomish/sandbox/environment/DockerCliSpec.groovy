@@ -1,9 +1,15 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
+import com.github.oinsio.gnomish.subprocess.CaptureRunner
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch
+import com.github.oinsio.gnomish.subprocess.ProcessSupervisor
+import com.github.oinsio.gnomish.subprocess.StdinSource
 import com.github.oinsio.gnomish.subprocess.Termination
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import spock.lang.Specification
@@ -113,7 +119,7 @@ class DockerCliSpec extends Specification {
         def cli = cliBackedBy('docker-speaks-both')
 
         when: 'stderr is merged'
-        def merged = cli.start(['exec', 'box', 'cmd'], true)
+        def merged = cli.start(['exec', 'box', 'cmd'], StderrPolicy.MERGED, StdinSource.NONE)
         def mergedOut = readFully(merged.inputStream)
         merged.waitFor()
 
@@ -122,7 +128,7 @@ class DockerCliSpec extends Specification {
         mergedOut.contains(ERR)
 
         when: 'stderr is kept separate'
-        def split = cli.start(['exec', 'box', 'cmd'], false)
+        def split = cli.start(['exec', 'box', 'cmd'], StderrPolicy.PIPED, StdinSource.NONE)
         def splitOut = readFully(split.inputStream)
         split.waitFor()
 
@@ -131,14 +137,75 @@ class DockerCliSpec extends Specification {
         !splitOut.contains(ERR)
     }
 
+    // FR20, D18 of fix-terminal-receipt-convergence: the exec client's stderr — which carries the
+    //     box process's — is redirected on the host side into the file the round named
+    def "FR20: start writes the client's stderr to the named host file, and only its stdout to the stream"() {
+        given:
+        def cli = cliBackedBy('docker-speaks-both')
+        def file = tempDir.resolve('round-stderr')
+
+        when:
+        def started = cli.start(['exec', 'box', 'cmd'], StderrPolicy.toFile(file), StdinSource.NONE)
+        def out = readFully(started.inputStream)
+        started.waitFor()
+
+        then:
+        out.contains(OUT)
+        !out.contains(ERR)
+        Files.readString(file).contains(ERR)
+    }
+
     def "FR4: start of a missing docker binary throws ProcessStartException"() {
         given:
         def cli = new DockerCli(tempDir.resolve('nope').toString())
 
         when:
-        cli.start(['exec', 'box', 'cmd'], false)
+        cli.start(['exec', 'box', 'cmd'], StderrPolicy.PIPED, StdinSource.NONE)
 
         then:
         thrown(ProcessStartException)
+    }
+
+    // FR23, D20 of fix-terminal-receipt-convergence: the exec client is started by the launch owner
+    //     the capture runner holds, with the caller's input source, so no pipe is left to pump into
+    def "FR23: start hands the exec builder and its input source to the capture runner's launch"() {
+        given:
+        List<ProcessBuilder> builders = []
+        List<StdinSource> sources = []
+        def process = new FakeProcess()
+        def launch = { ProcessBuilder builder, StdinSource stdin ->
+            builders << builder
+            sources << stdin
+            process
+        } as ProcessLaunch
+        def cli = new DockerCli('docker', Duration.ofSeconds(30), new CaptureRunner(new ProcessSupervisor(), launch))
+        def input = StdinSource.of('content'.bytes)
+
+        when:
+        def started = cli.start(['exec', '-i', 'box', 'cat'], StderrPolicy.MERGED, input)
+
+        then:
+        started.is(process)
+        builders*.command() == [
+            [
+                'docker',
+                'exec',
+                '-i',
+                'box',
+                'cat'
+            ]
+        ]
+        builders[0].redirectErrorStream()
+        sources == [input]
+    }
+
+    // D17: the supervisor a caller of start waits under is the one the management commands run under
+    def "start's caller waits under the capture runner's own supervisor"() {
+        given:
+        def supervisor = new ProcessSupervisor(Duration.ofMillis(300))
+
+        expect:
+        new DockerCli('docker', Duration.ofSeconds(30), new CaptureRunner(supervisor, ProcessLaunch.grouped()))
+                .supervisor().is(supervisor)
     }
 }

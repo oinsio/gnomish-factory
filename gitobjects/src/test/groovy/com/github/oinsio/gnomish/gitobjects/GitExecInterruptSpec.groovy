@@ -1,34 +1,42 @@
 package com.github.oinsio.gnomish.gitobjects
 
-import java.util.concurrent.TimeUnit
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch
+import com.github.oinsio.gnomish.subprocess.ProcessSupervisor
+import java.nio.file.Path
+import java.time.Duration
 import spock.lang.Specification
+import spock.lang.TempDir
 
 /**
- * FR25 of add-sandbox-core, FR13 of bound-subprocess-commands: {@link GitExec}'s interruption
- * contract, which the migration onto the shared supervisor leaves unchanged — the interrupt flag is
+ * FR25 of add-sandbox-core, FR13 of bound-subprocess-commands, FR19 of
+ * fix-terminal-receipt-convergence: {@link GitExec}'s interruption contract — the interrupt flag is
  * restored for callers up the stack, the child process is not left orphaned, and the failure
  * surfaces as a {@link GitObjectsInterruptedException} carrying its cause rather than as an exit
  * code — by its own type, so a caller that degrades on an unreadable document cannot fold "git was
  * never allowed to answer" into that answer.
  *
  * <p>The mechanics under the contract — the two-phase tree kill and the reap — belong to
- * {@code ProcessSupervisorInterruptSpec} now; what is verified here is only this library's
- * translation of a named termination into its own exception.
+ * {@code ProcessSupervisorInterruptSpec}; what is verified here is this library's translation of a
+ * named termination, and of an interrupt cutting the post-exit join (design D17), into its own
+ * exception. Driven on {@link FakeProcess}, so the order of exit and interrupt is the spec's.
  */
 class GitExecInterruptSpec extends Specification {
 
-    def "FR25: an interrupt while awaiting the subprocess restores the flag and destroys the process"() {
-        given: 'a long-lived child process standing in for a slow git command'
-        def process = new ProcessBuilder('sleep', '600').start()
+    private static final ProcessSupervisor SUPERVISOR = new ProcessSupervisor(Duration.ofMillis(100))
 
-        and: 'stdin/stderr pump threads that have already finished'
-        def done = finishedThread()
+    @TempDir
+    Path gitDir
+
+    def "FR25: an interrupt while awaiting the subprocess restores the flag and destroys the process"() {
+        given: 'a git process that never exits on its own'
+        FakeProcess process = FakeProcess.running()
 
         and: 'the awaiting thread is pre-interrupted, so the supervised wait ends as INTERRUPTED'
         Thread.currentThread().interrupt()
 
         when:
-        GitExec.await(process, done, done)
+        exec(process).run(['cat-file', '-e', 'HEAD'])
 
         then: 'the interruption surfaces loudly, by its own type and carrying its cause'
         def e = thrown(GitObjectsInterruptedException)
@@ -45,21 +53,19 @@ class GitExecInterruptSpec extends Specification {
         Thread.interrupted()
     }
 
-    // FR13: the second interrupt site — the process is already gone, so only the flag and the loud
-    // failure are owed; a pre-interrupted join makes the path deterministic rather than a race.
-    def "FR13: an interrupt while joining the pump threads restores the flag and surfaces loudly"() {
-        given: 'a process that has already exited, so the supervised wait resolves as EXITED'
-        def process = new ProcessBuilder('true').start()
-        process.waitFor(5, TimeUnit.SECONDS)
-
-        and: 'a pump thread still busy with slow work'
-        def pump = sleepingThread()
-
-        and: 'the joining thread is pre-interrupted, so join throws immediately'
-        Thread.currentThread().interrupt()
+    // FR19: the second interrupt site — the process has exited and a holder keeps the pipes, so the
+    // interrupt lands in the post-exit join; the wait was reached, and only the flag and the loud
+    // failure are owed.
+    def "FR19: an interrupt during the post-exit join restores the flag, surfaces loudly and closes the pipes"() {
+        given: 'git exits cleanly while a descendant holds both pipes, and the interrupt arrives once the wait saw the exit'
+        FakeProcess process = FakeProcess.running()
+        process.holdOpen()
+        process.onWaitReturn { Thread.currentThread().interrupt() }
+        process.exit(0)
 
         when:
-        GitExec.await(process, pump, pump)
+        long startedAt = System.nanoTime()
+        exec(process).run(['cat-file', '-e', 'HEAD'])
 
         then: 'the interruption surfaces loudly, by its own type and carrying its cause'
         def e = thrown(GitObjectsInterruptedException)
@@ -68,28 +74,35 @@ class GitExecInterruptSpec extends Specification {
         and: 'the interrupt flag was restored for callers up the stack (read-and-clear here)'
         Thread.interrupted()
 
-        cleanup: 'never leak the pump thread or the interrupt flag, whichever assertion failed'
-        pump.interrupt()
+        and: 'the join was cut by the interrupt, not waited out to the bound'
+        Duration.ofNanos(System.nanoTime() - startedAt) <SUPERVISOR.postExitBound()
+
+        cleanup: 'never leak the holder or the interrupt flag, whichever assertion failed'
+        process.release()
         Thread.interrupted()
     }
 
-    private static Thread finishedThread() {
-        def thread = new Thread({ } as Runnable)
-        thread.start()
-        thread.join()
-        thread
+    // FR19, FR23: the launch owner writes the input file before the start; an interrupt already set
+    // when it does is still this library's interruption, not an unlaunchable binary.
+    def "FR23: an interrupt set before a run with stdin surfaces as the interruption, not as a launch failure"() {
+        given: 'the real launch owner and a real git dir'
+        GitExec exec = new GitExec(gitDir, 'git', SUPERVISOR, ProcessLaunch.grouped(gitDir))
+
+        when:
+        Thread.currentThread().interrupt()
+        exec.run(['hash-object', '--stdin'], 'blob'.bytes, [:], -1)
+
+        then:
+        thrown(GitObjectsInterruptedException)
+        Thread.interrupted()
+
+        cleanup:
+        Thread.interrupted()
     }
 
-    private static Thread sleepingThread() {
-        def thread = new Thread({
-            try {
-                Thread.sleep(30_000)
-            } catch (InterruptedException ignored) {
-                Thread.currentThread().interrupt()
-            }
-        } as Runnable)
-        thread.daemon = true
-        thread.start()
-        thread
+    private GitExec exec(FakeProcess process) {
+        new GitExec(gitDir, 'git', SUPERVISOR, { builder, stdin ->
+            process
+        } as ProcessLaunch)
     }
 }

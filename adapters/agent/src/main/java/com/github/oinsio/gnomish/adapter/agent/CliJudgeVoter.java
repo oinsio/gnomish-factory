@@ -121,7 +121,12 @@ public final class CliJudgeVoter implements JudgeVoter {
             PipelineLaw law,
             @Nullable JudgeEnvironmentSource environmentSource) {
         this.equipment = new AgentRoundEquipment(
-                factoryProperties, clock, progressListener, new AgentRoundResultExtractor(), childEnv);
+                factoryProperties,
+                clock,
+                progressListener,
+                new AgentRoundResultExtractor(),
+                childEnv,
+                RoundScratchDirectory.HOST_TEMP);
         this.law = law;
         this.promptBuilder = new JudgePromptBuilder(law);
         this.environmentSource =

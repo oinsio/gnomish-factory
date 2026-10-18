@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.check
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Path
 import spock.lang.Specification
@@ -23,7 +24,7 @@ class CommandProcessRunnerSpec extends Specification {
     def runner = new CommandProcessRunner('sh', new VirtualClock())
 
     private HostTaskExecutionEnvironment env() {
-        new HostTaskExecutionEnvironment(tempDir, new VirtualClock(), TestChildEnvironment.hostAllowlist())
+        new HostTaskExecutionEnvironment(tempDir, new VirtualClock(), TestChildEnvironment.hostAllowlist(), ProcessLaunch.grouped())
     }
 
     private static VerifyCheck.Command command(String line) {

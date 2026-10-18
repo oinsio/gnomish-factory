@@ -1,7 +1,10 @@
 package com.github.oinsio.gnomish.subprocess
 
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 
 /**
  * Hands out the committed process-shaped fakes the supervisor is pointed at (the stand-in library's
@@ -32,9 +35,34 @@ trait FakeBinaries {
         throw new AssertionError("timed out waiting until ${what}" as Object)
     }
 
+    /**
+     * Whether the process in {@code pidFile} has ended, waiting up to ten seconds for its exit — the
+     * group sweep's kill reaches it at once, its reap by {@code init} a moment after.
+     */
+    boolean ended(Path pidFile) {
+        long pid = Long.parseLong(Files.readString(pidFile).trim())
+        ProcessHandle.of(pid).ifPresent {
+            it.onExit().get(10, TimeUnit.SECONDS)
+        }
+        !ProcessHandle.of(pid).map { it.isAlive() }.orElse(false)
+    }
+
     /** Kills a handle and everything under it, so a failed assertion never leaks a real process. */
     void killQuietly(ProcessHandle handle) {
         handle.descendants().forEach { it.destroyForcibly() }
         handle.destroyForcibly()
+    }
+
+    /**
+     * A child on the test baseline whose {@code PATH} is {@code first} ahead of the baseline's own,
+     * so the recording launcher — a shell script — still finds its tools, and a binary resolved
+     * from the baseline would show up in the launcher's log.
+     */
+    ProcessBuilder onPath(String first, String... command) {
+        ProcessBuilder builder = new ProcessBuilder(command)
+        TestChildEnvironment.cleared(builder)
+        String baseline = builder.environment().get('PATH')
+        builder.environment().put('PATH', baseline == null ? first : "${first}:${baseline}".toString())
+        builder
     }
 }

@@ -48,7 +48,6 @@ class ConsoleOwnerGateSpec extends Specification {
         (OWNER) : 'the console owner: implements the port over stdin',
         'application/src/main/java/com/github/oinsio/gnomish/app/port/console/ConsoleIO.java' : 'the port: declares readLine, calls nothing',
         'application/src/main/java/com/github/oinsio/gnomish/app/ConsoleTakeoverConfirmation.java' : 'the one console read: the takeover [y/N] confirmation',
-        'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/BoundedTail.java' : 'a BufferedReader over a command check subprocess, not the console',
         'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/StreamJsonParser.java' : 'a BufferedReader over the agent CLI stdout, not the console',
     ]
 
@@ -154,7 +153,7 @@ class ConsoleOwnerGateSpec extends Specification {
         readers == READ_LINE_SITES.keySet().sort()
 
         and: 'a subprocess reader holds no console, so its entry cannot hide an operator read'
-        SUBPROCESS_READERS.size() == 2
+        SUBPROCESS_READERS.size() == 1
         SUBPROCESS_READERS.every {
             !RepoSourceTree.code(RepoSourceTree.repoRoot().resolve(it).toFile()).contains('ConsoleIO')
         }

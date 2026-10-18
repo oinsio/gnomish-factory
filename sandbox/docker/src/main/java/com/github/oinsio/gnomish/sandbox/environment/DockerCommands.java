@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
+import com.github.oinsio.gnomish.subprocess.StdinSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -115,18 +116,21 @@ final class DockerCommands {
     /**
      * {@code exec} of {@code argv} in the task container with {@code workdir} as
      * the working directory and each {@code env} entry passed by {@code -e
-     * name=value}; {@code -i} is added when the process is fed stdin. The image's
+     * name=value}; {@code -i} is added exactly when {@code stdin} carries input, derived
+     * here from the one source the launch owner applies, never chosen beside it (design
+     * D20 of fix-terminal-receipt-convergence), so input cannot travel to a client that
+     * does not forward it. The image's
      * own {@code ENV} supplies the runtime environment (container base is empty,
      * D6) — these {@code -e} entries are the composed allowlist layered on top:
      * operator passthrough plus the factory-set fragment ({@link ChildEnvAllowlist}).
      */
     static List<String> exec(
-            String key, String workdir, Map<String, String> env, boolean interactive, List<String> argv) {
+            String key, String workdir, Map<String, String> env, StdinSource stdin, List<String> argv) {
         List<String> command = new ArrayList<>();
         command.add("exec");
         command.add("-w");
         command.add(workdir);
-        if (interactive) {
+        if (stdin != StdinSource.NONE) {
             command.add("-i");
         }
         for (Map.Entry<String, String> entry : env.entrySet()) {

@@ -152,7 +152,6 @@ class AgentSettingsValidatorSpec extends Specification {
 
     // FR11, D7: installation-level knobs and manifest data are not settings, on either role
     def "FR11: a #what in settings is the unknown-settings-key error, on the executor and a judge check"() {
-        // Scenario: executor/agent-executor / The grace is not a manifest setting
         // Scenario: executor/agent-executor / The child-environment allowlist is installation config
         // Scenario: executor/agent-executor / The model is manifest data, not a setting
         given:
@@ -165,8 +164,6 @@ class AgentSettingsValidatorSpec extends Specification {
 
         where:
         what | key | value
-        'tail-drain grace' | 'agentCliTailDrainGrace' | 'PT5S'
-        'tail-drain grace' | 'tailDrainGrace' | 5
         'child-environment allowlist' | 'envAllowlist' | ['PATH']
         'passthrough variable' | 'envPassthrough' | ['NPM_TOKEN']
         'model' | 'model' | 'claude-opus'

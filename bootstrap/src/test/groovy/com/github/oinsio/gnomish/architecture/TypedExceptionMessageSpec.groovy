@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
+import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.sandbox.environment.DockerCommandFailedException
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException
 import com.github.oinsio.gnomish.sandbox.environment.GuardUnavailableException
@@ -248,6 +249,16 @@ class TypedExceptionMessageSpec extends Specification {
                 { String raw -> UntrustedText.agent(raw) },
                 { UntrustedText carried ->
                     new MissingResultEventException(carried, 65_528L, 3)
+                }
+            ],
+            [
+                // The stderr tail of a failed agent round rides the wrapper beside the denials
+                // (design D18 of fix-terminal-receipt-convergence, as amended 2026-10-17); the
+                // message is the cause's, then the tail through the exit.
+                'ExecutorFailure',
+                { String raw -> UntrustedText.agent(raw) },
+                { UntrustedText carried ->
+                    new ExecutorFailure(new IllegalStateException('round exceeded roundTimeout'), [], carried)
                 }
             ],
             [

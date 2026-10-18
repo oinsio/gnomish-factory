@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
+import com.github.oinsio.gnomish.subprocess.StdinSource
 import java.nio.file.Path
 import java.time.Instant
 import java.util.function.Supplier
@@ -71,7 +73,7 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
     }
 
     @Override
-    Process start(List<String> args, boolean mergeStderr) {
+    Process start(List<String> args, StderrPolicy stderr, StdinSource stdin) {
         starts << args
         // The agent CLI's own exec: every round and vote asks for stream-json output.
         if (args.contains('stream-json')) {

@@ -69,6 +69,58 @@ final class VerifiedTip {
     }
 
     /**
+     * The object id an invocation that exited zero printed, for a reader whose empty answer means
+     * "no such ref": empty only when the invocation did not succeed, and a refusal — never empty —
+     * when it succeeded and printed anything but one full object id, since a reader that took that
+     * for "absent" would recreate or delete a branch on the strength of a prefix (FR17 of
+     * fix-terminal-receipt-convergence, design D15 as amended 2026-10-17: the second layer).
+     *
+     * @param revision the ref or revision that was read, for the refusal
+     * @param command the git subcommand that read it, e.g. {@code "rev-parse"}
+     * @param result the invocation's outcome
+     * @return the trimmed object id, or empty when the invocation did not succeed
+     * @throws BranchTipUnavailableException if it succeeded without printing one full object id
+     */
+    static Optional<String> answered(String revision, String command, GitCommandResult result) {
+        return result.succeeded() ? Optional.of(shaped(revision, command, result)) : Optional.empty();
+    }
+
+    /**
+     * The whole trimmed stdout of {@code result} as one full object id, refused otherwise; the
+     * caller has already decided that the invocation's exit makes its stdout an answer.
+     *
+     * @param revision the ref or revision that was read, for the refusal
+     * @param command the git subcommand that read it
+     * @param result the invocation's outcome
+     * @return the trimmed object id
+     * @throws BranchTipUnavailableException if the stdout is anything but one full object id
+     */
+    static String shaped(String revision, String command, GitCommandResult result) {
+        // @UntrustedParser warrant (design D11): what leaves passed the fixed shape of a full object
+        //     id, checked over the whole trimmed answer (F105).
+        return shaped(revision, command, result.stdout().forParsing().trim(), result);
+    }
+
+    /**
+     * {@code value}, a field the caller lifted out of {@code result}'s stdout (the first field of
+     * an {@code ls-remote} line), as one full object id, refused otherwise.
+     *
+     * @param revision the ref or revision that was read, for the refusal
+     * @param command the git subcommand that read it
+     * @param value the candidate field
+     * @param result the invocation's outcome, whose exit code and stderr the refusal carries
+     * @return {@code value}
+     * @throws BranchTipUnavailableException if {@code value} is anything but one full object id
+     */
+    static String shaped(String revision, String command, String value, GitCommandResult result) {
+        if (!isObjectId(value)) {
+            throw new BranchTipUnavailableException(
+                    revision, command, result.exitCode(), result.stderr().forLog());
+        }
+        return value;
+    }
+
+    /**
      * The tip a resolution established, refusing to continue without one.
      *
      * @param revision the ref or revision that was being resolved, for the failure message

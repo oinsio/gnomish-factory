@@ -15,8 +15,8 @@ import spock.lang.TempDir
  * {@link com.github.oinsio.gnomish.app.lease.ClaimLossFlag} the round-boundary check already
  * consults, wait up to the grace window, then always kill the process tree. The process-tree step is
  * seamed behind {@link ProcessTreeKiller} so sequencing is provable without spawning or killing real
- * OS processes (the fake {@link RecordingKiller} stands in; {@link RealProcessTreeKiller} is the
- * untested production implementation).
+ * OS processes (the fake {@link RecordingKiller} stands in; {@link RealProcessTreeKiller}, the
+ * production shutdown step, is driven on real processes by {@link ShutdownSweepSpec}).
  *
  * <p>The scenarios are split across sibling files to stay within the 200-line file cap:
  * {@link ServeShutdownSpec} (the sequence steps), {@link ServeShutdownDrainLoggingSpec} (the

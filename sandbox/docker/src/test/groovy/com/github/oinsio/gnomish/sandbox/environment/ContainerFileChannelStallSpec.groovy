@@ -97,20 +97,6 @@ class ContainerFileChannelStallSpec extends Specification {
         outcome instanceof Optional
         new String(((Optional<byte[]>) outcome).get()) == 'ok'
     }
-
-    // FR11: an interrupt landing on a still-running drain's join is restored for callers up the
-    // stack — the drain must not swallow the flag the supervisor deliberately left set
-    def "an interrupt landing on the exec pipe drain join is restored"() {
-        given: 'a wait that leaves the flag set, and a stdout pipe still open when the join begins'
-        docker.process.stdoutStream = new SlowEofStream()
-        docker.process.interruptOnWaitFor = true
-
-        when:
-        channel().readFile('note.txt', 10)
-
-        then:
-        Thread.interrupted() // asserts the flag was restored (and clears it)
-    }
 }
 
 /** An exec pipe still open when the join begins, reaching EOF shortly after. */

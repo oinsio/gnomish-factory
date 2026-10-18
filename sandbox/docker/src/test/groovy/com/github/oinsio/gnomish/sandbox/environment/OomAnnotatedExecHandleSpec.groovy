@@ -133,7 +133,7 @@ class OomAnnotatedExecHandleSpec extends Specification {
 
     // NFR-R1: the wrapper is a pass-through everywhere else — the Wait outcome carries no exit
     // code (design D1), so there is nothing to annotate on the timed wait.
-    def "NFR-R1: the timed wait, the output stream and the start instant pass through untouched"() {
+    def "NFR-R1: the timed wait, the output stream, the start instant and the post-exit bound pass through untouched"() {
         given:
         def stream = new ByteArrayInputStream('real-bytes'.bytes)
         def startedAt = Instant.parse('2026-08-07T09:59:00Z')
@@ -147,14 +147,17 @@ class OomAnnotatedExecHandleSpec extends Specification {
         def seenWait = subject.waitForExitOrTimeout(Duration.ofMinutes(5), clock)
         def seenOutput = subject.output()
         def seenStart = subject.startedAt()
+        def seenBound = subject.postExitBound()
 
         then:
         1 * delegate.waitForExitOrTimeout(Duration.ofMinutes(5), clock) >> outcome
         1 * delegate.output() >> stream
         1 * delegate.startedAt() >> startedAt
+        1 * delegate.postExitBound() >> Duration.ofMillis(1234)
         seenWait.is(outcome)
         seenOutput.is(stream)
         seenStart == startedAt
+        seenBound == Duration.ofMillis(1234) // FR19 of fix-terminal-receipt-convergence: the host handle's bound
 
         and: 'a timed wait never reaches the runtime for state it could not annotate anyway'
         docker.runs == []

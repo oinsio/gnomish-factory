@@ -29,6 +29,12 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       spec over a temporary home with and without leftovers, and that
       `FactoryHomeBoundarySpec` still passes.
 
+- [ ] 2.3 `assessHelper()` on the host launch owner of `fix-terminal-receipt-convergence`
+      (`:subprocess`, D19 there), returning the verdict over both tools its launching form refuses on — the platform's
+      launcher and the sweep's `/bin/kill` (`HostLauncher.prefix`, task 8.20 there) (D1, D4).
+      Verify a spec that the launch refuses exactly when `assessHelper` fails, over both
+      platforms' helpers and the kill path handed in as parameters.
+
 ## 3. The `doctor` subcommand (design D2, D3, D5)
 
 - [ ] 3.1 `doctor` in `Subcommand` with accepted options `--dir`, `--online`,
@@ -36,12 +42,13 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       `ManualRunRunner` before `gitVersionCheck.verify()` (FR7). Verify a spec
       that `doctor` runs with a fake git below the floor and still reports every
       check.
-- [ ] 3.2 `DoctorCheck`, `DoctorContext` and the twelve checks of FR1 as thin
+- [ ] 3.2 `DoctorCheck`, `DoctorContext` and the thirteen checks of FR1 as thin
       adapters over their owners (`FactoryVersion`, `GitVersionCheck`,
       `OperatorConfigLoader` bean, `ProjectRegistry`, `PipelineLoader`,
       `BoundTracker` + `CheckEquipment` + `SecretsProvider`,
       `AgentCredentials`, `DockerRuntimeProbe`, `ImageFacts` +
       `ImageContractCheck`, guard image via `ImageFacts`, `AgentCliBinary`,
+      the host launch owner's `assessHelper` (2.3),
       `FactoryHome.legacyFolders`); project checks skipped with a reason when no
       project resolves (FR1, FR2). Verify one spec per check for ok/warn/fail.
 - [ ] 3.3 `TrackerReadProbe` behind `--online`, using the tracker's read-only
@@ -58,9 +65,9 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       `Runtime.exec`, `System.getenv`, `System.getProperty`, YAML/JSON parser
       or `Files.read*` in the doctor package; asserts every doctor source was
       scanned (M2). Verify red with a planted `System.getenv`.
-- [ ] 4.2 Identity table (M1): for each of the twelve checks, one fixture run
+- [ ] 4.2 Identity table (M1): for each of the thirteen checks, one fixture run
       through the startup path (`take` or the owner's refusing form) and through
-      `doctor`, asserting the same verdict. Verify the table has twelve rows and
+      `doctor`, asserting the same verdict. Verify the table has thirteen rows and
       passes.
 - [ ] 4.3 E2E: packaged jar, temporary `GNOMISH_HOME`, a registered clone with a
       missing token and a missing sandbox image → one run, two `fail` lines,

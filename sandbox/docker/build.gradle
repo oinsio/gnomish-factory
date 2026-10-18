@@ -8,7 +8,7 @@
 // Deviation from D7's name-implies-scope (recorded at task 6.1): the host
 // backend lives here too, not in a `:sandbox:host` sibling. The two backends
 // share package-private subprocess mechanics by design (ChannelPathResolver,
-// ChildProcessStdin — the docker CLI itself runs as a host process), so a
+// HostExecHandle — the docker CLI itself runs as a host process), so a
 // per-backend cut would widen that encapsulation for a two-class module that
 // buys neither of D1's module warrants (no PIT-scoping win, no vendor
 // boundary). Task 5.2's residual-edge note already recorded this destination:
@@ -64,12 +64,6 @@ dependencies {
     implementation libs.jackson.core
     implementation libs.jackson.databind
 
-    // `@NonAtomicWrite`: the two classes here that write files without the atomic-rename
-    // discipline declare why in place, which is what the negative half of the atomic-write
-    // boundary gate reads (FR5, design D10 of harden-task-branch-contract). Marker only — no
-    // code in this module calls `AtomicFileWriter`.
-    implementation project(':atomicfile')
-
     // The dependency-free logging-support leaf (design D5/D6 of
     // harden-logging-observability): `DockerCli` reads `ShutdownPhase` so an
     // interrupt the daemon's own stop caused does not read as an unexplained abort.
@@ -108,9 +102,11 @@ dependencies {
 layering {
     allowedProjects = [
         ':application',
-        // The dependency-free atomic-write leaf (design D10 of harden-task-branch-contract).
-        // Reached here only for its `@NonAtomicWrite` marker; the writer itself is used by
-        // `:application`, which renames its snapshot and dashboard writes through it.
+        // The dependency-free atomic-write leaf (design D10 of harden-task-branch-contract):
+        // runtime-only, transitive through `:application`, which renames its snapshot and
+        // dashboard writes through it; no source in this module names it. The `@NonAtomicWrite`
+        // marker its two scratch writers wear comes from `build-checks` through
+        // `java-conventions` (design D20 of fix-terminal-receipt-convergence), not from here.
         ':atomicfile',
         // The base-resolution leaf, transitive through `:application` (design D2 of
         // add-base-ref-resolution); no source in this module names it.

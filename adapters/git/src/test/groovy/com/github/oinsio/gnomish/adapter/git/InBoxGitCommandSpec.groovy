@@ -138,6 +138,11 @@ class InBoxGitCommandSpec extends Specification {
             }
             exitCode
         }
+
+        @Override
+        Duration postExitBound() {
+            Duration.ofSeconds(5)
+        }
     }
 
     private static class BrokenStreamHandle extends FakeHandle {

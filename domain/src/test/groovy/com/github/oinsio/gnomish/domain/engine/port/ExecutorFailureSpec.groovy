@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine.port
 
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.Finding
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
@@ -79,5 +80,46 @@ class ExecutorFailureSpec extends Specification {
 
         then: 'the modification is rejected'
         thrown(UnsupportedOperationException)
+    }
+
+    // FR20 of fix-terminal-receipt-convergence (D18 as amended 2026-10-17): a failed round's
+    //     stderr tail rides the failure as untrusted text, beside the denials.
+    def "FR20: carries the stderr tail of the failed round as untrusted text"() {
+        given: 'the last bytes the round\'s CLI wrote to its stderr'
+        def tail = UntrustedText.agent('error: not logged in')
+
+        when:
+        def failure = new ExecutorFailure(new RuntimeException('boom'), [], tail)
+
+        then:
+        failure.stderrTail().is(tail)
+    }
+
+    // FR20: an executor with no process of its own wraps no tail — an empty carrier, never null.
+    def "FR20: the two-argument form carries an empty stderr tail"() {
+        expect:
+        new ExecutorFailure(new RuntimeException('boom'), []).stderrTail().isBlank()
+    }
+
+    // FR20, design D5 of type-untrusted-text: the wrapper's own message carries the tail only
+    //     through the carrier's log exit, after the cause's text, so a log of the wrapper is inert.
+    def "FR20: the message is the cause's, then the tail through its log exit"() {
+        given:
+        def cause = new RuntimeException('boom')
+        def tail = UntrustedText.agent("error: not\nlogged in")
+
+        expect:
+        new ExecutorFailure(cause, [], tail).message ==
+        cause.toString() + '; ' + ExecutorFailure.STDERR_TAIL_LABEL + tail.forLog()
+    }
+
+    // FR1: without a tail the message is the cause's alone, as it always was.
+    def "FR20: a blank tail leaves the message the cause's own"() {
+        given:
+        def cause = new RuntimeException('boom')
+
+        expect:
+        new ExecutorFailure(cause, []).message == cause.toString()
+        new ExecutorFailure(cause, [], UntrustedText.agent('  ')).message == cause.toString()
     }
 }

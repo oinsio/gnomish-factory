@@ -20,7 +20,6 @@ import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.PosixFilePermissions
-import java.time.Duration
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -42,7 +41,7 @@ class AgentSecretsFolderRoundSpec extends Specification {
     PipelineLaw.ofContent(['instructions.md': 'Do the thing.', 'criteria.md': 'The output must be correct.'])
 
     private static final FactoryProperties PROPERTIES =
-    new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), null, null, null)
+    new FactoryProperties('factory-01', 'claude', null, null)
 
     @TempDir
     Path tempDir

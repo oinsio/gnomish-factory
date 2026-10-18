@@ -277,7 +277,17 @@ public enum OperatorEvent {
     // forwarded branches are still Unregistered after the claimless owner's touchpoint read — a
     // local head the locate does not fetch, or a tracking ref for which origin delivered no
     // register or could not be reached; nothing is written, the quarantine owner keeps them.
-    WORKTREE_JANITOR_BRANCH_UNREGISTERED("GF165");
+    WORKTREE_JANITOR_BRANCH_UNREGISTERED("GF165"),
+    // capture-shaped subprocess callers (fix-terminal-receipt-convergence, design D15 as amended
+    // 2026-10-17, NFR-O3): a command exited with code 0 but a descendant still held its pipe when
+    // the post-exit bound expired, so the capture may be a prefix and is refused (CutCaptureException,
+    // rethrown after this line, which attributes the holder). One per caller.
+    GIT_CAPTURE_TRUNCATED("GF166"),
+    DOCKER_CAPTURE_TRUNCATED("GF167"),
+    // agent round scratch directory (fix-terminal-receipt-convergence, design D18, FR20): the host
+    // directory a round's CLI wrote its stderr into could not be removed when the round ended; the
+    // round's outcome stands, the directory is left on the host and named.
+    ROUND_SCRATCH_REMOVAL_FAILED("GF168");
 
     private final String code;
     private final String head;

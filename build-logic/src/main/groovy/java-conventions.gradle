@@ -54,6 +54,11 @@ dependencies {
     // compileOnly because it is source-retained and must reach no runtime classpath.
     errorprone 'com.github.oinsio.build:parameter-count-check'
     compileOnly 'com.github.oinsio.build:parameter-count-annotations'
+    // The atomic-write boundary gate's exemption marker (FR5, design D10 of
+    // harden-task-branch-contract; design D20 of fix-terminal-receipt-convergence): wired here
+    // rather than taken from `:atomicfile`, so a dependency-free leaf wears it with no edge.
+    // compileOnly: class-retained for the gate's bytecode scan, needed on no runtime classpath.
+    compileOnly 'com.github.oinsio.build:atomic-write-annotations'
 }
 
 // Reproducible archives (NFR-R1, design D5 of add-release-pipeline): every jar, boot jar and

@@ -6,8 +6,10 @@ import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.time.Duration
 import spock.lang.Specification
 
@@ -56,8 +58,8 @@ abstract class TaskExecutionEnvironmentContract extends Specification implements
         new String(stream.readAllBytes(), StandardCharsets.UTF_8)
     }
 
-    private static ExecCommand shell(String script, String stdin = null, boolean mergeStderr = false) {
-        new ExecCommand(['sh', '-c', script], [:], stdin, mergeStderr)
+    private static ExecCommand shell(String script, String stdin = null, StderrPolicy stderr = StderrPolicy.PIPED) {
+        new ExecCommand(['sh', '-c', script], [:], stdin, stderr)
     }
 
     // FR4: a command runs through exec() and its output and exit code reach the caller
@@ -104,19 +106,42 @@ abstract class TaskExecutionEnvironmentContract extends Specification implements
         out.contains('piped-prompt-content')
     }
 
-    // FR1: mergeStderr folds stderr into the one output stream
+    // FR1: the merged stderr policy folds stderr into the one output stream
     def "exec merges stderr into stdout when asked"() {
         given: 'a materialized environment'
         def e = materialized()
 
         when: 'a command writes to both streams with merge on'
-        def handle = e.exec(shell('echo out; echo err 1>&2', null, true))
+        def handle = e.exec(shell('echo out; echo err 1>&2', null, StderrPolicy.MERGED))
         def out = readFully(handle.output())
         handle.waitForExit()
 
         then: 'both lines appear on the merged stream'
         out.contains('out')
         out.contains('err')
+    }
+
+    // FR20 of fix-terminal-receipt-convergence (D18): on both media the stderr goes to a host file —
+    //     in a box through the host-side exec client's stderr — and the output stream is stdout alone
+    def "exec writes stderr to a host file when asked, and stdout alone to the stream"() {
+        given: 'a materialized environment and a host directory'
+        def e = materialized()
+        def directory = Files.createTempDirectory('gnomish-contract-stderr-')
+        def file = directory.resolve('stderr')
+
+        when: 'a command writes to both streams with its stderr sent to the file'
+        def handle = e.exec(shell('echo out; echo err 1>&2', null, StderrPolicy.toFile(file)))
+        def out = readFully(handle.output())
+        handle.waitForExit()
+
+        then: 'the stream holds stdout, the host file the stderr'
+        out.contains('out')
+        !out.contains('err')
+        file.toFile().getText('UTF-8').contains('err')
+
+        cleanup:
+        Files.deleteIfExists(file)
+        Files.deleteIfExists(directory)
     }
 
     // FR1, NFR-S3: a factory-authored file round-trips through the scratch channel

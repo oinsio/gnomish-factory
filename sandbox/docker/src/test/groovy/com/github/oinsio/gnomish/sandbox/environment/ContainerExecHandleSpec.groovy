@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import java.nio.file.Path
 import java.time.Instant
 import java.time.InstantSource
@@ -37,7 +38,7 @@ class ContainerExecHandleSpec extends Specification {
         e.materialize('task/x', null)
 
         when:
-        def handle = e.exec(new ExecCommand(['true'], [:], null, false))
+        def handle = e.exec(new ExecCommand(['true'], [:], null, StderrPolicy.PIPED))
 
         then: 'the handle is wired to the scripted process and this exec\'s start instant'
         handle.waitForExit() == 0

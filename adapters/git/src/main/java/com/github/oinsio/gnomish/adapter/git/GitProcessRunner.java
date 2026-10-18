@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.CaptureRunner;
 import com.github.oinsio.gnomish.subprocess.Captured;
+import com.github.oinsio.gnomish.subprocess.CutCaptureException;
+import com.github.oinsio.gnomish.subprocess.GroupSweep;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -79,7 +81,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR2 of add-git-workflow; NFR-S2 of fix-lifecycle-push; FR1, FR2, FR4, FR5, FR6,
  * NFR-O1, NFR-O2, NFR-S2 of bound-subprocess-commands; FR10 of type-untrusted-text; FR6, FR8 of
- * own-git-transfer-argv.
+ * own-git-transfer-argv; NFR-O3 of fix-terminal-receipt-convergence.
  */
 @UntrustedParser
 public final class GitProcessRunner implements GitRunner {
@@ -102,7 +104,7 @@ public final class GitProcessRunner implements GitRunner {
 
     private final String gitBinary;
     private final Duration networkTimeout;
-    private final CaptureRunner captureRunner = new CaptureRunner();
+    private final CaptureRunner captureRunner;
 
     public GitProcessRunner() {
         this("git");
@@ -130,8 +132,22 @@ public final class GitProcessRunner implements GitRunner {
      *     sub-second one
      */
     public GitProcessRunner(String gitBinary, Duration networkTimeout) {
+        this(gitBinary, networkTimeout, new CaptureRunner());
+    }
+
+    /**
+     * The full form: the capture runner is where the command is launched and supervised, so a spec
+     * hands in one over a fake launch (design D16 of fix-terminal-receipt-convergence); the shorter
+     * forms supply the leaf's own default, whose launch is the one production form.
+     *
+     * @param gitBinary the git executable to invoke
+     * @param networkTimeout the hard bound on a command that reaches a remote
+     * @param captureRunner the launch, the wait and the post-exit bound every command runs under
+     */
+    public GitProcessRunner(String gitBinary, Duration networkTimeout, CaptureRunner captureRunner) {
         this.gitBinary = gitBinary;
         this.networkTimeout = networkTimeout;
+        this.captureRunner = captureRunner;
     }
 
     /**
@@ -149,6 +165,8 @@ public final class GitProcessRunner implements GitRunner {
      *     "--bare"}
      * @return the captured exit code, separate stdout/stderr, and the named termination
      * @throws GitBinaryNotFoundException if the configured git executable could not be launched
+     * @throws CutCaptureException if git exited with code zero while a descendant still held its
+     *     output at the post-exit bound, so the capture may be a prefix
      *     at all (missing from {@code PATH}, not executable, ...)
      * @throws UnownedTransferException if {@code args} names a transfer subcommand, which only the
      *     owner's value may carry (see {@link #run(Path, GitTransfer)})
@@ -173,6 +191,8 @@ public final class GitProcessRunner implements GitRunner {
      * @param transfer the owner's value
      * @return the captured exit code, separate stdout/stderr, and the named termination
      * @throws GitBinaryNotFoundException if the configured git executable could not be launched
+     * @throws CutCaptureException if git exited with code zero while a descendant still held its
+     *     output at the post-exit bound, so the capture may be a prefix
      */
     @Override
     public GitCommandResult run(Path cwd, GitTransfer transfer) {
@@ -196,6 +216,8 @@ public final class GitProcessRunner implements GitRunner {
      * @param transaction the owner's value
      * @return the captured exit code, separate stdout/stderr, and the named termination
      * @throws GitBinaryNotFoundException if the configured git executable could not be launched
+     * @throws CutCaptureException if git exited with code zero while a descendant still held its
+     *     output at the post-exit bound, so the capture may be a prefix
      */
     @Override
     public GitCommandResult run(Path cwd, RefTransaction transaction) {
@@ -310,8 +332,8 @@ public final class GitProcessRunner implements GitRunner {
 
         Duration deadline = network ? networkTimeout : null;
         long startedAt = System.nanoTime();
-        Captured captured = capture(builder, deadline, input);
-        report(captured.termination(), args, deadline, Duration.ofNanos(System.nanoTime() - startedAt));
+        Captured captured = capture(builder, args, deadline, input);
+        report(captured, args, deadline, Duration.ofNanos(System.nanoTime() - startedAt));
         // The single choke point for git's text (design D3 of type-untrusted-text): both streams
         // become UntrustedText here, at the first factory reader, and stderr is scrubbed of any
         // remote-URL credentials on the way — before a caller can log it or carry it into a report
@@ -327,8 +349,15 @@ public final class GitProcessRunner implements GitRunner {
      * give it more. Only the subcommand is named, never the full argv: a {@code clone} or a
      * {@code push} argument can carry a credential-bearing remote URL, and this line is written
      * before any scrub could reach it.
+     *
+     * <p>A cut capture of a clean exit never reaches here: it is refused before a result exists
+     * ({@link #capture}). One that was cut on a failed exit is that failure's diagnostics, the cut
+     * named in its stderr, so it owes no line of its own (design D15 as amended 2026-10-17). A
+     * sweep of git's process group that found a survivor owes one DEBUG line (NFR-O3, design D19).
      */
-    private void report(Termination termination, String[] args, @Nullable Duration deadline, Duration elapsed) {
+    private void report(Captured captured, String[] args, @Nullable Duration deadline, Duration elapsed) {
+        swept(captured.sweep(), args);
+        Termination termination = captured.termination();
         if (termination == Termination.EXITED) {
             return;
         }
@@ -363,12 +392,39 @@ public final class GitProcessRunner implements GitRunner {
      * would leave the git child running unattended with its pipes half-read; for a mutating
      * command that means a push or fetch still writing into the clone after the run that owns it
      * has gone.
+     *
+     * <p>A clean exit whose drain the post-exit bound cut — a descendant of git still held the
+     * pipe — is refused by the capture runner, and this is where the operator hears of the holder
+     * (NFR-O3, design D15 as amended 2026-10-17): one coded WARN naming the subcommand, the cut
+     * streams and the bound, then the refusal rethrown, so no parser of the result and no reader
+     * of the exit code alone takes the prefix for the whole output. The line attributes the holder,
+     * an environment fact; the refusal is the command's failure, which its caller decides on.
      */
-    private Captured capture(ProcessBuilder builder, @Nullable Duration deadline, byte @Nullable [] input) {
+    private Captured capture(
+            ProcessBuilder builder, String[] args, @Nullable Duration deadline, byte @Nullable [] input) {
         try {
             return input == null ? captureRunner.run(builder, deadline) : captureRunner.run(builder, deadline, input);
         } catch (IOException e) {
             throw new GitBinaryNotFoundException(gitBinary, e);
+        } catch (CutCaptureException cut) {
+            // throwable-not-subject: the refusal is rethrown to the caller, which decides on it; this
+            //     line attributes the holder only.
+            log.warn(
+                    OperatorEvent.GIT_CAPTURE_TRUNCATED.head()
+                            + "git command exited with code 0 but a descendant still held its {} when the post-exit"
+                            + " bound expired; the capture is refused as a possible prefix: subcommand={}, bound={}",
+                    cut.streams().phrase(),
+                    GitNetworkCommands.subcommand(args),
+                    cut.bound());
+            swept(cut.captured().sweep(), args);
+            throw cut;
+        }
+    }
+
+    /** The one DEBUG line a group sweep that found a survivor owes (NFR-O3, design D19). */
+    private static void swept(GroupSweep sweep, String[] args) {
+        if (sweep.foundSurvivors()) {
+            log.debug("git {}: {}", GitNetworkCommands.subcommand(args), sweep.phrase());
         }
     }
 

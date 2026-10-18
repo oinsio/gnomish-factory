@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
@@ -126,7 +127,8 @@ class SelfCheckedEnvironmentSpec extends Specification {
         ExecCommand seen = null
 
         when:
-        def result = environment.exec(new ExecCommand(['env'], [HTTP_PROXY: 'http://caller:1', OTHER: 'x'], null, false))
+        def stderr = StderrPolicy.toFile(Path.of('/tmp/round/stderr'))
+        def result = environment.exec(new ExecCommand(['env'], [HTTP_PROXY: 'http://caller:1', OTHER: 'x'], null, stderr))
 
         then:
         1 * delegate.exec(_) >> { ExecCommand c -> seen = c; handle }
@@ -136,6 +138,9 @@ class SelfCheckedEnvironmentSpec extends Specification {
 
         and: 'an explicit caller value wins over the proxy fragment'
         seen.env()['HTTP_PROXY'] == 'http://caller:1'
+
+        and: 'the stderr policy passes on unchanged (FR20 of fix-terminal-receipt-convergence)'
+        seen.stderr() == stderr
     }
 
     def "the remaining operations pass through untouched, carrying the delegate's real values"() {

@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.atomicfile.NonAtomicWrite;
+import com.github.oinsio.buildchecks.atomicwrite.NonAtomicWrite;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;

@@ -39,31 +39,32 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
         stuck.set(true)
     }
 
-    // FR2: the grace expires while the drain is still reading — an infrastructure failure.
-    // Scenario: executor/agent-executor / A drain unfinished after the grace is infrastructure
-    def "a drain that outlives the tail-drain grace throws StreamDrainTimeoutException"() {
-        given: 'a process that exited normally but whose stdout never ends'
-        def handle = new ExitedExecHandle(nonEndingStream(stuck))
+    // FR2; FR19 of fix-terminal-receipt-convergence: the handle's post-exit bound runs out while
+    // the drain is still reading — an infrastructure failure, on the handle's bound and no other.
+    // Scenario: executor/agent-executor / A drain unfinished after the post-exit bound is infrastructure
+    def "a drain that outlives the handle's post-exit bound throws StreamDrainTimeoutException"() {
+        given: 'a process that exited normally but whose stdout never ends, its handle bounding the wait at 100 ms'
+        def handle = new ExitedExecHandle(nonEndingStream(stuck), Duration.ofMillis(100))
         def environment = Stub(TaskExecutionEnvironment) {
             exec(_ as ExecCommand) >> handle
         }
 
         when:
-        runRound(environment, Duration.ofMillis(100))
+        runRound(environment)
 
-        then: 'the round fails on the grace, naming the property an operator would raise'
+        then: 'the round fails on the bound the handle answered, not on an installation default'
         def failure = thrown(ExecutorFailure)
         def e = failure.cause()
         e instanceof StreamDrainTimeoutException
-        e.message.contains('tail-drain-grace')
+        e.message.contains('PT0.1S')
     }
 
     // FR2: an interrupted round thread is the drain's other infrastructure failure, and
-    // the executor must not report it as a grace that was too short.
-    // Scenario: executor/agent-executor / An interrupted wait is not blamed on the grace
+    // the executor must not report it as a bound that ran out.
+    // Scenario: executor/agent-executor / An interrupted wait is not blamed on the bound
     def "an interrupted round thread throws StreamDrainInterruptedException, not a timeout"() {
         given:
-        def handle = new ExitedExecHandle(nonEndingStream(stuck))
+        def handle = new ExitedExecHandle(nonEndingStream(stuck), Duration.ofSeconds(30))
         def environment = Stub(TaskExecutionEnvironment) {
             exec(_ as ExecCommand) >> handle
         }
@@ -72,25 +73,25 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
         Thread.currentThread().interrupt()
 
         when:
-        runRound(environment, Duration.ofSeconds(30))
+        runRound(environment)
 
         then:
         def failure = thrown(ExecutorFailure)
         def e = failure.cause()
         e instanceof StreamDrainInterruptedException
-        !e.message.contains('tail-drain-grace')
+        !e.message.contains('PT30S')
 
         cleanup:
         Thread.interrupted()
     }
 
-    private void runRound(TaskExecutionEnvironment environment, Duration grace) {
+    private void runRound(TaskExecutionEnvironment environment) {
         ExecutorRoundExecution.run(
                 new AgentRoundEquipment(
-                        new FactoryProperties('factory-01', 'claude', grace, null, null, null),
+                        new FactoryProperties('factory-01', 'claude', null, null),
                         new VirtualClock(),
                         { event -> },
-                        new AgentRoundResultExtractor(), ChildEnvAllowlist.none()),
+                        new AgentRoundResultExtractor(), ChildEnvAllowlist.none(), RoundScratchDirectory.HOST_TEMP),
                 new DecisionFileReader(),
                 StageExecutorRequests.request(workspaceDir),
                 'prompt',
@@ -98,13 +99,19 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
     }
 }
 
-/** A handle whose process has already exited cleanly, over a caller-supplied stdout. */
+/**
+ * A handle whose process has already exited cleanly, over a caller-supplied stdout and post-exit
+ * bound — the one wait a round gives its drain after the exit (FR19 of
+ * fix-terminal-receipt-convergence).
+ */
 class ExitedExecHandle implements ExecHandle {
 
     private final InputStream stdout
+    private final Duration postExitBound
 
-    ExitedExecHandle(InputStream stdout) {
+    ExitedExecHandle(InputStream stdout, Duration postExitBound = Duration.ofSeconds(1)) {
         this.stdout = stdout
+        this.postExitBound = postExitBound
     }
 
     @Override
@@ -125,6 +132,11 @@ class ExitedExecHandle implements ExecHandle {
     @Override
     int waitForExit() {
         0
+    }
+
+    @Override
+    Duration postExitBound() {
+        postExitBound
     }
 }
 

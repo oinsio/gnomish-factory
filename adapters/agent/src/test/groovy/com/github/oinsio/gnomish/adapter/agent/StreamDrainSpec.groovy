@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.charset.StandardCharsets
 import java.time.Duration
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.MDC
@@ -17,7 +19,7 @@ import spock.util.concurrent.PollingConditions
  * stdout gobbler. Covers reading from construction (before the writer has
  * finished, let alone "exited"), the tail delivered by {@code await} after the
  * writer closed, live listener callbacks on the drain thread under the round's
- * MDC, byte accounting, the grace expiry infrastructure failure, and the
+ * MDC, byte accounting, the post-exit bound's expiry as an infrastructure failure, and the
  * no-thread-outlives-the-round teardown on every exit path.
  */
 class StreamDrainSpec extends Specification {
@@ -58,7 +60,7 @@ class StreamDrainSpec extends Specification {
         drain.close()
     }
 
-    // FR2, D2: the tail already in the pipe at exit is what the grace absorbs.
+    // FR2, D2: the tail already in the pipe at exit is what the post-exit bound absorbs.
     // Scenario: executor/agent-executor / The round waits for its drain after exit
     def "await returns the tail written just before the stream closed"() {
         given:
@@ -158,9 +160,11 @@ class StreamDrainSpec extends Specification {
         drain.close()
     }
 
-    // FR2: a drain still reading when the grace expires is an infrastructure failure,
-    // never a silently partial event list.
-    def "await throws StreamDrainTimeoutException when the grace expires, tearing the drain down"() {
+    // FR2 of fix-round-stdout-drain; FR19, D17 (as amended 2026-10-17) of
+    // fix-terminal-receipt-convergence: a drain still reading when the post-exit bound expires is
+    // an infrastructure failure, never a silently partial event list; the message names the bound
+    // and the bytes read, and advises raising no property (the tail-drain key is retired).
+    def "await throws StreamDrainTimeoutException when the post-exit bound expires, tearing the drain down"() {
         given: 'a stream that never ends and ignores interrupts'
         def released = new AtomicBoolean()
         def drain = StreamDrain.start(spinningStream(released), clock, { event -> })
@@ -170,8 +174,10 @@ class StreamDrainSpec extends Specification {
 
         then:
         def e = thrown(StreamDrainTimeoutException)
-        e.message.contains('PT0.15S')
-        e.message.contains('tail-drain-grace')
+        e.message.contains('post-exit bound PT0.15S')
+        e.message ==~ /.*\(\d+ bytes read\).*/
+        !e.message.contains('tail-drain-grace')
+        !e.message.contains('raise')
 
         and: 'the expiring await tore the drain down itself — the stream is closed'
         released.get()
@@ -181,10 +187,10 @@ class StreamDrainSpec extends Specification {
     }
 
     // FR2: an interrupted round thread is a different infrastructure failure from an
-    // expired grace — the drain may have been about to finish, so the diagnostic must
-    // not blame the grace or advise raising it.
-    // Scenario: executor/agent-executor / An interrupted wait is not blamed on the grace
-    def "await reports an interrupted round thread as an interruption, not an expired grace"() {
+    // expired post-exit bound — the drain may have been about to finish, so the diagnostic
+    // must not blame the bound.
+    // Scenario: executor/agent-executor / An interrupted wait is not blamed on the bound
+    def "await reports an interrupted round thread as an interruption, not an expired post-exit bound"() {
         given: 'a drain that would need far longer than the round thread is willing to wait'
         def released = new AtomicBoolean()
         def drain = StreamDrain.start(spinningStream(released), clock, { event -> })
@@ -195,9 +201,10 @@ class StreamDrainSpec extends Specification {
         when:
         drain.await(Duration.ofSeconds(30))
 
-        then: 'the failure names the interruption and never the grace'
+        then: 'the failure names the interruption and never the bound'
         def e = thrown(StreamDrainInterruptedException)
-        !e.message.contains('tail-drain-grace')
+        e.message.contains('interrupted')
+        !e.message.contains('post-exit bound')
 
         and: 'the interrupt status is preserved for the caller'
         Thread.interrupted()
@@ -223,8 +230,8 @@ class StreamDrainSpec extends Specification {
         then: 'the stream is closed'
         closed.get()
 
-        and: 'the drain thread has finished — a one-millisecond await no longer times out'
-        drain.await(Duration.ofMillis(1)).isEmpty()
+        and: 'the drain thread finishes well before its read would have ended on its own'
+        drain.await(Duration.ofSeconds(5)).isEmpty()
     }
 
     // NFR-R1: and the teardown's interrupt is what releases a drain blocked on a read
@@ -252,8 +259,42 @@ class StreamDrainSpec extends Specification {
         when:
         drain.close()
 
-        then: 'the drain thread has finished'
-        drain.await(Duration.ofMillis(1)).isEmpty()
+        then: 'the drain thread finishes well before its read would have ended on its own'
+        drain.await(Duration.ofSeconds(5)).isEmpty()
+    }
+
+    // D17 of fix-terminal-receipt-convergence: the post-exit bound of the round's handle is the
+    // only wait; the teardown releases the drain and returns, it adds no join of its own.
+    def "close returns at once, without waiting for a drain its release has not yet ended"() {
+        given: 'a stream that neither its close nor an interrupt releases for a while'
+        def unblock = new CountDownLatch(1)
+        def source = new InputStream() {
+                    @Override
+                    int read() {
+                        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+                        while (unblock.count> 0 && System.nanoTime() <deadline) {
+                            try {
+                                unblock.await(10, TimeUnit.MILLISECONDS)
+                            } catch (InterruptedException ignored) {
+                                // ignored, as a read parked in the kernel ignores it
+                            }
+                        }
+                        -1
+                    }
+                }
+        def drain = StreamDrain.start(source, clock, { event -> })
+
+        when:
+        long startedAt = System.nanoTime()
+        drain.close()
+        def took = Duration.ofNanos(System.nanoTime() - startedAt)
+
+        then:
+        took <Duration.ofMillis(500)
+
+        cleanup:
+        unblock.countDown()
+        drain.await(Duration.ofSeconds(5))
     }
 
     // D3: a genuine I/O failure while the process is alive propagates from await.

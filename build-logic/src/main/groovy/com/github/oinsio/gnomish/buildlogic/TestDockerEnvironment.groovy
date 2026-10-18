@@ -30,7 +30,7 @@ import org.gradle.process.ProcessForkOptions
  *       exists, where Docker Desktop links {@code buildx} on macOS.
  *   <li>{@code DOCKER_HOST} is the operator's own when set; otherwise the endpoint of the
  *       operator's current context ({@link DockerContextEndpoint}, one {@code docker} process per
- *       build). With it set, the CLI and Testcontainers talk to one daemon by construction.
+ *       build, found on the client's {@code PATH}). With it set, the CLI and Testcontainers talk to one daemon by construction.
  *   <li>{@code DOCKER_CONTEXT} is removed: the clean configuration holds no contexts.
  *   <li>{@code TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE} is {@code /var/run/docker.sock} on a macOS
  *       host with a {@code unix://} endpoint, unless the operator set it: Testcontainers mounts the
@@ -146,6 +146,7 @@ final class TestDockerEnvironment {
         if (!extra.has(RESOLVED)) {
             extra.set(RESOLVED, project.providers.of(DockerContextEndpoint) {
                 it.parameters.executable = host.dockerExecutable
+                it.parameters.clientPath = project.providers.environmentVariable('PATH')
                 it.parameters.operatorConfig = project.providers.environmentVariable(CONFIG)
                 it.parameters.operatorContext = project.providers.environmentVariable(CONTEXT)
             }.get())

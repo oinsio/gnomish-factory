@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.HostBindingProvider
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
 import com.github.oinsio.gnomish.sandbox.SegmentPlanner
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
@@ -64,7 +65,7 @@ class ContainerFreshSegmentSpec extends Specification implements BareGitRepoFixt
     }
 
     private static String inBox(TaskExecutionEnvironment e, String script) {
-        def handle = e.exec(new ExecCommand(['sh', '-c', script], [:], null, true))
+        def handle = e.exec(new ExecCommand(['sh', '-c', script], [:], null, StderrPolicy.MERGED))
         def out = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8).trim()
         handle.waitForExit()
         out

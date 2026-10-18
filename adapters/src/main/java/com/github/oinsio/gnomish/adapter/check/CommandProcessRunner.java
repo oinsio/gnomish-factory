@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
+import com.github.oinsio.gnomish.sandbox.StderrPolicy;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.time.Duration;
 import java.time.InstantSource;
@@ -31,10 +32,13 @@ import org.slf4j.LoggerFactory;
  * caller to classify, carrying the tail captured so far, rather than a run that
  * hangs until an operator notices. The tail is drained concurrently with the
  * command ({@link BoundedTail}), because a stream read to its end on this thread
- * is precisely what a hung command never lets return.
+ * is precisely what a hung command never lets return; it is joined with the
+ * handle's post-exit bound, the runner holding no bound of its own (design D17 of
+ * fix-terminal-receipt-convergence).
  *
  * <p>Implements FR7, FR8, D6 of add-manual-run; FR4 of add-sandbox-core; FR6,
- * FR12, NFR-O1, D12 of bound-subprocess-commands.
+ * FR12, NFR-O1, D12 of bound-subprocess-commands; FR19 of
+ * fix-terminal-receipt-convergence.
  */
 final class CommandProcessRunner {
 
@@ -47,9 +51,6 @@ final class CommandProcessRunner {
      * through {@code factory.check-command-timeout}.
      */
     static final Duration DEFAULT_CHECK_TIMEOUT = Duration.ofMinutes(30);
-
-    /** How long the tail drain is waited on when a straggler still holds the pipe open (D2). */
-    static final Duration TAIL_JOIN_BOUND = Duration.ofSeconds(2);
 
     /**
      * The exit code reported when the command never got to choose one. Diagnostic
@@ -122,7 +123,7 @@ final class CommandProcessRunner {
         Map<String, String> env = findingsPath == null ? Map.of() : Map.of(FINDINGS_FILE_ENV_VAR, findingsPath);
         ExecHandle handle;
         try {
-            handle = environment.exec(new ExecCommand(shellCommand(check), env, null, true));
+            handle = environment.exec(new ExecCommand(shellCommand(check), env, null, StderrPolicy.MERGED));
         } catch (ProcessStartException e) {
             return null;
         }
@@ -131,10 +132,11 @@ final class CommandProcessRunner {
         BoundedTail tail = BoundedTail.start(handle.output());
         ExecHandle.Wait ended = handle.waitForExitOrTimeout(checkTimeout, clock);
         report(check, ended, Duration.ofNanos(System.nanoTime() - startedAt));
-        // Bounded on both paths: the command is over either way, so the drain has only the pipe's
-        // remaining bytes to read — unless something that escaped the tree still holds the pipe
-        // open, and neither a verdict nor a timeout report may wait on that (design D2).
-        String outputTail = tail.join(TAIL_JOIN_BOUND);
+        // Bounded on every path, by the handle's own post-exit bound (design D17 of
+        // fix-terminal-receipt-convergence): the command is over either way, so the drain has only
+        // the pipe's remaining bytes to read — unless something that escaped the tree still holds
+        // the pipe open, and neither a verdict nor a timeout report may wait on that.
+        String outputTail = tail.join(handle);
         // Only a command that chose its own exit code has one; after a kill the code is the
         // signal's, which would read as an ordinary red check.
         int exitCode = ended instanceof ExecHandle.Wait.Exited ? handle.waitForExit() : UNKNOWN_EXIT_CODE;

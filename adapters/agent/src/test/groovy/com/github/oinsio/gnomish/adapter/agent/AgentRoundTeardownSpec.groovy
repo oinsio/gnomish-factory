@@ -7,8 +7,10 @@ import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -38,13 +40,19 @@ class AgentRoundTeardownSpec extends Specification {
     '{"type":"result","subtype":"success","session_id":"s-1","result":"done",' +
     '"usage":{"input_tokens":"many"},"modelUsage":{"claude-fake-main-1":"not-an-object"}}\n'
 
-    private ExecutionResult runRound(ExecHandle handle, Duration grace = Duration.ofSeconds(5)) {
+    /** The command the round launched last: where its stderr went. */
+    ExecCommand launched
+
+    private ExecutionResult runRound(ExecHandle handle) {
         def environment = Stub(TaskExecutionEnvironment) {
-            exec(_ as ExecCommand) >> handle
+            exec(_ as ExecCommand) >> { ExecCommand command ->
+                launched = command
+                handle
+            }
         }
         ExecutorRoundExecution.run(
-                new AgentRoundEquipment(new FactoryProperties('factory-01', 'claude', grace, null, null, null),
-                new VirtualClock(), { event -> }, new AgentRoundResultExtractor(), ChildEnvAllowlist.none()),
+                new AgentRoundEquipment(new FactoryProperties('factory-01', 'claude', null, null),
+                new VirtualClock(), { event -> }, new AgentRoundResultExtractor(), ChildEnvAllowlist.none(), RoundScratchDirectory.HOST_TEMP),
                 new DecisionFileReader(),
                 StageExecutorRequests.request(workspaceDir),
                 'prompt',
@@ -76,16 +84,18 @@ class AgentRoundTeardownSpec extends Specification {
         result.usage().wallTime() == Duration.ofSeconds(7)
     }
 
-    // NFR-R1 of fix-round-stdout-drain: try-with-resources around the drain is what guarantees it
+    // NFR-R1 of fix-round-stdout-drain: try-with-resources around the drain is what guarantees it;
+    //     FR20 of fix-terminal-receipt-convergence: the round scratch directory leaves the same way
     // Scenario: executor/agent-executor / No reader outlives the round
-    def "NFR-R1: after a round that #ending, its stdout is closed and its drain thread has ended"() {
+    // Scenario: executor/agent-executor / The stderr file leaves with the round
+    def "NFR-R1: after a round that #ending, its stdout is closed, its drain thread has ended and no file of it remains"() {
         given:
         def stdout = new TrackedStream(content)
-        def handle = new ScriptedHandle(stdout, wait)
+        def handle = new ScriptedHandle(stdout, wait, Duration.ofMillis(200))
 
         when:
         try {
-            runRound(handle, Duration.ofMillis(200))
+            runRound(handle)
         } catch (ExecutorFailure ignored) {
             // the timeout and the adapter failure end the round by an exception; its teardown is the subject
         }
@@ -98,6 +108,9 @@ class AgentRoundTeardownSpec extends Specification {
         reader.join(Duration.ofSeconds(5))
         !reader.isAlive()
 
+        and: 'the round scratch directory, with the stderr file in it, left the host with the round'
+        !Files.exists((launched.stderr() as StderrPolicy.ToFile).file().parent)
+
         where:
         ending | content | wait
         'exited normally' | UNREADABLE_TELEMETRY | new ExecHandle.Wait.Exited(Duration.ofSeconds(1))
@@ -109,14 +122,16 @@ class AgentRoundTeardownSpec extends Specification {
         new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8))
     }
 
-    /** A process handle whose stdout and wait outcome the feature scripts. */
+    /** A process handle whose stdout, wait outcome and post-exit bound the feature scripts. */
     static final class ScriptedHandle implements ExecHandle {
         final InputStream stdout
         final ExecHandle.Wait wait
+        final Duration postExitBound
 
-        ScriptedHandle(InputStream stdout, ExecHandle.Wait wait) {
+        ScriptedHandle(InputStream stdout, ExecHandle.Wait wait, Duration postExitBound = Duration.ofSeconds(5)) {
             this.stdout = stdout
             this.wait = wait
+            this.postExitBound = postExitBound
         }
 
         InputStream output() {
@@ -134,12 +149,16 @@ class AgentRoundTeardownSpec extends Specification {
         int waitForExit() {
             0
         }
+
+        Duration postExitBound() {
+            postExitBound
+        }
     }
 
     /**
      * A stdout that records the thread reading it and its own close. With content it ends after the
      * content; without, it blocks like a live pipe until it is closed — so only the round's teardown
-     * can release its reader (the adapter failure: the drain outlives the tail-drain grace).
+     * can release its reader (the adapter failure: the drain outlives the handle's post-exit bound).
      */
     static final class TrackedStream extends InputStream {
         final CountDownLatch closed = new CountDownLatch(1)

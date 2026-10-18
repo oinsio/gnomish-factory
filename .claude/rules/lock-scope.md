@@ -85,6 +85,27 @@ under a monitor no longer starves the scheduler — and for that same reason, sw
 `synchronized` for `ReentrantLock` is not a fix for anything this rule covers. What this rule
 is about is unchanged: the waiters, who are blocked either way.
 
+## A lock inside the JDK: no pipe into a child
+
+A child's standard input is never a pipe the factory writes into. The JDK's `Process` stdin is a
+`BufferedOutputStream` whose `write()` holds the stream's monitor while it is parked on a full
+pipe, so `close()` from another thread blocks on that monitor in `flush()`, an interrupt does
+nothing, and the JDK's reaper thread blocks behind it in the `synchronized` `processExited`. A
+descendant that inherited the read end and never drains it holds the pump forever, and no bound
+can be put on it from outside. The read side is different: `ProcessPipeInputStream.close()`
+takes its own lock and wakes a parked `read()`. So a design that needs to hand a child bytes
+passes them to the launch owner as a `StdinSource` (a file the child inherits, or `/dev/null`),
+and a new stdin pump is refused at design; the `lifecycle/subprocess-supervision` capability owns
+the rule ("A child's input is a file or nothing").
+
+The failure this exists for: the factory's stdin writers — `GitExecStreams.feed`,
+`ContainerFileChannel.pump`, `ChildProcessStdin.feed` and the calling-thread write of
+`CaptureRunner.run` — were each parked for good by a descendant holding the child's stdin, and
+every other launch left the JDK's default pipe open for one to inherit. An amendment of design
+D15 of `fix-terminal-receipt-convergence` tried to bound the writers as the read side is bounded,
+by closing the write end; on JDK 25.0.3 the close blocked on the monitor. Design D20 of that
+change removed every pump instead.
+
 ## Writers from different processes
 
 A lock in the JVM covers one process. A step that two factory processes may run at once on one
@@ -142,3 +163,5 @@ a change that adds or widens one says in its artifacts which case it is: state-g
 7. A step two factory processes may run at once: `design.md` lists its sequence with the lock
    each step takes, the first lock with no compare-and-swap behind it is removed or moved
    behind the decision, and a real-thread race spec is named in the single-owner table.
+8. A child that needs input gets it through the launch owner's `StdinSource`, never from a
+   thread writing into its stdin pipe.

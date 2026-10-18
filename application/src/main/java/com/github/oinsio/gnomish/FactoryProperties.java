@@ -36,12 +36,6 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  *     to blank
  * @param agentCliBinary path or name of the agent CLI binary ({@code factory.agent-cli-binary});
  *     defaults to {@code "claude"} (resolved from {@code PATH}) when unset
- * @param agentCliTailDrainGrace how long a round waits after the agent process exits for its
- *     stdout drain to deliver the already-piped tail ({@code factory.agent-cli-tail-drain-grace});
- *     defaults to 5 seconds when unset, rejected when non-positive — installation-level like
- *     {@code agentCliBinary}, since it characterizes the host rather than the repo's pipeline
- *     (FR7, design D2 of fix-round-stdout-drain); documented in the installation-properties table
- *     of {@code docs/guides/operator-guide-run.md} (UX3 of fix-round-stdout-drain)
  * @param tracker the tracker abort-backoff policy defaults ({@code factory.tracker.*}); defaults
  *     to {@link Tracker#Tracker(Duration, Duration)}'s own defaults when unset
  * @param check the check providers' operator subsections ({@code factory.check.<provider>.*}),
@@ -67,7 +61,6 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
 public record FactoryProperties(
         @ConfigLevel(Level.ANY) String instanceName,
         @ConfigLevel(Level.ANY) String agentCliBinary,
-        @ConfigLevel(Level.HOST) Duration agentCliTailDrainGrace,
         Tracker tracker,
         @ConfigLevel(Level.PROJECT) Map<String, Map<String, Object>> check,
         @ConfigLevel(Level.ANY) Map<String, Map<String, Object>> connections,
@@ -87,7 +80,6 @@ public record FactoryProperties(
     public FactoryProperties(
             @Nullable String instanceName,
             @Nullable String agentCliBinary,
-            @Nullable Duration agentCliTailDrainGrace,
             @Nullable Tracker tracker,
             @Nullable Map<String, Map<String, Object>> check,
             @Nullable Map<String, Map<String, Object>> connections,
@@ -96,7 +88,6 @@ public record FactoryProperties(
             @Nullable Duration checkCommandTimeout) {
         this.instanceName = FactoryPropertyDefaults.instanceName(instanceName);
         this.agentCliBinary = FactoryPropertyDefaults.agentCliBinary(agentCliBinary);
-        this.agentCliTailDrainGrace = FactoryPropertyDefaults.tailDrainGrace(agentCliTailDrainGrace);
         this.tracker = FactoryPropertyDefaults.tracker(tracker);
         this.check = FactoryPropertyDefaults.subsections(check);
         this.connections = FactoryPropertyDefaults.subsections(connections);
@@ -110,21 +101,6 @@ public record FactoryProperties(
                 checkCommandTimeout,
                 FactoryPropertyDefaults.DEFAULT_CHECK_COMMAND_TIMEOUT,
                 "factory.check-command-timeout");
-    }
-
-    /**
-     * Convenience for the callers predating the three subprocess deadlines (FR5, design D8 of
-     * bound-subprocess-commands): each deadline keeps its documented default. Property binding
-     * ignores this one too — see the note on {@code @ConstructorBinding} above.
-     */
-    public FactoryProperties(
-            @Nullable String instanceName,
-            @Nullable String agentCliBinary,
-            @Nullable Duration agentCliTailDrainGrace,
-            @Nullable Tracker tracker,
-            @Nullable Map<String, Map<String, Object>> check,
-            @Nullable Map<String, Map<String, Object>> connections) {
-        this(instanceName, agentCliBinary, agentCliTailDrainGrace, tracker, check, connections, null, null, null);
     }
 
     /**
@@ -143,9 +119,9 @@ public record FactoryProperties(
     }
 
     /**
-     * Convenience for the callers predating the tail-drain grace (FR7 of fix-round-stdout-drain):
-     * the grace keeps its 5-second default. Property binding ignores this one too — see the note
-     * on {@code @ConstructorBinding} above.
+     * Convenience for the callers predating the three subprocess deadlines (FR5, design D8 of
+     * bound-subprocess-commands): each deadline keeps its documented default. Property binding
+     * ignores this one too — see the note on {@code @ConstructorBinding} above.
      */
     public FactoryProperties(
             @Nullable String instanceName,
@@ -153,7 +129,7 @@ public record FactoryProperties(
             @Nullable Tracker tracker,
             @Nullable Map<String, Map<String, Object>> check,
             @Nullable Map<String, Map<String, Object>> connections) {
-        this(instanceName, agentCliBinary, null, tracker, check, connections);
+        this(instanceName, agentCliBinary, tracker, check, connections, null, null, null);
     }
 
     /**

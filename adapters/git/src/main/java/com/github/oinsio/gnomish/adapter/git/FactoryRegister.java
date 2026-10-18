@@ -158,12 +158,17 @@ final class FactoryRegister {
     /**
      * Origin's register as the last touchpoint fetch landed it, or {@code null} when origin carries
      * none. A read cut off before its own exit refuses ({@link GitReadGate}) rather than answering
-     * "none", which would move the branch without the register origin holds beside it.
+     * "none", which would move the branch without the register origin holds beside it — and so does
+     * a zero exit that printed no full object id ({@link VerifiedTip#answered}, FR17 of
+     * fix-terminal-receipt-convergence).
      */
     private @Nullable String originRegister(Path repo, String taskId) {
         String tracking = FactoryRegisterRefs.of(taskId).trackingName();
-        return VerifiedTip.read(GitReadGate.answered(
-                        tracking, "rev-parse", runner.run(repo, "rev-parse", "--verify", "--quiet", tracking)))
+        return VerifiedTip.answered(
+                        tracking,
+                        "rev-parse",
+                        GitReadGate.answered(
+                                tracking, "rev-parse", runner.run(repo, "rev-parse", "--verify", "--quiet", tracking)))
                 .orElse(null);
     }
 }

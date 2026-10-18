@@ -55,9 +55,11 @@ class UntrustedTextSinkGateSpec extends Specification {
 
     /**
      * Production throwables {@link CarrierSinkScan#THROWABLE} cannot match, each listed with the reason its
-     * construction is not a text sink at all. {@code ExecutorFailure} wraps a cause and a denial
-     * list — its constructor takes no text, so there is nothing for a carrier to be laundered
-     * through. A throwable that carries text must wear one of the three suffixes instead of
+     * construction is not a text sink at all. {@code ExecutorFailure} wraps a cause, a denial
+     * list and a stderr tail it takes as the carrier itself (FR20 of
+     * fix-terminal-receipt-convergence) — the D5 exit contract, derived by
+     * {@code CarrierConstructors} and pinned by {@code TypedExceptionMessageSpec} — and no
+     * {@code String} detail, so there is nothing for a carrier to be laundered through. A throwable that carries text must wear one of the three suffixes instead of
      * joining this list, which is what the feature below enforces.
      */
     private static final Set<String> TEXTLESS_THROWABLES = ['ExecutorFailure'] as Set
@@ -309,7 +311,6 @@ class UntrustedTextSinkGateSpec extends Specification {
             'model',
             'name',
             'note',
-            'output',
             'question',
             'reason',
             'render',

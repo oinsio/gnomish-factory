@@ -28,6 +28,7 @@ if (!shared.has('mutationScope')) {
         parameters.moduleDirs = root.allprojects.collectEntries { [it.path, root.relativePath(it.projectDir)] }
         parameters.requested = providers.gradleProperty('pitScope')
         parameters.taskNames = gradle.startParameter.taskNames
+        parameters.clientPath = providers.environmentVariable('PATH')
     })
     shared.set('mutationScopeSummaries', new TreeMap<String, String>())
     shared.set('mutationScopeScheduled', new TreeSet<String>())

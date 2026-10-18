@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment;
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch;
 import java.time.InstantSource;
 
 /**
@@ -28,7 +29,8 @@ record HostCheckEnvironmentSource(InstantSource clock, ChildEnvAllowlist childEn
             throw new CheckEnvironmentUnavailableException("command check requires a DirectoryWorkspace, got "
                     + workspace.getClass().getName());
         }
-        var environment = new HostTaskExecutionEnvironment(directoryWorkspace.root(), clock, childEnv);
+        var environment =
+                new HostTaskExecutionEnvironment(directoryWorkspace.root(), clock, childEnv, ProcessLaunch.grouped());
         environment.materialize("workspace:" + directoryWorkspace.root().getFileName(), null);
         return new Acquired() {
 

@@ -23,8 +23,8 @@ import org.gradle.testkit.runner.GradleRunner
  * <p>The build under test runs {@code git} through a wrapper, handed to the source as its
  * {@code gitExecutable}, that appends each invocation — {@code GIT_OPTIONAL_LOCKS} value, then argv —
  * to {@code #invocations()}, so a scenario can count the processes (NFR-P1) and see their
- * environment (NFR-R4) without tracing. A {@code PATH} entry cannot do this: the JDK resolves the
- * executable against the daemon's own {@code PATH}, not the environment TestKit hands the build.
+ * environment (NFR-R4) without tracing. {@link #gitFromPath} drops the wrapper, so the source finds
+ * {@code git} by its bare name on the {@code PATH} a scenario hands the build ({@link #scopeWith}).
  */
 final class MiniScopeRepository {
 
@@ -48,7 +48,7 @@ printf '%s %s\\n' "\${GIT_OPTIONAL_LOCKS:-unset}" "\$*" >> '${invocationLog}'
 exec '${realGit()}' "\$@"
 """
         wrapper.toFile().setExecutable(true)
-        writeBuild()
+        writeBuild(true)
     }
 
     /**
@@ -101,9 +101,20 @@ exec '${realGit()}' "\$@"
         Files.exists(invocationLog) ? invocationLog.readLines() : []
     }
 
+    /** The mini build without the wrapper: the source runs {@code git} found on the client's {@code PATH}. */
+    MiniScopeRepository gitFromPath() {
+        writeBuild(false)
+        this
+    }
+
     /** Runs the mini build and returns the scope it printed, plus the raw result. */
     Map scope(String... arguments) {
-        BuildResult result = runner(arguments).build()
+        scopeWith([:], arguments)
+    }
+
+    /** {@link #scope}, with {@code environment} — a client {@code PATH} — laid over the build's. */
+    Map scopeWith(Map<String, String> environment, String... arguments) {
+        BuildResult result = runner(arguments).withEnvironment(runnerEnvironment() + environment).build()
         def line = result.output.readLines().find { it.startsWith('SCOPE ') }
         assert line != null: 'the mini build printed no scope'
         (new JsonSlurper().parseText(line.substring('SCOPE '.length())) as Map) + [output: result.output]
@@ -111,15 +122,19 @@ exec '${realGit()}' "\$@"
 
     /** Runs whatever build the repository holds — a caller may replace the scope-printing one. */
     GradleRunner runner(String... arguments) {
-        def environment = new HashMap<String, String>(System.getenv())
-        environment.keySet().removeIf { it.startsWith('GIT_') }
-        environment.putAll(gitEnvironment())
         String[] tasks = arguments
         if (tasks.length == 0) {
             tasks = new String[] {'printScope'}
         }
         GradleRunnerSupport.runner(dir, tasks)
-                .withEnvironment(environment)
+                .withEnvironment(runnerEnvironment())
+    }
+
+    private Map<String, String> runnerEnvironment() {
+        def environment = new HashMap<String, String>(System.getenv())
+        environment.keySet().removeIf { it.startsWith('GIT_') }
+        environment.putAll(gitEnvironment())
+        environment
     }
 
     private Map<String, String> gitEnvironment() {
@@ -128,7 +143,7 @@ exec '${realGit()}' "\$@"
          GIT_CEILING_DIRECTORIES: dir.parent.toString()]
     }
 
-    private void writeBuild() {
+    private void writeBuild(boolean wrapped) {
         write('settings.gradle', "rootProject.name = 'mini-scope'\n")
         write('build.gradle', """\
 // No convention plugin is applied (nothing to resolve, so every run stays offline): the scope
@@ -149,8 +164,8 @@ def obtained = providers.of(MutationScopeSource) {
     parameters.moduleDirs = [${MODULES.collect { k, v -> "'${k}': '${v}'" }.join(', ')}]
     parameters.requested = providers.gradleProperty('pitScope')
     parameters.taskNames = gradle.startParameter.taskNames
-    parameters.gitExecutable = '${GradleRunnerSupport.quotedPath(wrapper.toString())}'
-}.get()
+    parameters.clientPath = providers.environmentVariable('PATH')
+${wrapped ? "    parameters.gitExecutable = '" + GradleRunnerSupport.quotedPath(wrapper.toString()) + "'\n" : ''}}.get()
 def printed = JsonOutput.toJson([mode: obtained.mode.name(), base: obtained.base, baseOrigin: obtained.baseOrigin,
         reason: obtained.reason, globs: obtained.globs, changedClasses: obtained.changedClasses,
         widened: obtained.widened])

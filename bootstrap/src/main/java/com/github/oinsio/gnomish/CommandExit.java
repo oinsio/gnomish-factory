@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish;
 
 import com.github.oinsio.gnomish.app.OrderedExit;
+import com.github.oinsio.gnomish.app.serve.ProcessTreeKiller;
+import com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.jspecify.annotations.NullMarked;
@@ -31,6 +33,9 @@ import org.springframework.context.ConfigurableApplicationContext;
  * generic hook is registered here that runs the same sequence — and stands down for {@code serve},
  * which reserves the ownership before it registers a hook of its own (see {@code
  * ServeShutdownWiring}). Two hooks run concurrently in the JVM; only one may close the context.
+ * Before it closes the context, the generic hook runs the shutdown step — the process tree killed
+ * and every live process group swept — since a child in its own session receives nothing from the
+ * terminal (design D19 of fix-terminal-receipt-convergence, fourth amendment).
  *
  * <p>The context is captured by an initializer rather than from {@link SpringApplication#run}'s
  * return value, because the sequence has to be installed <em>before</em> the runners start: on the
@@ -40,7 +45,8 @@ import org.springframework.context.ConfigurableApplicationContext;
  * <p>Before the run, the command line is registered in the bootstrap registry for the
  * configuration loader ({@link #registerArguments}).
  *
- * <p>Implements FR9, NFR-R1 of harden-logging-observability; FR3, FR5 of add-project-registry.
+ * <p>Implements FR9, NFR-R1 of harden-logging-observability; FR3, FR5 of add-project-registry; FR21
+ * of fix-terminal-receipt-convergence (D19, fourth amendment).
  */
 @NullMarked
 final class CommandExit {
@@ -57,11 +63,11 @@ final class CommandExit {
      *
      * <p>{@code @DoNotMutate} for the "out-of-process delegation" reason of
      * `.claude/rules/testing.md`: the body is one hand-off into the seamed overload below with the
-     * two production arguments — no decision, no branch, nothing computed here. Those arguments are
+     * three production arguments — no decision, no branch, nothing computed here. Those arguments are
      * what makes it unassertable in process: it registers a real JVM shutdown hook (which a spec
      * cannot take back — the registry hands out no handle) and stops the real logging system the
-     * remaining specs of the same JVM write through, which is exactly why the seamed overload
-     * exists. The line is exercised end to end by the {@code com.github.oinsio.gnomish.e2e.*}
+     * remaining specs of the same JVM write through, and its shutdown step would kill the test
+     * JVM's own children, which is exactly why the seamed overload exists. The line is exercised end to end by the {@code com.github.oinsio.gnomish.e2e.*}
      * suites, which spawn the packaged jar and reach it through {@link FactoryApplication#main};
      * everything it wires — the install order, the hook body, the deferral to the serve hook — is
      * mutation-covered through the seamed overload by {@code CommandExitSpec}.
@@ -71,21 +77,33 @@ final class CommandExit {
      */
     @DoNotMutate
     static void start(SpringApplication application, String[] args) {
-        start(application, args, CommandExit::stopLogging, Runtime.getRuntime()::addShutdownHook);
+        start(
+                application,
+                args,
+                CommandExit::stopLogging,
+                new RealProcessTreeKiller(),
+                Runtime.getRuntime()::addShutdownHook);
     }
 
     /**
-     * Same as {@link #start(SpringApplication, String[])}, with the logging-system teardown and the
-     * JVM hook registration seamed so a spec can assert the installed order without stopping the
-     * logging system its own remaining specs write through, and without leaving real hooks behind.
+     * Same as {@link #start(SpringApplication, String[])}, with the logging-system teardown, the
+     * shutdown step and the JVM hook registration seamed so a spec can assert the installed order
+     * without stopping the logging system its own remaining specs write through, without killing the
+     * test JVM's children, and without leaving real hooks behind. The shutdown step is the one the
+     * generic signal hook runs before the context closes (design D19 of
+     * fix-terminal-receipt-convergence, fourth amendment; FR21).
      */
     static void start(
-            SpringApplication application, String[] args, Runnable stopLogging, Consumer<Thread> hookRegistrar) {
+            SpringApplication application,
+            String[] args,
+            Runnable stopLogging,
+            ProcessTreeKiller shutdownStep,
+            Consumer<Thread> hookRegistrar) {
         AtomicReference<ConfigurableApplicationContext> contextRef = new AtomicReference<>();
         registerArguments(application, args);
         application.setRegisterShutdownHook(false);
         application.addInitializers(contextRef::set);
-        OrderedExit.install(() -> close(contextRef.get()), stopLogging);
+        OrderedExit.install(() -> close(contextRef.get()), stopLogging, shutdownStep);
         hookRegistrar.accept(new Thread(OrderedExit::onSignal, SIGNAL_HOOK_THREAD_NAME));
         application.run(args);
     }

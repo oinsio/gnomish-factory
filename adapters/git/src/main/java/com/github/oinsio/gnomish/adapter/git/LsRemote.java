@@ -27,6 +27,9 @@ import java.nio.file.Path;
  */
 final class LsRemote {
 
+    /** The subcommand, spelled here alone; a refusal of its answer names it from here too. */
+    static final String COMMAND = "ls-remote";
+
     private LsRemote() {}
 
     /**
@@ -39,7 +42,7 @@ final class LsRemote {
      */
     static GitCommandResult refs(GitRunner runner, Path repo, String... refPatterns) {
         String[] argv = new String[refPatterns.length + 3];
-        argv[0] = "ls-remote";
+        argv[0] = COMMAND;
         argv[1] = "--end-of-options";
         argv[2] = OriginRemote.NAME;
         System.arraycopy(refPatterns, 0, argv, 3, refPatterns.length);

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.subprocess
 
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
@@ -51,8 +52,13 @@ class CaptureRunnerDrainSpec extends Specification implements FakeBinaries {
         Path pidFile = dir.resolve('holder.pid')
         Path binary = fakeBinary('leaky')
 
-        and: 'a runner whose kill-path drain join is a fraction of what the holder will live'
-        CaptureRunner runner = new CaptureRunner(new ProcessSupervisor(Duration.ofMillis(300)), Duration.ofMillis(300))
+        and: 'a runner whose kill-path drain join is a fraction of what the holder will live, its sweep'
+        and: 'noting whether the holder was still alive when the drains had let go'
+        Map<String, Boolean> atSweep = [:]
+        ProcessGroupSweep sweep = new ProcessGroupSweep(new ProcessProbes(GroupedLaunch.groupSignal(), [], {
+            atSweep.holderAlive = holder(pidFile).isAlive()
+        }))
+        CaptureRunner runner = new CaptureRunner(new ProcessSupervisor(Duration.ofMillis(300)), ProcessLaunch.grouped(), sweep)
 
         when:
         long startedAt = System.nanoTime()
@@ -66,9 +72,9 @@ class CaptureRunnerDrainSpec extends Specification implements FakeBinaries {
         and: 'the return happened on the bound, not on the pipe closing'
         elapsed <Duration.ofSeconds(6)
 
-        and: 'proof the pipe was still held open when the result came back'
-        ProcessHandle holder = ProcessHandle.of(Long.parseLong(Files.readString(pidFile).trim())).orElseThrow()
-        holder.isAlive()
+        and: 'proof the pipe was still held open when the drains let go; the group sweep ended the holder after'
+        atSweep.holderAlive
+        ended(pidFile)
 
         cleanup:
         ProcessHandle.of(Long.parseLong(Files.readString(pidFile).trim())).ifPresent {
@@ -76,28 +82,64 @@ class CaptureRunnerDrainSpec extends Specification implements FakeBinaries {
         }
     }
 
-    def "design D2, NFR-R3: a normal exit waits for its output rather than truncating it"() {
-        given: 'a binary that leaves a holder of its stdout still writing after it has exited'
-        // The parent lingers half a second between its own line and its exit on purpose. The JDK
-        // hands back a pipe stream whose process reaper, on exit, keeps only the bytes already
-        // available and closes the real descriptor — everything a leaked holder writes afterwards
-        // is lost. A drain parked inside read() holds that stream's own monitor and so blocks the
-        // reaper until the holder is done, which is what makes post-exit output observable at all.
-        // Without the linger the drain's virtual thread races the exit for that first read, and a
-        // loaded runner loses it: observed as a CI-only failure of this feature on 2026-09-13.
-        Path binary = fakeBinary('trailing')
+    // Scenario: lifecycle/subprocess-supervision / A spec controls the exit and the pipes
+    def "design D2, NFR-R3, FR16: a normal exit waits for output a holder writes after it, within the bound"() {
+        given: 'a fake process that has spoken and exits cleanly, its stdout held open as by a descendant'
+        // Every step is ordered by the spec, none by the scheduler (design D16 of
+        // fix-terminal-receipt-convergence): once the wait has seen the exit and the drain has read
+        // what the parent spoke, the holder speaks once more and releases the pipe — on the waiting
+        // thread, after the exit and before the post-exit join, which is where output arriving
+        // after the process itself exited meets the capture. This replaces a real script that
+        // lingered half a second so its drain would win the race for the first read.
+        FakeProcess process = FakeProcess.running()
+        process.holdOpen()
+        process.writeStdout('from-the-parent\n')
+        process.onWaitReturn {
+            if (!process.awaitStdoutRead(Duration.ofSeconds(10))) {
+                throw new AssertionError('the drain never read what the parent had spoken' as Object)
+            }
+            process.writeStdout('from-the-holder\n')
+            process.release()
+        }
+        process.exit(0)
 
-        and: 'a runner whose kill-path drain bound is far too short to have produced that output'
-        CaptureRunner runner = new CaptureRunner(new ProcessSupervisor(), Duration.ofMillis(1))
+        and: 'a runner over the default supervisor, whose post-exit bound the release falls well inside'
+        CaptureRunner runner = new CaptureRunner(new ProcessSupervisor(), { builder, stdin ->
+            process
+        } as ProcessLaunch)
+
+        when:
+        Captured captured = runner.run(new ProcessBuilder('fake'), Duration.ofSeconds(30))
+
+        then: 'the command ran to completion'
+        captured.termination() == Termination.EXITED
+        captured.exitCode() == 0
+
+        and: 'the capture is complete, including what arrived after the exit, and not flagged'
+        captured.stdout() == 'from-the-parent\nfrom-the-holder\n'
+        !captured.truncated()
+    }
+
+    def "design D2, NFR-P1: a real holder that writes after the exit and then ends never flags a clean exit"() {
+        given: 'a binary that speaks and exits at once, leaving a real holder that speaks two seconds later'
+        // The real-process twin of the feature above, with no ordering premise: which drain read
+        // comes first against the exit is a scheduling fact, and the JDK keeps the holder's late
+        // line only when the drain was already parked in read() — so it is not asserted. Either way
+        // the pipe reaches end-of-file when the holder ends, well inside the default bound.
+        Path binary = fakeBinary('trailing')
+        CaptureRunner runner = new CaptureRunner(new ProcessSupervisor(), ProcessLaunch.grouped())
 
         when:
         Captured captured = runner.run(new ProcessBuilder(binary.toString()), Duration.ofSeconds(30))
 
-        then: 'the command ran to completion, so the kill-path bound has no business here'
+        then: 'the clean exit is reported with what the parent spoke, and nothing is flagged as cut'
         captured.termination() == Termination.EXITED
-
-        and: 'the capture is complete, including what arrived after the process itself had exited'
+        captured.exitCode() == 0
         captured.stdout().contains('from-the-parent')
-        captured.stdout().contains('from-the-holder')
+        !captured.truncated()
+    }
+
+    private static ProcessHandle holder(Path pidFile) {
+        ProcessHandle.of(Long.parseLong(Files.readString(pidFile).trim())).orElseThrow()
     }
 }

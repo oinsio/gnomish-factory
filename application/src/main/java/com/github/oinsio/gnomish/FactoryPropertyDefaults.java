@@ -16,14 +16,13 @@ import org.jspecify.annotations.Nullable;
  * <p>Every parameter is {@code @Nullable} because Spring's reflective constructor binding can pass
  * null for any component despite this package's {@code @NullMarked} default.
  *
- * <p>Implements FR3 of add-project-skeleton; FR11 of add-agent-executor; FR7 of
- * fix-round-stdout-drain; FR5 of bound-subprocess-commands.
+ * <p>Implements FR3 of add-project-skeleton; FR11 of add-agent-executor; FR5 of
+ * bound-subprocess-commands.
  */
 final class FactoryPropertyDefaults {
 
     static final String DEFAULT_INSTANCE_NAME = "default";
     static final String DEFAULT_AGENT_CLI_BINARY = "claude";
-    static final Duration DEFAULT_AGENT_CLI_TAIL_DRAIN_GRACE = Duration.ofSeconds(5);
     // The three subprocess deadlines of bound-subprocess-commands (design D8). Each mirrors the
     // adapter-side constant that documents the same value for the no-argument construction path
     // (GitProcessRunner.DEFAULT_NETWORK_TIMEOUT, DockerCli.DEFAULT_COMMAND_TIMEOUT,
@@ -55,23 +54,6 @@ final class FactoryPropertyDefaults {
     /** Resolves the unset case to the {@code claude}-on-PATH default (design D7). */
     static String agentCliBinary(@Nullable String agentCliBinary) {
         return agentCliBinary == null ? DEFAULT_AGENT_CLI_BINARY : agentCliBinary;
-    }
-
-    /**
-     * Resolves the unset case to the 5-second default and rejects a non-positive value — a grace
-     * of zero or less could never absorb a piped tail, so it is a configuration mistake caught at
-     * startup, before any dialog (FR7, design D2 of fix-round-stdout-drain). A malformed value
-     * ({@code "banana"}) never reaches here: Spring's Duration conversion fails the bind first,
-     * which is the same startup error one layer up.
-     */
-    static Duration tailDrainGrace(@Nullable Duration agentCliTailDrainGrace) {
-        if (agentCliTailDrainGrace == null) {
-            return DEFAULT_AGENT_CLI_TAIL_DRAIN_GRACE;
-        }
-        if (agentCliTailDrainGrace.isZero() || agentCliTailDrainGrace.isNegative()) {
-            throw new IllegalArgumentException("factory.agent-cli-tail-drain-grace must be positive");
-        }
-        return agentCliTailDrainGrace;
     }
 
     /**

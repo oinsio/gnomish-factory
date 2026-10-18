@@ -40,6 +40,11 @@ final class ScriptedExecHandle {
                     int waitForExit() {
                         code
                     }
+
+                    @Override
+                    Duration postExitBound() {
+                        Duration.ofSeconds(5)
+                    }
                 }
     }
 }

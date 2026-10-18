@@ -55,9 +55,10 @@
  * com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist} composes the
  * layered positive allowlist (adapter base &cup; operator passthrough &cup;
  * factory-set protocol vars) every {@code exec()} child receives, with
- * credential names refused at construction; {@link
- * com.github.oinsio.gnomish.sandbox.environment.ChildProcessStdin} is the
- * shared fire-and-forget stdin delivery path for both adapters.
+ * credential names refused at construction. Neither adapter writes a child's
+ * stdin itself: both hand the command's input to the launch owner as a {@code
+ * StdinSource}, which gives the child a file or nothing (design D20 of
+ * fix-terminal-receipt-convergence).
  *
  * <p>Segment lease and self-checked construction (sandbox integration pass,
  * task 9.2, FR8, FR12, FR13, NFR-P1, D5): {@link

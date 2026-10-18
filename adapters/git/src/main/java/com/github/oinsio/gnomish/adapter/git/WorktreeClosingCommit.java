@@ -63,13 +63,20 @@ final class WorktreeClosingCommit {
             return new Outcome.Failed("git rev-parse " + branchRef, base.failureDetail("task branch read"));
         }
         // @UntrustedParser warrant (design D11): two object ids git printed for the factory's own
-        //     revisions, used as a parent argument and an equality subject, never shown as text.
+        //     revisions, each refused unless it is one full object id (FR17 of
+        //     fix-terminal-receipt-convergence), used as a parent argument and an equality subject.
         List<String> ids = base.stdout().forParsing().strip().lines().toList();
+        if (ids.size() != 2 || !ids.stream().allMatch(VerifiedTip::isObjectId)) {
+            return malformed("git rev-parse " + branchRef);
+        }
         GitCommandResult tree = runner.run(worktree, "write-tree");
         if (!tree.succeeded()) {
             return new Outcome.Failed("git write-tree", tree.failureDetail("index write"));
         }
         String treeId = tree.stdout().forParsing().strip();
+        if (!VerifiedTip.isObjectId(treeId)) {
+            return malformed("git write-tree");
+        }
         if (treeId.equals(ids.get(1))) {
             return new Outcome.Failed("git commit", UntrustedText.factory("nothing to commit in " + worktree));
         }
@@ -79,10 +86,22 @@ final class WorktreeClosingCommit {
             return new Outcome.Failed("git commit-tree", commit.failureDetail("commit write"));
         }
         String commitId = commit.stdout().forParsing().strip();
+        if (!VerifiedTip.isObjectId(commitId)) {
+            return malformed("git commit-tree");
+        }
         GitCommandResult landed = register.close(worktree, taskId, commitId, parent);
         if (!landed.succeeded()) {
             return new Outcome.Failed("closing ref transaction", landed.failureDetail("ref transaction"));
         }
         return new Outcome.Landed(commitId);
+    }
+
+    /**
+     * A step that exited zero without printing the full object ids it owes: a named failure that
+     * lands nothing, never a parent, a tree or a commit built from a prefix.
+     */
+    private static Outcome malformed(String step) {
+        return new Outcome.Failed(
+                step, UntrustedText.factory(step + " exited 0 without printing a full object id; nothing landed"));
     }
 }

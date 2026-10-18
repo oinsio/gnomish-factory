@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,7 +49,8 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR4, FR6, FR10, FR12, FR13, NFR-O1 of add-stage-engine; FR15 of add-manual-run;
  * FR2, FR3 of fix-denial-report-attachment; FR1 of fix-denial-attribution-durability;
- * FR5 of split-logtext-leaves; FR5 of make-checkpoint-gate-durable.
+ * FR5 of split-logtext-leaves; FR5 of make-checkpoint-gate-durable; FR20 of
+ * fix-terminal-receipt-convergence (the failed round's stderr tail follows the cause).
  */
 final class RoundExecution {
 
@@ -112,9 +114,16 @@ final class RoundExecution {
             // identical to the same failure without them — the wrapper adds attribution, not a
             // failure mode, and this stays ONE fault with one operator line (rules/logging.md:
             // one code, one call site).
+            // FR20 of fix-terminal-receipt-convergence: the process's stderr tail follows the cause.
             Throwable cause = ex instanceof ExecutorFailure failure ? failure.cause() : ex;
-            log.error(OperatorEvent.EXECUTOR_THREW.head() + "executor threw for {}", key, cause);
-            return new RoundOutcome.CannotExecute(key, StackTraces.render(cause), denialsOf(ex));
+            UntrustedText tail =
+                    ex instanceof ExecutorFailure failure ? failure.stderrTail() : UntrustedText.factory("");
+            log.error(
+                    OperatorEvent.EXECUTOR_THREW.head() + "executor threw for {}{}",
+                    key,
+                    StackTraces.logSuffix(tail),
+                    cause);
+            return new RoundOutcome.CannotExecute(key, StackTraces.render(cause, tail), denialsOf(ex));
         }
         Events.emit(listener, new EngineEvent.ExecutionFinished(key, result.usage()));
         return switch (result) {

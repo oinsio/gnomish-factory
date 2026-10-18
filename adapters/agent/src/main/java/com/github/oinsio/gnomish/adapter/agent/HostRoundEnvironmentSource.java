@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment;
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch;
 import java.nio.file.Path;
 import java.time.InstantSource;
 import java.util.Map;
@@ -36,7 +37,7 @@ record HostRoundEnvironmentSource(DecisionFileTransport transport, InstantSource
     @Override
     public Round openRound(StageExecutor.Request request) {
         var workspace = (DirectoryWorkspace) request.workspace();
-        var environment = new HostTaskExecutionEnvironment(workspace.root(), clock, childEnv);
+        var environment = new HostTaskExecutionEnvironment(workspace.root(), clock, childEnv, ProcessLaunch.grouped());
         DecisionFileTransport.Handle handle = transport.open();
         return new HostRound(environment, handle);
     }

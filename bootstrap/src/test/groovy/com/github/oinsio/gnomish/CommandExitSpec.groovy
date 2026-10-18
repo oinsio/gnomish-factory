@@ -47,7 +47,7 @@ class CommandExitSpec extends Specification {
     def cleanup() {
         operatorHome.close()
         ShutdownPhase.reset()
-        OrderedExit.install({}, {})
+        OrderedExit.install({}, {}, {})
         hooks.clear()
         System.clearProperty(LoggingSystem.SYSTEM_PROPERTY)
     }
@@ -65,7 +65,7 @@ class CommandExitSpec extends Specification {
         })
 
         when:
-        CommandExit.start(application, ['project', 'list'] as String[], {}, hooks.&add)
+        CommandExit.start(application, ['project', 'list'] as String[], {}, {}, hooks.&add)
 
         then:
         registered.sourceArgs.toList() == ['project', 'list']
@@ -84,7 +84,7 @@ class CommandExitSpec extends Specification {
         when:
         CommandExit.start(application, new String[0], {
             steps << 'stopLogging'
-        }, hooks.&add)
+        }, {}, hooks.&add)
 
         then:
         !registerShutdownHookOf(application)
@@ -101,7 +101,7 @@ class CommandExitSpec extends Specification {
         when:
         CommandExit.start(application, new String[0], {
             steps << 'stopLogging'
-        }, hooks.&add)
+        }, {}, hooks.&add)
 
         then: 'the context is live while the command runs'
         context.isActive()
@@ -119,7 +119,7 @@ class CommandExitSpec extends Specification {
         def application = application()
         CommandExit.start(application, new String[0], {
             steps << 'stopLogging'
-        }, hooks.&add)
+        }, {}, hooks.&add)
         CommandExit.finish()
 
         when:
@@ -140,7 +140,7 @@ class CommandExitSpec extends Specification {
         })
         CommandExit.start(application, new String[0], {
             steps << 'stopLogging'
-        }, hooks.&add)
+        }, {}, hooks.&add)
 
         when:
         ShutdownPhase.begin()
@@ -168,7 +168,7 @@ class CommandExitSpec extends Specification {
         when:
         CommandExit.start(application, new String[0], {
             steps << 'stopLogging'
-        }, hooks.&add)
+        }, {}, hooks.&add)
 
         then:
         thrown(Exception)
@@ -194,7 +194,7 @@ class CommandExitSpec extends Specification {
         when:
         CommandExit.start(application, new String[0], {
             steps << 'stopLogging'
-        }, hooks.&add)
+        }, {}, hooks.&add)
 
         then:
         hooks.size() == 1
@@ -218,7 +218,7 @@ class CommandExitSpec extends Specification {
         })
         CommandExit.start(application, new String[0], {
             steps << 'stopLogging'
-        }, hooks.&add)
+        }, {}, hooks.&add)
 
         when: 'the running command registers a hook of its own, as serve does'
         OrderedExit.reserveSignalOwner()

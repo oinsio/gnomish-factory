@@ -2,7 +2,9 @@ package com.github.oinsio.gnomish.e2e.paidsmoke
 
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import groovy.transform.CompileStatic
 import java.nio.file.Path
@@ -49,7 +51,7 @@ final class PaidSmokeAgentLauncher {
      * @return the launched process handle
      */
     static ExecHandle launch(List<String> command, Path workspaceRoot, InstantSource clock, String prompt) {
-        def environment = new HostTaskExecutionEnvironment(workspaceRoot, clock, TestChildEnvironment.hostAllowlist())
-        environment.exec(new ExecCommand(command, [:], prompt, false))
+        def environment = new HostTaskExecutionEnvironment(workspaceRoot, clock, TestChildEnvironment.hostAllowlist(), ProcessLaunch.grouped())
+        environment.exec(new ExecCommand(command, [:], prompt, StderrPolicy.PIPED))
     }
 }

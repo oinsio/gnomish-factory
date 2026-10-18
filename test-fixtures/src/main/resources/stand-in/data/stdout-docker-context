@@ -1,6 +1,8 @@
 # What `docker context inspect --format` answers, as TestDockerEnvironment's DockerContextEndpoint
 # asks it: the endpoint, a bar, then `tls` when the context carries TLS material.
 # One section per answer: its lines up to the blank line that separates it from the next one.
+# `docker` is the answer of a link found by its bare name on a PATH, which must be named after
+# the binary itself (TestDockerEnvironmentFunctionalSpec, build-logic).
 
 [unix-socket]
 unix:///run/stand-in/docker.sock|
@@ -10,3 +12,6 @@ ssh://builder@docker.invalid|
 
 [tls-context]
 tcp://docker.invalid:2376|tls
+
+[docker]
+unix:///run/stand-in/path-docker.sock|

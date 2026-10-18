@@ -43,7 +43,7 @@ class DockerCliBoundedSpec extends Specification {
      * registry is JVM-global, so a pin left behind makes a later spec order-dependent.
      */
     private static List<String> warnings(Closure emit) {
-        LogCaptureSupport.capture(DockerCli, Level.DEBUG, emit)
+        LogCaptureSupport.capture(DockerCommandReport, Level.DEBUG, emit)
                 .findAll {
                     it.level == Level.WARN
                 }*.formattedMessage

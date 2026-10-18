@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment;
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch;
 import java.time.InstantSource;
 
 /**
@@ -29,6 +30,7 @@ public record HostJudgeEnvironmentSource(InstantSource clock, ChildEnvAllowlist 
 
     @Override
     public TaskExecutionEnvironment environmentFor(Workspace workspace) {
-        return new HostTaskExecutionEnvironment(((DirectoryWorkspace) workspace).root(), clock, childEnv);
+        return new HostTaskExecutionEnvironment(
+                ((DirectoryWorkspace) workspace).root(), clock, childEnv, ProcessLaunch.grouped());
     }
 }

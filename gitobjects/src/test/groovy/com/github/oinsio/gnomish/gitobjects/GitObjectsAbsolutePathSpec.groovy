@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.gitobjects
 
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch
+import com.github.oinsio.gnomish.subprocess.ProcessSupervisor
+
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -18,7 +21,7 @@ class GitObjectsAbsolutePathSpec extends Specification implements GitObjectsFixt
     // FR13: a relative git dir never reaches a git process
     def "FR13: GitExec refuses a relative git dir, naming it"() {
         when:
-        new GitExec(Path.of('.git'), 'git')
+        new GitExec(Path.of('.git'), 'git', new ProcessSupervisor(), ProcessLaunch.grouped())
 
         then:
         def e = thrown(IllegalArgumentException)
@@ -30,7 +33,7 @@ class GitObjectsAbsolutePathSpec extends Specification implements GitObjectsFixt
         Path bare = seedBareRepo(tempDir, ['file.txt': 'content'])
 
         when:
-        def exec = new GitExec(bare, 'git')
+        def exec = new GitExec(bare, 'git', new ProcessSupervisor(), ProcessLaunch.grouped())
 
         then:
         exec.gitDir() == bare
@@ -40,7 +43,7 @@ class GitObjectsAbsolutePathSpec extends Specification implements GitObjectsFixt
     // FR13: a relative temporary-index dir never reaches git as GIT_INDEX_FILE
     def "FR13: CommitBuilder refuses a relative temporary-index dir, naming it"() {
         given:
-        def exec = new GitExec(tempDir, 'git')
+        def exec = new GitExec(tempDir, 'git', new ProcessSupervisor(), ProcessLaunch.grouped())
 
         when:
         new CommitBuilder(exec, Path.of('tmp'))
@@ -52,7 +55,7 @@ class GitObjectsAbsolutePathSpec extends Specification implements GitObjectsFixt
 
     def "FR13: CommitBuilder accepts an absolute temporary-index dir"() {
         when:
-        new CommitBuilder(new GitExec(tempDir, 'git'), tempDir.resolve('index'))
+        new CommitBuilder(new GitExec(tempDir, 'git', new ProcessSupervisor(), ProcessLaunch.grouped()), tempDir.resolve('index'))
 
         then:
         noExceptionThrown()

@@ -1,16 +1,18 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.logtext.MdcAwareThread;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.sandbox.StderrPolicy;
+import com.github.oinsio.gnomish.subprocess.CutCaptureException;
+import com.github.oinsio.gnomish.subprocess.Drain;
 import com.github.oinsio.gnomish.subprocess.ProcessSupervisor;
+import com.github.oinsio.gnomish.subprocess.StdinSource;
 import com.github.oinsio.gnomish.subprocess.Supervision;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import java.io.IOException;
 import java.io.InterruptedIOException;
-import java.io.OutputStream;
 import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -38,20 +40,27 @@ import org.slf4j.LoggerFactory;
  * {@code .git/**} under the working copy, even though this class's refusal is
  * lexical-only (no symlink resolution) where the host twin resolves symlinks.
  *
- * <p>Both exec pipes are drained on virtual threads of their own, concurrently
- * with the wait ({@link ExecPipeDrain}, design D2): reading either to the end on
- * the calling thread first would let a hung in-box command hold the channel
- * forever, ahead of any supervision.
+ * <p>Both exec pipes are drained on the {@code :subprocess} module's {@link
+ * Drain}, concurrently with the wait (design D2 of bound-subprocess-commands):
+ * reading either to the end on the calling thread first would let a hung in-box
+ * command hold the channel forever, ahead of any supervision. The drains are
+ * joined with the post-exit bound of the {@link DockerCli}'s supervisor, never a
+ * constant of this class, and a drain still open at the bound is judged by the
+ * one rule every value reader asks, {@link CutCaptureException#refuses} (design
+ * D15 as amended 2026-10-17, D17 of fix-terminal-receipt-convergence).
+ *
+ * <p>The file content of a write reaches the in-box {@code cat} as a {@link
+ * StdinSource} the launch owner turns into the {@code docker exec -i} client's
+ * input file (design D20): no factory thread pumps bytes into a pipe a
+ * descendant may hold. A read passes {@link StdinSource#NONE}.
  *
  * <p>The exec's wait and kill go through the shared subprocess supervisor
  * (design D11 of bound-subprocess-commands), so an interrupted channel operation
- * ends as a named {@link Termination} — reported as an {@link
- * InterruptedIOException} — with the {@code docker exec} tree killed and reaped,
- * rather than as the exit code {@code -1} the old catch returned, which a caller
- * could not tell from an in-box script that genuinely exited {@code -1}.
+ * ends as a named {@link Termination}, reported as an {@link
+ * InterruptedIOException}, never as an exit code an in-box script could choose.
  *
  * <p>Implements FR1, NFR-S3 of add-sandbox-core; FR11 of
- * bound-subprocess-commands.
+ * bound-subprocess-commands; FR17, FR19, FR23 of fix-terminal-receipt-convergence.
  */
 record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path scratch) {
 
@@ -67,25 +76,16 @@ record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path
     private static final String READ_SCRIPT = "if [ -f \"$1\" ]; then head -c \"$2\" \"$1\"; else exit 42; fi";
     private static final int ABSENT_EXIT = 42;
 
-    private static final ProcessSupervisor SUPERVISOR = new ProcessSupervisor();
-
     ContainerFileChannel(DockerCli docker, String key, String workingCopy, String scratch) {
         this(docker, key, Path.of(workingCopy), Path.of(scratch));
     }
 
     void putFile(String path, byte[] content) {
         String resolved = validate(path);
-        List<String> argv = List.of("sh", "-c", WRITE_SCRIPT, "gnomish", resolved);
-        Process process = docker.start(DockerCommands.exec(key, workingCopy.toString(), Map.of(), true, argv), false);
-        Thread pump = Thread.ofVirtual().start(MdcAwareThread.inheritingContext(() -> pump(process, content)));
-        ExecPipeDrain stdout = ExecPipeDrain.start(process.getInputStream(), "channel-write-stdout");
-        ExecPipeDrain stderr = ExecPipeDrain.start(process.getErrorStream(), "channel-write-stderr");
-        int code = completed(process, "in-box write to " + path);
-        stdout.join();
-        byte[] errBytes = stderr.join();
-        join(pump);
-        if (code != 0) {
-            throw new UncheckedIOException(failure("in-box write to " + path, code, errBytes));
+        String what = "in-box write to " + path;
+        ChannelExec exec = run(List.of("sh", "-c", WRITE_SCRIPT, "gnomish", resolved), StdinSource.of(content), what);
+        if (exec.code() != 0) {
+            throw new UncheckedIOException(failure(what, exec));
         }
     }
 
@@ -95,19 +95,16 @@ record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path
         }
         String resolved = validate(path);
         long bound = sizeCap + 1;
+        String what = "in-box read of " + path;
         List<String> argv = List.of("sh", "-c", READ_SCRIPT, "gnomish", resolved, Long.toString(bound));
-        Process process = docker.start(DockerCommands.exec(key, workingCopy.toString(), Map.of(), false, argv), false);
-        ExecPipeDrain stdout = ExecPipeDrain.start(process.getInputStream(), "channel-read-stdout");
-        ExecPipeDrain stderr = ExecPipeDrain.start(process.getErrorStream(), "channel-read-stderr");
-        int code = completed(process, "in-box read of " + path);
-        byte[] bytes = stdout.join();
-        byte[] errBytes = stderr.join();
-        if (code == ABSENT_EXIT) {
+        ChannelExec exec = run(argv, StdinSource.NONE, what);
+        if (exec.code() == ABSENT_EXIT) {
             return Optional.empty();
         }
-        if (code != 0) {
-            throw new UncheckedIOException(failure("in-box read of " + path, code, errBytes));
+        if (exec.code() != 0) {
+            throw new UncheckedIOException(failure(what, exec));
         }
+        byte[] bytes = exec.stdout().bytes();
         if (bytes.length > sizeCap) {
             log.warn(
                     OperatorEvent.CONTAINER_CHANNEL_FILE_TRUNCATED.head()
@@ -150,41 +147,58 @@ record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path
      * exec by hand to learn which of {@code mkdir}, {@code cat} or {@code head}
      * refused, and why (NFR-O1 of bound-subprocess-commands).
      */
-    private static IOException failure(String what, int code, byte[] stderr) {
-        String detail = new String(stderr, StandardCharsets.UTF_8).strip();
+    private static IOException failure(String what, ChannelExec exec) {
+        String detail = exec.stderr().strip();
         String suffix = detail.isEmpty() ? "" : "; stderr: " + detail;
-        return new IOException(what + " failed with exit " + code + suffix);
-    }
-
-    private static void pump(Process process, byte[] bytes) {
-        try (OutputStream os = process.getOutputStream()) {
-            os.write(bytes);
-        } catch (IOException e) {
-            log.debug("in-box writer closed stdin early", e);
-        }
-    }
-
-    private static void join(Thread pump) {
-        try {
-            pump.join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        return new IOException(what + " failed with exit " + exec.code() + suffix);
     }
 
     /**
-     * Waits for the exec to finish under the shared supervisor and returns the
-     * exit code it really chose. A wait cut short by an interrupt is not one of
-     * those: the tree is killed and reaped, the flag stays set for the caller
-     * above, and the operation is reported as an interruption by name rather than
-     * folded into an exit code (FR11).
+     * Starts the exec, drains both pipes on the owner's {@link Drain} concurrently
+     * with the supervised wait, and joins them under the supervisor's post-exit
+     * bound (design D15, D17 of fix-terminal-receipt-convergence). The {@code -i}
+     * flag follows from {@code stdin} inside {@link DockerCommands#exec}, never
+     * chosen beside it (D20).
+     *
+     * <p>An interrupted wait kills and reaps the tree and leaves the flag set; the
+     * flag is read after the joins, so a join it cut short fails the operation too
+     * rather than handing back a prefix (FR11 of bound-subprocess-commands). A drain still open at the
+     * bound is judged by {@link CutCaptureException#refuses}: after a clean exit
+     * with code zero the operation fails, the stream named in {@link
+     * CutCaptureException#notice}; otherwise the cut rides the failure's stderr.
      */
-    private static int completed(Process process, String what) {
-        Supervision supervision = SUPERVISOR.await(process, null);
-        if (supervision.termination() != Termination.EXITED) {
+    private ChannelExec run(List<String> argv, StdinSource stdin, String what) {
+        Process process = docker.start(
+                DockerCommands.exec(key, workingCopy.toString(), Map.of(), stdin, argv), StderrPolicy.PIPED, stdin);
+        Drain stdout = Drain.start(process.getInputStream(), "channel-stdout");
+        Drain stderr = Drain.start(process.getErrorStream(), "channel-stderr");
+        ProcessSupervisor supervisor = docker.supervisor();
+        Supervision supervision = supervisor.await(process, null);
+        Duration bound = supervisor.postExitBound();
+        boolean cut = Drain.joinAll(bound, stdout, stderr);
+        HostSweep.after(process, what); // D19: the docker client's group, on every termination
+        if (supervision.termination() != Termination.EXITED
+                || Thread.currentThread().isInterrupted()) {
             throw new UncheckedIOException(new InterruptedIOException(
                     what + " did not complete: the wait was interrupted and the exec was killed"));
         }
-        return supervision.exitCode();
+        int code = supervision.exitCode();
+        IOException broken = stdout.failure();
+        if (!cut && broken != null) {
+            // A cut drain's failure is the close that ended it, not a broken stream.
+            throw new UncheckedIOException("could not read " + what + " output", broken);
+        }
+        String diagnostics = stderr.captured();
+        if (cut) {
+            String notice = CutCaptureException.notice(stdout, stderr, bound);
+            if (CutCaptureException.refuses(Termination.EXITED, code, cut)) {
+                throw new UncheckedIOException(what + " " + notice, new IOException(notice));
+            }
+            diagnostics = CutCaptureException.withNotice(diagnostics, notice);
+        }
+        return new ChannelExec(code, stdout, diagnostics);
     }
+
+    // One finished exec: the code it chose, its joined stdout drain, and its stderr as diagnostics.
+    private record ChannelExec(int code, Drain stdout, String stderr) {}
 }

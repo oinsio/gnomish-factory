@@ -1,4 +1,0 @@
-spec: executor/agent-executor
-
-# Verified by the operator guide's content, the scenario's subject.
-The grace is documented for operators => docs/guides/operator-guide-run.md (section "Manifest settings vs. installation properties")

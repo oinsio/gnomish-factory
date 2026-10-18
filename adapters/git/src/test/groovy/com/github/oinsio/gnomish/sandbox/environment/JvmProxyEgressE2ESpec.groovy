@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 import java.time.InstantSource
@@ -103,7 +104,7 @@ class JvmProxyEgressE2ESpec extends Specification implements BareGitRepoFixture 
                                 'java',
                                 '/gnomish-probe/Probe.java',
                                 url
-                            ], [:], null, true))
+                            ], [:], null, StderrPolicy.MERGED))
             out = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8)
             handle.waitForExit()
             if (out.contains('HTTP ')) {

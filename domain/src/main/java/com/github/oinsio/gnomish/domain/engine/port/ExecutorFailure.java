@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine.port;
 
 import com.github.oinsio.gnomish.domain.engine.Denial;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.Serial;
 import java.util.List;
 import java.util.Objects;
@@ -28,27 +29,59 @@ import java.util.Objects;
  * type travels one stack, from the adapter that throws it to the engine frame that catches it,
  * and a deserialized instance would carry no denials. Do not serialize it.
  *
- * <p>Implements FR1 of fix-denial-attribution-durability.
+ * <p>A round that ran a process of its own also hands over the {@link #stderrTail() tail of
+ * that process's stderr}: the last bytes the CLI wrote, the one diagnostic of a CLI that failed
+ * to start, died without a result or was killed. The engine renders it after the cause, in its
+ * ERROR line and in the escalation (design D18 of fix-terminal-receipt-convergence, as amended
+ * 2026-10-17); an empty tail renders nothing, so the escalation text of a failure without one is
+ * unchanged. Like the denials, it is {@code transient}: it travels the same one stack.
+ *
+ * <p>Implements FR1 of fix-denial-attribution-durability; FR20 of
+ * fix-terminal-receipt-convergence.
  */
 public final class ExecutorFailure extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
+    /** The one spelling of what the stderr tail is, in this message, the report and the log line alike. */
+    public static final String STDERR_TAIL_LABEL = "stderr of the round's process, last bytes: ";
+
     private final transient List<Denial> denials;
+
+    private final transient UntrustedText stderrTail;
 
     /**
      * Wraps {@code cause} with the denials drained from the failed round's environment. The
-     * message is left to the cause — this type contributes no text of its own, because the
-     * engine renders the cause and the escalation text must stay unchanged (design D1).
+     * message is the cause's — this form contributes no text of its own, because the engine
+     * renders the cause and the escalation text must stay unchanged (design D1).
      *
      * @param cause the original infrastructure failure; never null
      * @param denials the egress denials drained from the round that failed; defensively
      *     copied, unmodifiable, possibly empty
      */
+    // The form for an executor that runs no process of its own: an empty stderr tail.
     public ExecutorFailure(Throwable cause, List<Denial> denials) {
-        super(cause);
+        this(cause, denials, UntrustedText.factory(""));
+    }
+
+    /**
+     * Wraps {@code cause} with the denials and the stderr tail of the failed round's process. The
+     * message is the cause's, followed by the tail through its log exit when there is one
+     * (design D5 of type-untrusted-text: a throwable that carries a machine's words composes its
+     * message through the carrier's exit), so a log of this wrapper itself is inert too; the
+     * engine renders the cause and the tail apart and never reads this message.
+     *
+     * @param cause the original infrastructure failure; never null
+     * @param denials the egress denials drained from the round that failed; defensively
+     *     copied, unmodifiable, possibly empty
+     * @param stderrTail the last bytes the round's process wrote to its stderr, as captured;
+     *     never null, empty when it wrote none or never started
+     */
+    public ExecutorFailure(Throwable cause, List<Denial> denials, UntrustedText stderrTail) {
+        super(cause.toString() + tailSuffix(stderrTail), cause);
         this.denials = List.copyOf(denials);
+        this.stderrTail = stderrTail;
     }
 
     /**
@@ -72,5 +105,20 @@ public final class ExecutorFailure extends RuntimeException {
      */
     public List<Denial> denials() {
         return denials;
+    }
+
+    /** {@code "; "}, the label and the tail through its log exit; empty for a blank tail. */
+    private static String tailSuffix(UntrustedText stderrTail) {
+        return stderrTail.isBlank() ? "" : "; " + STDERR_TAIL_LABEL + stderrTail.forLog();
+    }
+
+    /**
+     * The tail of the failed round's process stderr; carried to the engine's renderings, never
+     * consulted for an outcome (FR20 of fix-terminal-receipt-convergence).
+     *
+     * @return the captured tail; never null, blank when there is none
+     */
+    public UntrustedText stderrTail() {
+        return stderrTail;
     }
 }

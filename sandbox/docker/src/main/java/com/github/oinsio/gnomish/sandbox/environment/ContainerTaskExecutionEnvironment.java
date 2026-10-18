@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
+import com.github.oinsio.gnomish.subprocess.StdinSource;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.InstantSource;
 import java.util.List;
@@ -111,14 +113,16 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
     @Override
     public ExecHandle exec(ExecCommand command) {
         requireMaterialized();
-        boolean interactive = command.stdin() != null;
+        // D20: the prompt becomes the source once, here; the `-i` flag and the client's input file
+        // both follow from it, so neither can be chosen without the other.
+        String prompt = command.stdin();
+        StdinSource stdin = prompt == null ? StdinSource.NONE : StdinSource.of(prompt.getBytes(StandardCharsets.UTF_8));
         // Layered allowlist with an empty container base (D6, FR9): only passthrough names read
         // live from the factory environment plus the factory-set fragment become --env entries.
         Map<String, String> env = allowlist.compose(List.of(), command.env());
-        List<String> argv = DockerCommands.exec(key, WORKING_COPY, env, interactive, command.command());
-        Process process = docker.start(argv, command.mergeStderr());
+        List<String> argv = DockerCommands.exec(key, WORKING_COPY, env, stdin, command.command());
+        Process process = docker.start(argv, command.stderr(), stdin);
         Instant startedAt = clock.instant();
-        ChildProcessStdin.feed(process, command.stdin());
         // FR1 of polish-sandbox-forensics: the container handle annotates an exit 137 with the
         // container's own OOM state — advisory only, and only at this one seam every in-box
         // process passes through.

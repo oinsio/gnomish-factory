@@ -35,6 +35,24 @@ class SecretsPortBoundarySpec extends Specification {
 
     private static final String COMPOSITION_ROOT = 'com.github.oinsio.gnomish.app.ManualRunConfiguration'
 
+    /**
+     * The production classes besides the secrets adapter that read the process environment, each
+     * with the one variable it reads and why that variable is no credential (task 9.11 of
+     * tighten-spec-contract: "every hit is the secrets adapter or listed in SecretsPortBoundarySpec
+     * with a non-credential reason"). A feature below pins each row to that one variable.
+     */
+    private static final Map<String, Map<String, String>> NON_CREDENTIAL_READERS = [
+        // Design D19 of fix-terminal-receipt-convergence, as amended 2026-10-17: the launch owner
+        // resolves a command's executable as execvp does — on the child's PATH, else the factory's
+        // own — and finds the setsid launcher there. The JDK's own launch searched the same
+        // variable before a launcher existed; :subprocess is a dependency-free leaf that cannot
+        // reach the port, and PATH names directories, never a secret.
+        'com.github.oinsio.gnomish.subprocess.GroupedLaunch': [
+            source : 'subprocess/src/main/java/com/github/oinsio/gnomish/subprocess/GroupedLaunch.java',
+            variable: 'PATH'
+        ],
+    ]
+
     /** The credential names the adapters declare; each MUST stay absent from the build metadata. */
     private static final List<String> CREDENTIAL_NAMES = [
         GithubTrackerAdapterFactory.TOKEN_ENV_VAR,
@@ -91,12 +109,27 @@ class SecretsPortBoundarySpec extends Specification {
     // FR18, NFR-S1: the process environment, where a credential variable lives, is read by the adapter alone
     // Scenario: operator/secrets-provider / One seam to audit
     def "FR18, NFR-S1: no class outside the secrets adapter reads the process environment"() {
-        expect:
+        expect: 'the readers are the adapter and the named non-credential readers, nothing else'
         productionClasses.findAll { owner ->
             !fromTestFixtures(owner) && owner.accessesFromSelf.any {
                 it.targetOwner.name == System.name && it.name == 'getenv'
             }
-        }*.name.toSorted() == [EnvFileSecretsProvider.name]
+        }*.name.toSorted() == ([EnvFileSecretsProvider.name] + NON_CREDENTIAL_READERS.keySet()).toSorted()
+    }
+
+    // NFR-S3 of tighten-spec-contract (task 9.11's sweep): an exemption reads one named variable
+    //     that is no credential, and nothing else — so the row cannot widen into a second seam.
+    def "NFR-S1: each non-credential reader reads exactly the variable its row names"() {
+        expect:
+        NON_CREDENTIAL_READERS.every { String owner, Map<String, String> row ->
+            def file = RepoSourceTree.repoRoot().resolve(row.source).toFile()
+            def reads = (RepoSourceTree.code(file) =~ /System\s*\.\s*getenv\s*\(([^)]*)\)/).collect {
+                it[1].trim()
+            }
+            reads == [
+                "\"${row.variable}\"".toString()
+            ]
+        }
     }
 
     // NFR-S1: no credential name — and so no credential value — lives in any module's build metadata

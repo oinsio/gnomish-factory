@@ -25,13 +25,25 @@ no side effects, reported one line per check or as one JSON document.
 - **AND** when any stage is container-bound it also reports the presence of an agent
   credential, Docker reachable, the sandbox image present locally with a matching contract
   version, and the guard image present locally
-- **AND** when any stage is host-bound it also reports the agent CLI binary locatable
+- **AND** when any stage is host-bound it also reports the agent CLI binary locatable and the
+  host process-group launcher helper and the group sweep's `/bin/kill` present
 - **AND** it reports leftovers of the pre-registry folder layout
 
 #### Scenario: Absent guard image and old layout leftovers only warn
 - **WHEN** the guard image is absent locally, or leftovers of the pre-registry folder layout
   exist
 - **THEN** each is reported as `warn`, and neither alone makes the exit code 1
+
+#### Scenario: Missing launcher helper
+- **WHEN** a stage is host-bound and the platform's process-group launcher helper is absent
+  (`setsid` on Linux, `/usr/bin/perl` on macOS)
+- **THEN** the check is reported as `fail`, naming the helper and the package that provides it,
+  and the exit code is 1
+
+#### Scenario: Missing group sweep signaller
+- **WHEN** a stage is host-bound and `/bin/kill` is absent
+- **THEN** the check is reported as `fail`, naming `/bin/kill` and the package that provides it
+  (procps or util-linux on Linux), and the exit code is 1
 
 #### Scenario: Healthy setup
 - **WHEN** every check passes

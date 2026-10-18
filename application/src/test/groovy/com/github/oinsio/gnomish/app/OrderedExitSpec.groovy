@@ -29,12 +29,12 @@ class OrderedExitSpec extends Specification {
             steps << 'closeContext'
         }, {
             steps << 'stopLogging'
-        })
+        }, {})
     }
 
     def cleanup() {
         ShutdownPhase.reset()
-        OrderedExit.install({}, {})
+        OrderedExit.install({}, {}, {})
     }
 
     def "FR9: the context closes before logging stops"() {
@@ -98,7 +98,7 @@ class OrderedExitSpec extends Specification {
             steps << 'closeContext'
         }, {
             steps << 'stopLogging'
-        })
+        }, {})
         OrderedExit.onSignal()
 
         then:
@@ -156,7 +156,7 @@ class OrderedExitSpec extends Specification {
             throw new NoClassDefFoundError('the closing bean class went missing')
         }, {
             steps << 'stopLogging'
-        })
+        }, {})
 
         when:
         OrderedExit.closeAndStopLogging()
@@ -179,7 +179,7 @@ class OrderedExitSpec extends Specification {
             releaseClose.await(5, TimeUnit.SECONDS)
         }, {
             steps << 'stopLogging'
-        })
+        }, {})
 
         and: 'a winner already inside it'
         def winner = new Thread({ OrderedExit.closeAndStopLogging() }, 'winner')
@@ -222,7 +222,7 @@ class OrderedExitSpec extends Specification {
             throw new NoClassDefFoundError('the closing bean class went missing')
         }, {
             steps << 'stopLogging'
-        })
+        }, {})
         def winner = new Thread({
             try {
                 OrderedExit.closeAndStopLogging()
@@ -269,7 +269,7 @@ class OrderedExitSpec extends Specification {
             releaseClose.await(5, TimeUnit.SECONDS)
         }, {
             steps << 'stopLogging'
-        })
+        }, {})
         def winner = new Thread({ OrderedExit.closeAndStopLogging() }, 'winner')
         winner.start()
         closeEntered.await(5, TimeUnit.SECONDS)
@@ -304,7 +304,7 @@ class OrderedExitSpec extends Specification {
             throw new IllegalStateException('context refused to close')
         }, {
             steps << 'stopLogging'
-        })
+        }, {})
         def logs = LogCaptureSupport.attach(OrderedExit)
 
         when:

@@ -74,6 +74,35 @@ container environment). The test build already refuses the operator's git config
 third medium of the same leak. It is folded in here because this change's gate is where it
 stalls, and the cut is self-contained (§7).
 
+The Linux gate of task 7.4 (2026-10-16, CI run 38879822474) failed on
+`ProcessSupervisorInterruptSpec`, a spec this change had not touched; the architect session it
+triggered found a class, not a flake. On Unix a pipe belongs to whoever holds a descriptor to it,
+so a grandchild that inherited the child's stdout keeps it open after the child exited. The JDK
+handles that exit on its reaper thread: `ProcessPipeInputStream.processExited` is `synchronized`,
+drains what is available, closes the descriptor and swaps in a memory buffer — so a drain already
+parked in `read()` holds the monitor and blocks the reaper until the grandchild closes the pipe,
+while a drain that enters `read()` a few milliseconds later gets end-of-file and sees nothing the
+grandchild writes (open bugs JDK-8169565 and JDK-8330773; the window measured on a workstation is
+2–12 ms). Two halves follow. In the tests, three specs state "the drain entered `read()` first"
+as a premise and fail under a loaded runner, and four more hide the same race behind a sleep in a
+stand-in (`trailing.sh`'s 0.5 s linger, added for a CI failure of 2026-09-13, is the precedent).
+In production, the question "when is the capture complete after the exit" has seven answers:
+`CaptureRunner`/`Drain` and `ContainerFileChannel`/`ExecPipeDrain` join without a bound,
+`CapturedExec` and `GitExec` (its stdout read, and its stderr pump joined after the wait) join
+without a bound and cannot be interrupted, `StreamDrain` and `BoundedTail` are bounded; on the
+write side, five writers pump a child's stdin — `GitExec`'s feed and the file channel's pump,
+joined without a bound, `ChildProcessStdin` from the two environments' `exec`, fire-and-forget,
+and `CaptureRunner`'s write on the calling thread before the wait — and none of them can be
+bounded at all (a write parked on a full pipe holds the stream's monitor). The command deadline bounds only the wait, never the join after it:
+measured, `CaptureRunner` returns `EXITED` exactly when the holder dies — never, for a daemon. Go
+solved exactly this in 1.20 (`Cmd.WaitDelay`: one bound after the exit on both paths, then close
+the parent's pipe ends, then a visible "may be truncated" outcome), and both shipped adopters pair
+it with a process-group kill, because `ProcessHandle.descendants()` cannot see a reparented
+orphan. A side finding of the same audit: agent rounds pass `mergeStderr=false` and nothing reads
+the agent process's stderr, so a chatty CLI blocks on a full pipe until the round timeout. It is
+folded in here because this change's own gate is where the class surfaced, and the cut is
+self-contained (§8).
+
 ## What Changes
 
 - **MODIFIED**: the tracker port's `fetchTask` carries the latest tenure boundary (park,
@@ -113,6 +142,27 @@ stalls, and the cut is self-contained (§7).
   handed on explicitly as `DOCKER_HOST` (with the socket path Testcontainers mounts on macOS), so
   the result of a test run depends on the operator's Docker setup only for where the daemon is.
 
+- **ADDED**: the subprocess supervisor bounds the drain after an exit on both paths — normal and
+  killed — by one bound derived from the kill grace, then closes the parent's ends of the pipes,
+  so a drain parked on a pipe a descendant still holds returns and the JDK's reaper is freed; the
+  capture says when it may be a prefix. One launch owner starts every supervised process, and
+  specs drive the supervisor through a fake process rather than through a scheduling race.
+- **ADDED**: every reader of a child's output builds on that one drain and that one post-exit
+  bound: `GitExec` (stdout and stderr), `CapturedExec`, `ContainerFileChannel`, `BoundedTail` and
+  the agent round's `StreamDrain` are migrated, `ExecPipeDrain` is deleted into `Drain`; a reader
+  outside the supervision module takes the bound from the handle it holds; no reader of a child's
+  output waits without a bound or without an interrupt; and no stdin pump exists at all — the
+  launch owner gives every child its standard input from a file or from `/dev/null`, so nothing
+  of the factory writes into a pipe a descendant could hold (five writers deleted).
+- **ADDED**: a supervised process is launched in a process group of its own, and after its exit —
+  however it ended — the group is swept, so a reparented orphan the descendant snapshot cannot see
+  dies with the invocation; the launch owner has one production form, since every process it
+  starts is a host process — the `docker` client of a box command included — and nothing inside a
+  box is swept by the host, whose PID namespace ends with the box.
+- **ADDED**: the agent round's stderr goes to a file in the round scratch directory — a host
+  directory per round, on both media — read after the exit for diagnostics, instead of a pipe
+  nothing drains.
+
 ## Capabilities
 
 ### New Capabilities
@@ -139,6 +189,9 @@ None.
   accepted); "Forked test JVMs carry no operator-process variables" — the Docker client
   configuration variables are replaced, not passed through; new requirement "Forked test JVMs
   use the build's own Docker client configuration".
+- `subprocess-supervision`: new requirements "Post-exit output is bounded", "One launch owner",
+  "Launched processes form their own process group".
+- `agent-executor`: new requirement "The round's stderr is kept".
 
 ## Goals
 
@@ -158,6 +211,10 @@ None.
 - G7: a test run neither stops on nor depends on the operator's Docker client configuration —
   no credential helper, plugin hook, proxy block or context reaches a test process — on a
   developer's macOS machine and on the Linux CI runner alike.
+- G8: no supervised invocation outlives its child by more than the post-exit bound, whoever still
+  holds the child's pipes.
+- G9: no spec of the supervisor states a scheduling order as a premise: the four race-premise
+  specs pass on a loaded two-CPU runner as on a workstation.
 
 ## Non-Goals
 
@@ -191,6 +248,40 @@ None.
 - NG9: `~/.testcontainers.properties` is still read: a `tc.host` there is the operator's explicit
   choice and wins over `DOCKER_HOST`. Testcontainers reads it by `user.home`, which the test JVM
   must keep for every other tool; nothing in the repository writes that file.
+- NG10: Windows, and any fix on the JDK's side (a wait-delay API, JDK-8330773): the factory runs
+  on Linux and macOS, and the bound and the close are the factory's own.
+- NG11: output a grandchild writes after the post-exit bound is dropped — the JDK drops it already
+  whenever the drain lost the monitor; this change makes the loss bounded and visible, not absent.
+  Picked up by the change that needs a grandchild's output as a result, which then owns that
+  pipe itself (an `os.Pipe` of its own, as Go's maintainers put it).
+- NG12: file redirection for the agent round's stdout — rejected, not deferred: `StreamDrain`
+  parses stream-json per line while the process runs (`fix-round-stdout-drain`, D4), and a file
+  has no live tail. The round's stderr takes the file (FR20).
+- NG13: a concurrent drain of the agent's stderr with byte and line caps — the line
+  `extract-agent-round-runner`'s delta carries today. That change is sequenced after this one and
+  inherits `StderrPolicy.ToFile` and the round scratch directory (design D18); its line is the
+  second drain NG12 rejects, and its proposal takes the matching sequencing statement in its own
+  revision, not in this change's files.
+- NG14: a whitelist of spawn sites in `ProcessSpawnBoundarySpec` (`add-subprocess-access-log`,
+  design D14). After FR18 the whitelist is the launch owner alone, and `LaunchOwnerGateSpec` is
+  that gate; `ProcessSpawnBoundarySpec` stays the ArchUnit package rule it is today. That change
+  revises its D14 to cite the owner's gate when it is next updated.
+- NG16: removing the input instead of the pump — one git process per commit over files
+  (`hash-object -w -- <paths>`, `update-index --index-info`) instead of one `hash-object --stdin`
+  per blob, and the round prompt through a CLI argument or a prompt file. Each removes consumers
+  of the stdin source, not the source: the register transaction is stdin by git's contract and a
+  prompt can exceed `ARG_MAX`. Picked up when a measurement attributes a round's git cost to the
+  per-blob launches, or when every supported agent CLI documents a prompt-file argument.
+  Streaming or interactive stdin is a non-goal of the same kind: every input the factory gives a
+  child is complete before the launch.
+- NG17: a memory-backed input (`memfd_create`) — Linux only and native; the file's window on
+  disk is the launch itself, so the second medium buys milliseconds for a declared pair.
+- NG15: bounding `GitExec`'s wait itself (NG3 of `bound-subprocess-commands` holds: local
+  plumbing stays undeadlined); only its post-exit joins are bounded (FR19). NG4 of that change is
+  taken up in part by FR19 — tail reader and stdout read on the shared mechanics — and the cap
+  policy stays local, as it asked; the stdin feeds are not shared but removed (FR23, design
+  D20) — the bytes a caller gives a child stay the caller's, only their medium moves to the
+  launch owner.
 
 ## Users & Scenarios
 
@@ -204,6 +295,9 @@ None.
 - U4: **An operator** whose IDE fetches the factory clone every few minutes sees every finished
   task's branch cleaned by the next `serve` tick, and `status` names a branch the clone has not
   fetched the register of as exactly that, with the command that fetches it.
+- U5: **An operator** whose stage's check command starts a background server that keeps the
+  command's stdout gets a verdict when the command exits, not when the server stops; the slot
+  moves on.
 
 ## Requirements
 
@@ -289,6 +383,79 @@ None.
   the `cli-plugins` directory of the operator's configuration directory when that directory
   exists, so `docker build` resolves `buildx` as it does outside the tests.
 
+- FR16: after a supervised invocation's exit — normal, expired or interrupted — the supervisor
+  SHALL join each drain for at most one **post-exit bound**, derived from the kill grace plus a
+  fixed margin, then close the parent's ends of both pipes, so a drain parked on a pipe a
+  descendant still holds returns and the JDK reaper's `processExited` is released; the capture
+  SHALL be what was read until then.
+- FR17: a capture whose drain was cut by the bound SHALL say so with a flag on the result,
+  distinct from the termination and the exit code; the runner SHALL log it once with its catalog
+  code as the holder's attribution. An invocation that exited on its own with code zero and a cut
+  drain SHALL fail with a typed refusal carrying the capture (the prefix, stderr, which stream,
+  the bound), raised by one owner in `:subprocess`, so that no reader anywhere consumes the
+  prefix as a value — a reader of the exit code alone included, deliberately, since the runner
+  cannot tell the two apart and every external effect is recovered through its receipt. An
+  invocation that exited non-zero, timed out or was interrupted SHALL keep its own failure, with
+  its partial output readable and the cut named in the failure's detail, never as a second
+  finding (the exit error wins). *Amended 2026-10-17 (`/architect` Mode C on task 8.10's
+  blocker): the original clause "a caller SHALL never fail an otherwise successful command on
+  it" was written for diagnostic output; applied to the runners it let the flag die at the first
+  reader while 51 call sites parsed the prefix as a value.*
+- FR18: every supervised process SHALL be started by one **launch owner** in `:subprocess`, a role
+  interface over `ProcessBuilder.start()`; a spec SHALL be able to hand the owner a fake process
+  whose exit and whose pipes it controls with latches, so no spec of the supervisor states the
+  order of a drain's first read and the child's exit as a premise.
+- FR19: every production reader of a child's stdout or stderr — `CaptureRunner`, `GitExec` (its
+  stdout read and its stderr pump), `CapturedExec`, `ContainerFileChannel`, `StreamDrain`,
+  `BoundedTail` — SHALL take the drain and its post-exit bound from the one owner; a reader
+  outside `:subprocess` SHALL take the bound from the handle it holds (`ExecHandle.postExitBound()`),
+  never from a constant of its own — nor from an installation property: `StreamDrain`'s
+  `factory.agent-cli-tail-drain-grace` is retired (design D17 as amended 2026-10-17); no reader SHALL join a drain without a bound, none SHALL join
+  uninterruptibly, and `ExecPipeDrain` SHALL be deleted.
+- FR20: the agent round SHALL direct the CLI's stderr to a file in the round scratch directory — a
+  host directory per round, owned by the round on both media — and read it after the exit into
+  the round's diagnostics — on a round that does not succeed the tail of that file SHALL ride the
+  failure's detail, on a successful round it SHALL be logged at DEBUG only (design D18 as amended
+  2026-10-17); the round SHALL remove the directory on every exit path; the round
+  SHALL never leave the CLI's stderr as a pipe nothing reads.
+- FR21: on the host, the launch owner SHALL start a supervised process as the leader of a new
+  process group (`setsid(1)` on Linux, `/usr/bin/perl` with `POSIX::setsid` on macOS), so the
+  group id equals the child's pid; after the exit the supervisor SHALL signal the group with
+  `SIGKILL` until the signal finds no process, within a fixed number of rounds; a launch whose
+  helper is missing SHALL fail the invocation naming the helper, never run ungrouped. *Amended
+  2026-10-17:* before prefixing the launcher, the owner SHALL resolve the command's executable
+  as `execvp` would — an absolute or relative path checked for existence and the execute bit, a
+  bare name searched on the child's `PATH` and never on the working directory — and fail the
+  launch with the JDK's `IOException` naming the binary when nothing is found, so a missing
+  binary keeps the classification it had before the launcher (a thrown launch failure, never an
+  exit code); for the residue the resolution cannot see (`ENOEXEC`, a missing interpreter), a
+  launcher exit of 126 or 127 **together with** the launcher's own stderr text SHALL be
+  classified as a launch failure — never the exit code alone, which a program may return itself;
+  the sweep SHALL run only over a process that was started, with its pid asserted above one, and
+  its `kill` SHALL be started by the owner ungrouped; the group kill is best-effort hygiene: a
+  member that changed its uid or called `setsid` itself is beyond it; a child in its own session
+  has no controlling terminal, so the factory's own termination path is the only way a signal
+  reaches it; *amended 2026-10-17 (fourth):* that path SHALL exist for every command — at the
+  factory's exit the shutdown step SHALL kill the descendant snapshot cooperatively, then sweep
+  every group no waiter has swept yet.
+- FR22: the launch owner SHALL have one production form: every process it starts is a host
+  process — the `docker` client of a box command included — and is grouped and swept like any
+  other; nothing inside a box SHALL be swept by the host, since the box's PID namespace ends with
+  the box; no second implementation of the owner SHALL exist in production sources.
+- FR23: the launch owner SHALL set every child's standard input itself, from a typed source the
+  caller passes: with no input, `/dev/null`, so no pipe exists for a descendant to inherit; with
+  input, a file created atomically with owner-only permissions in the input directory the launch owner is given (the JVM's temp directory by default),
+  written in full before the start and deleted right after it, so the child and its descendants
+  read it through the inherited descriptor and no thread of the factory writes into a pipe; no
+  production source but the owner's SHALL open a child's stdin stream or set an input redirect;
+  a launch whose input file cannot be written SHALL fail before any process starts, as an
+  infrastructure failure.
+
+### Non-Functional Performance
+
+- NFR-P1: a clean exit with no holder SHALL cost no extra wait: the drains end at end-of-file and
+  the join returns at once; only a held pipe pays the bound, once per invocation.
+
 ### Non-Functional Reliability
 
 - NFR-R1: the cleanup of a finished task SHALL be idempotent across instances: two instances
@@ -302,6 +469,10 @@ None.
   is in the clone for good, so the next tick classifies the branch by its content and the set of
   `Unregistered` branches empties on its own, except for branches origin carries no register
   for and local heads (NG5).
+- NFR-R4: the four race-premise specs (`ProcessSupervisorInterruptSpec`, `CaptureRunnerDrainSpec`,
+  `GitExecPumpThreadsSpec`, `ShellCommandCheckRunnerTimeoutSpec`) SHALL pass 20 of 20 runs under a
+  CPU load of two busy threads on the developer's machine; `trailing.sh` SHALL lose its 0.5 s
+  linger, and the spec that needed it SHALL assert ordering through the fake process.
 
 ### Non-Functional Observability
 
@@ -310,6 +481,11 @@ None.
 - NFR-O2: the branch pass logs one DEBUG line per branch it does not forward, naming the shape,
   and one aggregate line per pass for the branches that stayed `Unregistered` after the owner's read
   (FR12); a healthy pass over delivered branches logs nothing above DEBUG.
+- NFR-O3: a cut drain logs one WARN with its catalog code, the command and the bound — the
+  holder's attribution, emitted whether or not the refusal of FR17 follows; the refusal itself is
+  logged by the layer that handles it, as any invocation failure (two facts, not one failure
+  logged twice); a group sweep that found a survivor logs one DEBUG per sweep naming the count; a
+  healthy invocation logs nothing above DEBUG.
 
 ### Non-Functional Cost
 
@@ -337,6 +513,8 @@ None.
 
 - UX4: a full `./gradlew check` on a macOS machine whose Docker configuration names
   `"credsStore": "desktop"` raises no "would like to access data from other apps" prompt.
+- UX5: a check command that leaves a background process holding its output ends its stage within
+  the post-exit bound, with a verdict and one log line saying the output may be a prefix.
 
 ## Success Metrics
 
@@ -370,6 +548,27 @@ None.
 - M11: during a full `./gradlew check` on macOS with `"credsStore": "desktop"`, no
   `docker-credential-desktop` process is started by a test JVM (sampled `ps` and the TCC log over
   the run, recorded in task 7.4), and the Docker suites named in task 7.4 are green.
+- M12: `grep -rn "\.join()" subprocess/src/main gitobjects/src/main sandbox/core/src/main sandbox/docker/src/main adapters/agent/src/main adapters/src/main/java/com/github/oinsio/gnomish/adapter/check`
+  shows an unbounded join nowhere; `grep -rn "ExecPipeDrain" --include='*.java' --include='*.groovy' .`
+  returns nothing.
+- M13: `grep -rn "\.start()" --include='*.java' */src/main */*/src/main` on a `ProcessBuilder`
+  shows the launch owner only; `DockerCli.start` and `HostTaskExecutionEnvironment.exec` route
+  through it; `grep -rn "implements ProcessLaunch" --include='*.java' */src/main */*/src/main`
+  shows the owner's one form; `grep -rn "getOutputStream()\|redirectInput(" --include='*.java' */src/main */*/src/main`
+  shows the owner's file only, and `ChildProcessStdin` exists nowhere.
+- M14: on the developer's macOS machine, 20 runs of the four specs of NFR-R4 by name with two busy
+  threads: 80 of 80 green; the Linux CI job green on the pushed commit.
+- M15: a stand-in that exits and leaves `sleep 600 &` holding stdout (`exit-leaky.sh`):
+  `CaptureRunner.run` returns within the post-exit bound plus 100 ms, with the holder alive before
+  the sweep and gone after it on the host; the timings recorded in the task. The per-launch cost
+  of the sweep's probe is measured on `:gitobjects` plumbing (a commit of N blobs: N
+  `hash-object` launches) and recorded in task 8.20 with the decision it drove; the observed
+  drain time after a clean exit is recorded in 8.24, so the 7 s bound is a measured margin, not
+  an asserted one.
+- M16: `grep -rn "truncated()" --include='*.java' */src/main */*/src/main` shows the flag read in
+  `:subprocess`'s owner and the two runners' report paths only — no result type outside
+  `:subprocess` carries it, and no parser can reach a prefix; `ObjectId.of` refuses a string that
+  is not 40 or 64 hex characters.
 
 ## Impact
 
@@ -430,6 +629,35 @@ None.
   `TestDockerEnvironmentSpec`; `test-fixtures` — `TestChildEnvironment` unchanged (it already
   carries `DOCKER_HOST`, `DOCKER_CONFIG` and `TESTCONTAINERS_*` to children);
   `.claude/rules/testing.md` ("Test processes never inherit the operator's environment").
+
+- Post-exit bound and process group (D15–D19, §8): `:subprocess` — `CaptureRunner`, `Drain` (the
+  bound, the close, the flag on `Captured`), `ProcessSupervisor.postExitBound()`, the launch owner
+  in its one grouped form with the stdin source (`StdinSource`; `CaptureRunner.run(builder,
+  deadline, input)` routes its input through it), the process-group sweep; `:gitobjects` —
+  `GitExec`, `GitExecStreams` (stdout and stderr through the drain, the stdin feed deleted, the
+  cap kept), `GitObjects.open`;
+  `sandbox/core` — `ExecHandle.postExitBound()`, `ExecCommand` (`StderrPolicy`), `CapturedExec`
+  (a new edge to `:subprocess` in its layering allowlist); `sandbox/docker` —
+  `ContainerFileChannel` (`ExecPipeDrain` deleted, `Piped`, its stdin pump deleted),
+  `ChildProcessStdin` (deleted), `HostExecHandle`,
+  `OomAnnotatedExecHandle`, `HostTaskExecutionEnvironment`, `ContainerTaskExecutionEnvironment`
+  and `SelfCheckedEnvironment` (launch through the owner; the stderr policy), `DockerCli` (its
+  constructors and `start`); `adapters/agent` — `StreamDrain` (`close()` without its own join),
+  `RoundScratchDirectory`, `ExecutorRoundExecution` and `JudgeRoundExecution` (the stderr file);
+  `:adapters` — `BoundedTail` and `CommandProcessRunner` (on the owner's drain and the handle's
+  bound); `:bootstrap` — a launch-owner gate and a drain-owner gate; `test-fixtures` — the
+  launcher helpers as committed resources, `exit-leaky.sh` and `parent.sh` kept, `trailing.sh`
+  without its linger, `FakeProcess`, the five `ExecHandle` fakes; `docs/glossary.md` (**post-exit
+  bound**, **launch owner**, **stdin source**, **process group sweep**, **round scratch
+  directory**);
+  `.claude/rules/testing.md` (a scheduling order is never a premise); `:operatorevent` — two
+  catalog codes. Sequencing with other active changes: before `extract-agent-round-runner` (NG13)
+  and before `add-subprocess-access-log`'s D14 revision (NG14). With `fix-docker-exec-env-argv` no
+  order is fixed, but both rewrite `DockerCli.start(List<String>, boolean)`: that change into
+  `start(DockerExecLaunch, boolean)`, this one by a `StdinSource` (task 8.12) and a `StderrPolicy`
+  (task 8.16) — whichever lands second rebases its tasks onto the other's signature, and that
+  change's ADR on secret channels words stdin as a 0600 file for the launch window (design D20,
+  Risks); it takes the matching statement in its own revision, not in this change's files.
 
 ## Open Questions
 

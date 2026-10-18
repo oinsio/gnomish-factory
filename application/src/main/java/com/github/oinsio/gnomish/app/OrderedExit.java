@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.serve.ProcessTreeKiller;
 import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.util.concurrent.CountDownLatch;
@@ -38,7 +39,17 @@ import org.slf4j.LoggerFactory;
  * with no shared object to hand an instance through. Before installation both entry points are
  * no-ops, which is what lets a spec drive the serve hook without a Spring context at all.
  *
- * <p>Implements FR9, NFR-R1 of harden-logging-observability.
+ * <p>On a signal, a command that owns no hook first runs the <strong>shutdown step</strong> it was
+ * installed with ({@link ProcessTreeKiller}, design D19 of fix-terminal-receipt-convergence, fourth
+ * amendment): every child is launched in a session of its own and receives nothing from the
+ * terminal, so a Ctrl-C in a foreground {@code gnomish run} or {@code gnomish take} reaches it only
+ * through this step — the snapshot kill, then the sweep of every group no waiter has swept — and it
+ * runs while the context and logging are still up. {@code serve} runs the same step inside its own
+ * hook. The step is a constructor value with no default: the composition root cannot install the
+ * sequence without naming it.
+ *
+ * <p>Implements FR9, NFR-R1 of harden-logging-observability; FR21 of fix-terminal-receipt-convergence
+ * (D19, fourth amendment).
  */
 public final class OrderedExit {
 
@@ -56,12 +67,14 @@ public final class OrderedExit {
 
     private final Runnable closeContext;
     private final Runnable stopLogging;
+    private final ProcessTreeKiller shutdownStep;
     private final AtomicBoolean done = new AtomicBoolean();
     private final CountDownLatch finished = new CountDownLatch(1);
 
-    private OrderedExit(Runnable closeContext, Runnable stopLogging) {
+    private OrderedExit(Runnable closeContext, Runnable stopLogging, ProcessTreeKiller shutdownStep) {
         this.closeContext = closeContext;
         this.stopLogging = stopLogging;
+        this.shutdownStep = shutdownStep;
     }
 
     /**
@@ -70,9 +83,11 @@ public final class OrderedExit {
      *
      * @param closeContext closes the application context; never null
      * @param stopLogging stops the logging system, flushing the async appender; never null
+     * @param shutdownStep the shutdown step a signal runs first for a command that owns no hook:
+     *     the process tree killed and every live group swept; never null
      */
-    public static void install(Runnable closeContext, Runnable stopLogging) {
-        installed = new OrderedExit(closeContext, stopLogging);
+    public static void install(Runnable closeContext, Runnable stopLogging, ProcessTreeKiller shutdownStep) {
+        installed = new OrderedExit(closeContext, stopLogging, shutdownStep);
         signalOwned = false;
     }
 
@@ -87,15 +102,21 @@ public final class OrderedExit {
     }
 
     /**
-     * The composition root's generic signal hook: the sequence a command that registered no hook of
-     * its own would otherwise never run, losing the tail of its log file to the async appender.
-     * Steps aside when a command owns its own stop.
+     * The composition root's generic signal hook: the shutdown step, then the sequence a command
+     * that registered no hook of its own would otherwise never run, losing the tail of its log file
+     * to the async appender. Steps aside when a command owns its own stop. The sequence runs however
+     * the step ended, so a step that threw still leaves the log flushed.
      */
     public static void onSignal() {
-        if (signalOwned) {
+        OrderedExit exit = installed;
+        if (signalOwned || exit == null) {
             return;
         }
-        closeAndStopLogging();
+        try {
+            exit.shutdownStep.killDescendants();
+        } finally {
+            exit.run();
+        }
     }
 
     /**

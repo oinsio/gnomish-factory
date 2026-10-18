@@ -142,8 +142,6 @@ class UntrustedTextGateSpec extends Specification {
         ' verdict; the subjects and paths it quotes go back into a carrier through the log exit',
         'com.github.oinsio.gnomish.adapter.git.HostBranchProbe':
         'symbolic-ref output into whether HEAD is on the task branch (a boolean)',
-        'com.github.oinsio.gnomish.adapter.git.LocalBranchTip':
-        'rev-parse --verify output into the branch\'s commit id',
         'com.github.oinsio.gnomish.adapter.git.OriginRemote':
         'remote get-url output into the origin URL, or empty',
         'com.github.oinsio.gnomish.adapter.git.RemoteBaseRef':
@@ -152,8 +150,6 @@ class UntrustedTextGateSpec extends Specification {
         'an ls-remote line into origin\'s tip commit id for the branch',
         'com.github.oinsio.gnomish.adapter.git.RemoteDefaultBranch':
         'an ls-remote --symref answer into the default branch name, gated by DefaultBranch\'s rules',
-        'com.github.oinsio.gnomish.adapter.git.ReplicaPairReconciler':
-        'rev-parse output into a ref\'s commit id, or null',
         'com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck':
         'a NUL-separated log line into the snapshot\'s stage, round and round token; the decision' +
         ' request it reads at the token path is the document itself, handed raw to the tolerant reader that mints it',

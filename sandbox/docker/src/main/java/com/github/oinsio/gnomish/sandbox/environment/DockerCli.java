@@ -1,19 +1,19 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.github.oinsio.gnomish.logtext.ShutdownPhase;
-import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
+import com.github.oinsio.gnomish.sandbox.StderrPolicy;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.subprocess.CaptureRunner;
 import com.github.oinsio.gnomish.subprocess.Captured;
+import com.github.oinsio.gnomish.subprocess.CutCaptureException;
+import com.github.oinsio.gnomish.subprocess.ProcessSupervisor;
+import com.github.oinsio.gnomish.subprocess.StdinSource;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Shells out to the real {@code docker} binary via {@link ProcessBuilder} — no
@@ -42,11 +42,9 @@ import org.slf4j.LoggerFactory;
  * ({@code HostExecHandle}, {@link ContainerFileChannel}) owns the wait.
  *
  * <p>Implements FR3, FR4, NFR-R1 of add-sandbox-core; FR6, FR10, NFR-O1 of
- * bound-subprocess-commands.
+ * bound-subprocess-commands; NFR-O3 of fix-terminal-receipt-convergence.
  */
 class DockerCli {
-
-    private static final Logger log = LoggerFactory.getLogger(DockerCli.class);
 
     /**
      * The documented default for a management command (FR5): generous enough
@@ -59,7 +57,8 @@ class DockerCli {
 
     private final String dockerBinary;
     private final Duration commandTimeout;
-    private final CaptureRunner captureRunner = new CaptureRunner();
+    private final CaptureRunner captureRunner;
+    private final DockerCommandReport report;
 
     DockerCli() {
         this("docker");
@@ -80,15 +79,25 @@ class DockerCli {
         this("docker", commandTimeout);
     }
 
+    DockerCli(String dockerBinary, Duration commandTimeout) {
+        this(dockerBinary, commandTimeout, new CaptureRunner());
+    }
+
     /**
      * @param dockerBinary the docker executable to invoke
-     * @param commandTimeout the hard bound on a management command; the composition root passes
-     *     the installation's {@code factory.docker-command-timeout}, and specs inject a
-     *     sub-second one
+     * @param commandTimeout the hard bound on a management command (the installation's {@code
+     *     factory.docker-command-timeout}; specs inject a sub-second one)
+     * @param captureRunner the launch, the wait and the post-exit bound every management command
+     *     runs under, and the launch owner {@link #start} starts every exec client through — one
+     *     owner for both, so a management command and a box command cannot be launched by two
+     *     different forms; a spec hands in one over a fake launch (design D16 of
+     *     fix-terminal-receipt-convergence)
      */
-    DockerCli(String dockerBinary, Duration commandTimeout) {
+    DockerCli(String dockerBinary, Duration commandTimeout, CaptureRunner captureRunner) {
         this.dockerBinary = dockerBinary;
         this.commandTimeout = commandTimeout;
+        this.captureRunner = captureRunner;
+        this.report = new DockerCommandReport(commandTimeout);
     }
 
     /**
@@ -102,6 +111,8 @@ class DockerCli {
      * @param args the docker subcommand and its arguments (no leading {@code docker})
      * @return the named termination, the captured exit code and separate stdout/stderr
      * @throws DockerUnavailableException if the binary cannot launch or the daemon is unreachable
+     * @throws CutCaptureException if docker exited with code zero while a descendant still held its
+     *     output at the post-exit bound, so the capture may be a prefix
      */
     DockerResult run(List<String> args) {
         Captured captured = capture(args);
@@ -123,69 +134,62 @@ class DockerCli {
     /**
      * Starts {@code docker <args...>} and returns the live process for streaming
      * — the {@code docker exec} seam behind {@link
-     * TaskExecutionEnvironment#exec}. Merges the exec'd process's stderr into its
-     * stdout when {@code mergeStderr} is set, matching the host adapter.
+     * TaskExecutionEnvironment#exec}. Applies {@code stderr} to the client on the host
+     * side, matching the host adapter (design D18 of fix-terminal-receipt-convergence):
+     * merged into its stdout, a pipe of its own, or a host file — the {@code docker exec}
+     * client's stderr carries the exec'd process's, so the file holds the box's. The client
+     * is started by the launch owner the capture runner holds, which sets its
+     * standard input from {@code stdin} (design D20 of fix-terminal-receipt-convergence):
+     * the file the {@code docker exec -i} client forwards into the box, or nothing.
      *
      * @param args        the docker subcommand and its arguments (no leading {@code docker})
-     * @param mergeStderr whether to fold stderr into the one output stream
+     * @param stderr      where the client's stderr goes
+     * @param stdin       what the client reads: {@link StdinSource#NONE}, or the whole input
      * @return the started process; never null
      * @throws ProcessStartException if the docker binary could not be launched
      */
-    Process start(List<String> args, boolean mergeStderr) {
+    Process start(List<String> args, StderrPolicy stderr, StdinSource stdin) {
         ProcessBuilder builder = builder(args);
-        builder.redirectErrorStream(mergeStderr);
+        stderr.applyTo(builder);
         try {
-            return builder.start();
+            return captureRunner.launch().start(builder, stdin);
         } catch (IOException e) {
             throw new ProcessStartException("could not start docker exec", e);
         }
     }
 
     /**
-     * Runs the management command under the shared supervisor and reports a bound
-     * that fired. A binary that cannot be launched at all is the daemon-outage
+     * The supervisor a caller of {@link #start} waits under, and whose post-exit bound
+     * it joins that process's output with (design D17 of fix-terminal-receipt-convergence)
+     * — the one the management commands run under, never a bound of the caller's own.
+     *
+     * @return the capture runner's supervisor
+     */
+    ProcessSupervisor supervisor() {
+        return captureRunner.supervisor();
+    }
+
+    /**
+     * Runs the management command under the shared supervisor and reports what its
+     * outcome owes the operator ({@link DockerCommandReport}). A binary that cannot be launched at all is the daemon-outage
      * classification this class owns, not a result: there is no docker to ask.
+     *
+     * <p>A clean exit whose drain the post-exit bound cut is refused by the capture runner; the
+     * holder is logged once here and the refusal rethrown (NFR-O3, design D15 as amended
+     * 2026-10-17), so no parser of the result takes the prefix for the whole output.
      */
     private Captured capture(List<String> args) {
         long startedAt = System.nanoTime();
         try {
             Captured captured = captureRunner.run(builder(args), commandTimeout);
-            report(captured.termination(), args, Duration.ofNanos(System.nanoTime() - startedAt));
+            report.report(captured, args, Duration.ofNanos(System.nanoTime() - startedAt));
             return captured;
         } catch (IOException e) {
             throw new DockerUnavailableException("could not launch docker binary '" + dockerBinary + "'", e);
+        } catch (CutCaptureException cut) {
+            report.cut(cut, args);
+            throw cut;
         }
-    }
-
-    /**
-     * Logs the one WARN a bound that fired owes an operator (NFR-O1, NFR-O2):
-     * which command ended early, how long it ran, and — for a timeout — the
-     * deadline they would raise to give it more. Only the subcommand is named,
-     * never the full argv, which carries container keys and mount paths.
-     */
-    private void report(Termination termination, List<String> args, Duration elapsed) {
-        if (termination == Termination.EXITED) {
-            return;
-        }
-        String subcommand = args.isEmpty() ? "docker" : args.getFirst();
-        if (termination == Termination.TIMED_OUT) {
-            log.warn(
-                    OperatorEvent.DOCKER_COMMAND_TIMED_OUT.head()
-                            + "docker command timed out and its process tree was killed: subcommand={},"
-                            + " elapsed={}, deadline={}",
-                    subcommand,
-                    elapsed,
-                    commandTimeout);
-            return;
-        }
-        // FR9 of harden-logging-observability: same classification the git runner makes — an
-        // interrupt during the shutdown phase is the stop, not an unexplained abort.
-        log.warn(
-                OperatorEvent.DOCKER_COMMAND_KILLED.head()
-                        + "docker command {} and its process tree was killed: subcommand={}, elapsed={}",
-                ShutdownPhase.inProgress() ? "interrupted by the daemon shutdown" : "interrupted",
-                subcommand,
-                elapsed);
     }
 
     private ProcessBuilder builder(List<String> args) {

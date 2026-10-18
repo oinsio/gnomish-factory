@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -164,7 +165,7 @@ advancement: auto
                             'sh',
                             '-c',
                             'echo revoked-leftover > revoked.txt'
-                        ], [:], null, true))
+                        ], [:], null, StderrPolicy.MERGED))
         handle.output().readAllBytes()
         assert handle.waitForExit() == 0
 

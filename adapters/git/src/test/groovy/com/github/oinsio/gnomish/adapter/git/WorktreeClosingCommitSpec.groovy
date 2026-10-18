@@ -108,4 +108,37 @@ class WorktreeClosingCommitSpec extends Specification {
             answer(['update-ref', '--stdin'], GitCommandResult.of(0, '', 'boom', Termination.INTERRUPTED))
         }
     }
+
+    // Scenario: lifecycle/subprocess-supervision / A value reader asserts its frame
+    def "FR17: a #step that exits zero without printing full object ids is named and lands nothing"() {
+        given:
+        def git = git(rows)
+
+        when:
+        def outcome = new WorktreeClosingCommit(git).commit(WORKTREE, 'T-1', 'm')
+
+        then: 'the malformed answer is a named failure, never a parent, a tree or a commit'
+        outcome instanceof WorktreeClosingCommit.Outcome.Failed
+        (outcome as WorktreeClosingCommit.Outcome.Failed).step() == named
+        (outcome as WorktreeClosingCommit.Outcome.Failed).evidence().forLog().contains('without printing')
+        git.calls(['update-ref']).isEmpty()
+
+        where:
+        step | named | rows
+        'branch read, short' | 'git rev-parse refs/heads/gnomish/T-1' | {
+            answer(['rev-parse'], 0, "${TIP[0..38]}\n${TIP_TREE}\n")
+        }
+        'branch read, one id' | 'git rev-parse refs/heads/gnomish/T-1' | {
+            answer(['rev-parse'], 0, "${TIP}\n")
+        }
+        'branch read, bad tree' | 'git rev-parse refs/heads/gnomish/T-1' | {
+            answer(['rev-parse'], 0, "${TIP}\n${TIP_TREE}x\n")
+        }
+        'index write' | 'git write-tree' | {
+            answer(['write-tree'], 0, TREE + 'c\n')
+        }
+        'commit write' | 'git commit-tree' | {
+            answer(['commit-tree'], 0, 'not-an-id\n')
+        }
+    }
 }

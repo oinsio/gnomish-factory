@@ -6,8 +6,11 @@ import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch;
+import com.github.oinsio.gnomish.subprocess.StdinSource;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -42,7 +45,14 @@ import org.slf4j.LoggerFactory;
  * the pre-change inherit-everything-minus-scrub behavior at the same single
  * {@link ProcessBuilder} start seam.
  *
- * <p>Implements FR1, FR2, FR4, FR9, NFR-S3 of add-sandbox-core.
+ * <p>The child is started by the {@link ProcessLaunch} handed in at construction — the one launch
+ * owner, which also sets the child's standard input (design D16, D20 of
+ * fix-terminal-receipt-convergence): the command's stdin is converted once, here, into the whole
+ * input as a file or into nothing, so no thread of this adapter writes into a pipe a descendant of
+ * the child could hold.
+ *
+ * <p>Implements FR1, FR2, FR4, FR9, NFR-S3 of add-sandbox-core; FR18, FR23 of
+ * fix-terminal-receipt-convergence.
  */
 public final class HostTaskExecutionEnvironment implements TaskExecutionEnvironment {
 
@@ -60,6 +70,7 @@ public final class HostTaskExecutionEnvironment implements TaskExecutionEnvironm
     private final Path workingCopy;
     private final InstantSource clock;
     private final ChildEnvAllowlist allowlist;
+    private final ProcessLaunch launch;
 
     private @Nullable Path scratch;
     private @Nullable ChannelPathResolver channels;
@@ -73,11 +84,16 @@ public final class HostTaskExecutionEnvironment implements TaskExecutionEnvironm
      *     is composed from (D6, FR9); never null — {@link
      *     ChildEnvAllowlist#none()} when neither passthrough nor a tracker is
      *     involved
+     * @param launch the launch owner every exec child is started through, with its input set from
+     *     the command's stdin ({@link ProcessLaunch#grouped()} in production; a spec hands in a fake
+     *     process through it); never null
      */
-    public HostTaskExecutionEnvironment(Path workingCopy, InstantSource clock, ChildEnvAllowlist allowlist) {
+    public HostTaskExecutionEnvironment(
+            Path workingCopy, InstantSource clock, ChildEnvAllowlist allowlist, ProcessLaunch launch) {
         this.workingCopy = workingCopy;
         this.clock = clock;
         this.allowlist = allowlist;
+        this.launch = launch;
     }
 
     @Override
@@ -98,20 +114,21 @@ public final class HostTaskExecutionEnvironment implements TaskExecutionEnvironm
     public ExecHandle exec(ExecCommand command) {
         ProcessBuilder builder = new ProcessBuilder(command.command());
         builder.directory(workingCopy.toFile());
-        builder.redirectErrorStream(command.mergeStderr());
+        command.stderr().applyTo(builder);
         // Positive allowlist, nothing inherited (D6, FR9): clear the inherited factory
         // environment, then put exactly the composed base ∪ passthrough ∪ factory-set map.
         builder.environment().clear();
         builder.environment().putAll(allowlist.compose(BASE_ENV_NAMES, command.env()));
-        Process process = start(builder, command.command());
+        String input = command.stdin();
+        StdinSource stdin = input == null ? StdinSource.NONE : StdinSource.of(input.getBytes(StandardCharsets.UTF_8));
+        Process process = start(builder, stdin, command.command());
         Instant startedAt = clock.instant();
-        ChildProcessStdin.feed(process, command.stdin());
         return new HostExecHandle(process, startedAt);
     }
 
-    private static Process start(ProcessBuilder builder, List<String> command) {
+    private Process start(ProcessBuilder builder, StdinSource stdin, List<String> command) {
         try {
-            return builder.start();
+            return launch.start(builder, stdin);
         } catch (IOException e) {
             throw new ProcessStartException("could not start process: " + command.getFirst(), e);
         }

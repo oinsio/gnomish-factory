@@ -6,6 +6,8 @@ import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
+import com.github.oinsio.gnomish.subprocess.StdinSource
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
@@ -80,7 +82,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
             DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', null, OWNERSHIP),
             IMAGE_INSPECT,
             runArgv(),
-            DockerCommands.exec(KEY, '/gnomish/work', [:], false, [
+            DockerCommands.exec(KEY, '/gnomish/work', [:], StdinSource.NONE, [
                 'mkdir',
                 '-p',
                 '/gnomish/scratch'
@@ -479,7 +481,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     def "FR3: exec before materialize or after dispose is refused and never starts a docker process"() {
         given:
         def e = env()
-        def command = new ExecCommand(['sh', '-c', 'true'], [:], null, false)
+        def command = new ExecCommand(['sh', '-c', 'true'], [:], null, StderrPolicy.PIPED)
 
         when: 'exec before materialize'
         e.exec(command)
@@ -566,7 +568,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         e.materialize('task/x', null)
 
         when: 'an exec with a factory-set fragment starts (the recording fake then stops it)'
-        e.exec(new ExecCommand(['sh', '-c', 'true'], [GNOMISH_FINDINGS_FILE: '/gnomish/scratch/f.json'], null, false))
+        e.exec(new ExecCommand(['sh', '-c', 'true'], [GNOMISH_FINDINGS_FILE: '/gnomish/scratch/f.json'], null, StderrPolicy.PIPED))
 
         then: 'the argv carries exactly the passthrough and factory-set entries — nothing else'
         thrown(IllegalStateException)

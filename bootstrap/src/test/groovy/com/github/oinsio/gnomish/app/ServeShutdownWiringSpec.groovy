@@ -548,7 +548,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
 
     def cleanupSpec() {
         ShutdownPhase.reset()
-        OrderedExit.install({}, {})
+        OrderedExit.install({}, {}, {})
     }
 
     /**
@@ -587,7 +587,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         OrderedExit.install({ steps << 'closeContext' }, {
             steps << 'stopLogging'
             loggerContext.stop()
-        })
+        }, {})
         def slotRunner = newSlotRunner()
         def automaton = newAutomaton(slotRunner)
         def shutdown = newShutdown(new RecordingKiller())
@@ -643,7 +643,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
         given: "the operator's file, fed through the production async appender"
         def logFile = tempDir.resolve('kill-during-drain.log')
         def async = attachAsyncRootFile(logFile)
-        OrderedExit.install({ }, { async.stop() })
+        OrderedExit.install({ }, { async.stop() }, {})
 
         and: "a drain whose in-flight slot writes its terminal summary as the drain kills the tree"
         def summary = new TaskSummary(
@@ -770,7 +770,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
             steps << 'closeContext'
         }, {
             steps << 'stopLogging'
-        })
+        }, {})
         def slotRunner = newSlotRunner()
         def automaton = newAutomaton(slotRunner)
         def observability = newObservability()
@@ -867,7 +867,7 @@ class ServeShutdownWiringSpec extends Specification implements BareGitRepoFixtur
             steps << 'closeContext'
         }, {
             steps << 'stopLogging'
-        })
+        }, {})
         def slotRunner = newSlotRunner()
         def automaton = newAutomaton(slotRunner)
         tracker.listReady(_) >> []

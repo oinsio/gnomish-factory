@@ -6,10 +6,10 @@ import java.io.Serial;
  * Thrown when the round thread is interrupted while waiting for its stdout
  * drain to finish (FR2 of fix-round-stdout-drain). It is the drain's second
  * infrastructure failure, deliberately distinct from {@link
- * StreamDrainTimeoutException}: nothing here says the tail-drain grace was too
- * short — the wait was cut short by whoever interrupted the round, and the
- * drain may have been about to finish — so the message must not send an
- * operator off raising {@code factory.agent-cli-tail-drain-grace}.
+ * StreamDrainTimeoutException}: nothing here says the post-exit bound of the
+ * round's handle was too short — the wait was cut short by whoever interrupted
+ * the round, and the drain may have been about to finish — so the message must
+ * not blame the bound.
  *
  * <p>Unchecked, and classified exactly like its sibling: the executor lets it
  * propagate into {@code RoundOutcome.CannotExecute} (no stage attempt burned,

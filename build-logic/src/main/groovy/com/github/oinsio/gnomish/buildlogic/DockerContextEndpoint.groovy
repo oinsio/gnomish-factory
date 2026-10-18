@@ -20,14 +20,18 @@ import org.gradle.process.ExecSpec
  * calls no daemon and no credential helper. It runs under the operator's own configuration — the
  * operator's {@code DOCKER_CONFIG} and {@code DOCKER_CONTEXT} are parameters, so a change to either
  * invalidates the configuration cache, and are set on the process explicitly rather than trusted to
- * reach it through the daemon's inherited environment.
+ * reach it through the daemon's inherited environment. The client's {@code PATH} is a parameter for
+ * the same reason: {@link ClientPathTool} finds {@code docker} on it and the inspect runs that
+ * absolute path, never a bare name the JDK would resolve on the {@code PATH} the daemon started with
+ * (D14 as amended 2026-10-18, task 7.5).
  *
  * <p>A {@code ValueSource} for the same reason as {@link HardwareSpec}: under the configuration
  * cache Gradle re-obtains it on every build and reuses the stored configuration only when the
  * answer is the same — one {@code docker} process per build either way.
  *
  * <p>No {@code docker} binary, a failing inspect or a blank answer: {@link Endpoint#NONE}, so the
- * build sets no endpoint and the Docker specs skip through their own availability checks.
+ * build sets no endpoint and the Docker specs skip through their own availability checks; a
+ * {@code docker} the client's {@code PATH} does not hold says so in a build warning.
  */
 abstract class DockerContextEndpoint implements ValueSource<Endpoint, Parameters> {
 
@@ -36,8 +40,11 @@ abstract class DockerContextEndpoint implements ValueSource<Endpoint, Parameters
 
     interface Parameters extends ValueSourceParameters {
 
-        /** The {@code docker} to run: {@code docker} on the daemon's path, or a path a spec chooses. */
+        /** The {@code docker} to run: the bare {@code docker}, found on {@link #getClientPath}, or a path a spec chooses. */
         Property<String> getExecutable()
+
+        /** The client's {@code PATH}, absent when unset: where a bare {@link #getExecutable} is looked up. */
+        Property<String> getClientPath()
 
         /** The operator's {@code DOCKER_CONFIG}, absent when unset. */
         Property<String> getOperatorConfig()
@@ -67,10 +74,15 @@ abstract class DockerContextEndpoint implements ValueSource<Endpoint, Parameters
      */
     @Override
     Endpoint obtain() {
+        String docker = ClientPathTool.locate(parameters.executable.get(), parameters.clientPath.getOrNull(),
+                'the test JVMs get no DOCKER_HOST, and the Docker specs skip')
+        if (docker == null) {
+            return Endpoint.NONE
+        }
         def out = new ByteArrayOutputStream()
         try {
             def result = execOperations.exec { spec ->
-                spec.commandLine(parameters.executable.get(), 'context', 'inspect', '--format', FORMAT)
+                spec.commandLine(docker, 'context', 'inspect', '--format', FORMAT)
                 operatorVariable(spec, 'DOCKER_CONFIG', parameters.operatorConfig.getOrNull())
                 operatorVariable(spec, 'DOCKER_CONTEXT', parameters.operatorContext.getOrNull())
                 spec.standardOutput = out
@@ -79,8 +91,8 @@ abstract class DockerContextEndpoint implements ValueSource<Endpoint, Parameters
             }
             result.exitValue == 0 ? parse(out.toString(StandardCharsets.UTF_8).trim()) : Endpoint.NONE
         } catch (GradleException ignored) {
-            // The process could not be started — no docker on the path: the Docker specs skip
-            // through their own checks. Narrower than RuntimeException, so a defect here fails loudly.
+            // The resolved docker could not be started: the Docker specs skip through their own
+            // checks. Narrower than RuntimeException, so a defect here fails loudly.
             Endpoint.NONE
         }
     }

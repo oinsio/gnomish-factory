@@ -13,15 +13,11 @@
 // methods themselves (.claude/rules/testing.md) — TakeBatchExitCode's
 // isNewSmallestNonZero is this module's one equivalent-mutant case.
 pitest {
-    // FR11/D9 documented exception (add-factory-serve, task 5.5): RealProcessTreeKiller walks
-    // ProcessHandle.current().descendants() and destroys them — spawning and killing real OS
-    // processes in a unit test would be heavy and flaky for no coverage benefit. The sequencing
-    // that decides whether/when it runs (ServeShutdown: interrupt feed, flag occupied claims,
-    // wait the grace window, then always call the process-tree killer) is fully covered by
-    // ServeShutdownSpec against a fake ProcessTreeKiller, so excluding this thin real
-    // implementation removes no production DECISION from mutation coverage, only the
-    // unverifiable OS-process bytes themselves — the same "main()/bootstrap wiring" category
-    // as `:bootstrap`'s FactoryApplication.
+    // RealProcessTreeKiller is no longer listed here (task 8.21a of fix-terminal-receipt-convergence):
+    // the shutdown step it now carries — the snapshot kill, then the sweep of every live group — is
+    // driven on real processes by ShutdownSweepSpec in this module, whose orphan outlives a removed
+    // sweep and whose child's exit code (143, the cooperative signal) tells a removed snapshot kill
+    // from the sweep's SIGKILL, so relocation restored the gate the FR11/D9 exception had removed.
     // Arid-wiring exemptions (task 8.6 of split-into-modules, design D13(b); the category and the
     // bar every entry below has to clear are in `.claude/rules/testing.md`, "Per-class exemptions").
     // Each was read through before being listed: none holds a conditional, a loop or a computed
@@ -30,7 +26,6 @@ pitest {
     // one that really drives the class end to end, so what is dropped here is the mutation gate on
     // the construction itself, never the coverage of the graph being constructed.
     excludedClasses = [
-        'com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller',
         // The six `with*` copies of the seam parameter object; driven by :bootstrap's
         // TakeCommandStandingReaperWiringSpec / TakeCommandBatchSpec / TakeHeartbeatLifecycleSpecBase,
         // each of which overrides one seam and asserts the resulting take run's behavior.

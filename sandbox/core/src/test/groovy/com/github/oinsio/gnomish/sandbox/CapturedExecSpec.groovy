@@ -1,12 +1,9 @@
 package com.github.oinsio.gnomish.sandbox
 
+import static com.github.oinsio.gnomish.sandbox.CaptureThread.onItsOwnThread
+
 import java.io.InterruptedIOException
 import java.io.UncheckedIOException
-import java.time.Duration
-import java.time.Instant
-import java.time.InstantSource
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import spock.lang.Specification
 
 /**
@@ -92,97 +89,5 @@ class CapturedExecSpec extends Specification {
 
     private static InputStream stream(String text) {
         new ByteArrayInputStream(text.bytes)
-    }
-
-    /** Runs {@code body} on a bounded thread of its own, so a wedged capture fails instead of hanging. */
-    private static Throwable onItsOwnThread(Closure body) {
-        def failure = new Throwable[1]
-        def done = new CountDownLatch(1)
-        Thread.ofPlatform().daemon(true).start {
-            try {
-                body()
-            } catch (Throwable t) {
-                failure[0] = t
-            } finally {
-                done.countDown()
-            }
-        }
-        assert done.await(10, TimeUnit.SECONDS): 'the capture never returned: the pipe read blocked ahead of the wait'
-        failure[0]
-    }
-}
-
-/** A canned {@link ExecHandle}: scripted output stream, exit code, and an optionally interrupted wait. */
-class CannedExecHandle implements ExecHandle {
-
-    InputStream output
-    int exit = 0
-    boolean interruptsWait = false
-
-    @Override
-    InputStream output() {
-        output
-    }
-
-    @Override
-    Instant startedAt() {
-        Instant.EPOCH
-    }
-
-    @Override
-    ExecHandle.Wait waitForExitOrTimeout(Duration timeout, InstantSource clock) {
-        throw new UnsupportedOperationException('not driven by the capture helper')
-    }
-
-    @Override
-    int waitForExit() {
-        if (interruptsWait) {
-            // The supervised wait's contract: tree killed, flag restored, exit code meaningless.
-            Thread.currentThread().interrupt()
-        }
-        exit
-    }
-}
-
-/** A pipe whose bytes arrive only after a delay — output still in flight when the wait resolves. */
-class SlowStream extends InputStream {
-
-    private final InputStream delegate
-    private final long delayMillis
-    private boolean delayed = false
-
-    SlowStream(byte[] bytes, long delayMillis) {
-        this.delegate = new ByteArrayInputStream(bytes)
-        this.delayMillis = delayMillis
-    }
-
-    @Override
-    int read() {
-        if (!delayed) {
-            delayed = true
-            Thread.sleep(delayMillis)
-        }
-        delegate.read()
-    }
-}
-
-/** A pipe that never yields a byte and never reaches EOF — a hung in-box command. */
-class NeverEndingStream extends InputStream {
-
-    private final CountDownLatch never = new CountDownLatch(1)
-
-    @Override
-    int read() {
-        never.await(30, TimeUnit.SECONDS) // in-JVM stand-in for a pipe read that does not return
-        -1
-    }
-}
-
-/** A pipe that breaks mid-read. */
-class BrokenStream extends InputStream {
-
-    @Override
-    int read() {
-        throw new IOException('pipe broke')
     }
 }

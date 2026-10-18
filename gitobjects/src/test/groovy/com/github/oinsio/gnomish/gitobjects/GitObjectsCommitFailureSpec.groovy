@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.gitobjects
 
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch
+import com.github.oinsio.gnomish.subprocess.ProcessSupervisor
+
 import java.lang.reflect.InvocationTargetException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -49,9 +52,9 @@ class GitObjectsCommitFailureSpec extends Specification implements GitObjectsFix
                     new TreeEdit.PutFile('f.txt', 'x'.bytes)
                 ], metadata()))
 
-        then: 'the failure names commit-tree — its output is checked, not passed along empty'
+        then: 'the failure names commit-tree — its exit is checked first, not read as a malformed id'
         def e = thrown(GitObjectsException)
-        e.message.contains('commit-tree')
+        e.message.contains('git commit-tree failed')
 
         and: 'no branch was created'
         git.resolveRef('refs/heads/gnomish/t1').isEmpty()
@@ -80,7 +83,7 @@ class GitObjectsCommitFailureSpec extends Specification implements GitObjectsFix
     def "FR25: deletePath fails loudly when ls-files cannot read a corrupt index"() {
         given: 'a CommitBuilder driven directly so a corrupt index can be injected'
         def bare = seedBareRepo(tempDir, ['a.txt': 'content'])
-        def exec = new GitExec(bare, 'git')
+        def exec = new GitExec(bare, 'git', new ProcessSupervisor(), ProcessLaunch.grouped())
         def builder = new CommitBuilder(exec, tempDir)
         def corruptIndex = tempDir.resolve('corrupt.idx')
         Files.writeString(corruptIndex, 'not a real git index')

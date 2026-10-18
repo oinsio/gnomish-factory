@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.atomicfile;
+package com.github.oinsio.buildchecks.atomicwrite;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -7,14 +7,15 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a class that writes a file <em>without</em> going through {@link AtomicFileWriter}, and
- * says why that is correct for the file it writes (FR5, design D10 of harden-task-branch-contract).
+ * Marks a class that writes a file <em>without</em> going through {@code
+ * com.github.oinsio.gnomish.atomicfile.AtomicFileWriter}, and says why that is correct for the file
+ * it writes (FR5, design D10 of harden-task-branch-contract).
  *
  * <p>The atomic-write boundary gate is a negative rule: no production class may reach a {@code
- * java.nio.file.Files} write method unless it lives in this package or carries this marker. A
- * negative rule is what catches the writer nobody thought to add to a list — the failure mode an
- * allowlist of named writers cannot have, because a new writer is exactly the thing missing from
- * it.
+ * java.nio.file.Files} write method unless it lives in the {@code :atomicfile} leaf or carries this
+ * marker. A negative rule is what catches the writer nobody thought to add to a list — the failure
+ * mode an allowlist of named writers cannot have, because a new writer is exactly the thing missing
+ * from it.
  *
  * <p>The escape is deliberately self-declaring rather than a central allowlist, the same shape
  * {@code @DoNotMutate} uses for the mutation gate: the justification lives beside the code it
@@ -33,7 +34,12 @@ import java.lang.annotation.Target;
  * <p>A factory-owned file under {@code .gnomish-task/}, or anything another instance classifies a
  * task from, never qualifies: those are what FR5 exists for.
  *
- * @see AtomicFileWriter
+ * <p>The marker lives in the {@code build-checks} included build, put {@code compileOnly} on every
+ * module by {@code java-conventions}, rather than beside the writer it excuses: a dependency-free
+ * leaf such as {@code :subprocess} must be able to wear it without an edge to {@code :atomicfile}
+ * (design D20 of fix-terminal-receipt-convergence, amended 2026-10-18). The gate matches it by
+ * this fully qualified name, so an annotation of the same simple name elsewhere does not pass.
+ * Class retention, because the gate reads bytecode.
  */
 @Documented
 @Retention(RetentionPolicy.CLASS)

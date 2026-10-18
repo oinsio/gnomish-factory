@@ -28,7 +28,7 @@ import org.slf4j.MDC;
  * <p>Both round executions share this one implementation (FR6). The round
  * thread keeps ownership of the round budget: it waits for process exit as
  * before, then calls {@link #await(Duration)} to collect the events within the
- * tail-drain grace. {@link #close()} on every exit path guarantees no drain
+ * post-exit bound of its handle. {@link #close()} on every exit path guarantees no drain
  * thread and no open stream outlives the round (NFR-R1), which is why callers
  * hold it in a try-with-resources.
  *
@@ -40,19 +40,9 @@ import org.slf4j.MDC;
  * post-exit from the round thread.
  *
  * <p>Implements FR1, FR2, FR4, FR6, NFR-R1, NFR-O1, NFR-P1, D1, D3, D4, D5 of
- * fix-round-stdout-drain.
+ * fix-round-stdout-drain; FR19, D17 of fix-terminal-receipt-convergence.
  */
 final class StreamDrain implements AutoCloseable {
-
-    /**
-     * How long {@link #close()} waits for an interrupted drain thread to notice.
-     * Not the tail-drain grace: by the time close runs, either the drain already
-     * finished (the normal path, where this join returns at once) or the round is
-     * being torn down by a failure and the stream has just been closed underneath
-     * it — this only keeps the teardown from returning while the thread is still
-     * unwinding.
-     */
-    private static final Duration CLOSE_JOIN = Duration.ofSeconds(1);
 
     private final InputStream source;
     private final CountingInputStream counting;
@@ -88,28 +78,29 @@ final class StreamDrain implements AutoCloseable {
 
     /**
      * The events parsed from the whole stream, once the drain has finished within
-     * {@code grace} (FR2). Called by the round thread after the process exited:
+     * {@code postExitBound} (FR2). Called by the round thread after the process exited:
      * the tail is already in the pipe buffer, so the join is normally instant.
      *
-     * @param grace the tail-drain grace ({@code factory.agent-cli-tail-drain-grace});
-     *     never null, always positive
+     * @param postExitBound the post-exit bound of the round's handle ({@code
+     *     ExecHandle.postExitBound()}, FR19 of fix-terminal-receipt-convergence); never
+     *     null, always positive
      * @return the round's events, in wire order; never null, possibly empty
      * @throws StreamDrainTimeoutException if the drain is still reading when the
-     *     grace expires — an infrastructure failure of the round, never a silently
+     *     bound expires — an infrastructure failure of the round, never a silently
      *     partial stream
      * @throws StreamDrainInterruptedException if the round thread is interrupted
-     *     before the drain finishes; the grace is blameless on that path, so it is a
+     *     before the drain finishes; the bound is blameless on that path, so it is a
      *     separate failure rather than a timeout that would misdirect the operator
      * @throws UncheckedIOException if the drain failed on a genuine I/O error while
      *     the process was alive (D3)
      */
-    List<TimestampedEvent> await(Duration grace) {
-        Join join = joinWithin(grace);
+    List<TimestampedEvent> await(Duration postExitBound) {
+        Join join = joinWithin(postExitBound);
         if (join != Join.FINISHED) {
             close();
             throw join == Join.INTERRUPTED
                     ? new StreamDrainInterruptedException(bytesRead())
-                    : new StreamDrainTimeoutException(grace, bytesRead());
+                    : new StreamDrainTimeoutException(postExitBound, bytesRead());
         }
         RuntimeException drainFailure = failure;
         if (drainFailure != null) {
@@ -124,17 +115,19 @@ final class StreamDrain implements AutoCloseable {
     }
 
     /**
-     * Ends the drain on any exit path (NFR-R1): interrupts the thread, closes the
-     * process's stdout — which is what unblocks a read still parked on a killed
-     * process's pipe — and waits briefly for the thread to unwind. Idempotent, and
-     * a no-op in effect on the normal path where the drain already reached EOF and
-     * closed the stream itself.
+     * Ends the drain on any exit path (NFR-R1): interrupts the thread and closes the
+     * process's stdout — which is what unblocks a read still parked on a pipe a killed
+     * process or an exited one's descendant holds, so the thread ends on its own a
+     * moment later. It does not join the thread: the wait for the stream is {@link
+     * #await}'s, bounded by the handle's post-exit bound the round passes, and a second bound of the
+     * drain's own here would be a reader's constant beside it (design D17 of
+     * fix-terminal-receipt-convergence). Idempotent, and a no-op in effect on the
+     * normal path where the drain already reached EOF and closed the stream itself.
      */
     @Override
     public void close() {
         thread.interrupt();
         closeSource();
-        joinWithin(CLOSE_JOIN);
     }
 
     /**

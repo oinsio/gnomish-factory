@@ -54,10 +54,8 @@ class GitObjectsReadSpec extends Specification implements GitObjectsFixture, Bou
         def git = openGitObjects(bare, tempDir)
         def tip = git.resolveRef('refs/heads/base').get()
 
-        // cap=20 drains readCapped's `remaining` to exactly zero — a mutant of its "remaining > 0"
-        // boundary would busy-spin forever there with no blocking I/O to interrupt, so the call is
-        // bounded, turning a hang into a fast, clean failure instead of stalling the
-        // mutation-testing minion.
+        // cap=20 spends the drain's capacity exactly; the call stays bounded so a regression to a
+        // spinning read fails fast instead of stalling the mutation-testing minion.
         expect: 'a cap exactly at or above the content length reads it whole'
         new String(withBoundedWait {
             git.readBlob(tip, 'big.txt', cap)

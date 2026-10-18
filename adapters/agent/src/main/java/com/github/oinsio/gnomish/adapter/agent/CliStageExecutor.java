@@ -113,7 +113,12 @@ public final class CliStageExecutor implements StageExecutor {
             PipelineLaw law,
             RoundEnvironmentSource environmentSource) {
         this.equipment = new AgentRoundEquipment(
-                factoryProperties, clock, progressListener, new AgentRoundResultExtractor(), childEnv);
+                factoryProperties,
+                clock,
+                progressListener,
+                new AgentRoundResultExtractor(),
+                childEnv,
+                RoundScratchDirectory.HOST_TEMP);
         this.promptBuilder = new ExecutorPromptBuilder(law);
         this.environmentSource = environmentSource;
     }

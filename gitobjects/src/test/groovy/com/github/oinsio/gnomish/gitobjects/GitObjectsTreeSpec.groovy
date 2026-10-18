@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.gitobjects
 
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch
+import com.github.oinsio.gnomish.subprocess.ProcessSupervisor
+
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
@@ -107,7 +110,7 @@ class GitObjectsTreeSpec extends Specification implements GitObjectsFixture {
     def "FR25: allocateIndex reserves a unique path but deletes the placeholder file it created"() {
         given: 'a CommitBuilder wired directly, bypassing the public commit() facade'
         def bare = seedBareRepo(tempDir, ['src/App.java': 'class App {}'])
-        def exec = new GitExec(bare, 'git')
+        def exec = new GitExec(bare, 'git', new ProcessSupervisor(), ProcessLaunch.grouped())
         def index = indexDir(tempDir)
         Files.createDirectories(index)
         def builder = new CommitBuilder(exec, index)

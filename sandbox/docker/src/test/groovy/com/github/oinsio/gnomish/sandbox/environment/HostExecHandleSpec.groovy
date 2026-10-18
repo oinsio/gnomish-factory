@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.subprocess.ProcessSupervisor
 import java.time.Duration
 import java.time.Instant
 import java.time.InstantSource
@@ -51,6 +52,13 @@ class HostExecHandleSpec extends Specification {
         then: 'the timeout is reported and the process is dead, not leaked'
         wait instanceof ExecHandle.Wait.TimedOut
         !process.isAlive()
+    }
+
+    // FR19 of fix-terminal-receipt-convergence: the handle answers the post-exit bound from the
+    // supervisor its waits run on, never a constant of its own
+    def "the post-exit bound is the supervisor's"() {
+        expect:
+        handle(['sh', '-c', 'true']).postExitBound() == new ProcessSupervisor().postExitBound()
     }
 
     // FR4: the natural exit code is returned unchanged

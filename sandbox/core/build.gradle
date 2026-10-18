@@ -41,6 +41,13 @@ dependencies {
     // public surface, so every consumer compiles against it too.
     api project(':untrustedtext')
 
+    // The subprocess leaf (design D9 of bound-subprocess-commands: dependency-free, so the reach it
+    // adds is nil): `CapturedExec` reads an exec handle's output on its `Drain`, joined with the
+    // handle's post-exit bound, and judges a cut through `CutCaptureException.refuses` (design D15,
+    // D17 of fix-terminal-receipt-convergence). `implementation`: no signature of this module names
+    // a type of it — the bound crosses the port as a `Duration`.
+    implementation project(':subprocess')
+
     // @ConfigurationProperties / @Name on the three configuration records
     // (design D1's layer-home rule: root config-properties types follow their
     // consumers). The bare `spring-boot` artifact, not the starter: this module
@@ -74,6 +81,10 @@ layering {
         // source in this module names it; the layering gate walks the transitive graph, so the
         // reach is listed where it arrives.
         ':operatorevent',
+        // The subprocess leaf (design D9 of bound-subprocess-commands; D17 of
+        // fix-terminal-receipt-convergence): declared directly above — `CapturedExec` joins its
+        // drain on it. Dependency-free, so this edge reaches nothing further.
+        ':subprocess',
         // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves; FR1, design D3
         // of type-untrusted-text): declared directly above — `CapturedExec.output` is a
         // carrier, so this module's own signatures name it.

@@ -39,8 +39,11 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * type-untrusted-text.
  *
  * @param exitCode the git process's exit code; authoritative only on {@link Termination#EXITED}
- * @param stdout the process's standard output, captured in full on a normal exit
- * @param stderr the process's standard error, captured in full on a normal exit, credential-scrubbed
+ * @param stdout the process's standard output, captured in full on a normal exit — a cut clean exit
+ *     never becomes a result, it is refused with {@code CutCaptureException} (design D15 as amended
+ *     2026-10-17); on a failure, possibly a prefix
+ * @param stderr the process's standard error, credential-scrubbed, captured in full on a normal exit;
+ *     on a failure whose drain was cut, followed by the note naming the cut
  * @param termination how the invocation ended
  */
 record GitCommandResult(int exitCode, UntrustedText stdout, UntrustedText stderr, Termination termination) {

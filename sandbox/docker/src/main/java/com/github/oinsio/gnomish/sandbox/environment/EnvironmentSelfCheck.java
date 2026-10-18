@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.IsolationLevel;
+import com.github.oinsio.gnomish.sandbox.StderrPolicy;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -114,7 +115,7 @@ public final class EnvironmentSelfCheck {
      * {@code id} that cannot run at all, fails closed (FR8, D16).
      */
     private String probeRunsAsNonRoot() {
-        ExecHandle handle = environment.exec(new ExecCommand(List.of("id", "-u"), Map.of(), null, true));
+        ExecHandle handle = environment.exec(new ExecCommand(List.of("id", "-u"), Map.of(), null, StderrPolicy.MERGED));
         CapturedExec probe = EgressSelfCheckProbes.capture(handle, "self-check probe non-root");
         UntrustedText output = probe.output();
         int exitCode = probe.exitCode();

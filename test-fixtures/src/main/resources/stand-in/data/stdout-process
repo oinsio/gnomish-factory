@@ -1,0 +1,5 @@
+# What process-shaped stand-ins print on stdout.
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[leading]
+up

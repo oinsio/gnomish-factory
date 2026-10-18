@@ -33,3 +33,7 @@ include 'parameter-count-check'
 // Its exemption annotation, split out because it lands on each module's compile
 // classpath (compileOnly) and must drag nothing behind it.
 include 'parameter-count-annotations'
+// The atomic-write boundary gate's exemption marker (`@NonAtomicWrite`; design D20 of
+// fix-terminal-receipt-convergence): no check of its own here — the gate is an ArchUnit spec in
+// the main build — but the same compileOnly shape, so a dependency-free leaf can wear it.
+include 'atomic-write-annotations'

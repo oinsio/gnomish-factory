@@ -29,7 +29,12 @@ does W" is not done until every item below has evidence in the task's own report
    the same step (the raw call — `rev-parse`, `resolveRef(String)`, a default literal, a
    direct file read). Every hit is either removed, routed through the owner, or listed as an
    exemption in the design with its reason (a manual tier, an offline path). An unlisted
-   survivor is the bug this rule prevents, not a follow-up.
+   survivor is the bug this rule prevents, not a follow-up. A flag or a verdict carried on a
+   result is a value with consumers of its own, and its consumer list reaches the readers of the
+   result, not the result's constructor: the `truncated` flag of a capture
+   (`fix-terminal-receipt-convergence`, design D15) was logged by the runner's report and
+   dropped at `GitCommandResult.of`, which takes no flag, so every parser of git's stdout read a
+   cut prefix as whole output with a green build.
 3. **The escape hatch is gone.** If a port or constructor still accepts the raw form the owner
    was introduced to replace (a `String` where a typed value now exists, a nullable that
    defaults), the mechanism is not enforced. Change the signature in the same change; the

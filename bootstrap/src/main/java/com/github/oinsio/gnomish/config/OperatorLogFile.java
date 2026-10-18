@@ -73,8 +73,8 @@ public final class OperatorLogFile {
         String configured =
                 Binder.get(environment).bind(INSTANCE_NAME, String.class).orElse(null);
         try {
-            // the six-argument constructor resolves the unset and blank cases as the binding does
-            String instance = new FactoryProperties(configured, null, null, null, null, null).instanceName();
+            // the five-argument constructor resolves the unset and blank cases as the binding does
+            String instance = new FactoryProperties(configured, null, null, null, null).instanceName();
             return home.project(project).logFile(instance);
         } catch (IllegalArgumentException e) {
             throw new ConfigurationViolationsException(List.of(INSTANCE_NAME + ": " + e.getMessage()

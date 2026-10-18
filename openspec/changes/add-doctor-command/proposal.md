@@ -5,7 +5,9 @@ Sequenced last: after `add-project-registry` (registry, configuration loader),
 contract label). It reports on what those changes introduce.
 Also sequenced after `tighten-spec-contract`: the MODIFIED blocks of `operator-configuration`
 ("Violations stop startup with one complete report") and `git-transfer` ("Git version floor at
-startup") are layered on that change's text, which must sync first.
+startup") are layered on that change's text, which must sync first. Also sequenced after
+`fix-terminal-receipt-convergence` (design D19): the host process-group launcher helper that
+`doctor` checks is introduced there.
 
 ## Why
 
@@ -90,7 +92,10 @@ is a way to ask them without stopping at the first refusal.
   container-bound; Docker reachable when a stage is container-bound; the
   sandbox image present with a matching contract version; the guard image
   present (warn when absent — it is pulled on first use); the agent CLI binary
-  locatable when a stage is host-bound; leftovers of the pre-registry folder
+  locatable when a stage is host-bound; the host process-group launcher helper
+  present when a stage is host-bound (`setsid` on Linux, `/usr/bin/perl` with
+  `POSIX::setsid` on macOS), and the process group sweep's `/bin/kill` on both
+  (`fix-terminal-receipt-convergence`, FR21, D19), with the fix naming the package to install; leftovers of the pre-registry folder
   layout (warn).
 - **FR2**: without `--dir` and outside a registered clone, `doctor` SHALL run
   only the host-level checks and say that project checks were skipped and why.
@@ -127,7 +132,7 @@ is a way to ask them without stopping at the first refusal.
 
 ## Success Metrics
 
-- **M1**: for each of the 12 checks, a spec shows `doctor` and the real startup
+- **M1**: for each of the 13 checks, a spec shows `doctor` and the real startup
   path reach the same verdict on the same fixture (one data table).
 - **M2**: an architecture spec finds no `ProcessBuilder`, `System.getenv`, or
   YAML parsing in the `doctor` package.
@@ -146,5 +151,7 @@ None.
 - Owners gaining a non-refusing assessment: `GitVersionCheck` (`:adapters:git`),
   `OperatorConfigLoader` (`:bootstrap`), `ImageContractCheck`
   (`:sandbox:docker`); `FactoryHome` gains legacy-layout detection;
-  `:adapters:agent` gains agent-CLI binary location.
+  `:adapters:agent` gains agent-CLI binary location; the host launch owner in
+  `:subprocess` (`fix-terminal-receipt-convergence`, D19) gains a non-refusing
+  assessment of its platform helper.
 - Docs: `README.md` (install → `gnomish doctor`), operator guides.

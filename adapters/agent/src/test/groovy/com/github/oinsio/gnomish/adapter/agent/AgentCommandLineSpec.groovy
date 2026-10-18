@@ -9,7 +9,6 @@ import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -38,10 +37,10 @@ class AgentCommandLineSpec extends Specification {
 
     private static AgentRoundEquipment equipment() {
         new AgentRoundEquipment(
-                new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), null, null, null),
+                new FactoryProperties('factory-01', 'claude', null, null),
                 new VirtualClock(),
                 { event -> },
-                new AgentRoundResultExtractor(), ChildEnvAllowlist.none())
+                new AgentRoundResultExtractor(), ChildEnvAllowlist.none(), RoundScratchDirectory.HOST_TEMP)
     }
 
     private List<String> executorArgv() {

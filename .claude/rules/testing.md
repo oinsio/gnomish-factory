@@ -273,7 +273,8 @@ cost report. The same mechanism slowed the ordinary `test` task and PIT's covera
   (`ContainerGitMechanicsSpec`, `FakeAgentSandboxImage` — Linux inside, a host link would not
   resolve; mount the library directory instead), specs of shipped scripts (`LauncherScriptSpec`,
   `ReleasePreflightScriptSpec`, `NightlyMutationIssueScriptSpec`), which run once per build, and
-  `StallingGitOwnerSpec`, whose detector is fed shebang text as data.
+  `StallingGitOwnerSpec`, whose detector is fed shebang text as data, and `StandInLibrarySpec`,
+  which compares the interpreter lines of the process fakes whose line is their subject as data.
 - **The gate**: `StandInOwnerSpec` in `:bootstrap` scans every module's test tree and
   `test-fixtures/src/main` (comments stripped) for three shapes — an executable bit set from code
   (`executable = true`, `setExecutable(`), shebang text (`#!/`, which a directly run script needs),
@@ -286,6 +287,35 @@ Before designing anything "per test" — a script, a configuration file, a repos
 truly varies per run. Everything constant becomes a committed preset; only the remainder is
 created, by one owner. The project record of that question is `design-decisions.md`,
 "Alternative zero".
+
+## A scheduling order is never a premise
+
+A spec never relies on which of two threads or processes runs first — "the drain entered `read()`
+before the child exited", "the script's last write lands after the wait", "the pump is parked by
+now". An order that holds on a workstation is a race on a loaded runner. A spec that needs an
+order **makes** it: the code under test is handed `FakeProcess` (`:test-fixtures`, the one
+`Process` fake) through its `ProcessLaunch`, and the spec gates the exit (`exit`), the pipes
+(`holdOpen`, `release`) and the steps between (`awaitStdoutRead`, `onWaitReturn`) itself. A real
+process stays only where the OS is the subject (a group the sweep must end, a pipe a grandchild
+holds), and then asserts no order: "returned within the bound while the holder is provably alive",
+with a bound of at least ten post-exit bounds. A sleep in a stand-in that buys an order is the
+same premise hidden, and so is a retry (`@Retry`, Gradle's retry plugin): both keep the race and
+make it invisible.
+
+The failure this exists for: the Linux gate of task 7.4 of `fix-terminal-receipt-convergence`
+(2026-10-16, CI run 38879822474) failed on `ProcessSupervisorInterruptSpec`, which that change had
+not touched. Four specs — `ProcessSupervisorInterruptSpec`, `CaptureRunnerDrainSpec`,
+`GitExecPumpThreadsSpec`, `ShellCommandCheckRunnerTimeoutSpec` — stated or hid the order "the
+drain's first `read()`, then the child's exit": the JDK's reaper drains a pipe at the exit on its
+own thread, so a drain that arrives a few milliseconds late sees end-of-file instead (the window
+measured at 2–12 ms). `trailing.sh`'s 0.5 s linger, added for a CI failure of 2026-09-13, was the
+precedent of hiding it. The analysis found a production class behind the flake — no bound on the
+post-exit join (design D15–D17 of that change) — and the four specs were rewritten on `FakeProcess`
+(D16; NFR-R4).
+
+How this is checked: no gate can see a premise, so review owns it, against this section. The
+measurement is NFR-R4 of the same change: the four specs, by name, 20 runs each under two busy
+threads, 80 of 80 green on macOS, and the Linux CI job green.
 
 ## Diagnosing a slow gate
 

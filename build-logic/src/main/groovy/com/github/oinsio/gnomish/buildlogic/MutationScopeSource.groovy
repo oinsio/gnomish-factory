@@ -42,7 +42,7 @@ import org.gradle.process.ExecOperations
  *       commits, so a new class is untracked for the whole change.</li>
  * </ol>
  * Any failure — no {@code main} or {@code origin/main}, no merge base, a root commit, no
- * {@code git}, not a checkout — yields {@link MutationScope.Mode#ALL} with the reason: a scope
+ * {@code git} on the client's {@code PATH} (with a build warning), not a checkout — yields {@link MutationScope.Mode#ALL} with the reason: a scope
  * the build cannot justify is wider, never narrower (NFR-R1). Widening by test and fixture
  * changes is {@link ChangedSources}'s (D4).
  *
@@ -85,12 +85,19 @@ abstract class MutationScopeSource implements ValueSource<MutationScope, Paramet
         ListProperty<String> getTaskNames()
 
         /**
-         * The {@code git} command; {@code git} on the daemon's {@code PATH} unless set. Set only by
-         * {@code MutationScopeFunctionalSpec}, to a wrapper that records each invocation — a
-         * {@code PATH} entry cannot do it, as the JDK resolves the executable against the daemon's
-         * own {@code PATH}, not the environment a build is given.
+         * The {@code git} command; the bare {@code git}, found on {@link #getClientPath}, unless set.
+         * Set only by {@code MutationScopeFunctionalSpec}'s fixture, to a wrapper that records each
+         * invocation.
          */
         Property<String> getGitExecutable()
+
+        /**
+         * The client's {@code PATH}, absent when unset: {@link ClientPathTool} finds {@code git} on it,
+         * never on the {@code PATH} the daemon started with — under launchd's that was Apple's
+         * {@code git}, below the 2.51 floor (D14 of fix-terminal-receipt-convergence as amended
+         * 2026-10-18, task 7.5).
+         */
+        Property<String> getClientPath()
     }
 
     @Inject
@@ -116,12 +123,17 @@ abstract class MutationScopeSource implements ValueSource<MutationScope, Paramet
     }
 
     protected MutationScope branch() {
-        def base = BASE_REFS.findResult { resolveBase(it) }
+        String git = ClientPathTool.locate(parameters.gitExecutable.getOrElse('git'), parameters.clientPath.getOrNull(),
+                'PIT mutates the whole tree')
+        if (git == null) {
+            return MutationScope.all("no git on the build's PATH (${parameters.clientPath.getOrElse('unset')})".toString())
+        }
+        def base = BASE_REFS.findResult { resolveBase(git, it) }
         if (base == null) {
             return MutationScope.all('no scope base: not a git checkout, no main or origin/main, no merge base with HEAD, or HEAD has no parent')
         }
-        def diff = git('diff', '--name-status', '--no-renames', base.sha)
-        def untracked = git('ls-files', '--others', '--exclude-standard')
+        def diff = run(git, 'diff', '--name-status', '--no-renames', base.sha)
+        def untracked = run(git, 'ls-files', '--others', '--exclude-standard')
         if (diff == null || untracked == null) {
             return MutationScope.all("no scope: git could not list the changes since ${base.sha}".toString())
         }
@@ -132,8 +144,8 @@ abstract class MutationScopeSource implements ValueSource<MutationScope, Paramet
     }
 
     /** {@code [sha, origin]} of the scope base against {@code candidate}, or null if it has none. */
-    protected Map<String, String> resolveBase(Map<String, String> candidate) {
-        def lines = git('rev-parse', "${candidate.ref}...HEAD".toString(), 'HEAD^', '--symbolic-full-name', 'HEAD')
+    protected Map<String, String> resolveBase(String git, Map<String, String> candidate) {
+        def lines = run(git, 'rev-parse', "${candidate.ref}...HEAD".toString(), 'HEAD^', '--symbolic-full-name', 'HEAD')
         if (lines == null) {
             return null
         }
@@ -151,13 +163,13 @@ abstract class MutationScopeSource implements ValueSource<MutationScope, Paramet
                 : [sha: mergeBase, origin: "merge-base ${candidate.name}".toString()]
     }
 
-    /** The command's stdout lines, or null when it failed or {@code git} could not be started. */
-    protected List<String> git(String... args) {
+    /** The stdout lines of {@code git} (an absolute path), or null when it failed or could not be started. */
+    protected List<String> run(String git, String... args) {
         def out = new ByteArrayOutputStream()
         try {
             def result = execOperations.exec { spec ->
                 spec.workingDir = parameters.repositoryRoot.get().asFile
-                spec.commandLine([parameters.gitExecutable.getOrElse('git'), *INSULATION, *args])
+                spec.commandLine([git, *INSULATION, *args])
                 spec.environment('GIT_OPTIONAL_LOCKS', '0')
                 spec.standardOutput = out
                 spec.errorOutput = OutputStream.nullOutputStream()
@@ -165,7 +177,7 @@ abstract class MutationScopeSource implements ValueSource<MutationScope, Paramet
             }
             result.exitValue == 0 ? out.toString(StandardCharsets.UTF_8).readLines().findAll { !it.isEmpty() } : null
         } catch (RuntimeException ignored) {
-            null // no git on PATH, or no such directory: NFR-R1 — the caller widens
+            null // git could not be started, or no such directory: NFR-R1 — the caller widens
         }
     }
 }

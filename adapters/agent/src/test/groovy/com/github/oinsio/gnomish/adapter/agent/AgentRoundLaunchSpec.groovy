@@ -43,7 +43,7 @@ class AgentRoundLaunchSpec extends Specification {
 
     static final String CRITERIA = 'The output must be correct.'
     static final PipelineLaw LAW = PipelineLaw.ofContent(['instructions.md': 'Do the thing.', 'criteria.md': CRITERIA])
-    static final FactoryProperties PROPERTIES = new FactoryProperties('factory-01', 'claude', Duration.ofSeconds(30), null, null, null)
+    static final FactoryProperties PROPERTIES = new FactoryProperties('factory-01', 'claude', null, null)
 
     final List<ExecCommand> launched = []
 

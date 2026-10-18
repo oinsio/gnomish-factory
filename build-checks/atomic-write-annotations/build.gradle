@@ -1,0 +1,5 @@
+// The exemption marker of the atomic-write boundary gate (FR5, design D10 of
+// harden-task-branch-contract; moved here by design D20 of fix-terminal-receipt-convergence).
+// Consumed `compileOnly` by every module of the main build, so a dependency-free leaf such as
+// `:subprocess` can wear it without an edge to `:atomicfile`; it declares no dependency, since
+// whatever it dragged in would land on every module's compile classpath.

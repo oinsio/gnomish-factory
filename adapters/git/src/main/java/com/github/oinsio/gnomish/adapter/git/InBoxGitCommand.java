@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
+import com.github.oinsio.gnomish.sandbox.StderrPolicy;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -66,7 +67,7 @@ final class InBoxGitCommand {
         argv.addAll(arguments);
         try {
             CapturedExec captured =
-                    CapturedExec.of(environment.exec(new ExecCommand(argv, Map.of(), null, true)), what);
+                    CapturedExec.of(environment.exec(new ExecCommand(argv, Map.of(), null, StderrPolicy.MERGED)), what);
             return new Outcome(Termination.EXITED, captured.exitCode(), captured.output());
         } catch (UncheckedIOException e) {
             if (e.getCause() instanceof InterruptedIOException interrupted) {

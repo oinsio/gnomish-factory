@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.architecture
 
 import com.github.oinsio.gnomish.adapter.git.LocalBoxEnvironment
 import com.github.oinsio.gnomish.sandbox.ExecCommand
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -29,7 +30,7 @@ final class FixtureBoxRoundProcess {
         println(PLANTED_PREFIX + System.getenv('GNOMISH_DECISION_FILE'))
         def box = new LocalBoxEnvironment(Path.of(args[0]), Files.createDirectories(Path.of(args[1])))
         box.materialize(args[2], null)
-        def command = new ExecCommand(args.drop(3).toList(), [GNOMISH_FAKE_SCENARIO: 'decision-needed'], null, true)
+        def command = new ExecCommand(args.drop(3).toList(), [GNOMISH_FAKE_SCENARIO: 'decision-needed'], null, StderrPolicy.MERGED)
         def handle = box.exec(command)
         handle.output().transferTo(System.out)
         System.exit(handle.waitForExit())

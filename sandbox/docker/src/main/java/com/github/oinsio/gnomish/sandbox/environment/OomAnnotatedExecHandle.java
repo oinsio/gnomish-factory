@@ -81,6 +81,11 @@ final class OomAnnotatedExecHandle implements ExecHandle {
         return exitCode;
     }
 
+    @Override
+    public Duration postExitBound() {
+        return delegate.postExitBound();
+    }
+
     /**
      * Reads the container's OOM state and warns when it is set. Best-effort in both
      * directions (NFR-R1): a docker command that answers non-zero, and a runtime that is

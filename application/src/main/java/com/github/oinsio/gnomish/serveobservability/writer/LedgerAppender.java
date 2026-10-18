@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.writer;
 
-import com.github.oinsio.gnomish.atomicfile.NonAtomicWrite;
+import com.github.oinsio.buildchecks.atomicwrite.NonAtomicWrite;
 import com.github.oinsio.gnomish.serveobservability.LedgerLine;
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper;
 import java.io.IOException;

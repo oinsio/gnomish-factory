@@ -23,9 +23,11 @@ dependencies {
     // discipline `GitExec.await` now runs on, replacing its own copy.
     // `:subprocess` is itself a dependency-free JDK-only leaf (design D9), so
     // the extraction property below is preserved — the folder move now carries
-    // two modules instead of one. `implementation`: the supervisor and its
-    // `Termination` are held inside `GitExec`, which is package-private, so
-    // nothing on this module's api surface mentions them.
+    // two modules instead of one. Since design D17 and D20 of
+    // fix-terminal-receipt-convergence `GitExec` also launches through its
+    // `ProcessLaunch` and reads both streams on its `Drain`. `implementation`: the
+    // supervisor, the launch and the drains are held inside `GitExec`, which is
+    // package-private, so nothing on this module's api surface mentions them.
     implementation project(':subprocess')
 
     // Shared fakes and port-contract suites (FR7, design D8). No production

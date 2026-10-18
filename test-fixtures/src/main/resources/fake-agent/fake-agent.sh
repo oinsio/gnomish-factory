@@ -19,6 +19,8 @@
 #   - sleeps for the scenario's sleep-seconds (if any) before exiting — the
 #     fake's stand-in for a hung CLI, so roundTimeout-kill tests observe a
 #     real killed OS process (FR13)
+#   - writes the scenario's stderr noise and stderr.txt (if any) to stderr
+#   - leaves a background job holding its stdin (if hold-stdin is present)
 #   - exits with the scenario's exitcode (default 0)
 #
 # Optional, backward-compatible extras (task 9.5, opt-in, unset/absent by
@@ -133,6 +135,23 @@ if [ -f "$SCENARIO_DIR/stdout.jsonl" ]; then
     cat "$SCENARIO_DIR/stdout.jsonl"
 fi
 
+# 1c. Optional stderr (fix-terminal-receipt-convergence, FR20): generated noise — the line in
+# stderr-noise-line, stderr-noise-repeat times — then stderr.txt verbatim, so the scripted error is
+# the stderr's tail. A stand-in for a chatty CLI whose stderr goes far past an OS pipe buffer; the
+# noise is generated, never committed, like the stdout noise above.
+if [ -f "$SCENARIO_DIR/stderr-noise-line" ] && [ -f "$SCENARIO_DIR/stderr-noise-repeat" ]; then
+    STDERR_LINE=$(cat "$SCENARIO_DIR/stderr-noise-line")
+    STDERR_REPEAT=$(cat "$SCENARIO_DIR/stderr-noise-repeat")
+    i=0
+    while [ "$i" -lt "$STDERR_REPEAT" ]; do
+        printf '%s\n' "$STDERR_LINE" >&2
+        i=$((i + 1))
+    done
+fi
+if [ -f "$SCENARIO_DIR/stderr.txt" ]; then
+    cat "$SCENARIO_DIR/stderr.txt" >&2
+fi
+
 # 2. Workspace files the "agent" wrote this round, copied into the cwd the
 # caller launched us in (the stage workspace, or a harness temp dir in tests).
 if [ -d "$SCENARIO_DIR/workspace-files" ]; then
@@ -153,6 +172,14 @@ fi
 # process (a scenario that outlives a test's roundTimeout budget).
 if [ -f "$SCENARIO_DIR/sleep-seconds" ]; then
     sleep "$(cat "$SCENARIO_DIR/sleep-seconds")"
+fi
+
+# 4b. Optional stdin holder (fix-terminal-receipt-convergence, task 8.17): a background job that
+# keeps the CLI's stdin open for hold-stdin seconds after the CLI exits. Its stdout and stderr go to
+# /dev/null, so only the stdin is held — no pipe of the round stays open through it — and its stdin
+# is redirected explicitly, since a shell gives a background job /dev/null otherwise.
+if [ -f "$SCENARIO_DIR/hold-stdin" ]; then
+    sleep "$(cat "$SCENARIO_DIR/hold-stdin")" <&0 >/dev/null 2>&1 &
 fi
 
 # 5. Exit code — default 0 (a clean round) when the scenario has no opinion.

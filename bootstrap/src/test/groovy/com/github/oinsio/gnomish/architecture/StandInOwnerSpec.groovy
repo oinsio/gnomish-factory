@@ -25,18 +25,13 @@ class StandInOwnerSpec extends Specification {
 
     /** Files allowed to spell a stand-in binary, each with why. */
     private static final Map<String, String> EXEMPT = [
-        ('adapters/git/src/test/groovy/com/github/oinsio/gnomish/sandbox/environment/ContainerGitMechanicsSpec.groovy'):
-        'a hook planted inside a running container, where Linux runs it and a host link would not resolve',
-        (BOOT + 'app/FakeAgentSandboxImage.groovy'):
-        'the fake agent installed into a sandbox image by its Dockerfile, run by Linux inside the box',
-        (BOOT + 'distribution/LauncherScriptSpec.groovy'):
-        'a spec of the shipped launcher script, with a stub java on its PATH; it runs once per build',
-        (BOOT + 'distribution/ReleasePreflightScriptSpec.groovy'):
-        'a spec of the shipped release preflight script, with a stub gh on its PATH; it runs once per build',
-        (BOOT + 'architecture/NightlyMutationIssueScriptSpec.groovy'):
-        'a spec of the shipped nightly mutation script, with a stub gh on its PATH; it runs once per build',
-        (BOOT + 'architecture/StallingGitOwnerSpec.groovy'):
-        'a gate\'s own seeded sources: shebang text as data for its detector, never written to disk',
+        ('adapters/git/src/test/groovy/com/github/oinsio/gnomish/sandbox/environment/ContainerGitMechanicsSpec.groovy'): 'a hook planted inside a running container, where Linux runs it and a host link would not resolve',
+        (BOOT + 'app/FakeAgentSandboxImage.groovy'): 'the fake agent installed into a sandbox image by its Dockerfile, run by Linux inside the box',
+        (BOOT + 'distribution/LauncherScriptSpec.groovy'): 'a spec of the shipped launcher script, with a stub java on its PATH; it runs once per build',
+        (BOOT + 'distribution/ReleasePreflightScriptSpec.groovy'): 'a spec of the shipped release preflight script, with a stub gh on its PATH; it runs once per build',
+        (BOOT + 'architecture/NightlyMutationIssueScriptSpec.groovy'): 'a spec of the shipped nightly mutation script, with a stub gh on its PATH; it runs once per build',
+        (BOOT + 'architecture/StallingGitOwnerSpec.groovy'): 'a gate\'s own seeded sources: shebang text as data for its detector, never written to disk',
+        (BOOT + 'testfixtures/standin/StandInLibrarySpec.groovy'): 'the library\'s own spec: the interpreter lines of the process fakes whose line is their subject, as data compared with the committed files, never written to disk',
     ]
 
     /** This gate's own sources spell every shape it scans for. */

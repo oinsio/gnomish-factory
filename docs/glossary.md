@@ -203,7 +203,7 @@ terms) live in `.claude/rules/process-invariants.md`.
 - **Round** — one iteration of the factory's execution loop for a task; round
   boundaries are where claim-loss and staleness decisions take effect.
 - **Agent round equipment** — what every agent round is launched with: the
-  installation's agent settings (CLI binary, tail drain grace), the instant
+  installation's agent settings (the CLI binary), the instant
   source that stamps the round, the live-progress subscriber and the extractor that
   shapes the round's essential result. Built once per owner (the stage
   executor, the judge voter) and taken whole by that owner's round
@@ -782,8 +782,9 @@ trusted/task tier split, and the law-root rule.
   output drained concurrently with the running process, an optional hard
   deadline on the wait, and on expiry or interruption a two-phase kill of the
   whole process tree followed by a reap. It owns mechanics only — logging,
-  output caps, stdin feeds, credential scrubbing and what an exit code means
-  stay with the caller. *Not:* a supervisor in the process-manager sense — it
+  output caps, the bytes given to a child as input, credential scrubbing and
+  what an exit code means stay with the caller; how that input reaches the
+  child is the **launch owner**'s. *Not:* a supervisor in the process-manager sense — it
   never restarts anything.
 - **Termination** — how a supervised invocation ended, named separately from
   the exit code: `EXITED` (the process chose its own code), `TIMED_OUT` (the
@@ -798,6 +799,74 @@ trusted/task tier split, and the law-root rule.
   forced kill, so git and docker can remove their lock and temporary files on a
   catchable signal. A bound on waiting, not a sleep: a tree that stops early
   returns early.
+- **Round scratch directory** — the one host directory an agent round writes
+  outside the task branch, on the host as for a box round: a fresh temp
+  directory per round that takes the CLI's stderr as a file
+  (`StderrPolicy.ToFile`; in a box, through the host-side `docker exec`
+  client's stderr), whose tail the round reads into its diagnostics after the
+  exit — the failure's detail on a round that did not succeed, one DEBUG line
+  on one that did — and which the round removes however it ended. Owned by
+  `RoundScratchDirectory` in `adapters/agent` on both media. *Not:* the
+  scratch area of an execution environment (`/gnomish/scratch` in a box), nor
+  the decision file's place — in container mode that file lives in the task
+  branch.
+- **Post-exit bound** — the one wait every reader of a child's output allows
+  after the child's exit for its pipes to reach end-of-file: the kill grace
+  plus a fixed margin (`ProcessSupervisor.postExitBound()`, 7 s by default),
+  carried across the environment port as `ExecHandle.postExitBound()`. When it
+  expires the reader closes the pipes, which wakes its parked drain, and the
+  capture is flagged as cut. A bound on a wait measured from the exit, never
+  from the start, and never a reader's own constant. *Not:* a deadline on the
+  command — a long command is not cut short by it.
+- **Cut capture** — a capture whose drain the post-exit bound cut: no
+  end-of-file arrived inside the bound, so the stdout held may be a prefix.
+  On a clean exit (exit code 0, `EXITED`) it is refused as a value —
+  `CaptureRunner.await` throws `CutCaptureException`, carrying the partial
+  capture — so no parser reads a prefix as a whole answer; a failed, timed-out
+  or interrupted invocation keeps its partial output readable, the cut named
+  in its detail. The flag means "no end-of-file in time", not "bytes lost".
+  *Not:* the output cap a reader applies itself (`GitExec`'s stdout cap) — a
+  limit the caller chose, not a pipe left open.
+- **Launch owner** — the one component that starts a supervised OS process:
+  the role `ProcessLaunch` in `:subprocess`, whose only production form is
+  `ProcessLaunch.grouped()` (`GroupedLaunch`). It resolves the executable and
+  its `#!` interpreter chain before the launcher (`ExecutableLookup`),
+  prefixes the platform's launcher (`HostLauncher`: `setsid` on Linux, a perl
+  one-liner on macOS) so the child leads a new process group, sets the child's
+  stdin from its **stdin source**, and registers the group in the **live group
+  registry**. Specs hand a `FakeProcess` in through the same role. *Not:* a
+  plain, ungrouped launch — none exists in production; the `docker` client of
+  a box command is a host process launched the same way.
+- **Stdin source** — what a launched child reads as its standard input,
+  handed to the launch owner with every launch (`StdinSource` in
+  `:subprocess`): `StdinSource.NONE` is `/dev/null`, so the child reads
+  end-of-file at once and no pipe exists for a descendant to hold;
+  `StdinSource.of(bytes)` is an owner-only file in the launch owner's input
+  directory, written in full before the start and deleted right after it, read
+  by the child through the descriptor it inherited. The factory never writes
+  into a child's stdin pipe.
+- **Process group sweep** — the one post-exit kill of a launched child's
+  process group (`ProcessGroupSweep` in `:subprocess`), run by every waiter
+  after the wait resolves, however it resolved: `kill -KILL -- -<pid>` repeated
+  while the zero-signal probe `kill -0 -- -<pid>` is answered, at most five
+  rounds, ending when the probe is refused — never judged by the text of
+  `kill`'s error. It ends the descendants the child lost to reparenting, which
+  no snapshot of the process tree lists. Best-effort hygiene, not a fence: a
+  member that changed its uid or called `setsid` itself is beyond it. *Not:*
+  the cooperative tree kill of the kill grace, which it follows.
+- **Live group registry** — the process-wide set of launched groups no
+  process group sweep has yet found empty (`LiveGroups` in `:subprocess`): the
+  launch owner registers the child's pid once the start returns, the sweep
+  deregisters it on a refused probe, and only the **shutdown step** sweeps it
+  whole. A launch that threw registers nothing.
+- **Shutdown step** — what the factory does to its children when it is told
+  to stop, for every command (`RealProcessTreeKiller.killDescendants`): the
+  cooperative kill of the JVM's descendants, then a process group sweep of
+  every group in the live group registry. Run by `serve`'s shutdown and, for a
+  command with no hook of its own (`run`, `take`), by the generic signal hook
+  before the context closes — the only way an operator's Ctrl-C reaches a child
+  that, in its own session, has no controlling terminal. *Not:* a guarantee
+  under `SIGKILL`, which runs no hook.
 
 ## Test stand-ins
 

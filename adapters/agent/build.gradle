@@ -50,6 +50,10 @@ dependencies {
     // events, decision-file content, progress payloads — and `MdcAwareThread` is the thread-hop
     // context helper. Declared, not inherited: this module names both in its own source.
     implementation project(':logtext')
+    // The launch-owner leaf (design D16, D20 of fix-terminal-receipt-convergence): the host
+    // environment source hands `ProcessLaunch.grouped()` to every host environment it builds.
+    // Declared, not inherited through `:sandbox:docker`: this module names the type in its own source.
+    implementation project(':subprocess')
     // The operator-event catalog leaf (FR4, design D3 of split-logtext-leaves): every
     // WARN/ERROR site in this module takes its `[GFnnn]` head from an `OperatorEvent`
     // constant. `implementation`, not `api`: the enum is named only inside log calls,

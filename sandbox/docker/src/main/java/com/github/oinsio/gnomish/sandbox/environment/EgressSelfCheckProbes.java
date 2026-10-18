@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.sandbox.CapturedExec;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
+import com.github.oinsio.gnomish.sandbox.StderrPolicy;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -139,7 +140,7 @@ record EgressSelfCheckProbes(
     }
 
     private Probe run(String... argv) {
-        ExecHandle handle = environment.exec(new ExecCommand(List.of(argv), Map.of(), null, true));
+        ExecHandle handle = environment.exec(new ExecCommand(List.of(argv), Map.of(), null, StderrPolicy.MERGED));
         CapturedExec captured = capture(handle, "self-check probe");
         return new Probe(captured.exitCode(), captured.output());
     }

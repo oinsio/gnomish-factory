@@ -36,8 +36,10 @@ layering.allowedProjects.convention([] as Set)
 // of THIS build (as opposed to an external module, or a project of an included
 // build) it reaches, excluding the module itself. A project of another build is
 // not a layer of the factory: `build-checks` substitutes the parameter-count
-// gate's annotation onto every module's compile classpath by coordinates
-// (design D9 of add-parameter-count-gate), and it carries no factory code — so
+// gate's annotation and the atomic-write gate's `@NonAtomicWrite` marker onto
+// every module's compile classpath by coordinates (design D9 of
+// add-parameter-count-gate; design D20 of fix-terminal-receipt-convergence),
+// and it carries no factory code — so
 // the gate's universe is the main build's module tree, the one `settings.gradle`
 // declares and the one the FR2 direction is stated over.
 def projectDependenciesOf = { String configurationName ->

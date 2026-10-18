@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.subprocess.StdinSource;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
@@ -128,7 +129,7 @@ final class ContainerMaterializer {
                         key,
                         ContainerTaskExecutionEnvironment.WORKING_COPY,
                         Map.of(),
-                        false,
+                        StdinSource.NONE,
                         List.of("mkdir", "-p", ContainerTaskExecutionEnvironment.SCRATCH)),
                 "create scratch");
         // FR2: the creation anchor, logged after the last step rather than before the first — the

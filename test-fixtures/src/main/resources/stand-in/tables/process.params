@@ -20,3 +20,16 @@
 # Writes NOISY_LINE as a line NOISY_LINES times to each stream, the amount the spec sets in the
 # child's environment (CaptureRunnerDrainSpec).
 * exec-sh steps/noisy.sh
+
+[launcher-record]
+# A process-group launcher that records its argv and runs nothing: the helper a spec hands the
+# launch owner, so the log's absence proves no process was started (HostProcessLaunchSpec).
+* record
+* exit 0
+
+[group-leader]
+# Prints its readiness line, then stalls until it is killed: the launch owner's launcher made it a
+# group leader before the exec, so the line proves the group exists, and the stall keeps the pid
+# (GroupLeader, for the group sweep specs of design D19).
+* stdout data/stdout-process#leading
+* stall 600

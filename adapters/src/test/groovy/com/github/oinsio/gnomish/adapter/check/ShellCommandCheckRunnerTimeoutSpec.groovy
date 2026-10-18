@@ -1,8 +1,14 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch
+import com.github.oinsio.gnomish.subprocess.StdinSource
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -28,11 +34,23 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
     // Scenario: verification/check-provider-model / A hung check fails instead of hanging the run
     @Timeout(30)
     def "FR12, UX4: a check that never exits is a quality failure carrying the tail captured so far"() {
-        given: 'a command that prints a distinctive line and then never exits'
-        def check = command('echo hung-output; while true; do sleep 1; done')
+        given: 'a check that has printed a distinctive line and never exits on its own'
+        // FR18 of fix-terminal-receipt-convergence: the line is in the pipe before the wait starts,
+        // and the latch shows the drain read it — the line is delivered by the spec, not by the
+        // shell's start time racing the 300 ms deadline.
+        def process = FakeProcess.running()
+        boolean drainReadTheLine = false
+        process.onWaitReturn {
+            drainReadTheLine = process.awaitStdoutRead(Duration.ofSeconds(10))
+        }
+        def launch = { ProcessBuilder builder, StdinSource stdin ->
+            process.writeStdout('hung-output\n')
+            process
+        } as ProcessLaunch
+        def fakeRunner = runner.withEnvironments(hostEnvironments(launch))
 
         when:
-        def verdict = runner.run(check, workspace())
+        def verdict = fakeRunner.run(command('the-hung-check'), workspace())
 
         then: 'a quality failure, not a hang and not an infrastructure verdict'
         verdict instanceof Verdict.Fail
@@ -40,6 +58,21 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         fail.findings().size() == 1
         fail.findings()[0].message().toLowerCase().contains('timed out')
         fail.findings()[0].details().contains('hung-output')
+
+        and: 'the drain read the line through the pipe'
+        process.awaitStdoutRead(Duration.ZERO)
+    }
+
+    /** The host environment of a check, its process started by {@code launch} instead of the OS. */
+    private CheckEnvironmentSource hostEnvironments(ProcessLaunch launch) {
+        def host = new HostTaskExecutionEnvironment(tempDir, new VirtualClock(), ChildEnvAllowlist.none(), launch)
+        host.materialize('workspace:fake', null)
+        Stub(CheckEnvironmentSource) {
+            acquire(_, _) >> Stub(CheckEnvironmentSource.Acquired) {
+                environment() >> host
+                close() >> { host.dispose() }
+            }
+        }
     }
 
     @Timeout(30)

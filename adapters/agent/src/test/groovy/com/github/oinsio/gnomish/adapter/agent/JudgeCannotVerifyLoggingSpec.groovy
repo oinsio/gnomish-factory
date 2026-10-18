@@ -37,30 +37,27 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
         logs?.detach()
     }
 
-    private static FactoryProperties propertiesWithGrace(Duration grace) {
-        new FactoryProperties('factory-01', 'claude', grace, null, null, null)
-    }
-
     private TaskExecutionEnvironment environmentOf(ExecHandle handle) {
         Stub(TaskExecutionEnvironment) {
             exec(_) >> handle
         }
     }
 
-    private ExecHandle handleOf(InputStream stdout, ExecHandle.Wait wait) {
+    private ExecHandle handleOf(InputStream stdout, ExecHandle.Wait wait, Duration bound = Duration.ofSeconds(30)) {
         Stub(ExecHandle) {
             output() >> stdout
             waitForExitOrTimeout(_, _) >> wait
+            postExitBound() >> bound
         }
     }
 
-    private static void runRound(TaskExecutionEnvironment environment, Duration grace = Duration.ofSeconds(30)) {
+    private static void runRound(TaskExecutionEnvironment environment) {
         JudgeRoundExecution.run(
                 new AgentRoundEquipment(
-                        propertiesWithGrace(grace),
+                        new FactoryProperties('factory-01', 'claude', null, null),
                         new VirtualClock(),
                         { event -> },
-                        new AgentRoundResultExtractor(), ChildEnvAllowlist.none()),
+                        new AgentRoundResultExtractor(), ChildEnvAllowlist.none(), RoundScratchDirectory.HOST_TEMP),
                 new JudgeVerdictExtractor(),
                 CHECK,
                 environment,
@@ -77,7 +74,7 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
     // Scenario: observability/factory-logging / A vote that cannot be cast says so
     def "FR5: a process that cannot start is reported as a vote that cannot be cast"() {
         given:
-        logs = LogCaptureSupport.attach(JudgeRoundExecution)
+        logs = LogCaptureSupport.attach(JudgeCannotVerify)
         def environment = Stub(TaskExecutionEnvironment) {
             exec(_) >> {
                 throw new ProcessStartException('cannot run claude', new IOException('no such file'))
@@ -99,7 +96,7 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
 
     def "FR5: a round killed on its roundTimeout is reported"() {
         given:
-        logs = LogCaptureSupport.attach(JudgeRoundExecution)
+        logs = LogCaptureSupport.attach(JudgeCannotVerify)
 
         when:
         runRound(environmentOf(handleOf(new ByteArrayInputStream(new byte[0]), new ExecHandle.Wait.TimedOut())))
@@ -116,7 +113,7 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
 
     def "FR5: a wait cut short by an interrupt is reported without blaming the budget"() {
         given:
-        logs = LogCaptureSupport.attach(JudgeRoundExecution)
+        logs = LogCaptureSupport.attach(JudgeCannotVerify)
 
         when:
         runRound(environmentOf(new InterruptedWaitExecHandle()))
@@ -130,7 +127,7 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
 
     def "FR5: a stream carrying no result event is reported"() {
         given:
-        logs = LogCaptureSupport.attach(JudgeRoundExecution)
+        logs = LogCaptureSupport.attach(JudgeCannotVerify)
         def wait = new ExecHandle.Wait.Exited(Duration.ofSeconds(1))
 
         when:
@@ -142,14 +139,14 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
         warning.throwableProxy.className == MissingResultEventException.name
     }
 
-    def "FR5: a drain outliving the tail-drain grace is reported"() {
+    def "FR5: a drain outliving the handle's post-exit bound is reported"() {
         given:
-        logs = LogCaptureSupport.attach(JudgeRoundExecution)
+        logs = LogCaptureSupport.attach(JudgeCannotVerify)
         def stuck = new AtomicBoolean()
         def wait = new ExecHandle.Wait.Exited(Duration.ofSeconds(1))
 
         when:
-        runRound(environmentOf(handleOf(nonEndingStream(stuck), wait)), Duration.ofMillis(100))
+        runRound(environmentOf(handleOf(nonEndingStream(stuck), wait, Duration.ofMillis(100))))
 
         then:
         def warning = theOnlyWarning()
@@ -162,7 +159,7 @@ class JudgeCannotVerifyLoggingSpec extends Specification {
 
     def "FR5: a drain wait cut short by an interrupt is reported"() {
         given:
-        logs = LogCaptureSupport.attach(JudgeRoundExecution)
+        logs = LogCaptureSupport.attach(JudgeCannotVerify)
         def stuck = new AtomicBoolean()
         def wait = new ExecHandle.Wait.Exited(Duration.ofSeconds(1))
 

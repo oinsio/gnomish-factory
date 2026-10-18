@@ -4,6 +4,8 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
+import com.github.oinsio.gnomish.sandbox.StderrPolicy
+import com.github.oinsio.gnomish.subprocess.ProcessLaunch
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.charset.StandardCharsets
@@ -56,7 +58,7 @@ class HostChildEnvironmentSpec extends Specification {
             'sh',
             '-c',
             'env | cut -d= -f1'
-        ], [:], null, false))
+        ], [:], null, StderrPolicy.PIPED))
         def names = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8).readLines()
         handle.waitForExit()
         (names.findAll { !it.isEmpty() } as Set) - SHELL_SELF_SET
@@ -66,7 +68,7 @@ class HostChildEnvironmentSpec extends Specification {
     def "FR9: a host child receives exactly the documented base set, and SSH_AUTH_SOCK is absent"() {
         given: 'a factory environment holding the base names, SSH_AUTH_SOCK and a cloud key; no passthrough'
         def env = new HostTaskExecutionEnvironment(workingCopy, new VirtualClock(),
-                ChildEnvAllowlist.of([], [], TestChildEnvironment.valuesOf(operatorShell())))
+                ChildEnvAllowlist.of([], [], TestChildEnvironment.valuesOf(operatorShell())), ProcessLaunch.grouped())
 
         expect: 'the adapter’s base set is the documented minimum'
         HostTaskExecutionEnvironment.BASE_ENV_NAMES == DOCUMENTED_MINIMUM
@@ -85,11 +87,11 @@ class HostChildEnvironmentSpec extends Specification {
         given: 'a passthrough name and a factory-set variable beside the base set'
         def shell = operatorShell() + [JAVA_HOME: '/opt/jdk-secret-path']
         def env = new HostTaskExecutionEnvironment(workingCopy, new VirtualClock(),
-                ChildEnvAllowlist.of(['JAVA_HOME'], [], TestChildEnvironment.valuesOf(shell)))
+                ChildEnvAllowlist.of(['JAVA_HOME'], [], TestChildEnvironment.valuesOf(shell)), ProcessLaunch.grouped())
 
         when: 'one process is executed'
         def events = LogCaptureSupport.capture(ChildEnvAllowlist, Level.DEBUG) {
-            def handle = env.exec(new ExecCommand(['true'], [GNOMISH_FINDINGS_FILE: '/scratch/findings.json'], null, false))
+            def handle = env.exec(new ExecCommand(['true'], [GNOMISH_FINDINGS_FILE: '/scratch/findings.json'], null, StderrPolicy.PIPED))
             handle.waitForExit()
         }
 

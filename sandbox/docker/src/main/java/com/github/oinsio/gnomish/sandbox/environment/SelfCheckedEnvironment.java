@@ -105,7 +105,7 @@ public final class SelfCheckedEnvironment implements TaskExecutionEnvironment {
     public ExecHandle exec(ExecCommand command) {
         Map<String, String> env = new LinkedHashMap<>(guard.proxyEnvironment());
         env.putAll(command.env());
-        return delegate.exec(new ExecCommand(command.command(), env, command.stdin(), command.mergeStderr()));
+        return delegate.exec(new ExecCommand(command.command(), env, command.stdin(), command.stderr()));
     }
 
     @Override

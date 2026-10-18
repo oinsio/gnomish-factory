@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
 import com.github.oinsio.gnomish.gittransfer.Refspec;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.subprocess.Termination;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -56,7 +55,6 @@ import org.slf4j.LoggerFactory;
  * <p>Implements FR8, NFR-R3 of harden-task-branch-contract; supersedes FR9 of add-git-workflow's
  * stop-and-escalate rule.
  */
-@UntrustedParser
 final class ReplicaPairReconciler {
 
     private static final Logger log = LoggerFactory.getLogger(ReplicaPairReconciler.class);
@@ -284,8 +282,9 @@ final class ReplicaPairReconciler {
     private @Nullable String tipOf(String ref) {
         GitCommandResult result =
                 GitReadGate.answered(ref, "rev-parse", runner.run(repo, "rev-parse", "--verify", "--quiet", ref));
-        // @UntrustedParser warrant (design D11): a rev-parse answer is an object id, used for
-        //     ancestry comparisons and update-ref arguments, never shown to a reader as itself.
-        return result.exitCode() == 0 ? result.stdout().forParsing().trim() : null;
+        // A rev-parse answer is an object id, used for ancestry comparisons and update-ref
+        //     arguments: a zero exit that printed anything else is refused (VerifiedTip), never a
+        //     half pair (FR17 of fix-terminal-receipt-convergence).
+        return result.exitCode() == 0 ? VerifiedTip.shaped(ref, "rev-parse", result) : null;
     }
 }
