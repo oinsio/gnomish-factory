@@ -126,9 +126,14 @@ jacoco {
 // resolution in the project, detached ones included, so this lifts those
 // edges onto the catalog's fixed `jackson` version — a fix, not an
 // accepted-risk entry in osv-scanner.toml.
+// json-schema-validator (1.5.9 on two test classpaths) declares Jackson 2.18.3: the
+// override wins, but whether Gradle fetches the loser's metadata depends on the
+// traversal order, and the verification metadata OSV-Scanner reads keeps whatever
+// was fetched. Lifted the same way, the old line is never a candidate.
 def fixedJackson = libs.findVersion('jackson').get().requiredVersion
-['palantir-java-format', 'palantir-java-format-spi'].each { formatterModule ->
-    dependencies.components.withModule("com.palantir.javaformat:${formatterModule}") {
+['com.palantir.javaformat:palantir-java-format', 'com.palantir.javaformat:palantir-java-format-spi',
+ 'com.networknt:json-schema-validator'].each { jacksonPinningModule ->
+    dependencies.components.withModule(jacksonPinningModule) {
         allVariants {
             withDependencies { deps ->
                 // jackson-annotations carries no patch number (`2.22`); the

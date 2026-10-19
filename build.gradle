@@ -48,6 +48,14 @@ buildscript {
         // its constraints. Same version as the catalog's pin (F113 of tighten-spec-contract).
         resolutionStrategy.force "com.fasterxml.jackson:jackson-bom:${buildscriptJackson2BomVersion}"
     }
+    // json-schema-validator declares Jackson 2.18.4; lifted as in build-logic/build.gradle, so its
+    // metadata never reaches the verification metadata OSV-Scanner reads.
+    def fixedJackson = buildscriptJackson2BomVersion
+    dependencies.components.withModule('com.networknt:json-schema-validator') {
+        allVariants { withDependencies { deps ->
+            deps.findAll { it.group.startsWith('com.fasterxml.jackson') }.each { it.version { require fixedJackson } }
+        } }
+    }
 }
 
 plugins {

@@ -24,6 +24,16 @@ dependencyLocking {
 configurations.configureEach {
     resolutionStrategy.force "${libs.jackson.bom.get().module}:${libs.versions.jackson.get()}"
 }
+// The force makes the fixed line win, but the CycloneDX plugin's json-schema-validator declares
+// Jackson 2.18.4, and whether Gradle fetches that loser's metadata depends on the traversal order;
+// the verification metadata keeps it, and OSV-Scanner reads it as a vulnerable version. Lifting the
+// edges (as `java-conventions` does for its modules) keeps 2.18.4 from ever being a candidate.
+def fixedJackson = libs.versions.jackson.get()
+dependencies.components.withModule('com.networknt:json-schema-validator') {
+    allVariants { withDependencies { deps ->
+        deps.findAll { it.group.startsWith('com.fasterxml.jackson') }.each { it.version { require fixedJackson } }
+    } }
+}
 
 // A plugin applied from a precompiled script plugin must be on this build's
 // implementation classpath, declared by its marker coordinates. `pluginId` and
