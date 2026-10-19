@@ -24,6 +24,8 @@ import io.github.resilience4j.retry.RetryConfig
 import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import spock.lang.Specification
 
 /**
@@ -104,6 +106,7 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
         def cache = new GithubConditionalRequestCache(httpClient)
         def feedQuery = new GithubFeedQuery(cache, OWNER, REPO, READY_LABEL)
         def claimed = new CopyOnWriteArrayList<TaskRef>()
+        def slotRan = new CountDownLatch(1)
         Tracker tracker = [
             listReady: { int limit -> feedQuery.listReady(limit) },
             listOpen : { -> [] },
@@ -112,7 +115,12 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
             },
         ] as Tracker
         def ledger = new SlotLedger(1, new VirtualClock())
-        def slotRunner = { TaskRef ref -> claimed.add(ref) } as SlotRunner
+        // The slot runs on a virtual thread of its own (FeedCycle.startSlot), so step() may return
+        // before it does: the spec waits for the slot instead of assuming it already ran.
+        def slotRunner = { TaskRef ref ->
+            claimed.add(ref)
+            slotRan.countDown()
+        } as SlotRunner
         def clock = new VirtualClock()
         def sleeper = new VirtualSleeper(clock)
         def automaton = FeedAutomatonFixture.feedAutomaton(
@@ -127,6 +135,7 @@ class FeedAutomatonOutageIntegrationSpec extends Specification {
         sleeper.slept.size() == 2
 
         and: 'the feed is fully functional again: it claimed the task that appeared once the tracker recovered'
+        slotRan.await(5, TimeUnit.SECONDS)
         claimed.collect { it.id() } == [
             'github:localhost/acme/widgets#42'
         ]
