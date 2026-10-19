@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.sandbox.environment.WritingHolder
 import com.github.oinsio.gnomish.subprocess.CaptureRunner
 import com.github.oinsio.gnomish.subprocess.CutCaptureException
 import com.github.oinsio.gnomish.subprocess.ProcessLaunch
@@ -23,7 +24,10 @@ import spock.lang.TempDir
  * CaptureRunnerPostExitSpec}, which pins the refusal itself in {@code :subprocess}.
  *
  * <p>Driven by a {@link FakeProcess} handed in through the runner's {@link CaptureRunner} (design
- * D16): the spec holds the pipe past the exit itself, so no script's timing decides the outcome.
+ * D16): the spec holds the pipe past the exit itself, so no script's timing decides the outcome. A
+ * drain that never parks reaches the bound only while a holder keeps writing after the exit (design
+ * D4 of make-pipe-reads-non-parking): the holder is a {@link WritingHolder} on stdout, whose writes
+ * ride the drain's own queries; a silent holder lets the capture end complete and unflagged.
  */
 class GitProcessRunnerTruncatedCaptureSpec extends Specification {
 
@@ -47,10 +51,11 @@ class GitProcessRunnerTruncatedCaptureSpec extends Specification {
 
     // Scenario: lifecycle/subprocess-supervision / A cut capture says so
     def "NFR-O3, FR17: a clean exit whose pipe a holder kept past the bound logs one coded WARN, then is refused"() {
-        given: 'git speaks, exits cleanly, and a descendant keeps its stdout open for good'
+        given: 'git speaks, exits cleanly, and a descendant holds its stdout and keeps writing to it'
         FakeProcess process = FakeProcess.running()
         process.writeStdout('spoken')
         process.holdOpen()
+        WritingHolder.on(process.stdoutPipe())
         process.releaseStderr()
         process.exit(0)
         def runner = runnerOver(process, Duration.ofSeconds(30))
@@ -68,7 +73,7 @@ class GitProcessRunnerTruncatedCaptureSpec extends Specification {
         then: 'no result reaches a parser: the refusal is rethrown, the prefix inside it'
         refusal != null
         refusal.captured().exitCode() == 0
-        refusal.captured().stdout() == 'spoken'
+        refusal.captured().stdout().startsWith('spoken')
 
         and: 'exactly one WARN before it, under its own code, naming the subcommand, the stream and the bound'
         lines.size() == 1
@@ -83,10 +88,11 @@ class GitProcessRunnerTruncatedCaptureSpec extends Specification {
 
     // Scenario: lifecycle/subprocess-supervision / A failed or killed invocation keeps its partial output
     def "FR17: a failed exit whose pipe a holder kept stands as its own failure, the cut named in its stderr"() {
-        given: 'git fails while a descendant keeps its pipes open'
+        given: 'git fails while a descendant holds its pipes and keeps writing to stdout'
         FakeProcess process = FakeProcess.running()
         process.writeStderr('fatal: bad revision\n')
         process.holdOpen()
+        WritingHolder.on(process.stdoutPipe())
         process.exit(128)
         def runner = runnerOver(process, Duration.ofSeconds(30))
 
@@ -101,7 +107,29 @@ class GitProcessRunnerTruncatedCaptureSpec extends Specification {
 
         and: 'its stderr stays readable and names the cut'
         result.stderr().contains('fatal: bad revision')
-        result.stderr().contains('output was cut: stdout and stderr still open at the post-exit bound')
+        result.stderr().contains('output was cut: stdout still open at the post-exit bound')
+
+        cleanup:
+        process.release()
+    }
+
+    def "NFR-O3, D4: a clean exit whose pipes a silent holder kept returns the whole capture, unflagged"() {
+        given: 'git speaks and exits cleanly; a descendant holds both pipes and writes nothing more'
+        FakeProcess process = FakeProcess.running()
+        process.writeStdout('spoken')
+        process.holdOpen()
+        process.exit(0)
+        def runner = runnerOver(process, Duration.ofSeconds(30))
+
+        when:
+        GitCommandResult result = null
+        def lines = warnings { result = runner.run(cwd, 'rev-parse', 'HEAD') }
+
+        then: 'no refusal, no line: the drains ended at the exit with all git said'
+        result.termination() == Termination.EXITED
+        result.exitCode() == 0
+        result.stdout().forParsing() == 'spoken'
+        lines.isEmpty()
 
         cleanup:
         process.release()
@@ -124,9 +152,10 @@ class GitProcessRunnerTruncatedCaptureSpec extends Specification {
     }
 
     def "NFR-O3: a timed-out command whose pipe stays held says only that it timed out"() {
-        given: 'a network command that never exits by itself, its pipe held past the kill'
+        given: 'a network command that never exits by itself, its pipe held and written to past the kill'
         FakeProcess process = FakeProcess.running()
         process.holdOpen()
+        WritingHolder.on(process.stdoutPipe())
         def runner = runnerOver(process, Duration.ofMillis(200))
 
         when:

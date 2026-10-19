@@ -20,6 +20,9 @@ import spock.lang.Specification
  * by {@code CaptureRunnerPostExitSpec}.
  *
  * <p>Driven by a {@link FakeProcess} handed in through the CLI's {@link CaptureRunner} (design D16).
+ * A drain that never parks reaches the bound only while a holder keeps writing after the exit
+ * (design D4 of make-pipe-reads-non-parking): the holder is a {@link WritingHolder} on stdout, whose
+ * writes ride the drain's own queries, and the dots it writes follow the spoken prefix.
  */
 class DockerCliTruncatedCaptureSpec extends Specification {
 
@@ -40,10 +43,11 @@ class DockerCliTruncatedCaptureSpec extends Specification {
 
     // Scenario: lifecycle/subprocess-supervision / A cut capture says so
     def "NFR-O3, FR17: a clean exit whose pipe a holder kept past the bound logs one coded WARN, then is refused"() {
-        given: 'docker speaks, exits cleanly, and a descendant keeps both its pipes open for good'
+        given: 'docker speaks, exits cleanly, and a descendant holds its pipes and keeps writing to stdout'
         FakeProcess process = FakeProcess.running()
         process.writeStdout('abc123')
         process.holdOpen()
+        WritingHolder.on(process.stdoutPipe())
         process.exit(0)
         def cli = cliOver(process, Duration.ofSeconds(30))
 
@@ -60,12 +64,12 @@ class DockerCliTruncatedCaptureSpec extends Specification {
         then: 'no result reaches a parser: the refusal is rethrown, the prefix inside it'
         refusal != null
         refusal.captured().exitCode() == 0
-        refusal.captured().stdout() == 'abc123'
+        refusal.captured().stdout().startsWith('abc123')
 
         and: 'exactly one WARN before it, under its own code, naming the subcommand, the streams and the bound'
         lines.size() == 1
         lines[0].formattedMessage.startsWith(OperatorEvent.DOCKER_CAPTURE_TRUNCATED.head())
-        lines[0].formattedMessage.contains('held its stdout and stderr when')
+        lines[0].formattedMessage.contains('held its stdout when')
         lines[0].formattedMessage.contains('subcommand=inspect')
         lines[0].formattedMessage.contains('bound=' + new ProcessSupervisor(KILL_GRACE).postExitBound())
 
@@ -75,10 +79,11 @@ class DockerCliTruncatedCaptureSpec extends Specification {
 
     // Scenario: lifecycle/subprocess-supervision / A failed or killed invocation keeps its partial output
     def "FR17: a failed exit whose pipe a holder kept stands as its own failure, the cut named in its stderr"() {
-        given: 'docker fails while a descendant keeps its pipes open'
+        given: 'docker fails while a descendant holds its pipes and keeps writing to stdout'
         FakeProcess process = FakeProcess.running()
         process.writeStderr('Error: No such object: box\n')
         process.holdOpen()
+        WritingHolder.on(process.stdoutPipe())
         process.exit(1)
         def cli = cliOver(process, Duration.ofSeconds(30))
 
@@ -93,7 +98,7 @@ class DockerCliTruncatedCaptureSpec extends Specification {
 
         and: 'its stderr stays readable and names the cut'
         result.stderr().contains('No such object: box')
-        result.stderr().contains('output was cut: stdout and stderr still open at the post-exit bound')
+        result.stderr().contains('output was cut: stdout still open at the post-exit bound')
 
         cleanup:
         process.release()
@@ -115,9 +120,10 @@ class DockerCliTruncatedCaptureSpec extends Specification {
     }
 
     def "NFR-O3: a timed-out command whose pipe stays held says only that it timed out"() {
-        given: 'a command that never exits by itself, its pipe held past the kill'
+        given: 'a command that never exits by itself, its pipe held and written to past the kill'
         FakeProcess process = FakeProcess.running()
         process.holdOpen()
+        WritingHolder.on(process.stdoutPipe())
         def cli = cliOver(process, Duration.ofMillis(200))
 
         when:

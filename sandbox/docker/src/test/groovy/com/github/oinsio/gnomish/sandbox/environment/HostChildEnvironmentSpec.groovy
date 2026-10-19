@@ -59,7 +59,7 @@ class HostChildEnvironmentSpec extends Specification {
             '-c',
             'env | cut -d= -f1'
         ], [:], null, StderrPolicy.PIPED))
-        def names = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8).readLines()
+        def names = new String(handle.output().stream().readAllBytes(), StandardCharsets.UTF_8).readLines()
         handle.waitForExit()
         (names.findAll { !it.isEmpty() } as Set) - SHELL_SELF_SET
     }

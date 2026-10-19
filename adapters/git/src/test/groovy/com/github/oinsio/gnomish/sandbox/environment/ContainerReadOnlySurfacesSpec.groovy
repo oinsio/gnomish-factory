@@ -87,7 +87,7 @@ class ContainerReadOnlySurfacesSpec extends Specification implements BareGitRepo
 
     private int run(String script) {
         def handle = env.exec(new ExecCommand(['sh', '-c', script], [:], null, StderrPolicy.MERGED))
-        handle.output().readAllBytes()
+        handle.output().stream().readAllBytes()
         handle.waitForExit()
     }
 
@@ -110,7 +110,7 @@ class ContainerReadOnlySurfacesSpec extends Specification implements BareGitRepo
             '-c',
             'cat ' + CONTROL_SURFACE
         ], [:], null, StderrPolicy.PIPED))
-        def out = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8)
+        def out = new String(handle.output().stream().readAllBytes(), StandardCharsets.UTF_8)
         handle.waitForExit()
         out.trim()
     }

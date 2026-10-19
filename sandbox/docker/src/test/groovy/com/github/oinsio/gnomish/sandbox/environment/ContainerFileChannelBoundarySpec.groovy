@@ -25,7 +25,7 @@ class ContainerFileChannelBoundarySpec extends Specification {
         given:
         def docker = new ScriptedFileChannelDockerCli()
         def payload = 'factory bytes'.getBytes('UTF-8')
-        docker.process.stdout = 'box bytes'.getBytes('UTF-8')
+        docker.script.stdout = 'box bytes'.getBytes('UTF-8')
 
         when:
         channel(docker).putFile('note.txt', payload)
@@ -104,7 +104,7 @@ class ContainerFileChannelBoundarySpec extends Specification {
     def "a plain nonzero exit from the in-box write is propagated, never coerced to 0"() {
         given:
         def docker = new ScriptedFileChannelDockerCli()
-        docker.process.exit = 5
+        docker.script.exit = 5
 
         when:
         channel(docker).putFile('note.txt', 'x'.getBytes())
@@ -120,8 +120,8 @@ class ContainerFileChannelBoundarySpec extends Specification {
     def "a failing in-box write carries the command's stderr in the failure message"() {
         given:
         def docker = new ScriptedFileChannelDockerCli()
-        docker.process.exit = 1
-        docker.process.stderrStream = new ByteArrayInputStream('cat: no space left on device\n'.bytes)
+        docker.script.exit = 1
+        docker.script.stderr = 'cat: no space left on device\n'
 
         when:
         channel(docker).putFile('note.txt', 'x'.getBytes())
@@ -136,8 +136,8 @@ class ContainerFileChannelBoundarySpec extends Specification {
     def "a failing in-box read carries the command's stderr in the failure message"() {
         given:
         def docker = new ScriptedFileChannelDockerCli()
-        docker.process.exit = 2
-        docker.process.stderrStream = new ByteArrayInputStream('head: permission denied'.bytes)
+        docker.script.exit = 2
+        docker.script.stderr = 'head: permission denied'
 
         when:
         channel(docker).readFile('note.txt', 10)

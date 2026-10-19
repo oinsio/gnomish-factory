@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.subprocess
 
 import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.sandbox.environment.WritingHolder
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -87,15 +88,18 @@ class ProcessSupervisorInterruptSpec extends Specification implements FakeBinari
 
     // Scenario: lifecycle/subprocess-supervision / A spec controls the exit and the pipes
     def "FR6: an interrupt landing after a clean exit is still the named outcome, never a truncated EXITED"() {
-        given: 'a fake process that has spoken and exited cleanly, its stdout held open as by a descendant'
+        given: 'a fake process that has spoken and exited cleanly, its stdout held and written to by a descendant'
         // Every step is ordered by the spec, none by the scheduler (G9, design D16 of
         // fix-terminal-receipt-convergence): the exit is released before the run starts, so the
         // wait observes a clean exit; the interrupt is raised on the waiting thread by the fake's
         // wait-return latch, once the drain has read what was spoken — after the exit, before the
-        // join, which is where an interrupt landing after a clean exit meets the capture.
+        // join, which is where an interrupt landing after a clean exit meets the capture. The holder
+        // keeps writing (D4 of make-pipe-reads-non-parking), so the drain is still open at the
+        // interrupted join whatever the scheduler does; a silent one could end in between.
         FakeProcess process = FakeProcess.running()
         process.holdOpen()
         process.writeStdout('spoken')
+        WritingHolder.on(process.stdoutPipe())
         process.onWaitReturn {
             if (!process.awaitStdoutRead(Duration.ofSeconds(10))) {
                 throw new AssertionError('the drain never read what the process had spoken' as Object)
@@ -115,7 +119,7 @@ class ProcessSupervisorInterruptSpec extends Specification implements FakeBinari
         captured.exitCode() == 0
 
         and: 'what was captured before the interrupt is still handed back, flagged as a possible prefix'
-        captured.stdout() == 'spoken'
+        captured.stdout().startsWith('spoken')
         captured.truncated()
 
         and: 'the flag is restored for callers up the stack'
@@ -126,11 +130,12 @@ class ProcessSupervisorInterruptSpec extends Specification implements FakeBinari
         Thread.interrupted()
     }
 
-    def "FR16, design D16: a real holder of stdout after a clean exit does not hold the capture past the bound"() {
-        given: 'a binary that speaks, exits cleanly, and leaves a real child holding its stdout open'
+    def "FR16, design D16, FR2: a real silent holder of stdout after a clean exit lets the capture end on its own"() {
+        given: 'a binary that speaks, exits cleanly, and leaves a real child holding its stdout open, writing nothing'
         // The one real-script feature design D16 keeps: it asserts only that the return came within
         // a generous bound — ten post-exit bounds — while the holder is provably alive, so no
-        // scheduling order on a loaded machine can turn it red.
+        // scheduling order on a loaded machine can turn it red. A drain that never parks ends as soon
+        // as it sees the exit (D2 of make-pipe-reads-non-parking), so nothing is cut.
         Path pidFile = dir.resolve('holder.pid')
         ProcessBuilder builder = new ProcessBuilder(fakeBinary('exit-leaky').toString(), pidFile.toString())
         ProcessSupervisor supervisor = new ProcessSupervisor(Duration.ofMillis(300))
@@ -143,10 +148,12 @@ class ProcessSupervisorInterruptSpec extends Specification implements FakeBinari
 
         when:
         long startedAt = System.nanoTime()
-        new CaptureRunner(supervisor, ProcessLaunch.grouped(), sweep).run(builder, null)
+        Captured captured = new CaptureRunner(supervisor, ProcessLaunch.grouped(), sweep).run(builder, null)
 
-        then: 'the cut clean exit is refused (design D15 as amended 2026-10-17), within ten post-exit bounds'
-        thrown(CutCaptureException)
+        then: 'the clean exit is returned whole and not flagged, within ten post-exit bounds'
+        captured.termination() == Termination.EXITED
+        captured.stdout() == 'spoken\n'
+        !captured.truncated()
         Duration.ofNanos(System.nanoTime() - startedAt) <supervisor.postExitBound().multipliedBy(10)
 
         and: 'proof the pipe was still held when the drains let go; the group sweep ended the holder after (D19)'

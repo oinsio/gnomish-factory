@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import static com.github.oinsio.gnomish.adapter.agent.NonEndingStreams.nonEndingStream
-
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.domain.engine.Verdict
@@ -15,12 +13,11 @@ import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
-import java.util.concurrent.atomic.AtomicBoolean
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -97,7 +94,7 @@ class RoundStderrTailSpec extends Specification {
     private ExecHandle handle(String stdout, ExecHandle.Wait wait) {
         new ScratchStderrHandle({
             stderrFile()
-        }, new ByteArrayInputStream(stdout.getBytes(StandardCharsets.UTF_8)), wait, STDERR)
+        }, CannedOutputs.written(stdout), wait, STDERR)
     }
 
     // FR20: the tail rides the failure on every path that ends a round without success
@@ -153,7 +150,7 @@ class RoundStderrTailSpec extends Specification {
                     { RoundStderrTailSpec spec ->
                         new ScratchStderrHandle({
                             spec.stderrFile()
-                        }, nonEndingStream(new AtomicBoolean()),
+                        }, CannedOutputs.nonEnding(FakeProcess.running()),
                         new ExecHandle.Wait.Exited(Duration.ofSeconds(1)), STDERR, Duration.ofMillis(100))
                     }
                 ],
@@ -167,7 +164,7 @@ class RoundStderrTailSpec extends Specification {
         def outcome = execute(role) {
             new ScratchStderrHandle({
                 stderrFile()
-            }, new ByteArrayInputStream(new byte[0]), new ExecHandle.Wait.TimedOut(), '')
+            }, CannedOutputs.written(''), new ExecHandle.Wait.TimedOut(), '')
         }
 
         then:

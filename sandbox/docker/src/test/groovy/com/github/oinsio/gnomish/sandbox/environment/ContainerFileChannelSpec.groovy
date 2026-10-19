@@ -42,7 +42,7 @@ class ContainerFileChannelSpec extends Specification {
     // NFR-S3: an over-cap read is truncated to exactly the first cap bytes — the copy is real
     def "an over-cap read returns exactly the first cap bytes"() {
         given: 'the in-box file yields one byte more than the cap'
-        docker.process.stdout = 'abcdefghijK'.getBytes(StandardCharsets.UTF_8)
+        docker.script.stdout = 'abcdefghijK'.getBytes(StandardCharsets.UTF_8)
 
         when:
         def read = channel().readFile('note.txt', 10)
@@ -55,7 +55,7 @@ class ContainerFileChannelSpec extends Specification {
     def "a read of exactly the cap comes back whole with no truncation warning"() {
         given:
         def bytes = ('x' * 10).getBytes(StandardCharsets.UTF_8)
-        docker.process.stdout = bytes
+        docker.script.stdout = bytes
         def read = null
 
         when:
@@ -71,7 +71,7 @@ class ContainerFileChannelSpec extends Specification {
     // Scenario: sandbox/execution-environment / Oversized protocol file cannot exhaust the factory
     def "FR5: the truncation warning names the environment the over-cap file was read from"() {
         given:
-        docker.process.stdout = 'abcdefghijK'.getBytes(StandardCharsets.UTF_8)
+        docker.script.stdout = 'abcdefghijK'.getBytes(StandardCharsets.UTF_8)
 
         when:
         def events = capture { channel().readFile('note.txt', 10) }

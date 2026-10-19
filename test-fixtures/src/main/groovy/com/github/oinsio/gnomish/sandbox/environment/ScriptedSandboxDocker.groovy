@@ -133,35 +133,20 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
         }
     }
 
-    /** A finished child process with canned merged output — the exec seam's daemon-free stand-in. */
+    /**
+     * A finished child process with canned merged output — the exec seam's daemon-free stand-in.
+     * The output is fed through the fake's own pipe ({@code writeStdout}, then the exit's release),
+     * so it reads as a Linux pipe does (design D6 of make-pipe-reads-non-parking).
+     */
     private static final class FakeExecProcess extends FakeProcess {
 
-        private final int exitCode
-        private final byte[] output
-
         FakeExecProcess(int exitCode, String output) {
-            this.exitCode = exitCode
-            this.output = output.getBytes('UTF-8')
+            super(exitCode, output)
         }
 
         @Override
         OutputStream getOutputStream() {
             new ByteArrayOutputStream()
-        }
-
-        @Override
-        InputStream getInputStream() {
-            new ByteArrayInputStream(output)
-        }
-
-        @Override
-        int waitFor() {
-            exitCode
-        }
-
-        @Override
-        int exitValue() {
-            exitCode
         }
     }
 }

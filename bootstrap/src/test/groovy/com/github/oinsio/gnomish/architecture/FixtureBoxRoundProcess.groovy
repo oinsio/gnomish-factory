@@ -32,7 +32,7 @@ final class FixtureBoxRoundProcess {
         box.materialize(args[2], null)
         def command = new ExecCommand(args.drop(3).toList(), [GNOMISH_FAKE_SCENARIO: 'decision-needed'], null, StderrPolicy.MERGED)
         def handle = box.exec(command)
-        handle.output().transferTo(System.out)
+        handle.output().stream().transferTo(System.out)
         System.exit(handle.waitForExit())
     }
 }

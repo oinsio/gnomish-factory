@@ -3,10 +3,9 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import com.github.oinsio.gnomish.subprocess.Termination
-import java.io.ByteArrayInputStream
-import java.io.IOException
-import java.io.InputStream
 import java.io.UncheckedIOException
 import java.time.Duration
 import java.time.Instant
@@ -104,21 +103,24 @@ class InBoxGitCommandSpec extends Specification {
         }
     }
 
+    /** A handle over a {@link FakeProcess} that wrote {@code output} and exited with {@code exitCode}. */
     private static class FakeHandle implements ExecHandle {
 
+        protected final FakeProcess process = FakeProcess.running()
+        private final ChildOutput stdout = ChildOutput.stdout(process)
         private final int exitCode
-        private final String output
         private final boolean interrupt
 
         FakeHandle(int exitCode, String output, boolean interrupt) {
             this.exitCode = exitCode
-            this.output = output
             this.interrupt = interrupt
+            process.writeStdout(output)
+            process.exit(exitCode)
         }
 
         @Override
-        InputStream output() {
-            new ByteArrayInputStream(output.bytes)
+        ChildOutput output() {
+            stdout
         }
 
         @Override
@@ -145,20 +147,12 @@ class InBoxGitCommandSpec extends Specification {
         }
     }
 
+    /** A handle whose pipe is broken: the first availability query fails, as a closed descriptor's does. */
     private static class BrokenStreamHandle extends FakeHandle {
 
         BrokenStreamHandle() {
             super(0, '', false)
-        }
-
-        @Override
-        InputStream output() {
-            new InputStream() {
-                        @Override
-                        int read() {
-                            throw new IOException('pipe broke')
-                        }
-                    }
+            process.stdoutPipe().source().close()
         }
     }
 }

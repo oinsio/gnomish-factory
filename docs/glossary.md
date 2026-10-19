@@ -792,9 +792,27 @@ trusted/task tier split, and the law-root rule.
   was interrupted and the tree was killed). *Never:* a sentinel exit code such
   as `-1` for interruption — collapsing the three into one number is the defect
   the term exists to remove.
-- **Drain** — one output stream read on a thread of its own, concurrently with
-  the running process, so neither a full OS pipe buffer nor a child that never
-  closes its stdout can block the wait.
+- **Child output** — the readable side of one of a child's pipes, stdout or
+  stderr, as a typed value (`ChildOutput` in `:subprocess`): minted only from a
+  started `Process` (`ChildOutput.stdout(process)`, `ChildOutput.stderr(process)`),
+  so it carries the process beside its stream and the exit signal is wired by
+  construction. It is the only thing a drain can start from, and the
+  environment port hands it across as `ExecHandle.output()`. It reads without
+  parking — only the bytes the pipe reports available, otherwise one tick of
+  waiting — and closes nothing: the pipe is the JDK's to close at the exit. Its
+  pull view (`ChildOutput.stream()`) runs the same steps on the caller's thread,
+  and its `close()` is a stop. The rule and its measurement are ADR 0018.
+  *Not:* the bare `InputStream` of a `Process`, which no reader outside the owner
+  obtains.
+- **Drain** — one child output read concurrently with the running process, so
+  neither a full OS pipe buffer nor a descendant that keeps the pipe open can
+  block the wait. It reads what is available and never parks in a blocking
+  read; it ends on its own at the first query after the child's exit that
+  finds nothing available, or early when it is stopped. Two forms of one owner:
+  the push form (`Drain`, chunks handed to a sink on the drain's own thread)
+  and the pull view (`ChildOutput.stream()`). The reasoning is ADR 0018.
+  *Not:* a thread parked in `read()` until end-of-file — no factory thread
+  waits that way on any OS.
 - **Kill grace** — the bounded wait between the cooperative terminate and the
   forced kill, so git and docker can remove their lock and temporary files on a
   catchable signal. A bound on waiting, not a sleep: a tree that stops early
@@ -811,21 +829,26 @@ trusted/task tier split, and the law-root rule.
   the decision file's place — in container mode that file lives in the task
   branch.
 - **Post-exit bound** — the one wait every reader of a child's output allows
-  after the child's exit for its pipes to reach end-of-file: the kill grace
+  after the child's exit for its drains to end: the kill grace
   plus a fixed margin (`ProcessSupervisor.postExitBound()`, 7 s by default),
-  carried across the environment port as `ExecHandle.postExitBound()`. When it
-  expires the reader closes the pipes, which wakes its parked drain, and the
-  capture is flagged as cut. A bound on a wait measured from the exit, never
+  carried across the environment port as `ExecHandle.postExitBound()`. The
+  reader waits at most the bound for its drain to end, then stops the drain and
+  flags the capture as cut; nothing is closed and no read is interrupted. On a
+  real process the JDK's reaper closes the pipe at the exit, so a drain ends
+  within ticks of it even while a descendant holds the pipe, and the bound is a
+  safety net (ADR 0018). A bound on a wait measured from the exit, never
   from the start, and never a reader's own constant. *Not:* a deadline on the
   command — a long command is not cut short by it.
-- **Cut capture** — a capture whose drain the post-exit bound cut: no
-  end-of-file arrived inside the bound, so the stdout held may be a prefix.
+- **Cut capture** — a capture whose drain the post-exit bound cut: the drain
+  had not ended when the bound expired, so the stdout held may be a prefix.
   On a clean exit (exit code 0, `EXITED`) it is refused as a value —
   `CaptureRunner.await` throws `CutCaptureException`, carrying the partial
   capture — so no parser reads a prefix as a whole answer; a failed, timed-out
   or interrupted invocation keeps its partial output readable, the cut named
-  in its detail. The flag means "no end-of-file in time", not "bytes lost".
-  *Not:* the output cap a reader applies itself (`GitExec`'s stdout cap) — a
+  in its detail. The flag means "the drain had not ended", not "bytes lost".
+  On a real process it is reached only on the safety net — a descendant that
+  outwrites the reaper's own drain at the exit — since the reaper closes the
+  pipe at the exit (ADR 0018). *Not:* the output cap a reader applies itself (`GitExec`'s stdout cap) — a
   limit the caller chose, not a pipe left open.
 - **Launch owner** — the one component that starts a supervised OS process:
   the role `ProcessLaunch` in `:subprocess`, whose only production form is
@@ -1104,6 +1127,13 @@ run and answer them is the developer guide's *Per-module verification* section.
   Introduced by `tighten-spec-contract`. *Not:* OpenSpec's own validation
   (`openspec validate`), which checks a spec's structure and knows nothing of
   traceability or tests.
+- **Linux spec runner** — the committed container that runs named Gradle tasks and specs of
+  the factory's own build on Linux from a developer's machine: `scripts/linux-specs.sh` over
+  `scripts/linux-runner/Dockerfile`, the platform of the CI `build` job (Temurin 25, git ≥ 2.51),
+  on a copy of the working tree, as a non-root user. `verification-scope.md` runs platform specs
+  through it before the root `check` and before a push, so CI is never the first Linux signal.
+  Introduced by `make-pipe-reads-non-parking` (ADR 0018, "The method rule"). *Not:* the sandbox
+  base image, the box a gnome runs in.
 
 ## Release and distribution
 

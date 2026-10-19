@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
 import com.github.oinsio.gnomish.sandbox.environment.GroupLeader
+import com.github.oinsio.gnomish.sandbox.environment.WritingHolder
 import com.github.oinsio.gnomish.subprocess.CaptureRunner
 import com.github.oinsio.gnomish.subprocess.CutCaptureException
 import com.github.oinsio.gnomish.subprocess.ProcessLaunch
@@ -21,7 +22,9 @@ import spock.lang.TempDir
  * process group after every invocation, and the git runner says one DEBUG line for a sweep that
  * found a survivor — on a result and on a refused cut alike — and nothing for an empty group. The
  * survivor is a real {@link GroupLeader}, named as the pid of the {@link FakeProcess} the runner
- * is handed, so the sweep the code under test runs reaches it and nothing else.
+ * is handed, so the sweep the code under test runs reaches it and nothing else. The refused cut is
+ * made by a {@link WritingHolder} on stdout: a drain that never parks reaches the bound only while a
+ * holder keeps writing after the exit (design D4 of make-pipe-reads-non-parking).
  */
 class GitProcessRunnerGroupSweepSpec extends Specification {
 
@@ -34,19 +37,25 @@ class GitProcessRunnerGroupSweepSpec extends Specification {
         FakeProcess git = FakeProcess.running().leading(survivor.pid())
         if (held) {
             git.holdOpen()
+            WritingHolder.on(git.stdoutPipe())
         }
         git.exit(0)
 
         when:
+        boolean refused = false
         List<ILoggingEvent> lines = LogCaptureSupport.capture(GitProcessRunner, Level.DEBUG) {
             try {
                 runnerOver(git).run(cwd, 'rev-parse', 'HEAD')
             } catch (CutCaptureException ignored) {
-                // the refusal is the cut feature's subject; the sweep's line is this one's
+                // the refusal's WARN is the cut feature's subject; the sweep's line is this one's
+                refused = true
             }
         }
 
-        then: 'the group was swept, and one DEBUG line says so'
+        then: 'the shape is the one named: a refusal exactly when a writing holder kept the pipe'
+        refused == held
+
+        and: 'the group was swept, and one DEBUG line says so'
         survivor.waitFor(10, TimeUnit.SECONDS)
         List<ILoggingEvent> swept = lines.findAll {
             it.formattedMessage.contains('process group swept')

@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.sandbox
 
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.sandbox.environment.WritingHolder
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import java.time.Duration
 import java.time.Instant
 import java.time.InstantSource
@@ -27,19 +30,63 @@ class CaptureThread {
     }
 }
 
-/** A canned {@link ExecHandle}: scripted output stream, exit code, and an optionally interrupted wait. */
+/**
+ * A canned {@link ExecHandle} over the one {@code Process} double (design D6 of
+ * make-pipe-reads-non-parking): its output is the {@link FakeProcess}'s stdout minted as a
+ * {@link ChildOutput}, its wait the process's own, or — with {@link #interruptsWait} — a wait cut
+ * short by an interrupt that reports {@link #exit}, the killed process's meaningless code.
+ */
 class CannedExecHandle implements ExecHandle {
 
-    InputStream output
-    int exit = 0
+    FakeProcess process = new FakeProcess()
+    int exit = 143
     boolean interruptsWait = false
     Duration bound = Duration.ofSeconds(5)
     CountDownLatch exited = new CountDownLatch(1)
     int boundReads = 0
 
+    private ChildOutput stdout
+
+    /** A child that wrote {@code stdout} and exited with {@code code}; nothing holds its pipe. */
+    static FakeProcess exited(int code, String stdout) {
+        def child = FakeProcess.running()
+        child.writeStdout(stdout)
+        child.exit(code)
+        child
+    }
+
+    /** A child that wrote {@code prefix} and exited with {@code code} while a silent descendant holds its pipe. */
+    static FakeProcess held(int code, String prefix) {
+        def child = FakeProcess.running()
+        child.writeStdout(prefix)
+        child.holdOpen()
+        child.exit(code)
+        child
+    }
+
+    /**
+     * A child that wrote {@code prefix} and exited with {@code code} while a descendant holding its
+     * pipe keeps writing: a byte before every other availability query, so the drain never sees two
+     * idle queries in a row and is still open at the post-exit bound.
+     */
+    static FakeProcess writingAfterExit(int code, String prefix) {
+        def child = held(code, prefix)
+        WritingHolder.on(child.stdoutPipe())
+        child
+    }
+
+    /** Whether the capture stopped the output: a stopped view answers end-of-file at once, past the writer. */
+    boolean stopped() {
+        output().stream().read(new byte[8]) == -1
+    }
+
+    /** Minted on first use, so a map constructor's {@code process} is the one it reads. */
     @Override
-    InputStream output() {
-        output
+    synchronized ChildOutput output() {
+        if (stdout == null) {
+            stdout = ChildOutput.stdout(process)
+        }
+        stdout
     }
 
     @Override
@@ -57,92 +104,17 @@ class CannedExecHandle implements ExecHandle {
         if (interruptsWait) {
             // The supervised wait's contract: tree killed, flag restored, exit code meaningless.
             Thread.currentThread().interrupt()
+            exited.countDown()
+            return exit
         }
+        int code = process.waitFor()
         exited.countDown()
-        exit
+        code
     }
 
     @Override
     Duration postExitBound() {
         boundReads++
         bound
-    }
-}
-
-/** A pipe a descendant still holds after the exit: yields its bytes, then blocks until closed. */
-class HeldStream extends InputStream {
-
-    private final InputStream prefix
-    private final CountDownLatch release = new CountDownLatch(1)
-    volatile boolean closed = false
-
-    HeldStream(byte[] bytes) {
-        this.prefix = new ByteArrayInputStream(bytes)
-    }
-
-    @Override
-    int read() {
-        byte[] one = new byte[1]
-        read(one, 0, 1) == -1 ? -1 : (one[0] & 0xff)
-    }
-
-    /** Hands out the whole prefix in one read, as a pipe does, then parks until closed. */
-    @Override
-    int read(byte[] buffer, int offset, int length) {
-        int read = prefix.read(buffer, offset, length)
-        if (read> 0) {
-            return read
-        }
-        release.await(30, TimeUnit.SECONDS) // in-JVM stand-in for a pipe whose write end is held
-        -1
-    }
-
-    @Override
-    void close() {
-        closed = true
-        release.countDown()
-    }
-}
-
-/** A pipe whose bytes arrive only after a delay — output still in flight when the wait resolves. */
-class SlowStream extends InputStream {
-
-    private final InputStream delegate
-    private final long delayMillis
-    private boolean delayed = false
-
-    SlowStream(byte[] bytes, long delayMillis) {
-        this.delegate = new ByteArrayInputStream(bytes)
-        this.delayMillis = delayMillis
-    }
-
-    @Override
-    int read() {
-        if (!delayed) {
-            delayed = true
-            Thread.sleep(delayMillis)
-        }
-        delegate.read()
-    }
-}
-
-/** A pipe that never yields a byte and never reaches EOF — a hung in-box command. */
-class NeverEndingStream extends InputStream {
-
-    private final CountDownLatch never = new CountDownLatch(1)
-
-    @Override
-    int read() {
-        never.await(30, TimeUnit.SECONDS) // in-JVM stand-in for a pipe read that does not return
-        -1
-    }
-}
-
-/** A pipe that breaks mid-read. */
-class BrokenStream extends InputStream {
-
-    @Override
-    int read() {
-        throw new IOException('pipe broke')
     }
 }

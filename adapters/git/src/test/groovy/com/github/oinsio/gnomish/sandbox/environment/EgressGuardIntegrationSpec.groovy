@@ -120,7 +120,7 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
                         [:],
                         null,
                         StderrPolicy.MERGED))
-        def output = new String(handle.output().readAllBytes(), 'UTF-8')
+        def output = new String(handle.output().stream().readAllBytes(), 'UTF-8')
         def exit = handle.waitForExit()
 
         then: 'the query gets no answer — the internal-only network has no port-53 route out'

@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.subprocess.ChildOutput;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -29,8 +29,14 @@ import org.slf4j.MDC;
  * thread keeps ownership of the round budget: it waits for process exit as
  * before, then calls {@link #await(Duration)} to collect the events within the
  * post-exit bound of its handle. {@link #close()} on every exit path guarantees no drain
- * thread and no open stream outlives the round (NFR-R1), which is why callers
+ * thread and no pending read outlives the round (NFR-R1), which is why callers
  * hold it in a try-with-resources.
+ *
+ * <p>The drain reads the {@link ChildOutput}'s stream view, which never parks in the pipe
+ * (design D1, D5 of make-pipe-reads-non-parking): it reads only the bytes the pipe reports,
+ * waits a tick when there are none, and ends as soon as it sees the exit with nothing pending,
+ * or on the owner's stop. The drain closes no pipe — the JDK's reaper closes it at the exit — so
+ * its close is that stop, observed by the view's next read within a tick on Linux as on macOS.
  *
  * <p>Listener callbacks fire from this thread, per line, while the process is
  * still running (FR4, D4). The round thread's MDC — the attempt's {@code
@@ -40,11 +46,12 @@ import org.slf4j.MDC;
  * post-exit from the round thread.
  *
  * <p>Implements FR1, FR2, FR4, FR6, NFR-R1, NFR-O1, NFR-P1, D1, D3, D4, D5 of
- * fix-round-stdout-drain; FR19, D17 of fix-terminal-receipt-convergence.
+ * fix-round-stdout-drain; FR19, D17 of fix-terminal-receipt-convergence; FR6, D5 of
+ * make-pipe-reads-non-parking.
  */
 final class StreamDrain implements AutoCloseable {
 
-    private final InputStream source;
+    private final ChildOutput source;
     private final CountingInputStream counting;
     private final List<TimestampedEvent> events = Collections.synchronizedList(new ArrayList<>());
     private final Thread thread;
@@ -55,21 +62,21 @@ final class StreamDrain implements AutoCloseable {
      * Starts draining {@code output} immediately — the returned drain is already
      * reading by the time this call returns.
      *
-     * @param output the launched process's stdout; never null, owned by the drain
-     *     from here on
+     * @param output the launched process's stdout, read without parking; never null,
+     *     owned by the drain from here on
      * @param clock the read-time source stamped onto each event as its line is
      *     consumed, now genuinely the line's arrival time (NFR-O1); never null
      * @param progressListener the live-progress subscriber invoked from the drain
      *     thread, per line; never null
      * @return the running drain; never null
      */
-    static StreamDrain start(InputStream output, InstantSource clock, AgentProgressListener progressListener) {
+    static StreamDrain start(ChildOutput output, InstantSource clock, AgentProgressListener progressListener) {
         return new StreamDrain(output, clock, progressListener);
     }
 
-    private StreamDrain(InputStream output, InstantSource clock, AgentProgressListener progressListener) {
+    private StreamDrain(ChildOutput output, InstantSource clock, AgentProgressListener progressListener) {
         this.source = output;
-        this.counting = new CountingInputStream(output);
+        this.counting = new CountingInputStream(output.stream());
         var parser = new StreamJsonParser(clock, progressListener);
         Map<String, String> roundMdc = MDC.getCopyOfContextMap();
         this.thread = Thread.ofVirtual().name("agent-stdout-drain").unstarted(() -> drain(parser, roundMdc));
@@ -115,27 +122,27 @@ final class StreamDrain implements AutoCloseable {
     }
 
     /**
-     * Ends the drain on any exit path (NFR-R1): interrupts the thread and closes the
-     * process's stdout — which is what unblocks a read still parked on a pipe a killed
-     * process or an exited one's descendant holds, so the thread ends on its own a
-     * moment later. It does not join the thread: the wait for the stream is {@link
-     * #await}'s, bounded by the handle's post-exit bound the round passes, and a second bound of the
-     * drain's own here would be a reader's constant beside it (design D17 of
-     * fix-terminal-receipt-convergence). Idempotent, and a no-op in effect on the
-     * normal path where the drain already reached EOF and closed the stream itself.
+     * Ends the drain on any exit path (NFR-R1): the owner's stop, which the stream view's
+     * next read observes within a tick — so the parser sees end-of-stream even while a
+     * descendant of the process still holds the pipe — and an interrupt for a thread that is
+     * inside the parser or its listener (design D5 of make-pipe-reads-non-parking). It closes
+     * no pipe and joins nothing: the wait for the stream is {@link #await}'s, bounded by the
+     * handle's post-exit bound the round passes, and a second bound of the drain's own here
+     * would be a reader's constant beside it (design D17 of fix-terminal-receipt-convergence).
+     * Idempotent, and a no-op in effect on the normal path where the drain already ended.
      */
     @Override
     public void close() {
+        source.stop();
         thread.interrupt();
-        closeSource();
     }
 
     /**
-     * The drain thread's body. A {@code roundTimeout} kill closes the pipe
-     * mid-read, so the {@link IOException} it raises is recorded rather than
-     * thrown: the round thread never consults it on that path — it throws its
-     * timeout classification first (D3, FR3) — and on any path where it does
-     * consult it, the process was alive and the failure is genuine.
+     * The drain thread's body. The try-with-resources closes the view, which is the
+     * owner's stop, never a close of the pipe (D5 of make-pipe-reads-non-parking). A
+     * failure of the read is recorded rather than thrown: on a {@code roundTimeout}
+     * kill the round thread never consults it — it throws its timeout classification
+     * first (D3, FR3) — and on any path where it does consult it, the failure is genuine.
      */
     private void drain(StreamJsonParser parser, @Nullable Map<String, String> roundMdc) {
         applyMdc(roundMdc);
@@ -172,14 +179,6 @@ final class StreamDrain implements AutoCloseable {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return Join.INTERRUPTED;
-        }
-    }
-
-    private void closeSource() {
-        try {
-            source.close();
-        } catch (IOException e) {
-            // Teardown only: the round's own outcome is already decided by here.
         }
     }
 }

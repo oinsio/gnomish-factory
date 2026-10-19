@@ -83,23 +83,22 @@ class CaptureRunnerDrainSpec extends Specification implements FakeBinaries {
     }
 
     // Scenario: lifecycle/subprocess-supervision / A spec controls the exit and the pipes
-    def "design D2, NFR-R3, FR16: a normal exit waits for output a holder writes after it, within the bound"() {
-        given: 'a fake process that has spoken and exits cleanly, its stdout held open as by a descendant'
+    def "design D2, NFR-R3, FR16: a normal exit keeps output a holder writes after it while the drain still reads"() {
+        given: 'a fake process that has spoken and exited cleanly, its stdout held open as by a descendant'
         // Every step is ordered by the spec, none by the scheduler (design D16 of
-        // fix-terminal-receipt-convergence): once the wait has seen the exit and the drain has read
-        // what the parent spoke, the holder speaks once more and releases the pipe — on the waiting
-        // thread, after the exit and before the post-exit join, which is where output arriving
-        // after the process itself exited meets the capture. This replaces a real script that
-        // lingered half a second so its drain would win the race for the first read.
+        // fix-terminal-receipt-convergence; D6 of make-pipe-reads-non-parking): the drain's first
+        // query takes what the parent spoke, and just before its second the holder speaks once more
+        // and releases the pipe — after the exit, while the drain is still reading, which is where
+        // output arriving after the process itself exited meets the capture. A holder that speaks
+        // only after the drain saw the exit is dropped, as the JDK's reaper drops it (D2).
         FakeProcess process = FakeProcess.running()
         process.holdOpen()
         process.writeStdout('from-the-parent\n')
-        process.onWaitReturn {
-            if (!process.awaitStdoutRead(Duration.ofSeconds(10))) {
-                throw new AssertionError('the drain never read what the parent had spoken' as Object)
+        process.stdoutPipe().onQuery {
+            process.stdoutPipe().onQuery {
+                process.writeStdout('from-the-holder\n')
+                process.release()
             }
-            process.writeStdout('from-the-holder\n')
-            process.release()
         }
         process.exit(0)
 

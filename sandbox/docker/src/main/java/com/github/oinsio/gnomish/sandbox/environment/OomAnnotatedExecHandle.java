@@ -2,8 +2,8 @@ package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
+import com.github.oinsio.gnomish.subprocess.ChildOutput;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
-import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.InstantSource;
@@ -56,7 +56,7 @@ final class OomAnnotatedExecHandle implements ExecHandle {
     }
 
     @Override
-    public InputStream output() {
+    public ChildOutput output() {
         return delegate.output();
     }
 

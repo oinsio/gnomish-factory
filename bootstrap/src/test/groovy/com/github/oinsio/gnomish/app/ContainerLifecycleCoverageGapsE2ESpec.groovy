@@ -166,7 +166,7 @@ advancement: auto
                             '-c',
                             'echo revoked-leftover > revoked.txt'
                         ], [:], null, StderrPolicy.MERGED))
-        handle.output().readAllBytes()
+        handle.output().stream().readAllBytes()
         assert handle.waitForExit() == 0
 
         when:

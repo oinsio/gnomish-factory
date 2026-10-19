@@ -29,11 +29,24 @@ instead of in its tasks.
    other (`testing.md`). A task that changed no production Java skips this step.
 4. **Architecture and build specs** the task's own text names — run them by name, like
    step 2.
+5. **Specs whose subject is the platform run on Linux too.** A spec of OS or JDK behaviour —
+   a real process, a pipe, a signal, a process group, the launcher — is run by name through
+   `scripts/linux-specs.sh` as well, the same `--tests` arguments as step 2: the developer's
+   machine is macOS and CI is Linux, and a fact that holds on one may not hold on the other
+   (`design-decisions.md`, "A platform fact is measured on every platform CI runs").
 
 A task's "PIT gate green" or "`check` green" wording is met by these steps for the task's
 own scope; the whole build is proven once, below.
 
 ## At the end: the whole build, once
+
+**The cheapest platform signal first.** Before the root `check`, and before any push, the
+modules that hold platform specs (step 5) are run through `scripts/linux-specs.sh` — minutes,
+against an hour for the root `check` and a push for CI. CI stays the last confirmation, never
+the first Linux signal. The failure this exists for: the Linux failures of
+`fix-terminal-receipt-convergence` were found by CI only, twice (runs 38879822474 and
+39117545428), and the next change planned root `check` → push → CI again until the operator
+asked for the container run (`make-pipe-reads-non-parking`, 2026-10-19).
 
 When every task is done, run the full root `./gradlew check` — no `--tests`, no
 `-PpitScope` — and fix what fails. It is the gate that proves cross-module effects and

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.StderrPolicy;
+import com.github.oinsio.gnomish.subprocess.ChildOutput;
 import com.github.oinsio.gnomish.subprocess.CutCaptureException;
 import com.github.oinsio.gnomish.subprocess.Drain;
 import com.github.oinsio.gnomish.subprocess.ProcessSupervisor;
@@ -40,14 +41,13 @@ import org.slf4j.LoggerFactory;
  * {@code .git/**} under the working copy, even though this class's refusal is
  * lexical-only (no symlink resolution) where the host twin resolves symlinks.
  *
- * <p>Both exec pipes are drained on the {@code :subprocess} module's {@link
- * Drain}, concurrently with the wait (design D2 of bound-subprocess-commands):
- * reading either to the end on the calling thread first would let a hung in-box
- * command hold the channel forever, ahead of any supervision. The drains are
- * joined with the post-exit bound of the {@link DockerCli}'s supervisor, never a
- * constant of this class, and a drain still open at the bound is judged by the
- * one rule every value reader asks, {@link CutCaptureException#refuses} (design
- * D15 as amended 2026-10-17, D17 of fix-terminal-receipt-convergence).
+ * <p>Both exec pipes are read as non-parking {@link ChildOutput}s on {@link Drain}s, concurrently
+ * with the wait (design D2 of bound-subprocess-commands; D1, D2 of make-pipe-reads-non-parking): a
+ * read to the end on the calling thread would let a hung in-box command hold the channel ahead of
+ * any supervision. A drain ends as soon as it sees the exit with nothing pending; the drains
+ * are joined with the {@link DockerCli} supervisor's post-exit bound, and one a holder still feeds
+ * there is stopped — no pipe is closed (D3, D4) — and judged by {@link CutCaptureException#refuses}
+ * (design D15 as amended 2026-10-17, D17 of fix-terminal-receipt-convergence).
  *
  * <p>The file content of a write reaches the in-box {@code cat} as a {@link
  * StdinSource} the launch owner turns into the {@code docker exec -i} client's
@@ -60,7 +60,8 @@ import org.slf4j.LoggerFactory;
  * InterruptedIOException}, never as an exit code an in-box script could choose.
  *
  * <p>Implements FR1, NFR-S3 of add-sandbox-core; FR11 of
- * bound-subprocess-commands; FR17, FR19, FR23 of fix-terminal-receipt-convergence.
+ * bound-subprocess-commands; FR17, FR19, FR23 of fix-terminal-receipt-convergence; FR1, FR3 of
+ * make-pipe-reads-non-parking.
  */
 record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path scratch) {
 
@@ -162,7 +163,7 @@ record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path
      *
      * <p>An interrupted wait kills and reaps the tree and leaves the flag set; the
      * flag is read after the joins, so a join it cut short fails the operation too
-     * rather than handing back a prefix (FR11 of bound-subprocess-commands). A drain still open at the
+     * rather than handing back a prefix (FR11 of bound-subprocess-commands). A drain stopped at the
      * bound is judged by {@link CutCaptureException#refuses}: after a clean exit
      * with code zero the operation fails, the stream named in {@link
      * CutCaptureException#notice}; otherwise the cut rides the failure's stderr.
@@ -170,8 +171,8 @@ record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path
     private ChannelExec run(List<String> argv, StdinSource stdin, String what) {
         Process process = docker.start(
                 DockerCommands.exec(key, workingCopy.toString(), Map.of(), stdin, argv), StderrPolicy.PIPED, stdin);
-        Drain stdout = Drain.start(process.getInputStream(), "channel-stdout");
-        Drain stderr = Drain.start(process.getErrorStream(), "channel-stderr");
+        Drain stdout = Drain.start(ChildOutput.stdout(process), "channel-stdout");
+        Drain stderr = Drain.start(ChildOutput.stderr(process), "channel-stderr");
         ProcessSupervisor supervisor = docker.supervisor();
         Supervision supervision = supervisor.await(process, null);
         Duration bound = supervisor.postExitBound();
@@ -184,8 +185,8 @@ record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path
         }
         int code = supervision.exitCode();
         IOException broken = stdout.failure();
-        if (!cut && broken != null) {
-            // A cut drain's failure is the close that ended it, not a broken stream.
+        if (broken != null) {
+            // A stopped drain fails nothing (no pipe is closed, D3): a failure is a stream that broke.
             throw new UncheckedIOException("could not read " + what + " output", broken);
         }
         String diagnostics = stderr.captured();

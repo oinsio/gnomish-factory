@@ -138,7 +138,7 @@ class PaidSmokePermissionModeSpec extends Specification {
         //     (FR17 of supervise-daemon-loops-and-embed-dashboard); the time source is not the subject here.
         def clock = InstantSource.system()
         def handle = PaidSmokeAgentLauncher.launch(command, box, clock, prompt)
-        List<String> lines = handle.output().withReader(StandardCharsets.UTF_8.name()) {
+        List<String> lines = handle.output().stream().withReader(StandardCharsets.UTF_8.name()) {
             it.readLines()
         }
         handle.waitForExitOrTimeout(Duration.ofSeconds(90), clock)

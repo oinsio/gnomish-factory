@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import static com.github.oinsio.gnomish.adapter.agent.NonEndingStreams.nonEndingStream
-
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -9,8 +7,8 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
 import java.time.Duration
-import java.util.concurrent.atomic.AtomicBoolean
 import spock.lang.Specification
 
 /**
@@ -25,9 +23,9 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
     // Scenario: executor/agent-executor / A drain unfinished after the post-exit bound is infrastructure
     def "a drain that outlives the handle's post-exit bound yields CannotVerify"() {
         given: 'a process that exited normally but whose stdout never ends, its handle bounding the wait at 100 ms'
-        def stuck = new AtomicBoolean()
+        def stuck = FakeProcess.running()
         def handle = Stub(ExecHandle) {
-            output() >> nonEndingStream(stuck)
+            output() >> CannedOutputs.nonEnding(stuck)
             waitForExitOrTimeout(_, _) >> new ExecHandle.Wait.Exited(Duration.ofSeconds(1))
             postExitBound() >> Duration.ofMillis(100)
         }
@@ -54,7 +52,7 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
         verdict.details().forLog().contains('PT0.1S')
 
         cleanup:
-        stuck.set(true)
+        stuck.exit(0)
     }
 
     // FR2: the drain's other infrastructure failure — the wait was cut short by an
@@ -62,9 +60,9 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
     // Scenario: executor/agent-executor / An interrupted wait is not blamed on the bound
     def "an interrupted round thread yields CannotVerify naming the interruption"() {
         given:
-        def stuck = new AtomicBoolean()
+        def stuck = FakeProcess.running()
         def handle = Stub(ExecHandle) {
-            output() >> nonEndingStream(stuck)
+            output() >> CannedOutputs.nonEnding(stuck)
             waitForExitOrTimeout(_, _) >> new ExecHandle.Wait.Exited(Duration.ofSeconds(1))
             postExitBound() >> Duration.ofSeconds(30)
         }
@@ -96,6 +94,6 @@ class JudgeRoundDrainTimeoutSpec extends Specification {
 
         cleanup:
         Thread.interrupted()
-        stuck.set(true)
+        stuck.exit(0)
     }
 }

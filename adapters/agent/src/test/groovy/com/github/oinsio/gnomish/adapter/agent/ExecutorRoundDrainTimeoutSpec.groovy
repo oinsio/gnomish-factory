@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import static com.github.oinsio.gnomish.adapter.agent.NonEndingStreams.nonEndingStream
-
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -10,11 +8,12 @@ import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
 import java.time.InstantSource
-import java.util.concurrent.atomic.AtomicBoolean
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -32,11 +31,11 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
     @TempDir
     Path workspaceDir
 
-    /** Released in cleanup so a spinning stand-in stream never outlives its feature. */
-    def stuck = new AtomicBoolean()
+    /** Ended in cleanup so a live stand-in child's output never outlives its feature. */
+    def stuck = FakeProcess.running()
 
     def cleanup() {
-        stuck.set(true)
+        stuck.exit(0)
     }
 
     // FR2; FR19 of fix-terminal-receipt-convergence: the handle's post-exit bound runs out while
@@ -44,7 +43,7 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
     // Scenario: executor/agent-executor / A drain unfinished after the post-exit bound is infrastructure
     def "a drain that outlives the handle's post-exit bound throws StreamDrainTimeoutException"() {
         given: 'a process that exited normally but whose stdout never ends, its handle bounding the wait at 100 ms'
-        def handle = new ExitedExecHandle(nonEndingStream(stuck), Duration.ofMillis(100))
+        def handle = new ExitedExecHandle(CannedOutputs.nonEnding(stuck), Duration.ofMillis(100))
         def environment = Stub(TaskExecutionEnvironment) {
             exec(_ as ExecCommand) >> handle
         }
@@ -64,7 +63,7 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
     // Scenario: executor/agent-executor / An interrupted wait is not blamed on the bound
     def "an interrupted round thread throws StreamDrainInterruptedException, not a timeout"() {
         given:
-        def handle = new ExitedExecHandle(nonEndingStream(stuck), Duration.ofSeconds(30))
+        def handle = new ExitedExecHandle(CannedOutputs.nonEnding(stuck), Duration.ofSeconds(30))
         def environment = Stub(TaskExecutionEnvironment) {
             exec(_ as ExecCommand) >> handle
         }
@@ -106,16 +105,16 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
  */
 class ExitedExecHandle implements ExecHandle {
 
-    private final InputStream stdout
+    private final ChildOutput stdout
     private final Duration postExitBound
 
-    ExitedExecHandle(InputStream stdout, Duration postExitBound = Duration.ofSeconds(1)) {
+    ExitedExecHandle(ChildOutput stdout, Duration postExitBound = Duration.ofSeconds(1)) {
         this.stdout = stdout
         this.postExitBound = postExitBound
     }
 
     @Override
-    InputStream output() {
+    ChildOutput output() {
         stdout
     }
 

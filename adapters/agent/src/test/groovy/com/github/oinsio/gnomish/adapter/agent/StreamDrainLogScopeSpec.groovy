@@ -3,8 +3,9 @@ package com.github.oinsio.gnomish.adapter.agent
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import java.nio.charset.StandardCharsets
 import java.time.Duration
 import org.slf4j.MDC
 import spock.lang.Specification
@@ -31,12 +32,15 @@ class StreamDrainLogScopeSpec extends Specification {
 
     // Scenario: observability/factory-logging / Pump thread keeps the task
     def "FR8: the drain thread's line lands in the round's task scope"() {
-        given: 'the round thread inside a task scope, and a stream holding one malformed line'
+        given: 'the round thread inside a task scope, and a child that wrote one malformed line and exited'
         logs = LogCaptureSupport.attach(StreamJsonParser, Level.DEBUG)
         MDC.put('taskId', 'T-7')
         MDC.put('stage', 'implement')
         MDC.put('attempt', '2')
-        def output = new ByteArrayInputStream('not json\n'.getBytes(StandardCharsets.UTF_8))
+        def child = FakeProcess.running()
+        child.writeStdout('not json\n')
+        child.exit(0)
+        def output = ChildOutput.stdout(child)
         AgentProgressListener listener = { event -> }
 
         when: 'the round spawns the drain and waits for it'

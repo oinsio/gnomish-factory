@@ -13,8 +13,8 @@ import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -71,8 +71,8 @@ class RoundStderrFileSpec extends Specification {
                 new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1), environment, 'prompt')
     }
 
-    private static InputStream stream(String text) {
-        new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8))
+    private static ChildOutput stream(String text) {
+        CannedOutputs.written(text)
     }
 
     private Path stderrFile() {

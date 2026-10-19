@@ -17,112 +17,42 @@ import spock.lang.TempDir
  *
  * <p>Driven on {@link FakeProcess}, whose exit and pipe ends the spec orders (design D16): the shapes
  * that pinned the old pump joins — "await waits for the stderr pump", "await still runs when the
- * capped read fails" — are asserted here as their bounded successors.
+ * capped read fails" — are asserted here as their bounded successors. The cut verdict on a holder
+ * after the exit is {@code GitExecCutSpec}'s.
  */
 class GitExecPumpThreadsSpec extends Specification {
 
-    /** A short kill grace keeps the post-exit bound, and so the held-pipe feature, near two seconds. */
+    /** A short kill grace keeps the post-exit bound, and so the late-line feature, near two seconds. */
     private static final ProcessSupervisor SUPERVISOR = new ProcessSupervisor(Duration.ofMillis(100))
 
     @TempDir
     Path gitDir
 
     // Scenario: lifecycle/subprocess-supervision / Every reader waits with the one bound
-    def "FR19: stderr a holder writes after the exit is captured whole, within the post-exit bound"() {
+    def "FR19: stderr a holder writes after the exit while the drain still reads is captured whole, within the post-exit bound"() {
         given: 'git has spoken on stderr and exits, its stderr held open as by a descendant'
+        // The order is the spec's, not the scheduler's (design D2 of make-pipe-reads-non-parking): the
+        // drain's first query takes what git spoke, and just before its second the holder speaks and
+        // releases the pipe, while the drain still reads. A line the holder speaks only after the drain
+        // saw the exit is dropped, as the JDK's reaper drops it.
         FakeProcess process = FakeProcess.running()
         process.holdOpen()
         process.writeStderr('from-git\n')
-        process.onWaitReturn {
-            process.writeStderr('from-the-holder\n')
-            process.release()
+        process.stderrPipe().onQuery {
+            process.stderrPipe().onQuery {
+                process.writeStderr('from-the-holder\n')
+                process.release()
+            }
         }
         process.exit(1)
 
         when:
         GitExec.Result result = exec(process).run(['cat-file', '-e', 'HEAD'])
 
-        then: 'the result waited for the late line, not for an unbounded pump join'
+        then: 'the result waited for the late line through the bounded join, not an unbounded pump join'
         result.exitCode() == 1
         result.stderr() == 'from-git\nfrom-the-holder\n'
         !result.overflowed()
-    }
-
-    // FR17, D15 as amended 2026-10-17: the flag is "no end-of-file inside the bound", not "bytes
-    // lost", so a held pipe with nothing written is refused as well as one that carried a prefix.
-    def "FR19, FR17: git exiting zero while a holder keeps #held open is refused, naming the bound and the stream (written: '#written')"() {
-        given: 'git exits cleanly while a descendant keeps the named pipes open'
-        FakeProcess process = FakeProcess.running()
-        process.holdOpen()
-        if (written) {
-            process.writeStdout(written)
-        }
-        process.onWaitReturn { released(process).close() }
-        process.exit(0)
-
-        when:
-        long startedAt = System.nanoTime()
-        exec(process).run([
-            'cat-file',
-            'blob',
-            'HEAD:file'
-        ])
-
-        then: 'the cut output is refused loudly rather than handed back as complete'
-        GitObjectsException failure = thrown()
-        !(failure instanceof GitObjectsInterruptedException)
-        failure.message == "git output was cut: ${held} still open at the post-exit bound of ${SUPERVISOR.postExitBound()}" +
-                ' — a descendant held its pipes after the command exited'
-
-        and: 'the return came on the bound'
-        Duration.ofNanos(System.nanoTime() - startedAt) <SUPERVISOR.postExitBound() + Duration.ofSeconds(2)
-
-        and: 'the drains closed their ends of the held pipes'
-        closed(process.inputStream)
-        closed(process.errorStream)
-
-        cleanup:
-        process.release()
-
-        where:
-        held | written | released
-        'stdout and stderr' | 'partial' | { FakeProcess p ->
-            InputStream.nullInputStream()
-        }
-        'stdout and stderr' | '' | { FakeProcess p ->
-            InputStream.nullInputStream()
-        }
-        'stdout' | 'partial' | { FakeProcess p -> p.errorStream }
-        'stderr' | '' | { FakeProcess p -> p.inputStream }
-    }
-
-    // FR17, D15 as amended 2026-10-17 (Go's precedence): a failed git keeps its own failure — the
-    // stderr check() reports — and the cut rides that message instead of becoming a second finding.
-    def "FR19, FR17: git exiting non-zero while a holder keeps its pipes returns the result, the cut riding git's stderr"() {
-        given:
-        FakeProcess process = FakeProcess.running()
-        process.holdOpen()
-        process.writeStderr('fatal: not a valid object name\n')
-        process.exit(1)
-
-        when:
-        GitExec.Result result = exec(process).run([
-            'cat-file',
-            '-e',
-            'HEAD:missing'
-        ])
-
-        then: 'no refusal: the exit code keeps its meaning, so exists() and check() read it unchanged'
-        result.exitCode() == 1
-        !result.overflowed()
-
-        and: "git's own stderr comes first, the cut after it"
-        result.stderr() == 'fatal: not a valid object name\n' +
-                "(git output was cut: stdout and stderr still open at the post-exit bound of ${SUPERVISOR.postExitBound()}" +
-                ' — a descendant held its pipes after the command exited)'
-
-        cleanup:
-        process.release()
     }
 
     def "FR23: the stdin bytes reach the launch owner as a source, and no stdin as NONE"() {
@@ -146,15 +76,6 @@ class GitExecPumpThreadsSpec extends Specification {
         then:
         handed[0] instanceof StdinSource.Content
         handed[1].is(StdinSource.NONE)
-    }
-
-    private static boolean closed(InputStream stream) {
-        try {
-            stream.read()
-            false
-        } catch (IOException expected) {
-            true
-        }
     }
 
     private GitExec exec(FakeProcess process) {

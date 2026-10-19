@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.gitobjects
 
 import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.sandbox.environment.WritingHolder
 import com.github.oinsio.gnomish.subprocess.ProcessLaunch
 import com.github.oinsio.gnomish.subprocess.ProcessSupervisor
 import java.nio.file.Path
@@ -53,13 +54,15 @@ class GitExecInterruptSpec extends Specification {
         Thread.interrupted()
     }
 
-    // FR19: the second interrupt site — the process has exited and a holder keeps the pipes, so the
-    // interrupt lands in the post-exit join; the wait was reached, and only the flag and the loud
+    // FR19: the second interrupt site — the process has exited and a holder keeps the pipes, writing
+    // to stdout so the drain stays open to the bound (D4 of make-pipe-reads-non-parking); the
+    // interrupt lands in the post-exit join, the wait was reached, and only the flag and the loud
     // failure are owed.
-    def "FR19: an interrupt during the post-exit join restores the flag, surfaces loudly and closes the pipes"() {
-        given: 'git exits cleanly while a descendant holds both pipes, and the interrupt arrives once the wait saw the exit'
+    def "FR19: an interrupt during the post-exit join restores the flag, surfaces loudly and stops the drains"() {
+        given: 'git exits cleanly while a descendant holds both pipes and keeps writing to stdout, and the interrupt arrives once the wait saw the exit'
         FakeProcess process = FakeProcess.running()
         process.holdOpen()
+        WritingHolder.on(process.stdoutPipe())
         process.onWaitReturn { Thread.currentThread().interrupt() }
         process.exit(0)
 

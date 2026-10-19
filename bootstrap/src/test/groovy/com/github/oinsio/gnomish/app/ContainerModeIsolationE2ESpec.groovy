@@ -118,7 +118,7 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
 
         when: 'the full environment is dumped from inside the box'
         def handle = environment.exec(new ExecCommand(['env'], [:], null, StderrPolicy.MERGED))
-        def output = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8)
+        def output = new String(handle.output().stream().readAllBytes(), StandardCharsets.UTF_8)
         handle.waitForExit()
         def names = output.readLines().findAll {
             it.contains('=')

@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.time.Duration
@@ -54,8 +55,9 @@ abstract class TaskExecutionEnvironmentContract extends Specification implements
         env?.dispose()
     }
 
-    protected static String readFully(InputStream stream) {
-        new String(stream.readAllBytes(), StandardCharsets.UTF_8)
+    /** Reads the whole output through the owner's non-parking stream view, to the child's exit. */
+    protected static String readFully(ChildOutput output) {
+        new String(output.stream().readAllBytes(), StandardCharsets.UTF_8)
     }
 
     private static ExecCommand shell(String script, String stdin = null, StderrPolicy stderr = StderrPolicy.PIPED) {

@@ -53,8 +53,8 @@ class ContainerFileChannelStallSpec extends Specification {
 
     // FR11: an in-box read whose stdout never reaches EOF still ends as the named interruption
     def "an interrupted readFile of a stalled exec still names the interruption"() {
-        given: 'an in-box process holding its stdout open, as a hung command does'
-        docker.process.stdoutStream = new StalledInputStream()
+        given: 'an in-box process that never exits by itself, holding its pipes open, as a hung command does'
+        docker.script.stalls = true
 
         when:
         def outcome = completeWithin {
@@ -70,7 +70,7 @@ class ContainerFileChannelStallSpec extends Specification {
     // FR11: the same on the write path — the write's own stdout pipe must not gate the wait
     def "an interrupted putFile of a stalled exec still names the interruption"() {
         given:
-        docker.process.stdoutStream = new StalledInputStream()
+        docker.script.stalls = true
 
         when:
         def outcome = completeWithin {
@@ -86,9 +86,9 @@ class ContainerFileChannelStallSpec extends Specification {
     // FR2: stderr is an exec pipe too — a read that never drains it cannot let the exec exit
     def "a read whose in-box command writes to stderr completes"() {
         given: 'an exec that cannot exit until its stderr has been consumed'
-        docker.process.stdout = 'ok'.bytes
-        docker.process.stderrStream = new ByteArrayInputStream('head: warning'.bytes)
-        docker.process.exitsOnlyWhenStderrDrained = true
+        docker.script.stdout = 'ok'.bytes
+        docker.script.stderr = 'head: warning'
+        docker.script.exitsOnceStderrRead = true
 
         when:
         def outcome = completeWithin { channel().readFile('note.txt', 10) }
@@ -96,29 +96,5 @@ class ContainerFileChannelStallSpec extends Specification {
         then:
         outcome instanceof Optional
         new String(((Optional<byte[]>) outcome).get()) == 'ok'
-    }
-}
-
-/** An exec pipe still open when the join begins, reaching EOF shortly after. */
-class SlowEofStream extends InputStream {
-
-    private final CountDownLatch never = new CountDownLatch(1)
-
-    @Override
-    int read() {
-        never.await(1, TimeUnit.SECONDS)
-        return -1
-    }
-}
-
-/** An exec pipe that never reaches EOF and never yields a byte — a hung in-box command. */
-class StalledInputStream extends InputStream {
-
-    private final CountDownLatch never = new CountDownLatch(1)
-
-    @Override
-    int read() {
-        never.await() // an in-JVM stand-in for a pipe read that simply never returns
-        return -1
     }
 }

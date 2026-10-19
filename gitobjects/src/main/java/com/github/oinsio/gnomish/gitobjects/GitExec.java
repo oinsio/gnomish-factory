@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.gitobjects;
 
+import com.github.oinsio.gnomish.subprocess.ChildOutput;
 import com.github.oinsio.gnomish.subprocess.CutCaptureException;
 import com.github.oinsio.gnomish.subprocess.Drain;
 import com.github.oinsio.gnomish.subprocess.ProcessGroupSweep;
@@ -29,9 +30,10 @@ import org.jspecify.annotations.Nullable;
  * dependency-free {@code :subprocess} module's (design D13 of bound-subprocess-commands, D17 of
  * fix-terminal-receipt-convergence): the command is started through the {@link ProcessLaunch} owner,
  * which hands git its stdin as a file or {@code /dev/null} (design D20), so no thread of this class
- * writes into a pipe; both output streams are read on the module's {@link Drain}, the cap applied to
- * the drained stdout; the wait and the kill run on the {@link ProcessSupervisor}, and the drains are
- * joined after it with the supervisor's post-exit bound, so the wait is always reached and an
+ * writes into a pipe; both output streams are read as {@link ChildOutput} on the module's {@link
+ * Drain}, which never parks in a pipe (design D1, D2 of make-pipe-reads-non-parking), the cap applied
+ * to the drained stdout; the wait and the kill run on the {@link ProcessSupervisor}, and the drains
+ * are joined after it with the supervisor's post-exit bound, so the wait is always reached and an
  * interrupt always lands. D19's goal is untouched — {@code :subprocess} reaches nothing at all, so
  * extraction still means a folder move, of two modules instead of one.
  *
@@ -51,7 +53,8 @@ import org.jspecify.annotations.Nullable;
  * of fix-operator-blockers).
  *
  * <p>Implements FR25 of add-sandbox-core; FR13, FR9 of bound-subprocess-commands; FR13 of
- * fix-operator-blockers; FR16, FR17, FR18, FR19, FR21, FR23 of fix-terminal-receipt-convergence.
+ * fix-operator-blockers; FR16, FR17, FR18, FR19, FR21, FR23 of fix-terminal-receipt-convergence; FR3,
+ * FR4, FR5 of make-pipe-reads-non-parking.
  *
  * @param gitDir the absolute git dir every command runs against
  * @param gitBinary the git executable
@@ -110,9 +113,9 @@ record GitExec(Path gitDir, String gitBinary, ProcessSupervisor supervisor, Proc
         }
 
         Drain stdout = stdoutCap < 0
-                ? Drain.start(process.getInputStream(), "gitexec-stdout")
-                : Drain.capped(process.getInputStream(), "gitexec-stdout", stdoutCap);
-        Drain stderr = Drain.start(process.getErrorStream(), "gitexec-stderr");
+                ? Drain.start(ChildOutput.stdout(process), "gitexec-stdout")
+                : Drain.capped(ChildOutput.stdout(process), "gitexec-stdout", stdoutCap);
+        Drain stderr = Drain.start(ChildOutput.stderr(process), "gitexec-stderr");
         return await(process, stdout, stderr);
     }
 
@@ -135,9 +138,11 @@ record GitExec(Path gitDir, String gitBinary, ProcessSupervisor supervisor, Proc
      *
      * <p>No deadline is passed to the wait: a local plumbing command against a bare repository that
      * never returns is a broken machine, not a broken remote (NG3 of bound-subprocess-commands, NG15
-     * of fix-terminal-receipt-convergence). Only the post-exit join is bounded: a descendant holding
-     * git's pipes after the exit costs the caller the bound once, after which the drains' streams
-     * are closed (design D15, D17).
+     * of fix-terminal-receipt-convergence). Only the post-exit join is bounded (design D15, D17): a
+     * descendant that holds git's pipes and writes nothing lets the drains end as soon as they see
+     * the exit, the capture whole; one that keeps writing costs the caller the bound once,
+     * after which {@link Drain#joinAll} stops the drains still open and reports them cut. No pipe is
+     * closed here — the JDK's reaper closes it (design D3, D4 of make-pipe-reads-non-parking).
      *
      * <p>Once the drains are joined, git's process group is swept ({@link ProcessGroupSweep},
      * design D19 of fix-terminal-receipt-convergence) on every termination, before any refusal.

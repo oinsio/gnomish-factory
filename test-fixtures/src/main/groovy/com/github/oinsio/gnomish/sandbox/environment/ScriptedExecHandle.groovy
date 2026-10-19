@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import java.time.Duration
 import java.time.Instant
 import java.time.InstantSource
@@ -11,7 +12,8 @@ import java.time.InstantSource
  * {@code waitForExitOrTimeout} that refuses to run because the self-check
  * never calls it. Shared between {@code EnvironmentSelfCheckSpec} and
  * {@code SelfCheckedEnvironmentSpec}, which both fake a probe's {@link ExecHandle}
- * the same way.
+ * the same way. The stdout is a {@link FakeProcess}'s that wrote {@code out} and exited with
+ * {@code code}, minted as its {@link ChildOutput} (design D6 of make-pipe-reads-non-parking).
  */
 final class ScriptedExecHandle {
 
@@ -19,11 +21,15 @@ final class ScriptedExecHandle {
     }
 
     static ExecHandle of(int code, String out) {
+        def child = FakeProcess.running()
+        child.writeStdout(out)
+        child.exit(code)
+        def stdout = ChildOutput.stdout(child)
         new ExecHandle() {
 
                     @Override
-                    InputStream output() {
-                        new ByteArrayInputStream(out.getBytes('UTF-8'))
+                    ChildOutput output() {
+                        stdout
                     }
 
                     @Override

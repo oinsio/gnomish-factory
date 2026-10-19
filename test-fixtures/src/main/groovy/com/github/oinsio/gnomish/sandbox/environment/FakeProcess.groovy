@@ -1,8 +1,5 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
-import java.nio.ByteBuffer
-import java.nio.channels.Channels
-import java.nio.channels.Pipe
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.concurrent.CompletableFuture
@@ -14,27 +11,18 @@ import java.util.stream.Stream
 
 /**
  * The one {@link Process} test double (design D16 of fix-terminal-receipt-convergence), handed to
- * the code under test through its {@code ProcessLaunch}. Two forms:
+ * the code under test through its {@code ProcessLaunch}. {@code new FakeProcess()} has exited with
+ * 0 and written nothing; {@code new FakeProcess(code, stdout)} is the canned base the scripted fakes
+ * extend ({@code ScriptedProcess}, {@code FakeExecProcess}). {@link #running()} is a live process
+ * whose exit happens when the spec calls {@link #exit(int)}, which releases every wait and closes the
+ * pipes' write ends unless {@link #holdOpen()} came first — a descendant still holding them — and
+ * then they stay open until {@link #release()}, or forever. {@link #awaitStdoutRead} and
+ * {@link #onWaitReturn} let a spec place a step between the code's own instead of trusting a
+ * script's scheduling. Both streams are {@link FakePipe}s, which behave as a Linux pipe (design D6
+ * of make-pipe-reads-non-parking); no subclass overrides them, as {@code FakePipeSpec} pins.
  *
- * <ul>
- *   <li>{@code new FakeProcess()} — the canned base the scripted fakes of this package extend
- *       ({@code ScriptedProcess}, {@code FakeExecProcess}): already exited with 0, empty output, a
- *       no-op kill, so a subclass overrides only the streams and the exit it scripts.
- *   <li>{@link #running()} — a live process whose exit is gated: it happens when the spec calls
- *       {@link #exit(int)}, and every wait — {@code waitFor}, {@code onExit}, the handle's — is
- *       released by that call. Its stdout and stderr are {@link Pipe} ends: {@link #writeStdout}
- *       and {@link #writeStderr} write into them, and the exit closes them unless {@link #holdOpen()}
- *       was called first — the shape of a descendant still holding the pipe — in which case they
- *       stay open until {@link #release()}, or forever. A spec orders "exit, then the last write"
- *       itself instead of trusting a script's scheduling. Two latches let it place a step between
- *       the code's own: {@link #awaitStdoutRead} returns once a read of stdout has returned bytes,
- *       and an {@link #onWaitReturn} action runs on the waiting thread once its wait saw the exit.
- * </ul>
- *
- * <p>{@link #descendants()} and {@link #toHandle()} are stubbed because {@link Process}'s own
- * implementations reach a real OS handle and throw for a hand-written subclass: the fake has no
- * tree, and its handle reports the gated exit (FR11 of bound-subprocess-commands). Its pid is 0,
- * which the group sweep never signals, unless {@link #leading} names a group (design D19).
+ * <p>{@link #descendants()} and {@link #toHandle()} are stubbed, not reaching an OS handle (FR11 of
+ * bound-subprocess-commands); the pid is 0, never signalled, unless {@link #leading} names a group.
  */
 class FakeProcess extends Process {
 
@@ -42,31 +30,33 @@ class FakeProcess extends Process {
     private final AtomicBoolean exitTaken = new AtomicBoolean()
     private final CompletableFuture<Process> exited = new CompletableFuture<>()
     private final AtomicReference<Runnable> waitReturn = new AtomicReference<>()
-    private final Pipe stdout
-    private final Pipe stderr
-    private final SignallingInputStream stdoutEnd
-    private final InputStream stderrEnd
+    private final FakePipe stdout = new FakePipe()
+    private final FakePipe stderr = new FakePipe()
     private volatile int exitCode
     private volatile boolean heldOpen
     private volatile long pid
 
     /** The canned base: exited with 0, nothing written. */
     FakeProcess() {
-        this(null, null)
-        exit(0)
+        this(0, '')
     }
 
-    private FakeProcess(Pipe stdout, Pipe stderr) {
-        this.stdout = stdout
-        this.stderr = stderr
-        this.stdoutEnd = new SignallingInputStream(
-                stdout == null ? InputStream.nullInputStream() : Channels.newInputStream(stdout.source()))
-        this.stderrEnd = stderr == null ? InputStream.nullInputStream() : Channels.newInputStream(stderr.source())
+    /** The canned base with output: {@code stdout} waits in the pipe, the process has exited with {@code code}. */
+    protected FakeProcess(int code, String stdout) {
+        writeStdout(stdout)
+        exit(code)
+    }
+
+    /**
+     * The live form; the flag only selects this constructor over the canned ones. Protected so a
+     * scripted subclass writes its pipes and arranges its exit before it is handed to the launch.
+     */
+    protected FakeProcess(boolean gated) {
     }
 
     /** A live process with open pipes, which exits only when the spec says so. */
     static FakeProcess running() {
-        new FakeProcess(Pipe.open(), Pipe.open())
+        new FakeProcess(true)
     }
 
     /** Reports {@code group}, a real group the spec started and ends itself, as this fake's pid. */
@@ -82,43 +72,48 @@ class FakeProcess extends Process {
 
     /** Writes {@code text} into the stdout pipe; the bytes wait in the pipe until the drain reads them. */
     void writeStdout(String text) {
-        write(livePipe(stdout), text)
+        stdout.write(text.getBytes(StandardCharsets.UTF_8))
     }
 
     /** Writes {@code text} into the stderr pipe. */
     void writeStderr(String text) {
-        write(livePipe(stderr), text)
+        stderr.write(text.getBytes(StandardCharsets.UTF_8))
     }
 
     /** Keeps both pipes open past the exit, as a descendant holding them would; called before {@link #exit}. */
     void holdOpen() {
-        livePipe(stdout)
         heldOpen = true
     }
 
-    /** Closes both pipes' write ends: the drains read to end-of-file. Idempotent. */
+    /** Closes both pipes' write ends, as the holder's death would: a read of either reaches end-of-file. Idempotent. */
     void release() {
-        [stdout, stderr].findAll { it != null }.each { it.sink().close() }
+        stdout.release()
+        stderr.release()
     }
 
     /** Closes the stderr pipe's write end only, so a held stdout is the one stream left open. */
     void releaseStderr() {
-        livePipe(stderr).sink().close()
-    }
-
-    /** Closes the stdout pipe's write end only, so a held stderr is the one stream left open. */
-    void releaseStdout() {
-        livePipe(stdout).sink().close()
+        stderr.release()
     }
 
     /** Waits up to {@code bound} for a read of stdout to have returned bytes; whether one did. */
     boolean awaitStdoutRead(Duration bound) {
-        stdoutEnd.awaitRead(bound)
+        stdout.awaitRead(bound)
     }
 
     /** Runs {@code action} once, on the thread whose {@code waitFor} next returns with the exit. */
     void onWaitReturn(Runnable action) {
         waitReturn.set(action)
+    }
+
+    /** The stdout pipe itself, for a spec that counts a reader's queries and reads or hooks a query. */
+    FakePipe stdoutPipe() {
+        stdout
+    }
+
+    /** The stderr pipe itself, for a spec that hooks a query of stderr (a {@link WritingHolder} on it). */
+    FakePipe stderrPipe() {
+        stderr
     }
 
     /** Opens the gate: the process exits with {@code code}. The first exit wins; later ones change nothing. */
@@ -141,12 +136,12 @@ class FakeProcess extends Process {
 
     @Override
     InputStream getInputStream() {
-        stdoutEnd
+        stdout.source()
     }
 
     @Override
     InputStream getErrorStream() {
-        stderrEnd
+        stderr.source()
     }
 
     @Override
@@ -204,19 +199,5 @@ class FakeProcess extends Process {
     private boolean waitReturned() {
         waitReturn.getAndSet(null)?.run()
         true
-    }
-
-    private static Pipe livePipe(Pipe pipe) {
-        if (pipe == null) {
-            throw new IllegalStateException('a canned FakeProcess has no pipes; use FakeProcess.running()')
-        }
-        pipe
-    }
-
-    private static void write(Pipe pipe, String text) {
-        ByteBuffer bytes = ByteBuffer.wrap(text.getBytes(StandardCharsets.UTF_8))
-        while (bytes.hasRemaining()) {
-            pipe.sink().write(bytes)
-        }
     }
 }

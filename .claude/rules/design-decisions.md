@@ -167,6 +167,17 @@ So, before a `Dn` describes how a per-X artefact is produced, the decision lists
 artefact actually varies per X; an alternative that removes the production step is written first,
 and rejected only with the varying part named.
 
+## A platform fact is measured on every platform CI runs
+
+A JDK or OS fact a design rests on — what a `close()` wakes, what a lock blocks, what a signal
+reaches — is measured on Linux and macOS before it is written into a design, and the design
+records the JDK build and OS of each measurement. A fact measured on one platform is an
+unverified premise on the other (`spec-mismatch.md`, item 1). The failure this exists for:
+design D15 of `fix-terminal-receipt-convergence` measured "a close from another thread ends a
+read parked on a child's pipe" on macOS only and wrote it into a requirement, a rule and the
+docs; on Linux the close wakes nothing, and the first Linux CI run after that change (run
+39117545428) was red (`docs/adr/0018-non-parking-pipe-reads.md`, "The method rule").
+
 ## Rules
 
 - Always reference the FR/NFR/UX from proposal.md that drove the decision

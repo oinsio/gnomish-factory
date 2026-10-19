@@ -32,13 +32,15 @@ import org.slf4j.LoggerFactory;
  * caller to classify, carrying the tail captured so far, rather than a run that
  * hangs until an operator notices. The tail is drained concurrently with the
  * command ({@link BoundedTail}), because a stream read to its end on this thread
- * is precisely what a hung command never lets return; it is joined with the
- * handle's post-exit bound, the runner holding no bound of its own (design D17 of
- * fix-terminal-receipt-convergence).
+ * is precisely what a hung command never lets return; the drain reads the
+ * handle's {@link com.github.oinsio.gnomish.subprocess.ChildOutput} without
+ * parking and is joined with the handle's post-exit bound, the runner holding no
+ * bound of its own (design D17 of fix-terminal-receipt-convergence; D2, D4 of
+ * make-pipe-reads-non-parking).
  *
  * <p>Implements FR7, FR8, D6 of add-manual-run; FR4 of add-sandbox-core; FR6,
  * FR12, NFR-O1, D12 of bound-subprocess-commands; FR19 of
- * fix-terminal-receipt-convergence.
+ * fix-terminal-receipt-convergence; FR2, FR4 of make-pipe-reads-non-parking.
  */
 final class CommandProcessRunner {
 
@@ -133,9 +135,10 @@ final class CommandProcessRunner {
         ExecHandle.Wait ended = handle.waitForExitOrTimeout(checkTimeout, clock);
         report(check, ended, Duration.ofNanos(System.nanoTime() - startedAt));
         // Bounded on every path, by the handle's own post-exit bound (design D17 of
-        // fix-terminal-receipt-convergence): the command is over either way, so the drain has only
-        // the pipe's remaining bytes to read — unless something that escaped the tree still holds
-        // the pipe open, and neither a verdict nor a timeout report may wait on that.
+        // fix-terminal-receipt-convergence): the command is over either way, so the drain reads
+        // what is pending and ends as soon as it sees the exit, even with the pipe still held
+        // (design D2, D4 of make-pipe-reads-non-parking). Only a holder that keeps writing keeps it
+        // open to the bound, and neither a verdict nor a timeout report may wait past that.
         String outputTail = tail.join(handle);
         // Only a command that chose its own exit code has one; after a kill the code is the
         // signal's, which would read as an ordinary red check.

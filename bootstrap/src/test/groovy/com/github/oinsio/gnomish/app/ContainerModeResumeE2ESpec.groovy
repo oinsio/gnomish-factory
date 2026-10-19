@@ -245,7 +245,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
             '-c',
             'echo done > output.txt'
         ], [:], null, StderrPolicy.MERGED))
-        handle.output().readAllBytes()
+        handle.output().stream().readAllBytes()
         assert handle.waitForExit() == 0
         // The round opened on the current tip: that tip is the token its snapshot subject names
         // (design D10 of make-checkpoint-gate-durable), opened as SandboxRoundEnvironmentSource

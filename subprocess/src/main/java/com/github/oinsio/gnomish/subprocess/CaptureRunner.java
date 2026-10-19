@@ -12,9 +12,11 @@ import org.jspecify.annotations.Nullable;
  * <p>The drains start immediately after the process does and are joined once the wait has resolved,
  * on every termination with one post-exit bound the supervisor derives from its kill grace (design
  * D15 of fix-terminal-receipt-convergence): a descendant holding the pipe after a clean exit must
- * not delay the result any more than a straggler on the kill path (design D2). When the bound
- * expires with a drain still open, both streams are closed — which wakes the parked reads and
- * releases the JDK's reaper — and the capture is flagged as {@link Captured#truncated()}. A cut
+ * not delay the result any more than a straggler on the kill path (design D2). The drains read the
+ * child's {@link ChildOutput}, which never parks: a holder that writes nothing lets a drain end on
+ * its own as soon as it sees the exit, the capture complete (D2 of make-pipe-reads-non-parking).
+ * When the bound expires with a drain still open — a holder that keeps writing — the drain is
+ * stopped, no pipe is closed (D3, D4), and the capture is flagged as {@link Captured#truncated()}. A cut
  * clean exit with code zero is refused with {@link CutCaptureException}, the one refusal of a cut
  * capture (design D15 as amended 2026-10-17); a failed, timed-out or interrupted invocation keeps
  * its partial output, the cut named at the end of its stderr.
@@ -33,7 +35,7 @@ import org.jspecify.annotations.Nullable;
  * the result is otherwise unchanged by it. A launch that threw has no process, and nothing is swept.
  *
  * <p>Implements FR2, FR3, FR6, FR10 of bound-subprocess-commands; FR16, FR17, FR18, FR21, FR23,
- * NFR-P1 of fix-terminal-receipt-convergence.
+ * NFR-P1 of fix-terminal-receipt-convergence; FR4 of make-pipe-reads-non-parking.
  *
  * @param supervisor the wait/kill discipline to run the command under, and the source of the
  *     post-exit bound its drains are joined with
@@ -102,8 +104,8 @@ public record CaptureRunner(ProcessSupervisor supervisor, ProcessLaunch launch, 
 
     private Captured run(ProcessBuilder builder, @Nullable Duration deadline, StdinSource stdin) throws IOException {
         Process process = launch.start(builder, stdin);
-        Drain stdout = Drain.start(process.getInputStream(), "subprocess-stdout");
-        Drain stderr = Drain.start(process.getErrorStream(), "subprocess-stderr");
+        Drain stdout = Drain.start(ChildOutput.stdout(process), "subprocess-stdout");
+        Drain stderr = Drain.start(ChildOutput.stderr(process), "subprocess-stderr");
         Captured captured = await(process, stdout, stderr, deadline);
         if (ProcessLaunch.launcherCouldNotExec(captured.termination(), captured.exitCode(), captured.stderr())) {
             // The launcher started and could not exec the program (design D19 as amended): the

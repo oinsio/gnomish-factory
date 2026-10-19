@@ -186,14 +186,14 @@ class ContainerDeclaredVolumesSpec extends Specification implements BareGitRepoF
 
     private String output(String script) {
         def handle = env.exec(new ExecCommand(['sh', '-c', script], [:], null, StderrPolicy.MERGED))
-        def out = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8)
+        def out = new String(handle.output().stream().readAllBytes(), StandardCharsets.UTF_8)
         handle.waitForExit()
         out
     }
 
     private int exitOf(String script) {
         def handle = env.exec(new ExecCommand(['sh', '-c', script], [:], null, StderrPolicy.MERGED))
-        handle.output().readAllBytes()
+        handle.output().stream().readAllBytes()
         handle.waitForExit()
     }
 }

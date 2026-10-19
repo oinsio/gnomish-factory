@@ -105,7 +105,7 @@ class JvmProxyEgressE2ESpec extends Specification implements BareGitRepoFixture 
                                 '/gnomish-probe/Probe.java',
                                 url
                             ], [:], null, StderrPolicy.MERGED))
-            out = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8)
+            out = new String(handle.output().stream().readAllBytes(), StandardCharsets.UTF_8)
             handle.waitForExit()
             if (out.contains('HTTP ')) {
                 return out

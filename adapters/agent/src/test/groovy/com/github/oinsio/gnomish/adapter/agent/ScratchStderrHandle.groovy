@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -15,12 +16,12 @@ import java.time.InstantSource
 final class ScratchStderrHandle implements ExecHandle {
 
     private final Closure<Path> stderrFile
-    private final InputStream stdout
+    private final ChildOutput stdout
     private final ExecHandle.Wait wait
     private final Duration bound
     private final String stderr
 
-    ScratchStderrHandle(Closure<Path> stderrFile, InputStream stdout, ExecHandle.Wait wait, String stderr,
+    ScratchStderrHandle(Closure<Path> stderrFile, ChildOutput stdout, ExecHandle.Wait wait, String stderr,
     Duration bound = Duration.ofSeconds(5)) {
         this.stderrFile = stderrFile
         this.stdout = stdout
@@ -30,7 +31,7 @@ final class ScratchStderrHandle implements ExecHandle {
     }
 
     @Override
-    InputStream output() {
+    ChildOutput output() {
         stdout
     }
 

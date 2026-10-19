@@ -229,7 +229,10 @@ No spec or fixture sets a Docker configuration of its own or reads `~/.docker`; 
 reaches the copy by inheritance or through `TestChildEnvironment`. The gates:
 `TestDockerEnvironmentSpec` in `:bootstrap` asserts the effect in the real test JVM, and
 `TestDockerEnvironmentFunctionalSpec` with `TestDockerConventionsFunctionalSpec` in `build-logic`
-pin each branch of the composition on inner builds.
+pin each branch of the composition on inner builds. A project script that calls `docker`
+outside Gradle (`scripts/linux-specs.sh`, the Linux spec runner) applies the same configuration
+— a copy of the committed file and the endpoint from the operator's context — and is a declared
+pair with `TestDockerEnvironment` (`manual-sync-pairs.md`).
 
 ## Stand-ins are prepared, not generated
 

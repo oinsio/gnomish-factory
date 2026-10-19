@@ -1,56 +1,26 @@
 package com.github.oinsio.gnomish.subprocess
 
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
 import java.time.Duration
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import spock.lang.Specification
 
 /**
  * FR2, NFR-P1, design D2 of bound-subprocess-commands: a drain join that is interrupted hands
- * back what it has and restores the flag,
- * rather than swallowing the interrupt on the way out of a command that is already being torn down.
+ * back what it has and restores the flag, rather than swallowing the interrupt on the way out of a
+ * command that is already being torn down.
  *
- * <p>Driven over a stream that blocks until this spec lets it go, so the drain is provably still
- * running when the join begins — the case the process-level specs cannot reach, since by the time
- * a killed process's pipe closes the drain has usually already finished.
+ * <p>Driven over a {@link FakeProcess} that spoke once and stays alive until this spec lets it go,
+ * so the drain is provably still running when the join begins — the case the process-level specs
+ * cannot reach, since by the time a killed process's pipe ends the drain has usually finished.
  */
-class DrainInterruptSpec extends Specification {
+class DrainInterruptSpec extends Specification implements DrainSpecSupport {
 
     def "FR2: an interrupted drain join returns its prefix and leaves the flag set"() {
-        given: 'a stream that has spoken once and then blocks indefinitely, so the drain stays alive'
-        CountDownLatch release = new CountDownLatch(1)
-        // Counted down from the read that follows the one carrying the head: a drain asking for
-        // more has already written what it got, so waiting on this is waiting on the capture
-        // itself, with no polling of the very join under test.
-        CountDownLatch delivered = new CountDownLatch(1)
-        // The bulk read is the one to override: the default one loops on single bytes until the
-        // buffer is full, so a stream that spoke seven bytes and then blocked would hand the drain
-        // nothing at all.
-        InputStream blocking = new InputStream() {
-                    private byte[] head = 'partial'.bytes
-                    private boolean spoken = false
-
-                    @Override
-                    int read(byte[] target, int offset, int length) {
-                        if (spoken) {
-                            delivered.countDown()
-                            release.await()
-                            return -1
-                        }
-                        spoken = true
-                        System.arraycopy(head, 0, target, offset, head.length)
-                        return head.length
-                    }
-
-                    @Override
-                    int read() {
-                        delivered.countDown()
-                        release.await()
-                        return -1
-                    }
-                }
-        Drain drain = Drain.start(blocking, 'drain-interrupt-spec')
-        assert delivered.await(10, TimeUnit.SECONDS)
+        given: 'a child that has spoken once and then stays alive, so the drain keeps running'
+        FakeProcess process = FakeProcess.running()
+        process.writeStdout('partial')
+        Drain drain = Drain.start(ChildOutput.stdout(process), 'drain-interrupt-spec')
+        awaitKept(process)
 
         and: 'the joining thread is interrupted before the join begins, so it throws at once'
         Thread.currentThread().interrupt()
@@ -70,7 +40,7 @@ class DrainInterruptSpec extends Specification {
         elapsed <Duration.ofSeconds(5)
 
         cleanup:
-        release.countDown()
+        process.exit(0)
         Thread.interrupted()
     }
 }

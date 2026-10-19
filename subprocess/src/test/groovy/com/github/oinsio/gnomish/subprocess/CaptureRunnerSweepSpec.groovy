@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.subprocess
 
 import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.sandbox.environment.WritingHolder
 import com.github.oinsio.gnomish.subprocess.ProcessGroupSweep.Answer
 import java.time.Duration
 import spock.lang.Specification
@@ -8,7 +9,8 @@ import spock.lang.Specification
 /**
  * FR21, design D19 of fix-terminal-receipt-convergence: the capture runner sweeps the command's
  * process group once the drains are joined, on every termination — the cut clean exit it refuses
- * included — and its result is otherwise the one it had without the sweep. The process is a {@link
+ * included, cut by a {@link WritingHolder} (D4 of make-pipe-reads-non-parking) — and its result is
+ * otherwise the one it had without the sweep. The process is a {@link
  * FakeProcess} naming a group the scripted signal answers for, so no real group is signalled; the
  * real {@code kill} is {@code ProcessGroupSweepSpec}'s.
  */
@@ -49,10 +51,11 @@ class CaptureRunnerSweepSpec extends Specification {
     }
 
     def "FR21, FR17: a cut clean exit is swept before it is refused, the sweep inside the refusal"() {
-        given:
+        given: 'a clean exit whose stdout a descendant holds and keeps writing to, so the bound cuts it'
         List<String> sent = []
         FakeProcess process = FakeProcess.running().leading(4242)
         process.holdOpen()
+        WritingHolder.on(process.stdoutPipe())
         process.exit(0)
 
         when:

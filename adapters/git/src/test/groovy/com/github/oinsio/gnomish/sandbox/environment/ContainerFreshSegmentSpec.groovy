@@ -66,7 +66,7 @@ class ContainerFreshSegmentSpec extends Specification implements BareGitRepoFixt
 
     private static String inBox(TaskExecutionEnvironment e, String script) {
         def handle = e.exec(new ExecCommand(['sh', '-c', script], [:], null, StderrPolicy.MERGED))
-        def out = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8).trim()
+        def out = new String(handle.output().stream().readAllBytes(), StandardCharsets.UTF_8).trim()
         handle.waitForExit()
         out
     }

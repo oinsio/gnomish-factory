@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -89,8 +90,8 @@ class RoundInterruptedWaitSpec extends Specification {
 class InterruptedWaitExecHandle implements ExecHandle {
 
     @Override
-    InputStream output() {
-        new ByteArrayInputStream(new byte[0])
+    ChildOutput output() {
+        CannedOutputs.written('')
     }
 
     @Override

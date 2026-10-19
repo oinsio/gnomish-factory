@@ -9,13 +9,15 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR16, FR17, NFR-P1, design D15 of fix-terminal-receipt-convergence: after a clean exit the drains
- * are joined with the one post-exit bound — the supervisor's kill grace plus a fixed margin — and
- * when a descendant still holds a pipe the streams are closed and the capture is flagged as a
- * possible prefix. The holder is a real process on purpose (M15): what is measured is that the
- * return does not wait on it. Design D15 as amended 2026-10-17: a cut clean exit with code zero is
- * refused with {@link CutCaptureException}, every other cut termination keeps its partial output —
- * pinned on {@link FakeProcess}, whose exit and pipes the spec orders itself (design D16).
+ * FR16, FR17, NFR-P1, design D15 of fix-terminal-receipt-convergence; FR4, design D2, D4 of
+ * make-pipe-reads-non-parking: after the exit the drains are joined with the one post-exit bound —
+ * the supervisor's kill grace plus a fixed margin. A drain never parks, so a descendant that holds a
+ * pipe and writes nothing lets it end on its own as soon as it sees the exit, the capture complete
+ * and not flagged; the bound is reached only by a holder that keeps writing, and then the
+ * drain is stopped and the capture flagged as a possible prefix. The silent holder is a real process
+ * on purpose (M15): what is measured is that the return does not wait on it. The silent fake holder
+ * rides {@link FakeProcess}, whose exit and pipes the spec orders itself (design D16). The cut
+ * verdict on a holder that keeps writing is {@code CaptureRunnerCutSpec}'s.
  */
 class CaptureRunnerPostExitSpec extends Specification implements FakeBinaries {
 
@@ -31,8 +33,9 @@ class CaptureRunnerPostExitSpec extends Specification implements FakeBinaries {
     }
 
     // Scenario: lifecycle/subprocess-supervision / A clean exit with a held pipe returns within the bound
-    def "FR16, FR17, M15: a clean exit with a held stdout returns within the post-exit bound, refused as cut"() {
-        given: 'a binary that speaks, exits cleanly, and leaves a child holding its stdout open'
+    // Scenario: lifecycle/subprocess-supervision / The drain ends on its own after the exit
+    def "FR16, M15, FR2: a clean exit with a silent real holder of stdout returns within the bound, complete and not flagged"() {
+        given: 'a binary that speaks, exits cleanly, and leaves a child holding its stdout open, writing nothing'
         Path pidFile = dir.resolve('holder.pid')
         ProcessBuilder builder = new ProcessBuilder(fakeBinary('exit-leaky').toString(), pidFile.toString())
 
@@ -48,17 +51,16 @@ class CaptureRunnerPostExitSpec extends Specification implements FakeBinaries {
 
         when:
         long startedAt = System.nanoTime()
-        new CaptureRunner(supervisor, ProcessLaunch.grouped(), sweep).run(builder, Duration.ofSeconds(30))
-
-        then: 'the cut clean exit is refused, the exit and the prefix inside the refusal'
-        CutCaptureException refusal = thrown()
+        Captured captured = new CaptureRunner(supervisor, ProcessLaunch.grouped(), sweep).run(builder, Duration.ofSeconds(30))
         Duration elapsed = Duration.ofNanos(System.nanoTime() - startedAt)
-        refusal.captured().termination() == Termination.EXITED
-        refusal.captured().exitCode() == 0
-        refusal.captured().stdout().contains('spoken')
-        refusal.captured().truncated()
 
-        and: 'the return came on the bound, not on the holder releasing the pipe — the sweep included'
+        then: 'the exit and every byte the child wrote before it, with nothing flagged'
+        captured.termination() == Termination.EXITED
+        captured.exitCode() == 0
+        captured.stdout() == 'spoken\n'
+        !captured.truncated()
+
+        and: 'the return did not wait on the holder releasing the pipe — the sweep included'
         elapsed <bound + Duration.ofMillis(100)
 
         and: 'M15: the holder was alive before the sweep and is gone after it'
@@ -73,60 +75,9 @@ class CaptureRunnerPostExitSpec extends Specification implements FakeBinaries {
         }
     }
 
-    // Scenario: lifecycle/subprocess-supervision / A cut capture says so
-    def "FR17: a clean exit with code zero and a held pipe is refused with the prefix, the stream and the bound"() {
-        given: 'a fake that speaks on both streams and exits with zero while a descendant holds its pipes'
-        FakeProcess process = FakeProcess.running()
-        process.writeStdout('abc12')
-        process.writeStderr('noted')
-        process.holdOpen()
-        process.exit(0)
-        ProcessSupervisor supervisor = new ProcessSupervisor(Duration.ofMillis(100))
-
-        when:
-        runnerOver(supervisor, process).run(UNLAUNCHABLE, null)
-
-        then: 'the refusal carries the capture, the exit and the termination keeping their meaning'
-        CutCaptureException refusal = thrown()
-        refusal.captured().termination() == Termination.EXITED
-        refusal.captured().exitCode() == 0
-        refusal.captured().stdout() == 'abc12'
-        refusal.captured().stderr() == 'noted'
-        refusal.captured().truncated()
-
-        and: 'which streams were cut, and the bound, named in the refusal and its message'
-        refusal.streams() == CutCaptureException.CutStreams.BOTH
-        refusal.bound() == supervisor.postExitBound()
-        refusal.message == 'output was cut: stdout and stderr still open at the post-exit bound of ' +
-                supervisor.postExitBound() + ' — a descendant held its pipes after the command exited'
-
-        cleanup:
-        process.release()
-    }
-
-    def "FR17: the refusal names only the stream that was still held"() {
-        given: 'a fake whose stderr reaches end-of-file at the exit while its stdout stays held'
-        FakeProcess process = FakeProcess.running()
-        process.writeStdout('abc12')
-        process.holdOpen()
-        process.releaseStderr()
-        process.exit(0)
-
-        when:
-        runnerOver(new ProcessSupervisor(Duration.ofMillis(100)), process).run(UNLAUNCHABLE, null)
-
-        then:
-        CutCaptureException refusal = thrown()
-        refusal.streams() == CutCaptureException.CutStreams.STDOUT
-        refusal.message.startsWith('output was cut: stdout still open')
-
-        cleanup:
-        process.release()
-    }
-
-    // Scenario: lifecycle/subprocess-supervision / A failed or killed invocation keeps its partial output
-    def "FR17, FR3: a non-zero exit or a timeout with a held pipe keeps its own failure and its partial output"() {
-        given: 'a fake that speaks and holds its pipes, then exits with the given code or never exits'
+    // Scenario: lifecycle/subprocess-supervision / The drain ends on its own after the exit
+    def "FR2, D4: a silent holder of both pipes never flags the capture, whatever the termination: #termination"() {
+        given: 'a fake that speaks on both streams while a descendant holds its pipes and writes nothing'
         FakeProcess process = FakeProcess.running()
         process.writeStdout('partial')
         process.writeStderr('fatal: refused\n')
@@ -134,25 +85,30 @@ class CaptureRunnerPostExitSpec extends Specification implements FakeBinaries {
         if (exitCode != null) {
             process.exit(exitCode)
         }
-        ProcessSupervisor supervisor = new ProcessSupervisor(Duration.ofMillis(100))
+
+        and: 'a bound far longer than the return may take'
+        ProcessSupervisor supervisor = new ProcessSupervisor(Duration.ofSeconds(10))
 
         when:
+        long startedAt = System.nanoTime()
         Captured captured = runnerOver(supervisor, process).run(UNLAUNCHABLE, Duration.ofMillis(200))
+        Duration elapsed = Duration.ofNanos(System.nanoTime() - startedAt)
 
-        then: 'no refusal: the failure stands as the termination and exit the process gave'
+        then: 'the termination the process gave, the capture whole, no notice and no flag'
         captured.termination() == termination
-        captured.truncated()
-
-        and: 'the partial output is readable, the cut named once at the end of stderr'
         captured.stdout() == 'partial'
-        captured.stderr() == 'fatal: refused\n(output was cut: stdout and stderr still open at the post-exit bound of ' +
-                supervisor.postExitBound() + ' — a descendant held its pipes after the command exited)'
+        captured.stderr() == 'fatal: refused\n'
+        !captured.truncated()
+
+        and: 'the drains ended on their own, not at the bound'
+        elapsed <ProcessSupervisor.POST_EXIT_MARGIN
 
         cleanup:
         process.release()
 
         where:
         exitCode | termination
+        0 | Termination.EXITED
         1 | Termination.EXITED
         null | Termination.TIMED_OUT
     }

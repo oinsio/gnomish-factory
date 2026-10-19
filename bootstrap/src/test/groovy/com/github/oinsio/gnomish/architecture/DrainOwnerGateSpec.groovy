@@ -27,17 +27,26 @@ import spock.lang.Specification
  * {@code BoardModel.truncated()} of the board, an unrelated window flag, is out of its scope by
  * construction; the scope is asserted to reach the files that once read the flag.
  *
+ * <p>The owner of the pipe itself — no source outside {@code ChildOutput} obtains or reads a child's
+ * stream, and no production source sleeps — is {@code ChildOutputOwnerGateSpec} (design D8 of
+ * make-pipe-reads-non-parking).
+ *
  * <p>Comments are stripped before every scan.
  */
 class DrainOwnerGateSpec extends Specification {
 
-    private static final Map<String, String> READERS = [
-        'subprocess/src/main/java/com/github/oinsio/gnomish/subprocess/CaptureRunner.java': 'the owner',
-        'gitobjects/src/main/java/com/github/oinsio/gnomish/gitobjects/GitExec.java': 'migrated by 8.10',
-        'sandbox/core/src/main/java/com/github/oinsio/gnomish/sandbox/CapturedExec.java': 'migrated by 8.11',
-        'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/BoundedTail.java': 'migrated by 8.15',
-        'sandbox/docker/src/main/java/com/github/oinsio/gnomish/sandbox/environment/ContainerFileChannel.java': 'migrated by 8.12',
-        'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/StreamDrain.java': 'migrated by 8.14',
+    /**
+     * The six readers of a child's output, each with how it takes the bytes from {@code ChildOutput},
+     * the one owner of a child's readable pipe (design D1 of make-pipe-reads-non-parking). {@code
+     * ChildOutputOwnerGateSpec} asserts its whole-tree scan reaches every one of them.
+     */
+    static final Map<String, String> READERS = [
+        'subprocess/src/main/java/com/github/oinsio/gnomish/subprocess/CaptureRunner.java': 'drains stdout and stderr as ChildOutput on two Drains',
+        'gitobjects/src/main/java/com/github/oinsio/gnomish/gitobjects/GitExec.java': 'drains stdout (capped or not) and stderr as ChildOutput on Drains',
+        'sandbox/core/src/main/java/com/github/oinsio/gnomish/sandbox/CapturedExec.java': 'drains the ExecHandle\'s ChildOutput on one Drain',
+        'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/BoundedTail.java': 'keeps the tail of the ExecHandle\'s ChildOutput on one Drain',
+        'sandbox/docker/src/main/java/com/github/oinsio/gnomish/sandbox/environment/ContainerFileChannel.java': 'drains the exec\'s stdout and stderr as ChildOutput on two Drains',
+        'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/StreamDrain.java': 'reads lines from the ChildOutput\'s stream view, the owner\'s pull form',
     ]
 
     private static final Pattern UNBOUNDED_JOIN = ~/\.\s*join\s*\(\s*\)/

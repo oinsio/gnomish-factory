@@ -63,7 +63,7 @@ class ContainerBoxBoundarySpec extends Specification implements BareGitRepoFixtu
 
     private static Map inBox(ContainerTaskExecutionEnvironment e, String script) {
         def handle = e.exec(new ExecCommand(['sh', '-c', script], [:], null, StderrPolicy.MERGED))
-        def out = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8).trim()
+        def out = new String(handle.output().stream().readAllBytes(), StandardCharsets.UTF_8).trim()
         [exit: handle.waitForExit(), out: out]
     }
 

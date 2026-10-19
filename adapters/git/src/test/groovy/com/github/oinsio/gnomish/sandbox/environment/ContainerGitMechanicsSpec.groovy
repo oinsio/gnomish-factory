@@ -73,7 +73,7 @@ class ContainerGitMechanicsSpec extends Specification implements BareGitRepoFixt
 
     private static String inBox(ContainerTaskExecutionEnvironment e, String script) {
         def handle = e.exec(new ExecCommand(['sh', '-c', script], [:], null, StderrPolicy.MERGED))
-        def out = new String(handle.output().readAllBytes(), StandardCharsets.UTF_8)
+        def out = new String(handle.output().stream().readAllBytes(), StandardCharsets.UTF_8)
         def code = handle.waitForExit()
         assert code == 0: "in-box script failed (${code}): ${script}\n${out}"
         out.trim()

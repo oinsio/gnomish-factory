@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.subprocess
 
 import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.sandbox.environment.WritingHolder
 import java.time.Duration
 import spock.lang.Specification
 
@@ -86,11 +87,36 @@ class CaptureRunnerLaunchSpec extends Specification {
         !captured.truncated()
     }
 
-    def "FR16, FR18: a pipe held past the exit and never released is cut at the post-exit bound"() {
-        given: 'a fake that exits while its pipe stays held, and a short kill grace'
+    def "FR16, FR18, FR2: a pipe held past the exit by a silent holder ends on its own, complete and not flagged"() {
+        given: 'a fake that exits while a descendant holds its pipes and writes nothing, and a long kill grace'
         FakeProcess process = FakeProcess.running()
         process.writeStdout('spoken')
         process.holdOpen()
+        process.exit(0)
+        ProcessSupervisor supervisor = new ProcessSupervisor(Duration.ofSeconds(10))
+
+        when:
+        long startedAt = System.nanoTime()
+        Captured captured = new CaptureRunner(supervisor, { ProcessBuilder builder, StdinSource stdin ->
+            process
+        } as ProcessLaunch).run(UNLAUNCHABLE, null)
+
+        then: 'the clean exit is returned whole, before the bound, with nothing flagged'
+        captured.termination() == Termination.EXITED
+        captured.stdout() == 'spoken'
+        !captured.truncated()
+        Duration.ofNanos(System.nanoTime() - startedAt) <ProcessSupervisor.POST_EXIT_MARGIN
+
+        cleanup:
+        process.release()
+    }
+
+    def "FR16, FR18, D4: a pipe held past the exit and still written to is cut at the post-exit bound"() {
+        given: 'a fake that exits while a descendant holds its pipe and keeps writing, and a short kill grace'
+        FakeProcess process = FakeProcess.running()
+        process.writeStdout('spoken')
+        process.holdOpen()
+        WritingHolder.on(process.stdoutPipe())
         process.exit(0)
         ProcessSupervisor supervisor = new ProcessSupervisor(Duration.ofMillis(100))
 
@@ -102,7 +128,7 @@ class CaptureRunnerLaunchSpec extends Specification {
         then: 'the clean exit is refused as cut, the prefix kept inside the refusal'
         CutCaptureException refusal = thrown()
         refusal.captured().termination() == Termination.EXITED
-        refusal.captured().stdout() == 'spoken'
+        refusal.captured().stdout().startsWith('spoken')
         refusal.captured().truncated()
 
         cleanup:

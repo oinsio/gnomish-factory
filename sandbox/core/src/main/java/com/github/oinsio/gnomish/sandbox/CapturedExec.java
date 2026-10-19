@@ -26,6 +26,12 @@ import java.time.Duration;
  * bound after the wait is the same hang one step later: a descendant that
  * inherited the pipe holds it after the command exited.
  *
+ * <p>The drain reads the handle's {@link ExecHandle#output()} as a {@code ChildOutput}, which
+ * never parks in the pipe (design D1, D2 of make-pipe-reads-non-parking): it ends on its own as
+ * soon as it sees the exit with nothing pending, so a descendant that holds the pipe in silence
+ * leaves the capture whole. Only a holder that keeps writing keeps it open to the bound, where the
+ * join stops it; no pipe is closed — the JDK's reaper closes it at the exit (D3, D4).
+ *
  * <p>A drain still open at the bound is judged by {@link
  * CutCaptureException#refuses}, the one judgement every value reader asks (design
  * D15 as amended 2026-10-17): after a clean exit with code zero the read fails —
@@ -51,7 +57,8 @@ import java.time.Duration;
  * answer read it through {@code forParsing()}.
  *
  * <p>Implements FR2, FR11 of bound-subprocess-commands; FR1, FR7 of
- * type-untrusted-text; FR17, FR19 of fix-terminal-receipt-convergence.
+ * type-untrusted-text; FR17, FR19 of fix-terminal-receipt-convergence; FR3, FR4, FR5 of
+ * make-pipe-reads-non-parking.
  *
  * @param exitCode the exit code the wait reported; meaningful only because an
  *     interrupted wait never reaches a {@code CapturedExec} at all
@@ -65,7 +72,7 @@ public record CapturedExec(int exitCode, UntrustedText output) {
      * through the handle's supervised wait, and joins the drain with the
      * handle's post-exit bound once the wait has resolved.
      *
-     * @param handle the started command's handle; its output stream is consumed and closed
+     * @param handle the started command's handle; its output is consumed, and stopped when cut
      * @param what the operation for failure messages, e.g. {@code "in-box state commit"}
      * @return the exit code and the complete captured output, minted as in-container
      *     text; never null
@@ -80,13 +87,13 @@ public record CapturedExec(int exitCode, UntrustedText output) {
         boolean cut = Drain.joinAll(bound, drain);
         if (Thread.currentThread().isInterrupted()) {
             // The supervised wait killed the tree and restored the flag, or the join restored it;
-            // either way the join closed a still-open stream, so the drain thread ends with it.
+            // either way the join stopped a drain still open, so the drain thread ends within a tick.
             throw new UncheckedIOException(new InterruptedIOException(
                     what + " did not complete: the wait was interrupted and the process tree was killed"));
         }
         IOException broken = drain.failure();
         if (!cut && broken != null) {
-            // A cut drain's failure is the close that ended it, not a broken stream.
+            // A cut drain's failure is the stop that ended it, not a broken stream.
             throw new UncheckedIOException("could not read " + what + " output", broken);
         }
         String output = drain.captured();

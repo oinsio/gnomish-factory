@@ -47,6 +47,14 @@ import org.gradle.process.ProcessForkOptions
  * environment was modified while it was configured has its whole map stored by the configuration
  * cache, and the variables this class reads come through {@code providers.environmentVariable},
  * so a change to any of them invalidates the stored map instead of being ignored by it.
+ *
+ * <p>Kept in sync with {@code scripts/linux-specs.sh} (the Linux spec runner, design D9 of
+ * make-pipe-reads-non-parking), which calls {@code docker} outside Gradle and cannot load this
+ * class: both hand the CLI a copy of {@link #RELATIVE_PATH} whose {@code cliPluginsExtraDirs}
+ * names the operator's {@code cli-plugins} directory when it exists, and both take
+ * {@code DOCKER_HOST} from the operator or from the current context's endpoint (the
+ * {@link DockerContextEndpoint#FORMAT} query), refusing an {@code ssh://} or TLS endpoint, and
+ * remove {@code DOCKER_CONTEXT}.
  */
 final class TestDockerEnvironment {
 

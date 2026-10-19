@@ -9,7 +9,8 @@ import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
-import java.nio.charset.StandardCharsets
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -88,10 +89,21 @@ class AgentRoundTeardownSpec extends Specification {
     //     FR20 of fix-terminal-receipt-convergence: the round scratch directory leaves the same way
     // Scenario: executor/agent-executor / No reader outlives the round
     // Scenario: executor/agent-executor / The stderr file leaves with the round
-    def "NFR-R1: after a round that #ending, its stdout is closed, its drain thread has ended and no file of it remains"() {
-        given:
-        def stdout = new TrackedStream(content)
-        def handle = new ScriptedHandle(stdout, wait, Duration.ofMillis(200))
+    def "NFR-R1: after a round that #ending, its drain thread has ended, no read is pending and no file of it remains"() {
+        given: 'with content, a child that wrote it and exited; without, a live child that writes nothing'
+        def child = FakeProcess.running()
+        if (content != null) {
+            child.writeStdout(content)
+            child.exit(0)
+        }
+        def reader = new AtomicReference<Thread>()
+        def reading = new CountDownLatch(1)
+        child.stdoutPipe().onQuery {
+            reader.set(Thread.currentThread())
+            reading.countDown()
+        }
+        def handle = new ScriptedHandle(ChildOutput.stdout(child), wait, Duration.ofMillis(200),
+                { reading.await(5, TimeUnit.SECONDS) })
 
         when:
         try {
@@ -100,16 +112,21 @@ class AgentRoundTeardownSpec extends Specification {
             // the timeout and the adapter failure end the round by an exception; its teardown is the subject
         }
 
-        then: 'the stream was closed by the round itself'
-        stdout.closed.await(0, TimeUnit.SECONDS)
+        then: 'the thread that read the stdout has ended'
+        reader.get().join(Duration.ofSeconds(5))
+        !reader.get().alive
 
-        and: 'the thread that read it has ended'
-        def reader = stdout.awaitReader()
-        reader.join(Duration.ofSeconds(5))
-        !reader.isAlive()
+        and: "no read of the stream is pending: a live child's empty pipe was never read at all"
+        content != null || child.stdoutPipe().reads() == 0
+
+        and: 'the round stopped its stdout itself and closed no pipe: the view answers end-of-file at once'
+        handle.output().stream().read(new byte[8]) == -1
 
         and: 'the round scratch directory, with the stderr file in it, left the host with the round'
         !Files.exists((launched.stderr() as StderrPolicy.ToFile).file().parent)
+
+        cleanup:
+        child.exit(0)
 
         where:
         ending | content | wait
@@ -118,23 +135,30 @@ class AgentRoundTeardownSpec extends Specification {
         'failed in the adapter' | null | new ExecHandle.Wait.Exited(Duration.ofSeconds(1))
     }
 
-    private static InputStream stream(String text) {
-        new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8))
+    private static ChildOutput stream(String text) {
+        CannedOutputs.written(text)
     }
 
-    /** A process handle whose stdout, wait outcome and post-exit bound the feature scripts. */
+    /**
+     * A process handle whose stdout, wait outcome and post-exit bound the feature scripts; its wait
+     * first runs {@code beforeWait}, so a feature can make the drain's first query precede the
+     * round's wait, as it does for a live process, instead of trusting the scheduler.
+     */
     static final class ScriptedHandle implements ExecHandle {
-        final InputStream stdout
+        final ChildOutput stdout
         final ExecHandle.Wait wait
         final Duration postExitBound
+        final Closure<?> beforeWait
 
-        ScriptedHandle(InputStream stdout, ExecHandle.Wait wait, Duration postExitBound = Duration.ofSeconds(5)) {
+        ScriptedHandle(ChildOutput stdout, ExecHandle.Wait wait, Duration postExitBound = Duration.ofSeconds(5),
+        Closure<?> beforeWait = {}) {
             this.stdout = stdout
             this.wait = wait
             this.postExitBound = postExitBound
+            this.beforeWait = beforeWait
         }
 
-        InputStream output() {
+        ChildOutput output() {
             stdout
         }
 
@@ -143,6 +167,7 @@ class AgentRoundTeardownSpec extends Specification {
         }
 
         ExecHandle.Wait waitForExitOrTimeout(Duration timeout, InstantSource clock) {
+            beforeWait()
             wait
         }
 
@@ -152,44 +177,6 @@ class AgentRoundTeardownSpec extends Specification {
 
         Duration postExitBound() {
             postExitBound
-        }
-    }
-
-    /**
-     * A stdout that records the thread reading it and its own close. With content it ends after the
-     * content; without, it blocks like a live pipe until it is closed — so only the round's teardown
-     * can release its reader (the adapter failure: the drain outlives the handle's post-exit bound).
-     */
-    static final class TrackedStream extends InputStream {
-        final CountDownLatch closed = new CountDownLatch(1)
-        final AtomicReference<Thread> reader = new AtomicReference<>()
-        private final InputStream content
-
-        TrackedStream(String text) {
-            this.content = text == null ? null : stream(text)
-        }
-
-        @Override
-        int read() {
-            reader.compareAndSet(null, Thread.currentThread())
-            if (content != null) {
-                return content.read()
-            }
-            closed.await(10, TimeUnit.SECONDS)
-            -1
-        }
-
-        @Override
-        void close() {
-            closed.countDown()
-        }
-
-        Thread awaitReader() {
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-            while (reader.get() == null && System.nanoTime() <deadline) {
-                Thread.onSpinWait()
-            }
-            reader.get()
         }
     }
 }

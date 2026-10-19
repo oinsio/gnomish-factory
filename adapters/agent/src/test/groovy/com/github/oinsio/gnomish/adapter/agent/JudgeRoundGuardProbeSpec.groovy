@@ -9,7 +9,6 @@ import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.GuardUnavailableException
-import java.nio.charset.StandardCharsets
 import java.time.Duration
 import spock.lang.Specification
 
@@ -40,7 +39,7 @@ class JudgeRoundGuardProbeSpec extends Specification {
 
     private ExecHandle passingRound() {
         Stub(ExecHandle) {
-            output() >> new ByteArrayInputStream(PASSING_STREAM.getBytes(StandardCharsets.UTF_8))
+            output() >> CannedOutputs.written(PASSING_STREAM)
             waitForExitOrTimeout(_, _) >> new ExecHandle.Wait.Exited(Duration.ofSeconds(1))
             postExitBound() >> Duration.ofSeconds(5)
         }

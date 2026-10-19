@@ -1,29 +1,36 @@
 package com.github.oinsio.gnomish.subprocess
 
+import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
 import java.time.Duration
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import spock.lang.Specification
 
 /**
- * FR16, FR17, design D15 of fix-terminal-receipt-convergence: the drains of one process are joined
- * under one shared post-exit bound, and when one is still open at its end every stream is closed and
- * the capture is reported cut. Driven over in-process streams that block until they are closed — a
- * held pipe whose holder this spec controls — so no scheduling order is a premise. Each drain then
- * answers whether it was the one cut, so a reader can name the stream in its refusal (FR19).
+ * FR16, FR17, design D15 of fix-terminal-receipt-convergence; FR4, NFR-R2, design D3, D4 of
+ * make-pipe-reads-non-parking: drains are joined under one shared post-exit bound, a drain still
+ * open at its end is stopped — never its pipe closed — and the capture is reported cut. Driven over
+ * {@link FakeProcess}: a child the spec keeps alive is a drain that cannot end on its own, so no
+ * scheduling order is a premise. Each drain answers whether it was the one cut, so a reader can name
+ * the stream in its refusal (FR19).
  */
-class DrainJoinAllSpec extends Specification {
+class DrainJoinAllSpec extends Specification implements DrainSpecSupport {
 
     private static final Duration BOUND = Duration.ofMillis(400)
+    private static final Duration GONE = Duration.ofSeconds(10)
 
-    def "FR16: two held drains cost the bound once, then both streams are closed and the capture is cut"() {
+    private final List<FakeProcess> processes = []
+
+    def cleanup() {
+        processes*.exit(0)
+    }
+
+    def "FR16: two open drains cost the bound once, then both are stopped and the capture is cut"() {
         given:
-        HeldStream out = new HeldStream('out')
-        HeldStream err = new HeldStream('err')
-        Drain stdout = Drain.start(out, 'join-all-spec-out')
-        Drain stderr = Drain.start(err, 'join-all-spec-err')
-        out.awaitSpoken()
-        err.awaitSpoken()
+        FakeProcess out = live('out')
+        FakeProcess err = live('err')
+        Drain stdout = Drain.start(ChildOutput.stdout(out), 'join-all-spec-out')
+        Drain stderr = Drain.start(ChildOutput.stdout(err), 'join-all-spec-err')
+        awaitKept(out)
+        awaitKept(err)
 
         when:
         long startedAt = System.nanoTime()
@@ -37,48 +44,54 @@ class DrainJoinAllSpec extends Specification {
         elapsed >= BOUND
         elapsed <BOUND + Duration.ofMillis(300)
 
-        and: 'both streams were closed, and what each drain read before is kept'
-        out.closed.await(5, TimeUnit.SECONDS)
-        err.closed.await(5, TimeUnit.SECONDS)
+        and: 'both drains were stopped: a second join finds them ended, the children still alive'
+        !Drain.joinAll(GONE, stdout, stderr)
+        out.alive
+        err.alive
+
+        and: 'what each drain read before is kept, and no pipe was closed'
         stdout.captured() == 'out'
         stderr.captured() == 'err'
+        out.inputStream.available() == 0
+        err.inputStream.available() == 0
     }
 
-    def "FR17: one held drain among ended ones closes every stream and reports the cut (held: #heldName)"() {
+    def "FR17: one open drain among ended ones is the one stopped and reported cut (open: #openName)"() {
         given:
-        HeldStream held = new HeldStream('held')
-        HeldStream ended = new HeldStream('ended')
-        ended.close()
-        Drain heldDrain = Drain.start(held, 'join-all-spec-held')
-        Drain endedDrain = Drain.start(ended, 'join-all-spec-ended')
-        held.awaitSpoken()
-        List<Drain> drains = heldFirst ? [heldDrain, endedDrain] : [endedDrain, heldDrain]
+        FakeProcess open = live('open')
+        FakeProcess ended = exitedWith('ended')
+        Drain openDrain = Drain.start(ChildOutput.stdout(open), 'join-all-spec-open')
+        Drain endedDrain = Drain.start(ChildOutput.stdout(ended), 'join-all-spec-ended')
+        awaitKept(open)
+        List<Drain> drains = openFirst ? [openDrain, endedDrain] : [endedDrain, openDrain]
 
         when:
         boolean cut = Drain.joinAll(BOUND, drains as Drain[])
 
         then:
         cut
-        held.closed.await(5, TimeUnit.SECONDS)
-        ended.closeCount == 2
 
         and: 'each drain says whether it was the one cut, so a reader can name the stream'
-        heldDrain.cut()
+        openDrain.cut()
         !endedDrain.cut()
+        openDrain.captured() == 'open'
+        endedDrain.captured() == 'ended'
+
+        and: 'the open drain was stopped: a second join finds it ended, its child still alive'
+        !Drain.joinAll(GONE, openDrain)
+        open.alive
 
         where:
-        heldFirst << [true, false]
-        heldName = heldFirst ? 'first' : 'second'
+        openFirst << [true, false]
+        openName = openFirst ? 'first' : 'second'
     }
 
-    def "NFR-P1: drains that end on their own are not cut, and no stream is closed by the join"() {
+    def "NFR-P1: drains that end on their own are not cut, and the join closes no pipe"() {
         given:
-        HeldStream out = new HeldStream('out')
-        HeldStream err = new HeldStream('err')
-        out.close()
-        err.close()
-        Drain stdout = Drain.start(out, 'join-all-spec-out')
-        Drain stderr = Drain.start(err, 'join-all-spec-err')
+        FakeProcess out = exitedWith('out')
+        FakeProcess err = exitedWith('err')
+        Drain stdout = Drain.start(ChildOutput.stdout(out), 'join-all-spec-out')
+        Drain stderr = Drain.start(ChildOutput.stdout(err), 'join-all-spec-err')
 
         when:
         boolean cut = Drain.joinAll(BOUND, stdout, stderr)
@@ -87,50 +100,16 @@ class DrainJoinAllSpec extends Specification {
         !cut
         !stdout.cut()
         !stderr.cut()
-        out.closeCount == 1
-        err.closeCount == 1
+        stdout.captured() == 'out'
+        stderr.captured() == 'err'
+        out.inputStream.available() == 0
+        err.inputStream.available() == 0
     }
 
-    /** Speaks its text once, then blocks until closed and reports end-of-file. */
-    private static final class HeldStream extends InputStream {
-
-        final CountDownLatch closed = new CountDownLatch(1)
-        private final CountDownLatch spoken = new CountDownLatch(1)
-        private final byte[] head
-        private boolean headDelivered
-        volatile int closeCount
-
-        HeldStream(String text) {
-            head = text.bytes
-        }
-
-        void awaitSpoken() {
-            assert spoken.await(10, TimeUnit.SECONDS)
-        }
-
-        @Override
-        int read(byte[] target, int offset, int length) {
-            if (!headDelivered) {
-                headDelivered = true
-                System.arraycopy(head, 0, target, offset, head.length)
-                return head.length
-            }
-            spoken.countDown()
-            closed.await()
-            return -1
-        }
-
-        @Override
-        int read() {
-            spoken.countDown()
-            closed.await()
-            return -1
-        }
-
-        @Override
-        void close() {
-            closeCount++
-            closed.countDown()
-        }
+    private FakeProcess live(String text) {
+        FakeProcess process = FakeProcess.running()
+        process.writeStdout(text)
+        processes << process
+        process
     }
 }

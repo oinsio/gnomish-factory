@@ -4,7 +4,7 @@ package com.github.oinsio.gnomish.subprocess;
  * Where a {@link Drain} hands every chunk it reads, on the drain's own thread: a caller's retention
  * policy over the one read loop, such as the last lines of a command check's output (design D17 of
  * fix-terminal-receipt-convergence). The drain keeps the thread, the read, the bounded join and the
- * close at the bound; the sink keeps only what its policy keeps.
+ * stop at the bound; the sink keeps only what its policy keeps.
  *
  * <p>Implements FR19 of fix-terminal-receipt-convergence.
  */

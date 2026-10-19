@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.GuardUnavailableException
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import java.time.Duration
 import java.time.Instant
 import java.time.InstantSource
@@ -61,7 +62,7 @@ class ObservedBox implements TaskExecutionEnvironment {
         running << token
         new ExecHandle() {
                     @Override
-                    InputStream output() {
+                    ChildOutput output() {
                         handle.output()
                     }
 

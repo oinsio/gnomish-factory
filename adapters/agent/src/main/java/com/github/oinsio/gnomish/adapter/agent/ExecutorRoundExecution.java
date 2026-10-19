@@ -107,13 +107,14 @@ final class ExecutorRoundExecution {
             // let a stream larger than the ~64 KB OS pipe buffer either block the child on a
             // full pipe until the roundTimeout kill or lose its tail — and the tail is where
             // the essential result event lives. try-with-resources is what guarantees no drain
-            // thread and no open stream outlives the round on any exit path (NFR-R1).
+            // thread outlives the round on any exit path (NFR-R1): its close stops the drain and
+            // closes no pipe, which is the JDK's to close at the exit (D5 of make-pipe-reads-non-parking).
             try (StreamDrain drain =
                     StreamDrain.start(launched.output(), clock, listenerFor(equipment.progressListener(), round))) {
                 Duration roundTimeout = RoundTimeout.resolve(executor.settings());
                 var wait = launched.waitForExitOrTimeout(roundTimeout, clock);
                 // Both early endings are classified before the drain's events are consulted
-                // (FR3): the kill closed the pipe mid-read, and that secondary symptom must not
+                // (FR3): the kill ended the stream mid-line, and that secondary symptom must not
                 // mask what actually ended the round. An interrupt is its own failure, never the
                 // budget's (FR6, FR11 of bound-subprocess-commands).
                 var wallTime =

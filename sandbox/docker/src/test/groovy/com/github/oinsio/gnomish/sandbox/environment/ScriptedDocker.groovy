@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.subprocess.StdinSource
+import java.nio.charset.StandardCharsets
 
 /**
  * Shared scripted test doubles for {@link ContainerTaskExecutionEnvironment} exec
@@ -45,23 +46,17 @@ final class ScriptedDockerCli extends DockerCli {
     }
 }
 
-/** A {@link Process} double with configurable stdout and exit code. */
+/**
+ * A {@link Process} double that has exited with 0 and canned stdout, read through {@link FakeProcess}'s
+ * own pipe (design D6 of make-pipe-reads-non-parking).
+ */
 final class ScriptedProcess extends FakeProcess {
-    byte[] stdout = new byte[0]
-    int exit = 0
 
-    @Override
-    InputStream getInputStream() {
-        new ByteArrayInputStream(stdout)
+    ScriptedProcess() {
+        this(new byte[0])
     }
 
-    @Override
-    int waitFor() {
-        exit
-    }
-
-    @Override
-    int exitValue() {
-        exit
+    ScriptedProcess(byte[] stdout) {
+        super(0, new String(stdout, StandardCharsets.UTF_8))
     }
 }

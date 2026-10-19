@@ -60,7 +60,7 @@ class AgentRoundLaunchSpec extends Specification {
         Stub(TaskExecutionEnvironment) {
             exec(_ as ExecCommand) >> { ExecCommand command ->
                 launched << command
-                new ExitedExecHandle(getClass().getResourceAsStream("/fake-agent/scenarios/${scenario}/stdout.jsonl"))
+                new ExitedExecHandle(CannedOutputs.written(getClass().getResourceAsStream("/fake-agent/scenarios/${scenario}/stdout.jsonl")))
             }
         }
     }

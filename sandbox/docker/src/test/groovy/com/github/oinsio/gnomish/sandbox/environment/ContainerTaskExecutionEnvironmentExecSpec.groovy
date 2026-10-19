@@ -85,7 +85,7 @@ class ContainerTaskExecutionEnvironmentExecSpec extends Specification {
 
     def "readFile carries the channel's real content through, never swallowed to empty"() {
         given:
-        def process = new ScriptedProcess(stdout: 'file-body'.getBytes(StandardCharsets.UTF_8))
+        def process = new ScriptedProcess('file-body'.getBytes(StandardCharsets.UTF_8))
         def docker = new ScriptedDockerCli(process)
         def e = env(docker)
         e.materialize('task/x', null)

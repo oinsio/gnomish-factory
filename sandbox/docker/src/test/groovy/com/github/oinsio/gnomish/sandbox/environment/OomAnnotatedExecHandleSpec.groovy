@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ExecHandle
+import com.github.oinsio.gnomish.subprocess.ChildOutput
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
 import java.time.Instant
@@ -133,9 +134,9 @@ class OomAnnotatedExecHandleSpec extends Specification {
 
     // NFR-R1: the wrapper is a pass-through everywhere else — the Wait outcome carries no exit
     // code (design D1), so there is nothing to annotate on the timed wait.
-    def "NFR-R1: the timed wait, the output stream, the start instant and the post-exit bound pass through untouched"() {
+    def "NFR-R1: the timed wait, the output, the start instant and the post-exit bound pass through untouched"() {
         given:
-        def stream = new ByteArrayInputStream('real-bytes'.bytes)
+        def stream = ChildOutput.stdout(new FakeProcess())
         def startedAt = Instant.parse('2026-08-07T09:59:00Z')
         def outcome = new ExecHandle.Wait.Exited(Duration.ofSeconds(3))
         def clock = {
