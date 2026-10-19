@@ -48,6 +48,24 @@ class HostProcessLaunchSpec extends Specification implements FakeBinaries {
         process?.destroyForcibly()
     }
 
+    def "FR21: the macOS launcher is chosen by os.name and groups the child on whichever host runs it"() {
+        given: 'the OS\'s own perl, which macOS ships and the Linux CI runner and spec runner image carry'
+        assert Files.isExecutable(Path.of('/usr/bin/perl'))
+        ProcessBuilder builder = new ProcessBuilder(fakeBinary('stall').toString())
+        TestChildEnvironment.cleared(builder)
+
+        when: 'the owner is told the platform is macOS, so the branch runs on a Linux gate as well'
+        Process process = new GroupedLaunch(inputs, 'Mac OS X', System.getenv('PATH')).start(builder, StdinSource.NONE)
+
+        then:
+        eventually('the perl launcher made the child a group leader') {
+            groupOf(process.pid()) == process.pid()
+        }
+
+        cleanup:
+        process?.destroyForcibly()
+    }
+
     def "FR21: a one-element argv with shell metacharacters is executed verbatim"() {
         given: 'a binary whose own name holds a command separator, exiting 3'
         Path odd = StandIn.link(work.resolve('quick;echo injected'), 'quick')
