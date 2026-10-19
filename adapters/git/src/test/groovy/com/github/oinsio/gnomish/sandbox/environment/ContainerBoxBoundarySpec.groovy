@@ -147,8 +147,8 @@ class ContainerBoxBoundarySpec extends Specification implements BareGitRepoFixtu
         forks.exit != 0
         forks.out.contains("can't fork")
 
-        and: 'the box answers again once its short-lived children are gone, and the factory clone is untouched'
-        (1..100).any { inBox(e, 'echo alive').out == 'alive' }
+        and: 'the box forks again once its orphaned children are gone, and the factory clone is untouched'
+        (1..100).any { inBox(e, 'echo alive | cat').out == 'alive' }
         gitOutput(clone, 'status', '--porcelain').isEmpty()
     }
 }

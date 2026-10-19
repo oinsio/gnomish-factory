@@ -98,7 +98,11 @@ final class DockerCommands {
                 "--memory",
                 spec.limits().memory(),
                 "--pids-limit",
-                Long.toString(spec.limits().pids())));
+                Long.toString(spec.limits().pids()),
+                // PID 1 is the keep-alive, which reaps nothing: without an init, every process
+                // orphaned by an exec stays a zombie charged to the PID limit, and a box a
+                // runaway build filled never forks again (FR10).
+                "--init"));
         if (spec.enforceDiskQuota()) {
             argv.add("--storage-opt");
             argv.add("size=" + spec.limits().disk());

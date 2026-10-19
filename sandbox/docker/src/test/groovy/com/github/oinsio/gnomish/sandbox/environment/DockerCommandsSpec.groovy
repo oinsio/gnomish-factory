@@ -114,6 +114,9 @@ class DockerCommandsSpec extends Specification {
             '256'
         ])
 
+        and: 'an init is PID 1, so a process an exec orphaned is reaped instead of holding a PID'
+        argv.contains('--init')
+
         and: 'no disk quota when not opted in'
         !argv.contains('--storage-opt')
 
