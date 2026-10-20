@@ -1,8 +1,9 @@
 # Tasks: own-git-invocation-policy
 
 Sequenced before `add-subprocess-access-log` (same `GitProcessRunner.execute`; proposal,
-Impact). Build order: groups 1 → 2 → 3 → 4 → 5 → 6 → 7, where 2 depends on 1 and 5 needs 2–4
-green. Every group lands its own specs and docs.
+Impact). Build order: groups 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8, where 2 depends on 1 and 5 needs 2–4
+green. Every group lands its own specs and docs. Group 8 was added on 2026-10-21, after groups
+1–7 were implemented (design D3, D11): its tasks change code those groups landed.
 
 Group 14 of `supervise-daemon-loops-and-embed-dashboard` has landed (archived 2026-10-11): every
 holder of the git runner is typed as the package-private `GitRunner` role (`adapters/git`), and
@@ -250,3 +251,73 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 - [x] 7.4 Integration check: root `./gradlew check` green; the `openspec validate
       own-git-invocation-policy` result is clean; an FR/NFR/UX grep shows every proposal ID
       referenced by at least one spec or code unit (`traceability.md`).
+
+## 8. Hooks defined in the configuration, and the git floor
+
+- [ ] 8.1 TDD (red first) for configured hooks (FR9, design D3; scenario "A hook defined in the
+      configuration does not run"):
+      - `GitInvocationIdentitySpec` gains a feature that defines one hook in the clone's local
+        configuration by `hook.<name>.command` (a `StandIn.link` to the committed preset
+        `hook-record-refuse`) with `hook.<name>.event` set to `reference-transaction`,
+        `post-checkout` and `post-index-change`, then drives `createTask` (branch, `worktree
+        add`, lifecycle commit), a round's `persist` and a register transaction; it asserts the
+        hook's marker is absent, every operation succeeded, and `.git/config` is byte-identical
+        apart from the spec's own plant;
+      - `GitInvocationSpec` expects the switch pairs after the eight of D3, one per event of
+        the owner's event list, in its order.
+
+      Verify: both red against today's owner (the configured hook runs; the pairs are missing).
+- [ ] 8.2 Implement the event switches in `GitInvocation` (FR2, FR9, design D3): one constant
+      list of the hook events of githooks(5) in git 2.56 — client and server side — rendered as
+      `-c hook.<event>.enabled=false` after the eight pairs; the javadoc names the floor release
+      the list was read from. Re-render the expectations that spell the pairs
+      (`GitTransferInvocationPolicySpec`, `GitTransferSpec`, `GitPushSpec`,
+      `DockerSeedCloneCommandSpec`, `GitNetworkCommandsSpec`, `GitProcessRunnerNetworkBranchSpec`,
+      `GitVersionCheckSpec`, `GitVersionFloorSpec`, and any other spec a run of
+      `grep -rln "core.useReplaceRefs=false" --include='*.groovy' .` finds). Verify: 8.1 green;
+      `:gittransfer` PIT on `GitInvocation` all killed; the named specs green.
+- [ ] 8.3 Split the git floor (FR10, design D11, D10 row 3):
+      - `GitVersion.FLOOR` becomes 2.56.0, and `FLOOR_REASON` names the event-level hook switch
+        first, then the earlier reasons;
+      - a second floor for the box keeps 2.51.0 and today's reason; `BoxGitFloor` reads it, and
+        its javadoc stops calling it the factory's one floor;
+      - specs: `GitVersionCheckSpec` refuses 2.55.x and passes 2.56.0; `GitVersionFloorSpec`
+        (`:bootstrap`) and `BoxGitFloorSpec` (`:sandbox:docker`) keep the box at 2.51.0 (an
+        image reporting 2.53.0 seeds).
+
+      Old-way grep, recorded in the report: `grep -rn '2, 51\|2, 56\|"2\.51\|"2\.56' --include='*.java'`
+      over production sources — hits only in `GitVersion`. Verify: the named specs green; PIT on
+      `GitVersion`, `GitVersionCheck`, `BoxGitFloor` all killed.
+- [ ] 8.4 CI's git (UX3, design D11): read the `git version … meets the floor` line from the last
+      CI `build` run, or run `git --version` in a one-off job step. If `ubuntu-latest` ships a git
+      below 2.56.0, install git from the `git-core` PPA in every workflow job that runs the
+      factory's specs (`ci.yml` `build`, `pitest-nightly.yml`, and `release.yml` if its build
+      runs them), the way
+      `scripts/linux-runner/Dockerfile` does. Update that Dockerfile's floor comment and the
+      `docs/glossary.md` entry that names the CI platform's git (≥ 2.51 → ≥ 2.56). Verify: the
+      workflow's git step prints 2.56 or later; `scripts/linux-specs.sh` builds and runs one
+      named spec.
+- [ ] 8.5 Docs (UX3, design D3, D11):
+      - `docs/releases/v0.1.0.md`: the factory needs git 2.56.0 or newer, with the remedy
+        (Homebrew's git; on Ubuntu the `git-core` PPA, since the 26.04 archive ships 2.53);
+      - `docs/adr/0008-git-transfer-policy.md`: amend the floor paragraph — 2.56.0 for the
+        factory since `own-git-invocation-policy`, the box's own floor 2.51.0 until
+        `add-sandbox-base-image`;
+      - `docs/adr/0012-git-invocation-policy.md`: the event switches beside the eight pairs, and
+        why `core.hooksPath` alone does not cover configured hooks;
+      - `docs/sandbox-threat-registry.md` row 50: hooks defined in the configuration as a vector,
+        mitigated by the event switches;
+      - `docs/guides/operator-guide-sandbox.md` (lines 42–44) and `docs/examples/sandbox-image/`
+        (`README.md`, `Dockerfile`): the image's git is judged against the box's floor, 2.51.0,
+        no longer "the factory's own".
+
+      Verify: `grep -rn "2\.51" docs` lists only statements about the box's floor or history.
+- [x] 8.6 Hand-offs, made by `/opsx:update` on 2026-10-21 together with this group:
+      `add-sandbox-base-image` records that it raises the box's floor to 2.56.0, joins the two
+      floors, and moves the base image, the test sandbox images (`alpine:3`: 2.54.0;
+      `eclipse-temurin:21-jdk-resolute`: 2.53.0) and the reference recipe to a git at or above
+      it; `add-subprocess-access-log`'s note on the argv records names the new pair count.
+- [ ] 8.7 Integration check: root `./gradlew check` green (after `scripts/linux-specs.sh` over the
+      modules group 8 touched, per `verification-scope.md`); `openspec validate
+      own-git-invocation-policy` clean; the FR9, FR10 and UX3 grep shows each referenced by a spec
+      or code unit.

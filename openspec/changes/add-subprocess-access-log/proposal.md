@@ -361,8 +361,9 @@ only budgets this change touches); no separate cost requirement.
   on this delta's text, per `delta-specs.md`; if the order is inverted at
   sync time, that delta's preamble says what must survive a hand merge.
 - **Sequencing after `own-git-invocation-policy`**: every factory git
-  process now carries that change's eight `-c` policy pairs ahead of its
-  subcommand, so each git argv record (FR1, FR6) carries them too; this change
-  may render the policy as one token rather than eight pairs.
+  process now carries that change's `-c` policy pairs ahead of its
+  subcommand — eight keys plus one hook switch per event, 37 pairs on git 2.56
+  (design D3 of that change) — so each git argv record (FR1, FR6) carries them
+  too; this change may render the policy as one token rather than the pairs.
 - **Not touched**: `:subprocess` (neutrality contract), `CaptureRunner`,
   `:domain`, tracker adapters, the ledger/snapshot plane.

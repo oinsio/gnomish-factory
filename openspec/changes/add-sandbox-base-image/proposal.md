@@ -191,6 +191,14 @@ are recorded here without a decision.
   PPA, a source build, another base) and what that does to NFR-P1, to the
   weekly rebuild (G3: a package source outside Ubuntu) and to the "Ubuntu
   24.04" requirement is undecided.
+  **Raised by `own-git-invocation-policy` (2026-10-21):** that change moves the
+  factory's own git floor to 2.56.0 and holds the box's apart at 2.51.0
+  (its NG5, design D11); this change raises the box's floor to 2.56.0 and joins
+  the two floors again. The bar for the base is therefore git 2.56.0, which no
+  Ubuntu archive ships today (26.04: 2.53.0), so the `git-core` PPA or a source
+  build is no longer optional, and the same bar applies to the test sandbox
+  images and the reference recipe (see tasks, "Carried from
+  own-git-invocation-policy").
 - **Q2 — Which other image dependencies carry a version requirement.** git is
   the first tool whose version the factory's own mechanics constrain; the
   image contract lists tools by presence only. The other tools the factory

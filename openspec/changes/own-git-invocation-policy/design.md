@@ -2,7 +2,7 @@
 
 ## Context
 
-Driven by FR1–FR8, NFR-R1, NFR-R2, NFR-S1 and NFR-S2 of the proposal. The principle that
+Driven by FR1–FR10, NFR-R1, NFR-R2, NFR-S1, NFR-S2 and UX3 of the proposal. The principle that
 outlives this change goes into ADR 0012 ("the clone's configuration is untrusted input, not
 storage"). This file records only the local decisions.
 
@@ -34,6 +34,19 @@ Verified on git 2.55 while preparing this change:
   `TaskBranchAdoption` creates the local branch by one `update-ref --stdin` transaction, which
   writes no configuration. The key stays in the set as a pre-emption, so no future `branch`
   invocation can reintroduce the write.
+
+Verified on git 2.56.0 on 2026-10-20, after the first eight pairs were implemented:
+
+- A hook defined in the clone's local configuration — `hook.<name>.command` with
+  `hook.<name>.event=reference-transaction`, a mechanism git added in 2.54 — runs three times in
+  one `update-ref` that carries all eight pairs: `core.hooksPath=/dev/null` governs the hook
+  directory only. The same hook also runs on `branch`, `add -A` (`post-index-change`) and
+  `worktree add`.
+- `-c hook.reference-transaction.enabled=false` (the event-level switch, documented in the 2.56
+  `git-hook` page: "no hooks fire for that event") stops it; so does the per-name
+  `hook.<name>.enabled=false`, which the factory cannot use, since the attacker picks the name.
+  The release notes of 2.55 announce only parallel configuration hooks, so whether 2.55 already
+  honours the event-level switch is not verified.
 
 ## Decisions
 
@@ -82,8 +95,22 @@ removes.
 - `maintenance.auto=false`
 - `gc.auto=0`
 - `core.useReplaceRefs=false`
+- `hook.<event>.enabled=false` for every hook event the githooks(5) page of the floor release
+  (2.56, D11) lists, client and server side — `applypatch-msg` through `post-index-change`, and
+  `pre-receive`, `update`, `proc-receive`, `post-receive`, `post-update`. `GitInvocation` holds
+  the event list as one constant beside the other pairs.
 
 Removed from every environment: `GIT_CONFIG_PARAMETERS` and `GIT_CONFIG_COUNT`.
+
+*Rationale for the event switches:* `core.hooksPath=/dev/null` empties the hook directory but
+says nothing about hooks defined in the configuration (Context, verified on 2.56). Only the
+event-level switch is under the factory's control: the per-name one needs a name the factory
+cannot know. Both stay — the directory key disables the classic hooks, the switches disable the
+configured ones. The switches are listed per event, not derived at runtime: the list is read
+from the documentation of the floor release, and an event git adds later is a new entry, like
+any other key (G3). A configured hook named after an event (`hook.pre-commit.event`) makes git
+fail with a fatal error by design; that is a loud refusal of the command, not a hook that runs,
+and is accepted.
 
 `GitTransfer.CONFIG_KEYS` drops its own `maintenance.auto`/`gc.auto` (now inherited from the
 base), and its `STRIPPED` list drops the two configuration variables for the same reason (FR4:
@@ -148,12 +175,10 @@ command-scope value `/dev/null`. The doctor check for the stale line (UX2) must 
   daemon's whole lifetime.
 - **Retry on lock error.** It hides the race. `CloneMutationLock` exists precisely instead of a
   retry loop.
-- **Raise the git floor to 2.56.0 for `core.configLockTimeout`** (default 1000 ms of retry on
-  `config.lock`). Its only effect would be to retry a write this change deletes. It masks the
-  race instead of removing it, it does nothing for the read side (hooks, signing, replace refs),
-  and it forces every operator onto a very recent git: distribution LTS releases ship older
-  ones. The floor stays where `tighten-spec-contract` put it (2.51.0, design D13 as amended
-  2026-10-13).
+- **Rely on `core.configLockTimeout` (git 2.56: retry on `config.lock`) instead of deleting the
+  write.** Its only effect would be to retry a write this change deletes; it masks the race
+  instead of removing it, and does nothing for the read side. The floor does rise to 2.56.0, but
+  for the event-level hook switch (D3, D11), not for this retry, which the factory never needs.
 
 **D5 — The container resume path is pinned, not changed.** The "ref created, exit 1" failure of
 `git branch <n> refs/remotes/origin/<n>` already disappeared when `TaskBranchAdoption` (design D9
@@ -274,6 +299,29 @@ No row of the `manual-sync-pairs.md` registry is touched.
 |---|---|---|---|---|
 | `GitInvocation` (`:gittransfer`) | The full git command line (`List<String>`, produced only by `GitInvocation.commandLine(gitBinary, args)`) and the environment-removal set. The list is a primitive because `ProcessBuilder` consumes exactly that; the owner is enforced by being the only producer (gate item 2), not by the type. | `adapters/git/.../GitProcessRunner.java` (`execute`); `gitobjects/.../GitExec.java` (`run`); `gittransfer/.../GitTransfer.java` (`fetch`, `harvest`, `clone`) and `gittransfer/.../GitPush.java` (`closing`, `branchOnly`, through `start()`), and through them the runner's typed entry and `sandbox/docker/.../DockerSeedCloneCommand.java` | `GitProcessRunner.commandLine` and `GitExec.commandLine` (private builders) deleted, `GitExec`'s own `-c core.hooksPath=/dev/null` literal with the latter; `GitTransfer.CONFIG_KEYS` loses `maintenance.auto`/`gc.auto`; `GitTransfer.STRIPPED` loses the two configuration variables. Old-way grep: `commandLine(` defined outside `GitInvocation`, and `"gc.auto=0"`/`"maintenance.auto=false"`/`"core.hooksPath=` literals outside it — all expected empty. `core.hooksPath=` inside the in-box scripts of `EnvironmentAttemptPersistence`, `EnvironmentRoundSnapshot` and `EnvironmentSalvage` is the box's git (NG6), not a producer of a factory command line | `GitLaunchBoundarySpec` (D7); `GitTransfer` compact-constructor invariant (D2) |
 | "No repository-configuration write" (runner refusal plus the owner's `branch.autoSetupMerge=false`) | none — the absence of a write, checked on the medium | Previous writers: `adapters/git/.../FactoryCloneHardening.java` (removed); `adapters/git/.../GitTaskBranches.java` `harden` (write removed; renamed `requireRefFormat`, keeping only the ref-backend check); `application/.../port/git/TaskBranchGit.java` `harden` (renamed `requireRefFormat`); the decorator `application/.../app/serve/RemoteOutageSignalingTaskBranchGit.java` `harden` (renamed, pass-through); call sites `TakeFreshClaim`, `TakeContainerFreshClaim`, `TakeResumeBootstrap`, `TakeContainerResumeBootstrap`, `GitModeRunner`, `ContainerGitModeRunner`, `ContainerResumeRunner` (`application/.../app/`, one `git.branches().harden(cloneDir)` each, each now the ref-backend check at the same position); `adapters/git/.../TaskBranchAdoption.java` (kept: creates the local branch by `update-ref --stdin`, which writes no configuration) | `git config core.hooksPath` deleted; the port method keeps only the ref-backend precondition, under its own name (D4). Old-way grep: `harden(` and `"config"` in production Java — expected empty apart from the refusal classifier. Exemption: the `sandbox/docker/.../DockerSeedCloneCommand.java` script writes five configuration lines in the **box** — `--global --add safe.directory` twice, `user.name`, `user.email`, `gc.auto 0` — into the box's own global file and its fresh seed clone, outside the operator clone and the factory trust domain (NG6) | Runner refusal (FR5); identity spec `GitInvocationIdentitySpec` asserting a byte-identical `.git/config` on the real medium (D8) |
+| `GitVersion` (`:gittransfer`) | The two git floors (`GitVersion`): the factory's, 2.56.0, with its reason, and the box's, 2.51.0, with its own (D11) | `adapters/git/.../GitVersionCheck.java` (startup, the factory's floor); `sandbox/docker/.../BoxGitFloor.java` (seed clone, the box's floor) | `BoxGitFloor` stops reading the factory's floor. Old-way grep: a version literal `2, 51` or `2, 56` (or `"2.51`/`"2.56`) in production Java outside `GitVersion` — expected empty | `GitVersionFloorSpec` (`:bootstrap`) for the startup refusal; `BoxGitFloorSpec` for the box's floor; the old-way grep in the task report |
+
+**D11 — Two git floors until the base image catches up.** The factory's git floor rises from
+2.51.0 to 2.56.0 (FR10): the event-level hook switch of D3 is documented in 2.56, it was
+verified there, and a policy that names a key the installed git ignores neutralizes nothing.
+The box's floor (`BoxGitFloor`, the seed clone's check) stays at 2.51.0 and becomes its own
+constant in `GitVersion`, keeping today's value and today's reason unchanged, until
+`add-sandbox-base-image` raises it to 2.56.0 and joins the two again. The box's git is outside the factory's trust domain (NG6): no factory policy runs
+there, so the box needs no event switch.
+
+- *Alternative rejected:* **one floor, raised now.** Every image the box checks would be
+  refused: the five test images on `alpine:3` (3.24.1) install git 2.54.0, `JvmProxyEgressImage`
+  and the reference recipe on `eclipse-temurin:21-jdk-resolute` get 2.53.0 from the Ubuntu 26.04
+  archive (measured 2026-10-20); only `alpine:edge` has 2.56.0. Moving the images is the base
+  image change's subject, and doing it here would grow this change past its initiative.
+- *Alternative rejected:* **keep 2.51.0 and refuse only 2.54.x.** A special case in the version
+  check, and the event switch is not verified on 2.55; a key that might be ignored there is not
+  a policy.
+- *Alternative rejected:* **2.55.0.** Its release notes announce parallel configuration hooks but
+  not the event switch; the floor follows what was verified.
+- *Cost:* an operator on a distribution git (Ubuntu 26.04's 2.53) needs the `git-core` PPA or
+  Homebrew's current git (UX3); the CI `build` job's git must be at least 2.56.0, installed from
+  the PPA when `ubuntu-latest` lags (task 8.4).
 
 ## Risks / Trade-offs
 
@@ -284,9 +332,14 @@ No row of the `manual-sync-pairs.md` registry is touched.
 - **Operators relying on the persisted `core.hooksPath`.** Their own git has been hook-less
   since they first ran the factory; after upgrading it runs their hooks again. → Release note
   plus the doctor check (UX2), which prints the exact `git config --local --unset` line.
-- **The access log sees the pairs.** `add-subprocess-access-log` records argv, so eight pairs
-  appear on every record → that change is sequenced after this one and may render the policy as
-  one token. Its concern, noted in its proposal.
+- **The access log sees the pairs.** `add-subprocess-access-log` records argv, so the policy's
+  pairs — eight keys plus one switch per hook event, 37 in all on 2.56 — appear on every record
+  → that change is sequenced after this one and may render the policy as one token. Its concern,
+  noted in its proposal. The argv itself stays far below any `ARG_MAX`.
+- **A git newer than the floor adds a hook event.** The switch list is the floor release's; an
+  event added later runs its configured hooks until it is listed → the list is reread whenever
+  the floor moves, and the identity spec plants a configured hook on the events the factory's
+  commands fire (task 8.1).
 - **`/dev/null` is POSIX.** The factory already requires a POSIX host (Docker CLI, `sh`
   scripts). A Windows port would change the value in one place.
 - **Keys the policy cannot pre-empt** (attribute-selected filter drivers, `info/attributes`,

@@ -11,10 +11,17 @@ file: the file is neither read as trusted policy nor written as storage.
 ### Requirement: Every factory git process carries one invocation policy
 Every git process the factory starts — through the factory git runner or through the
 git-object library — SHALL carry one invocation policy, built by one owner, as command-scope
-configuration placed before the subcommand. The policy SHALL neutralize, by value: hooks,
-commit signing, tag signing, the filesystem monitor, branch upstream auto-setup, automatic
-maintenance, automatic garbage collection, and replace refs.
-**Implements**: FR1, FR2, NFR-S2 of own-git-invocation-policy
+configuration placed before the subcommand. The policy SHALL neutralize, by value: hooks
+(the hook directory and every hook event), commit signing, tag signing, the filesystem monitor,
+branch upstream auto-setup, automatic maintenance, automatic garbage collection, and replace refs.
+**Implements**: FR1, FR2, FR9, NFR-S2 of own-git-invocation-policy
+**Notes**: Hooks defined in the configuration (`hook.<name>.command`, git 2.54+) ignore `core.hooksPath`; only the event-level switch, documented in 2.56, disables them (design D3).
+
+#### Scenario: A hook defined in the configuration does not run
+- **WHEN** the clone's local configuration defines a hook by `hook.<name>.command` with
+  `hook.<name>.event` set to `reference-transaction`, `post-checkout` and `post-index-change`,
+  and the factory creates a task branch, adds its worktree, commits a round and updates a ref
+- **THEN** the configured hook does not run, and every operation succeeds
 
 #### Scenario: A planted local configuration runs nothing
 - **WHEN** the clone's local configuration plants a hook directory with executable

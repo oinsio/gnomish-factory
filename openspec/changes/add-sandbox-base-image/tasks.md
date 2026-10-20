@@ -99,3 +99,23 @@ Docker is available.
   2.43, so the base planned on `eclipse-temurin:25-jdk-noble` (design, task on line 58) would be
   refused; revise the base (the reference recipe moved to `eclipse-temurin:21-jdk-resolute`, whose
   archive ships git 2.53, above 2.51) through `/opsx:update` before this change is applied.
+
+## Carried from own-git-invocation-policy
+
+- `own-git-invocation-policy` (design D11, NG5; 2026-10-21) raised the factory's git floor to
+  2.56.0 — the event-level hook switch `hook.<event>.enabled` its invocation policy needs is
+  documented and verified there — and kept the box's floor at 2.51.0 as a second constant in
+  `GitVersion`, read by `BoxGitFloor`, because every image the box checks installs an older git.
+  This change raises the box's floor to 2.56.0 and folds the two constants back into one, in the
+  same task that moves every image the floor judges, so no image is refused in between:
+  - the base image: git 2.56.0 or newer (Ubuntu 26.04's archive ships 2.53.0: the `git-core` PPA
+    or a source build);
+  - the test sandbox images on `alpine:3` (3.24.1 installs 2.54.0) — `GitSandboxImage`,
+    `EgressProbeImage`, `DeclaredVolumeSandboxImage`, `ContainerReadOnlySurfacesSpec`,
+    `FakeAgentSandboxImage` — and `JvmProxyEgressImage` on `eclipse-temurin:21-jdk-resolute`
+    (2.53.0) (`alpine:edge` installs 2.56.0; measured 2026-10-20);
+  - the reference recipe `docs/examples/sandbox-image/` and `docs/guides/operator-guide-sandbox.md`.
+
+  Revise the base's design and tasks through `/opsx:update` before this change is applied; the
+  joined floor's spec text is the `execution-environment` requirement "The box's git meets the
+  floor before the seed clone", whose Notes then name one floor again.

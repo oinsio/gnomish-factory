@@ -24,6 +24,13 @@ The factory treats the operator clone's shared `.git/config` as two things it is
   - Separately, `fetch`, and any future factory `git commit`, would start a detached
     `git maintenance run --auto` in the shared clone. That background work is serialized with
     nothing.
+  - Since git 2.54 a hook can also be defined in the configuration itself
+    (`hook.<name>.command` with `hook.<name>.event`), and `core.hooksPath=/dev/null` does not
+    disable it. Verified on git 2.56.0 (2026-10-20): a `reference-transaction` hook defined in
+    the clone's local configuration ran three times in one `update-ref` that carried the whole
+    set; `-c hook.reference-transaction.enabled=false` stopped it. The event-level switch is
+    documented in git 2.56; on 2.54 only the per-name switch exists, and the name is the
+    attacker's choice.
 
 ADR 0008 already solved this for fetch and clone. The factory states its policy on every
 invocation with `-c` pairs (command-line configuration, which beats every file scope) and
@@ -39,7 +46,8 @@ statement of how it invokes git.
 - **ADDED** capability `git-invocation-policy`:
   - One owner holds a closed, command-scope configuration set, applied to **every** factory git
     process.
-  - The set neutralizes hooks, commit and tag signing, fsmonitor, upstream auto-setup,
+  - The set neutralizes hooks (the hook directory and every hook event, so hooks defined in
+    the configuration as well), commit and tag signing, fsmonitor, upstream auto-setup,
     automatic maintenance/gc and replace refs.
   - Inherited per-process configuration is stripped for every command, not only for transfers.
   - Transfers — fetch, clone and push — layer their existing set on top.
@@ -51,6 +59,11 @@ statement of how it invokes git.
   local configuration SHALL execute nothing.
 - **MODIFIED** `module-layering`: `gitobjects` may depend on `gittransfer`, which now also holds
   the invocation policy, so the plumbing launcher applies the same set.
+- **MODIFIED** `git-transfer`, "Git version floor at startup": the factory's floor rises from
+  2.51.0 to 2.56.0, the first release whose event-level hook switch is documented and verified.
+- **MODIFIED** `execution-environment`, "The box's git meets the floor before the seed clone":
+  the box is judged against its own floor, which stays 2.51.0 here; `add-sandbox-base-image`
+  raises it to 2.56.0 together with the images (design D11).
 - **REMOVED** (code): `FactoryCloneHardening`, `FactoryCloneHardeningException` and the
   configuration write of `TaskBranchGit.harden`. The port method, its decorator method and its
   seven call sites keep only the method's other step, the clone's ref-backend check, under a
@@ -60,7 +73,7 @@ statement of how it invokes git.
 - Test build: the shared clone fixture gains an adversarial **local** configuration posture.
   The temporary `@Retry` on the concurrency spec is removed.
 - Docs: ADR 0012; `docs/sandbox-threat-registry.md` row 38 revised and row 50 added;
-  glossary entry.
+  glossary entry; the release note and the operator guide name the new git floor (UX3).
 
 ## Capabilities
 
@@ -74,6 +87,9 @@ statement of how it invokes git.
   invocation instead of by a persisted clone setting.
 - `module-layering`: the `gitobjects` dependency set gains `gittransfer`; the `gittransfer`
   leaf's description gains the invocation policy.
+- `git-transfer`: "Git version floor at startup" — the floor is 2.56.0.
+- `execution-environment`: "The box's git meets the floor before the seed clone" — the box has
+  its own floor until `add-sandbox-base-image`.
 
 ## Goals
 
@@ -95,7 +111,12 @@ statement of how it invokes git.
 - **NG3**: Raising git's ref-lock timeouts. There is no evidence of ref-lock contention.
 - **NG4**: Automatically unsetting the `core.hooksPath` that earlier factory versions persisted
   in operator clones. The operator is told how instead (UX2).
-- **NG5**: Raising the git version floor (design, rejected alternative).
+- **NG5**: Raising the box's git floor. It stays 2.51.0 in this change, held apart from the
+  factory's: every test sandbox image and the reference recipe install a git below 2.56
+  (`alpine:3` 2.54.0, Ubuntu 26.04's archive 2.53.0; measured 2026-10-20), and the box's git is
+  outside the factory's trust domain (NG6). Picked up by `add-sandbox-base-image`, which raises
+  it to 2.56.0 with the base image, the test images and the recipe, and joins the two floors
+  again (design D11).
 - **NG6**: The in-box git of a task environment. The gnome's own git and the box clone are
   outside the factory's trust domain.
 
@@ -141,6 +162,12 @@ statement of how it invokes git.
   worktree paths against a clone whose local configuration plants a hook, a signing program,
   an fsmonitor command, `branch.autoSetupMerge=always` and a replace ref. It SHALL assert that
   nothing planted ran and that `.git/config` is byte-identical afterwards.
+- **FR9**: The set SHALL disable every hook event git documents (githooks(5) of the floor
+  release, client and server side) by its event-level switch, so a hook defined in any
+  configuration scope runs no more than one in the hook directory.
+- **FR10**: The factory SHALL refuse to start on a git below 2.56.0, the first release whose
+  event-level hook switch is documented and verified. The box's seed-clone check SHALL judge the
+  image's git against the box's own floor, 2.51.0, until `add-sandbox-base-image` raises it.
 
 ### Non-Functional Reliability
 
@@ -175,6 +202,9 @@ statement of how it invokes git.
 - **UX2**: Release notes (and `doctor`, once `add-doctor-command` lands) name the one line
   earlier versions left behind (`core.hooksPath=<clone>/.git/gnomish-empty-hooks`) and the
   command that removes it. Nothing is removed automatically.
+- **UX3**: An operator whose git is below 2.56.0 is refused at startup with the floor, the
+  installed version and the reason; the release note and the operator guide name the remedy
+  (Homebrew's current git; on Ubuntu, the `git-core` PPA, since the 26.04 archive ships 2.53).
 
 ## Success Metrics
 
@@ -199,6 +229,10 @@ statement of how it invokes git.
 ## Impact
 
 - `:gittransfer`: new `GitInvocation` owner; `GitTransfer` and `GitPush` compose it.
+  `GitVersion` holds two floors until `add-sandbox-base-image`: the factory's (2.56.0) and the
+  box's (2.51.0); `BoxGitFloor` (`:sandbox:docker`) reads the box's.
+- CI: the `build` job's git must be at least 2.56.0; if `ubuntu-latest` ships an older one, the
+  job installs it from the `git-core` PPA, as `scripts/linux-runner/Dockerfile` already does.
 - `:gitobjects`: `GitExec` applies the policy; new edge to `:gittransfer`.
 - `:adapters:git`: `GitProcessRunner` applies the policy and refuses configuration writes.
   `FactoryCloneHardening*` is removed; `GitTaskBranches.harden` keeps only its ref-backend check,
@@ -213,7 +247,9 @@ statement of how it invokes git.
 - `:test-fixtures`: an adversarial local-configuration posture in `BareGitRepoFixture`.
 - Docs: `docs/adr/0012-git-invocation-policy.md` (0011 is `operator-configuration-levels`;
   `fix-docker-exec-env-argv`, which also planned 0011, takes 0017), `docs/sandbox-threat-registry.md`,
-  `docs/glossary.md`.
+  `docs/glossary.md`, `docs/releases/v0.1.0.md` and the operator guide's git requirement (UX3).
+- `add-sandbox-base-image`: carries the box floor's raise to 2.56.0 (NG5, design D11); its
+  proposal and tasks record the hand-off.
 - Sequencing: this change lands before `add-subprocess-access-log`, which touches the same
   `GitProcessRunner.execute`.
 - Layered on `tighten-spec-contract` (archived 2026-10-14; `GitPush`, the rewritten module
