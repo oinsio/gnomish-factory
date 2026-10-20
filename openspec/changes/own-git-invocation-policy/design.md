@@ -59,8 +59,11 @@ the caller's arguments. Both launchers pass what it returns straight to `Process
 their private `commandLine` builders are deleted. `GitTransfer.argv()` begins with the same
 pairs for every construction site — the `fetch`/`harvest`/`clone` factories and `GitPush.closing`
 and `GitPush.branchOnly`, whose `start()` opens with the owner's pairs; the compact constructor
-asserts this, so a transfer built any other way cannot exist. The runner's typed transfer entry
-therefore does not prefix the pairs a second time. Classification
+asserts this, so a transfer built any other way cannot exist. `commandLine` is idempotent on the
+policy: when `args` already opens with the owner's pairs, as every `GitTransfer.argv()` does, it
+adds nothing. The runner's string, typed-transfer and ref-transaction entries therefore all reach
+one `execute` and the same `commandLine`, the owner has one producer, and a transfer carries the
+pairs once. Classification
 (`isRepoLevelMutating`, `GitNetworkCommands`) keeps running on the caller's arguments. For
 transfers it already skips leading `-c` pairs.
 *Rationale:* when the owner produces the command line, a launcher cannot forget the policy. It
@@ -104,9 +107,17 @@ operator's credentials.
 
 **D4 — The factory writes no repository configuration.**
 
-- **Removed:** `FactoryCloneHardening`, `FactoryCloneHardeningException`, `GitTaskBranches.harden`
-  and the port method `TaskBranchGit.harden`, which is the escape hatch. The compiler then forces
-  the seven call sites out.
+- **Removed:** `FactoryCloneHardening`, `FactoryCloneHardeningException`, and the configuration
+  write inside `GitTaskBranches.harden`, which is the escape hatch.
+- **Kept, renamed:** `harden` runs two steps today, `refFormat.require(cloneDir)` and then the
+  write (`GitTaskBranches.java:80-85`). The first is the reftable-backend precondition of
+  `tighten-spec-contract` (NFR-S2, `FactoryCloneRefFormat`), and the call sites rely on its
+  position: "a refused clone gets no worktree-registry write" (`TakeFreshClaim`, `GitModeRunner`).
+  So the port method `TaskBranchGit.harden` becomes `TaskBranchGit.requireRefFormat(Path)`,
+  `GitTaskBranches` keeps only `refFormat.require` in it, the `RemoteOutageSignalingTaskBranchGit`
+  decorator passes it through, and each of the seven call sites calls it where it called `harden`.
+  The rename makes the compiler visit every call site. `FactoryRegisterOwnerSpec`'s pin of
+  `new FactoryCloneRefFormat(` to `GitTaskBranches.java` and `TouchpointFetch.java` is unchanged.
 - **Runner refusal:** the runner's string entry refuses `config` unless the arguments carry a read
   form (`--get`, `--get-all`, `--get-regexp`, `--get-urlmatch`, `--list`/`-l`, or the `get`/`list`
   subcommands). It also refuses `remote add|rename|remove|rm|set-head|set-branches|set-url`. The
@@ -208,8 +219,9 @@ classes).
 3. Seeded scenarios prove the detector fires; `GitTransferBoundarySpec` is the model.
 
 The seed helper's shell script is already covered: `GitTransferBoundarySpec` forbids transfer
-literals, and its only git command is the owner's `GitTransfer.clone`, which carries the pairs
-by D2's constructor invariant.
+literals, and its only transfer is the owner's `GitTransfer.clone`, which carries the pairs
+by D2's constructor invariant; the box-side `config`, `remote remove` and `reset` lines are the
+box's git (NG6, D10 row 2).
 
 **D8 — Identity and concurrency specs.**
 
@@ -244,8 +256,9 @@ by D2's constructor invariant.
     `ContainerResumeRunner` calls it directly while `GitResumeRunner` reaches it through
     `TakeResumeBootstrap`.
 
-  Both ends of every pair lose the call, and the three markers that name it are reworded in the
-  same task, so no end describes a step the other no longer performs.
+  Both ends of every pair keep the call under its new name, `requireRefFormat` (D4), and the
+  three markers that name `harden` are reworded to that step in the same task, so no end
+  describes a step the other no longer performs.
 - **Collapsed rule.** The change also collapses a rule that exists three times — the
   configuration policy of `GitProcessRunner` (none), `GitExec` (global/system isolation) and
   `GitTransfer` (transfer set). By the rule of three in `manual-sync-pairs.md` this is a
@@ -259,8 +272,8 @@ No row of the `manual-sync-pairs.md` registry is touched.
 
 | Owner | Value (type) | Consumers | Old way removed | Enforced by |
 |---|---|---|---|---|
-| `GitInvocation` (`:gittransfer`) | The full git command line (`List<String>`, produced only by `GitInvocation.commandLine(gitBinary, args)`) and the environment-removal set. The list is a primitive because `ProcessBuilder` consumes exactly that; the owner is enforced by being the only producer (gate item 2), not by the type. | `adapters/git/.../GitProcessRunner.java` (`execute`); `gitobjects/.../GitExec.java` (`run`); `gittransfer/.../GitTransfer.java` (`fetch`, `harvest`, `clone`) and `gittransfer/.../GitPush.java` (`closing`, `branchOnly`, through `start()`), and through them the runner's typed entry and `sandbox/docker/.../DockerSeedCloneCommand.java` | `GitProcessRunner.commandLine` and `GitExec.commandLine` (private builders) deleted, `GitExec`'s own `-c core.hooksPath=/dev/null` literal with the latter; `GitTransfer.CONFIG_KEYS` loses `maintenance.auto`/`gc.auto`; `GitTransfer.STRIPPED` loses the two configuration variables. Old-way grep: `commandLine(` defined outside `GitInvocation`, and `"gc.auto=0"`/`"maintenance.auto=false"`/`"core.hooksPath=` literals outside it — all expected empty | `GitLaunchBoundarySpec` (D7); `GitTransfer` compact-constructor invariant (D2) |
-| "No repository-configuration write" (runner refusal plus the owner's `branch.autoSetupMerge=false`) | none — the absence of a write, checked on the medium | Previous writers: `adapters/git/.../FactoryCloneHardening.java` (removed); `adapters/git/.../GitTaskBranches.java` `harden` (removed); `application/.../port/git/TaskBranchGit.java` `harden` (removed); the decorator `application/.../app/serve/RemoteOutageSignalingTaskBranchGit.java` `harden` (removed); call sites `TakeFreshClaim`, `TakeContainerFreshClaim`, `TakeResumeBootstrap`, `TakeContainerResumeBootstrap`, `GitModeRunner`, `ContainerGitModeRunner`, `ContainerResumeRunner` (`application/.../app/`, one `git.branches().harden(cloneDir)` each, all removed); `adapters/git/.../TaskBranchAdoption.java` (kept: creates the local branch by `update-ref --stdin`, which writes no configuration) | `git config core.hooksPath` and the port method, both deleted. Old-way grep: `harden(` and `"config"` in production Java — expected empty apart from the refusal classifier. Exemption: the `sandbox/docker/.../DockerSeedCloneCommand.java` script writes five configuration lines in the **box** — `--global --add safe.directory` twice, `user.name`, `user.email`, `gc.auto 0` — into the box's own global file and its fresh seed clone, outside the operator clone and the factory trust domain (NG6) | Runner refusal (FR5); identity spec `GitInvocationIdentitySpec` asserting a byte-identical `.git/config` on the real medium (D8) |
+| `GitInvocation` (`:gittransfer`) | The full git command line (`List<String>`, produced only by `GitInvocation.commandLine(gitBinary, args)`) and the environment-removal set. The list is a primitive because `ProcessBuilder` consumes exactly that; the owner is enforced by being the only producer (gate item 2), not by the type. | `adapters/git/.../GitProcessRunner.java` (`execute`); `gitobjects/.../GitExec.java` (`run`); `gittransfer/.../GitTransfer.java` (`fetch`, `harvest`, `clone`) and `gittransfer/.../GitPush.java` (`closing`, `branchOnly`, through `start()`), and through them the runner's typed entry and `sandbox/docker/.../DockerSeedCloneCommand.java` | `GitProcessRunner.commandLine` and `GitExec.commandLine` (private builders) deleted, `GitExec`'s own `-c core.hooksPath=/dev/null` literal with the latter; `GitTransfer.CONFIG_KEYS` loses `maintenance.auto`/`gc.auto`; `GitTransfer.STRIPPED` loses the two configuration variables. Old-way grep: `commandLine(` defined outside `GitInvocation`, and `"gc.auto=0"`/`"maintenance.auto=false"`/`"core.hooksPath=` literals outside it — all expected empty. `core.hooksPath=` inside the in-box scripts of `EnvironmentAttemptPersistence`, `EnvironmentRoundSnapshot` and `EnvironmentSalvage` is the box's git (NG6), not a producer of a factory command line | `GitLaunchBoundarySpec` (D7); `GitTransfer` compact-constructor invariant (D2) |
+| "No repository-configuration write" (runner refusal plus the owner's `branch.autoSetupMerge=false`) | none — the absence of a write, checked on the medium | Previous writers: `adapters/git/.../FactoryCloneHardening.java` (removed); `adapters/git/.../GitTaskBranches.java` `harden` (write removed; renamed `requireRefFormat`, keeping only the ref-backend check); `application/.../port/git/TaskBranchGit.java` `harden` (renamed `requireRefFormat`); the decorator `application/.../app/serve/RemoteOutageSignalingTaskBranchGit.java` `harden` (renamed, pass-through); call sites `TakeFreshClaim`, `TakeContainerFreshClaim`, `TakeResumeBootstrap`, `TakeContainerResumeBootstrap`, `GitModeRunner`, `ContainerGitModeRunner`, `ContainerResumeRunner` (`application/.../app/`, one `git.branches().harden(cloneDir)` each, each now the ref-backend check at the same position); `adapters/git/.../TaskBranchAdoption.java` (kept: creates the local branch by `update-ref --stdin`, which writes no configuration) | `git config core.hooksPath` deleted; the port method keeps only the ref-backend precondition, under its own name (D4). Old-way grep: `harden(` and `"config"` in production Java — expected empty apart from the refusal classifier. Exemption: the `sandbox/docker/.../DockerSeedCloneCommand.java` script writes five configuration lines in the **box** — `--global --add safe.directory` twice, `user.name`, `user.email`, `gc.auto 0` — into the box's own global file and its fresh seed clone, outside the operator clone and the factory trust domain (NG6) | Runner refusal (FR5); identity spec `GitInvocationIdentitySpec` asserting a byte-identical `.git/config` on the real medium (D8) |
 
 ## Risks / Trade-offs
 

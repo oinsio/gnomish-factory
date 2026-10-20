@@ -15,6 +15,8 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 - [ ] 1.1 TDD (red first): `GitInvocationSpec` pins the owner (FR1, FR2, FR3, design D2, D3):
       - `commandLine(gitBinary, args)` returns the binary, then exactly the eight `-c` pairs of
         D3 in declared order, then the caller's arguments unchanged;
+      - an argv that already opens with the pairs is returned with them once (D2, idempotent on
+        the policy);
       - the environment-removal set is exactly `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`;
       - no pair names `credential.`, `core.sshCommand` or `url.` (NFR-S2);
       - a blank binary is refused.
@@ -33,6 +35,9 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       A data-driven spec over every source kind and both pushes asserts that every invocation pair
       is present before the subcommand and that no key has two values. Verify: `GitTransferSpec`,
       `GitPushSpec`, the new spec and `SeedTransferFixture`-based specs are green;
+      `ScriptedGitSpec` ("the transfer owner's value is matched and logged by its argv", which
+      hand-builds a `GitTransfer` the new invariant refuses) is rebuilt through the owner's
+      `fetch` factory and green;
       `DockerSeedCloneCommandSpec`'s rendered script expectation is updated; `:gittransfer:check`
       and `:sandbox:docker:check` are green.
 
@@ -42,7 +47,8 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       - `execute` builds its `ProcessBuilder` from `GitInvocation.commandLine` and removes the
         owner's environment set;
       - the private `commandLine` is deleted;
-      - the typed transfer entry runs the value's argv as-is, without prefixing again;
+      - the typed transfer entry runs the value's argv through the same `commandLine`, which
+        adds no second copy of the pairs (D2);
       - classification keeps reading the caller's arguments.
 
       Spec: a commit with an inherited `GIT_CONFIG_COUNT` pair naming a hook directory runs no
@@ -51,8 +57,9 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       - `:gitobjects` gains `implementation project(':gittransfer')` and its layering allowlist
         entry with a comment naming the edge; `:application` gains the reach entry `:gittransfer`
         with a comment naming `:gitobjects` as the edge it arrives through (`:adapters`,
-        `:adapters:agent` and `:bootstrap` already list it); `GitObjectsBoundarySpec`'s permitted
-        set admits `gittransfer`;
+        `:adapters:agent` and `:bootstrap` already list it); `gitobjects/build.gradle`'s header
+        comment ("never a factory module") names the second JDK-only leaf;
+        `GitObjectsBoundarySpec` needs no edit (its forbidden list does not name the leaf);
       - `run` builds its command line from the owner and removes the owner's environment set;
       - `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` isolation is kept;
       - the private `commandLine` is deleted, its `-c core.hooksPath=/dev/null` literal with it.
@@ -67,7 +74,10 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       `grep -rn "commandLine(" --include=*.java */src/main */*/src/main` (expected: definitions
       only in `GitInvocation`) and
       `grep -rn '"gc.auto=0"\|"maintenance.auto=false"' --include=*.java . | grep /src/main/`
-      (expected: only `GitInvocation`). Record both commands and their hits in the task report.
+      (expected: only `GitInvocation`) and
+      `grep -rn '"core.hooksPath=' --include=*.java . | grep /src/main/` (expected: empty once
+      task 2.2 has run; the unquoted in-box `core.hooksPath=` of the three `Environment*`
+      scripts is the box's git, NG6). Record the three commands and their hits in the task report.
 
 ## 3. No repository-configuration writes
 
@@ -79,28 +89,32 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       Allowed: `config --get|--get-all|--get-regexp|--get-urlmatch|--list|-l`, `config get|list`,
       `remote get-url`. The data-driven spec covers every refused and every allowed form, with
       and without leading `-c` pairs. Verify: `:adapters:git:check` green.
-- [ ] 3.2 Remove the hardening (FR6, design D4, D10 row 2):
-      - delete `FactoryCloneHardening`, `FactoryCloneHardeningException`, their spec
-        `FactoryCloneHardeningSpec`, `GitTaskBranches.harden` and the port method
-        `TaskBranchGit.harden`;
-      - the compiler then forces removal of `RemoteOutageSignalingTaskBranchGit.harden` (the
-        port decorator, `application/.../app/serve/`) and of the one `git.branches().harden(cloneDir)`
-        call in each of `TakeFreshClaim`, `TakeContainerFreshClaim`, `TakeResumeBootstrap`,
+- [ ] 3.2 Remove the hardening write, keep the ref-backend check (FR6, design D4, D10 row 2):
+      - delete `FactoryCloneHardening`, `FactoryCloneHardeningException` and their spec
+        `FactoryCloneHardeningSpec`;
+      - rename the port method `TaskBranchGit.harden(Path)` to `requireRefFormat(Path)`;
+        `GitTaskBranches.requireRefFormat` keeps only `refFormat.require(cloneDir)`, and
+        `RemoteOutageSignalingTaskBranchGit` (the port decorator, `application/.../app/serve/`)
+        passes it through;
+      - the compiler then forces the rename of the one `git.branches().harden(cloneDir)` call in
+        each of `TakeFreshClaim`, `TakeContainerFreshClaim`, `TakeResumeBootstrap`,
         `TakeContainerResumeBootstrap`, `GitModeRunner`, `ContainerGitModeRunner` and
-        `ContainerResumeRunner` (`application/.../app/`);
+        `ContainerResumeRunner` (`application/.../app/`); each call stays at its position, ahead of
+        the first write, and its comment names the backend check, not hooks;
       - update the fakes and specs that stub or assert `harden`: `RunChainFakes`,
         `TakeFreshClaimSpec`, `TakeContainerFreshClaimSpec`, `TakeClaimAndWorkSpec`,
         `GitModeRunnerFreshRunSpec`, `ContainerGitModeRunnerSpec`, `GitTaskBranchesSpec`,
         `TakeContainerResumeRoutingSpec`, `ContainerResumeRoutingSpec`, `AnchorLogSpec`;
-      - retire or rewrite `RunnerStartHardeningSpec` so it asserts that no configuration is
-        written.
+      - rewrite `RunnerStartHardeningSpec` so each of its run paths asserts that the backend
+        check still runs before the first write and that no configuration is written;
+        `FactoryRegisterOwnerSpec` stays green unedited.
 
       Verify: root `./gradlew check` green.
 - [ ] 3.3 Reword the sync markers (design D9). Both ends of
       `TakeFreshClaim`↔`TakeContainerFreshClaim`,
       `TakeResumeBootstrap`↔`TakeContainerResumeBootstrap` and
-      `GitModeRunner`↔`ContainerGitModeRunner` drop "harden" from the recipe they state, in the
-      same wording at both ends. Confirm that `ContainerResumeRunner`↔`GitResumeRunner` needs no
+      `GitModeRunner`↔`ContainerGitModeRunner` replace "harden" in the recipe they state by the
+      ref-backend check (`requireRefFormat`), in the same wording at both ends. Confirm that `ContainerResumeRunner`↔`GitResumeRunner` needs no
       wording change. Verify: `grep -rn "Kept in sync with" --include=*.java */src/main | grep -i
       harden` is empty.
 - [ ] 3.4 Old-way sweep for row 2 of the D10 table. Run

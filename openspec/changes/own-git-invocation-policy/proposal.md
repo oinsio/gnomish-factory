@@ -16,14 +16,14 @@ The factory treats the operator clone's shared `.git/config` as two things it is
 - **A trusted source of policy.** Every factory git command reads that file. The operator, the
   operator's tools (husky rewrites `core.hooksPath` on every `npm install`), or a host-mode gnome
   can all write to it. A one-time write does not hold. Verified on git 2.55:
-  - `core.hooksPath` pointing at a planted hook runs it during the factory's `git commit`.
-  - The planted hook runs in the runner's `update-ref` (the `reference-transaction` hook) and in
-    the runner's `push` (`pre-push`). `gitobjects`' own `update-ref` is the one place already
+  - `core.hooksPath` pointing at a planted hook runs it in the runner's `update-ref` (the
+    `reference-transaction` hook) and in the runner's `push` (`pre-push`). `gitobjects`' own `update-ref` is the one place already
     guarded: `GitExec` carries `-c core.hooksPath=/dev/null` — and nothing else of the set.
   - `commit.gpgSign` together with `gpg.program` runs an arbitrary program during the factory's
-    `git commit`.
-  - Separately, every factory `git commit` starts a detached `git maintenance run --auto` in the
-    shared clone. That background work is serialized with nothing.
+    `git commit-tree` (every factory-side commit is `commit-tree` since `tighten-spec-contract`).
+  - Separately, `fetch`, and any future factory `git commit`, would start a detached
+    `git maintenance run --auto` in the shared clone. That background work is serialized with
+    nothing.
 
 ADR 0008 already solved this for fetch and clone. The factory states its policy on every
 invocation with `-c` pairs (command-line configuration, which beats every file scope) and
@@ -51,8 +51,10 @@ statement of how it invokes git.
   local configuration SHALL execute nothing.
 - **MODIFIED** `module-layering`: `gitobjects` may depend on `gittransfer`, which now also holds
   the invocation policy, so the plumbing launcher applies the same set.
-- **REMOVED** (code): `FactoryCloneHardening`, `FactoryCloneHardeningException`,
-  `TaskBranchGit.harden`, its decorator method and its seven call sites. This is **BREAKING** only for an operator
+- **REMOVED** (code): `FactoryCloneHardening`, `FactoryCloneHardeningException` and the
+  configuration write of `TaskBranchGit.harden`. The port method, its decorator method and its
+  seven call sites keep only the method's other step, the clone's ref-backend check, under a
+  name that says so (design D4). This is **BREAKING** only for an operator
   who relied on the factory persisting `core.hooksPath` into their clone. That write stops; see
   UX2.
 - Test build: the shared clone fixture gains an adversarial **local** configuration posture.
@@ -131,7 +133,8 @@ statement of how it invokes git.
   writes repository configuration (`config` in a write form, `remote` in a write form), with an
   exception naming the policy. Read forms stay allowed.
 - **FR6**: The factory SHALL no longer persist any configuration into a clone. The clone
-  hardening step and its port method SHALL be removed.
+  hardening write SHALL be removed; the ref-backend check that runs before it in the same port
+  method today keeps its place ahead of the first write (NFR-S2 of `tighten-spec-contract`).
 - **FR7**: A build gate SHALL fail when a production class outside the two launchers starts a
   git process, and when a launcher builds its command line without the policy.
 - **FR8**: A spec on real git SHALL run the factory's commit, ref-update, branch-creation and
@@ -176,13 +179,15 @@ statement of how it invokes git.
 ## Success Metrics
 
 - **M1**: `harden` occurrences in production: 7 call sites + 1 port decorator + 1 port method +
-  2 classes → 0.
+  2 classes → 0 (the call sites, the decorator and the port method remain under the
+  ref-backend check's own name).
 - **M2**: Git process launchers applying the policy: 2 of 2 (today 0 of 2 for non-transfer
   commands).
 - **M3**: `TakeSlotRunnerContainerConcurrencySpec` passes 20 consecutive local runs without
   `@Retry`; the new real-thread spec passes with 8 concurrent claims.
-- **M4**: Adversarial local-configuration posture: 5 planted vectors, 0 executed across the
-  existing real-git suites.
+- **M4**: Adversarial local-configuration posture: 4 planted configuration vectors in the shared
+  fixture, 0 executed across the existing real-git suites; with the replace ref the identity
+  spec plants itself, 5 vectors, 0 executed.
 
 ## Open Questions
 
@@ -196,9 +201,11 @@ statement of how it invokes git.
 - `:gittransfer`: new `GitInvocation` owner; `GitTransfer` and `GitPush` compose it.
 - `:gitobjects`: `GitExec` applies the policy; new edge to `:gittransfer`.
 - `:adapters:git`: `GitProcessRunner` applies the policy and refuses configuration writes.
-  `FactoryCloneHardening*` is removed, and `GitTaskBranches.harden` with it.
-- `:application`: `TaskBranchGit.harden` is removed, along with its 7 call sites and the
-  `RemoteOutageSignalingTaskBranchGit` decorator's method; `:application` gains a layering reach
+  `FactoryCloneHardening*` is removed; `GitTaskBranches.harden` keeps only its ref-backend check,
+  renamed.
+- `:application`: `TaskBranchGit.harden` is renamed to the ref-backend check it keeps, along
+  with its 7 call sites and the `RemoteOutageSignalingTaskBranchGit` decorator's method;
+  `:application` gains a layering reach
   entry for `:gittransfer` through `:gitobjects`. Three declared sync pairs have their markers
   reworded.
 - `:bootstrap`: the new boundary spec and the concurrency spec; `RunnerStartHardeningSpec` is
@@ -211,7 +218,9 @@ statement of how it invokes git.
   `GitProcessRunner.execute`.
 - Layered on `tighten-spec-contract` (archived 2026-10-14; `GitPush`, the rewritten module
   enumerations) and `fix-terminal-receipt-convergence` (archived 2026-10-18; `TaskBranchAdoption`,
-  the `:subprocess` edge of `:sandbox:core`, `ProcessLaunch`): the MODIFIED blocks of
+  the `:subprocess` edge of `:sandbox:core`, `ProcessLaunch`) and `make-pipe-reads-non-parking`
+  (archived 2026-10-20; `GitExec` and `CaptureRunner` read through `ChildOutput`, on lines this
+  change does not edit): the MODIFIED blocks of
   `git-task-persistence` and `module-layering` are written over the main spec as both left it.
   `add-subprocess-access-log` no longer carries a `module-layering` delta, so the two changes no
   longer overlap there.

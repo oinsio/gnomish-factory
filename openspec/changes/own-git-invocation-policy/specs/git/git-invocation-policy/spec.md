@@ -27,10 +27,10 @@ maintenance, automatic garbage collection, and replace refs.
 - **WHEN** the clone holds a `refs/replace/` entry substituting a commit on a task branch
 - **THEN** the factory's reads of that branch see the original commit
 
-#### Scenario: Factory commits start no background maintenance
-- **WHEN** the factory commits in a clone whose loose-object count exceeds the automatic
-  maintenance threshold
-- **THEN** no maintenance or gc process is started by that commit
+#### Scenario: Factory git starts no background maintenance
+- **WHEN** the factory writes a commit object and moves a ref in a clone whose loose-object
+  count exceeds the automatic maintenance threshold
+- **THEN** no maintenance or gc process is started by those commands
 
 #### Scenario: Operator credentials still reach origin
 - **WHEN** the operator's global configuration names a credential helper and the factory
@@ -104,23 +104,23 @@ configuration lock.
 ### Requirement: The invocation policy has one owner and no bypass
 A build gate SHALL fail when a production class outside the two git launchers starts a git
 process, and when either launcher starts one without the invocation policy. The gate SHALL
-assert that it reached every production source root.
+assert that its allowlist is matched exactly, so a new spawn site fails until it is classified.
 **Implements**: FR7 of own-git-invocation-policy
 
 #### Scenario: A third launcher fails the build
 - **WHEN** a production class outside the two launchers constructs a process whose command is
   git
-- **THEN** `./gradlew check` fails naming the file
+- **THEN** `./gradlew check` fails naming the class
 
 ### Requirement: The policy holds on an adversarial local configuration
 The shared real-git clone fixture SHALL plant, as its default posture, a local configuration
 carrying a hook directory, a signing program with signing on, a filesystem-monitor command,
-upstream auto-setup forced on, and a replace ref. Every spec that drives the factory's git
-paths on that fixture SHALL therefore run against the planted vectors. A spec SHALL assert
-that none of them ran.
+and upstream auto-setup forced on. Every spec that drives the factory's git paths on that
+fixture SHALL therefore run against the planted vectors. The identity spec SHALL plant the
+replace ref on the commit it reads, and SHALL assert that none of the vectors ran.
 **Implements**: FR8, M4 of own-git-invocation-policy
 
 #### Scenario: The posture is in force
 - **WHEN** a spec builds a clone through the shared fixture
-- **THEN** the clone's local configuration holds every planted vector, unless the spec asked
+- **THEN** the clone's local configuration holds every planted configuration vector, unless the spec asked
   for the plain posture by name
