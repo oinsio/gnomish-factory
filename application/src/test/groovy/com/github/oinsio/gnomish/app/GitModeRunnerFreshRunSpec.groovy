@@ -141,12 +141,12 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
     // BEFORE the task is created — a stale worktree registration or a live hook left in place would
     // otherwise apply to the branch this run is about to make.
     // Scenario: git/git-task-persistence / Runner start prunes worktrees and sweeps orphans
-    def "hardens and prunes before creating the task, then records and disposes at the end"() {
+    def "checks the ref backend and prunes before creating the task, then records and disposes at the end"() {
         when:
         runCapturingStdout()
 
-        then: 'the clone is checked (its ref backend inside harden) before anything is written to it (design D13 of tighten-spec-contract, as amended 2026-10-13)'
-        1 * branches.harden(cloneDir)
+        then: 'FR6: the clone\'s ref backend is checked before anything is written to it (design D13 of tighten-spec-contract, as amended 2026-10-13)'
+        1 * branches.requireRefFormat(cloneDir)
 
         then: 'run-start hygiene runs before anything is created (FR17, design D11)'
         1 * worktrees.pruneWorktrees(cloneDir)

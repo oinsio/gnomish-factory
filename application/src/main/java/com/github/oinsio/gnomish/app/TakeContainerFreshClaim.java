@@ -26,12 +26,13 @@ import java.util.List;
  * it holds as a field for the slot's lifetime: each claim receives only its {@link TakeOrder} and
  * the run's segment plan, never the equipment (D2, D4 of introduce-slot-wiring).
  *
- * <p>Kept in sync with {@link TakeFreshClaim}: both run the SAME fresh-claim recipe — harden,
- * resolve+refresh the base, bind the task tier at that base, synthesize, create the branch FROM
- * THE BOUND LAW COMMIT with the base pin beside it (FR15, D12 revised 2026-09-10), run the engine
- * once — over their own execution medium (host worktree vs. sandbox task repository). Both hand
- * on, past the task-tier bind, only the order re-bound to the task's law through {@link
- * TakeOrder#withDefinition} (D6 of introduce-take-order).
+ * <p>Kept in sync with {@link TakeFreshClaim}: both run the SAME fresh-claim recipe — require
+ * the clone's ref backend ({@code requireRefFormat}), resolve+refresh the base, bind the task
+ * tier at that base, synthesize, create the branch FROM THE BOUND LAW COMMIT with the base pin
+ * beside it (FR15, D12 revised 2026-09-10), run the engine once — over their own execution medium
+ * (host worktree vs. sandbox task repository). Both hand on, past the task-tier bind, only the
+ * order re-bound to the task's law through {@link TakeOrder#withDefinition} (D6 of
+ * introduce-take-order).
  *
  * <p>Implements FR1, FR2 of add-serve-sandbox-lifecycle; FR9, FR11, D3 of add-tracker-port; FR2,
  * FR6, FR13, D6, D15 of add-base-ref-resolution; FR5 of introduce-slot-wiring.
@@ -55,7 +56,9 @@ final class TakeContainerFreshClaim {
         TaskGit git = wiring.git();
         Path cloneDir = order.run().cloneDir();
 
-        git.branches().harden(cloneDir);
+        // The ref-backend check first, ahead of the first write: a refused clone gets no branch,
+        // ref or worktree-registry write (design D4 of own-git-invocation-policy).
+        git.branches().requireRefFormat(cloneDir);
 
         TaskState notYetStarted = TaskState.atStageStart(
                 order.run().definition().stages().getFirst().name());

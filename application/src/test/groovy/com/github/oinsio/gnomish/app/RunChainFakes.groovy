@@ -271,8 +271,9 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * A {@link TaskGit} whose branch port reports the task as not-yet-created (bare shape): the
      * shape both {@code TakeRefDispatchSpec} and {@code TakeRefDispatchContainerBatchSpec} drive
      * their fresh-claim dispatch through, since neither scenario cares about anything past that.
-     * {@code harden} is also answered, as a no-op: both the host and container fresh-claim
-     * recipes call it before ever reaching {@code locate}/{@code classifyShape}.
+     * {@code requireRefFormat} is also answered, as a no-op: both the host and container
+     * fresh-claim recipes call the ref-backend check before ever reaching {@code locate}/{@code
+     * classifyShape}.
      *
      * <p>Plain closure-backed ports, not Spock {@code Stub}s: a trait's shared method runs outside
      * the per-feature scope Spock's mock controller requires, the same reason {@link
@@ -280,7 +281,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      */
     TaskGit bareGit() {
         def branchGit = [
-            harden: { Path cloneDir -> },
+            requireRefFormat: { Path cloneDir -> },
             locate: { Path cloneDir, String taskId ->
                 new BranchLocation.NotFound()
             },

@@ -115,7 +115,7 @@ then. *Alternative rejected:* ArchUnit on `ProcessBuilder` dependencies alone â€
 string literal, and the literal is the leak.
 
 **D7 â€” The principle goes to an ADR, the operator guide gets one paragraph (UX2, UX3).**
-`docs/adr/0011-secret-channels-to-child-processes.md` records: a secret never travels on a command
+`docs/adr/0017-secret-channels-to-child-processes.md` records: a secret never travels on a command
 line (argv is world-readable; environment is owner-readable; a file is permission-readable; stdin is
 private); a gnome-product child's environment is composed by the factory from the three allowlist
 layers; a factory client's inherited environment has the declared credentials subtracted; the

@@ -19,8 +19,8 @@ import java.util.function.UnaryOperator;
  * <p>Implements FR12b of split-into-modules.
  *
  * @param store the task store: lifecycle repository, round persistence, usage history; never null
- * @param branches the branch-level operations: hardening, lookup, listing, state reads, push;
- *     never null
+ * @param branches the branch-level operations: the clone's ref-backend check, lookup, listing,
+ *     state reads, push; never null
  * @param worktrees the worktree-level operations: materialization, reconciliation, salvage,
  *     cleanup; never null
  * @param midRoundPush the executor-rounds decoration git-mode host control flows attach via

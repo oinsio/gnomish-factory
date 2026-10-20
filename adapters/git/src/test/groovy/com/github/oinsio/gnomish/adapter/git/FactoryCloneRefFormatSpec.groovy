@@ -90,29 +90,36 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         logs.list*.level == [Level.ERROR]
     }
 
-    def "F135: hardening a files-backend clone refuses it before writing its configuration"() {
+    def "F135: the ref-backend check refuses a files-backend clone and writes nothing to it"() {
         given:
         Path clone = filesClone()
+        byte[] configBefore = Files.readAllBytes(clone.resolve('.git/config'))
         def branches = TaskGitFixture.realClaimless().branches()
 
         when:
-        branches.harden(clone)
+        branches.requireRefFormat(clone)
 
-        then: 'the refusal, and no hooks path written: a refused clone is not touched'
+        then: 'the refusal, and the clone\'s configuration untouched: a refused clone is not written to'
         thrown(CloneRefFormatRefusedException)
-        gitExitCode(clone, 'config', '--local', 'core.hooksPath') != 0
+        Files.readAllBytes(clone.resolve('.git/config')) == configBefore
     }
 
-    def "F122: hardening a reftable clone still points its hooks at the empty directory"() {
+    // FR6, D4 of own-git-invocation-policy: the check is all that is left of the former hardening
+    // step; the factory writes no repository configuration, so no hooks path is persisted.
+    def "F122: a reftable clone passes the ref-backend check and no hooks path is written"() {
         given:
         Path clone = initTaskWorkingRepo(tempDir)
+        byte[] configBefore = Files.readAllBytes(clone.resolve('.git/config'))
+        String hooksPathBefore = gitOutput(clone, 'config', '--local', '--get', 'core.hooksPath')
         def branches = TaskGitFixture.realClaimless().branches()
 
         when:
-        branches.harden(clone)
+        branches.requireRefFormat(clone)
 
-        then:
-        gitOutput(clone, 'config', '--local', 'core.hooksPath').endsWith(FactoryCloneHardening.EMPTY_HOOKS_DIR)
+        then: 'the clone\'s own hooks path (the fixture\'s planted one) is left as it was, and nothing else is written'
+        noExceptionThrown()
+        gitOutput(clone, 'config', '--local', '--get', 'core.hooksPath') == hooksPathBefore
+        Files.readAllBytes(clone.resolve('.git/config')) == configBefore
     }
 
     def "F135: a status read of a files-backend clone is refused before the touchpoint fetch writes a ref"() {
@@ -120,7 +127,7 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         Path clone = filesCloneOfOriginWithTask()
         def branches = TaskGitFixture.realClaimless().branches()
 
-        when: 'status reads the task, which no run path hardened first'
+        when: 'status reads the task, which no run path checked first'
         branches.readState(clone, 'PROJ-1')
 
         then: 'the refusal, and neither the tracking ref nor the register was written'
@@ -134,7 +141,7 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         Path clone = filesCloneOfOriginWithTask()
         def branches = TaskGitFixture.realClaimless().branches()
 
-        when: 'the take router classifies the branch before any run path hardens the clone'
+        when: 'the take router classifies the branch before any run path checks the clone'
         branches.classifyShape(clone, 'PROJ-1')
 
         then:

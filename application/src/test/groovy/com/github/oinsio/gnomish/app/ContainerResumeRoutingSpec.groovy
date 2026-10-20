@@ -100,7 +100,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         resume()
 
         then:
-        1 * branches.harden(CLONE_DIR)
+        1 * branches.requireRefFormat(CLONE_DIR)
         1 * branches.ensureLocalTaskBranch(CLONE_DIR, 'PROJ-1') >> new BranchAdoption.Nowhere()
 
         and:

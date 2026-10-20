@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.gittransfer.GitInvocation
 import com.github.oinsio.gnomish.gittransfer.GitTransfer
 import com.github.oinsio.gnomish.gittransfer.Refspec
 import com.github.oinsio.gnomish.gittransfer.TransferSource
@@ -16,6 +17,9 @@ import java.nio.file.Path
  * {@code GitProcessRunner}, under the test JVM's environment — the adversarial global
  * configuration included ({@code testing.md}, "Git fixtures are adversarial by default"), so a
  * seeding fetch spells its source in full ({@code refs/heads/…}) like every other fixture fetch.
+ * They do carry the factory's invocation policy ({@code GitInvocation}, FR1 and FR3 of
+ * own-git-invocation-policy), so the local-configuration posture planted in a working repository
+ * refuses only factory paths that run without it, never the scaffolding.
  *
  * <p>Two rules keep this from becoming the escape hatch the runner closed. Only test sources can
  * reach it: {@code :test-fixtures} is on no production classpath, and the whole-tree gate over
@@ -94,12 +98,20 @@ trait SeedTransferFixture {
     }
 
     private GitCommandResult seedGit(Path cwd, List<String> args) {
-        def builder = new ProcessBuilder(['git'] + args).directory(cwd.toFile())
+        // Under the factory's invocation policy, from its owner (FR1, FR3 of
+        // own-git-invocation-policy): a seed fetch lands in a working repository that carries the
+        // planted local-configuration posture (AdversarialLocalConfig), and the factory transfer
+        // it stands in for — the harvest of a box, a fetch into a clone — runs with the policy
+        // too, so a planted hook must not refuse the scaffolding either.
+        def builder = new ProcessBuilder(GitInvocation.commandLine('git', args)).directory(cwd.toFile())
+        GitInvocation.removedEnvironment().each {
+            builder.environment().remove(it)
+        }
         // Pinned as the runner pins it, so a spec classifying stderr (a non-fast-forward refusal)
-        // reads git's English wording under any locale. Inherits the test JVM's environment by
-        // design (exempt from design D14 of make-checkpoint-gate-durable): this child is git
-        // seeding a fixture repository, not a gnome product, and it needs the build's git test
-        // configuration exactly as the test JVM has it.
+        // reads git's English wording under any locale. Otherwise inherits the test JVM's
+        // environment by design (exempt from design D14 of make-checkpoint-gate-durable): this
+        // child is git seeding a fixture repository, not a gnome product, and it needs the build's
+        // git test configuration exactly as the test JVM has it.
         builder.environment().put('LC_ALL', 'C')
         def process = builder.start()
         def stderr = new StringBuilder()

@@ -35,7 +35,7 @@ first. The files it touches overlap neither queued change.
   one owner, so the flag names and the delivered values cannot diverge. The docker client's
   environment for an exec is the factory's inherited environment with every declared credential
   name removed and the composed map laid on top — subtraction, not a cleared allowlist.
-- **ADDED** to the durable record: `docs/adr/0011-secret-channels-to-child-processes.md`, stating
+- **ADDED** to the durable record: `docs/adr/0017-secret-channels-to-child-processes.md`, stating
   the principle both this change and the queued ones rest on: a secret never travels on a command
   line; a child's environment is composed by the factory, and a factory client's inherited
   environment has the declared credentials subtracted.

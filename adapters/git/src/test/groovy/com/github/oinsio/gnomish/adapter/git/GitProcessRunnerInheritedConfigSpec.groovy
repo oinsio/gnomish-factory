@@ -15,8 +15,9 @@ import spock.lang.TempDir
  * {@code pre-commit} hook that refuses every commit it runs for.
  *
  * <p>The runner composes its child's environment from the JVM's, and a running JVM cannot change
- * its own, so the factory process is a child JVM ({@link InheritedConfigCommitProcess}) whose
- * environment this spec composes through {@link TestChildEnvironment}, plus the planted pair.
+ * its own, so the factory process is a child JVM ({@link CommitProcess}, this spec's own other
+ * half, which drives the real {@link GitProcessRunner}) whose environment this spec composes
+ * through {@link TestChildEnvironment}, plus the planted pair.
  */
 class GitProcessRunnerInheritedConfigSpec extends Specification implements BareGitRepoFixture {
 
@@ -49,7 +50,7 @@ class GitProcessRunnerInheritedConfigSpec extends Specification implements BareG
                 ProcessHandle.current().info().command().orElseThrow(),
                 '-cp',
                 System.getProperty('java.class.path'),
-                InheritedConfigCommitProcess.getName(),
+                CommitProcess.getName(),
                 repo.toString()).redirectErrorStream(true)
         planted(builder, hooks)
         def process = builder.start()
@@ -59,10 +60,10 @@ class GitProcessRunnerInheritedConfigSpec extends Specification implements BareG
         then: 'the factory JVM really held the planted pair'
         exited
         process.exitValue() == 0
-        output.readLines().first() == InheritedConfigCommitProcess.PLANTED_PREFIX + 'core.hooksPath'
+        output.readLines().first() == CommitProcess.PLANTED_PREFIX + 'core.hooksPath'
 
         and: 'the hook never ran: the commit landed'
-        output.readLines()[1] == InheritedConfigCommitProcess.EXIT_PREFIX + '0'
+        output.readLines()[1] == CommitProcess.EXIT_PREFIX + '0'
         gitOutput(repo, 'log', '-1', '--format=%s') == 'inherited'
     }
 
@@ -73,5 +74,33 @@ class GitProcessRunnerInheritedConfigSpec extends Specification implements BareG
             GIT_CONFIG_KEY_0: 'core.hooksPath',
             GIT_CONFIG_VALUE_0: hooks.toString(),
         ])
+    }
+
+    /**
+     * The child-JVM half of this spec: one commit through the real {@link GitProcessRunner}, run in
+     * a JVM whose own environment the spec composed — the only way to plant a variable in the
+     * inherited environment of the runner's {@link ProcessBuilder}, since a running JVM cannot
+     * change its own (the precedent is {@code FixtureBoxRoundProcess} in {@code :bootstrap}).
+     *
+     * <p>Argument: the working repository, with its change already staged. Prints the planted key,
+     * so the spec can prove the plant reached this JVM, then the commit's exit code and stderr.
+     */
+    static final class CommitProcess {
+
+        /** The line this process prints first, naming the inherited key it was started with. */
+        static final String PLANTED_PREFIX = 'inherited GIT_CONFIG_KEY_0='
+
+        /** The line carrying the commit's exit code. */
+        static final String EXIT_PREFIX = 'commit exit='
+
+        private CommitProcess() {}
+
+        static void main(String[] args) {
+            println(PLANTED_PREFIX + System.getenv('GIT_CONFIG_KEY_0'))
+            def result = new GitProcessRunner()
+                    .run(Path.of(args[0]), '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'inherited')
+            println(EXIT_PREFIX + result.exitCode())
+            println(result.stderr().forParsing())
+        }
     }
 }

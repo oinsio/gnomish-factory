@@ -27,13 +27,13 @@ import java.util.List;
  * capability seam instead of a dozen construction sites.
  *
  * <p>Implements FR2, FR9, FR10, FR13 of add-git-workflow; FR12b of split-into-modules; FR1,
- * FR2 of harden-task-branch-contract; FR11 of fix-terminal-receipt-convergence.
+ * FR2 of harden-task-branch-contract; FR11 of fix-terminal-receipt-convergence; FR6 of
+ * own-git-invocation-policy.
  */
 public final class GitTaskBranches implements TaskBranchGit {
 
     private final GitRunner runner;
     private final FactoryCloneRefFormat refFormat;
-    private final FactoryCloneHardening hardening;
     private final ContainerResumeBranch resumeBranch;
     private final TaskBranchLocator locator;
     private final TaskBranchAdoption adoption;
@@ -61,7 +61,6 @@ public final class GitTaskBranches implements TaskBranchGit {
      */
     GitTaskBranches(GitRunner runner, ClaimEpochSource epochs, GitInfrastructureRetry retry) {
         this.refFormat = new FactoryCloneRefFormat(runner);
-        this.hardening = new FactoryCloneHardening(runner);
         this.resumeBranch = new ContainerResumeBranch(runner, epochs, retry);
         this.locator = new TaskBranchLocator(runner, retry);
         this.adoption = new TaskBranchAdoption(runner, locator);
@@ -77,11 +76,11 @@ public final class GitTaskBranches implements TaskBranchGit {
     }
 
     @Override
-    public void harden(Path cloneDir) {
-        // The backend first: a clone the factory refuses is not written to, not even its config
-        // (design D13 of tighten-spec-contract, as amended 2026-10-13).
+    public void requireRefFormat(Path cloneDir) {
+        // The ref-backend precondition only (design D13 of tighten-spec-contract, as amended
+        // 2026-10-13): the factory writes no repository configuration (FR6, design D4 of
+        // own-git-invocation-policy), so nothing follows the check here.
         refFormat.require(cloneDir);
-        hardening.harden(cloneDir);
     }
 
     @Override

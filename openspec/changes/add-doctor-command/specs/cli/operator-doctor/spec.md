@@ -53,6 +53,18 @@ no side effects, reported one line per check or as one JSON document.
 - **WHEN** `gnomish doctor` runs in a directory that is no registered clone
 - **THEN** host-level checks run and the output says project checks were skipped because the directory is not registered, with the `project add` line
 
+### Requirement: Doctor names the hooks-path line earlier versions left in the clone
+On a registered clone, `gnomish doctor` SHALL read `core.hooksPath` from the clone's local configuration (`--local`), never through an unscoped read, which under the factory's git invocation policy reports the command-scope value `/dev/null`. When the local value ends in `/gnomish-empty-hooks` it SHALL report `warn` with the fix `git config --local --unset core.hooksPath`; otherwise it SHALL report `ok` and print no such line. It SHALL remove nothing.
+**Implements**: FR8 of add-doctor-command; UX2 of own-git-invocation-policy
+
+#### Scenario: Leftover hooks path of an earlier version
+- **WHEN** `gnomish doctor --dir=<clone>` runs on a clone whose local configuration holds `core.hooksPath=<clone>/.git/gnomish-empty-hooks`
+- **THEN** the check is reported as `warn` with the fix `git config --local --unset core.hooksPath`, the exit code is not made 1 by it, and the clone's configuration is unchanged
+
+#### Scenario: An operator's own hooks path is not reported
+- **WHEN** the clone's local `core.hooksPath` is unset, or holds a value that does not end in `/gnomish-empty-hooks`
+- **THEN** the check is reported as `ok` and no `git config --local --unset core.hooksPath` line is printed
+
 ### Requirement: Doctor shares every decision with the startup path
 Each doctor check SHALL obtain its verdict from the component the real startup path uses for the same decision, through a non-refusing assessment on which that component's refusing form is itself built. Doctor SHALL NOT start a subprocess, read an environment variable, or parse a configuration file itself, and SHALL have no side effects: no claim, branch, worktree, box, image pull or file write beyond its log.
 **Implements**: FR3, FR4, NFR-R1, NFR-P1 of add-doctor-command

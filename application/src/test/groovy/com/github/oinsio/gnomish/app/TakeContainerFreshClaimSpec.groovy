@@ -57,9 +57,9 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
     }
 
     // FR1, FR2: the task branch is created factory-side over the SandboxRunSupport's own task
-    // repository (no worktree), hardening runs first, and the engine runs once to a terminal
+    // repository (no worktree), the ref-backend check runs first, and the engine runs once to a terminal
     // Completed/Delivered result through the container assembly.
-    def "creates the task over the sandbox task repository, hardening first, and runs the engine once"() {
+    def "creates the task over the sandbox task repository, ref-backend check first, and runs the engine once"() {
         given:
         def tracker = Mock(Tracker)
         def branches = Mock(TaskBranchGit)
@@ -81,8 +81,8 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
                 takeOrder(readyTask(), tracker, runOrder(completingPipeline())),
                 [] as List<Segment>)
 
-        then: 'the clone is hardened before the branch is created (mirrors ContainerGitModeRunner)'
-        1 * branches.harden(CLONE_DIR)
+        then: 'FR6: the clone\'s ref backend is checked before the branch is created (mirrors ContainerGitModeRunner)'
+        1 * branches.requireRefFormat(CLONE_DIR)
 
         then: 'the branch is created from the trusted-tier default branch'
         1 * repository.createTask({

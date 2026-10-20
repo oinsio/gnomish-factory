@@ -47,14 +47,16 @@ final class FixtureGitConfig {
 
     private static void git(Path repo, String... args) {
         def command = ['git', *args.toList()]
+        // No pipe to read: git's output goes to the test JVM's own standard output, where the
+        // test report shows it, so this fixture never parks in a read of a child's pipe and needs
+        // no exemption from ChildOutputOwnerGateSpec or RawCaptureGateSpec.
         def builder = new ProcessBuilder(command)
                 .directory(repo.toFile())
                 .redirectInput(ProcessBuilder.Redirect.from(new File('/dev/null')))
                 .redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.INHERIT)
         TestChildEnvironment.cleared(builder)
-        def process = builder.start()
-        String output = process.inputStream.getText('UTF-8')
-        int exit = process.waitFor()
-        assert exit == 0: "${command.join(' ')} in ${repo} failed (${exit}): ${output}"
+        int exit = builder.start().waitFor()
+        assert exit == 0: "${command.join(' ')} in ${repo} failed (${exit}); git's output is in the test's standard output"
     }
 }

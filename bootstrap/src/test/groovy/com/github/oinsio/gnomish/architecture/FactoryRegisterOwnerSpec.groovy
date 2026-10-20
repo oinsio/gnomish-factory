@@ -36,8 +36,8 @@ import spock.lang.Specification
  *       made from a task id in {@code FactoryRegisterRefs} alone (the naming half split from
  *       {@code FactoryRegister} for the file-size cap, which keeps the transactions);
  *   <li>the ref backend those transactions are atomic on is spelled, and read, in
- *       {@code FactoryCloneRefFormat} alone, reached through {@code GitTaskBranches#harden} and
- *       {@code TouchpointFetch} (the first write of every task touchpoint, task 9.13g); the
+ *       {@code FactoryCloneRefFormat} alone, reached through
+ *       {@code GitTaskBranches#requireRefFormat} and {@code TouchpointFetch} (the first write of every task touchpoint, task 9.13g); the
  *       factory creates no clone, so {@code --ref-format} is spelled only in the refusal's remedy.
  * </ul>
  *

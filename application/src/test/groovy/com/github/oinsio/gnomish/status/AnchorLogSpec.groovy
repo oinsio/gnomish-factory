@@ -95,7 +95,7 @@ class AnchorLogSpec extends Specification {
         capture.list[0].formattedMessage == 'serve stopping: reason=signal'
     }
 
-    // FR3: one renderer, every outcome family — including the post-harden quarantine park
+    // FR3: one renderer, every outcome family — each park naming its reason inline
     def "the summary renders #outcome at #level with its stage, attempts and wall time"() {
         when:
         AnchorLog.taskSummary(new TaskSummary(outcome, parkReason, 'implement', 2, Duration.ofSeconds(75), [:]))

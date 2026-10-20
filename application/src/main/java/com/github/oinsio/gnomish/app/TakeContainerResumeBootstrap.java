@@ -23,14 +23,16 @@ import org.slf4j.MDC;
  * {@link com.github.oinsio.gnomish.app.port.run.SandboxRunSupport} bundle every subsequent
  * container-mode resume step reads and writes through.
  *
- * <p>Kept in sync with {@link TakeResumeBootstrap}: both must harden the clone, reconcile the
- * remote on resume-start, and build the same resume bundle shape (context, outcome, last
- * escalation, base commit and the durable base pin) from the loaded task record.
+ * <p>Kept in sync with {@link TakeResumeBootstrap}: both must require the clone's ref backend
+ * ({@code requireRefFormat}), reconcile the remote on resume-start, and build the same resume
+ * bundle shape (context, outcome, last escalation, base commit and the durable base pin) from the
+ * loaded task record.
  *
  * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9 of add-tracker-port; FR8 of
  * fix-terminal-receipt-convergence.
  *
- * @param git the task-git capability set: clone hardening and branch reconciliation; never null
+ * @param git the task-git capability set: the clone's ref-backend check and branch
+ *     reconciliation; never null
  * @param containerTakeSupport the container-dispatch collaborators; never null
  * @param taskIdMdcKey the MDC key set to the branch's recorded taskId once bootstrap succeeds
  */
@@ -51,7 +53,9 @@ record TakeContainerResumeBootstrap(TaskGit git, ContainerTakeSupport containerT
     @Nullable
     ContainerResumeBootstrap bootstrap(
             Path cloneDir, String taskId, List<Segment> segments, PipelineDefinition definition) {
-        git.branches().harden(cloneDir);
+        // The ref-backend check first, ahead of the first write: a refused clone gets no branch,
+        // ref or worktree-registry write (design D4 of own-git-invocation-policy).
+        git.branches().requireRefFormat(cloneDir);
         LocalTaskBranch branch =
                 switch (git.branches().ensureLocalTaskBranch(cloneDir, taskId)) {
                     case LocalTaskBranch local -> local;

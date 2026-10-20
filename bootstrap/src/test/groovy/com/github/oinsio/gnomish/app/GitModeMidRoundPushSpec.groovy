@@ -49,7 +49,11 @@ class GitModeMidRoundPushSpec extends Specification implements BareGitRepoFixtur
     RegisteredClone registeredClone
 
     def setup() {
-        cloneDir = initWorkingRepo(tempDir, 'my-project')
+        // Plain by name: the gnome stand-in commits in the task worktree with its own raw git, which
+        // the factory's invocation policy does not cover (it governs factory git only), so the
+        // planted posture's failing pre-commit hook and gpg program would refuse the very gnome
+        // commit whose mid-round push by the factory is this spec's subject.
+        cloneDir = initPlainWorkingRepo(tempDir, 'my-project')
         Files.createDirectories(cloneDir.resolve('.gnomish'))
         commit(cloneDir, '.gnomish/instructions.md', 'build it\n')
         bareRepo = initBareRepo(tempDir, 'origin.git')

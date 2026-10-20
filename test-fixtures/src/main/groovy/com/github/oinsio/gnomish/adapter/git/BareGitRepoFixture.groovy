@@ -38,14 +38,41 @@ trait BareGitRepoFixture implements SeedTransferFixture {
      * Runs {@code git init} (a normal, non-bare repo) in a new subdirectory of {@code parent}
      * named {@code name} and returns its path — useful for specs that need a working tree
      * rather than a bare remote.
+     *
+     * <p>The repository carries the adversarial local-configuration posture
+     * ({@link AdversarialLocalConfig}, design D6 of own-git-invocation-policy): a hook directory,
+     * signing on with a failing signing program, a filesystem-monitor command and upstream
+     * auto-setup forced on, each planted program recording its run and exiting 1. A git path that
+     * runs without the factory's invocation policy fails here instead of in production; {@link
+     * #assertNothingPlantedRan} asserts the policy held. A spec that needs a plain clone asks for
+     * {@link #initPlainWorkingRepo} by name.
      */
     Path initWorkingRepo(Path parent, String name = 'work') {
+        Path repo = initPlainWorkingRepo(parent, name)
+        AdversarialLocalConfig.plant(repo)
+        repo
+    }
+
+    /**
+     * {@link #initWorkingRepo} without the adversarial local-configuration posture — for a spec
+     * whose git runs outside the factory's policy on purpose; naming it at the call site is the
+     * point, the plain posture is never the default a spec silently inherits.
+     */
+    Path initPlainWorkingRepo(Path parent, String name = 'work') {
         Path repo = parent.resolve(name)
         repo.toFile().mkdirs()
         def runner = new GitProcessRunner()
         def result = runner.run(repo, 'init')
         assert result.exitCode() == 0: "git init failed: ${result.stderr()}"
         assertOnReftable(repo)
+    }
+
+    /**
+     * Fails, naming each program and its argv, when any program {@link #initWorkingRepo} planted in
+     * {@code repo} ran (FR8 of own-git-invocation-policy).
+     */
+    void assertNothingPlantedRan(Path repo) {
+        AdversarialLocalConfig.assertNothingRan(repo)
     }
 
     /**

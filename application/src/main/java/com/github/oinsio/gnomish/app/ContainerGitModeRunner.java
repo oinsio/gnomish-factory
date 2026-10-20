@@ -22,15 +22,16 @@ import java.util.List;
  * commits; every non-completed exit keeps the environment stopped with volume
  * and network retained.
  *
- * <p>Kept in sync with {@link GitModeRunner}: both run the SAME manual fresh-run recipe — harden
- * the clone's branches, print the banner naming where the work lives (UX1), bind and peel the law
- * through {@code ManualRunLawBinding#bind}, resolve the {@code --base} override through {@code
- * GitFreshTaskSupport#resolveManualBase} and create the task through {@code
- * GitFreshTaskSupport#createTask} FROM THAT LAW COMMIT (FR15, D12 revised 2026-09-10), then drive
- * the engine under the same binding — and both settle the {@code Completed}, {@code Aborted} and
- * park terminals through the mode's own outcome/cleanup ordering: both record a park outcome at the
- * terminal boundary and keep the workspace for the resume (design D6 of make-run-headless). The
- * media differ (host worktree there, task environment here); the recipe and its order must not.
+ * <p>Kept in sync with {@link GitModeRunner}: both run the SAME manual fresh-run recipe — require
+ * the clone's ref backend ({@code requireRefFormat}), print the banner naming where the work
+ * lives (UX1), bind and peel the law through {@code ManualRunLawBinding#bind}, resolve the
+ * {@code --base} override through {@code GitFreshTaskSupport#resolveManualBase} and create the
+ * task through {@code GitFreshTaskSupport#createTask} FROM THAT LAW COMMIT (FR15, D12 revised
+ * 2026-09-10), then drive the engine under the same binding — and both settle the {@code
+ * Completed}, {@code Aborted} and park terminals through the mode's own outcome/cleanup ordering:
+ * both record a park outcome at the terminal boundary and keep the workspace for the resume
+ * (design D6 of make-run-headless). The media differ (host worktree there, task environment
+ * here); the recipe and its order must not.
  *
  * <p>Implements FR3, FR12, FR21, FR25, D19 of add-sandbox-core.
  */
@@ -62,7 +63,9 @@ record ContainerGitModeRunner(
         String taskId = context.taskId();
         Path cloneDir = order.cloneDir();
 
-        git.branches().harden(cloneDir);
+        // The ref-backend check first, ahead of the first write: a refused clone gets no branch,
+        // ref or worktree-registry write (design D4 of own-git-invocation-policy).
+        git.branches().requireRefFormat(cloneDir);
         console.print("container mode: branch " + TaskIdSanitizer.branchName(taskId) + ConsoleIO.LINE_END);
         console.print("container mode: environment " + TaskIdSanitizer.sanitize(taskId) + ConsoleIO.LINE_END);
 

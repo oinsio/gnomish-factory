@@ -72,6 +72,12 @@ scripts varies per run except where a recording lands.
    `GIT_CONFIG_PARAMETERS`, so a local push made through it would not run the receiving
    repository's `pre-receive`; the transfer owner (`GitTransfer`) strips that variable, which is
    why a push through the runner reaches a `pre-receive` preset in a bare fixture remote.
+   *(Amended 2026-10-20 by ADR 0012, `own-git-invocation-policy`: every factory git process now
+   passes `-c core.hooksPath=/dev/null` — the git invocation policy, `GitInvocation` — the runner
+   and every push included, and the policy removes `GIT_CONFIG_PARAMETERS` for every factory git
+   process, not only transfers. A push still reaches a `pre-receive` preset because git's local
+   transport does not hand the pushing process's command-scope configuration to the receiving
+   repository, measured on git 2.56.0.)*
 4. **A gate keeps it so.** An architecture spec in `:bootstrap` scans every test tree and
    `test-fixtures/src/main` for an executable bit set from code, shebang text and a `chmod`
    granting execute; only named exemptions may match (scripts run inside a container, where Linux

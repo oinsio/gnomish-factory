@@ -128,8 +128,6 @@ class UntrustedTextGateSpec extends Specification {
         'the image\'s git --version output into the transfer leaf\'s typed GitVersion, judged against the floor',
         'com.github.oinsio.gnomish.adapter.git.FactoryCloneRefFormat':
         'rev-parse --show-ref-format output into the verdict that the clone is on the required ref backend',
-        'com.github.oinsio.gnomish.adapter.git.FactoryCloneHardening':
-        'rev-parse --absolute-git-dir output into the clone\'s git directory Path',
         'com.github.oinsio.gnomish.adapter.git.GitProcessRunner':
         'rev-parse --git-common-dir output into the Path the mutation lock keys on',
         'com.github.oinsio.gnomish.adapter.git.GitVersionCheck':

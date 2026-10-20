@@ -47,8 +47,8 @@ import java.util.function.Supplier;
 record RemoteOutageSignalingTaskBranchGit(TaskBranchGit delegate, RemoteOutageGate gate) implements TaskBranchGit {
 
     @Override
-    public void harden(Path cloneDir) {
-        delegate.harden(cloneDir);
+    public void requireRefFormat(Path cloneDir) {
+        delegate.requireRefFormat(cloneDir);
     }
 
     @Override

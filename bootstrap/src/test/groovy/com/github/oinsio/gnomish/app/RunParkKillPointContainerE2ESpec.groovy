@@ -132,7 +132,7 @@ class RunParkKillPointContainerE2ESpec extends ContainerParkSpecBase {
     /** The three resume-start calls {@code ContainerResumeRunner#run} makes before it reads the branch. */
     private void resumeStartReconciliation() {
         def branches = TaskGitFixture.real().branches()
-        branches.harden(cloneDir)
+        branches.requireRefFormat(cloneDir)
         assert branches.ensureLocalTaskBranch(cloneDir, taskId) instanceof LocalTaskBranch
         branches.reconcileRemote(cloneDir, taskId, 'resume-start')
     }

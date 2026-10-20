@@ -18,7 +18,7 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       before. Verify the execution-environment contract scenarios still pass
       and a table shows refusal iff `assess` fails.
 
-## 2. New owners (design D4)
+## 2. New owners (design D4, D6)
 
 - [ ] 2.1 `AgentCliBinary.locate` and `AgentCredentials.presentNames` in
       `:adapters:agent` (names only, never values; javadoc cites FR1, NFR-S1).
@@ -35,6 +35,15 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       Verify a spec that the launch refuses exactly when `assessHelper` fails, over both
       platforms' helpers and the kill path handed in as parameters.
 
+- [ ] 2.4 `HooksPathLeftover.assess(clone)` in `:adapters:git` (D6; FR8 of
+      this change, UX2 of `own-git-invocation-policy`): reads
+      `git config --local --get core.hooksPath` through `GitRunner`; `warn` with
+      the fix `git config --local --unset core.hooksPath` only when the value
+      ends in `/gnomish-empty-hooks`, `ok` otherwise; writes nothing. Verify a
+      spec over a real clone with the invocation policy in force: the leftover
+      value warns, an unset value and an operator's own path are `ok` with no
+      unset line, and the clone's `.git/config` is byte-identical afterwards.
+
 ## 3. The `doctor` subcommand (design D2, D3, D5)
 
 - [ ] 3.1 `doctor` in `Subcommand` with accepted options `--dir`, `--online`,
@@ -49,8 +58,9 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       `AgentCredentials`, `DockerRuntimeProbe`, `ImageFacts` +
       `ImageContractCheck`, guard image via `ImageFacts`, `AgentCliBinary`,
       the host launch owner's `assessHelper` (2.3),
-      `FactoryHome.legacyFolders`); project checks skipped with a reason when no
-      project resolves (FR1, FR2). Verify one spec per check for ok/warn/fail.
+      `FactoryHome.legacyFolders`), plus the hooks-path check of FR8 over
+      `HooksPathLeftover` (2.4); project checks skipped with a reason when no
+      project resolves (FR1, FR2, FR8). Verify one spec per check for ok/warn/fail.
 - [ ] 3.3 `TrackerReadProbe` behind `--online`, using the tracker's read-only
       resolution; without `--online` no network call (FR3). Verify with
       WireMock: one read with `--online`, none without.
@@ -78,7 +88,8 @@ Starts after `add-project-registry`, `add-release-pipeline` and
 - [ ] 5.1 README install section ends with `gnomish doctor`; operator guides
       point to it from their troubleshooting sections; `docs/glossary.md` entry
       for doctor. Verify the README step exists.
-- [ ] 5.2 Traceability: every FR/NFR/UX named by a spec or javadoc. Verify
+- [ ] 5.2 Traceability: every FR/NFR/UX named by a spec or javadoc, and UX2 of
+      `own-git-invocation-policy` named by the hooks-path check's spec. Verify
       `git grep -n "of add-doctor-command"` against the proposal's IDs.
 - [ ] 5.3 Root `./gradlew check` green. Verify the exit code.
 - [ ] 5.4 Operator-stand acceptance (M3, human step): break three things

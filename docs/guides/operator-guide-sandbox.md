@@ -162,7 +162,7 @@ what it means:
 Host mode remains fully supported for trusted setups — running the factory on
 this project's own repository, licensed toolchains, iOS/GPU builds — but treat
 it as running the gnome with your own hands. Mode-independent process discipline (stdin prompts, the findings
-funnel, law binding, factory git hardening) still applies.
+funnel, law binding, the git invocation policy) still applies.
 
 ## Environment passthrough
 

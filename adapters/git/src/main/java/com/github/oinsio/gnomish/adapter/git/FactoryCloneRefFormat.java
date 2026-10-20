@@ -21,11 +21,11 @@ import org.slf4j.LoggerFactory;
  *
  * <p>The one owner of the requirement: {@link #REQUIRED} is the only production spelling of the
  * backend, and this class the only reader of {@code --show-ref-format}
- * ({@code FactoryRegisterOwnerSpec} pins both). Reached through {@link GitTaskBranches#harden},
- * which every run path calls before it writes the clone's configuration or worktree registry — the
- * same touchpoint as {@link FactoryCloneHardening} — and through {@link TouchpointFetch}, before
- * the first ref every task touchpoint writes, including the take router's classification and the
- * {@code status}/{@code usage} reads that never harden. A worktree shares its clone's ref store, so checking the clone
+ * ({@code FactoryRegisterOwnerSpec} pins both). Reached through {@link
+ * GitTaskBranches#requireRefFormat}, which every run path calls before its first write to the clone
+ * (a branch, a ref, the worktree registry), and through {@link TouchpointFetch}, before the first
+ * ref every task touchpoint writes, including the take router's classification and the {@code
+ * status}/{@code usage} reads that no run path precedes. A worktree shares its clone's ref store, so checking the clone
  * covers every worktree of it. {@code git rev-parse --show-ref-format} exists since git 2.45, below
  * the factory's floor of 2.51 ({@code GitVersionCheck}).
  *

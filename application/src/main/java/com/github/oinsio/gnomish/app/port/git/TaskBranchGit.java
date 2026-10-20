@@ -5,8 +5,8 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * The branch- and clone-level git capabilities a use case needs: harden a factory clone, find or
- * list task branches, read a branch's recorded state, and push a task branch best-effort. Every
+ * The branch- and clone-level git capabilities a use case needs: check a factory clone's ref
+ * backend, find or list task branches, read a branch's recorded state, and push a task branch best-effort. Every
  * operation takes the clone (or worktree) it acts on as an argument, so one bound instance serves
  * every task and every concurrent slot.
  *
@@ -17,19 +17,20 @@ import java.util.List;
  * non-git backend could satisfy the same contract.
  *
  * <p>Implements FR2, FR9, FR10, FR13 of add-git-workflow; FR12b of split-into-modules; FR7, FR11 of
- * fix-terminal-receipt-convergence.
+ * fix-terminal-receipt-convergence; FR6 of own-git-invocation-policy.
  */
 public interface TaskBranchGit {
 
     /**
-     * Applies the factory's required hardening to a clone before any task work touches it, after
-     * refusing a clone the factory cannot write atomically to.
+     * Refuses a clone the factory cannot write atomically to, before any task work touches it. A
+     * check only: the factory writes no repository configuration, so a clone that passes is left
+     * exactly as it was (FR6, design D4 of own-git-invocation-policy).
      *
      * @param cloneDir the working directory of an existing clone; never null
      * @throws CloneRefFormatRefusedException when the clone is not on the ref backend whose ref
      *     transactions are atomic on disk (design D13 of tighten-spec-contract); nothing is written
      */
-    void harden(Path cloneDir);
+    void requireRefFormat(Path cloneDir);
 
     /**
      * Ensures a reconciled local branch for {@code taskId} exists in {@code cloneDir}, without

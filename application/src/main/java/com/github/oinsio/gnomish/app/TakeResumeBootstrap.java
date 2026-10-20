@@ -22,14 +22,15 @@ import org.slf4j.MDC;
  * apart in what a resumed worktree is brought to before {@code task.json} is read at its
  * {@code HEAD}.
  *
- * <p>Kept in sync with {@link TakeContainerResumeBootstrap}: both must harden the clone,
- * reconcile the remote on resume-start, and build the same resume bundle shape (context,
- * outcome, last escalation, base commit and the durable base pin) from the loaded task record.
+ * <p>Kept in sync with {@link TakeContainerResumeBootstrap}: both must require the clone's ref
+ * backend ({@code requireRefFormat}), reconcile the remote on resume-start, and build the same
+ * resume bundle shape (context, outcome, last escalation, base commit and the durable base pin)
+ * from the loaded task record.
  *
  * <p>Implements FR9 of add-tracker-port; FR6 of harden-task-branch-contract; FR9 of
  * add-project-registry; FR8 of fix-terminal-receipt-convergence.
  *
- * @param git the task-git capability set: clone hardening, branch lookup, worktree
+ * @param git the task-git capability set: the clone's ref-backend check, branch lookup, worktree
  *     materialization and divergence reconciliation; never null
  * @param registeredClone the registered clone whose own worktree folder the resumed worktree is
  *     materialized in (design D6; FR9 of add-project-registry); never null
@@ -64,10 +65,9 @@ record TakeResumeBootstrap(TaskGit git, RegisteredClone registeredClone, String 
      *     reports instead (FR8 of harden-task-branch-contract)
      */
     Optional<ResumeBootstrap> bootstrap(Path cloneDir, String taskId) {
-        // Runner-start hygiene for both resume flows: neutralize hooks on the clone before the
-        // worktree materializes, so the shared .git/config carries core.hooksPath from the start
-        // (FR17, design D11) — the config-write twin of the fresh path's pruneWorktrees hardening.
-        git.branches().harden(cloneDir);
+        // The ref-backend check first, ahead of the first write: a refused clone gets no branch,
+        // ref or worktree-registry write (design D4 of own-git-invocation-policy).
+        git.branches().requireRefFormat(cloneDir);
         // Adopt over the location the lookup just refreshed, before the worktree (design D9, D11
         // of fix-terminal-receipt-convergence): a branch this clone holds only as a remote-tracking
         // ref becomes local through the one owner, so the worktree below names an existing branch

@@ -161,14 +161,14 @@ class RemoteOutageSignalingTaskBranchGitSpec extends Specification {
         def verdict = new ParkDeliveryVerdict.Undelivered('note')
 
         when:
-        decorated.harden(CLONE)
+        decorated.requireRefFormat(CLONE)
         decorated.pushClosingBestEffort(CLONE, 'PROJ-1')
         decorated.reconcileRemote(CLONE, TASK, 'resume-start')
         def listed = decorated.list(CLONE)
         def fenced = decorated.fenceParkDelivery(CLONE, TASK)
 
         then:
-        1 * delegate.harden(CLONE)
+        1 * delegate.requireRefFormat(CLONE)
         1 * delegate.pushClosingBestEffort(CLONE, 'PROJ-1')
         1 * delegate.reconcileRemote(CLONE, TASK, 'resume-start')
         1 * delegate.list(CLONE) >> rows

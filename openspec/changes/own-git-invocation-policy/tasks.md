@@ -89,7 +89,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       Allowed: `config --get|--get-all|--get-regexp|--get-urlmatch|--list|-l`, `config get|list`,
       `remote get-url`. The data-driven spec covers every refused and every allowed form, with
       and without leading `-c` pairs. Verify: `:adapters:git:check` green.
-- [ ] 3.2 Remove the hardening write, keep the ref-backend check (FR6, design D4, D10 row 2):
+- [x] 3.2 Remove the hardening write, keep the ref-backend check (FR6, design D4, D10 row 2):
       - delete `FactoryCloneHardening`, `FactoryCloneHardeningException` and their spec
         `FactoryCloneHardeningSpec`;
       - rename the port method `TaskBranchGit.harden(Path)` to `requireRefFormat(Path)`;
@@ -118,14 +118,14 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
         `FactoryRegisterOwnerSpec` stays green unedited.
 
       Verify: root `./gradlew check` green.
-- [ ] 3.3 Reword the sync markers (design D9). Both ends of
+- [x] 3.3 Reword the sync markers (design D9). Both ends of
       `TakeFreshClaim`↔`TakeContainerFreshClaim`,
       `TakeResumeBootstrap`↔`TakeContainerResumeBootstrap` and
       `GitModeRunner`↔`ContainerGitModeRunner` replace "harden" in the recipe they state by the
       ref-backend check (`requireRefFormat`), in the same wording at both ends. Confirm that `ContainerResumeRunner`↔`GitResumeRunner` needs no
       wording change. Verify: `grep -rn "Kept in sync with" --include=*.java */src/main | grep -i
       harden` is empty.
-- [ ] 3.4 Old-way sweep for row 2 of the D10 table. Run
+- [x] 3.4 Old-way sweep for row 2 of the D10 table. Run
       `grep -rn 'harden(\|"config"' --include=*.java */src/main */*/src/main` (expected: only the
       refusal classifier) and `grep -rn "gnomish-empty-hooks\|FactoryCloneHardening" .
       --include=*.java --include=*.groovy` (expected: empty). Confirm the one exemption,
@@ -134,7 +134,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
 ## 4. Adversarial local-configuration posture
 
-- [ ] 4.1 Add `FixtureGitConfig` to `:test-fixtures`, a test-only raw writer for fixture
+- [x] 4.1 Add `FixtureGitConfig` to `:test-fixtures`, a test-only raw writer for fixture
       configuration setup (design D6). Move every test-side configuration write onto it, because
       the runner now refuses them (FR5): `BareGitRepoFixture.addRemote`, `LocalBoxEnvironment`'s
       `config gc.auto 0`, and every hit of
@@ -156,7 +156,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       `assertNothingPlantedRan(repo)` helper. Update `.claude/rules/testing.md` ("Git fixtures
       are adversarial by default") with the local-config posture. Verify: a fixture spec asserts
       the posture is in force and that the plain variant carries none of it.
-- [ ] 4.3 Sweep the real-git test suites that now fail on the posture: route them through the
+- [x] 4.3 Sweep the real-git test suites that now fail on the posture: route them through the
       fixture helpers, or switch them to `initPlainWorkingRepo` with a comment giving the
       reason. Starting set: the files found by `grep -rln "ProcessBuilder\|\.execute()"` over
       the test sources that also run git. Verify: root `./gradlew check` green. List every
@@ -164,7 +164,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
 ## 5. Identity, concurrency and container-resume specs
 
-- [ ] 5.1 `GitInvocationIdentitySpec` (`:adapters:git`, real git, adversarial posture; FR8,
+- [x] 5.1 `GitInvocationIdentitySpec` (`:adapters:git`, real git, adversarial posture; FR8,
       M4, NFR-S1, design D8). It drives:
       - the worktree attempt commit;
       - the lifecycle commit;
@@ -179,16 +179,16 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       It asserts that no marker exists, that the read returns the original content, and that
       `.git/config` is byte-identical. Verify: green, and red with the owner's pairs emptied
       (record the red run in the task report).
-- [ ] 5.2 Container-resume pin (NFR-R2, design D5). With `branch.autoSetupMerge=always` planted,
+- [x] 5.2 Container-resume pin (NFR-R2, design D5). With `branch.autoSetupMerge=always` planted,
       `ContainerResumeBranch.ensureLocalBranch` on a remote-only branch reports the adoption, the
       local ref exists, and `.git/config` is byte-identical. A pin, not a red-first test: it is
       expected green before this change's code lands (`TaskBranchAdoption` already creates the
       branch by `update-ref --stdin`). Verify: green; record that it was green before task 2.1.
-- [ ] 5.3 `ConcurrentCloneConfigSpec` (`:adapters:git`; NFR-R1, lock-scope rule "Specs"). Eight
+- [x] 5.3 `ConcurrentCloneConfigSpec` (`:adapters:git`; NFR-R1, lock-scope rule "Specs"). Eight
       virtual threads released by one latch each run the fresh-claim git sequence (branch create,
       worktree add, commit) on one clone. It asserts that no result carries `could not lock
       config file` and that `.git/config` is byte-identical. Verify: green over 20 local runs.
-- [ ] 5.4 Remove the temporary `@Retry(count = 2, mode = Retry.Mode.SETUP_FEATURE_CLEANUP)`,
+- [x] 5.4 Remove the temporary `@Retry(count = 2, mode = Retry.Mode.SETUP_FEATURE_CLEANUP)`,
       its `TEMPORARY` comment and the `spock.lang.Retry` import from
       `TakeSlotRunnerContainerConcurrencySpec` "two slots run containers concurrently" (added on
       2026-09-30 to mask the `.git/config` lock race). Keep the per-attempt setup only if it
@@ -213,7 +213,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
 ## 7. Docs and hand-offs
 
-- [ ] 7.1 Write `docs/adr/0012-git-invocation-policy.md` (0011 is taken by
+- [x] 7.1 Write `docs/adr/0012-git-invocation-policy.md` (0011 is taken by
       `0011-operator-configuration-levels.md`; 0012 is the free number). Content:
       - the clone configuration is untrusted input, not storage;
       - one command-scope policy for every factory git process;
@@ -223,7 +223,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
         git's SECURITY guidance.
 
       Reference it from `design.md` and ADR 0008. Verify: file present; links resolve.
-- [ ] 7.2 Update `docs/sandbox-threat-registry.md`:
+- [x] 7.2 Update `docs/sandbox-threat-registry.md`:
       - row 38: "core.hooksPath points at an empty location in all factory copies" → "every
         factory git invocation neutralizes hooks by command-scope configuration";
       - new row 50 (49 is `tighten-spec-contract`'s): program execution and read substitution
@@ -234,7 +234,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       Update `docs/glossary.md` with the entry **git invocation policy**, and a *Not:* note
       that it is not the transfer set. Verify: both files updated, glossary term used verbatim
       in the ADR.
-- [ ] 7.3 Hand-offs:
+- [x] 7.3 Hand-offs:
       - add one sentence to `add-subprocess-access-log/proposal.md` noting that git argv records
         now carry the eight policy pairs (that change may render them as one token); it carries no
         `module-layering` delta any more, so nothing of this change's layering text needs keeping
@@ -247,6 +247,6 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       - add a release-note line for UX2.
 
       Verify: all three edits present.
-- [ ] 7.4 Integration check: root `./gradlew check` green; the `openspec validate
+- [x] 7.4 Integration check: root `./gradlew check` green; the `openspec validate
       own-git-invocation-policy` result is clean; an FR/NFR/UX grep shows every proposal ID
       referenced by at least one spec or code unit (`traceability.md`).

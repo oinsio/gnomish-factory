@@ -30,8 +30,8 @@ public final class UsageException extends RuntimeException {
      * The shared "no branch found" message both resume bootstraps ({@link
      * com.github.oinsio.gnomish.app.TakeResumeBootstrap} and {@link
      * com.github.oinsio.gnomish.app.TakeContainerResumeBootstrap}) raise once branch lookup for a
-     * resumed {@code taskId} comes back empty, after hardening and (for host mode) a fetch
-     * attempt.
+     * resumed {@code taskId} comes back empty, after the clone's ref-backend check and (for host
+     * mode) a fetch attempt.
      *
      * @param taskId the tracker's original taskId, as supplied to {@code take <ref>}
      * @return the exception, ready to throw

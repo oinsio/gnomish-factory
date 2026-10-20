@@ -634,6 +634,21 @@ trusted/task tier split, and the law-root rule.
   `ext::` transport, or the operator's clone as the seed path of a box's
   working copy. A new sandbox backend adds a kind, never a flag list.
   *Never:* remote kind, fetch target.
+- **Git invocation policy** — how the factory runs every git process of its
+  own: a closed set of command-scope `-c` pairs that neutralize the keys of a
+  clone's local configuration that run a program or change what git reads or
+  writes (hooks, commit and tag signing, the filesystem monitor, branch
+  tracking writes, background maintenance and garbage collection, replace
+  refs), and the inherited per-process configuration variables removed from
+  the environment. The clone's configuration is untrusted input, never the
+  factory's storage: the factory reads no policy from it and writes nothing
+  into it. One owner, `GitInvocation` in `:gittransfer`, builds the whole
+  command line for both git launchers and opens every transfer. Introduced by
+  `own-git-invocation-policy`; the reasoning is ADR 0012
+  (`docs/adr/0012-git-invocation-policy.md`). *Not:* the transfer set — the
+  deny-by-default set of the git transfer policy (ADR 0008) that a transfer
+  adds after the invocation policy's pairs. *Not:* the in-box git of a task
+  environment, which is outside the policy.
 - **Ownership asymmetry** — the repo may only tighten its sandbox; adapter
   bindings and any loosening are operator-only; reconciliation is fail-closed.
 

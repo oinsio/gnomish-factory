@@ -55,7 +55,7 @@ public final class BaseRefresh {
     /**
      * Refreshes {@code ref} in the clone at {@code cloneDir}.
      *
-     * @param cloneDir the factory clone, already hardened; never null
+     * @param cloneDir the factory clone, its ref backend already checked; never null
      * @param ref the resolved base ref — a branch name, a tag name, or a commit SHA
      * @return the commit the task branch may start from, or which failure class stopped it
      */
@@ -72,7 +72,7 @@ public final class BaseRefresh {
      * that task under the collision arm below. With no kind — a manual pin, or one written before
      * the kind existed — the name is classified exactly as a fresh claim classifies it.
      *
-     * @param cloneDir the factory clone, already hardened; never null
+     * @param cloneDir the factory clone, its ref backend already checked; never null
      * @param ref the base ref — a branch name, a tag name, or a commit SHA
      * @param pinnedKind the namespace to read, or {@code null} to classify {@code ref}
      * @return the commit the task branch may start from, or which failure class stopped it

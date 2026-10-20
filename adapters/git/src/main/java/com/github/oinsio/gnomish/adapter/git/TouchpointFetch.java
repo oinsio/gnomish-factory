@@ -25,10 +25,10 @@ import org.slf4j.LoggerFactory;
  * caller's to classify, exactly as before, so an unreachable origin still costs one fetch.
  *
  * <p>The touchpoint fetch is the first write every task touchpoint makes to the clone — before
- * any run path hardens it, and on the {@code status}/{@code usage} reads that never do — so the
- * clone's ref backend is required here, before the fetch ({@link FactoryCloneRefFormat}): a clone
- * the factory refuses receives no ref (design D13 of tighten-spec-contract, as amended
- * 2026-10-13).
+ * any run path's own ref-backend check, and on the {@code status}/{@code usage} reads that never
+ * make one — so the clone's ref backend is required here, before the fetch ({@link
+ * FactoryCloneRefFormat}): a clone the factory refuses receives no ref (design D13 of
+ * tighten-spec-contract, as amended 2026-10-13).
  *
  * <p>Implements FR13, NFR-S2 of tighten-spec-contract.
  */

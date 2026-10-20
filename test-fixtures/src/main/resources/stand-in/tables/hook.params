@@ -8,7 +8,10 @@
 
 [hook-record-refuse]
 # A hook that records that it ran and refuses whatever it guards: the marker of a hook the factory
-# must never run, which fails the operation loudly as well (LocalGitRepoFixture).
+# must never run, which fails the operation loudly as well (LocalGitRepoFixture). The adversarial
+# local configuration of the shared clone fixture (AdversarialLocalConfig) runs it as its hooks, its
+# `gpg.program` and its `core.fsmonitor` command alike: `record` takes any argv, so one preset serves
+# a hook's, gpg's (`--status-fd=2 -bsau <key>`) and the fsmonitor hook protocol's (`<version> <token>`).
 * record
 * exit 1
 

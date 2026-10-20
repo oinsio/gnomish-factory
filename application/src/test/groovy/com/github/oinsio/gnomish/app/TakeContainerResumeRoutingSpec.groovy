@@ -214,7 +214,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
                 takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), new BranchShape.InProgress())
 
         then:
-        1 * branches.harden(CLONE_DIR)
+        1 * branches.requireRefFormat(CLONE_DIR)
         1 * builtSupport.reattachFor('build')
 
         then:

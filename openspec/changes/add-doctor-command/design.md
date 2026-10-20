@@ -2,7 +2,7 @@
 
 ## Context
 
-Driven by FR1–FR7 of the proposal. The checks `doctor` reports already have
+Driven by FR1–FR8 of the proposal. The checks `doctor` reports already have
 owners on the startup path, most of them shaped as "decide, log, throw":
 
 - `GitVersionCheck.verify()` (`:adapters:git`) runs `git --version`, logs
@@ -23,6 +23,9 @@ owners on the startup path, most of them shaped as "decide, log, throw":
 - `FactoryVersion` (`add-release-pipeline`) reports the product version.
 - Nothing today locates the agent CLI binary before a round fails to start it,
   and nothing knows the pre-registry folder names except the release notes.
+- Nothing reads the `core.hooksPath` line earlier factory versions wrote into
+  the clone: `own-git-invocation-policy` removed its writer (`harden`) and
+  leaves the line for the operator to remove (its UX2).
 
 ## Decisions
 
@@ -85,6 +88,22 @@ fix}]`) printed with `printMachine` (FR5, NFR-O1). Exit code: 0 with no `fail`,
 1 otherwise (FR6). No secret value is ever a verdict field — the secrets check
 reports the name and the places searched (NFR-S1).
 
+**D6 — The hooks-path leftover is read by `:adapters:git`, with `--local`.**
+Factory versions before `own-git-invocation-policy` wrote
+`core.hooksPath=<clone>/.git/gnomish-empty-hooks` into the clone's own
+configuration; that change stops writing it and removes nothing (its UX2), so
+`doctor` names the line (FR8). A new owner in `:adapters:git`,
+`HooksPathLeftover.assess(clone)`, runs `git config --local --get
+core.hooksPath` through the factory's `GitRunner` and returns `warn` with the
+fix `git config --local --unset core.hooksPath` only when the value ends in
+`/gnomish-empty-hooks`, `ok` otherwise. `--local` is required: the runner
+applies the invocation policy, whose command-scope `core.hooksPath=/dev/null`
+an unscoped `--get` would report (design of `own-git-invocation-policy`, its
+note for this change). The suffix test keeps an operator's own hooks path out
+of the report. `doctor` holds no git argv itself (FR4, M2).
+*Alternative rejected:* removing the line automatically — `doctor` has no side
+effects (NFR-R1, NG2), and the operator may rely on it.
+
 ### Sync surfaces
 
 Sync surfaces: none — this change adds no parallel implementation: every
@@ -100,6 +119,7 @@ forms are rebuilt on the same `assess` (D1). It touches no declared pair.
 | `ImageContractCheck.assess` | contract verdict (`ImageContractVerdict`) | the environment builder's refusal, `SandboxImageDoctorCheck` | the inline comparison moves into `assess` | spec: refusal iff `assess` fails |
 | `ProjectRegistry`, `PipelineLoader`, `BoundTracker` + `CheckEquipment` + `SecretsProvider`, `BindingResolver`, `DockerRuntimeProbe`, `FactoryVersion` | their existing values | the startup path, the matching doctor checks | none | M1 table row per check |
 | `AgentCliBinary`, `AgentCredentials`, `FactoryHome.legacyFolders` (new) | binary location, present credential names, legacy entries | the matching doctor checks | none — no other code answers these | `DoctorBoundarySpec` |
+| `HooksPathLeftover.assess` (new, `:adapters:git`, D6) | hooks-path leftover verdict (`ok`, or `warn` with the unset line) | `HooksPathDoctorCheck` | none — no other code answers this (the factory no longer writes the line) | `DoctorBoundarySpec`; owner spec over a real clone: `warn` only for a local value ending in `/gnomish-empty-hooks`, `ok` for unset and for an operator's own path, with the policy in force |
 | the host launch owner's `assessHelper` (`:subprocess`, from `fix-terminal-receipt-convergence` D19) | launcher helper verdict (present, or the missing tool — the platform's launcher or `/bin/kill` — and the package to install) | the launching form's refusal (FR21 there), `LauncherHelperDoctorCheck` | none — the launching form is built on it | `DoctorBoundarySpec`; M1 table row: the launch refuses exactly when `assessHelper` fails |
 
 `DoctorBoundarySpec` in `:bootstrap` (M2): no source in the doctor package

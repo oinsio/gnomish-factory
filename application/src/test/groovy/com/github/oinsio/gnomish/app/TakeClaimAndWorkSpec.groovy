@@ -178,7 +178,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
     }
 
     // FR9, D3: a held claim with an EXISTING branch is a resume — the disposition-resume chain
-    // bootstraps the branch (harden, locate, materialize the worktree, reconcile) instead of
+    // bootstraps the branch (ref-backend check, locate, materialize the worktree, reconcile) instead of
     // creating anything. Stopped at the task.json read, the bootstrap's last step.
     def "routes a held claim with an existing branch to the resume path"() {
         given:
@@ -579,7 +579,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         then: 'the branch is located and bootstrapped, never created'
         1 * tracker.claim(_, _) >> new ClaimResult.Acquired(new ClaimEpoch(1))
-        1 * branches.harden(CLONE_DIR)
+        1 * branches.requireRefFormat(CLONE_DIR)
         // The routing decision is one classification (FR2 of harden-task-branch-contract); the
         // resume bootstrap then locates the ref it materializes the worktree from. The second read
         // is the completion's delivered cleanup classifying the tip it cleans (FR4 of

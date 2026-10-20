@@ -19,13 +19,17 @@ class ReachEntrySpec extends Specification {
         ':gittransfer'
     ]
 
-    /** The declared edges a transitive leaf may arrive through. */
+    /**
+     * The declared edges a transitive leaf may arrive through; {@code :gitobjects} carries
+     * {@code :gittransfer} to {@code :application} (FR1 of own-git-invocation-policy).
+     */
     private static final List<String> CARRIERS = [
         ':domain',
         ':gnomish-plugin-api',
         ':application',
         ':sandbox:core',
         ':logtext',
+        ':gitobjects',
         ':sandbox:docker',
         ':adapters:git'
     ]

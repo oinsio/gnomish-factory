@@ -7,7 +7,9 @@ Also sequenced after `tighten-spec-contract`: the MODIFIED blocks of `operator-c
 ("Violations stop startup with one complete report") and `git-transfer` ("Git version floor at
 startup") are layered on that change's text, which must sync first. Also sequenced after
 `fix-terminal-receipt-convergence` (design D19): the host process-group launcher helper that
-`doctor` checks is introduced there.
+`doctor` checks is introduced there. Also sequenced after `own-git-invocation-policy`: that
+change stops writing `core.hooksPath` into the operator's clone and leaves the line earlier
+versions wrote for the operator to remove; `doctor` names it (FR8, UX2 there).
 
 ## Why
 
@@ -66,7 +68,8 @@ is a way to ask them without stopping at the first refusal.
 - **NG2**: fixing anything automatically.
 - **NG3**: diagnosing the target project's toolchain inside the image.
 - **NG4**: new checks with no existing owner beyond locating the agent CLI
-  binary and detecting the pre-registry folder layout.
+  binary, detecting the pre-registry folder layout, and detecting the
+  `core.hooksPath` leftover of earlier factory versions (FR8).
 
 ## Users & Scenarios
 
@@ -111,6 +114,15 @@ is a way to ask them without stopping at the first refusal.
   failed; a warning SHALL NOT fail.
 - **FR7**: `doctor` SHALL run when git is below the floor and when the
   configuration has violations, reporting both instead of refusing.
+- **FR8**: on a registered clone, `doctor` SHALL report the `core.hooksPath`
+  line that factory versions before `own-git-invocation-policy` wrote into the
+  clone's own configuration: it SHALL read the clone's local configuration
+  (`--local`), since under the factory's git invocation policy an unscoped read
+  reports the command-scope value `/dev/null`; it SHALL report `warn` with the
+  fix `git config --local --unset core.hooksPath` only when the local value ends
+  in `/gnomish-empty-hooks`, and `ok` otherwise — a hooks path the operator set
+  is not the factory's. Nothing is removed automatically (NG2). Traces UX2 of
+  `own-git-invocation-policy`.
 
 ### Non-Functional
 
@@ -132,8 +144,10 @@ is a way to ask them without stopping at the first refusal.
 
 ## Success Metrics
 
-- **M1**: for each of the 13 checks, a spec shows `doctor` and the real startup
-  path reach the same verdict on the same fixture (one data table).
+- **M1**: for each of the 13 checks of FR1, a spec shows `doctor` and the real
+  startup path reach the same verdict on the same fixture (one data table). The
+  hooks-path check of FR8, which no startup path decides, is pinned by its
+  owner's spec instead.
 - **M2**: an architecture spec finds no `ProcessBuilder`, `System.getenv`, or
   YAML parsing in the `doctor` package.
 - **M3**: on the operator stand, a deliberately broken setup (old image, missing
@@ -153,5 +167,6 @@ None.
   (`:sandbox:docker`); `FactoryHome` gains legacy-layout detection;
   `:adapters:agent` gains agent-CLI binary location; the host launch owner in
   `:subprocess` (`fix-terminal-receipt-convergence`, D19) gains a non-refusing
-  assessment of its platform helper.
+  assessment of its platform helper; `:adapters:git` gains the read of the
+  `core.hooksPath` leftover (FR8).
 - Docs: `README.md` (install → `gnomish doctor`), operator guides.

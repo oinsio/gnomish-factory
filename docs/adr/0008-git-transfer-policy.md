@@ -102,7 +102,10 @@ configure the process rather than the new repository:
 - `fetch.prune=false` — an operator's prune setting deletes the destination
   of a short-name source.
 - `maintenance.auto=false` and `gc.auto=0` — no background work in the
-  shared clone.
+  shared clone. *(Amended 2026-10-20 by ADR 0012, `own-git-invocation-policy`
+  design D3: these two pairs now come from the git invocation policy, whose
+  pairs open every transfer ahead of the transfer's own set; the transfer
+  set no longer lists them, and the effect on a transfer is unchanged.)*
 - `fetch.fsckObjects=true` and `transfer.fsckObjects=true` — every received
   object is validated (see below).
 - `fetch.fsck.badTimezone=ignore`, `fetch.fsck.missingSpaceBeforeDate=ignore`,
@@ -207,6 +210,11 @@ Every source strips the inherited `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`,
 `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_WORK_TREE`,
 and `GIT_INDEX_FILE`, so a per-process configuration or a repository override
 in the factory's own environment reaches no transfer (NFR-S2).
+
+*Amended 2026-10-20 (ADR 0012, `own-git-invocation-policy`):*
+`GIT_CONFIG_PARAMETERS` and `GIT_CONFIG_COUNT` are now removed by the git
+invocation policy for every factory git process, transfers included; the
+transfer owner strips the four repository overrides on top of that.
 
 ### The seed script renders the value; the branch stays a positional parameter
 
@@ -363,6 +371,9 @@ isolation, so a run outside the build fails rather than passing vacuously.
 
 ## See also
 
+- `docs/adr/0012-git-invocation-policy.md` — the command-scope policy every
+  factory git process carries, transfers included; the transfer set above is
+  layered on top of it, and the ambient keys stay out of it.
 - `docs/adr/0006-base-refresh-fetch.md` — the refspec per base kind, what the
   base refresh may change, and the origin probe; the flag set it once carried
   lives here.

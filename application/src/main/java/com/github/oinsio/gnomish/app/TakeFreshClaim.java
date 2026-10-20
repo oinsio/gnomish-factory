@@ -34,11 +34,12 @@ import java.nio.file.Path;
  * the equipment (D2 of introduce-slot-wiring).
  *
  * <p>Kept in sync with {@link TakeContainerFreshClaim}: both run the SAME fresh-claim recipe —
- * harden, resolve+refresh the base, bind the task tier at that base, synthesize, create the
- * branch FROM THE BOUND LAW COMMIT with the base pin beside it (FR15, D12 revised 2026-09-10),
- * run the engine once — over their own execution medium (host worktree vs. sandbox task
- * repository). Both hand on, past the task-tier bind, only the order re-bound to the task's law
- * through {@link TakeOrder#withDefinition} (D6 of introduce-take-order).
+ * require the clone's ref backend ({@code requireRefFormat}), resolve+refresh the base, bind the
+ * task tier at that base, synthesize, create the branch FROM THE BOUND LAW COMMIT with the base
+ * pin beside it (FR15, D12 revised 2026-09-10), run the engine once — over their own execution
+ * medium (host worktree vs. sandbox task repository). Both hand on, past the task-tier bind, only
+ * the order re-bound to the task's law through {@link TakeOrder#withDefinition} (D6 of
+ * introduce-take-order).
  *
  * <p>Implements FR9, FR11, D3 of add-tracker-port; FR2, FR6, FR13, D6, D15 of
  * add-base-ref-resolution; FR5 of introduce-slot-wiring; FR9 of add-project-registry.
@@ -61,8 +62,9 @@ final class TakeFreshClaim {
         TaskGit git = wiring.git();
         Path cloneDir = order.run().cloneDir();
 
-        // The backend check inside harden first: a refused clone gets no worktree-registry write.
-        git.branches().harden(cloneDir);
+        // The ref-backend check first, ahead of the first write: a refused clone gets no branch,
+        // ref or worktree-registry write (design D4 of own-git-invocation-policy).
+        git.branches().requireRefFormat(cloneDir);
         git.worktrees().pruneWorktrees(cloneDir);
 
         TaskState notYetStarted = TaskState.atStageStart(

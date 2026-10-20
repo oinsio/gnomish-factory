@@ -98,7 +98,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
     // asserted in order — run-start hygiene BEFORE anything is created, the branch created once
     // from the synthesized tracker task, and the terminal record + tracker finish after the engine
     // returns Completed.
-    def "creates the task and runs the engine once, hardening first and finishing last"() {
+    def "creates the task and runs the engine once, ref-backend check first and finishing last"() {
         given:
         def tracker = Mock(Tracker)
         def lifecycleStore = Mock(TaskLifecycleStore)
@@ -125,8 +125,8 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
                         assemblyRunning(executor), git, tracker, registeredClone)).claim(
                 takeOrder(readyTask(), tracker, runOrder(definition, cloneDir)))
 
-        then: 'the clone is checked (its ref backend inside harden) before anything is written to it (design D13 of tighten-spec-contract, as amended 2026-10-13)'
-        1 * branches.harden(cloneDir)
+        then: 'FR6: the clone\'s ref backend is checked before anything is written to it (design D13 of tighten-spec-contract, as amended 2026-10-13)'
+        1 * branches.requireRefFormat(cloneDir)
 
         then: 'run-start hygiene runs before anything is created (FR17, design D11)'
         1 * worktrees.pruneWorktrees(cloneDir)

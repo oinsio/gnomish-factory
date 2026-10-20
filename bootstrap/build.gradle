@@ -4,14 +4,11 @@
 // the use cases declare. It is the only module allowed to depend on `:adapters` (D3), which is
 // what makes it the composition root; it owns the Boot packaging and the E2E layers.
 
-// Dependency locking for this module's buildscript (plugin) classpath. The Boot
-// Gradle plugin is applied here, so its transitives — and the CVE forces that
-// guard them — travel with it out of the root build script (FR11, design D9).
-// Versions live in gradle.properties (the `buildscript*` keys; the version
-// catalog is not visible to the buildscript classpath) and the per-artifact
-// advisory rationale is in the root `build.gradle`, which keeps the same block
-// as the standing guard for the convention plugins' own classpath.
-// The `buildscript` block must precede `plugins`, hence its position here.
+// Dependency locking for this module's buildscript (plugin) classpath (FR11, design D9): the Boot
+// Gradle plugin is applied here, so its transitives and the CVE forces guarding them travel with
+// it out of the root build script. Versions live in gradle.properties (`buildscript*` keys; the
+// catalog is not visible here); the advisory rationale is in the root `build.gradle`, which keeps
+// the same block for the convention plugins' classpath. It must precede `plugins`.
 buildscript {
     configurations.classpath {
         resolutionStrategy.activateDependencyLocking()
@@ -103,9 +100,11 @@ dependencies {
     testImplementation project(':operatorevent')
     // `ConfigLevels` derives the key → level table from the annotation (D4 of add-project-registry).
     implementation project(':operatorconfig')
-    // Test scope: the process-spawn boundary gate and the subprocess-backed harnesses name
-    // `:subprocess`'s own types, which the gate asks be declared rather than inherited.
+    // Test scope, declared rather than inherited: the process-spawn boundary gate and the
+    // subprocess-backed harnesses name `:subprocess`'s types; `GitVersionFloorSpec` names
+    // `:gittransfer`'s `GitInvocation` (design D1 of own-git-invocation-policy).
     testImplementation project(':subprocess')
+    testImplementation project(':gittransfer')
     // Spring-family versions are managed by the Boot BOM (design D3).
     implementation platform(libs.spring.boot.dependencies)
 

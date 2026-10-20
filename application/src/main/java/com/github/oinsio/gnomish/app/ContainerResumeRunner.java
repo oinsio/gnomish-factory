@@ -98,7 +98,9 @@ final class ContainerResumeRunner {
     void run(RunOrder order, String taskId, @Nullable String decision, List<Segment> segments) {
         Path cloneDir = order.cloneDir();
         PipelineDefinition definition = order.definition();
-        git.branches().harden(cloneDir);
+        // The ref-backend check first, ahead of the first write: a refused clone gets no branch,
+        // ref or worktree-registry write (design D4 of own-git-invocation-policy).
+        git.branches().requireRefFormat(cloneDir);
         LocalTaskBranch branch =
                 switch (git.branches().ensureLocalTaskBranch(cloneDir, taskId)) {
                     case LocalTaskBranch local -> local;

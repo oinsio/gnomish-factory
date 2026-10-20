@@ -68,12 +68,12 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes,
 
     // UX1: a sandboxed run has TWO places the operator may need to look — the branch and the task
     // environment — so the banner names both, before anything materializes.
-    def "hardens the clone and prints the branch and environment banner before running"() {
+    def "checks the clone's ref backend and prints the branch and environment banner before running"() {
         when:
         def output = run()
 
         then:
-        1 * branches.harden(CLONE_DIR)
+        1 * branches.requireRefFormat(CLONE_DIR)
 
         and:
         output.contains('container mode: branch gnomish/PROJ-1')

@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.architecture
 
 import com.github.oinsio.gnomish.adapter.agent.MissingResultEventException
 import com.github.oinsio.gnomish.adapter.git.BranchStateFileMissingException
-import com.github.oinsio.gnomish.adapter.git.FactoryCloneHardeningException
 import com.github.oinsio.gnomish.adapter.git.GitPersistFailedException
 import com.github.oinsio.gnomish.adapter.git.GitResyncFailedException
 import com.github.oinsio.gnomish.adapter.git.HarvestFailedException
@@ -137,13 +136,6 @@ class TypedExceptionMessageSpec extends Specification {
                 { String raw -> UntrustedText.subprocess(raw) },
                 { UntrustedText carried ->
                     new BranchStateFileMissingException('refs/heads/x', 'state.json', carried)
-                }
-            ],
-            [
-                'FactoryCloneHardeningException',
-                { String raw -> UntrustedText.subprocess(raw) },
-                { UntrustedText carried ->
-                    new FactoryCloneHardeningException('/clones/x', carried)
                 }
             ],
             [

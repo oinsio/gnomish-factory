@@ -59,14 +59,15 @@ import java.util.List;
  * exits through {@link RunParkedException} (design D8 of make-run-headless).
  *
  * <p>Kept in sync with {@link ContainerGitModeRunner}: both run the SAME manual fresh-run recipe
- * — harden the clone's branches, print the banner naming where the work lives (UX1), bind and peel
- * the law through {@code ManualRunLawBinding#bind}, resolve the {@code --base} override through
- * {@code GitFreshTaskSupport#resolveManualBase} and create the task through {@code
- * GitFreshTaskSupport#createTask} FROM THAT LAW COMMIT (FR15, D12 revised 2026-09-10), then drive
- * the engine under the same binding — and both settle the {@code Completed}, {@code Aborted} and park
- * terminals through the mode's own outcome/cleanup ordering: both record a park outcome at the
- * terminal boundary and keep the workspace for the resume (design D6 of make-run-headless). The
- * media differ (host worktree here, task environment there); the recipe and its order must not.
+ * — require the clone's ref backend ({@code requireRefFormat}), print the banner naming where the
+ * work lives (UX1), bind and peel the law through {@code ManualRunLawBinding#bind}, resolve the
+ * {@code --base} override through {@code GitFreshTaskSupport#resolveManualBase} and create the
+ * task through {@code GitFreshTaskSupport#createTask} FROM THAT LAW COMMIT (FR15, D12 revised
+ * 2026-09-10), then drive the engine under the same binding — and both settle the {@code
+ * Completed}, {@code Aborted} and park terminals through the mode's own outcome/cleanup ordering:
+ * both record a park outcome at the terminal boundary and keep the workspace for the resume
+ * (design D6 of make-run-headless). The media differ (host worktree here, task environment
+ * there); the recipe and its order must not.
  *
  * <p>Implements FR6, FR7, UX1, NFR-S2 of add-git-workflow; FR9 of add-project-registry; FR1, FR2, FR10
  * of make-run-headless.
@@ -98,8 +99,9 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, RegisteredClone register
         Path cloneDir = order.cloneDir();
         PipelineDefinition definition = order.definition();
 
-        // The backend check inside harden first: a refused clone gets no worktree-registry write.
-        git.branches().harden(cloneDir);
+        // The ref-backend check first, ahead of the first write: a refused clone gets no branch,
+        // ref or worktree-registry write (design D4 of own-git-invocation-policy).
+        git.branches().requireRefFormat(cloneDir);
         git.worktrees().pruneWorktrees(cloneDir);
 
         String branchName = branchName(taskId);

@@ -360,5 +360,9 @@ only budgets this change touches); no separate cost requirement.
   its `factory-logging` delta ("Untrusted text enters logs only sanitized")
   on this delta's text, per `delta-specs.md`; if the order is inverted at
   sync time, that delta's preamble says what must survive a hand merge.
+- **Sequencing after `own-git-invocation-policy`**: every factory git
+  process now carries that change's eight `-c` policy pairs ahead of its
+  subcommand, so each git argv record (FR1, FR6) carries them too; this change
+  may render the policy as one token rather than eight pairs.
 - **Not touched**: `:subprocess` (neutrality contract), `CaptureRunner`,
   `:domain`, tracker adapters, the ledger/snapshot plane.
