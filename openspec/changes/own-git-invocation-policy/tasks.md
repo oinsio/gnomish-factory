@@ -104,7 +104,15 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       - update the fakes and specs that stub or assert `harden`: `RunChainFakes`,
         `TakeFreshClaimSpec`, `TakeContainerFreshClaimSpec`, `TakeClaimAndWorkSpec`,
         `GitModeRunnerFreshRunSpec`, `ContainerGitModeRunnerSpec`, `GitTaskBranchesSpec`,
-        `TakeContainerResumeRoutingSpec`, `ContainerResumeRoutingSpec`, `AnchorLogSpec`;
+        `TakeContainerResumeRoutingSpec`, `ContainerResumeRoutingSpec`, `AnchorLogSpec`,
+        `RemoteOutageSignalingTaskBranchGitSpec` (the decorator's pass-through, under the new
+        name) and `RunParkKillPointContainerE2ESpec` (its resume-start reconciliation helper);
+      - rewrite feature F122 of `FactoryCloneRefFormatSpec` ("hardening a reftable clone still
+        points its hooks at the empty directory") to the ref-backend check only: a reftable clone
+        passes `requireRefFormat` and no `core.hooksPath` is written;
+      - drop the deleted classes' rows from `UntrustedTextGateSpec` (the
+        `FactoryCloneHardening` entry) and `TypedExceptionMessageSpec` (the
+        `FactoryCloneHardeningException` case and its import);
       - rewrite `RunnerStartHardeningSpec` so each of its run paths asserts that the backend
         check still runs before the first write and that no configuration is written;
         `FactoryRegisterOwnerSpec` stays green unedited.

@@ -209,7 +209,7 @@ statement of how it invokes git.
   entry for `:gittransfer` through `:gitobjects`. Three declared sync pairs have their markers
   reworded.
 - `:bootstrap`: the new boundary spec and the concurrency spec; `RunnerStartHardeningSpec` is
-  retired or rewritten.
+  rewritten to assert the ref-backend check before the first write and no configuration write.
 - `:test-fixtures`: an adversarial local-configuration posture in `BareGitRepoFixture`.
 - Docs: `docs/adr/0012-git-invocation-policy.md` (0011 is `operator-configuration-levels`;
   `fix-docker-exec-env-argv`, which also planned 0011, takes 0017), `docs/sandbox-threat-registry.md`,
