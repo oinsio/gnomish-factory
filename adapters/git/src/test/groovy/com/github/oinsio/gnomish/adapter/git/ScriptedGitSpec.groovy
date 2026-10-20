@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.gittransfer.GitTransfer
+import com.github.oinsio.gnomish.gittransfer.Refspec
+import com.github.oinsio.gnomish.gittransfer.TransferSource
 import com.github.oinsio.gnomish.subprocess.Termination
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
@@ -81,16 +83,12 @@ class ScriptedGitSpec extends Specification {
         ]
     }
 
+    // FR4 of own-git-invocation-policy: the value is built through the owner's fetch factory — a
+    //     hand-built argv without the invocation pairs is no transfer at all.
     def "FR27: the transfer owner's value is matched and logged by its argv"() {
         given:
         def git = new ScriptedGit().answer(['fetch'], 128, '', 'fatal: refused\n')
-        def transfer = new GitTransfer([
-            '-c',
-            'fetch.prune=false',
-            'fetch',
-            '--no-tags',
-            'origin'
-        ], new TreeMap())
+        def transfer = GitTransfer.fetch(TransferSource.ORIGIN, new Refspec('a:b'))
 
         when:
         def answered = git.run(CWD, transfer)
@@ -101,9 +99,15 @@ class ScriptedGitSpec extends Specification {
             [
                 'fetch',
                 '--no-tags',
-                'origin'
+                '--no-recurse-submodules',
+                '--no-write-fetch-head',
+                '--refmap=',
+                '--end-of-options',
+                'origin',
+                'a:b'
             ]
         ]
+        git.calls()*.argv == [transfer.argv()]
         git.calls()*.cwd == [CWD]
     }
 

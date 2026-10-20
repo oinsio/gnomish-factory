@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.gitobjects
 
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
+import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -12,7 +14,11 @@ import java.nio.file.Path
  * {@code BareGitRepoFixture} either. Method names match that fixture exactly, so the specs that
  * consume {@link GitObjectsFixture} are unchanged.
  *
- * <p>Supports FR1, FR2 of split-into-modules.
+ * <p>Two adversarial plantings serve the git invocation policy's pins (FR1, FR2, design D8 of
+ * own-git-invocation-policy): a {@code refs/replace/} substitution, whose target only the spec
+ * knows, and a {@code reference-transaction} hook that records its run and exits 1.
+ *
+ * <p>Supports FR1, FR2 of split-into-modules; FR1, FR2 of own-git-invocation-policy.
  */
 trait LocalGitRepoFixture {
 
@@ -46,6 +52,25 @@ trait LocalGitRepoFixture {
     /** Runs an arbitrary {@code git} command in {@code repo} and returns trimmed stdout. */
     String gitOutput(Path repo, String... args) {
         git(repo, args)
+    }
+
+    /**
+     * Plants {@code refs/replace/<original>} naming {@code replacement} in {@code repo}, so a git
+     * that honours replace refs reads {@code replacement} wherever {@code original} is asked for.
+     * Plant it before {@link #plantRefusingHook}: the replace ref is itself a ref update.
+     */
+    void plantReplacement(Path repo, String original, String replacement) {
+        git(repo, 'replace', original, replacement)
+    }
+
+    /**
+     * Plants a {@code reference-transaction} hook in {@code repo} (a bare git dir) that records its
+     * run and exits 1, so a ref update that runs it fails. Returns the marker the hook writes: it
+     * exists only if the hook ran.
+     */
+    Path plantRefusingHook(Path repo) {
+        Path hooks = Files.createDirectories(repo.resolve('hooks'))
+        StandIn.log(StandIn.link(hooks.resolve('reference-transaction'), 'hook-record-refuse'))
     }
 
     private static String git(Path repo, String... args) {

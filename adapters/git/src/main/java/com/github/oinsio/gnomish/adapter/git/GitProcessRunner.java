@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git;
 
+import com.github.oinsio.gnomish.gittransfer.GitInvocation;
 import com.github.oinsio.gnomish.gittransfer.GitTransfer;
 import com.github.oinsio.gnomish.logtext.ShutdownPhase;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
@@ -14,6 +15,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.SequencedMap;
 import org.jspecify.annotations.Nullable;
@@ -28,6 +30,12 @@ import org.slf4j.LoggerFactory;
  * process's inherited environment (no global git config assumptions) minus git's interactive
  * credential prompting, which is switched off so no command can block on an unanswerable password
  * question, and a caller-supplied working directory, which later tasks use to target the worktree root (design D11, D12, D3).
+ *
+ * <p>The command line itself comes from the factory's one invocation policy, {@link
+ * GitInvocation#commandLine}: the binary, the policy's {@code -c} pairs, then the caller's
+ * arguments; and the policy's {@link GitInvocation#removedEnvironment()} is removed from every
+ * child, on every entry (FR1, FR3, design D2 of own-git-invocation-policy). Classification reads
+ * the caller's arguments, never the policy's.
  *
  * <p>Public (rather than package-private) so the {@code app} layer's git-mode wiring
  * (design D8 of add-git-workflow, task 4.4 onward) can construct the one instance shared by a
@@ -81,7 +89,8 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR2 of add-git-workflow; NFR-S2 of fix-lifecycle-push; FR1, FR2, FR4, FR5, FR6,
  * NFR-O1, NFR-O2, NFR-S2 of bound-subprocess-commands; FR10 of type-untrusted-text; FR6, FR8 of
- * own-git-transfer-argv; NFR-O3 of fix-terminal-receipt-convergence.
+ * own-git-transfer-argv; NFR-O3 of fix-terminal-receipt-convergence; FR1, FR3 of
+ * own-git-invocation-policy.
  */
 @UntrustedParser
 public final class GitProcessRunner implements GitRunner {
@@ -170,12 +179,17 @@ public final class GitProcessRunner implements GitRunner {
      *     at all (missing from {@code PATH}, not executable, ...)
      * @throws UnownedTransferException if {@code args} names a transfer subcommand, which only the
      *     owner's value may carry (see {@link #run(Path, GitTransfer)})
+     * @throws RepositoryConfigWriteException if {@code args} writes the repository's configuration,
+     *     which the factory never does (FR5 of own-git-invocation-policy)
      */
     @Override
     public GitCommandResult run(Path cwd, String... args) {
         if (GitNetworkCommands.isTransfer(args)) {
             throw new UnownedTransferException(GitNetworkCommands.subcommand(args));
         }
+        RepositoryConfigWrites.refusedSubcommand(args).ifPresent(subcommand -> {
+            throw new RepositoryConfigWriteException(subcommand);
+        });
         return runClassified(cwd, args, Collections.emptySortedMap());
     }
 
@@ -306,9 +320,15 @@ public final class GitProcessRunner implements GitRunner {
             SequencedMap<String, Optional<String>> transferEnvironment,
             byte @Nullable [] input) {
         boolean network = GitNetworkCommands.isNetwork(args);
-        ProcessBuilder builder =
-                new ProcessBuilder(commandLine(network ? GitNetworkCommands.withStallDetection(args) : args));
+        // The owner builds the whole command line (design D2 of own-git-invocation-policy): the
+        // binary, the invocation policy's pairs, then the caller's arguments — once, since a
+        // transfer's argv already opens with the pairs and the owner adds no second copy.
+        ProcessBuilder builder = new ProcessBuilder(GitInvocation.commandLine(
+                gitBinary, List.of(network ? GitNetworkCommands.withStallDetection(args) : args)));
         builder.directory(cwd.toFile());
+        // No inherited per-process configuration reaches any git this runner starts, whatever the
+        // entry (FR3): it could name a hook directory or any other key the pairs do not cover.
+        GitInvocation.removedEnvironment().forEach(builder.environment()::remove);
         // Pin git's message locale for the child process only: callers classify failures by
         // stderr content (e.g. the harvest fetch's non-fast-forward refusal, FR5 of
         // add-sandbox-core), and a localized git would defeat that parsing.
@@ -426,12 +446,5 @@ public final class GitProcessRunner implements GitRunner {
         if (sweep.foundSurvivors()) {
             log.debug("git {}: {}", GitNetworkCommands.subcommand(args), sweep.phrase());
         }
-    }
-
-    private String[] commandLine(String... args) {
-        String[] commandLine = new String[args.length + 1];
-        commandLine[0] = gitBinary;
-        System.arraycopy(args, 0, commandLine, 1, args.length);
-        return commandLine;
     }
 }

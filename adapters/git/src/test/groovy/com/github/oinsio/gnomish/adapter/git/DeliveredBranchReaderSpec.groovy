@@ -90,7 +90,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     def "recovers a delivered branch reachable only via origin (remote-tracking ref)"() {
         given: 'a delivered task pushed to a bare origin, and a fresh clone that lacks the branch locally'
         def bare = initBareRepo(tempDir, 'origin.git')
-        runner.run(cloneDir, 'remote', 'add', 'origin', bare.toString())
+        FixtureGitConfig.addRemote(cloneDir, 'origin', bare.toString())
         runner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
         repository.createTask(context('PROJ-6'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def finalState = TaskState.atStageStart('implement')

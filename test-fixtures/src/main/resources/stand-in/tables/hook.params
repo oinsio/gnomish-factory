@@ -6,6 +6,12 @@
 * record
 * exit 0
 
+[hook-record-refuse]
+# A hook that records that it ran and refuses whatever it guards: the marker of a hook the factory
+# must never run, which fails the operation loudly as well (LocalGitRepoFixture).
+* record
+* exit 1
+
 [hook-refuse]
 # A hook that refuses whatever it guards (a pre-commit that fails any hook-running commit).
 * exit 1

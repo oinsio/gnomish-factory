@@ -2,11 +2,11 @@
 // the internal shared git-object library — a bare-repo commit/tree writer driven
 // through `git` plumbing subprocesses.
 //
-// The module deliberately depends on nothing but the JDK (design D19 of
-// add-sandbox-core, pinned by GitObjectsBoundarySpec): no factory types, no
-// logging backend, no Jackson. That property is what makes it extractable at
-// all, and FR2 now enforces it at the Gradle level too — there is no
-// production-scope declaration below because there is nothing to declare.
+// The module deliberately depends on nothing but the JDK and two JDK-only leafs,
+// `:subprocess` and `:gittransfer` (design D19 of add-sandbox-core, pinned by
+// GitObjectsBoundarySpec; design D1 of own-git-invocation-policy): no factory
+// types, no logging backend, no Jackson. That property is what makes it
+// extractable at all, and FR2 enforces it at the Gradle level too.
 // The Spock/Groovy test stack and the JSpecify + Error Prone compiler plugins
 // come from the convention plugins (design D9).
 plugins {
@@ -29,17 +29,29 @@ dependencies {
     // supervisor, the launch and the drains are held inside `GitExec`, which is
     // package-private, so nothing on this module's api surface mentions them.
     implementation project(':subprocess')
+    // The factory's one git invocation policy (FR1, FR3, design D1, D2 of
+    // own-git-invocation-policy): `GitExec` builds its whole command line through
+    // `GitInvocation.commandLine` and removes the policy's environment set, so this
+    // library holds no policy key of its own. `:gittransfer` is a JDK-only leaf with
+    // no dependency at all; `implementation`, since `GitExec` is package-private.
+    implementation project(':gittransfer')
 
     // Shared fakes and port-contract suites (FR7, design D8). No production
     // module may depend on `:test-fixtures` — test scope only.
     testImplementation project(':test-fixtures')
 }
 
-// `:gitobjects` is an extraction-ready library: the JDK, SLF4J, and the
-// dependency-free `:subprocess` leaf only — never a factory module (FR2, design
-// D19 of add-sandbox-core, as amended by design D13 of bound-subprocess-commands).
-// The single entry is safe precisely because `:subprocess` itself allows nothing:
-// were a dependency ever added there, this module's own gate would fail.
+// `:gitobjects` is an extraction-ready library: the JDK, SLF4J, and the two
+// dependency-free leafs `:subprocess` and `:gittransfer` only — never a factory
+// module (FR2, design D19 of add-sandbox-core, as amended by design D13 of
+// bound-subprocess-commands and design D1 of own-git-invocation-policy). The two
+// entries are safe precisely because each leaf itself allows nothing: were a
+// dependency ever added to either, this module's own gate would fail.
 layering {
-    allowedProjects = [':subprocess']
+    allowedProjects = [
+        // The git invocation policy's owner, declared directly above: `GitExec`
+        // takes its command line and environment stripping from `GitInvocation`.
+        ':gittransfer',
+        ':subprocess',
+    ]
 }

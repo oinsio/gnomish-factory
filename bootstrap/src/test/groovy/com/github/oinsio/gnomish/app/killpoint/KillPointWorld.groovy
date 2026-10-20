@@ -154,10 +154,12 @@ class KillPointWorld implements BareGitRepoFixture {
      * The envelope reads among {@code argv}: the {@code show} and {@code cat-file -e} invocations
      * addressed at {@code HEAD:} — the worktree's own tip, which is the medium the host readers
      * moved to. Reads at the branch ref (what the classifier spends) are deliberately outside it:
-     * this is the budget of one pickup's worktree reads (NFR-P1 of fix-envelope-medium).
+     * this is the budget of one pickup's worktree reads (NFR-P1 of fix-envelope-medium). The
+     * leading {@code -c} pairs every runner command line opens with (the invocation policy, FR1 of
+     * own-git-invocation-policy) are skipped before the subcommand is read.
      */
     static List<String> envelopeReads(List<String> argv) {
-        argv.findAll {
+        argv.collect { it.replaceFirst(/^(-c \S+ )*/, '') }.findAll {
             it.contains('HEAD:') && (it.startsWith('show ') || it.startsWith('cat-file '))
         }
     }

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.git.ProjectIdentity
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
@@ -108,7 +109,7 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
         // load-bearing now (FR7 of harden-task-branch-contract), so it is created while the clone
         // has no origin at all and the remote is restored right after.
         def originUrl = gitOutput(cloneDir, 'remote', 'get-url', 'origin').trim()
-        assert gitExitCode(cloneDir, 'remote', 'remove', 'origin') == 0
+        FixtureGitConfig.removeRemote(cloneDir, 'origin')
         support.taskRepository().createTask(new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         addRemote(cloneDir, 'origin', originUrl)
         support.lease().environmentFor('work')
@@ -177,7 +178,7 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
 
         when: 'a pass runs, the credential is rotated in place, and a second pass runs'
         def first = sweep(clone, props(image), liveness)
-        assert gitExitCode(clone, 'remote', 'set-url', 'origin', after) == 0
+        FixtureGitConfig.setRemoteUrl(clone, 'origin', after)
         def second = sweep(clone, props(image), liveness)
 
         then: 'the identity the two URLs derive is the same one'

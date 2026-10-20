@@ -120,7 +120,7 @@ class RemoteAuthRefusalSpec extends Specification implements BareGitRepoFixture 
         commit(repo, 'a.txt', 'seed')
         // No credential helper: this origin must be refused, never satisfied out of a developer's
         // keychain, which macOS wires in globally.
-        assert gitExitCode(repo, 'config', 'credential.helper', '') == 0
+        FixtureGitConfig.set(repo, 'credential.helper', '')
         addRemote(repo, 'origin', "http://${userInfo}127.0.0.1:${origin.address.port}/owner/repo.git")
         repo
     }

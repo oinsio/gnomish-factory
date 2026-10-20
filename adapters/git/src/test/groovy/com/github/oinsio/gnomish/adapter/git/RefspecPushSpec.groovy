@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.gittransfer.GitInvocation
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -60,7 +61,7 @@ class RefspecPushSpec extends Specification implements BareGitRepoFixture {
 
         then: 'one invocation, exactly the explicit refspec of the branch alone — the mid-round push carries no register (FR13 of tighten-spec-contract)'
         git.calls()*.argv == [
-            [
+            GitInvocation.configPairs() + [
                 'push',
                 '--no-follow-tags',
                 '--no-recurse-submodules',

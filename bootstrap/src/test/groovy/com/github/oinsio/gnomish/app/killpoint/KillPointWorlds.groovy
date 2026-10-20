@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.killpoint
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
+import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
@@ -158,7 +159,7 @@ trait KillPointWorlds implements BareGitRepoFixture {
      */
     ClaimWorld claimOutageWorld(Path root) {
         def world = claimWorld(root)
-        gitOutput(world.claimantClone, 'remote', 'set-url', 'origin', root.resolve('no-such-origin.git').toString())
+        FixtureGitConfig.setRemoteUrl(world.claimantClone, 'origin', root.resolve('no-such-origin.git').toString())
         world.baseRefGit = newGitBaseRefs()
         world
     }

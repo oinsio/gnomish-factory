@@ -123,7 +123,7 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         new File(seedRepo.toFile(), 'a.txt').text = 'first'
         runner.run(seedRepo, 'add', 'a.txt')
         runner.run(seedRepo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
-        runner.run(seedRepo, 'remote', 'add', 'origin', bare.toString())
+        FixtureGitConfig.addRemote(seedRepo, 'origin', bare.toString())
         runner.run(seedRepo, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def seedRegistered = RegisteredCloneFixture.registered(tempDir.resolve('seed-worktrees'), seedRepo)

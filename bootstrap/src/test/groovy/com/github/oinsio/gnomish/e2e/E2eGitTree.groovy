@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.e2e
 
+import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
@@ -59,7 +60,7 @@ final class E2eGitTree {
         git(clone, 'checkout', '--quiet', '-b', 'main')
         git(clone, 'add', '--all')
         git(clone, 'commit', '--quiet', '-m', 'fixture')
-        git(clone, 'remote', 'add', 'origin', origin.toString())
+        FixtureGitConfig.addRemote(clone, 'origin', origin.toString())
         git(clone, 'push', '--quiet', 'origin', 'refs/heads/main:refs/heads/main')
         git(clone, 'fetch', '--quiet', 'origin', 'refs/heads/main:refs/remotes/origin/main')
     }

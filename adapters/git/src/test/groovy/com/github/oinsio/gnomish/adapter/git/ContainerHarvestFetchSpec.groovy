@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.gittransfer.GitInvocation
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException
 import com.github.oinsio.gnomish.subprocess.Termination
 import java.nio.file.Path
@@ -39,17 +40,13 @@ class ContainerHarvestFetchSpec extends Specification {
 
         then: 'the owner\'s exact list: no protocol.ext.allow — the allowlist alone enables ext'
         git.calls()*.argv == [
-            [
+            GitInvocation.configPairs() + [
                 '-c',
                 'fetch.recurseSubmodules=no',
                 '-c',
                 'submodule.recurse=false',
                 '-c',
                 'fetch.prune=false',
-                '-c',
-                'maintenance.auto=false',
-                '-c',
-                'gc.auto=0',
                 '-c',
                 'fetch.fsckObjects=true',
                 '-c',

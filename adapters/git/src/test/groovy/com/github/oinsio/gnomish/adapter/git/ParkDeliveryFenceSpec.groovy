@@ -119,7 +119,7 @@ class ParkDeliveryFenceSpec extends Specification implements BareGitRepoFixture 
         given:
         ParkDeliveryVerdict verdict = null
         commitPark()
-        gitOutput(clone, 'remote', 'set-url', 'origin', tempDir.resolve('nowhere.git').toString())
+        FixtureGitConfig.setRemoteUrl(clone, 'origin', tempDir.resolve('nowhere.git').toString())
 
         when:
         def events = LogCaptureSupport.capture(ParkDeliveryFence, Level.INFO) {

@@ -44,7 +44,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
     // Scenario: git/git-task-persistence / Lifecycle push failure stays best-effort
     def "an unreachable origin logs one WARN naming task, branch and event, and never propagates"() {
         given:
-        gitOutput(cloneDir, 'remote', 'set-url', 'origin', tempDir.resolve('nowhere.git').toString())
+        FixtureGitConfig.setRemoteUrl(cloneDir, 'origin', tempDir.resolve('nowhere.git').toString())
         def delegate = Mock(TaskRepository)
         def repository = decorated(delegate)
 
@@ -73,7 +73,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
     // all four is what makes the mapping (not just one arm of it) observable.
     def "each terminal outcome's WARN names its own lifecycle event"() {
         given:
-        gitOutput(cloneDir, 'remote', 'set-url', 'origin', tempDir.resolve('nowhere.git').toString())
+        FixtureGitConfig.setRemoteUrl(cloneDir, 'origin', tempDir.resolve('nowhere.git').toString())
         def delegate = Mock(TaskRepository)
         def repository = decorated(delegate)
 
@@ -102,7 +102,7 @@ class PushBestEffortTaskRepositoryFailureSpec extends Specification implements L
     // FR3, NFR-O1 of make-checkpoint-gate-durable: a lost approval push names the approval event.
     def "a failed approval push names the APPROVED event in its single WARN"() {
         given:
-        gitOutput(cloneDir, 'remote', 'set-url', 'origin', tempDir.resolve('nowhere.git').toString())
+        FixtureGitConfig.setRemoteUrl(cloneDir, 'origin', tempDir.resolve('nowhere.git').toString())
         def delegate = Mock(TaskRepository)
         def repository = decorated(delegate)
 

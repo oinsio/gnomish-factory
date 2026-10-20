@@ -6,7 +6,8 @@ import spock.lang.Specification
  * FR13, NFR-S2 of tighten-spec-contract (design D13): the owner builds the factory's two pushes to
  * origin. The closing push moves the task branch and the factory register in one atomic push; the
  * mid-round push moves the branch alone. One feature per push pins the whole value, so a flag that
- * appears, disappears or moves is a red spec.
+ * appears, disappears or moves is a red spec. Both open with the invocation policy's pairs (FR4 of
+ * own-git-invocation-policy).
  */
 class GitPushSpec extends Specification {
 
@@ -33,7 +34,7 @@ class GitPushSpec extends Specification {
         def push = GitPush.closing('gnomish/T-1', RegisterRef.forTask('T-1'))
 
         then:
-        push.argv() == ['push', '--atomic'] + COMMON + [
+        push.argv() == GitInvocation.configPairs() + ['push', '--atomic'] + COMMON + [
             'refs/heads/gnomish/T-1:refs/heads/gnomish/T-1',
             'refs/gnomish-factory/T-1:refs/gnomish-factory/T-1',
         ]
@@ -48,7 +49,7 @@ class GitPushSpec extends Specification {
         def push = GitPush.branchOnly('gnomish/T-1')
 
         then:
-        push.argv() == ['push'] + COMMON + [
+        push.argv() == GitInvocation.configPairs() + ['push'] + COMMON + [
             'refs/heads/gnomish/T-1:refs/heads/gnomish/T-1'
         ]
         push.environment() == ORIGIN_ENVIRONMENT

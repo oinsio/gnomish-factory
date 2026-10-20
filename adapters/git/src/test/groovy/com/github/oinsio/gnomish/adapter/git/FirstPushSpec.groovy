@@ -69,7 +69,7 @@ class FirstPushSpec extends Specification implements BareGitRepoFixture, Registe
         def bare = initBareRepo(tempDir, 'origin.git')
         def clone = initWorkingRepo(tempDir, 'clone')
         commit(clone, 'a.txt', 'first')
-        runner.run(clone, 'remote', 'add', 'origin', bare.toString())
+        FixtureGitConfig.addRemote(clone, 'origin', bare.toString())
         runner.run(clone, 'branch', 'gnomish/PROJ-1')
         registerTip(clone, 'PROJ-1')
 

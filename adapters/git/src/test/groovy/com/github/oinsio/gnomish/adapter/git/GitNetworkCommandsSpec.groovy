@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.gittransfer.GitInvocation
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import com.github.oinsio.gnomish.testfixtures.standin.StandInLog
 import java.nio.file.Path
@@ -14,6 +15,10 @@ import spock.lang.TempDir
  * wrapper, a jump host) is never clobbered.
  */
 class GitNetworkCommandsSpec extends Specification {
+
+    /** The invocation policy every runner command line opens with (FR1 of own-git-invocation-policy). */
+    static final String POLICY = GitInvocation.configPairs().join(' ')
+
 
     @TempDir
     Path tempDir
@@ -85,18 +90,20 @@ class GitNetworkCommandsSpec extends Specification {
         ]
     }
 
-    def "FR4: an invocation the caller already configured keeps its own -c options too"() {
+    // FR1 of own-git-invocation-policy (design D2): a transfer's argv opens with the policy's pairs,
+    // and the owner adds no second copy only while they stay first.
+    def "FR4: an invocation the caller already configured keeps its own -c options first"() {
         when:
         def prefixed = GitNetworkCommands.withStallDetection('-c', 'protocol.ext.allow=user', 'fetch')
 
         then:
         prefixed as List == [
             '-c',
+            'protocol.ext.allow=user',
+            '-c',
             'http.lowSpeedLimit=1000',
             '-c',
             'http.lowSpeedTime=60',
-            '-c',
-            'protocol.ext.allow=user',
             'fetch'
         ]
     }
@@ -135,12 +142,12 @@ class GitNetworkCommandsSpec extends Specification {
         runner.run(tempDir, 'ls-remote', 'origin')
         def (local, network) = StandInLog.blocks(fakeGit)
 
-        then: 'a local command is handed nothing it did not ask for — no options, no ssh wrapper'
-        local.argv == 'status'
+        then: 'a local command is handed only the invocation policy — no network options, no ssh wrapper'
+        local.argv == "${POLICY} status"
         !local.GIT_SSH_COMMAND.contains('BatchMode')
 
         and: 'a network command carries the HTTP no-progress abort ahead of its own arguments'
-        network.argv == '-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 ls-remote origin'
+        network.argv == "${POLICY} -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 ls-remote origin"
 
         and: 'and the SSH connect/keepalive limits, in the child environment only'
         network.GIT_SSH_COMMAND == '[ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15' +

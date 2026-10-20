@@ -47,13 +47,13 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
 
     def "harden delegates to FactoryCloneHardening — the clone's hooksPath is repointed"() {
         given:
-        assert runner.run(cloneDir, 'config', '--get', 'core.hooksPath').exitCode() != 0
+        assert runner.run(cloneDir, 'config', '--local', '--get', 'core.hooksPath').exitCode() != 0
 
         when:
         branches.harden(cloneDir)
 
         then:
-        def configured = Path.of(runner.run(cloneDir, 'config', '--get', 'core.hooksPath').stdout().forParsing().trim())
+        def configured = Path.of(runner.run(cloneDir, 'config', '--local', '--get', 'core.hooksPath').stdout().forParsing().trim())
         configured.fileName.toString() == FactoryCloneHardening.EMPTY_HOOKS_DIR
         Files.isDirectory(configured)
     }
@@ -72,7 +72,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         given: 'a clone whose task branch exists only on origin'
         def bare = initBareRepo(tempDir, 'origin.git')
         seedTask('PROJ-2')
-        runner.run(cloneDir, 'remote', 'add', 'origin', bare.toString())
+        FixtureGitConfig.addRemote(cloneDir, 'origin', bare.toString())
         runner.run(cloneDir, 'push', 'origin', 'gnomish/PROJ-2')
         runner.run(cloneDir, 'checkout', '-q', 'main')
         // The seeded worktree holds the branch checked out, so `branch -D` would refuse: drop the ref itself.
@@ -177,7 +177,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
         def bare = initBareRepo(tempDir, 'push-origin.git')
         seedTask('PROJ-7')
         def worktree = worktreeFor('PROJ-7')
-        runner.run(worktree, 'remote', 'add', 'origin', bare.toString())
+        FixtureGitConfig.addRemote(worktree, 'origin', bare.toString())
 
         when:
         branches.pushClosingBestEffort(worktree, 'PROJ-7')

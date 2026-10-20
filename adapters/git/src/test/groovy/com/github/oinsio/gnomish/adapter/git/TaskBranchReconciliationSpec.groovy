@@ -127,7 +127,7 @@ class TaskBranchReconciliationSpec extends Specification implements BareGitRepoF
     def "an unreachable origin degrades to a WARN and blocks nothing"() {
         given:
         driveWithoutPushing()
-        gitOutput(cloneDir, 'remote', 'set-url', 'origin', tempDir.resolve('nowhere.git').toString())
+        FixtureGitConfig.setRemoteUrl(cloneDir, 'origin', tempDir.resolve('nowhere.git').toString())
 
         when:
         def events = capture {

@@ -128,7 +128,7 @@ class OriginReconciliationSpec extends Specification implements BareGitRepoFixtu
     def "an unreachable origin degrades to one WARN without throwing"() {
         given:
         def local = commitOnBranch('one')
-        gitOutput(clone, 'remote', 'set-url', 'origin', tempDir.resolve('nowhere.git').toString())
+        FixtureGitConfig.setRemoteUrl(clone, 'origin', tempDir.resolve('nowhere.git').toString())
 
         when:
         def events = capture {

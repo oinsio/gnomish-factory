@@ -64,7 +64,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
     def "an unreachable origin reads as empty rather than throwing"() {
         given:
         def unreachable = initWorkingRepo(tempDir, 'unreachable')
-        gitOutput(unreachable, 'remote', 'add', 'origin', tempDir.resolve('nowhere.git').toString())
+        FixtureGitConfig.addRemote(unreachable, 'origin', tempDir.resolve('nowhere.git').toString())
 
         expect:
         remoteTip.read(unreachable, TASK_ID) == Optional.empty()
@@ -127,7 +127,7 @@ class RemoteBranchTipSpec extends Specification implements BareGitRepoFixture {
     def "FR7: a remote that never answered is unknown, not absent"() {
         given:
         def unreachable = initWorkingRepo(tempDir, 'unreachable-confirm')
-        gitOutput(unreachable, 'remote', 'add', 'origin', tempDir.resolve('nowhere.git').toString())
+        FixtureGitConfig.addRemote(unreachable, 'origin', tempDir.resolve('nowhere.git').toString())
 
         expect:
         remoteTip.confirm(unreachable, TASK_ID, '3333333333333333333333333333333333333333') ==

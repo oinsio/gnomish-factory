@@ -237,7 +237,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
     def "FR11: with origin configured, persist pushes the round commit to the remote's task branch"() {
         given:
         def bareRepo = initBareRepo(tempDir, 'origin.git')
-        runner.run(repo, 'remote', 'add', 'origin', bareRepo.toString())
+        FixtureGitConfig.addRemote(repo, 'origin', bareRepo.toString())
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
 
         when:
@@ -254,7 +254,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         given: 'origin points at a path that is not a git repository at all, so push fails cleanly'
         def notARepo = tempDir.resolve('not-a-repo')
         notARepo.toFile().mkdirs()
-        runner.run(repo, 'remote', 'add', 'origin', notARepo.toString())
+        FixtureGitConfig.addRemote(repo, 'origin', notARepo.toString())
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
         def headBefore = currentHead(repo)
 

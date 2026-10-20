@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.gittransfer.GitInvocation
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.subprocess.Termination
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -41,6 +42,9 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
     'ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4'
 
     static final String STALL_DETECTION = '-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60'
+
+    /** The invocation policy every command line opens with (FR1 of own-git-invocation-policy). */
+    static final String POLICY = GitInvocation.configPairs().join(' ')
 
     static final Duration NETWORK_TIMEOUT = Duration.ofMillis(50)
 
@@ -96,7 +100,7 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
 
         then:
         result.exitCode() == 0
-        recorded().argv == 'version'
+        recorded().argv == "${POLICY} version"
 
         and: 'the child sees exactly the parent\'s GIT_SSH_COMMAND — none, unless the operator set one'
         recorded().GIT_SSH_COMMAND == (parentSshCommand() == null ? 'unset' : "[${parentSshCommand()}]")
@@ -108,7 +112,7 @@ class GitProcessRunnerNetworkBranchSpec extends Specification {
 
         then:
         result.exitCode() == 0
-        recorded().argv == "${STALL_DETECTION} ls-remote origin"
+        recorded().argv == "${POLICY} ${STALL_DETECTION} ls-remote origin"
         recorded().GIT_SSH_COMMAND == "[${parentSshCommand() ?: DEFAULT_SSH_COMMAND}]"
     }
 

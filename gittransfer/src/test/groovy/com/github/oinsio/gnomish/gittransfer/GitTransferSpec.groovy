@@ -14,18 +14,17 @@ class GitTransferSpec extends Specification {
     private static final Path SOURCE = Path.of('/factory-clone')
     private static final Path DESTINATION = Path.of('/task-volume/work')
 
-    /** The everywhere half of design D2's common set: `-c` pairs that precede the subcommand. */
-    private static final List<String> CONFIG_PAIRS = [
+    /**
+     * Everything before the subcommand: the invocation policy's pairs (FR4 of
+     * own-git-invocation-policy), then the everywhere half of design D2's common set.
+     */
+    private static final List<String> CONFIG_PAIRS = GitInvocation.configPairs() + [
         '-c',
         'fetch.recurseSubmodules=no',
         '-c',
         'submodule.recurse=false',
         '-c',
         'fetch.prune=false',
-        '-c',
-        'maintenance.auto=false',
-        '-c',
-        'gc.auto=0',
         '-c',
         'fetch.fsckObjects=true',
         '-c',
@@ -38,7 +37,10 @@ class GitTransferSpec extends Specification {
         'fetch.fsck.zeroPaddedFilemode=ignore',
     ]
 
-    /** The everywhere half of the environment: inherited overrides that no transfer may see. */
+    /**
+     * The everywhere half of the environment: the invocation policy's removals, then the
+     * inherited overrides that no transfer may see.
+     */
     private static final Map<String, Optional<String>> STRIPPED = [
         GIT_CONFIG_PARAMETERS: Optional.<String> empty(),
         GIT_CONFIG_COUNT: Optional.<String> empty(),

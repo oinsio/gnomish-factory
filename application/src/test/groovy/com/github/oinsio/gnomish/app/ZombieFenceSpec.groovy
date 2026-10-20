@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.BestEffortPush
+import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -72,8 +73,8 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
     private Path cloneOrigin(String name, boolean onBranch = false) {
         Path dir = tempDir.resolve(name)
         seedClone(tempDir, origin.toString(), dir, '-q')
-        gitExitCode(dir, 'config', 'user.email', "${name}@b.c")
-        gitExitCode(dir, 'config', 'user.name', name)
+        FixtureGitConfig.set(dir, 'user.email', "${name}@b.c")
+        FixtureGitConfig.set(dir, 'user.name', name)
         if (onBranch) {
             assert gitExitCode(dir, 'checkout', '-q', BRANCH) == 0
         }

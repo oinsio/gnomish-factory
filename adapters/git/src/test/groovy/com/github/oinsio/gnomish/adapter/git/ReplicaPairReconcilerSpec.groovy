@@ -45,7 +45,7 @@ class ReplicaPairReconcilerSpec extends Specification implements BareGitRepoFixt
         def bare = initBareRepo(tempDir, 'origin.git')
         def seed = initWorkingRepo(tempDir, 'seed')
         commit(seed, 'seed.txt', 'seed')
-        runner.run(seed, 'remote', 'add', 'origin', bare.toString())
+        FixtureGitConfig.addRemote(seed, 'origin', bare.toString())
         runner.run(seed, 'push', 'origin', 'HEAD:refs/heads/main')
         runner.run(seed, 'checkout', '-b', branchName)
         commit(seed, 'a.txt', 'first')

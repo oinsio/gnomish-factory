@@ -141,7 +141,7 @@ class TaskBranchLocatorSpec extends Specification implements BareGitRepoFixture 
         def tracked = gitOutput(clone, 'rev-parse', 'refs/remotes/origin/gnomish/PROJ-2')
 
         and: 'origin is then unreachable, so the touchpoint fetch cannot deliver'
-        runner.run(clone, 'remote', 'set-url', 'origin', tempDir.resolve('does-not-exist.git').toString())
+        FixtureGitConfig.setRemoteUrl(clone, 'origin', tempDir.resolve('does-not-exist.git').toString())
         def logs = LogCaptureSupport.attach(TaskBranchLocator, Level.DEBUG)
 
         when:

@@ -60,10 +60,12 @@ class LocalBoxEnvironment implements TaskExecutionEnvironment, SeedTransferFixtu
         this.branch = branch
         workingCopy = boxRoot.resolve('work')
         seedClone(boxRoot, cloneDir.toString(), workingCopy, '--no-hardlinks', '--single-branch', '--branch', branch)
-        runner.run(workingCopy, 'remote', 'remove', 'origin')
-        runner.run(workingCopy, 'config', 'user.name', 'gnome')
-        runner.run(workingCopy, 'config', 'user.email', 'gnome@sandbox.local')
-        runner.run(workingCopy, 'config', 'gc.auto', '0')
+        // The box's own configuration, as the seed script writes it in a container (NG6 of
+        // own-git-invocation-policy) — a fixture write, so not through the refusing runner.
+        FixtureGitConfig.removeRemote(workingCopy, 'origin')
+        FixtureGitConfig.set(workingCopy, 'user.name', 'gnome')
+        FixtureGitConfig.set(workingCopy, 'user.email', 'gnome@sandbox.local')
+        FixtureGitConfig.set(workingCopy, 'gc.auto', '0')
         if (commitPin != null) {
             runner.run(workingCopy, 'reset', '--hard', commitPin)
         }

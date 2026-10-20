@@ -146,7 +146,7 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
     def "a commit that cannot be delivered is Undeliverable, never a silent pass"() {
         given: 'the origin URL points at a path that no longer exists'
         def sha = commitChange('one')
-        gitOutput(clone, 'remote', 'set-url', 'origin', tempDir.resolve('gone.git').toString())
+        FixtureGitConfig.setRemoteUrl(clone, 'origin', tempDir.resolve('gone.git').toString())
 
         when:
         def outcome = delivery().ensureDelivered(workspaceAt(sha))
@@ -160,7 +160,7 @@ class RemoteAttemptDeliverySpec extends Specification implements BareGitRepoFixt
     def "no configured origin is Undeliverable"() {
         given:
         def sha = commitChange('one')
-        gitOutput(clone, 'remote', 'remove', 'origin')
+        FixtureGitConfig.removeRemote(clone, 'origin')
 
         when:
         def outcome = delivery().ensureDelivered(workspaceAt(sha))

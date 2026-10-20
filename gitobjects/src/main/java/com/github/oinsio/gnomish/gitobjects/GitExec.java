@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.gitobjects;
 
+import com.github.oinsio.gnomish.gittransfer.GitInvocation;
 import com.github.oinsio.gnomish.subprocess.ChildOutput;
 import com.github.oinsio.gnomish.subprocess.CutCaptureException;
 import com.github.oinsio.gnomish.subprocess.Drain;
@@ -24,6 +25,14 @@ import org.jspecify.annotations.Nullable;
  * {@code gitobjects} stays import-independent of the factory (design D19). Ambient git config is
  * neutralized and pathspec magic disabled, so behavior and commit ids do not depend on the
  * operator's environment.
+ *
+ * <p>The command line comes from the factory's one invocation policy, {@link
+ * GitInvocation#commandLine}: the binary, the policy's {@code -c} pairs (hooks, signing, the
+ * filesystem monitor, maintenance and replace refs neutralized by value), then {@code --git-dir}
+ * and the caller's arguments; and the policy's {@link GitInvocation#removedEnvironment()} is removed
+ * from the child, so no inherited per-process configuration adds a key back (design D1, D2 of
+ * own-git-invocation-policy). The global and system configuration files stay isolated here as
+ * well, since this library runs only local plumbing and needs no operator setting.
  *
  * <p>The I/O policy — the stdout cap, the hermetic environment, and the loud {@link
  * GitObjectsInterruptedException} an interruption raises — is this class's own. The mechanics are the
@@ -54,7 +63,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR25 of add-sandbox-core; FR13, FR9 of bound-subprocess-commands; FR13 of
  * fix-operator-blockers; FR16, FR17, FR18, FR19, FR21, FR23 of fix-terminal-receipt-convergence; FR3,
- * FR4, FR5 of make-pipe-reads-non-parking.
+ * FR4, FR5 of make-pipe-reads-non-parking; FR1, FR3 of own-git-invocation-policy.
  *
  * @param gitDir the absolute git dir every command runs against
  * @param gitBinary the git executable
@@ -97,9 +106,13 @@ record GitExec(Path gitDir, String gitBinary, ProcessSupervisor supervisor, Proc
      *     longer than the cap comes back as its prefix with {@link Result#overflowed()} set
      */
     Result run(List<String> args, byte @Nullable [] stdin, Map<String, String> extraEnv, long stdoutCap) {
-        ProcessBuilder builder = new ProcessBuilder(commandLine(args));
+        List<String> line = new ArrayList<>();
+        line.add("--git-dir=" + gitDir);
+        line.addAll(args);
+        ProcessBuilder builder = new ProcessBuilder(GitInvocation.commandLine(gitBinary, line));
         builder.directory(gitDir.toFile());
         Map<String, String> env = builder.environment();
+        GitInvocation.removedEnvironment().forEach(env::remove);
         env.put("GIT_LITERAL_PATHSPECS", "1");
         env.put("GIT_CONFIG_GLOBAL", "/dev/null");
         env.put("GIT_CONFIG_SYSTEM", "/dev/null");
@@ -117,20 +130,6 @@ record GitExec(Path gitDir, String gitBinary, ProcessSupervisor supervisor, Proc
                 : Drain.capped(ChildOutput.stdout(process), "gitexec-stdout", stdoutCap);
         Drain stderr = Drain.start(ChildOutput.stderr(process), "gitexec-stderr");
         return await(process, stdout, stderr);
-    }
-
-    private String[] commandLine(List<String> args) {
-        List<String> line = new ArrayList<>(args.size() + 4);
-        line.add(gitBinary);
-        line.add("--git-dir=" + gitDir);
-        // Disable hooks unconditionally: the only plumbing command here that would run one is
-        // update-ref (the reference-transaction hook). Pointing hooksPath at a non-directory makes
-        // git find no hook — the library's "no hook execution" guarantee holds regardless of what
-        // the target clone has installed (design D19).
-        line.add("-c");
-        line.add("core.hooksPath=/dev/null");
-        line.addAll(args);
-        return line.toArray(new String[0]);
     }
 
     /**

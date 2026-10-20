@@ -100,7 +100,7 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
 
         then: 'the refusal, and no hooks path written: a refused clone is not touched'
         thrown(CloneRefFormatRefusedException)
-        gitExitCode(clone, 'config', 'core.hooksPath') != 0
+        gitExitCode(clone, 'config', '--local', 'core.hooksPath') != 0
     }
 
     def "F122: hardening a reftable clone still points its hooks at the empty directory"() {
@@ -112,7 +112,7 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         branches.harden(clone)
 
         then:
-        gitOutput(clone, 'config', 'core.hooksPath').endsWith(FactoryCloneHardening.EMPTY_HOOKS_DIR)
+        gitOutput(clone, 'config', '--local', 'core.hooksPath').endsWith(FactoryCloneHardening.EMPTY_HOOKS_DIR)
     }
 
     def "F135: a status read of a files-backend clone is refused before the touchpoint fetch writes a ref"() {

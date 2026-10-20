@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckExternalClient
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.ThreadSleeper
@@ -105,7 +106,7 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
         Files.createDirectories(work.resolve('.gitea/workflows'))
         def git = new GitProcessRunner()
         git.run(work, 'checkout', '-q', '-b', 'main')
-        git.run(work, 'remote', 'add', 'origin', gitea.authenticatedCloneUrl())
+        FixtureGitConfig.addRemote(work, 'origin', gitea.authenticatedCloneUrl())
         // Two attempt commits on a linear history: each push is a distinct head SHA, so the two
         // runs are keyed independently and the adapter matches each by its own commit (see 7.1).
         //

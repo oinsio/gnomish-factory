@@ -74,10 +74,13 @@ trait BareGitRepoFixture implements SeedTransferFixture {
         assert result.exitCode() == 0: "git commit failed: ${result.stderr()}"
     }
 
-    /** Registers {@code url} as remote {@code name} in {@code repo}, asserting success. */
+    /**
+     * Registers {@code url} as remote {@code name} in {@code repo}, asserting success — through
+     * {@link FixtureGitConfig}, since the runner refuses a configuration write (FR5 of
+     * own-git-invocation-policy).
+     */
     void addRemote(Path repo, String name, String url) {
-        def result = new GitProcessRunner().run(repo, 'remote', 'add', name, url)
-        assert result.exitCode() == 0: "git remote add failed: ${result.stderr()}"
+        FixtureGitConfig.addRemote(repo, name, url)
     }
 
     /**

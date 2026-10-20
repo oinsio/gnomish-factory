@@ -80,7 +80,7 @@ class BaseRefreshCloneSafetySpec extends Specification implements BareGitRepoFix
 
     def "FR6: a non-standard remote.origin.fetch cannot make the refresh move anything extra"() {
         given: 'a configured refspec that would write straight into refs/heads if git applied it'
-        assert gitExitCode(clone, 'config', 'remote.origin.fetch', '+refs/heads/*:refs/heads/*') == 0
+        FixtureGitConfig.set(clone, 'remote.origin.fetch', '+refs/heads/*:refs/heads/*')
         def before = untouchable()
 
         when:

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.e2e.gitea
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -60,12 +61,12 @@ class GiteaContainerFixtureSmokeSpec extends Specification implements BareGitRep
         Path work = initWorkingRepo(tempDir)
         GitProcessRunner git = new GitProcessRunner()
         git.run(work, 'checkout', '-q', '-b', 'main')
-        git.run(work, 'config', 'user.email', 'e2e@example.invalid')
-        git.run(work, 'config', 'user.name', 'e2e')
+        FixtureGitConfig.set(work, 'user.email', 'e2e@example.invalid')
+        FixtureGitConfig.set(work, 'user.name', 'e2e')
         git.run(work, 'commit', '-q', '--allow-empty', '-m', 'smoke commit')
 
         when: 'the remote is pointed at the bootstrapped Gitea repo and pushed'
-        git.run(work, 'remote', 'add', 'origin', gitea.authenticatedCloneUrl())
+        FixtureGitConfig.addRemote(work, 'origin', gitea.authenticatedCloneUrl())
         def result = git.run(work, 'push', 'origin', 'main')
 
         then: 'the push succeeds'

@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -38,12 +40,30 @@ class FactoryCloneHardeningSpec extends Specification implements BareGitRepoFixt
         runner.run(cwd, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', message).exitCode()
     }
 
+    /**
+     * The same commit by a plain {@code git} outside the factory runner, whose invocation policy
+     * neutralizes hooks on its own (FR1 of own-git-invocation-policy): the plant's liveness check.
+     */
+    private static int plainCommitWithExitCode(Path cwd, String file, String message) {
+        Files.writeString(cwd.resolve(file), 'x')
+        def builder = new ProcessBuilder('git', 'add', file).directory(cwd.toFile()).redirectErrorStream(true)
+        TestChildEnvironment.cleared(builder)
+        def add = builder.start()
+        add.inputStream.text
+        assert add.waitFor(1, TimeUnit.MINUTES) && add.exitValue() == 0
+        builder.command('git', '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', message)
+        def commit = builder.start()
+        commit.inputStream.text
+        assert commit.waitFor(1, TimeUnit.MINUTES)
+        commit.exitValue()
+    }
+
     def "FR17: harden points core.hooksPath at an empty directory under the git dir"() {
         when:
         hardening.harden(cloneDir)
 
         then: 'core.hooksPath is configured'
-        def configured = gitOutput(cloneDir, 'config', 'core.hooksPath')
+        def configured = gitOutput(cloneDir, 'config', '--local', 'core.hooksPath')
 
         and: 'it names an existing, empty directory'
         def hooksDir = Path.of(configured)
@@ -57,8 +77,8 @@ class FactoryCloneHardeningSpec extends Specification implements BareGitRepoFixt
         given: 'a hook that would fail any hook-running commit'
         plantFailingPreCommitHook()
 
-        expect: 'without hardening, the hook fires and the commit fails'
-        commitWithExitCode(cloneDir, 'before.txt', 'before') != 0
+        expect: 'the plant is live: a git outside the factory runner fires the hook and the commit fails'
+        plainCommitWithExitCode(cloneDir, 'before.txt', 'before') != 0
 
         when:
         hardening.harden(cloneDir)
@@ -73,7 +93,7 @@ class FactoryCloneHardeningSpec extends Specification implements BareGitRepoFixt
         hardening.harden(cloneDir)
 
         then:
-        gitOutput(cloneDir, 'config', 'core.hooksPath').endsWith(FactoryCloneHardening.EMPTY_HOOKS_DIR)
+        gitOutput(cloneDir, 'config', '--local', 'core.hooksPath').endsWith(FactoryCloneHardening.EMPTY_HOOKS_DIR)
     }
 
     def "FR17: linked worktrees inherit the neutralized hooks path"() {

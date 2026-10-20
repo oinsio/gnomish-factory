@@ -145,6 +145,11 @@ layering {
         ':baseref',
         ':domain',
         ':gitobjects',
+        // The git invocation policy's leaf (design D1 of own-git-invocation-policy): no source
+        // in this module names it; it arrives through `:gitobjects`, whose `GitExec` builds its
+        // command line from it. The layering gate walks the transitive graph, so the reach is
+        // listed where it arrives.
+        ':gittransfer',
         ':gnomish-plugin-api',
         ':logtext',
         // The operator-configuration level leaf (design D4 of add-project-registry): declared

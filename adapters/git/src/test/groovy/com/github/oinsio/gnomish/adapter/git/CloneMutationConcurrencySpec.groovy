@@ -41,7 +41,7 @@ class CloneMutationConcurrencySpec extends Specification implements BareGitRepoF
         new File(cloneDir.toFile(), 'seed.txt').text = 'seed'
         seedRunner.run(cloneDir, 'add', 'seed.txt')
         seedRunner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'seed')
-        seedRunner.run(cloneDir, 'remote', 'add', 'origin', bare.toString())
+        FixtureGitConfig.addRemote(cloneDir, 'origin', bare.toString())
         seedRunner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
 
         def gitWrapper = StandIn.recording(tempDir, 'trace-clone-mutations')

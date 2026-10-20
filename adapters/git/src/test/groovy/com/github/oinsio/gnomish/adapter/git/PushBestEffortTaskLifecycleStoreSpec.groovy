@@ -54,7 +54,7 @@ class PushBestEffortTaskLifecycleStoreSpec extends Specification implements Life
 
     def "a failed confirm push names the confirm event in its single WARN"() {
         given:
-        gitOutput(cloneDir, 'remote', 'set-url', 'origin', tempDir.resolve('nowhere.git').toString())
+        FixtureGitConfig.setRemoteUrl(cloneDir, 'origin', tempDir.resolve('nowhere.git').toString())
         def delegate = Mock(TaskLifecycleStore)
         def store = decorated(delegate)
 

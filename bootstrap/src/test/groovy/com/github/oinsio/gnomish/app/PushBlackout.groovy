@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import java.nio.file.Path
 
 /**
@@ -27,11 +28,11 @@ final class PushBlackout {
      */
     static void around(Path cloneDir, Closure write) {
         String url = git(cloneDir, 'remote', 'get-url', 'origin')
-        git(cloneDir, 'remote', 'set-url', 'origin', cloneDir.resolveSibling('no-such-origin.git').toString())
+        FixtureGitConfig.setRemoteUrl(cloneDir, 'origin', cloneDir.resolveSibling('no-such-origin.git').toString())
         try {
             write()
         } finally {
-            git(cloneDir, 'remote', 'set-url', 'origin', url)
+            FixtureGitConfig.setRemoteUrl(cloneDir, 'origin', url)
         }
     }
 

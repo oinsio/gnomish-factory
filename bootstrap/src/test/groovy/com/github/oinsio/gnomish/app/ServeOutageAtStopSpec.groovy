@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.fasterxml.jackson.databind.JsonNode
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -55,7 +56,7 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         @Override
         ClaimResult claim(TaskRef ref, String instanceId) {
             if (remoteDiesOnClaim) {
-                assert gitExitCode(projectDir, 'remote', 'set-url', 'origin', tempDir.resolve('gone.git').toString()) == 0
+                FixtureGitConfig.setRemoteUrl(projectDir, 'origin', tempDir.resolve('gone.git').toString())
             }
             super.claim(ref, instanceId)
         }
@@ -133,7 +134,7 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
 
         when: 'the remote is back and a second daemon runs on the same project'
         remoteDiesOnClaim = false
-        assert gitExitCode(projectDir, 'remote', 'set-url', 'origin', origin.toString()) == 0
+        FixtureGitConfig.setRemoteUrl(projectDir, 'origin', origin.toString())
         drain()
 
         then: 'its gate starts closed and knows nothing of the first outage'

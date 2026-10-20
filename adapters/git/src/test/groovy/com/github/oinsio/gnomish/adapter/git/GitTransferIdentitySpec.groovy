@@ -102,7 +102,7 @@ class GitTransferIdentitySpec extends Specification implements TransferAdversary
         Path clone = initWorkingRepo(tempDir, 'rewritten')
         commit(clone, 'a.txt', 'first')
         addOrigin(clone, tempDir)
-        assert gitExitCode(clone, 'remote', 'set-url', 'origin', AdversarialGitConfig.REWRITE_SENTINEL + 'repo.git') == 0
+        FixtureGitConfig.setRemoteUrl(clone, 'origin', AdversarialGitConfig.REWRITE_SENTINEL + 'repo.git')
 
         when:
         def result = runner.run(clone,

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException
+import com.github.oinsio.gnomish.gittransfer.GitInvocation
 import com.github.oinsio.gnomish.gittransfer.GitVersion
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -129,7 +130,9 @@ class GitVersionCheckSpec extends Specification {
         then: 'one subprocess, one INFO line'
         StandInLog.blocks(git).collect {
             StandInLog.argv(it)
-        } == [['--version']]
+        } == [
+            GitInvocation.configPairs() + ['--version']
+        ]
         logs.list.size() == 1
     }
 

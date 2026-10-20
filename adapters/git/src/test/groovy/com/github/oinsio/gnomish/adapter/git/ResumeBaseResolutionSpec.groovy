@@ -106,7 +106,7 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
     // Scenario: git/git-task-persistence / Autonomous resume refreshes the pinned base for the law
     def "a configured origin that never answers is the infrastructure class"() {
         given:
-        assert gitExitCode(clone, 'remote', 'set-url', 'origin', tempDir.resolve('gone.git').toString()) == 0
+        FixtureGitConfig.setRemoteUrl(clone, 'origin', tempDir.resolve('gone.git').toString())
 
         when:
         def outcome = resolution().resolve(clone, 'develop', null)
@@ -124,7 +124,7 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
         Path log = tempDir.resolve('no-origin.log')
         assert gitExitCode(clone, 'branch', 'release/1.18', 'refs/remotes/origin/develop') == 0
         def localTip = gitOutput(clone, 'rev-parse', 'release/1.18')
-        assert gitExitCode(clone, 'remote', 'remove', 'origin') == 0
+        FixtureGitConfig.removeRemote(clone, 'origin')
 
         when:
         def outcome = resolution(new GitProcessRunner(recordingGit(log).toString()))
@@ -141,7 +141,7 @@ class ResumeBaseResolutionSpec extends Specification implements BareGitRepoFixtu
     // never a silent fall-back to the pinned SHA.
     def "a clone with no origin and no local resolution refuses"() {
         given:
-        assert gitExitCode(clone, 'remote', 'remove', 'origin') == 0
+        FixtureGitConfig.removeRemote(clone, 'origin')
 
         when:
         def outcome = resolution().resolve(clone, 'release/does-not-exist', null)

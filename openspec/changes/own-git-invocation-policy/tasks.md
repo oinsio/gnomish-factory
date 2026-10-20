@@ -12,7 +12,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
 ## 1. The owner in `:gittransfer`
 
-- [ ] 1.1 TDD (red first): `GitInvocationSpec` pins the owner (FR1, FR2, FR3, design D2, D3):
+- [x] 1.1 TDD (red first): `GitInvocationSpec` pins the owner (FR1, FR2, FR3, design D2, D3):
       - `commandLine(gitBinary, args)` returns the binary, then exactly the eight `-c` pairs of
         D3 in declared order, then the caller's arguments unchanged;
       - an argv that already opens with the pairs is returned with them once (D2, idempotent on
@@ -22,9 +22,9 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       - a blank binary is refused.
 
       Verify: red against a stub, green after 1.2.
-- [ ] 1.2 Implement `GitInvocation` (JDK-only; javadoc `Implements FR1, FR2, FR3 of
+- [x] 1.2 Implement `GitInvocation` (JDK-only; javadoc `Implements FR1, FR2, FR3 of
       own-git-invocation-policy`). Verify: 1.1 green; `:gittransfer:check` green (PIT 100%).
-- [ ] 1.3 TDD then refactor `GitTransfer` and `GitPush` to compose the owner (FR4, design D2, D3):
+- [x] 1.3 TDD then refactor `GitTransfer` and `GitPush` to compose the owner (FR4, design D2, D3):
       - `argv()` begins with the owner's pairs for every construction site: the
         `fetch`/`harvest`/`clone` factories and `GitPush.closing`/`branchOnly` (their `start()`
         opens with the pairs);
@@ -43,7 +43,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
 ## 2. Both launchers take the owner's command line
 
-- [ ] 2.1 TDD then wire `GitProcessRunner` (FR1, FR3, design D2):
+- [x] 2.1 TDD then wire `GitProcessRunner` (FR1, FR3, design D2):
       - `execute` builds its `ProcessBuilder` from `GitInvocation.commandLine` and removes the
         owner's environment set;
       - the private `commandLine` is deleted;
@@ -53,7 +53,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
       Spec: a commit with an inherited `GIT_CONFIG_COUNT` pair naming a hook directory runs no
       hook (FR3 scenario). Verify: `:adapters:git:check` green.
-- [ ] 2.2 TDD then wire `GitExec` (FR1, FR3, design D1, D2):
+- [x] 2.2 TDD then wire `GitExec` (FR1, FR3, design D1, D2):
       - `:gitobjects` gains `implementation project(':gittransfer')` and its layering allowlist
         entry with a comment naming the edge; `:application` gains the reach entry `:gittransfer`
         with a comment naming `:gitobjects` as the edge it arrives through (`:adapters`,
@@ -70,7 +70,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       marker cannot go red). `LocalGitRepoFixture` also plants a `reference-transaction` hook that
       writes a marker and exits 1 as the regression pin for the moved literal. Verify:
       `:gitobjects:check` green, and the layering gate is green in every module.
-- [ ] 2.3 Old-way sweep for row 1 of the D10 table. Run
+- [x] 2.3 Old-way sweep for row 1 of the D10 table. Run
       `grep -rn "commandLine(" --include=*.java */src/main */*/src/main` (expected: definitions
       only in `GitInvocation`) and
       `grep -rn '"gc.auto=0"\|"maintenance.auto=false"' --include=*.java . | grep /src/main/`
@@ -81,7 +81,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
 ## 3. No repository-configuration writes
 
-- [ ] 3.1 TDD (red first) then implement the runner refusal (FR5, NFR-O1, design D4). The new
+- [x] 3.1 TDD (red first) then implement the runner refusal (FR5, NFR-O1, design D4). The new
       `RepositoryConfigWriteException` (javadoc traceability) is thrown before launch for:
       - `config` with no read form;
       - `remote add|rename|remove|rm|set-head|set-branches|set-url`.

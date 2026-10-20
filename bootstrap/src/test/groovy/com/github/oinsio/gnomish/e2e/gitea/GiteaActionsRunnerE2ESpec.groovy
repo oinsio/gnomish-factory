@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.e2e.gitea
 
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckExternalClient
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
@@ -82,7 +83,7 @@ class GiteaActionsRunnerE2ESpec extends Specification implements BareGitRepoFixt
         git.run(work, 'checkout', '-q', '-b', 'main')
         git.run(work, 'add', '.')
         git.run(work, '-c', 'user.email=e2e@example.invalid', '-c', 'user.name=e2e', 'commit', '-q', '-m', 'add workflow')
-        git.run(work, 'remote', 'add', 'origin', gitea.authenticatedCloneUrl())
+        FixtureGitConfig.addRemote(work, 'origin', gitea.authenticatedCloneUrl())
 
         when: 'the commit is pushed'
         def headSha = git.run(work, 'rev-parse', 'HEAD').stdout().forParsing().trim()

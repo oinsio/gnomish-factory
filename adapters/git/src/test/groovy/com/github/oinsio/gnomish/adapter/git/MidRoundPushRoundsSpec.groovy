@@ -173,7 +173,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     // WARN and the delegated round methods keep working.
     def "a failing push inside onProgress never throws out of the round"() {
         given: 'origin points nowhere, so the triggered push fails'
-        runner.run(repo, 'remote', 'set-url', 'origin', tempDir.resolve('no-such-remote.git').toString())
+        FixtureGitConfig.setRemoteUrl(repo, 'origin', tempDir.resolve('no-such-remote.git').toString())
         def delegate = new PassThroughRounds()
         def source = new MidRoundPushRounds(delegate, runner, new VirtualClock())
         def round = source.openRound(request())

@@ -17,7 +17,9 @@ import java.util.List;
  *       last closing push put it.
  * </ul>
  *
- * <p>Both name each ref in full on both sides of its refspec ({@code refs/heads/<b>:refs/heads/<b>}),
+ * <p>Both open with the factory's invocation policy ({@link GitInvocation#configPairs()}), so a
+ * clone's {@code core.hooksPath} runs no {@code pre-push} hook (FR4, design D2 of
+ * own-git-invocation-policy). Both name each ref in full on both sides of its refspec ({@code refs/heads/<b>:refs/heads/<b>}),
  * so nothing rides on git's refspec inference or on {@code push.default}; neither forces, so a
  * non-fast-forward is a refused push. Neither follows tags nor recurses into submodules, whatever
  * the operator's {@code push.followTags} or {@code submodule.recurse} say, and {@code
@@ -25,7 +27,7 @@ import java.util.List;
  * TransferSource.Origin}): inherited per-process configuration stripped, the protocol allowlist
  * set, the operator's configuration kept — it is how the operator authenticates.
  *
- * <p>Implements FR13, NFR-S2 of tighten-spec-contract.
+ * <p>Implements FR13, NFR-S2 of tighten-spec-contract; FR4 of own-git-invocation-policy.
  */
 public final class GitPush {
 
@@ -59,8 +61,9 @@ public final class GitPush {
         return new GitTransfer(argv, GitTransfer.environment(TransferSource.ORIGIN));
     }
 
+    /** The invocation policy's pairs, then the subcommand and the flags common to both pushes. */
     private static List<String> start(String... flags) {
-        List<String> argv = new ArrayList<>();
+        List<String> argv = new ArrayList<>(GitInvocation.configPairs());
         argv.add("push");
         argv.addAll(List.of(flags));
         argv.add("--no-follow-tags");

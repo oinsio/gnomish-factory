@@ -33,7 +33,7 @@ class ReplicaPairRegisterFollowSpec extends Specification implements BareGitRepo
         def bare = initBareRepo(tempDir, 'origin.git')
         def seed = initWorkingRepo(tempDir, 'seed')
         commit(seed, 'seed.txt', 'seed')
-        gitOutput(seed, 'remote', 'add', 'origin', bare.toString())
+        FixtureGitConfig.addRemote(seed, 'origin', bare.toString())
         gitOutput(seed, 'push', 'origin', 'HEAD:refs/heads/main')
         gitOutput(seed, 'checkout', '-b', branchName)
         commit(seed, 'a.txt', 'first')

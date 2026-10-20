@@ -28,7 +28,8 @@ import java.util.SequencedMap;
  * since only the owner's value may carry one — and how a value's environment entries are applied
  * to the child.
  *
- * <p>Implements FR1, FR4, NFR-S1 of bound-subprocess-commands; FR8 of own-git-transfer-argv.
+ * <p>Implements FR1, FR4, NFR-S1 of bound-subprocess-commands; FR8 of own-git-transfer-argv; FR1 of
+ * own-git-invocation-policy.
  */
 final class GitNetworkCommands {
 
@@ -138,14 +139,19 @@ final class GitNetworkCommands {
     }
 
     /**
-     * Returns {@code args} with git's HTTP no-progress abort prefixed. The settings are global
-     * options, so they must precede the subcommand; the caller's own argv — its own {@code -c}
-     * pairs included — follows unchanged.
+     * Returns {@code args} with git's HTTP no-progress abort placed right before the subcommand.
+     * The settings are global options, so they must precede the subcommand; the caller's own
+     * leading {@code -c} pairs stay first and unchanged, so a transfer's argv still opens with the
+     * invocation policy and the policy owner adds no second copy of it (design D2 of
+     * own-git-invocation-policy).
      */
     static String[] withStallDetection(String... args) {
+        int subcommand = subcommandIndex(args);
         String[] prefixed = new String[HTTP_STALL_DETECTION.length + args.length];
-        System.arraycopy(HTTP_STALL_DETECTION, 0, prefixed, 0, HTTP_STALL_DETECTION.length);
-        System.arraycopy(args, 0, prefixed, HTTP_STALL_DETECTION.length, args.length);
+        System.arraycopy(args, 0, prefixed, 0, subcommand);
+        System.arraycopy(HTTP_STALL_DETECTION, 0, prefixed, subcommand, HTTP_STALL_DETECTION.length);
+        System.arraycopy(
+                args, subcommand, prefixed, subcommand + HTTP_STALL_DETECTION.length, args.length - subcommand);
         return prefixed;
     }
 

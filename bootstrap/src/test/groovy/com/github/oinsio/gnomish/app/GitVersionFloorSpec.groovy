@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.gittransfer.GitInvocation
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -79,7 +80,9 @@ class GitVersionFloorSpec extends Specification implements AppAssemblyFixture {
         and: 'git was asked its version and nothing else'
         StandInLog.blocks(oldGit).collect {
             StandInLog.argv(it)
-        } == [['--version']]
+        } == [
+            GitInvocation.configPairs() + ['--version']
+        ]
 
         and: 'the tracker saw nothing'
         0 * tracker._

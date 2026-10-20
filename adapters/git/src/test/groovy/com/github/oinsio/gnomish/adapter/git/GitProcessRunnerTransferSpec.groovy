@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.gittransfer.GitInvocation
 import com.github.oinsio.gnomish.gittransfer.GitTransfer
 import com.github.oinsio.gnomish.gittransfer.Refspec
 import com.github.oinsio.gnomish.gittransfer.TransferSource
@@ -59,9 +60,23 @@ class GitProcessRunnerTransferSpec extends Specification {
         when:
         def result = recordingRunner().run(tempDir, transfer)
 
-        then: 'the child ran the owner\'s argv, with the network prefix the runner puts before it'
+        then: 'the child ran the owner\'s argv, with the network options the runner puts before its subcommand'
         result.exitCode() == 0
-        recorded('argv') == '-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 ' + transfer.argv().join(' ')
+        recorded('argv') == GitNetworkCommands.withStallDetection(transfer.argv() as String[]).join(' ')
+    }
+
+    def "FR1 of own-git-invocation-policy: the typed entry carries the invocation policy once, first (D2)"() {
+        given:
+        def transfer = GitTransfer.fetch(TransferSource.ORIGIN, new Refspec(REFSPEC))
+        def policy = GitInvocation.configPairs()
+
+        when:
+        recordingRunner().run(tempDir, transfer)
+
+        then: 'the argv opens with the pairs, and no second copy follows'
+        def argv = recorded('argv').split(' ') as List
+        Collections.indexOfSubList(argv, policy) == 0
+        Collections.lastIndexOfSubList(argv, policy) == 0
     }
 
     // Scenario: git/git-transfer / Inherited environment cannot inject configuration
@@ -72,8 +87,8 @@ class GitProcessRunnerTransferSpec extends Specification {
         when: 'the untyped entry runs a non-transfer command'
         recordingRunner().run(tempDir, 'ls-remote', 'origin')
 
-        then: 'the child inherits it, as every git command did before'
-        recorded('GIT_CONFIG_COUNT') == '[1]'
+        then: 'the invocation policy strips it there too (FR3 of own-git-invocation-policy)'
+        recorded('GIT_CONFIG_COUNT') == 'unset'
         recorded('GIT_CONFIG_KEY_0') == '[' + System.getenv('GIT_CONFIG_KEY_0') + ']'
 
         when: 'the typed entry runs a transfer'
@@ -193,12 +208,7 @@ class GitProcessRunnerTransferSpec extends Specification {
             ['push', 'origin', 'HEAD'],
             ['ls-remote', 'origin'],
             ['submodule', 'status'],
-            [
-                'remote',
-                'add',
-                'origin',
-                '/a'
-            ],
+            ['remote', 'get-url', 'origin'],
             ['-c', 'a=b', 'status'],
         ]
     }

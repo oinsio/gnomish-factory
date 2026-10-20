@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.gitobjects
 import com.github.oinsio.gnomish.subprocess.ProcessLaunch
 import com.github.oinsio.gnomish.subprocess.ProcessSupervisor
 
-import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.stream.Collectors
@@ -61,12 +60,10 @@ class GitObjectsTreeSpec extends Specification implements GitObjectsFixture {
         gitOutput(bare, 'ls-tree', '-r', base.hex()).contains('.gnomish-task/task.json')
     }
 
-    def "FR25: hooks never fire on the ref update"() {
-        given: 'a bare repo with a reference-transaction hook that would abort every update'
+    def "FR25, FR1 of own-git-invocation-policy: hooks never fire on the ref update"() {
+        given: 'a bare repo with a reference-transaction hook that records its run and aborts every update'
         def bare = seedBareRepo(tempDir, ['src/App.java': 'class App {}'])
-        def hooks = bare.resolve('hooks')
-        Files.createDirectories(hooks)
-        StandIn.link(hooks.resolve('reference-transaction'), 'hook-refuse')
+        def marker = plantRefusingHook(bare)
         def git = openGitObjects(bare, tempDir)
         def base = git.resolveRef('refs/heads/base').get()
 
@@ -76,8 +73,9 @@ class GitObjectsTreeSpec extends Specification implements GitObjectsFixture {
                     new TreeEdit.PutFile('.gnomish-task/task.json', '{}'.bytes)
                 ], metadata()))
 
-        then: 'the hook did not run — the ref moved'
+        then: 'the hook did not run — the ref moved and no marker was written'
         git.resolveRef('refs/heads/gnomish/t1').get() == tip
+        !Files.exists(marker)
     }
 
     def "FR25: the temporary index is removed after both success and failure"() {

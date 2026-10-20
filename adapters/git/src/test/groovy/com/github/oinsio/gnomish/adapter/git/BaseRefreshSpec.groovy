@@ -247,7 +247,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
     // Scenario: git/git-task-persistence / Unreachable remote creates no branch
     def "FR9: an unreachable origin is unavailable, never a refusal, and no ref moves"() {
         given:
-        assert gitExitCode(clone, 'remote', 'set-url', 'origin', tempDir.resolve('gone.git').toString()) == 0
+        FixtureGitConfig.setRemoteUrl(clone, 'origin', tempDir.resolve('gone.git').toString())
         def refsBefore = gitOutput(clone, 'for-each-ref', '--format=%(refname) %(objectname)')
 
         when:
@@ -263,7 +263,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
 
     def "FR9: a clone with no origin is a deterministic refusal, not an outage"() {
         given:
-        assert gitExitCode(clone, 'remote', 'remove', 'origin') == 0
+        FixtureGitConfig.removeRemote(clone, 'origin')
 
         when:
         def outcome = refresh().refresh(clone, 'develop')
@@ -407,7 +407,7 @@ class BaseRefreshSpec extends Specification implements BareGitRepoFixture {
         given:
         def advanced = advance('develop', 'h.txt')
         assert gitExitCode(clone, 'cat-file', '-e', advanced + '^{commit}') != 0
-        assert gitExitCode(clone, 'remote', 'set-url', 'origin', tempDir.resolve('gone.git').toString()) == 0
+        FixtureGitConfig.setRemoteUrl(clone, 'origin', tempDir.resolve('gone.git').toString())
 
         when:
         def outcome = refresh().refresh(clone, advanced)

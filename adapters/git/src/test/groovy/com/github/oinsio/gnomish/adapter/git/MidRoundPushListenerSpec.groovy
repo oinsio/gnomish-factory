@@ -138,7 +138,7 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
 
     def "FR11: no remote configured means onProgress never throws even after a tip movement"() {
         given:
-        runner.run(repo, 'remote', 'remove', 'origin')
+        FixtureGitConfig.removeRemote(repo, 'origin')
         def listener = newListener()
         gnomeCommit()
 

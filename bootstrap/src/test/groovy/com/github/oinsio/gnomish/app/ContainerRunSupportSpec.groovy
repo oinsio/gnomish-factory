@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.RegisteredBranchFixture
@@ -164,7 +165,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         // would retry until it landed, so the way to reach the park boundary with an undelivered
         // branch is a clone that had nowhere to push it in the first place.
         def support = support()
-        assert gitExitCode(cloneDir, 'remote', 'remove', 'origin') == 0
+        FixtureGitConfig.removeRemote(cloneDir, 'origin')
         createTask(support)
         addRemote(cloneDir, 'origin', origin.toString())
         assert gitOutput(cloneDir, 'ls-remote', 'origin', 'refs/heads/gnomish/T-1').isEmpty()
@@ -183,7 +184,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     def "FR13: a container resume's salvage pushes the branch and its register as the clone holds them"() {
         given: 'a task created while the clone had no origin, so origin has seen neither ref'
         def support = support()
-        assert gitExitCode(cloneDir, 'remote', 'remove', 'origin') == 0
+        FixtureGitConfig.removeRemote(cloneDir, 'origin')
         createTask(support)
         addRemote(cloneDir, 'origin', origin.toString())
         def started = gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
