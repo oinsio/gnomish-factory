@@ -177,7 +177,7 @@ Order note: 2.2 ran before 1.3 — `Drain`'s `InputStream` overloads could not b
 
 ## 6. Measurement (M3, NFR-P1, NFR-P3)
 
-- [ ] 6.1 The Linux gate: first locally — `scripts/linux-specs.sh --repeat 20` on
+- [x] 6.1 The Linux gate: first locally — `scripts/linux-specs.sh --repeat 20` on
   `EscapedHolderSpec` and `StreamDrainCloseReleaseSpec` (M3 on Linux) and the four modules
   below once, all green; only then push the branch and run the CI `build` job as the last
   confirmation; `:subprocess:test`,

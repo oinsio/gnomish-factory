@@ -11,12 +11,12 @@ interrupt does not reach a `FileInputStream` read either. The fact was measured 
 
 Measured on Temurin 25.0.3 (macOS and `eclipse-temurin:25-jdk`), 2026-10-18:
 
-| Experiment                                              | macOS            | Linux                                                         |
-|---------------------------------------------------------|------------------|---------------------------------------------------------------|
-| `close()` from another thread wakes a parked `read()`   | 0 ms             | never (virtual and platform threads alike, > 3 s)             |
-| `Thread.interrupt()` wakes it                           | no               | no                                                            |
-| A holder's first write after the close                  | holder gets SIGPIPE | write succeeds, wakes the read with "Stream closed", bytes lost |
-| A silent holder                                         | read released    | thread parked until the holder dies                           |
+| Experiment                                            | macOS               | Linux                                                           |
+|-------------------------------------------------------|---------------------|-----------------------------------------------------------------|
+| `close()` from another thread wakes a parked `read()` | 0 ms                | never (virtual and platform threads alike, > 3 s)               |
+| `Thread.interrupt()` wakes it                         | no                  | no                                                              |
+| A holder's first write after the close                | holder gets SIGPIPE | write succeeds, wakes the read with "Stream closed", bytes lost |
+| A silent holder                                       | read released       | thread parked until the holder dies                             |
 
 The first Linux run of `:subprocess:test` after that change (CI run 39117545428) is red on
 `DrainCloseReleaseSpec`, and `StreamDrainCloseReleaseSpec` states the same premise. Every spec
