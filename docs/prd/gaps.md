@@ -45,7 +45,7 @@ entry; the gate, once written, reports both.
 **Resolution:** `decided` (2026-10-21): host mode stays for work a box cannot serve, such as attached peripherals, special settings or applications, or a specific OS; process, code and security stay as close to container mode as they can, with no guarantee where none can be given; lands in `concept.md` (execution modes), the operator guide, and a `QR-*` whose measure is that the list of differences is kept and complete
 
 ### GP-LAW-UNSEALED-AGENT-FILES — The agent CLI's own instruction and policy files are not law
-**Breaks:** `UC-SEAL-THE-LAW`
+**Breaks:** `UC-SEAL-THE-LAW`, `UC-ASK-ONLY-TO-TIGHTEN` (the agent's repo-local policy file can widen its tool permissions, where the law can only tighten)
 **Where today:** `pipeline/pipeline-config`: Pipeline law binds per invocation (names `.gnomish/` only); `CLAUDE.md`, `.claude/settings.json` and their equivalents are read from the gnome-writable copy
 **Kind:** `missing`
 **Resolution:** `planned: harden-verification-integrity` (repo-local agent policy cannot widen the gnome; instruction files only where the law declares them protected)
@@ -91,3 +91,33 @@ entry; the gate, once written, reports both.
 **Where today:** `sandbox/sandbox-egress`: Default-deny allowlist owned by the operator
 **Kind:** `missing`
 **Resolution:** `planned: add-artifact-depot`
+
+### GP-NO-READINESS-COMMAND — Readiness problems surface one per failed run
+**Breaks:** `UC-SEE-READINESS-IN-ONE-RUN`
+**Where today:** `operator/operator-configuration`: Violations stop startup with one complete report (configuration only); every other check (git floor, Docker, image, agent credential, tracker token) refuses at the first command that needs it
+**Kind:** `missing`
+**Resolution:** `planned: add-doctor-command`
+
+### GP-FACTORY-IN-OPERATOR-CLONE — The factory works inside the operator's own clone
+**Breaks:** `UC-REGISTER-A-CLONE`
+**Where today:** `operator/project-registry`: Projects are registered explicitly by clone path; `git/git-task-persistence`: Factory git executes no untrusted content (writes the clone's hook path); the operator must create the clone on the ref backend the factory requires, and the operator's hooks, configuration and IDE fetches reach the factory's git
+**Kind:** `wrong-turn` (the premise "the factory's clone is the operator's clone" dates from the manual-run era and was never decided; the 2026-10-21 review traced eight defects to it)
+**Resolution:** `open` (a factory-owned clone from the origin URL is the candidate; no change written)
+
+### GP-STAND-IN-AGENT-NOT-SHIPPED — A dry run without a model needs the factory's source tree
+**Breaks:** `UC-DRY-RUN-THE-LAW`
+**Where today:** `cli/manual-run`: Run modes (in-place, no tracker); the scripted stand-in for the gnome and the judge lives in the factory's test fixtures and is absent from the distribution archive
+**Kind:** `missing`
+**Resolution:** `open`
+
+### GP-IMAGE-CONTRACT-UNCHECKED — Nothing tells an operator their sandbox image has drifted
+**Breaks:** `UC-TRUST-THE-IMAGE-CONTRACT`
+**Where today:** `sandbox/sandbox-egress`: Image carries the egress plumbing (a recipe the operator copies by hand; the user, the control surfaces and the guard plumbing are re-typed per installation)
+**Kind:** `missing`
+**Resolution:** `planned: add-sandbox-base-image` (published base, contract label checked before a box starts)
+
+### GP-NO-HARDWARE-BOUNDARY — Every box shares the host kernel, and Docker inside is unsupported
+**Breaks:** `UC-CHOOSE-A-STRONGER-BOUNDARY`
+**Where today:** `sandbox/execution-environment`: Adapter passports and fail-closed reconciliation (the passport can state the boundary; the container adapter declares a software one, and no adapter declares a hardware one)
+**Kind:** `missing`
+**Resolution:** `planned: add-sandbox-colima-vm` (a per-task VM adapter of the same port; the cloud and CI executors in `add-sandbox-cloud-executor` and `add-sandbox-gha-executor` are other answers to the same want)

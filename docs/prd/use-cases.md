@@ -15,7 +15,7 @@ groups 8 to 10 hold the events that are not one task's.
 
 | # | Group | File | Events of the kind |
 |---|---|---|---|
-| 1 | Setting up the installation and the project | *(next)* | factory installed; clone registered; law written; sandbox boundary set |
+| 1 | Setting up the installation and the project | [`setting-up.md`](use-cases/setting-up.md) | factory installed; clone registered; law written; sandbox boundary set |
 | 2 | Filing and authorizing work | [`filing-and-authorizing.md`](use-cases/filing-and-authorizing.md) | task written; ready applied; ready applied by an untrusted source; task mandated by ref |
 | 3 | Coordinating instances | *(next)* | queue non-empty; lease stale; instance died; sibling picks up |
 | 4 | Working a task | [`working-a-task.md`](use-cases/working-a-task.md) | round begins; gnome commits; gnome asks a decision; box fails to start |
