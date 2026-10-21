@@ -1,0 +1,16 @@
+{"seq":0,"tool":"Bash","start":"2026-10-21T05:38:55.960771Z","durationMillis":518}
+{"seq":1,"tool":"Bash","start":"2026-10-21T05:38:59.181569Z","durationMillis":51}
+{"seq":2,"tool":"Bash","start":"2026-10-21T05:39:02.866323Z","durationMillis":84}
+{"seq":3,"tool":"Bash","start":"2026-10-21T05:39:08.152751Z","durationMillis":57}
+{"seq":4,"tool":"Bash","start":"2026-10-21T05:39:13.020885Z","durationMillis":53}
+{"seq":5,"tool":"Agent","start":"2026-10-21T05:39:22.375125Z","durationMillis":547897}
+{"seq":6,"tool":"Bash","start":"2026-10-21T05:48:34.169022Z","durationMillis":4839}
+{"seq":7,"tool":"Bash","start":"2026-10-21T05:48:46.558521Z","durationMillis":40}
+{"seq":8,"tool":"Bash","start":"2026-10-21T05:48:49.515344Z","durationMillis":69}
+{"seq":9,"tool":"Bash","start":"2026-10-21T05:48:53.194082Z","durationMillis":2132}
+{"seq":10,"tool":"Bash","start":"2026-10-21T05:48:59.415113Z","durationMillis":2904}
+{"seq":11,"tool":"Agent","start":"2026-10-21T05:49:12.519960Z","durationMillis":137871}
+{"seq":12,"tool":"Bash","start":"2026-10-21T05:51:35.324589Z","durationMillis":1213}
+{"seq":13,"tool":"Bash","start":"2026-10-21T05:51:39.470866Z","durationMillis":46}
+{"seq":14,"tool":"Bash","start":"2026-10-21T05:51:50.029532Z","durationMillis":21}
+{"seq":15,"tool":"Write","start":"2026-10-21T05:52:03.449723Z","durationMillis":47}

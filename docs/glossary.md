@@ -1144,7 +1144,7 @@ run and answer them is the developer guide's *Per-module verification* section.
   traceability or tests.
 - **Linux spec runner** — the committed container that runs named Gradle tasks and specs of
   the factory's own build on Linux from a developer's machine: `scripts/linux-specs.sh` over
-  `scripts/linux-runner/Dockerfile`, the platform of the CI `build` job (Temurin 25, git ≥ 2.51),
+  `scripts/linux-runner/Dockerfile`, the platform of the CI `build` job (Temurin 25, git ≥ 2.56),
   on a copy of the working tree, as a non-root user. `verification-scope.md` runs platform specs
   through it before the root `check` and before a push, so CI is never the first Linux signal.
   Introduced by `make-pipe-reads-non-parking` (ADR 0018, "The method rule"). *Not:* the sandbox

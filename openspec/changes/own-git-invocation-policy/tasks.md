@@ -277,7 +277,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       `GitVersionCheckSpec`, `GitVersionFloorSpec`, and any other spec a run of
       `grep -rln "core.useReplaceRefs=false" --include='*.groovy' .` finds). Verify: 8.1 green;
       `:gittransfer` PIT on `GitInvocation` all killed; the named specs green.
-- [ ] 8.3 Split the git floor (FR10, design D11, D10 row 3):
+- [x] 8.3 Split the git floor (FR10, design D11, D10 row 3):
       - `GitVersion.FLOOR` becomes 2.56.0, and `FLOOR_REASON` names the event-level hook switch
         first, then the earlier reasons;
       - a second floor for the box keeps 2.51.0 and today's reason; `BoxGitFloor` reads it, and

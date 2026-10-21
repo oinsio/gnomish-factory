@@ -2,10 +2,11 @@
 # 2026-10-19; glossary: "Linux spec runner"). Run through scripts/linux-specs.sh, never by hand.
 #
 # It reproduces the platform of the CI `build` job (.github/workflows/ci.yml): Temurin 25 on
-# Ubuntu, a git at or above the factory's floor (2.51), perl (the launcher of the process-group
-# wrapper on macOS, present on CI's runner) and setsid (util-linux). It is deliberately NOT
-# built FROM the sandbox base image of add-sandbox-base-image: that is a box image carrying the
-# egress guard's proxy in its environment and mirrors the box, not CI.
+# Ubuntu, a git at or above the factory's floor (2.56, GitVersion.FLOOR; the CI jobs install the
+# same PPA's git), perl (the launcher of the process-group wrapper on macOS, present on CI's
+# runner) and setsid (util-linux). It is deliberately NOT built FROM the sandbox base image of
+# add-sandbox-base-image: that is a box image carrying the egress guard's proxy in its
+# environment and mirrors the box, not CI.
 #
 # No Docker CLI: the runner is for platform specs (:subprocess, :adapters:agent, the git
 # runner); suites that need a Docker daemon stay on the host and on CI.
@@ -22,7 +23,7 @@ RUN apt-get update \
 
 # Refuse an image whose git is below the floor, so a stale PPA fails the build, not a spec.
 RUN git version \
- && git version | awk '{ split($3, v, "."); exit !(v[1] > 2 || (v[1] == 2 && v[2] >= 51)) }' \
+ && git version | awk '{ split($3, v, "."); exit !(v[1] > 2 || (v[1] == 2 && v[2] >= 56)) }' \
  && command -v setsid perl rsync
 
 # The working-tree copy is mounted from the host and owned by the developer's uid, which has

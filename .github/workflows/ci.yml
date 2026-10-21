@@ -37,6 +37,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # The factory refuses a git below its floor, 2.56.0 (GitVersion.FLOOR; FR10, UX3 of
+      # own-git-invocation-policy, design D11), and ubuntu-latest ships an older one (2.55.0 on
+      # run 39484184528). Install the current git from the git-core PPA, as the Linux spec
+      # runner's image does (scripts/linux-runner/Dockerfile), before anything runs git.
+      - name: Install git from the git-core PPA
+        run: |
+          sudo add-apt-repository -y ppa:git-core/ppa
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends git
+
+      # The log names the git the specs ran on, and a stale PPA fails here, not in a spec.
+      - name: Git meets the factory's floor
+        run: |
+          git --version
+          git version | awk '{ split($3, v, "."); exit !(v[1] > 2 || (v[1] == 2 && v[2] >= 56)) }'
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
