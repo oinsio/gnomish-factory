@@ -519,9 +519,9 @@ Container round environments SHALL be built by a factory constructed once per ow
 - **THEN** no constructor or static factory takes the installation's equipment and a task's inputs in one parameter list, and the run-support factory holds the installation's settings as fixed state
 
 ### Requirement: The box's git meets the floor before the seed clone
-The container adapter SHALL, before every seed clone of a box (a fresh materialize, and a reattach that applies a commit pin), run the image's own `git --version` in a one-shot, network-less helper carrying the environment's ownership labels, and SHALL refuse the image when the reported version is below the factory's git floor or no version is reported. A claimed task whose box image is refused SHALL be released, not aborted.
-**Implements**: NFR-S2 of tighten-spec-contract
-**Notes**: The seed clone reads the factory clone, on the reftable ref backend (readable since git 2.45; the floor is 2.51, one floor with the factory's own), with the image's git; the version is judged by the same parser and floor as the factory's own git check, and the reference sandbox-image recipe installs a git at or above it.
+The container adapter SHALL, before every seed clone of a box (a fresh materialize, and a reattach that applies a commit pin), run the image's own `git --version` in a one-shot, network-less helper carrying the environment's ownership labels, and SHALL refuse the image when the reported version is below the box's git floor or no version is reported. A claimed task whose box image is refused SHALL be released, not aborted.
+**Implements**: NFR-S2 of tighten-spec-contract; FR10 of own-git-invocation-policy
+**Notes**: The seed clone reads the factory clone, on the reftable ref backend (readable since git 2.45), with the image's git; the box's floor is 2.51.0 and is held apart from the factory's 2.56.0 until `add-sandbox-base-image` raises it with the images (design D11 of own-git-invocation-policy); the version is judged by the same parser as the factory's own git check, and the reference sandbox-image recipe installs a git at or above it.
 
 #### Scenario: An image whose git is below the floor is refused before the seed clone
 - **WHEN** a box is materialized on an image whose `git --version` reports 2.43.0

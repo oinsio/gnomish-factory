@@ -13,7 +13,7 @@ The build SHALL be organized into layered Gradle modules by hexagonal layer:
 `gnomish-plugin-api`,
 `application`, one or more `adapters` modules, `sandbox` modules, and
 `bootstrap`.
-**Implements**: FR9 of bound-subprocess-commands; FR1 of split-into-modules; FR5 of harden-task-branch-contract; FR4, FR6, FR8 of harden-logging-observability; FR2, FR3 of add-subprocess-access-log; FR10 of add-base-ref-resolution; FR1, FR4 of split-logtext-leaves; FR2 of own-git-transfer-argv
+**Implements**: FR9 of bound-subprocess-commands; FR1 of split-into-modules; FR5 of harden-task-branch-contract; FR4, FR6, FR8 of harden-logging-observability; FR2, FR3 of add-subprocess-access-log; FR10 of add-base-ref-resolution; FR1, FR4 of split-logtext-leaves; FR2 of own-git-transfer-argv; FR1, FR7 of own-git-invocation-policy
 **Notes**: The published contract and the logging leaf were the first two consumers of `untrustedtext`. The extractability of `baseref` is a declared property.
 
 #### Scenario: Modules resolve as distinct Gradle projects
@@ -60,6 +60,18 @@ The build SHALL be organized into layered Gradle modules by hexagonal layer:
 - **WHEN** a task branch's base is resolved
 - **THEN** the allowed-bases pattern grammar, the designator validation against the allowed bases, the source priority and the decision value types come from the `:baseref` leaf
 - **AND** the leaf is a function from values to a decision, with no subprocess, no port and no factory type inside
+
+#### Scenario: Both git launchers take one invocation policy
+- **WHEN** the factory git runner and the git-object library each start a git
+  process
+- **THEN** each takes its command-scope configuration and environment
+  stripping from `:gittransfer`, and neither holds a policy key of its own
+
+#### Scenario: The invocation policy is pure values in gittransfer
+- **WHEN** any factory git process is started
+- **THEN** the one command-scope configuration set and the stripped environment it carries come
+  from the git invocation policy held by the JDK-only `:gittransfer` leaf, as pure values
+- **AND** the git transfer owner in the same leaf — fetch, clone and push alike — is layered on that policy
 
 ### Requirement: Composition root isolated in bootstrap
 `app` SHALL be split into `application` (use cases and ports, adapter-free) and
@@ -138,9 +150,10 @@ engine already consumes it) that `bootstrap` binds to the concrete adapter.
 The module dependency direction SHALL be acyclic and enforced by the build: each
 module SHALL declare only the internal edges its layer permits, and the layering
 gate SHALL fail the build naming any declared edge outside that set.
-**Implements**: FR9, NFR-S3 of bound-subprocess-commands; FR2 of split-into-modules; FR5 of harden-task-branch-contract; FR4, FR6, FR8 of harden-logging-observability; FR2, FR3 of add-subprocess-access-log; FR10, NFR-S3 of add-base-ref-resolution; FR6, FR7, FR11, NFR-S1 of split-logtext-leaves; FR2 of own-git-transfer-argv; FR19 of fix-terminal-receipt-convergence
+**Implements**: FR9, NFR-S3 of bound-subprocess-commands; FR2 of split-into-modules; FR5 of harden-task-branch-contract; FR4, FR6, FR8 of harden-logging-observability; FR2, FR3 of add-subprocess-access-log; FR10, NFR-S3 of add-base-ref-resolution; FR6, FR7, FR11, NFR-S1 of split-logtext-leaves; FR2 of own-git-transfer-argv; FR19 of fix-terminal-receipt-convergence; FR1 of own-git-invocation-policy
 **Notes**: "Depends only on" in the scenarios describes declared edges; a module's layering allowlist describes reach, since the gate walks the transitive production graph.
 **Notes**: The dependency-free leafs stay empty because any edge added to one is pushed into every consumer: the emptiness of `subprocess` and `atomicfile` keeps their consumers free of transitive coupling, the domain reaches the event catalog and the published contract reaches both text leafs, and the git adapter and a sandbox backend reach `gittransfer` from opposite sides of the layering. `baseref` takes and returns plain values, which constructively keeps the resolution policy ignorant of subprocesses, trackers and configuration formats.
+**Notes**: The git-object library reaches `gittransfer` for the invocation policy alone, so extracting that library means moving it with its two JDK-only leafs, `subprocess` and `gittransfer`.
 
 #### Scenario: A vendor adapter reaches the tenure record through the contract
 - **WHEN** a vendor adapter module stamps its writes with the claim epoch of
@@ -186,7 +199,8 @@ gate SHALL fail the build naming any declared edge outside that set.
   `:domain`, the sample plugin reaching `:operatorevent` and `:untrustedtext`
   through `:gnomish-plugin-api`, `:adapters`, `:adapters:agent` and
   `:bootstrap` reaching `:gittransfer` through `:sandbox:docker` or
-  `:adapters:git`, and `:sandbox:docker`, `:adapters`, `:adapters:git` and
+  `:adapters:git`, `:application` reaching `:gittransfer` through
+  `:gitobjects`, and `:sandbox:docker`, `:adapters`, `:adapters:git` and
   `:adapters:agent` reaching `:operatorconfig` through `:application` or
   `:sandbox:core`
 - **THEN** the gate passes only because that module's allowlist names the
@@ -234,7 +248,7 @@ gate SHALL fail the build naming any declared edge outside that set.
 #### Scenario: Access-log emission adds no edge to gitobjects
 - **WHEN** the dependency gates run against `:gitobjects` after the access
   log lands
-- **THEN** its production dependency set is unchanged (`:subprocess` only),
+- **THEN** its production dependency set is unchanged (`:subprocess` and `:gittransfer` only),
   and its access-record reporting reaches the emitter only through the
   caller-supplied observer hook
 
@@ -282,9 +296,14 @@ gate SHALL fail the build naming any declared edge outside that set.
 
 #### Scenario: A reach entry names the edge it arrives through
 - **WHEN** a module's production classpath reaches `:untrustedtext`, `:operatorevent`, `:operatorconfig` or `:gittransfer` without declaring the edge
-- **THEN** its layering allowlist lists the leaf, and outside the composition root `:bootstrap` with a comment naming the edge it arrives through — `:domain`, `:gnomish-plugin-api`, `:application`, `:sandbox:core`, `:logtext`, `:sandbox:docker`, `:adapters:git`, or a direct declaration
+- **THEN** its layering allowlist lists the leaf, and outside the composition root `:bootstrap` with a comment naming the edge it arrives through — `:domain`, `:gnomish-plugin-api`, `:application`, `:sandbox:core`, `:logtext`, `:gitobjects`, `:sandbox:docker`, `:adapters:git`, or a direct declaration
 
 #### Scenario: The gitobjects observer hook defaults to a no-op
 - **WHEN** `:gitobjects` runs a git command and no observer was supplied
 - **THEN** it reports its execution facts to a no-op through its own JDK-only observer hook and declares no dependency for access-log emission
 - **AND** in the shipped composition `bootstrap` wires that hook to the access-log emitter
+
+#### Scenario: The git-object library depends only on subprocess and gittransfer
+- **WHEN** the layering gate runs against `:gitobjects`
+- **THEN** its only internal edges are `:subprocess` and the `:gittransfer` leaf that owns its
+  invocation policy, and its layering allowlist names `:gittransfer` with a comment naming that edge
