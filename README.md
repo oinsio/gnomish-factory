@@ -205,6 +205,7 @@ The full map of the project's documentation, by the question it answers:
 | Document                                                                                                   | Read it when you want to...                                                                       |
 |------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
 | [`docs/glossary.md`](docs/glossary.md)                                                                     | learn the project's terms — the normative dictionary every doc and class name follows; start here |
+| [`docs/prd/`](docs/prd)                                                                                    | see who the factory is for and what each of them needs — the system-level requirements layer      |
 | [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)                                   | run one ad-hoc task through a pipeline (`gnomish run`): flags, git mode, resume, exit codes       |
 | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                                           | run the factory against a tracker (`take`, `board`): labels, escalations, recovery                |
 | [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)                               | run the autonomous daemon (`serve`): slots, write budget, cron operation, embedded dashboard      |
