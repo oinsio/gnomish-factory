@@ -22,7 +22,7 @@ one entry, not four cells. An entry is deleted when it closes; git history keeps
 | `missing` | the want was never built; nothing contradicts it, nothing serves it |
 | `contradiction` | a requirement promises one thing and the story wants another; one of the two must change |
 | `one-medium-only` | served on one execution medium and not on the other; the story holds in the box and fails in host mode, or the reverse |
-| `wrong-turn` | built, but on a premise the review refuted; closing it means redesign, not a patch |
+| `wrong-turn` | built, but on a premise a story refutes; closing it means a decision review, not a patch. The entry names the decision, the premise and the refuting story (`plan.md`, section G) |
 
 **Resolution** says who closes it and when the entry leaves:
 
@@ -53,7 +53,7 @@ entry; the gate, once written, reports both.
 ### GP-VERIFY-RUNS-GNOME-TREE — A command check runs the project's commands from the gnome's tree
 **Breaks:** `UC-SEAL-THE-LAW`
 **Where today:** `pipeline/stage-engine`: Ordered fail-fast verification; the check is law, what it invokes is gnome-editable
-**Kind:** `wrong-turn`
+**Kind:** `wrong-turn` (decision: a command check runs in the attempt's working tree; premise: what the check invokes is the project's code; refuted by `UC-SEAL-THE-LAW`, whose **whatever the gnome writes in its copy** covers the build scripts the check runs)
 **Resolution:** `planned: harden-verification-integrity` (sealed assets, protected paths, diff-scope verdict)
 
 ### GP-VENDOR-KEY-IN-BOX — The gnome's process holds the model vendor's real key
@@ -101,7 +101,7 @@ entry; the gate, once written, reports both.
 ### GP-FACTORY-IN-OPERATOR-CLONE — The factory works inside the operator's own clone
 **Breaks:** `UC-REGISTER-A-CLONE`
 **Where today:** `operator/project-registry`: Projects are registered explicitly by clone path; `git/git-task-persistence`: Factory git executes no untrusted content (writes the clone's hook path); the operator must create the clone on the ref backend the factory requires, and the operator's hooks, configuration and IDE fetches reach the factory's git
-**Kind:** `wrong-turn` (the premise "the factory's clone is the operator's clone" dates from the manual-run era and was never decided; the 2026-10-21 review traced eight defects to it)
+**Kind:** `wrong-turn` (decision: D7 of `add-git-workflow`, the factory runs in the registered clone; premise: the factory's clone is the operator's clone, dating from the manual-run era and never decided; refuted by `UC-SHARE-A-PROJECT-ACROSS-MACHINES`, `UC-RUN-SLOTS-UNATTENDED` and the IDE fetch of `UC-REGISTER-A-CLONE`; the 2026-10-21 review traced eight defects to it)
 **Resolution:** `open` (a factory-owned clone from the origin URL is the candidate; no change written)
 
 ### GP-STAND-IN-AGENT-NOT-SHIPPED — A dry run without a model needs the factory's source tree
@@ -131,5 +131,5 @@ entry; the gate, once written, reports both.
 ### GP-SLOTS-RACE-ON-CLONE-CONFIG — Two slots claiming at once can fail on the clone's configuration lock
 **Breaks:** `UC-RUN-SLOTS-UNATTENDED`
 **Where today:** `serve/factory-serve`: Concurrent slots share one clone safely (promised; the hardening step writes the shared clone's configuration from every slot under no lock, and the loser's fresh claim fails)
-**Kind:** `wrong-turn` (the factory treats the clone's configuration file as its own settings store; see `GP-FACTORY-IN-OPERATOR-CLONE`)
+**Kind:** `wrong-turn` (decision: the factory hardens the clone by writing its configuration file; premise: one writer at a time; refuted by `UC-RUN-SLOTS-UNATTENDED`; see `GP-FACTORY-IN-OPERATOR-CLONE`)
 **Resolution:** `planned: own-git-invocation-policy` (the factory never writes the clone's configuration; every setting travels on the command line)

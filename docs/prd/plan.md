@@ -60,7 +60,10 @@ names it in `**Breaks:**`.
    `**Implements**:` on every main-spec requirement, keys `UC-`/`QR-`, many-to-many; the dead
    "Use case format" and "Gherkin scenario" rows deleted. `process-invariants.md`: this
    directory as layer 0 of artifact layering. `delta-specs.md`: the second metadata line.
-   `proposal-format.md`: "Users & Scenarios" becomes "Actors & Use Cases", naming keys.
+   `proposal-format.md`: "Users & Scenarios" becomes "Actors & Use Cases", naming keys; every
+   FR cites the story step or extension it realizes, every NFR cites the `QR-` whose measure is
+   its criterion. `design-decisions.md` and the ADR template: a decision names the `UC-`/`QR-`
+   it serves and its premises, one checkable sentence each (section G).
    Glossary entries: use case, quality requirement, known gap, fake-agent role (and the rename
    `GNOMISH_FAKE_SCENARIO` → `GNOMISH_FAKE_ROLE`, "scenario" being OpenSpec's word).
 2. **The gate.** `checkSpecContract` resolves every PRD key to exactly one heading under this
@@ -75,12 +78,64 @@ names it in `**Breaks:**`.
 
 ## E. Use the layer
 
-- Judge the pending git work against the stories: the operator-clone premise
-  (`GP-FACTORY-IN-OPERATOR-CLONE`), the scope of `own-git-invocation-policy`, directions A/B/C
-  of the git usage review.
+- Review the decisions behind the `wrong-turn` entries by the procedure of section G, the
+  operator-clone premise first (`GP-FACTORY-IN-OPERATOR-CLONE`, the scope of
+  `own-git-invocation-policy`, directions A/B/C of the git usage review).
 - Decide every `open` entry of `gaps.md` or state why it stays open.
-- Only then, Cockburn's next rung for the stories whose risk earns it: main course, failure
-  conditions and their handling.
+
+## F. From stories to requirements
+
+No separate list of functional and non-functional requirements is written: the system
+requirements are the main-spec requirements with their scenarios, and FR/NFR are numbered per
+change in its proposal (`traceability.md`). The stories and the `QR-` entries are their
+source, and the path from one to the other is:
+
+1. **Three outcomes per story**, read off the coverage table: a requirement carries the story
+   whole (it gets the `**Serves**:` line, nothing new is written); it carries it in part or
+   not at all (a `gaps.md` entry); a requirement carries no story at all (a deletion
+   candidate, or a missing story or `QR-`; reported by the ratchet of D.2, decided by the human).
+2. **Cockburn's next rung, only for the stories a gap being closed breaks**: the main course
+   (the actor's steps and the system's) and the extensions (what goes wrong, how the system
+   answers), written under the story in its group file before the change is proposed. Every
+   system step is a candidate FR; every extension an FR for handling it; a condition on a step
+   ("within one poll", "before any paid round") is the measure of a `QR-`.
+3. **One change per group of gaps with one closing mechanism.** Its proposal names the keys
+   in "Actors & Use Cases"; each FR cites its step or extension; each NFR cites its `QR-` and
+   takes the measure as its criterion. Then design, delta requirements with `Implements` and
+   `Serves`, scenarios, tests, as today. The archive closes the gap entry; the gate reports it
+   if it stays.
+4. **Completeness both ways** (Volere: every event has a response): a story with no
+   requirement and no gap is a hole; a `QR-` with no requirement and no gap is a hole; a
+   requirement with no `Serves` is a mechanism without a need. The "Tension with" lines are
+   settled in `quality.md` by saying which `QR-` wins, and that order is the order of closing
+   gaps.
+
+## G. Reviewing a decision that leads the wrong way
+
+Every wrong turn found so far rested on a premise nobody had written down, so none could be
+checked ("the factory's clone is the operator's clone"; "a check may run commands from the
+gnome's tree"). The layer makes a decision reviewable by its source and its premises:
+
+1. **Source and premises are written.** An ADR or a `D-n` of a design names the `UC-`/`QR-`
+   it serves and its premises, one checkable sentence each (D.1). A decision serving no story
+   is as suspect as a requirement without `Serves`.
+2. **Stories test premises.** A premise is refuted when the **When** of a story is
+   incompatible with it: "I run instances on several machines", "two slots claim at once",
+   "my IDE fetches" each refute the operator-clone premise. A `wrong-turn` entry therefore
+   names the decision, the premise and the refuting story.
+3. **The ratchet finds mechanisms without a need** (D.2, F.1): what the git usage review
+   found by hand, every later group or `QR-` surfaces by a run of the gate.
+4. **The review is a decision review, never a narrowed requirement** (`spec-mismatch.md`;
+   `/architect` mode C). Inputs the layer adds: the alternatives compared by the `QR-` each
+   meets and breaks, the "Tension with" lines as the trade-off points, alternative zero (delete
+   the mechanism; who carries the duty) checked against the same stories. One of three results:
+   the decision stands and gains its missing source line; it is superseded by a new ADR or a
+   change with `Supersedes`, the old requirement leaves by REMOVED in the delta, the gap entry
+   moves to `planned:`; it is kept knowingly, as `decided:` with the stance in `concept.md`
+   (host mode is the precedent).
+5. **A refuted premise becomes an explicit stance**, a `QR-` with a measure or a sentence in
+   `concept.md`, so the same turn is not taken twice ("the factory writes only to a clone no
+   other writer touches").
 
 ## Standing constraints
 
