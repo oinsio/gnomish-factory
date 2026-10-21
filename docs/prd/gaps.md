@@ -121,3 +121,15 @@ entry; the gate, once written, reports both.
 **Where today:** `sandbox/execution-environment`: Adapter passports and fail-closed reconciliation (the passport can state the boundary; the container adapter declares a software one, and no adapter declares a hardware one)
 **Kind:** `missing`
 **Resolution:** `planned: add-sandbox-colima-vm` (a per-task VM adapter of the same port; the cloud and CI executors in `add-sandbox-cloud-executor` and `add-sandbox-gha-executor` are other answers to the same want)
+
+### GP-NO-IMMEDIATE-RETURN — A task given back on purpose waits out the lease
+**Breaks:** `UC-STOP-AND-RESTART-WITHOUT-DEBT`
+**Where today:** `serve/factory-serve`: SIGTERM stops cleanly within grace promises "an instant return to Ready with no TTL wait", while the port's release verb drops the claim and moves nothing (a documented no-op on the GitHub adapter, pinned by its release contract); the task returns only when a reaper finds the claim stale
+**Kind:** `contradiction` (the main spec's scenario and the port's release contract promise opposite things; the scenario's test is a pending feature naming finding F97 and the planned change)
+**Resolution:** `planned: add-claim-return` (a fenced return verb for the deliberate callers: shutdown, pre-work outage, usage error)
+
+### GP-SLOTS-RACE-ON-CLONE-CONFIG — Two slots claiming at once can fail on the clone's configuration lock
+**Breaks:** `UC-RUN-SLOTS-UNATTENDED`
+**Where today:** `serve/factory-serve`: Concurrent slots share one clone safely (promised; the hardening step writes the shared clone's configuration from every slot under no lock, and the loser's fresh claim fails)
+**Kind:** `wrong-turn` (the factory treats the clone's configuration file as its own settings store; see `GP-FACTORY-IN-OPERATOR-CLONE`)
+**Resolution:** `planned: own-git-invocation-policy` (the factory never writes the clone's configuration; every setting travels on the command line)
