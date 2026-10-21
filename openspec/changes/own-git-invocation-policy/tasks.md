@@ -146,7 +146,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       (`--get`, `--list`) stay. Record the grep and its hit count in the task report. Verify:
       `:test-fixtures` builds, the existing `addOrigin` specs are green, and the grep shows no
       write through the runner.
-- [ ] 4.2 Plant the posture in `BareGitRepoFixture.initWorkingRepo` (FR8, design D6):
+- [x] 4.2 Plant the posture in `BareGitRepoFixture.initWorkingRepo` (FR8, design D6):
       - a hook directory with marker-writing `pre-commit`, `post-checkout` and
         `reference-transaction` hooks that exit 1;
       - `commit.gpgSign=true` with a marker-writing `gpg.program` that exits 1;
@@ -289,18 +289,25 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       Old-way grep, recorded in the report: `grep -rn '2, 51\|2, 56\|"2\.51\|"2\.56' --include='*.java'`
       over production sources — hits only in `GitVersion`. Verify: the named specs green; PIT on
       `GitVersion`, `GitVersionCheck`, `BoxGitFloor` all killed.
-- [ ] 8.4 CI's git (UX3, design D11): read the `git version … meets the floor` line from the last
-      CI `build` run, or run `git --version` in a one-off job step. If `ubuntu-latest` ships a git
-      below 2.56.0, install git from the `git-core` PPA in every workflow job that runs the
-      factory's specs (`ci.yml` `build`, `pitest-nightly.yml`, and `release.yml` if its build
-      runs them), the way
-      `scripts/linux-runner/Dockerfile` does. Update that Dockerfile's floor comment and the
-      `docs/glossary.md` entry that names the CI platform's git (≥ 2.51 → ≥ 2.56). Verify: the
-      workflow's git step prints 2.56 or later; `scripts/linux-specs.sh` builds and runs one
-      named spec.
-- [ ] 8.5 Docs (UX3, design D3, D11):
+- [x] 8.4 CI's git (UX3, design D11; `ubuntu-latest` ships 2.55.0, the `git-core` PPA 2.55.0):
+      - add `scripts/install-git.sh`: one pinned version (2.56.0) and SHA-256
+        (`26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3`, kernel.org's
+        `sha256sums.asc`), downloads `git-2.56.0.tar.xz`, refuses a checksum mismatch, builds and
+        installs it, and ends with the floor check (`git version` ≥ 2.56);
+      - `ci.yml` `build` and `pitest-nightly.yml` replace the PPA step with the script, caching
+        the install keyed on the script's hash (`actions/cache`); `release.yml` runs no specs and
+        needs none;
+      - `scripts/linux-runner/Dockerfile` drops the PPA and runs the script in one layer (the
+        build tools it needs purged in the same layer); its header comment names the script;
+      - update the `docs/glossary.md` entry that names the CI platform's git (≥ 2.51 → ≥ 2.56).
+
+      Verify: the script builds and passes its floor check in the runner image;
+      `scripts/linux-specs.sh` builds and runs one named spec; old-way grep
+      `grep -rn "git-core\|ppa:" .github scripts docs` — hits only history.
+- [x] 8.5 Docs (UX3, design D3, D11):
       - `docs/releases/v0.1.0.md`: the factory needs git 2.56.0 or newer, with the remedy
-        (Homebrew's git; on Ubuntu the `git-core` PPA, since the 26.04 archive ships 2.53);
+        (Homebrew's git; on Ubuntu a source build, since the 26.04 archive ships 2.53 and the
+        `git-core` PPA 2.55);
       - `docs/adr/0008-git-transfer-policy.md`: amend the floor paragraph — 2.56.0 for the
         factory since `own-git-invocation-policy`, the box's own floor 2.51.0 until
         `add-sandbox-base-image`;
@@ -318,7 +325,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       floors, and moves the base image, the test sandbox images (`alpine:3`: 2.54.0;
       `eclipse-temurin:21-jdk-resolute`: 2.53.0) and the reference recipe to a git at or above
       it; `add-subprocess-access-log`'s note on the argv records names the new pair count.
-- [ ] 8.7 Integration check: root `./gradlew check` green (after `scripts/linux-specs.sh` over the
+- [x] 8.7 Integration check: root `./gradlew check` green (after `scripts/linux-specs.sh` over the
       modules group 8 touched, per `verification-scope.md`); `openspec validate
       own-git-invocation-policy` clean; the FR9, FR10 and UX3 grep shows each referenced by a spec
       or code unit.

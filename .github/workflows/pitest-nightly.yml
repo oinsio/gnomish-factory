@@ -57,27 +57,54 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # The factory refuses a git below its floor, 2.56.0 (GitVersion.FLOOR; FR10, UX3 of
-      # own-git-invocation-policy, design D11), and ubuntu-latest ships an older one (2.55.0 on
-      # run 39484184528). Install the current git from the git-core PPA, as the Linux spec
-      # runner's image does (scripts/linux-runner/Dockerfile), before anything runs git.
-      - name: Install git from the git-core PPA
-        run: |
-          sudo add-apt-repository -y ppa:git-core/ppa
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends git
-
-      # The log names the git the specs ran on, and a stale PPA fails here, not in a spec.
-      - name: Git meets the factory's floor
-        run: |
-          git --version
-          git version | awk '{ split($3, v, "."); exit !(v[1] > 2 || (v[1] == 2 && v[2] >= 56)) }'
-
       - name: Checkout
         uses: actions/checkout@v7
         with:
           # The whole-tree scope resolves no merge base, so no history is needed.
           fetch-depth: 1
+
+      # The factory refuses a git below its floor, 2.56.0 (GitVersion.FLOOR; FR10, UX3 of
+      # own-git-invocation-policy, design D11), ubuntu-latest ships an older one (2.55.0 on run
+      # 39484184528), and no Ubuntu package source publishes 2.56.0. scripts/install-git.sh builds
+      # the pinned kernel.org release, as the Linux spec runner's image does
+      # (scripts/linux-runner/Dockerfile). The checkout above runs on the runner's own git; nothing
+      # of the factory runs git before the floor check below. The installed tree is cached, keyed
+      # on the runner's Ubuntu release (the libraries it links against), its architecture and the
+      # script's hash (the version, the checksum and the build flags).
+      - name: Name the runner's Ubuntu release
+        id: os
+        run: echo "release=$(. /etc/os-release && echo "$ID-$VERSION_ID")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the built git
+        id: git-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.tool_cache }}/gnomish-git
+          key: gnomish-git-${{ steps.os.outputs.release }}-${{ runner.arch }}-${{ hashFiles('scripts/install-git.sh') }}
+
+      # On a cache hit the script finds the pinned version already installed, builds nothing and
+      # still runs its floor check.
+      - name: Install git from source
+        run: scripts/install-git.sh --prefix "${{ runner.tool_cache }}/gnomish-git"
+
+      # Saved right after the build, not in a post step, so a later red step does not cost the
+      # next run another build.
+      - name: Save the built git
+        if: steps.git-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.tool_cache }}/gnomish-git
+          key: ${{ steps.git-cache.outputs.cache-primary-key }}
+
+      - name: Put the built git first on PATH
+        run: echo "${{ runner.tool_cache }}/gnomish-git/bin" >> "$GITHUB_PATH"
+
+      # The log names the git the specs ran on; a wrong PATH or build fails here, not in a spec.
+      - name: Git meets the factory's floor
+        run: |
+          test "$(command -v git)" = "${{ runner.tool_cache }}/gnomish-git/bin/git"
+          git --version
+          git version | awk '{ split($3, v, "."); exit !(v[1] > 2 || (v[1] == 2 && v[2] >= 56)) }'
 
       - name: Set up JDK 25 (Temurin)
         uses: actions/setup-java@v6

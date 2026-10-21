@@ -204,7 +204,8 @@ statement of how it invokes git.
   command that removes it. Nothing is removed automatically.
 - **UX3**: An operator whose git is below 2.56.0 is refused at startup with the floor, the
   installed version and the reason; the release note and the operator guide name the remedy
-  (Homebrew's current git; on Ubuntu, the `git-core` PPA, since the 26.04 archive ships 2.53).
+  (Homebrew's current git; on Ubuntu, a source build, since the 26.04 archive ships 2.53 and the
+  `git-core` PPA 2.55).
 
 ## Success Metrics
 
@@ -231,8 +232,9 @@ statement of how it invokes git.
 - `:gittransfer`: new `GitInvocation` owner; `GitTransfer` and `GitPush` compose it.
   `GitVersion` holds two floors until `add-sandbox-base-image`: the factory's (2.56.0) and the
   box's (2.51.0); `BoxGitFloor` (`:sandbox:docker`) reads the box's.
-- CI: the `build` job's git must be at least 2.56.0; if `ubuntu-latest` ships an older one, the
-  job installs it from the `git-core` PPA, as `scripts/linux-runner/Dockerfile` already does.
+- CI: the `build` job's git must be at least 2.56.0; `ubuntu-latest` ships 2.55.0, so the CI
+  jobs that run the specs and `scripts/linux-runner/Dockerfile` build a pinned 2.56.0 from
+  source through one script, `scripts/install-git.sh` (design D11).
 - `:gitobjects`: `GitExec` applies the policy; new edge to `:gittransfer`.
 - `:adapters:git`: `GitProcessRunner` applies the policy and refuses configuration writes.
   `FactoryCloneHardening*` is removed; `GitTaskBranches.harden` keeps only its ref-backend check,

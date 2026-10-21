@@ -450,3 +450,20 @@ that fixes it removes the annotation.
   commit fails on a CI runner, where git cannot guess one, while passing on a workstation), and a fixture fetch
   spells its source in full (`refs/heads/<branch>:refs/remotes/origin/<branch>`): under
   `fetch.prune=true` git deletes the destination of a short-name source instead of writing it
+
+  The clone's own local configuration is adversarial too (design D6 of
+  `own-git-invocation-policy`): every working repository `BareGitRepoFixture.initWorkingRepo`
+  builds carries, through `AdversarialLocalConfig` in `:test-fixtures`, a `core.hooksPath`
+  directory whose `pre-commit`, `post-checkout` and `reference-transaction` hooks record their run
+  and exit 1, `commit.gpgSign=true` with a `gpg.program` that records its run and exits 1, a
+  `core.fsmonitor` command that records its run, and `branch.autoSetupMerge=always`. Every planted
+  program is the committed stand-in preset `hook-record-refuse`, reached through a per-repository
+  link under `.git/gnomish-planted/`, so its marker is that link's `<link>.log`. A git path that
+  runs without the factory's invocation policy (`GitInvocation`) therefore leaves a marker, and
+  every planted program but the filesystem monitor also fails the operation, so an existing spec
+  goes red instead of waiting for a regression spec; a spec asserting the policy held calls
+  `assertNothingPlantedRan(repo)`, which names each program that ran and its arguments. The
+  fixture's own configuration writes go through `FixtureGitConfig`, since the factory runner
+  refuses every configuration write. A spec whose git runs outside the policy on purpose asks for
+  `initPlainWorkingRepo` by name, with a comment giving the reason; no spec inherits the plain
+  posture silently

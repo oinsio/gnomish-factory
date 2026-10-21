@@ -321,9 +321,22 @@ there, so the box needs no event switch.
   a policy.
 - *Alternative rejected:* **2.55.0.** Its release notes announce parallel configuration hooks but
   not the event switch; the floor follows what was verified.
-- *Cost:* an operator on a distribution git (Ubuntu 26.04's 2.53) needs the `git-core` PPA or
-  Homebrew's current git (UX3); the CI `build` job's git must be at least 2.56.0, installed from
-  the PPA when `ubuntu-latest` lags (task 8.4).
+- *Cost:* an operator on a distribution git (Ubuntu 26.04's archive ships 2.53, the `git-core`
+  PPA 2.55) needs Homebrew's current git or a source build (UX3). CI and the Linux spec runner
+  get theirs from one committed script, `scripts/install-git.sh`, which downloads
+  `git-2.56.0.tar.xz` from kernel.org, verifies its pinned SHA-256, builds and installs it; the
+  `ci.yml` `build` job and `pitest-nightly.yml` run it (the build cached with `actions/cache`),
+  and `scripts/linux-runner/Dockerfile` runs it in one layer (task 8.4). `ubuntu-latest` ships
+  2.55.0 (run 39484184528), and the PPA still published only `1:2.55.0` for noble and resolute
+  on 2026-10-21 (Launchpad API). The next floor raise bumps the version and checksum in that
+  one script (`add-sandbox-base-image`); returning to a package source once one publishes the
+  floor is optional.
+- *Alternative rejected:* **the `git-core` PPA.** It publishes 2.55.0 only; CI would stay red
+  until it caught up, a stall with no owner.
+- *Alternative rejected:* **Homebrew on the CI runners and in the runner image.** Heavy inside
+  a container, and the version follows Homebrew's latest bottle rather than a pin.
+- *Alternative rejected:* **Homebrew on CI, a source build in the runner image.** Two sources
+  for one platform: the runner exists to reproduce CI, and two sources drift.
 
 ## Risks / Trade-offs
 
@@ -335,7 +348,7 @@ there, so the box needs no event switch.
   since they first ran the factory; after upgrading it runs their hooks again. → Release note
   plus the doctor check (UX2), which prints the exact `git config --local --unset` line.
 - **The access log sees the pairs.** `add-subprocess-access-log` records argv, so the policy's
-  pairs — eight keys plus one switch per hook event, 37 in all on 2.56 — appear on every record
+  pairs — eight keys plus one switch per hook event, 36 in all on 2.56 (eight plus 28 events) — appear on every record
   → that change is sequenced after this one and may render the policy as one token. Its concern,
   noted in its proposal. The argv itself stays far below any `ARG_MAX`.
 - **A git newer than the floor adds a hook event.** The switch list is the floor release's; an

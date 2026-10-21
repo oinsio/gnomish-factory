@@ -13,8 +13,9 @@
 #   scripts/linux-specs.sh --repeat 20 :subprocess:test --tests '*EscapedHolderSpec'
 #
 # What it does:
-#   1. builds the image from scripts/linux-runner/Dockerfile when it is missing (or always, with
-#      --rebuild); the tag carries the Dockerfile's hash, so an edit builds a new image;
+#   1. builds the image from scripts/linux-runner/Dockerfile, with scripts/ as the build context
+#      (the image runs scripts/install-git.sh), when it is missing (or always, with --rebuild);
+#      the tag carries the hash of both files, so an edit of either builds a new image;
 #   2. copies the working tree, .git included and build/ and .gradle/ excluded, into
 #      <scratch>/repo (refreshed by rsync on every run);
 #   3. runs ./gradlew <gradle args> in the container as the developer's uid:gid, with HOME and
@@ -109,18 +110,20 @@ printf '%s\n' "$committed" >"$scratch/docker-config/config.json"
 export DOCKER_CONFIG="$scratch/docker-config"
 
 if command -v sha256sum >/dev/null 2>&1; then
-    hash=$(sha256sum "$dockerfile_dir/Dockerfile" | cut -c1-12)
+    sha=(sha256sum)
 else
-    hash=$(shasum -a 256 "$dockerfile_dir/Dockerfile" | cut -c1-12)
+    sha=(shasum -a 256)
 fi
+hash=$(cat "$dockerfile_dir/Dockerfile" "$repo/scripts/install-git.sh" | "${sha[@]}" | cut -c1-12)
 image="gnomish-linux-specs:$hash"
 
 if test "$rebuild" -eq 1 || ! docker image inspect "$image" >/dev/null 2>&1; then
     echo "linux-specs: building $image from scripts/linux-runner/Dockerfile" >&2
     if test "$rebuild" -eq 1; then
-        docker build --pull --no-cache --tag "$image" "$dockerfile_dir" >&2
+        docker build --pull --no-cache --tag "$image" \
+            --file "$dockerfile_dir/Dockerfile" "$repo/scripts" >&2
     else
-        docker build --tag "$image" "$dockerfile_dir" >&2
+        docker build --tag "$image" --file "$dockerfile_dir/Dockerfile" "$repo/scripts" >&2
     fi
 fi
 

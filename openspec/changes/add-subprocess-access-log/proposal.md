@@ -362,7 +362,7 @@ only budgets this change touches); no separate cost requirement.
   sync time, that delta's preamble says what must survive a hand merge.
 - **Sequencing after `own-git-invocation-policy`**: every factory git
   process now carries that change's `-c` policy pairs ahead of its
-  subcommand — eight keys plus one hook switch per event, 37 pairs on git 2.56
+  subcommand — eight keys plus one hook switch per event, 36 pairs on git 2.56
   (design D3 of that change) — so each git argv record (FR1, FR6) carries them
   too; this change may render the policy as one token rather than the pairs.
 - **Not touched**: `:subprocess` (neutrality contract), `CaptureRunner`,
