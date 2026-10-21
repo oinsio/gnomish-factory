@@ -60,6 +60,10 @@ class GitInvocationSpec extends Specification {
         'post-rewrite',
         'sendemail-validate',
         'fsmonitor-watchman',
+        'p4-changelist',
+        'p4-prepare-changelist',
+        'p4-post-changelist',
+        'p4-pre-submit',
         'post-index-change',
     ]
 

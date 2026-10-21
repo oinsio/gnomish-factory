@@ -1,6 +1,6 @@
 # ADR 0012: Git Invocation Policy
 
-Status: accepted (2026-10-20, introduced by `own-git-invocation-policy`; its design D1–D4 and D7
+Status: accepted (2026-10-20, introduced by `own-git-invocation-policy`; its design D1–D4, D7 and D11
 took these decisions, recorded here because a change's `design.md` archives with the change and
 governs nothing afterwards)
 
@@ -18,6 +18,11 @@ the gnome. Before this decision the factory treated that file as two things it i
   (`pre-push`); `commit.gpgSign` with `gpg.program` ran an arbitrary program in the factory's
   `commit-tree`; a local `refs/replace/` entry changed what `cat-file` returned for a commit id;
   `fetch`, and a `git commit`, started a detached `maintenance run --auto` in the shared clone.
+- **A hook directory is not the only place a hook lives.** Since git 2.54 a hook can be defined
+  in the configuration itself: `hook.<name>.command` names the program and `hook.<name>.event`
+  the event it runs on. git runs such a hook whatever `core.hooksPath` says — verified on 2.56.0: a
+  `reference-transaction` hook planted that way in `.git/config` ran in an `update-ref` carrying
+  all eight pairs below, and also on `branch`, `add -A` and `worktree add`.
 
 The factory started git from two launchers — `GitProcessRunner` (`:adapters:git`) and `GitExec`
 (`:gitobjects`) — and stated a third policy in the transfer owner `GitTransfer` (ADR 0008). The
@@ -68,6 +73,24 @@ The eight pairs, each neutralizing a key that runs a program or changes what git
 
 `/dev/null` needs no filesystem state; an empty hook directory under `.git` is writable by anyone
 who can write `.git/config`. Gitaly and the Jenkins git plugin use the same value.
+
+After the eight pairs come the **event switches**: one `hook.<event>.enabled=false` pair for every
+hook event the githooks(5) page of git 2.56.0 lists, client and server side, in the page's order —
+`applypatch-msg` through `post-index-change`, 28 events. `core.hooksPath=/dev/null` empties the
+hook directory but says nothing about a hook defined in the configuration (`hook.<name>.command`
+with `hook.<name>.event`, Context), so it alone does not cover them. git also has a per-name
+switch, `hook.<name>.enabled`, but it needs the hook's name, which whoever writes the
+configuration chooses; the event switch needs only the event, which the factory can list. Both
+keep their place: the directory key disables the classic hooks, the event switches disable the
+configured ones. The event list is written out in `GitInvocation`, read from the documentation of
+the floor release, not derived at runtime; an event a later git adds is one new entry, like any
+other key. A configured hook whose name is an event name (`hook.pre-commit.event`) makes git stop
+with a fatal error by design — a refused command, not a hook that runs — and that is accepted.
+
+The switches are why the factory's git floor is 2.56.0 (ADR 0008, the floor paragraph as amended
+by this change): the switch is documented and verified there, and a policy naming a key the
+installed git ignores neutralizes nothing. The box's git keeps its own floor, 2.51.0, until
+`add-sandbox-base-image`: no factory policy runs inside the box, so the box needs no switch.
 
 Removed from every factory git process's environment: `GIT_CONFIG_PARAMETERS` and
 `GIT_CONFIG_COUNT`, so a per-process configuration inherited by the factory cannot add a key
@@ -134,8 +157,8 @@ Closing these is a separate clone per task, not a longer list of pairs, and belo
   undone until the next claim.
 - **Write once at startup** — undone values stay undone for the daemon's whole lifetime.
 - **Retry on the lock error, or raise the git floor to 2.56 for `core.configLockTimeout`** — both
-  retry a write that should not exist, do nothing for the read side (hooks, signing, replace
-  refs), and the floor would push operators past their distribution's git.
+  retry a write that should not exist and do nothing for the read side (hooks, signing, replace
+  refs). (The floor did rise to 2.56 afterwards, for the event switches above, not for this lock.)
 - **`GIT_CONFIG_GLOBAL=/dev/null` for the runner** — `origin` needs the operator's credentials.
 - **Expose the pairs as a constant each launcher concatenates** — three concatenations kept in
   step by hand; the owner producing the command line leaves a launcher no way to forget it.
@@ -151,15 +174,18 @@ Closing these is a separate clone per task, not a longer list of pairs, and belo
 - An operator who relied on the persisted `core.hooksPath` sees their own hooks run again in their
   own git. The stale line earlier versions left (`core.hooksPath=<clone>/.git/gnomish-empty-hooks`)
   is reported, never removed automatically.
-- Every git argv carries eight pairs more; an access log that records argv sees them on every
-  record.
+- Every git argv carries 36 pairs more (the eight above and 28 event switches); an access log
+  that records argv sees them on every record.
+- The factory refuses to start on a git below 2.56.0; an operator on a distribution git that
+  lags (Ubuntu 26.04 ships 2.53) installs a newer one first.
 - `/dev/null` is POSIX; the factory already requires a POSIX host.
 
 ## See also
 
 - `docs/adr/0008-git-transfer-policy.md` — the transfer owner that composes this policy, and the
   ambient-credentials decision for `origin`.
-- `docs/sandbox-threat-registry.md` — threat #38 (hooks in factory copies).
+- `docs/sandbox-threat-registry.md` — threat #38 (hooks in factory copies) and threat #50 (the
+  clone's configuration, hooks defined in it included).
 - `docs/glossary.md` — *git invocation policy*, *transfer*.
 - `.claude/rules/implementation.md` — the single-owner checklist this decision was implemented
   under.

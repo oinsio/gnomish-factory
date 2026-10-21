@@ -248,7 +248,8 @@ cannot run.
 ### A git version floor, checked once at startup
 
 The factory reads `git --version` once per process, before any transfer and
-before any tracker write, and refuses to run below the floor — 2.45.1 as accepted, 2.51.0 since the amendment below — with a report
+before any tracker write, and refuses to run below the floor — 2.45.1 as accepted, 2.51.0 since the first amendment below,
+2.56.0 since the second — with a report
 naming the floor, the installed version, and the reason: the seed clone
 relies on git's local-clone hook protections, closed in 2.39.4 and 2.45.1
 (FR10, NFR-R2, UX2). A git that cannot report its version is refused the same
@@ -269,6 +270,18 @@ and is part of the new floor's reason. A passing check logs one INFO line with t
 detected version and the floor; a refusal is one ERROR line with the same
 two values and the reason (NFR-O1). The seed helper image needs the same
 floor, since it runs the clone.
+
+*Amended 2026-10-20 (ADR 0012, `own-git-invocation-policy`, design D11):* the
+factory's floor is now 2.56.0. The git invocation policy disables hooks
+defined in the configuration with one `hook.<event>.enabled=false` switch per
+hook event; that switch is documented and verified in 2.56, and a policy
+naming a key the installed git ignores neutralizes nothing. The 2.45.1 and
+2.51.0 reasons above stand and are part of the new floor's reason. The floors
+are now two: the box's git — the seed clone and the snapshot commits run
+inside the box — keeps its own floor, 2.51.0, with the reasons above, until
+`add-sandbox-base-image` raises it to 2.56.0 and joins the two again. No
+factory policy runs inside the box, so the box needs no event switch, and the
+images it runs today ship 2.53 or 2.54.
 
 ### Origin contact for the outage accounting of ADR 0005
 
@@ -363,7 +376,7 @@ isolation, so a run outside the build fails rather than passing vacuously.
 - An operator whose `origin` is `git://`, or who relies on a custom remote
   helper for `origin`, is refused by the allowlist with git's own message.
 - An operator on a git below the floor (2.45.1 when this ADR was accepted,
-  2.51.0 since the amendment above) is refused at startup with a
+  2.51.0 since the first amendment above, 2.56.0 since the second) is refused at startup with a
   precondition report instead of running with a silently weaker seed clone.
 - Every developer's `~/.gitconfig` is out of the test build; the committed
   file supplies a fixture committer identity in its place (git cannot guess one

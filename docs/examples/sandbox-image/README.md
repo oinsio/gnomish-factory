@@ -11,7 +11,7 @@ The container adapter and the egress self-check assume, in any image you build:
 
 | Contract item                                         | Why                                                                          |
 |-------------------------------------------------------|------------------------------------------------------------------------------|
-| `git` 2.51.0 or newer on `PATH`                       | the seed clone and snapshot commits run in-box; the seed clone reads the reftable factory clone under the factory's own git floor, and an older git is refused before seeding |
+| `git` 2.51.0 or newer on `PATH`                       | the seed clone and snapshot commits run in-box; the seed clone reads the reftable factory clone; the image's git is judged against the box's floor, 2.51.0 (not the factory's host floor, 2.56.0), and an older git is refused before seeding |
 | `curl` on `PATH`                                      | the fail-closed self-check probes run via `exec` (FR8)                       |
 | non-root user `gnome`, uid 1000, owning `/gnomish/**` | every process — seed clone included — runs as the image user, never root     |
 | control surfaces root-owned                           | agent-CLI policy, proxy/CA/build configs must survive a hostile round (FR20) |
@@ -40,7 +40,7 @@ Build arguments (all optional):
 
 | Arg                         | Default                        | Purpose                                             |
 |-----------------------------|--------------------------------|-----------------------------------------------------|
-| `BASE_IMAGE`                | `eclipse-temurin:21-jdk-resolute` | JDK base; pick your project's toolchain — its git must be 2.51.0 or newer (Ubuntu 26.04 ships 2.53; noble's 2.43 is refused — add the git-core PPA on a noble base) |
+| `BASE_IMAGE`                | `eclipse-temurin:21-jdk-resolute` | JDK base; pick your project's toolchain — its git must meet the box's floor, 2.51.0 or newer (Ubuntu 26.04 ships 2.53; noble's 2.43 is refused — add the git-core PPA on a noble base) |
 | `NPM_REGISTRY`              | npmjs.org                      | registry the agent CLI installs from at build time  |
 | `MAVEN_MIRROR_URL`          | Maven Central                  | the baked Maven mirror — the artifact-depot seam    |
 | `AGENT_CLI_PACKAGE`         | `@anthropic-ai/claude-code`    | the agent CLI baked into the image                  |
