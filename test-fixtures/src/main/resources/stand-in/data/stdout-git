@@ -9,14 +9,14 @@ refs/heads/gnomish/PROJ-1
 [git-version-2-50]
 git version 2.50.1
 
-[git-version-2-51-0]
-git version 2.51.0
+[git-version-2-55-2]
+git version 2.55.2
 
-[git-version-2-55-apple]
-git version 2.55.0 (Apple Git-200)
+[git-version-2-56-0]
+git version 2.56.0
 
-[git-version-2-55]
-git version 2.55.0
+[git-version-2-56-apple]
+git version 2.56.1 (Apple Git-200)
 
 [landed]
 landed

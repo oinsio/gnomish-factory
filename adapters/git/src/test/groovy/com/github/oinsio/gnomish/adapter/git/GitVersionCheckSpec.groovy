@@ -51,31 +51,36 @@ class GitVersionCheckSpec extends Specification {
 
         where:
         line | preset || expected
-        'git version 2.51.0' | 'version-2-51-0' || new GitVersion(2, 51, 0)
-        'git version 2.55.0 (Apple Git-200)' | 'version-2-55-apple' || new GitVersion(2, 55, 0)
+        'git version 2.56.0' | 'version-2-56-0' || new GitVersion(2, 56, 0)
+        'git version 2.56.1 (Apple Git-200)' | 'version-2-56-apple' || new GitVersion(2, 56, 1)
     }
 
     // Scenario: git/git-transfer / Old git is refused before any work
-    def "FR10, UX2, NFR-O1: a git below the floor is refused, naming floor, installed and reason"() {
-        given: 'a git one release below the floor'
-        def check = new GitVersionCheck(new GitProcessRunner(StandIn.recording(tempDir, 'version-2-50').toString()))
+    def "FR10, UX2, NFR-O1: a git below the floor is refused, naming floor, installed and reason: #installed"() {
+        given: 'a git below the factory\'s floor — 2.55.x meets the box\'s floor but not the factory\'s (FR10 of own-git-invocation-policy)'
+        def check = new GitVersionCheck(new GitProcessRunner(StandIn.recording(tempDir, preset).toString()))
 
         when:
         check.verify()
 
         then: 'the refusal reads like a precondition'
         def refused = thrown(GitVersionRefusedException)
-        refused.message.contains('2.51.0')
-        refused.message.contains('2.50.1')
+        refused.message.contains('2.56.0')
+        refused.message.contains(installed)
         refused.message.contains(GitVersion.FLOOR_REASON)
 
         and: 'one coded ERROR line carries the same two values and the reason'
         logs.list.size() == 1
         logs.list[0].level == Level.ERROR
         logs.list[0].formattedMessage.startsWith(OperatorEvent.STARTUP_GIT_VERSION_REFUSED.head())
-        logs.list[0].formattedMessage.contains('2.51.0')
-        logs.list[0].formattedMessage.contains('2.50.1')
+        logs.list[0].formattedMessage.contains('2.56.0')
+        logs.list[0].formattedMessage.contains(installed)
         logs.list[0].formattedMessage.contains(GitVersion.FLOOR_REASON)
+
+        where:
+        preset | installed
+        'version-2-55' | '2.55.2'
+        'version-2-50' | '2.50.1'
     }
 
     def "NFR-R2: a git whose output is not a version line is refused the same way, quoting the output"() {
@@ -87,7 +92,7 @@ class GitVersionCheckSpec extends Specification {
 
         then:
         def refused = thrown(GitVersionRefusedException)
-        refused.message.contains('2.51.0')
+        refused.message.contains('2.56.0')
         refused.message.contains('did not report a version')
         refused.message.contains('not a git at all')
         refused.message.contains(GitVersion.FLOOR_REASON)
@@ -120,7 +125,7 @@ class GitVersionCheckSpec extends Specification {
     // Scenario: git/git-transfer / Passing check is logged once
     def "NFR-R2: the check runs git once per process — a second call answers from the first"() {
         given: 'a git that records every invocation'
-        def git = StandIn.recording(tempDir, 'version-record-2-55')
+        def git = StandIn.recording(tempDir, 'version-record-2-56')
         def check = new GitVersionCheck(new GitProcessRunner(git.toString()))
 
         when:

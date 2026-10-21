@@ -99,9 +99,9 @@ class ContainerTaskExecutionEnvironmentContractSpec extends TaskExecutionEnviron
         ]))
         def line = readFully(version.output())
 
-        then: 'it parses, and it is not below the floor'
+        then: 'it parses, and it is not below the box\'s floor (FR10, design D11 of own-git-invocation-policy)'
         version.waitForExit() == 0
         GitVersion.parse(line).present
-        !GitVersion.parse(line).get().isBelow(GitVersion.FLOOR)
+        !GitVersion.parse(line).get().isBelow(GitVersion.BOX_FLOOR)
     }
 }

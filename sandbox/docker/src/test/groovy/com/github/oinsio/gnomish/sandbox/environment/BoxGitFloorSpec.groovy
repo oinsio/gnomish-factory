@@ -50,7 +50,7 @@ class BoxGitFloorSpec extends Specification {
     }
 
     // Scenario: sandbox/execution-environment / An image at or above the floor seeds as before
-    def "F122: an image at or above the floor passes silently: #line"() {
+    def "F122, FR10: an image at or above the box's floor passes silently, though below the factory's: #line"() {
         given:
         docker.boxGitVersion = line
 
@@ -65,7 +65,8 @@ class BoxGitFloorSpec extends Specification {
         where:
         line << [
             'git version 2.51.0',
-            'git version 2.53.0'
+            'git version 2.53.0',
+            'git version 2.55.2'
         ]
     }
 
@@ -80,7 +81,9 @@ class BoxGitFloorSpec extends Specification {
         then: 'the refusal names the image, the floor, what the image printed, why and what to do'
         def refused = thrown(BoxGitVersionRefusedException)
         refused.message.contains(IMAGE)
-        refused.message.contains(GitVersion.FLOOR.toString())
+        refused.message.contains(GitVersion.BOX_FLOOR.toString())
+        refused.message.contains('2.51.0')
+        !refused.message.contains(GitVersion.FLOOR.toString())
         refused.message.contains(line)
         refused.message.contains(BoxGitFloor.REASON)
         refused.message.contains('docs/examples/sandbox-image')
@@ -91,6 +94,7 @@ class BoxGitFloorSpec extends Specification {
         logs.list[0].formattedMessage.startsWith(OperatorEvent.BOX_GIT_VERSION_REFUSED.head())
         logs.list[0].formattedMessage.contains(KEY)
         logs.list[0].formattedMessage.contains(IMAGE)
+        logs.list[0].formattedMessage.contains('git 2.51.0 or newer')
 
         where:
         line << [

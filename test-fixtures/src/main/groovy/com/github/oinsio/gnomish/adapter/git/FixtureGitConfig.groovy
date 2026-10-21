@@ -30,6 +30,11 @@ final class FixtureGitConfig {
         git(repo, 'config', key, value)
     }
 
+    /** {@code git config --add <key> <value>} in {@code repo}'s local configuration: one more value of a multi-valued key. */
+    static void add(Path repo, String key, String value) {
+        git(repo, 'config', '--add', key, value)
+    }
+
     /** {@code git remote add <name> <url>} in {@code repo}. */
     static void addRemote(Path repo, String name, String url) {
         git(repo, 'remote', 'add', name, url)

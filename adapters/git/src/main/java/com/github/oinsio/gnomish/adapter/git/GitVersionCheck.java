@@ -12,8 +12,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The git version floor, checked once at startup before any transfer (FR10, design D8 of
- * own-git-transfer-argv): {@code git --version} runs through the one runner, its stdout is parsed
+ * The factory's git version floor, checked once at startup before any transfer (FR10, design D8 of
+ * own-git-transfer-argv; the floor itself is the factory's, not the box's, design D11 of
+ * own-git-invocation-policy): {@code git --version} runs through the one runner, its stdout is parsed
  * into the leaf's typed {@link GitVersion} — the parser warrant this class carries — and a version
  * below {@link GitVersion#FLOOR}, or a git that reports no version at all, ends the process with a
  * {@link GitVersionRefusedException} naming floor, installed and {@link GitVersion#FLOOR_REASON}.
@@ -33,7 +34,7 @@ import org.slf4j.LoggerFactory;
  * <p>The one ERROR of this failure class is logged here (NFR-O1); the command that ends on the
  * exception prints its message and nothing else, so the operator reads a precondition (UX2).
  *
- * <p>Implements FR10, NFR-R2, NFR-O1, UX2 of own-git-transfer-argv.
+ * <p>Implements FR10, NFR-R2, NFR-O1, UX2 of own-git-transfer-argv; FR10 of own-git-invocation-policy.
  */
 @UntrustedParser
 public final class GitVersionCheck {

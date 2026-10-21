@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.gittransfer.GitInvocation
 import com.github.oinsio.gnomish.gittransfer.GitTransfer
 import com.github.oinsio.gnomish.gittransfer.TransferSource.SeedPath
 import java.nio.file.Path
@@ -23,6 +24,9 @@ class DockerSeedCloneCommandSpec extends Specification {
     static final String KEY = 'org-repo-42'
     static final String GIT_CONFIG_GLOBAL = 'GIT_CONFIG_GLOBAL'
     static final ObjectOwnership OWNERSHIP = new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')
+
+    /** FR9 of own-git-invocation-policy: the policy's event-level hook switches, after its eight pairs. */
+    static final String HOOK_SWITCHES = GitInvocation.configPairs().drop(16).join(' ')
 
     // Scenario: sandbox/execution-environment / Every factory object is labelled from creation
     def "seedClone is a throwaway, anonymous, network-less helper with the full ownership label set"() {
@@ -115,7 +119,7 @@ class DockerSeedCloneCommandSpec extends Specification {
         then: 'the production script is the rendering of that value, and nothing else'
         script == DockerSeedCloneCommand.seedScript(owner)
 
-        and: 'the clone line, literally: unsets first, then the assignments, then git and the owner\'s argv, the invocation policy\'s pairs first (FR4 of own-git-invocation-policy)'
+        and: 'the clone line, literally: unsets first, then the assignments, then git and the owner\'s argv, the invocation policy\'s pairs first (FR4 of own-git-invocation-policy), the eight spelled here and the event-level hook switches after them (FR9; their list is pinned by GitInvocationSpec)'
         script.readLines().contains('  env'
                 + ' -u GIT_CONFIG_PARAMETERS -u GIT_CONFIG_COUNT -u GIT_OBJECT_DIRECTORY'
                 + ' -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_WORK_TREE -u GIT_INDEX_FILE'
@@ -124,6 +128,7 @@ class DockerSeedCloneCommandSpec extends Specification {
                 + ' git -c core.hooksPath=/dev/null -c commit.gpgSign=false -c tag.gpgSign=false'
                 + ' -c core.fsmonitor=false -c branch.autoSetupMerge=false -c maintenance.auto=false -c gc.auto=0'
                 + ' -c core.useReplaceRefs=false'
+                + ' ' + HOOK_SWITCHES
                 + ' -c fetch.recurseSubmodules=no -c submodule.recurse=false -c fetch.prune=false'
                 + ' -c fetch.fsckObjects=true -c transfer.fsckObjects=true'
                 + ' -c fetch.fsck.badTimezone=ignore -c fetch.fsck.missingSpaceBeforeDate=ignore'

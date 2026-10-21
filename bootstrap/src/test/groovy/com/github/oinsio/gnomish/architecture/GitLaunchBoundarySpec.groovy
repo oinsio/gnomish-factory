@@ -53,9 +53,6 @@ class GitLaunchBoundarySpec extends Specification {
         'com.github.oinsio.gnomish.subprocess.ProcessLaunch' : 'the launch role: starts a caller\'s builder, names no binary (D16, D19 of fix-terminal-receipt-convergence)',
         'com.github.oinsio.gnomish.subprocess.GroupedLaunch' : 'the launch owner: prefixes the launcher and starts, names no binary (D19 of fix-terminal-receipt-convergence)',
     ]
-    // D7 also lists StdinSource (:subprocess); its bytecode holds no ProcessBuilder reference (the
-    //     name appears only in its javadoc) — ProcessLaunch applies it to the builder (D20 of
-    //     fix-terminal-receipt-convergence) — so an entry for it would fail here as stale.
 
     /** The :test-fixtures module is test support on the production classpath, not production. */
     private static final ImportOption NO_TEST_FIXTURES = { Location location ->

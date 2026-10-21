@@ -21,7 +21,7 @@ package com.github.oinsio.gnomish.sandbox.environment
  *
  * <p>The base is {@code eclipse-temurin:21-jdk-resolute} (a real JDK, ~450 MB) —
  * the same base the reference recipe defaults to, on Ubuntu 26.04 whose archive git (2.53) meets
- * the box's git floor (2.51.0, the factory's own): the seed clone runs the image's git against the reftable factory clone
+ * the box's git floor (2.51.0, its own, below the factory's 2.56.0): the seed clone runs the image's git against the reftable factory clone
  * (design D13 of tighten-spec-contract, as amended 2026-10-13), which noble's 2.43 cannot open; the image builds on demand
  * and the spec is Docker-gated, so an offline machine skips it cleanly.
  */

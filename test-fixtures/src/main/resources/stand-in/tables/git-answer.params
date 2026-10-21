@@ -34,17 +34,23 @@ ls-remote answer data/stdout-git#ls-remote-hostile-symref 0
 * delegate git
 
 [version-2-50]
-# A git below the floor that records every invocation (GitVersionCheckSpec, GitVersionFloorSpec).
+# A git below both floors that records every invocation (GitVersionCheckSpec).
 * record
 * answer data/stdout-git#git-version-2-50 0
 
-[version-2-51-0]
-# A git exactly at the floor (GitVersionCheckSpec).
-* answer data/stdout-git#git-version-2-51-0 0
+[version-2-55]
+# A git above the box's floor and one release below the factory's, recording every invocation
+# (GitVersionCheckSpec, GitVersionFloorSpec).
+* record
+* answer data/stdout-git#git-version-2-55-2 0
 
-[version-2-55-apple]
-# A git above the floor, as Apple ships it (GitVersionCheckSpec).
-* answer data/stdout-git#git-version-2-55-apple 0
+[version-2-56-0]
+# A git exactly at the factory's floor (GitVersionCheckSpec).
+* answer data/stdout-git#git-version-2-56-0 0
+
+[version-2-56-apple]
+# A git above the factory's floor, as Apple ships it (GitVersionCheckSpec).
+* answer data/stdout-git#git-version-2-56-apple 0
 
 [version-broken]
 # A broken install: no version, an error, exit 1 (GitVersionCheckSpec).
@@ -54,7 +60,7 @@ ls-remote answer data/stdout-git#ls-remote-hostile-symref 0
 # Something on the git path that is not git (GitVersionCheckSpec).
 * answer data/stdout-git#not-a-git 0
 
-[version-record-2-55]
+[version-record-2-56]
 # Records the argv, prints a supported version (GitVersionCheckSpec).
 * record
-* answer data/stdout-git#git-version-2-55 0
+* answer data/stdout-git#git-version-2-56-0 0

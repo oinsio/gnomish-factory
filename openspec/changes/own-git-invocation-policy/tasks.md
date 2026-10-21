@@ -199,7 +199,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
 ## 6. Enforcement gate
 
-- [ ] 6.1 `GitLaunchBoundarySpec` in `:bootstrap` (FR7, design D7), an ArchUnit spec over all
+- [x] 6.1 `GitLaunchBoundarySpec` in `:bootstrap` (FR7, design D7), an ArchUnit spec over all
       production classes:
       - the set of classes depending on `java.lang.ProcessBuilder` equals the allowlist of D7 —
         `GitProcessRunner`, `GitExec`, `DockerCli`, `HostTaskExecutionEnvironment`, `StderrPolicy`,
@@ -255,7 +255,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
 
 ## 8. Hooks defined in the configuration, and the git floor
 
-- [ ] 8.1 TDD (red first) for configured hooks (FR9, design D3; scenario "A hook defined in the
+- [x] 8.1 TDD (red first) for configured hooks (FR9, design D3; scenario "A hook defined in the
       configuration does not run"):
       - `GitInvocationIdentitySpec` gains a feature that defines one hook in the clone's local
         configuration by `hook.<name>.command` (a `StandIn.link` to the committed preset
@@ -268,7 +268,7 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
         the owner's event list, in its order.
 
       Verify: both red against today's owner (the configured hook runs; the pairs are missing).
-- [ ] 8.2 Implement the event switches in `GitInvocation` (FR2, FR9, design D3): one constant
+- [x] 8.2 Implement the event switches in `GitInvocation` (FR2, FR9, design D3): one constant
       list of the hook events of githooks(5) in git 2.56 — client and server side — rendered as
       `-c hook.<event>.enabled=false` after the eight pairs; the javadoc names the floor release
       the list was read from. Re-render the expectations that spell the pairs

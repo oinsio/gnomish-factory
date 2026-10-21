@@ -1,36 +1,22 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
-import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
-import com.github.oinsio.gnomish.baseref.BaseRule
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.TaskContext
-import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.gitobjects.CommitIdentity
-import com.github.oinsio.gnomish.gitobjects.CommitMetadata
-import com.github.oinsio.gnomish.gitobjects.CommitRequest
-import com.github.oinsio.gnomish.gitobjects.GitObjects
-import com.github.oinsio.gnomish.gitobjects.ObjectId
-import com.github.oinsio.gnomish.gitobjects.TreeEdit
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Instant
 import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR8, M4, NFR-S1 of own-git-invocation-policy (design D8) — the identity claim of the invocation
- * policy on real git: the factory's own git paths, driven through the production adapters on a clone
- * carrying the shared fixture's adversarial local configuration ({@link AdversarialLocalConfig}),
- * run none of the planted programs, read through a planted replace ref, and leave the clone's
+ * FR8, FR9, M4, NFR-S1 of own-git-invocation-policy (design D3, D8) — the identity claim of the
+ * invocation policy on real git: the factory's own git paths, driven through the production adapters
+ * ({@link InvocationTaskFlow}) on a clone carrying the shared fixture's adversarial local configuration
+ * ({@link AdversarialLocalConfig}) or a hook defined in the configuration, run none of the planted
+ * programs, read through a planted replace ref, and leave the clone's
  * {@code .git/config} byte-identical. Component specs prove each launcher carries the pairs; only
  * this spec proves that the pairs, together, defeat the posture on the paths the factory runs.
  *
@@ -40,8 +26,13 @@ import spock.lang.TempDir
  */
 class GitInvocationIdentitySpec extends Specification implements BareGitRepoFixture {
 
-    static final String TASK = 'INV-1'
-    static final String BRANCH = TaskIdSanitizer.branchName(TASK)
+    static final String TASK = InvocationTaskFlow.TASK
+    static final String BRANCH = InvocationTaskFlow.BRANCH
+    static final List<String> CONFIGURED_EVENTS = [
+        'reference-transaction',
+        'post-checkout',
+        'post-index-change'
+    ]
 
     @TempDir
     Path tempDir
@@ -50,6 +41,7 @@ class GitInvocationIdentitySpec extends Specification implements BareGitRepoFixt
     Path clone
     Path origin
     RegisteredClone registeredClone
+    InvocationTaskFlow flow
     byte[] configBefore
 
     def setup() {
@@ -60,6 +52,7 @@ class GitInvocationIdentitySpec extends Specification implements BareGitRepoFixt
         origin = initBareRepo(tempDir, 'origin.git')
         addRemote(clone, 'origin', origin.toString())
         registeredClone = RegisteredCloneFixture.registered(tempDir.resolve('home'), clone)
+        flow = new InvocationTaskFlow(runner, registeredClone, tempDir)
         configBefore = Files.readAllBytes(clone.resolve('.git/config'))
     }
 
@@ -71,34 +64,61 @@ class GitInvocationIdentitySpec extends Specification implements BareGitRepoFixt
     // Scenario: git/git-invocation-policy / A planted local configuration runs nothing
     def "FR8: the host task flow — branch, worktree add, lifecycle commit, attempt commit, register transaction, bare-object commit — runs nothing planted"() {
         when: 'the lifecycle start: branch creation, worktree add, the STARTED commit and its register transaction'
-        startTask()
+        flow.startTask()
 
         and: 'a round persisted in the worktree: commit-tree, then the register moved by update-ref --stdin'
-        persistRound('verify')
+        flow.persistRound('verify')
 
         and: 'a commit written through the git-object library'
-        def written = forge(registeredCommit(), 'notes.txt', 'bare-object write')
+        def written = flow.forge(flow.registeredCommit(), 'notes.txt', 'bare-object write')
 
         then: 'every operation landed'
-        gitOutput(clone, 'rev-parse', BRANCH) == registeredCommit()
-        gitOutput(clone, 'log', '-1', '--format=%s', registeredCommit()) == ServiceCommitMessages.round('verify', 1)
+        gitOutput(clone, 'rev-parse', BRANCH) == flow.registeredCommit()
+        gitOutput(clone, 'log', '-1', '--format=%s', flow.registeredCommit()) == ServiceCommitMessages.round('verify', 1)
         gitOutput(clone, 'rev-parse', 'refs/heads/forged') == written
 
         and: 'nothing planted ran, and .git/config is byte-identical (cleanup)'
         AdversarialLocalConfig.ran(clone).isEmpty()
     }
 
+    // Scenario: git/git-invocation-policy / A hook defined in the configuration does not run
+    def "FR9: a hook defined in the configuration runs on none of branch, worktree add, lifecycle commit, attempt commit or register transaction"() {
+        given: 'one hook defined by hook.<name>.command, on three events, which core.hooksPath does not reach'
+        Path hook = StandIn.link(tempDir.resolve('configured-hook'), AdversarialLocalConfig.PRESET)
+        FixtureGitConfig.set(clone, 'hook.planted.command', hook.toString())
+        CONFIGURED_EVENTS.each {
+            FixtureGitConfig.add(clone, 'hook.planted.event', it)
+        }
+        configBefore = Files.readAllBytes(clone.resolve('.git/config'))
+
+        and: 'git knows the hook for every one of its events'
+        CONFIGURED_EVENTS.each {
+            assert gitOutput(clone, 'hook', 'list', it).contains('planted')
+        }
+
+        when:
+        flow.startTask()
+        flow.persistRound('verify')
+
+        then: 'every operation landed'
+        gitOutput(clone, 'rev-parse', BRANCH) == flow.registeredCommit()
+        gitOutput(clone, 'log', '-1', '--format=%s', flow.registeredCommit()) == ServiceCommitMessages.round('verify', 1)
+
+        and: 'the configured hook never ran; .git/config is byte-identical apart from the plant (cleanup)'
+        !Files.exists(StandIn.log(hook))
+    }
+
     // Scenario: git/git-invocation-policy / Replace refs do not change what the factory reads
     def "FR8, NFR-S1: a state read at the registered commit sees the original through a planted replace ref"() {
         given: 'a task whose registered commit records the verify stage'
-        startTask()
-        persistRound('verify')
-        String registered = registeredCommit()
+        flow.startTask()
+        flow.persistRound('verify')
+        String registered = flow.registeredCommit()
 
         and: 'a replace ref substituting a forged commit whose state names another stage'
         String original = gitOutput(clone, 'show', "${registered}:.gnomish-task/state.json")
         assert original.contains('"verify"')
-        String forged = forge(registered, '.gnomish-task/state.json', original.replace('"verify"', '"forged"'))
+        String forged = flow.forge(registered, '.gnomish-task/state.json', original.replace('"verify"', '"forged"'))
         seed(clone, 'update-ref', "refs/replace/${registered}", forged)
 
         and: 'the substitution is in force for a git that honours replace refs'
@@ -143,35 +163,6 @@ class GitInvocationIdentitySpec extends Specification implements BareGitRepoFixt
         then: 'the local branch exists at the tracking tip; .git/config is byte-identical (cleanup)'
         adopted == new BranchAdoption.Adopted(TASK)
         gitOutput(clone, 'rev-parse', "refs/heads/${BRANCH}") == tip
-    }
-
-    private void startTask() {
-        new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock()).createTask(
-                new TaskContext(TASK, UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
-                TaskStart.commit(clone, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
-                TaskState.atStageStart('implement'))
-    }
-
-    private void persistRound(String stage) {
-        Path worktree = registeredClone.worktrees().resolve(TASK)
-        new File(worktree.toFile(), 'gnome.txt').text = 'gnome wrote this'
-        new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE)
-                .persist(TASK, TaskState.atStageStart(stage), new ToolTrace(new AttemptKey(TASK, stage, 1), []))
-    }
-
-    private String registeredCommit() {
-        gitOutput(clone, 'rev-parse', FactoryRegisterRefs.of(TASK).name())
-    }
-
-    /** A commit over {@code parent} with {@code path} set to {@code content}, written by the git-object library. */
-    private String forge(String parent, String path, String content) {
-        def identity = new CommitIdentity('forger', 'forger@localhost')
-        def at = Instant.parse('2026-10-20T00:00:00Z')
-        GitObjects.open(clone.resolve('.git'), tempDir).commit(new CommitRequest('refs/heads/forged',
-                Optional.empty(), ObjectId.of(parent), [
-                    new TreeEdit.PutFile(path, content.bytes)
-                ],
-                new CommitMetadata(identity, at, identity, at, 'forged'))).hex()
     }
 
     /** The spec's own seeding: git with the posture neutralized by this spec's pairs, not the owner's. */
