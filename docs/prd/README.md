@@ -14,8 +14,9 @@ one file each.
 |---|---|---|
 | [`stakeholders.md`](stakeholders.md) | who has an interest in the factory, who interacts with it, what each needs | `SH-*`, `AC-*` |
 | `concept.md` (next) | the operational concept: one task from filing to merge, from every stakeholder's seat | none |
-| `use-cases.md` (next) | actor, goal, trigger, success condition, extensions | `UC-*` |
+| [`use-cases.md`](use-cases.md) | the event partition into ten groups and the entry format; one file per group under `use-cases/` | `UC-*` |
 | `quality.md` (next) | quality requirements in the six-part form with a fit criterion each | `QR-*` |
+| [`gaps.md`](gaps.md) | where the factory as built does not meet a story or a quality requirement: the kind of each gap and who closes it | `GP-*` |
 
 ## PRD keys
 
@@ -30,6 +31,7 @@ unique across this directory, mnemonic rather than numbered (`SH-FACTORY-OPERATO
 | `AC-` | actor | an automated party that interacts with the factory but has no interest of its own; listed because use cases name it |
 | `UC-` | use case | one actor's goal with its trigger, success condition and extensions |
 | `QR-` | quality requirement | a system-wide quality stated as source, stimulus, environment, artifact, response and response measure; the measure is its fit criterion |
+| `GP-` | known gap | a story or quality requirement the factory as built does not meet; referenced from coverage tables, deleted when closed |
 
 External systems and adversarial sources carry no key: they are depended on or defended
 against, never served. A use case or quality requirement names them in its text.
