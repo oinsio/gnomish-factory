@@ -203,9 +203,10 @@ adapter drive `ScriptedGit`, the in-process fake, not a stand-in binary.
       production classes:
       - the set of classes depending on `java.lang.ProcessBuilder` equals the allowlist of D7 —
         `GitProcessRunner`, `GitExec`, `DockerCli`, `HostTaskExecutionEnvironment`, `StderrPolicy`,
-        `CaptureRunner`, `ProcessLaunch`, `GroupedLaunch`, `StdinSource` — each entry carrying its
+        `CaptureRunner`, `ProcessLaunch`, `GroupedLaunch` — each entry carrying its
         reason, and the spec's javadoc names what `LaunchOwnerGateSpec` and
-        `ProcessSpawnBoundarySpec` own instead;
+        `ProcessSpawnBoundarySpec` own instead; the spec carries no note of a deviation from D7
+        (`StdinSource` is not an entry, design D7);
       - `GitProcessRunner` and `GitExec` both call `GitInvocation.commandLine`;
       - seeded scenarios show the detector fails on a synthetic extra spawn site and on a
         launcher that skips the owner.

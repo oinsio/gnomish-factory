@@ -230,10 +230,12 @@ classes).
    - `HostTaskExecutionEnvironment` (`:sandbox:docker`): gnome-product processes, not factory git;
    - `StderrPolicy` (`:sandbox:core`): applies a stderr redirect to a builder an adapter built
      (design D18 of fix-terminal-receipt-convergence), constructs none;
-   - `CaptureRunner`, `ProcessLaunch`, `GroupedLaunch`, `StdinSource` (`:subprocess`): the launch
-     owner and its helpers — they take a builder a caller constructed, prefix the launcher, set its
-     stdin and start it (design D16, D19, D20 of fix-terminal-receipt-convergence); none names a
-     binary.
+   - `CaptureRunner`, `ProcessLaunch`, `GroupedLaunch` (`:subprocess`): the launch owner and its
+     helpers — they take a builder a caller constructed, prefix the launcher, set its stdin and
+     start it (design D16, D19, D20 of fix-terminal-receipt-convergence); none names a binary.
+     `StdinSource` is not an entry: it names what the child reads and holds no `ProcessBuilder`
+     reference (the name appears only in its javadoc); `ProcessLaunch` applies it to the builder,
+     so an entry for it would fail the equality as stale.
 
    Asserting equality, rather than a subset, makes a new spawn site fail until it is classified.
    The gate asks "who builds a command line" and nothing else: who may call `start()` is
