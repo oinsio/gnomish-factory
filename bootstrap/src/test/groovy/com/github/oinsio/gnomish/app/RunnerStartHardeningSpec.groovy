@@ -52,6 +52,7 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
     Path tempDir
 
     // FR6: the check still runs on every path; a passing clone is stopped later, its config untouched.
+    // Scenario: git/git-task-persistence / The clone's configuration is not written
     def "#path writes no configuration to a reftable clone it starts on"() {
         given: 'a reftable clone set up so the path stops at its usage refusal'
         Path clone = prepare(path)

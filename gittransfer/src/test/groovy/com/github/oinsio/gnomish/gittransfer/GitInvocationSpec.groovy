@@ -93,6 +93,7 @@ class GitInvocationSpec extends Specification {
     }
 
     // FR1, D2: binary, then the policy, then the caller's arguments unchanged.
+    // Scenario: build-system/module-layering / The invocation policy is pure values in gittransfer
     def "FR1: the command line is the binary, the policy pairs, then the caller's arguments unchanged"() {
         expect:
         GitInvocation.commandLine('/usr/bin/git', args) == ['/usr/bin/git'] + POLICY + args

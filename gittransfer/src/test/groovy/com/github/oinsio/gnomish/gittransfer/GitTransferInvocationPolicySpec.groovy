@@ -40,6 +40,7 @@ class GitTransferInvocationPolicySpec extends Specification {
     // FR4: the policy's pairs open the argv and so precede the subcommand; a key both sets name
     //     would carry two values, so no key may appear twice.
     // Scenario: git/git-invocation-policy / A transfer carries the invocation policy
+    // Scenario: build-system/module-layering / The invocation policy is pure values in gittransfer
     def "FR4: #site carries every invocation pair before its subcommand, and no key twice"() {
         given:
         def transfer = SITES[site].call()
