@@ -378,9 +378,12 @@ SHALL fail when a resolved module declares no license the allowlist accepts.
 Each module's `pitest` SHALL target a mutation scope the build computes from one
 owner. With no `pitScope` property the scope is the branch's changes: the
 module's production classes whose source files differ, in the working tree
-(committed, staged, unstaged and untracked) against the scope base.
-**Implements**: FR1, FR4, FR5, NFR-P1, NFR-R2, NFR-R3, NFR-R4, UX1 of scope-pit-locally; FR1, FR5 of scope-pit-to-changed-files; FR11 of split-into-modules
+(committed, staged, unstaged and untracked) against the scope base, and
+nothing else — a changed test source or shared test fixture SHALL not widen
+any module's scope.
+**Implements**: FR1, FR4, FR5, NFR-P1, NFR-R2, NFR-R3, NFR-R4, UX1 of scope-pit-locally; FR1, FR5 of scope-pit-to-changed-files; FR11 of split-into-modules; FR1, FR2, FR4, NFR-R1, NFR-R2 of narrow-branch-mutation-scope
 **Notes**: The scope is obtained through a configuration-cache-validated read, which is what makes an edit between two builds re-resolve it.
+**Notes**: The whole-tree verdict on a weakened test or fixture is the scheduled whole-tree run's; see NG1 of narrow-branch-mutation-scope for the condition that restores a branch-side rule.
 
 #### Scenario: Default run mutates the branch's changed classes
 - **WHEN** `./gradlew check` runs with no `pitScope` property on a branch that
@@ -390,6 +393,19 @@ module's production classes whose source files differ, in the working tree
 - **AND** every module the branch did not touch skips its mutation task
 - **AND** the 100% mutation-score gate and `pitestVerifyAllKilled` apply to the
   scoped set
+
+#### Scenario: A test or fixture change widens nothing
+- **WHEN** a branch changes, adds or deletes files under a module's test source
+  tree, or under the shared test-fixtures module's sources, and changes no
+  production file in some module
+- **THEN** that module's mutation task is skipped
+- **AND** a module whose production files did change still targets exactly its
+  changed classes, not its whole production tree
+
+#### Scenario: A deleted class contributes nothing
+- **WHEN** a branch deletes a production source file and changes nothing else in
+  that module
+- **THEN** that module's mutation task is skipped
 
 #### Scenario: Whole tree on request
 - **WHEN** `./gradlew check -PpitScope=all` or `./gradlew pitestAll` runs
@@ -480,34 +496,12 @@ Resolution failures SHALL never narrow the scope.
 - **THEN** every module mutates its whole production tree
 - **AND** the scope line names the fallback reason
 
-### Requirement: Test changes widen the mutation scope
-A changed file under a module's test source tree SHALL widen that module's scope
-to its whole production tree. A changed file under the shared test-fixtures
-module's sources SHALL widen every module's scope to its whole production tree.
-A deleted or renamed-away production file SHALL contribute no class.
-**Implements**: FR3 of scope-pit-locally
-
-#### Scenario: A weakened spec is caught
-- **WHEN** a branch changes only a test file in one module (for example deletes
-  an assertion from a killing spec)
-- **THEN** that module's whole production tree is mutated and the mutant the
-  assertion killed survives, failing the gate
-
-#### Scenario: A shared fixture change mutates everything
-- **WHEN** a branch changes a file under the shared test-fixtures module
-- **THEN** every module mutates its whole production tree
-
-#### Scenario: A deleted class contributes nothing
-- **WHEN** a branch deletes a production source file and changes nothing else in
-  that module
-- **THEN** that module's mutation task is skipped
-
 ### Requirement: Mutation scope is announced
 The build SHALL log one lifecycle line per build naming the scope mode
 (`branch`, `all`, `explicit`), the resolved base commit, the changed-class
-count per module, and any widening or fallback reason. The line SHALL be logged
-even when the scope leaves every module's mutation task skipped.
-**Implements**: NFR-O1, UX2 of scope-pit-locally
+count per module, and any fallback reason. The line SHALL be logged even when
+the scope leaves every module's mutation task skipped.
+**Implements**: NFR-O1, UX2 of scope-pit-locally; FR3, NFR-O1, UX1 of narrow-branch-mutation-scope
 
 #### Scenario: A run that mutates nothing says so
 - **WHEN** a scoped run resolves its base and no module has a changed class
@@ -516,8 +510,10 @@ even when the scope leaves every module's mutation task skipped.
 
 #### Scenario: A branch run explains itself
 - **WHEN** a scoped run resolves its base
-- **THEN** the log carries the base commit, the per-module class counts, and the
-  widening reason for any module widened by a test change
+- **THEN** the log carries the base commit, its origin, the per-module class
+  counts of the mutated modules and the number of skipped modules
+- **AND** the line names no module as mutated whole: the only whole-tree form is
+  the `all` mode's
 
 #### Scenario: A fallback is visible
 - **WHEN** the base could not be resolved
@@ -537,13 +533,20 @@ the failing modules and linking the run. It SHALL skip when `main` is unchanged
 since the previous successful scheduled run, through a mechanism that reads no
 other run's artifacts. Its token SHALL carry only `contents: read` and
 `issues: write`.
-**Implements**: FR6, NFR-S1, NFR-C1, UX4 of scope-pit-locally
+**Implements**: FR6, NFR-S1, NFR-C1, UX4 of scope-pit-locally; G3, NFR-C1 of narrow-branch-mutation-scope
 
 #### Scenario: Cross-file mutation rot is caught within a day
 - **WHEN** a mutant in an unchanged class stops dying because of a change
   merged elsewhere
 - **THEN** the next scheduled run fails on that module and an issue names it
   with a link to the run and its PIT report artifact
+
+#### Scenario: A weakened test or fixture is caught within a day
+- **WHEN** a merged branch changed a test source or a shared test fixture so
+  that a mutant in a production class the branch did not change now survives
+- **THEN** the branch's own gate did not mutate that class, and the next
+  scheduled run fails on that class's module and reports it as the previous
+  scenario does
 
 #### Scenario: A repeat failure updates the open issue
 - **WHEN** the scheduled run fails while the issue from a previous failure is
