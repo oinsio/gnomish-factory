@@ -3,11 +3,12 @@ import com.github.oinsio.gnomish.buildlogic.MutationScopeSource
 
 import java.util.regex.Pattern
 
-// What PIT mutates in this build, per module (D1 of scope-pit-locally): `targetClasses`, the one
-// skip predicate the verdict shares, and the build's one scope announcement — all derived from the
-// typed `MutationScope` that `MutationScopeSource` returns, never from a diff or a property parse of
-// this script's own (FR5). Split out of `pitest-conventions` along the line its gate half already
-// left by: the engine configuration stays there, *what to mutate this build* lives here. Applied by
+// What PIT mutates in this build, per module (D1 of scope-pit-locally; D1 of
+// narrow-branch-mutation-scope): `targetClasses`, the one skip predicate the verdict shares, and
+// the build's one scope announcement — all derived from the typed `MutationScope` that
+// `MutationScopeSource` returns, never from a diff or a property parse of this script's own (FR5).
+// Split out of `pitest-conventions` along the line its gate half already left by: the engine
+// configuration stays there, *what to mutate this build* lives here. Applied by
 // `pitest-conventions` and `pitest-gate-conventions`; never applied directly by a module.
 plugins {
     id 'info.solidsoft.pitest'
@@ -103,12 +104,12 @@ extensions.extraProperties.set('mutationScopeSkipReason', skipReason)
 afterEvaluate {
     def excludedPatterns = pitest.excludedClasses.getOrElse([] as Set).collect(globToPattern)
     def mutable = ownClasses.findAll { fqcn -> !excludedPatterns.any { it.matcher(fqcn).matches() } }
-    def wholeModule = scope.mode == MutationScope.Mode.ALL || scope.widened.containsKey(module)
+    def wholeModule = scope.mode == MutationScope.Mode.ALL
     List<String> targets
     String summary
     if (wholeModule) {
         targets = moduleTargets
-        summary = scope.widened.containsKey(module) ? "whole module (${scope.widened[module]})" : 'whole module'
+        summary = 'whole module'
     } else if (scope.mode == MutationScope.Mode.EXPLICIT) {
         targets = scope.globs.findAll { glob -> mutable.any { globToPattern(glob).matcher(it).matches() } }
         summary = "${targets.size()} of the requested globs"

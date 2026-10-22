@@ -44,7 +44,10 @@ Execution failed for task ':bootstrap:test'.
     @TempDir
     Path work
 
+    // G3 of narrow-branch-mutation-scope: a weakened test or fixture fails the night on its module and
+    // reaches a human through this same report, since the branch's own gate no longer mutates for it
     // Scenario: build-system/quality-gates / Cross-file mutation rot is caught within a day
+    // Scenario: build-system/quality-gates / A weakened test or fixture is caught within a day
     def "UX4: with no open issue, one is created naming every failed task with its reason"() {
         when:
         def run = runScript(label: '', openIssue: '')
@@ -117,6 +120,7 @@ Execution failed for task ':bootstrap:test'.
 
     // FR6: the workflow runs the failure report through this script, so the features above test what CI runs
     // Scenario: build-system/quality-gates / Cross-file mutation rot is caught within a day
+    // Scenario: build-system/quality-gates / A weakened test or fixture is caught within a day
     def "FR6: the nightly workflow reports a failure through the script"() {
         given:
         def workflow = Files.readString(RepoSourceTree.repoRoot().resolve('.github/workflows/pitest-nightly.yml'))
@@ -124,6 +128,9 @@ Execution failed for task ':bootstrap:test'.
         expect:
         workflow.contains('if: failure()')
         workflow.contains('run: bash scripts/nightly-mutation-issue.sh build/nightly.log')
+
+        and: 'G3 of narrow-branch-mutation-scope: the branch gate mutates no unchanged class, so this run must mutate them all'
+        workflow.contains('./gradlew check -PpitScope=all')
     }
 
     /** Runs the script with a stub {@code gh} answering the label and open-issue lookups. */

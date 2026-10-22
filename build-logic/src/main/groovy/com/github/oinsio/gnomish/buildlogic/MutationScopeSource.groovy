@@ -37,14 +37,16 @@ import org.gradle.process.ExecOperations
  *       which has no local {@code main}, always spends.</li>
  *   <li>{@code git diff --name-status --no-renames <base>} — the working tree against the base,
  *       so committed, staged and unstaged edits are all in it; a rename is a deletion plus an
- *       addition, which {@link ChangedSources} classifies.</li>
+ *       addition, and only the addition reaches {@link ChangedSources}.</li>
  *   <li>{@code git ls-files --others --exclude-standard} — untracked files: the agent never
  *       commits, so a new class is untracked for the whole change.</li>
  * </ol>
  * Any failure — no {@code main} or {@code origin/main}, no merge base, a root commit, no
  * {@code git} on the client's {@code PATH} (with a build warning), not a checkout — yields {@link MutationScope.Mode#ALL} with the reason: a scope
- * the build cannot justify is wider, never narrower (NFR-R1). Widening by test and fixture
- * changes is {@link ChangedSources}'s (D4).
+ * the build cannot justify is wider, never narrower (NFR-R1). Deleted ({@code D}) entries are kept
+ * out of the present list, so a deleted production file contributes no class (FR4 of
+ * narrow-branch-mutation-scope); {@link ChangedSources} maps the present paths to classes and
+ * nothing else (D1 of narrow-branch-mutation-scope).
  *
  * <p><b>Insulation (NFR-R4).</b> Every argv carries {@code -c core.quotePath=false} (non-ASCII
  * paths arrive verbatim, decoded as UTF-8) and {@code -c core.excludesFile=} (an operator's global
@@ -57,7 +59,8 @@ import org.gradle.process.ExecOperations
  * {@code ValueSource} on every build and discards the cached configuration when the value moved —
  * so an edit between two builds re-resolves the scope. {@link HardwareSpec} is the precedent.
  *
- * <p>Implements FR1, FR2, FR4, FR5, NFR-P1, NFR-R1, NFR-R2, NFR-R4 of scope-pit-locally.
+ * <p>Implements FR1, FR2, FR4, FR5, NFR-P1, NFR-R1, NFR-R2, NFR-R4 of scope-pit-locally; FR2, FR4 of
+ * narrow-branch-mutation-scope.
  */
 abstract class MutationScopeSource implements ValueSource<MutationScope, Parameters> {
 
@@ -139,8 +142,7 @@ abstract class MutationScopeSource implements ValueSource<MutationScope, Paramet
         }
         def entries = diff.collect { it.split('\t', 2) }.findAll { it.length == 2 }
         def present = entries.findAll { it[0] != 'D' }.collect { it[1] } + untracked
-        def deleted = entries.findAll { it[0] == 'D' }.collect { it[1] }
-        MutationScope.branch(base.sha, base.origin, ChangedSources.classify(present, deleted, parameters.moduleDirs.get()))
+        MutationScope.branch(base.sha, base.origin, ChangedSources.classify(present, parameters.moduleDirs.get()).classes)
     }
 
     /** {@code [sha, origin]} of the scope base against {@code candidate}, or null if it has none. */

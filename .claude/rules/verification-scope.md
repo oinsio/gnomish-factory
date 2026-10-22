@@ -36,7 +36,7 @@ instead of in its tasks.
    (`design-decisions.md`, "A platform fact is measured on every platform CI runs").
 
 A task's "PIT gate green" or "`check` green" wording is met by these steps for the task's
-own scope; the whole build is proven once, below.
+own scope; the whole build runs once, below.
 
 ## At the end: the whole build, once
 
@@ -49,11 +49,21 @@ the first Linux signal. The failure this exists for: the Linux failures of
 asked for the container run (`make-pipe-reads-non-parking`, 2026-10-19).
 
 When every task is done, run the full root `./gradlew check` — no `--tests`, no
-`-PpitScope` — and fix what fails. It is the gate that proves cross-module effects and
-catches what a per-task scope missed. It runs once per implementation, not per task, and
-again only after a fix. Repeating it on an unchanged tree is cheap — the build cache and
-up-to-date checks skip every task whose inputs did not change — so a later gate that runs the
-same `check` (CI, a pipeline stage's own check) costs seconds, not another hour.
+`-PpitScope` — and fix what fails. It is the gate that proves cross-module effects —
+compilation, specs and architecture gates across every module, and the mutation gate on the
+production classes the branch changed — and catches what a per-task scope missed. It mutates
+no unchanged class, and a test or fixture change mutates nothing on the branch: mutation rot in
+an unchanged class, a weakened test or fixture included, is the finding of the nightly
+whole-tree run (`.github/workflows/pitest-nightly.yml`), within a day, as a `nightly-mutation`
+issue. No `-PpitScope=all` is run by hand before a merge to cover it: that would be the removed
+widening brought back as a convention nobody enforces, and the one-day bound is the accepted
+cost (provenance: `narrow-branch-mutation-scope`, design D3). The branch gate takes the duty
+back only under the pickup condition in NG1 of `narrow-branch-mutation-scope` — a whole-tree
+run fast enough for every CI push, or the classes a test guards made computable. It runs once
+per implementation, not per task, and again only after a fix. Repeating it on an unchanged tree
+is cheap — the build cache and up-to-date checks skip every task whose inputs did not change —
+so a later gate that runs the same `check` (CI, a pipeline stage's own check) costs seconds,
+not another hour.
 
 ## What this rule does not change
 

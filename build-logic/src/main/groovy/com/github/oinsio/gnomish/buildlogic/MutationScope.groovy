@@ -9,17 +9,17 @@ import groovy.transform.Immutable
  * own.
  *
  * <p>Three modes (D5): {@code Mode#BRANCH} — the classes the branch changed against its scope
- * base, per module, with any module widened to its whole tree by a test change (D4);
- * {@code Mode#ALL} — every module's whole tree, by request or because no base could be resolved
- * ({@link #reason} says which, NFR-R1); {@code Mode#EXPLICIT} — today's comma-separated glob list,
- * intersected by each module with what it owns.
+ * base, per module, and nothing else (D1 of narrow-branch-mutation-scope); {@code Mode#ALL} —
+ * every module's whole tree, by request or because no base could be resolved ({@link #reason}
+ * says which, NFR-R1); {@code Mode#EXPLICIT} — today's comma-separated glob list, intersected by
+ * each module with what it owns.
  *
  * <p>Value-typed with generated {@code equals}/{@code hashCode} and {@code Serializable}, as
  * {@link HardwareSpec.Machine} is: the configuration cache records the obtained value and compares
  * each build's freshly obtained one against it, so a scope that moved invalidates the cache
  * (NFR-R2).
  *
- * <p>Implements FR1, FR2, FR3, FR4 of scope-pit-locally.
+ * <p>Implements FR1, FR2, FR3, FR4 of scope-pit-locally; FR2, NFR-R2 of narrow-branch-mutation-scope.
  */
 @Immutable
 class MutationScope implements Serializable {
@@ -37,23 +37,19 @@ class MutationScope implements Serializable {
     List<String> globs
     /** Module project path → changed production class names; {@link Mode#BRANCH} only. */
     Map<String, Set<String>> changedClasses
-    /** Module project path → why its whole production tree is mutated (D4); {@link Mode#BRANCH} only. */
-    Map<String, String> widened
 
     static MutationScope all(String reason) {
         Map<String, Set<String>> noClasses = [:]
-        Map<String, String> noWidened = [:]
-        new MutationScope(mode: Mode.ALL, reason: reason, globs: [], changedClasses: noClasses, widened: noWidened)
+        new MutationScope(mode: Mode.ALL, reason: reason, globs: [], changedClasses: noClasses)
     }
 
     static MutationScope explicit(List<String> globs) {
         Map<String, Set<String>> noClasses = [:]
-        Map<String, String> noWidened = [:]
-        new MutationScope(mode: Mode.EXPLICIT, globs: globs, changedClasses: noClasses, widened: noWidened)
+        new MutationScope(mode: Mode.EXPLICIT, globs: globs, changedClasses: noClasses)
     }
 
-    static MutationScope branch(String base, String baseOrigin, ChangedSources changes) {
+    static MutationScope branch(String base, String baseOrigin, Map<String, Set<String>> changedClasses) {
         new MutationScope(mode: Mode.BRANCH, base: base, baseOrigin: baseOrigin, globs: [],
-                changedClasses: changes.classes, widened: changes.widened)
+                changedClasses: changedClasses)
     }
 }

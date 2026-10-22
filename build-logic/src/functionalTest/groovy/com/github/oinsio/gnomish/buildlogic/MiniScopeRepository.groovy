@@ -167,8 +167,7 @@ def obtained = providers.of(MutationScopeSource) {
     parameters.clientPath = providers.environmentVariable('PATH')
 ${wrapped ? "    parameters.gitExecutable = '" + GradleRunnerSupport.quotedPath(wrapper.toString()) + "'\n" : ''}}.get()
 def printed = JsonOutput.toJson([mode: obtained.mode.name(), base: obtained.base, baseOrigin: obtained.baseOrigin,
-        reason: obtained.reason, globs: obtained.globs, changedClasses: obtained.changedClasses,
-        widened: obtained.widened])
+        reason: obtained.reason, globs: obtained.globs, changedClasses: obtained.changedClasses])
 
 tasks.register('printScope') {
     doLast { println "SCOPE \${printed}" }

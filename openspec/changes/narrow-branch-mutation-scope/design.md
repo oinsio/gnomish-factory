@@ -47,8 +47,12 @@ direction (NG6).
 
 **D1 — The widening is deleted, not disabled: `ChangedSources` classifies production classes
 only, and `MutationScope.widened` with its two reasons leaves the value type.** `classify`
-keeps its `present`/`deleted` split (a deleted production file still contributes nothing, FR4)
-and drops the `touched` pass; `MutationScope.branch` takes the class map only; the three
+drops the `touched` pass and, with it, its `deleted` parameter: that pass was the only reader of
+the deleted paths (`ChangedSources.groovy:55`), so `classify` takes the present paths and the
+module map only, and `MutationScopeSource.branch` stops collecting the deleted list. A deleted
+production file still contributes nothing (FR4) because `MutationScopeSource` keeps `D` entries
+out of the present list (`MutationScopeSource.groovy:141`), not because `classify` is told about
+them. `MutationScope.branch` takes the class map only; the three
 factories stop building an empty widening map; `pitest-scope-conventions` decides
 `wholeModule` from `mode == ALL` alone and the branch summary has one form, `N classes`;
 `MiniScopeRepository` stops printing `widened`. *Rationale:* alternative zero
@@ -56,7 +60,8 @@ factories stop building an empty widening map; `pitest-scope-conventions` decide
 is the class set and nothing else, so a field that is always empty is a lie the next reader has
 to disprove, and a `whole module (reason)` branch in the module script is dead code — an
 unkillable mutant under the 100 % gate were it Java, and an unreachable branch in Groovy either
-way. Deleting it also makes M4 greppable. *Alternative rejected:* keep the field and the readers,
+way; a parameter no line reads is the same lie one level down. Deleting it also makes M4
+greppable. *Alternative rejected:* keep the field and the readers,
 make `classify` never fill it — "disabled, easy to re-enable". The re-enabling change would have
 to rewrite the rule anyway (NG1 asks for a computable blast radius, not the old prefix test), and
 an empty map kept "for later" is the escape hatch `implementation.md` item 3 forbids: a future
@@ -110,8 +115,10 @@ documentation, not a second implementation.
 workflows and by the `pitScope` contract for the build); this change removes a rule from that
 owner and introduces no mechanism of its own. The consumer list of the removed value is in D1
 (`pitest-scope-conventions.gradle`, `MiniScopeRepository`) so the apply sub-agent's old-way sweep
-is `grep -rn "widened\|SHARED_FIXTURE\|TEST_CHANGE\|whole module (" build-logic/src`, expected
-empty (M4).
+is `grep -rnE '\.widened|\bwidened( =|$|[:,).[])|SHARED_FIXTURE|TEST_CHANGE|whole module \(' build-logic/src`,
+expected empty (M4). The pattern matches the identifiers, not the English word: `widened` in its
+ordinary sense (`TestTimeInjectionCheckFunctionalSpec.groovy:19`, `test-conventions.gradle:169`)
+is not this change's and stays.
 
 **Deferrals of archived proposals (constraint 7 of `/opsx:propose-checked`):**
 

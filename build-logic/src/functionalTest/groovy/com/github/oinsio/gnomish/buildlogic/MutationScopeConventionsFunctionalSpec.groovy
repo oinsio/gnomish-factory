@@ -76,18 +76,31 @@ class MutationScopeConventionsFunctionalSpec extends MutationScopeConventionsSpe
         scopeLines(result) == ["PIT scope: branch — base ${base()} (merge-base main) — mod-a: 1 class — 0 modules skipped"]
     }
 
-    // Scenario: build-system/quality-gates / Surviving mutant fails the build
-    // Scenario: build-system/quality-gates / A weakened spec is caught
+    // Scenario: build-system/quality-gates / A test or fixture change widens nothing
     // Scenario: build-system/quality-gates / A branch run explains itself
-    def "M3, FR3: deleting an assertion from a killing spec widens the module, and the gate fails on the survivor"() {
-        given: 'the only production-relevant edit is the weakened spec'
+    def "FR1, FR3, M3 of narrow-branch-mutation-scope: a weakened spec widens nothing, so the module is skipped and the line names no module whole"() {
+        given: 'the only edit on the branch is a spec that no longer kills anything'
         repo.write(SPEC, spec('when: Foo.twice(3)\n        then: noExceptionThrown()'))
+
+        when:
+        BuildResult result = run(GATE)
+
+        then:
+        result.task(':mod-a:pitest').outcome == SKIPPED
+        scopeLines(result) == ["PIT scope: branch — base ${base()} (merge-base main) — every module skipped (1)"]
+    }
+
+    // Scenario: build-system/quality-gates / Surviving mutant fails the build
+    def "FR1 of narrow-branch-mutation-scope: a changed class with logic no spec kills fails the gate on the survivor"() {
+        given: 'Foo gains a method the existing spec never calls'
+        repo.write(FOO, javaClass('Foo', '''public static int twice(int x) { return x * 2; }
+
+    public static int thrice(int x) { return x * 3; }'''))
 
         when:
         BuildResult result = repo.runner(GATE).buildAndFail()
 
         then:
-        scopeLines(result) == ["PIT scope: branch — base ${base()} (merge-base main) — mod-a: whole module (test change) — 0 modules skipped"]
         result.task(':mod-a:pitest').outcome == FAILED
         result.output.contains('below threshold')
     }

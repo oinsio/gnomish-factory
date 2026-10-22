@@ -129,7 +129,8 @@ None.
   nothing to any module's target.
 - **FR2** — `MutationScope` carries no per-module widening: the `widened` field, the two widening
   reasons of `ChangedSources` and every reader of them (`pitest-scope-conventions.gradle`, the
-  scope announcement, `MiniScopeRepository`) are removed, not left empty.
+  scope announcement, `MiniScopeRepository`) are removed, not left empty; so is the deleted-path
+  input of `ChangedSources`, which only the widening read.
 - **FR3** — The branch scope line names the base, its origin, each mutated module with its class
   count, and the number of skipped modules; it contains no widening reason. The `ALL` and
   `EXPLICIT` forms of the line are unchanged.
@@ -187,7 +188,10 @@ None.
 - **M3** — `MutationScopeFunctionalSpec`'s data-driven feature for a spec edited, a spec deleted
   and a fixture edited asserts an empty widening — the field is gone — and every module's
   `pitest` is skipped in the conventions spec for a test-only change.
-- **M4** — `grep -rn "widened\|SHARED_FIXTURE\|TEST_CHANGE" build-logic/src` returns no hit.
+- **M4** — `grep -rnE '\.widened|\bwidened( =|$|[:,).[])|SHARED_FIXTURE|TEST_CHANGE|whole module \(' build-logic/src`
+  returns no hit. The pattern matches the identifiers, not the English word: `widened` in its
+  ordinary sense at `TestTimeInjectionCheckFunctionalSpec.groovy:19` and
+  `test-conventions.gradle:169` is not part of this change.
 
 ## Open Questions
 

@@ -48,7 +48,6 @@ class MutationScopeFunctionalSpec extends Specification {
         scope.base == repo.git('rev-parse', 'main')
         scope.baseOrigin == 'merge-base main'
         scope.changedClasses == [':mod-a': ['com.x.Foo']]
-        scope.widened == [:]
     }
 
     // Scenario: build-system/quality-gates / Default run mutates the branch's changed classes
@@ -121,21 +120,30 @@ class MutationScopeFunctionalSpec extends Specification {
         'not a git checkout'    | { MiniScopeRepository r -> r.write(FOO) }
     }
 
-    // Scenario: build-system/quality-gates / A shared fixture change mutates everything
-    def "FR3, M3: a test change widens its module, a shared fixture change widens every module (#situation)"() {
+    // FR1, FR2, M3 of narrow-branch-mutation-scope: no test or fixture change reaches the scope, and
+    // the scope carries no per-module widening at all.
+    // Scenario: build-system/quality-gates / A test or fixture change widens nothing
+    def "FR1, M3: a test or fixture change widens nothing, and a changed class beside it is all its module mutates (#situation)"() {
         given:
         branched()
         change(repo)
         repo.commit(situation)
 
-        expect:
-        repo.scope().widened == widened
+        when:
+        def scope = repo.scope()
+
+        then:
+        scope.changedClasses == changedClasses
+
+        and: 'FR2: the scope has no widening to carry'
+        !scope.containsKey('widened')
 
         where:
-        situation             | change                                              || widened
-        'a spec edited'       | { MiniScopeRepository r -> r.write(SPEC, '// weakened') } || [':mod-a': 'test change']
-        'a spec deleted'      | { MiniScopeRepository r -> r.git('rm', '-q', SPEC) }      || [':mod-a': 'test change']
-        'a fixture edited'    | { MiniScopeRepository r -> r.write(FIXTURE, '// fake') }  || MiniScopeRepository.MODULES.collectEntries { k, v -> [(k): 'shared fixture'] }
+        situation                            | change                                                                                          || changedClasses
+        'a spec edited'                      | { MiniScopeRepository r -> r.write(SPEC, '// weakened') }                                       || [:]
+        'a spec deleted'                     | { MiniScopeRepository r -> r.git('rm', '-q', SPEC) }                                            || [:]
+        'a fixture edited'                   | { MiniScopeRepository r -> r.write(FIXTURE, '// fake') }                                        || [:]
+        'a fixture and a mod-b class edited' | { MiniScopeRepository r -> r.write(FIXTURE, '// fake').write(QUX, 'class Qux { int edited }') } || [':mod-b': ['com.y.Qux']]
     }
 
     def "FR3, D2: a path in a nested module belongs to the nested module, not to the one enclosing it (#situation)"() {
@@ -147,12 +155,11 @@ class MutationScopeFunctionalSpec extends Specification {
 
         then:
         scope.changedClasses == changedClasses
-        scope.widened == widened
 
         where:
-        situation               | change                                         || changedClasses                 | widened
-        'a nested class edited' | 'mod-a/inner/src/main/java/com/n/Nested.java'  || [':mod-a:inner': ['com.n.Nested']] | [:]
-        'a nested spec edited'  | 'mod-a/inner/src/test/groovy/com/n/NSpec.groovy' || [:]                          | [':mod-a:inner': 'test change']
+        situation               | change                                           || changedClasses
+        'a nested class edited' | 'mod-a/inner/src/main/java/com/n/Nested.java'    || [':mod-a:inner': ['com.n.Nested']]
+        'a nested spec edited'  | 'mod-a/inner/src/test/groovy/com/n/NSpec.groovy' || [:]
     }
 
     // Scenario: build-system/quality-gates / A deleted class contributes nothing
