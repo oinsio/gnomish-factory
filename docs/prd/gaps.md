@@ -39,8 +39,8 @@ entry; the gate, once written, reports both.
 ## Entries
 
 ### GP-HOST-MODE-BEST-EFFORT — Host mode gives weaker guarantees than the box
-**Breaks:** `UC-KEEP-SECRETS-ON-THE-HOST`, `UC-ONE-EXIT-FROM-THE-BOX`, `UC-GNOME-CANNOT-FORGE-RECORDS`
-**Where today:** `sandbox/execution-environment`: Host adapter mechanics; `git/git-task-persistence`: Gnome commits within a round (the host round close reads the gnome's working tree); no guard and no denials in host mode
+**Breaks:** `UC-KEEP-SECRETS-ON-THE-HOST`, `UC-ONE-EXIT-FROM-THE-BOX`, `UC-GNOME-CANNOT-FORGE-RECORDS`, `UC-JUDGE-ON-CLEAN-GROUND`
+**Where today:** `sandbox/execution-environment`: Host adapter mechanics; `git/git-task-persistence`: Gnome commits within a round (the host round close reads the gnome's working tree); `executor/agent-executor`: CLI judge vote (a host-mode vote runs in the stage workspace the round left behind); no guard and no denials in host mode
 **Kind:** `one-medium-only`
 **Resolution:** `decided` (2026-10-21): host mode stays for work a box cannot serve, such as attached peripherals, special settings or applications, or a specific OS; process, code and security stay as close to container mode as they can, with no guarantee where none can be given; lands in `concept.md` (execution modes), the operator guide, and a `QR-*` whose measure is that the list of differences is kept and complete
 
@@ -50,10 +50,10 @@ entry; the gate, once written, reports both.
 **Kind:** `missing`
 **Resolution:** `planned: harden-verification-integrity` (repo-local agent policy cannot widen the gnome; instruction files only where the law declares them protected)
 
-### GP-VERIFY-RUNS-GNOME-TREE — A command check runs the project's commands from the gnome's tree
-**Breaks:** `UC-SEAL-THE-LAW`
-**Where today:** `pipeline/stage-engine`: Ordered fail-fast verification; the check is law, what it invokes is gnome-editable
-**Kind:** `wrong-turn` (decision: a command check runs in the attempt's working tree; premise: what the check invokes is the project's code; refuted by `UC-SEAL-THE-LAW`, whose **whatever the gnome writes in its copy** covers the build scripts the check runs)
+### GP-VERIFY-RUNS-GNOME-TREE — A check runs the project's commands from the gnome's tree
+**Breaks:** `UC-SEAL-THE-LAW`, `UC-PROTECT-THE-EVIDENCE`, `UC-PIN-THE-EXTERNAL-CHECK`
+**Where today:** `pipeline/stage-engine`: Ordered fail-fast verification; the check is law, what it invokes is gnome-editable; `verification/verification-hardening`: Pin-check guards external checks (the pin covers the workflow file, not the build scripts and tests the workflow runs from the attempt commit); no check fails an attempt for touching a test, a threshold or a build script
+**Kind:** `wrong-turn` (decision: a command check runs in the attempt's working tree, and an external check runs on it; premise: what the check invokes is the project's code; refuted by `UC-SEAL-THE-LAW`, whose **whatever the gnome writes in its copy** covers the build scripts the check runs)
 **Resolution:** `planned: harden-verification-integrity` (sealed assets, protected paths, diff-scope verdict)
 
 ### GP-VENDOR-KEY-IN-BOX — The gnome's process holds the model vendor's real key
@@ -133,3 +133,15 @@ entry; the gate, once written, reports both.
 **Where today:** `serve/factory-serve`: Concurrent slots share one clone safely (promised; the hardening step writes the shared clone's configuration from every slot under no lock, and the loser's fresh claim fails)
 **Kind:** `wrong-turn` (decision: the factory hardens the clone by writing its configuration file; premise: one writer at a time; refuted by `UC-RUN-SLOTS-UNATTENDED`; see `GP-FACTORY-IN-OPERATOR-CLONE`)
 **Resolution:** `planned: own-git-invocation-policy` (the factory never writes the clone's configuration; every setting travels on the command line)
+
+### GP-EVERY-FINDING-BLOCKS — A check cannot report without failing the stage
+**Breaks:** `UC-REPORT-WITHOUT-FAILING`
+**Where today:** `pipeline/stage-engine`: Ordered fail-fast verification (the first non-pass verdict ends the attempt; a check carries no severity)
+**Kind:** `missing`
+**Resolution:** `planned: harden-verification-integrity` (`severity: blocking | advisory` on a check; advisory findings reach the tracker and the attempt record and burn nothing)
+
+### GP-CHECK-TARGET-UNCHECKED — A check's target is found missing only after a paid round
+**Breaks:** `UC-HEAR-EVERY-LAW-ERROR-AT-ONCE`
+**Where today:** `pipeline/pipeline-config`: Local sanity validation of mechanism and check configs (the loader validates no target liveness by decision: a workflow name, a command binary, a model name); `verification/github-external-check`: Misconfiguration fails fast without burning an attempt (found at the first poll, after the stage's rounds were paid for)
+**Kind:** `missing`
+**Resolution:** `open` (`add-doctor-command` checks the secrets and the binaries the checks declare, not whether a named workflow or model exists)

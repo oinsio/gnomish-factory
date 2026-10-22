@@ -19,7 +19,7 @@ groups 8 to 10 hold the events that are not one task's.
 | 2 | Filing and authorizing work | [`filing-and-authorizing.md`](use-cases/filing-and-authorizing.md) | task written; ready applied; ready applied by an untrusted source; task mandated by ref |
 | 3 | Coordinating instances | [`coordinating-instances.md`](use-cases/coordinating-instances.md) | queue non-empty; lease stale; instance died; sibling picks up |
 | 4 | Working a task | [`working-a-task.md`](use-cases/working-a-task.md) | round begins; gnome commits; gnome asks a decision; box fails to start |
-| 5 | Verifying | *(next)* | round ends; check red; CI silent past its timeout; judge verdict |
+| 5 | Verifying | [`verifying.md`](use-cases/verifying.md) | round ends; check red; CI silent past its timeout; judge verdict |
 | 6 | Deciding and escalating | *(next)* | fork unresolved; arbiter decides; human answers; attempts exhausted; manual checkpoint |
 | 7 | Delivering and closing | *(next)* | task completed; PR opened; branch merged; task reopened |
 | 8 | Recovering and degrading | *(next)* | process killed mid-step; origin unreachable; tracker unreachable; clone lost |
