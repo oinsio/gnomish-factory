@@ -22,8 +22,8 @@ its [`gaps.md`](gaps.md) entries in one step.
 1. ~~Group 2, filing and authorizing~~ · ~~group 4, working a task~~ · ~~group 1, setting
    up~~ · ~~group 3, coordinating instances~~
 2. ~~Group 5, verifying: round ends; check red; CI silent past its timeout; judge verdict.~~
-3. Group 6, deciding and escalating: fork unresolved; arbiter decides; human answers;
-   attempts exhausted; manual checkpoint.
+3. ~~Group 6, deciding and escalating: fork unresolved; arbiter decides; human answers;
+   attempts exhausted; manual checkpoint.~~
 4. Group 7, delivering and closing: task completed; PR opened; branch merged; task reopened.
 5. Group 8, recovering and degrading: process killed mid-step; origin, tracker, runtime
    unreachable; clone lost. The first-order promise of resume lives here.
