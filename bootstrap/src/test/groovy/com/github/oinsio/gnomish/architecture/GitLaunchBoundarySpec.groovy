@@ -79,6 +79,7 @@ class GitLaunchBoundarySpec extends Specification {
         spawnSites(productionClasses) == SPAWN_SITES.keySet()
     }
 
+    // Scenario: build-system/module-layering / Both git launchers take one invocation policy
     def "FR7: both git launchers take their command line from GitInvocation.commandLine"() {
         expect:
         GIT_LAUNCHERS.keySet().findAll {

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.architecture
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 
+import com.github.oinsio.gnomish.testsupport.ModuleBuildFile
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
@@ -46,6 +47,43 @@ class GitObjectsBoundarySpec extends Specification {
             'org.springframework..',
             'com.fasterxml.jackson..'
         ]
+    }
+
+    // FR1 of own-git-invocation-policy (design D1): the library takes its invocation policy from
+    //     :gittransfer, which allows nothing itself, so the edge keeps it extraction-ready.
+    // Scenario: build-system/module-layering / The git-object library depends only on subprocess and gittransfer
+    def "FR1: gitobjects declares and allows only :subprocess and :gittransfer, the leaf's entry naming its edge"() {
+        given: 'the build file, read as data and as text'
+        def code = ModuleBuildFile.textOf(':gitobjects')
+        List<String> lines = ModuleBuildFile.fileOf(':gitobjects').readLines()*.trim()
+
+        expect: 'its internal production edges are exactly the two leafs'
+        ModuleBuildFile.productionDependencies(code)
+                .findResults {
+                    (it =~ /project\('([^']+)'\)/).with {
+                        it.find() ? it.group(1) : null
+                    }
+                }
+                .toSet() == INTERNAL_EDGES
+
+        and: 'its layering allowlist names the same two'
+        ModuleBuildFile.allowedProjects(code) == INTERNAL_EDGES
+
+        and: "the allowlist entry for :gittransfer carries a comment naming the edge it comes through"
+        int entry = lines.indexOf("':gittransfer',")
+        entry> 0
+        commentAbove(lines, entry).contains('declared directly above')
+    }
+
+    private static final Set<String> INTERNAL_EDGES = [':subprocess', ':gittransfer'] as Set
+
+    /** The contiguous comment lines directly above {@code index}, joined; empty when there are none. */
+    private static String commentAbove(List<String> lines, int index) {
+        int start = index
+        while (start> 0 && lines[start - 1].startsWith('//')) {
+            start--
+        }
+        lines.subList(start, index).join(' ')
     }
 
     def "FR25: the pure domain never depends on the gitobjects library"() {
