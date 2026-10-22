@@ -89,6 +89,9 @@ class SupervisedLoopStopConcurrencySpec extends Specification {
         then:
         prompt
         stillInBackoff
+        // The stop only sets the backoff thread's interrupt status; the sleeper records it once that
+        // thread runs again, so its return is awaited before the record is read.
+        backoff.returnedWithin(JOIN_BOUND)
         backoff.interrupted
         rig.stopAndJoinWithinBound()
         rig.ticks.get() == 1
