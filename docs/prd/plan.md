@@ -31,7 +31,7 @@ its [`gaps.md`](gaps.md) entries in one step.
 7. Group 10, developing the factory: release tagged; plugin written; the factory on itself.
 
 Per group, the checks run before the report: every `UC-` heading unique across the
-directory; every `GP-` key in a table defined in `gaps.md` and every entry referenced by some
+directory; every `GP-` key in a table defined under `gaps/` and every entry referenced by some
 story; every key in a `**Breaks:**` line resolves to a story; every `planned:` change exists
 unarchived; every requirement heading in a coverage cell exists in its main spec (strip only
 the `(...)` note at the end of a cell, never inside a heading). The checks are an ad hoc

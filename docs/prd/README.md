@@ -17,7 +17,7 @@ written; the order of the remaining work, and how it is wired into the specs, is
 | `concept.md` (next) | the operational concept: one task from filing to merge, from every stakeholder's seat | none |
 | [`use-cases.md`](use-cases.md) | the event partition into ten groups and the entry format; one file per group under `use-cases/` | `UC-*` |
 | `quality.md` (next) | quality requirements in the six-part form with a fit criterion each | `QR-*` |
-| [`gaps.md`](gaps.md) | where the factory as built does not meet a story or a quality requirement: the kind of each gap and who closes it | `GP-*` |
+| [`gaps.md`](gaps.md) | where the factory as built does not meet a story or a quality requirement: the kind of each gap and who closes it; the entries live under `gaps/`, one file per subject | `GP-*` |
 
 ## PRD keys
 
