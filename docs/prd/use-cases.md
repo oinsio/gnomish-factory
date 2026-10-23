@@ -23,7 +23,7 @@ groups 8 to 10 hold the events that are not one task's.
 | 6 | Deciding and escalating | [`deciding-and-escalating.md`](use-cases/deciding-and-escalating.md) | fork unresolved; arbiter decides; human answers; attempts exhausted; manual checkpoint |
 | 7 | Delivering and closing | [`delivering-and-closing.md`](use-cases/delivering-and-closing.md) | task completed; PR opened; branch merged; task reopened |
 | 8 | Recovering and degrading | [`recovering-and-degrading.md`](use-cases/recovering-and-degrading.md) | process killed mid-step; origin unreachable; tracker unreachable; clone lost |
-| 9 | Observing and accounting | *(next)* | morning check; wall display; incident review; cost report |
+| 9 | Observing and accounting | [`observing-and-accounting.md`](use-cases/observing-and-accounting.md) | morning check; wall display; incident review; cost report |
 | 10 | Developing the factory | *(next)* | release tagged; plugin written; the factory works on itself |
 
 Recovery is its own group, against Volere's habit of folding a failure into the use case it

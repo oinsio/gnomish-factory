@@ -44,3 +44,9 @@ and hold, and host mode. The form and the vocabulary are in the index.
 **Where today:** `sandbox/execution-environment`: Runtime outage is an infrastructure failure (the task escalates at once as cannot-execute, an infrastructure park a human must return); `serve/factory-serve`: Remote outage gate holds the feed off the tracker (an origin outage releases the claim and closes on a probe with no human action; the runtime has no gate of its own)
 **Kind:** `missing`
 **Resolution:** `open`
+
+### GP-NO-EGRESS-ACCESS-LOG — Only denied requests are recorded, never the allowed ones
+**Breaks:** `UC-SEE-WHAT-LEFT-THE-BOX`
+**Where today:** `sandbox/sandbox-egress`: Denials are captured as structured findings (host, path, method of a denial, carried to the task report); a request the allowlist admits leaves no record in the guard, the report or the branch, so what left the box is known only by what was refused
+**Kind:** `missing`
+**Resolution:** `open`

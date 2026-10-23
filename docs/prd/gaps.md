@@ -19,6 +19,7 @@ across the directory, so a reference never names the file.
 | [`law-and-checks.md`](gaps/law-and-checks.md) | the law as sealed and the checks that grade an attempt |
 | [`decisions.md`](gaps/decisions.md) | forks, arbiters, answers and their record |
 | [`delivery.md`](gaps/delivery.md) | the pull request, the merge and what the factory leaves behind |
+| [`observing.md`](gaps/observing.md) | what the factory shows of itself and what it counts |
 
 ## The entry form
 

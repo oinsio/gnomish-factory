@@ -4,8 +4,8 @@ Entries of [`../gaps.md`](../gaps.md) about the pull request, the merge and what
 leaves behind. The form and the vocabulary are in the index.
 
 ### GP-DELIVERY-IS-A-GNOME-STAGE — The pull request is opened by the gnome with a write token
-**Breaks:** `UC-RECEIVE-AN-ORDINARY-PULL-REQUEST`, `UC-DELIVER-WITHOUT-ARMING-THE-GNOME`
-**Where today:** nothing in the engine; the reference pipelines' `deliver` stage is an agent round running the forge's command line, and `operator-guide.md` has the operator pass a token with write access to contents and pull requests into the box through `sandbox/execution-environment`: Layered positive environment allowlist (the passthrough layer)
+**Breaks:** `UC-RECEIVE-AN-ORDINARY-PULL-REQUEST`, `UC-DELIVER-WITHOUT-ARMING-THE-GNOME`, `UC-SEE-WHAT-THE-TASK-COST`
+**Where today:** nothing in the engine; the reference pipelines' `deliver` stage is an agent round running the forge's command line, and `operator-guide.md` has the operator pass a token with write access to contents and pull requests into the box through `sandbox/execution-environment`: Layered positive environment allowlist (the passthrough layer); the `usage-report` stage of the reference pipelines is the same shape, a paid agent round running one script
 **Kind:** `missing`
 **Resolution:** `open` (`add-command-executor` turns the round into a command, but the token stays in the box; a factory-side delivery through the tracker or a forge port has no change)
 
