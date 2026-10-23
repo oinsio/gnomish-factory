@@ -10,8 +10,8 @@ registered clone, the slots that share it. The form and the vocabulary are in th
 **Resolution:** `planned: add-doctor-command`
 
 ### GP-FACTORY-IN-OPERATOR-CLONE — The factory works inside the operator's own clone
-**Breaks:** `UC-REGISTER-A-CLONE`
-**Where today:** `operator/project-registry`: Projects are registered explicitly by clone path; `git/git-task-persistence`: Factory git executes no untrusted content (writes the clone's hook path); the operator must create the clone on the ref backend the factory requires, and the operator's hooks, configuration and IDE fetches reach the factory's git
+**Breaks:** `UC-REGISTER-A-CLONE`, `UC-REBUILD-FROM-ORIGIN`
+**Where today:** `operator/project-registry`: Projects are registered explicitly by clone path; `git/git-task-persistence`: Factory git executes no untrusted content (writes the clone's hook path); the operator must create the clone on the ref backend the factory requires, by hand after a loss as at the start, and the operator's hooks, configuration and IDE fetches reach the factory's git
 **Kind:** `wrong-turn` (decision: D7 of `add-git-workflow`, the factory runs in the registered clone; premise: the factory's clone is the operator's clone, dating from the manual-run era and never decided; refuted by `UC-SHARE-A-PROJECT-ACROSS-MACHINES`, `UC-RUN-SLOTS-UNATTENDED` and the IDE fetch of `UC-REGISTER-A-CLONE`; the 2026-10-21 review traced eight defects to it)
 **Resolution:** `open` (a factory-owned clone from the origin URL is the candidate; no change written)
 

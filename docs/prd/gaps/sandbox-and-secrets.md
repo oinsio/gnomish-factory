@@ -4,8 +4,8 @@ Entries of [`../gaps.md`](../gaps.md) about the box, its boundary, what the gnom
 and hold, and host mode. The form and the vocabulary are in the index.
 
 ### GP-HOST-MODE-BEST-EFFORT — Host mode gives weaker guarantees than the box
-**Breaks:** `UC-KEEP-SECRETS-ON-THE-HOST`, `UC-ONE-EXIT-FROM-THE-BOX`, `UC-GNOME-CANNOT-FORGE-RECORDS`, `UC-JUDGE-ON-CLEAN-GROUND`
-**Where today:** `sandbox/execution-environment`: Host adapter mechanics; `git/git-task-persistence`: Gnome commits within a round (the host round close reads the gnome's working tree); `executor/agent-executor`: CLI judge vote (a host-mode vote runs in the stage workspace the round left behind); no guard and no denials in host mode
+**Breaks:** `UC-KEEP-SECRETS-ON-THE-HOST`, `UC-ONE-EXIT-FROM-THE-BOX`, `UC-GNOME-CANNOT-FORGE-RECORDS`, `UC-JUDGE-ON-CLEAN-GROUND`, `UC-RECOVERY-TRUSTS-ONLY-THE-RECORD`
+**Where today:** `sandbox/execution-environment`: Host adapter mechanics; `git/git-task-persistence`: Gnome commits within a round (the host round close reads the gnome's working tree), Factory register ref (in host mode the gnome shares the clone and can move the register, so it is a detection, not a fence); `executor/agent-executor`: CLI judge vote (a host-mode vote runs in the stage workspace the round left behind); no guard and no denials in host mode
 **Kind:** `one-medium-only`
 **Resolution:** `decided` (2026-10-21): host mode stays for work a box cannot serve, such as attached peripherals, special settings or applications, or a specific OS; process, code and security stay as close to container mode as they can, with no guarantee where none can be given; lands in `concept.md` (execution modes), the operator guide, and a `QR-*` whose measure is that the list of differences is kept and complete
 
@@ -38,3 +38,9 @@ and hold, and host mode. The form and the vocabulary are in the index.
 **Where today:** `sandbox/execution-environment`: Adapter passports and fail-closed reconciliation (the passport can state the boundary; the container adapter declares a software one, and no adapter declares a hardware one)
 **Kind:** `missing`
 **Resolution:** `planned: add-sandbox-colima-vm` (a per-task VM adapter of the same port; the cloud and CI executors in `add-sandbox-cloud-executor` and `add-sandbox-gha-executor` are other answers to the same want)
+
+### GP-RUNTIME-OUTAGE-PARKS — A container runtime outage parks the task for a human
+**Breaks:** `UC-RIDE-OUT-AN-OUTAGE`
+**Where today:** `sandbox/execution-environment`: Runtime outage is an infrastructure failure (the task escalates at once as cannot-execute, an infrastructure park a human must return); `serve/factory-serve`: Remote outage gate holds the feed off the tracker (an origin outage releases the claim and closes on a probe with no human action; the runtime has no gate of its own)
+**Kind:** `missing`
+**Resolution:** `open`

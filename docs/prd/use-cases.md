@@ -22,7 +22,7 @@ groups 8 to 10 hold the events that are not one task's.
 | 5 | Verifying | [`verifying.md`](use-cases/verifying.md) | round ends; check red; CI silent past its timeout; judge verdict |
 | 6 | Deciding and escalating | [`deciding-and-escalating.md`](use-cases/deciding-and-escalating.md) | fork unresolved; arbiter decides; human answers; attempts exhausted; manual checkpoint |
 | 7 | Delivering and closing | [`delivering-and-closing.md`](use-cases/delivering-and-closing.md) | task completed; PR opened; branch merged; task reopened |
-| 8 | Recovering and degrading | *(next)* | process killed mid-step; origin unreachable; tracker unreachable; clone lost |
+| 8 | Recovering and degrading | [`recovering-and-degrading.md`](use-cases/recovering-and-degrading.md) | process killed mid-step; origin unreachable; tracker unreachable; clone lost |
 | 9 | Observing and accounting | *(next)* | morning check; wall display; incident review; cost report |
 | 10 | Developing the factory | *(next)* | release tagged; plugin written; the factory works on itself |
 

@@ -7,7 +7,7 @@ against the mechanism that implements it. The order follows ISO/IEC/IEEE 29148: 
 and needs, the operational concept, use cases and quality requirements; system requirements
 live in `openspec/specs/`.
 
-**Status: in progress.** The stakeholder register and seven of the ten use-case groups are
+**Status: in progress.** The stakeholder register and eight of the ten use-case groups are
 written; the order of the remaining work, and how it is wired into the specs, is in
 [`plan.md`](plan.md).
 
