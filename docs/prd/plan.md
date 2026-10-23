@@ -28,7 +28,7 @@ its [`gaps.md`](gaps.md) entries in one step.
 5. ~~Group 8, recovering and degrading: process killed mid-step; origin, tracker, runtime
    unreachable; clone lost. The first-order promise of resume lives here.~~
 6. ~~Group 9, observing and accounting: morning check; wall display; incident review; cost.~~
-7. Group 10, developing the factory: release tagged; plugin written; the factory on itself.
+7. ~~Group 10, developing the factory: release tagged; plugin written; the factory on itself.~~
 
 Per group, the checks run before the report: every `UC-` heading unique across the
 directory; every `GP-` key in a table defined under `gaps/` and every entry referenced by some

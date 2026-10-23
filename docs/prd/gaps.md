@@ -20,6 +20,7 @@ across the directory, so a reference never names the file.
 | [`decisions.md`](gaps/decisions.md) | forks, arbiters, answers and their record |
 | [`delivery.md`](gaps/delivery.md) | the pull request, the merge and what the factory leaves behind |
 | [`observing.md`](gaps/observing.md) | what the factory shows of itself and what it counts |
+| [`developing.md`](gaps/developing.md) | the factory's own making: build, release, plugin contract, its work on itself |
 
 ## The entry form
 
