@@ -129,6 +129,45 @@ class ContainerGitModeRunnerSpec extends Specification implements RunChainFakes,
         ex.message.contains('--resume')
 
         and: 'and no environment was ever started'
+        0 * support.reattachFor(_)
         0 * support.sweepOrphans()
+    }
+
+    // Scenario: sandbox/execution-environment / A refused image releases the claimed task
+    // FR14, NFR-R2 of add-sandbox-base-image (design D22): the first box is live before the engine,
+    // so a #kind refusal leaves the run (exit 8 through RunExitCodeMapper) instead of parking it.
+    def "a #kind refusal of the first box leaves the run after the branch exists, and the engine never runs"() {
+        given:
+        def refusal = OperatorPreconditionRefusalSamples.of(kind)
+
+        when:
+        run()
+
+        then:
+        1 * taskRepository.createTask(*_)
+
+        then: 'the runner-start sweep first, as before the first box existed (D22)'
+        1 * support.sweepOrphans()
+
+        then:
+        1 * support.reattachFor('build') >> { throw refusal }
+        def ex = thrown(RuntimeException)
+        ex.is(refusal)
+        executor.requests.isEmpty()
+
+        where:
+        kind << OperatorPreconditionRefusalSamples.kinds()
+    }
+
+    // D22: any other early failure is the first round's, which meets it again as cannot-execute.
+    def "a first-box failure that is no precondition is left to the first round, and the engine runs"() {
+        when:
+        run()
+
+        then:
+        1 * support.reattachFor('build') >> {
+            throw new IllegalStateException('create network failed')
+        }
+        executor.requests.size() == 1
     }
 }

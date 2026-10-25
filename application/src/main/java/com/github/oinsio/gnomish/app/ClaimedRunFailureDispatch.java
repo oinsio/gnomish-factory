@@ -5,10 +5,17 @@ import com.github.oinsio.gnomish.app.port.git.BoxGitVersionRefusedException;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException;
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeUnavailableException;
+import com.github.oinsio.gnomish.app.port.run.ImageContractRefusedException;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.take.DaemonConditionKind;
 import com.github.oinsio.gnomish.app.take.TakeCrashAbort;
 import com.github.oinsio.gnomish.app.take.TakeQuarantinePark;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Decides where an uncaught {@link RuntimeException} of a claimed run goes — the classification
@@ -17,19 +24,28 @@ import com.github.oinsio.gnomish.app.take.TakeResult;
  * the mapping, holding the crash arm as a field built once per slot. Extracted out of {@link
  * TakeClaimAndWork} by finding F56 of tighten-spec-contract.
  *
- * <p>Four arms, checked in this order:
+ * <p>Five arms, checked in this order:
  *
  * <ol>
+ *   <li><b>An operator precondition</b> — the factory clone's ref format ({@link
+ *       CloneRefFormatRefusedException}), the container runtime ({@link
+ *       ContainerRuntimeUnavailableException}), the sandbox image's git floor ({@link
+ *       BoxGitVersionRefusedException}) or its image contract ({@link
+ *       ImageContractRefusedException}), as {@link OperatorPreconditionRefusals} decides — ends {@link TakeResult.OperatorPreconditionUnmet} after
+ *       the claim is released through the outage release's one owner, {@link ClaimOutageRelease}
+ *       (design D18 of add-sandbox-base-image). Each is the operator's to fix, not the task's
+ *       fault, so it spends no abort, backoff or fuse; a returned result is what every sink of a
+ *       slot reads, where a rethrow reached only the one caller with a {@code catch}. The command
+ *       or the daemon condition the result ends writes the operator's line; this layer logs the
+ *       classification at DEBUG (design D19, "One failure, one log").
  *   <li><b>Deliberate, dedicated-exit-code control flow</b> is rethrown unchanged: {@link
  *       UsageException} keeps exit 2 and {@link DivergedBranchException} keeps exit 5 (D16: codes
- *       shared with {@code run} keep their meaning). The latter reaches here only when the tenure
- *       was dropped mid-run — a beat reported the claim gone — so the diverged branch is no longer
- *       this instance's to repair (FR8 of harden-task-branch-contract). The claim is still dropped
+ *       shared with {@code run} keep their meaning). These two alone rethrow, because their codes
+ *       exist and a caller reads them. The latter reaches here only when the tenure was dropped
+ *       mid-run — a beat reported the claim gone — so the diverged branch is no longer this
+ *       instance's to repair (FR8 of harden-task-branch-contract). The claim is still dropped
  *       first (see {@link #releaseBestEffort}), so a refusal never leaves the task hanging {@code
- *       Working}. A refused factory clone ({@link CloneRefFormatRefusedException}) and a refused
- *       sandbox image ({@link BoxGitVersionRefusedException}) take the same arm: each is the
- *       operator's precondition, not the task's fault, so it spends no abort
- *       (design D13 of tighten-spec-contract, as amended 2026-10-13).
+ *       Working}.
  *   <li><b>A quarantined branch</b> — one that classifies to a non-recoverable shape — stops at
  *       {@link TakeQuarantinePark}, parking the task for a human on the first classification and
  *       spending no attempt of the unified recovery accounting (FR15 of
@@ -46,9 +62,11 @@ import com.github.oinsio.gnomish.app.take.TakeResult;
  * </ol>
  *
  * <p>Implements FR14, D16 of add-tracker-port; FR15 of harden-task-branch-contract; FR9 of
- * add-base-ref-resolution.
+ * add-base-ref-resolution; FR5, FR14, NFR-O3 of add-sandbox-base-image.
  */
 final class ClaimedRunFailureDispatch {
+
+    private static final Logger log = LoggerFactory.getLogger(ClaimedRunFailureDispatch.class);
 
     private final TakeCrashAbort crashAbort;
 
@@ -68,16 +86,42 @@ final class ClaimedRunFailureDispatch {
      * @return the terminal result of the arm the failure classifies to
      */
     TakeResult onFailure(TakeOrder order, RuntimeException failure) {
+        Optional<DaemonConditionKind> precondition = OperatorPreconditionRefusals.kindOf(failure);
+        if (precondition.isPresent()) {
+            return preconditionUnmet(order, precondition.get(), failure);
+        }
         return switch (failure) {
             case UsageException deliberate -> throw releaseBestEffort(order, deliberate);
             case DivergedBranchException deliberate -> throw releaseBestEffort(order, deliberate);
-            case CloneRefFormatRefusedException deliberate -> throw releaseBestEffort(order, deliberate);
-            case BoxGitVersionRefusedException deliberate -> throw releaseBestEffort(order, deliberate);
             case BranchQuarantineException quarantine -> TakeQuarantinePark.onQuarantine(order, quarantine);
             case BranchLocationUnavailableException outage ->
                 TaskBranchLookupOutage.release(order.tracker(), order.ref(), outage);
             default -> crashAbort.onCrash(order, failure);
         };
+    }
+
+    /**
+     * Ends the claimed run of {@code order} on the operator precondition {@code refused} met: the
+     * claim released plain, the typed result returned (design D18 of add-sandbox-base-image).
+     */
+    private static TakeResult preconditionUnmet(TakeOrder order, DaemonConditionKind kind, RuntimeException refused) {
+        // The refusal's message is the operator's line, written by the deciding layer the result
+        // ends (the command, or the daemon condition); here it is the classification only.
+        log.debug(
+                "task {}: operator precondition {} refused the claimed run",
+                order.ref().id(),
+                kind);
+        return ClaimOutageRelease.refused(
+                order.tracker(),
+                order.ref(),
+                kind,
+                String.valueOf(refused.getMessage()),
+                unreleased -> log.error(
+                        OperatorEvent.PRECONDITION_CLAIM_RELEASE_FAILED.head()
+                                + "release failed for task {} whose claimed run met operator precondition {}",
+                        order.ref().id(),
+                        kind,
+                        unreleased));
     }
 
     /**

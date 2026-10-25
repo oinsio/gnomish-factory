@@ -1,13 +1,14 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
- * FR1, FR2, FR3, NFR-R1, NFR-R2 of fix-image-declared-volumes: the one owner of the
- * image-declared-volume override set reads the image's declared paths through the
- * runtime seam, subtracts the destinations the container mounts explicitly, renders
- * bounded {@code tmpfs} fragments in the image's own order, and refuses — rather than
- * returning an empty set — any answer it cannot trust. No daemon.
+ * FR1, FR2, FR3, NFR-R2 of fix-image-declared-volumes: the one owner of the
+ * image-declared-volume override set takes the image's declared paths from its {@link ImageFacts}
+ * (design D3 of add-sandbox-base-image), subtracts the destinations the container mounts
+ * explicitly, and renders bounded {@code tmpfs} fragments in the image's own order. The refusal
+ * of an answer it cannot trust moved with the read to {@code ImageFactsSpec}. No daemon.
  */
 class DeclaredVolumeOverridesSpec extends Specification {
 
@@ -51,29 +52,9 @@ class DeclaredVolumeOverridesSpec extends Specification {
         ['/cache', '/var/lib'] || '[/cache, /var/lib]' | false
     }
 
-    def "FR1: resolve inspects the image through the runtime seam, once"() {
-        given:
-        def docker = answering('{"/cache":{}}')
-
-        when:
-        def overrides = DeclaredVolumeOverrides.resolve(docker, IMAGE, [] as Set)
-
-        then:
-        docker.runs == [
-            [
-                'image',
-                'inspect',
-                '-f',
-                '{{json .Config.Volumes}}',
-                IMAGE
-            ]
-        ]
-        overrides.paths() == ['/cache']
-    }
-
     def "FR1, FR2: #answer yields #expected once the explicit destinations are subtracted"() {
         expect:
-        DeclaredVolumeOverrides.resolve(answering(answer), IMAGE, explicit as Set).paths() == expected
+        DeclaredVolumeOverrides.resolve(facts(answer), explicit as Set).paths() == expected
 
         where:
         answer | explicit || expected
@@ -85,51 +66,14 @@ class DeclaredVolumeOverridesSpec extends Specification {
         '{"/gnomish/work":{}}' | [WORKING_COPY] || []
     }
 
-    // Scenario: sandbox/execution-environment / Declared-volume read failure is an infrastructure failure
-    def "NFR-R1: a refused inspect fails the caller and names the image and the runtime's answer"() {
-        given:
-        def docker = new RecordingDockerCli()
-        docker.onRun = { List<String> args ->
-            DockerResult.of(1, '', 'No such image: gnomish/img:1\n')
-        }
-
-        when:
-        DeclaredVolumeOverrides.resolve(docker, IMAGE, [] as Set)
-
-        then:
-        def e = thrown(DockerCommandFailedException)
-        // The runtime's answer leaves the carrier through its log exit, so the trailing newline
-        // it arrived with is inert notation rather than a second line (design D1, D5, D6).
-        e.message == 'docker image inspect for gnomish/img:1 failed: No such image: gnomish/img:1\\n'
-    }
-
-    // Scenario: sandbox/execution-environment / Declared-volume read failure is an infrastructure failure
-    def "NFR-R1: an answer of shape #answer is refused, never read as an empty override set"() {
-        when:
-        DeclaredVolumeOverrides.resolve(answering(answer), IMAGE, [] as Set)
-
-        then:
-        def e = thrown(DockerCommandFailedException)
-        e.message.startsWith('docker image inspect for ' + IMAGE + ' failed:')
-
-        where:
-        answer << [
-            '',
-            'not json at all',
-            '[]',
-            '"/cache"',
-            '7'
-        ]
-    }
-
     // Scenario: sandbox/execution-environment / The override is a pure function of image and explicit mounts
     def "NFR-R2: two resolutions over the same answer and destinations are equal and render the same argv"() {
         given:
         def answer = '{"/var/lib/tool":{},"/cache":{},"/gnomish/work":{}}'
 
         when:
-        def first = DeclaredVolumeOverrides.resolve(answering(answer), IMAGE, [WORKING_COPY] as Set)
-        def second = DeclaredVolumeOverrides.resolve(answering(answer), IMAGE, [WORKING_COPY] as Set)
+        def first = DeclaredVolumeOverrides.resolve(facts(answer), [WORKING_COPY] as Set)
+        def second = DeclaredVolumeOverrides.resolve(facts(answer), [WORKING_COPY] as Set)
 
         then: 'equal as values, and rendered in the order the image declared them'
         first == second
@@ -149,9 +93,12 @@ class DeclaredVolumeOverridesSpec extends Specification {
         overrides.paths() == ['/cache']
     }
 
-    private static RecordingDockerCli answering(String stdout) {
-        def docker = new RecordingDockerCli()
-        docker.onRun = { List<String> args -> DockerResult.of(0, stdout, '') }
-        docker
+    /**
+     * The facts of an image whose inspect answered {@code volumes} as its declared volumes — the
+     * JSON this spec fed the fake runner before {@code ImageFacts} took the read over (design D3
+     * of add-sandbox-base-image), now one step up, through the owner's own parse.
+     */
+    private static ImageFacts facts(String volumes) {
+        ImageFacts.parse(IMAGE, UntrustedText.subprocess('{"Volumes":' + volumes + '}'))
     }
 }

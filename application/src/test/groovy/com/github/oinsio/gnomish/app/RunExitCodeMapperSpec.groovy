@@ -1,10 +1,13 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeUnavailableException
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
 
@@ -53,8 +56,22 @@ class RunExitCodeMapperSpec extends Specification {
         [
             new UsageException('bad flag'),
             new PipelineLoadFailedException(['error line']),
+            new CloneRefFormatRefusedException('/clones/x', 'reftable', UntrustedText.subprocess('files')),
+            new ContainerRuntimeUnavailableException('the Docker runtime is unreachable'),
             new RuntimeException('unexpected')
         ].every { mapper.getExitCode(it) != 4 }
+    }
+
+    // FR14 of add-sandbox-base-image: a precondition is the operator's configuration, never the
+    // generic internal-error fallback it fell into before.
+    // Scenario: cli/manual-run / A precondition refusal in run exits 8, never 1
+    // The four share code 8 with take; every kind the classifier names (design D22).
+    def "a #kind refusal maps to 8, not the fallback 1"() {
+        expect:
+        mapper.getExitCode(OperatorPreconditionRefusalSamples.of(kind)) == 8
+
+        where:
+        kind << OperatorPreconditionRefusalSamples.kinds()
     }
 
     // Scenario: cli/manual-run / Each tool failure has its exit code below 10

@@ -5,7 +5,7 @@ import java.time.Duration;
 import java.time.InstantSource;
 
 /**
- * {@link RemoteOutageGate}'s observability collaborators (task 7.4 of add-base-ref-resolution),
+ * {@link DaemonCondition}'s observability collaborators (task 7.4 of add-base-ref-resolution),
  * bundled into one parameter object per the project's parameter-count limit
  * (process-invariants.md) — the gate's full constructor otherwise runs to eleven positional
  * arguments. This is deliberately a plain data carrier: the gate still owns every decision about

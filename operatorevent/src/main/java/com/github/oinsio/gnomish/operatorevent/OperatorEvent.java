@@ -262,14 +262,11 @@ public enum OperatorEvent {
     // factory register (tighten-spec-contract, design D13): a best-effort closing push of a salvage
     // or a sandboxed round failed.
     CLOSING_PUSH_FAILED("GF161"),
-    // factory clone ref backend (tighten-spec-contract, design D13 as amended 2026-10-13): the clone
-    // a run starts on is not on the reftable ref backend, so a ref transaction moving the task
-    // branch and its register would not be atomic on disk; the run is refused before it writes.
-    FACTORY_CLONE_REF_FORMAT_REFUSED("GF162"),
-    // sandbox image git floor (tighten-spec-contract, design D13 as amended 2026-10-13): the image
-    // a box is about to be seeded on carries a git below the floor (or none), so its seed clone
-    // could not read the reftable factory clone; the box is refused before any object exists.
-    BOX_GIT_VERSION_REFUSED("GF163"),
+    // GF162 and GF163 are retired (add-sandbox-base-image, design D19): the factory clone's ref
+    // format check and the box's git floor no longer log their own refusals; the layer that decides
+    // on the refusal writes the one line — the take (GF171), the command (GF172), and the startup
+    // assessment and the daemon condition under their own codes. A retired code stays retired —
+    // the gap is not filled.
     // worktree janitor branch pass (fix-terminal-receipt-convergence, design D2): one or more
     // finished tasks' delivered branches could not be cleaned on this tick; the next tick retries.
     WORKTREE_JANITOR_BRANCH_CLEANUP_FAILED("GF164"),
@@ -287,7 +284,37 @@ public enum OperatorEvent {
     // agent round scratch directory (fix-terminal-receipt-convergence, design D18, FR20): the host
     // directory a round's CLI wrote its stderr into could not be removed when the round ended; the
     // round's outcome stands, the directory is left on the host and named.
-    ROUND_SCRATCH_REMOVAL_FAILED("GF168");
+    ROUND_SCRATCH_REMOVAL_FAILED("GF168"),
+    // GF169 is retired (add-sandbox-base-image, design D19): the image contract check no longer logs
+    // its own refusal; the deciding layer writes the line, as for GF162 and GF163. A retired code
+    // stays retired — the gap is not filled.
+    // claimed-run precondition refusal (add-sandbox-base-image, design D18, FR14): an operator
+    // precondition refused a claimed run and the plain release of its claim itself failed; the
+    // run still ends on the typed precondition result.
+    PRECONDITION_CLAIM_RELEASE_FAILED("GF170"),
+    // single-shot take (add-sandbox-base-image, design D18/D19, FR14): the take ends on an operator
+    // precondition its claimed run met; the command's one line, with the refusal and its fix, before
+    // it exits 8.
+    TAKE_OPERATOR_PRECONDITION_UNMET("GF171"),
+    // command exception reporting (add-sandbox-base-image, design D19, FR14): a command ends on an
+    // operator precondition met outside a claimed run (run, or take before its claim); the
+    // command's one line beside the message it prints, before it exits 8.
+    COMMAND_OPERATOR_PRECONDITION_REFUSED("GF172"),
+    // serve startup assessment (add-sandbox-base-image, design D17/D19, FR13): an operator
+    // precondition refused the daemon before its first claim; the startup's one line, with the
+    // refusal and its fix, before it exits 1.
+    SERVE_OPERATOR_PRECONDITION_REFUSED("GF173"),
+    // daemon conditions (add-sandbox-base-image, design D19, FR15, NFR-O2): an operator precondition
+    // a slot or the janitor met under a running serve opened its condition — the one WARN with the
+    // refusal and its fix — and, past the sustained-open threshold, the one ERROR; one pair per kind.
+    CONDITION_CONTAINER_RUNTIME_OPENED("GF174"),
+    CONDITION_CONTAINER_RUNTIME_SUSTAINED_OPEN("GF175"),
+    CONDITION_CLONE_REF_FORMAT_OPENED("GF176"),
+    CONDITION_CLONE_REF_FORMAT_SUSTAINED_OPEN("GF177"),
+    CONDITION_IMAGE_CONTRACT_OPENED("GF178"),
+    CONDITION_IMAGE_CONTRACT_SUSTAINED_OPEN("GF179"),
+    CONDITION_BOX_GIT_FLOOR_OPENED("GF180"),
+    CONDITION_BOX_GIT_FLOOR_SUSTAINED_OPEN("GF181");
 
     private final String code;
     private final String head;

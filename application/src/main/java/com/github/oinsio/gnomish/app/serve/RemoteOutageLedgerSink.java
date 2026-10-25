@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app.serve;
 
 /**
- * The role a {@link RemoteOutageGate} needs from the observability plane: told exactly once per
+ * The role a {@link DaemonCondition} needs from the observability plane: told exactly once per
  * closed outage, so its {@code remoteOutage} ledger line can be appended (task 7.4 of
  * add-base-ref-resolution). A seam a spec fakes is a role interface in the owning module, never a
  * JDK functional type (clause (iii) of design D22 of supervise-daemon-loops-and-embed-dashboard) —

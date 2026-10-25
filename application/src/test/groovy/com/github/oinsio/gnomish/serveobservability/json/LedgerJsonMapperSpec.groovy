@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.serveobservability.json
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory
+import com.github.oinsio.gnomish.app.take.DaemonConditionKind
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.LedgerLifecycleEvent
 import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage
@@ -46,13 +47,14 @@ class LedgerJsonMapperSpec extends Specification {
     }
 
     // NFR-O1, NFR-O3 of add-base-ref-resolution.
-    def "remoteOutage carries version 1, the type discriminator, and every field of the closed outage"() {
+    def "daemonCondition carries version 1, the type discriminator, the condition, and every field of the closed outage"() {
         given:
         def dto = mapper.toDto(remoteOutageLine())
 
         expect:
         dto.version() == 1
-        dto.type() == "remoteOutage"
+        dto.type() == "daemonCondition"
+        dto.condition() == "remote"
         dto.target() == "origin"
         dto.openedAt() == "2026-08-02T21:10:00Z"
         dto.closedAt() == "2026-08-02T22:10:00Z"
@@ -266,7 +268,7 @@ class LedgerJsonMapperSpec extends Specification {
 
     static RemoteOutageLine remoteOutageLine() {
         new RemoteOutageLine(
-                instance(), "origin", Instant.parse("2026-08-02T21:10:00Z"), Instant.parse("2026-08-02T22:10:00Z"),
+                instance(), DaemonConditionKind.REMOTE, "origin", Instant.parse("2026-08-02T21:10:00Z"), Instant.parse("2026-08-02T22:10:00Z"),
                 Duration.ofHours(1), 12, 3, "connection refused")
     }
 }

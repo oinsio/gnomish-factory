@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
+import com.github.oinsio.gnomish.app.port.run.SandboxImageReadiness;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
@@ -144,18 +145,51 @@ public class TrackerCommandConfiguration {
                 sandboxLifecyclePass);
     }
 
+    /**
+     * The image half of {@code serve}'s startup assessment (design D17 of add-sandbox-base-image):
+     * the Docker adapter's checks under the daemon's {@code tracked} ownership, with the clone read
+     * lazily because the bean exists only once a project was resolved.
+     */
+    @Bean
+    SandboxImageReadiness sandboxImageReadiness(
+            ObjectProvider<RegisteredClone> registeredClone,
+            SandboxProperties sandboxProperties,
+            FactoryProperties factoryProperties) {
+        return new TrackedImageReadiness(registeredClone, sandboxProperties, factoryProperties);
+    }
+
+    /**
+     * The three pre-claim startup steps of {@code serve} (FR12 of add-factory-serve; design D17 of
+     * add-sandbox-base-image), the operator preconditions assessed through the ports a slot reaches
+     * them by: the clone's ref format, the process's one mode selector, the image readiness.
+     */
+    @Bean
+    ServeStartupGates serveStartupGates(
+            TrackerWiring trackerWiring,
+            TaskGit git,
+            SandboxModeSelector sandboxModeSelector,
+            SandboxImageReadiness sandboxImageReadiness,
+            SandboxProperties sandboxProperties,
+            @Qualifier("errorConsoleIO") ConsoleIO errorConsoleIO) {
+        return new ServeStartupGates(
+                trackerWiring,
+                git,
+                new ServePreconditions(git.branches(), sandboxModeSelector, sandboxImageReadiness, sandboxProperties),
+                errorConsoleIO);
+    }
+
     /** {@code gnomish serve}, driving the real {@link FeedAutomaton#run}. */
     @Bean
     ServeCommand serveCommand(
             ServeRuntimeAssembly serveRuntimeAssembly,
-            TaskGit git,
+            ServeStartupGates serveStartupGates,
             ProjectScope projectScope,
             ServeProperties serveProperties,
             TrackerWiring trackerWiring,
             @Qualifier("errorConsoleIO") ConsoleIO errorConsoleIO) {
         return new ServeCommand(
                 serveRuntimeAssembly,
-                git,
+                serveStartupGates,
                 projectScope,
                 serveProperties,
                 trackerWiring,

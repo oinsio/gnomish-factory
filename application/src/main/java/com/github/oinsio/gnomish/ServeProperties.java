@@ -220,7 +220,7 @@ public record ServeProperties(
 
     /**
      * Resolves the unset case to the design D9 default of 10 minutes (FR14 of
-     * add-base-ref-resolution, matching {@code RemoteOutageGate}'s prior hardcoded constant).
+     * add-base-ref-resolution, matching the remote {@code DaemonCondition}'s prior hardcoded constant).
      * Kept as an explicit method for the same PIT record-constructor reason as {@link
      * #defaultSlots}.
      */

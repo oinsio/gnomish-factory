@@ -109,6 +109,9 @@ class FieldInventorySpec extends Specification {
         output : FieldCategory.TOKEN_COUNT,
         cacheCreation: FieldCategory.TOKEN_COUNT,
         cacheRead : FieldCategory.TOKEN_COUNT,
+        // daemon conditions (add-sandbox-base-image, D19): the conditions section and the
+        // daemonCondition line name a condition by its closed-vocabulary token
+        condition : FieldCategory.STATE,
         // remote outage gate (add-base-ref-resolution, task 7.4): snapshot section + ledger line
         target : FieldCategory.IDENTIFIER,
         openSince : FieldCategory.TIMESTAMP,

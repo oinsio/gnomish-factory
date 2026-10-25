@@ -15,8 +15,9 @@ import java.util.List;
  * pass of add-sandbox-core): a fresh git-mode task whose working copy lives
  * inside a task container instead of a host worktree. The task branch is
  * created with {@code task.json} factory-side over bare git objects (FR25,
- * D19) — no worktree ever exists; the environment materializes lazily on the
- * first round through the {@code ContainerRunSupport} lease, rounds close per
+ * D19) — no worktree ever exists; the first stage's environment is made live
+ * before the engine runs ({@link FirstBoxStep}, D22 of add-sandbox-base-image),
+ * later ones on demand through the {@code ContainerRunSupport} lease, rounds close per
  * the snapshot-first protocol (FR21), and the terminal boundary follows D19's
  * ordering: Completed disposes the environment before the outcome and cleanup
  * commits; every non-completed exit keeps the environment stopped with volume
@@ -82,7 +83,8 @@ record ContainerGitModeRunner(
                 law.lawCommit(),
                 new BasePin(baseDecision.ref(), null, baseDecision.rule()),
                 initialState);
-
-        ContainerTerminalDrive.run(assembly, support, order, context, initialState, law.binding(), null);
+        // D22 of add-sandbox-base-image: the first box is live before the engine, after the
+        // runner-start sweep, so an operator precondition refusal exits 8 rather than parking.
+        ContainerTerminalDrive.runFresh(assembly, support, order, context, initialState, law.binding());
     }
 }

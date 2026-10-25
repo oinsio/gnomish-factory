@@ -1,0 +1,17 @@
+# An operator image over the sandbox base (BaseImageHelpersSpec, task 2.2 of add-sandbox-base-image):
+# it adds only a JDK, grafted from the official image, a placeholder for the agent CLI and a CA
+# certificate, then runs the base's helpers as the reference recipe does. BASE is the base
+# fixture's tag.
+ARG BASE
+FROM eclipse-temurin:25-jdk-noble AS jdk
+
+FROM ${BASE}
+USER root
+COPY --from=jdk /opt/java/openjdk /opt/java/openjdk
+ENV JAVA_HOME=/opt/java/openjdk \
+    PATH=/opt/java/openjdk/bin:${PATH}
+# The agent CLI's place on PATH; the spec asserts the contract holds after it, not what it runs.
+RUN ln -s /bin/true /usr/local/bin/claude
+COPY --chmod=0644 test-ca.crt /etc/gnomish/ca/test-ca.crt
+RUN gnomish-trust-ca && gnomish-verify-image
+USER gnome

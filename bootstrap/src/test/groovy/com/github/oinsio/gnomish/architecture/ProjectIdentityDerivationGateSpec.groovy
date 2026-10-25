@@ -68,11 +68,13 @@ class ProjectIdentityDerivationGateSpec extends Specification {
             it.name != DERIVATION_SITE && RepoSourceTree.code(it).contains('ProjectIdentity')
         }
 
-        expect: 'the two composition-root call sites named in the proposal, and no others'
+        expect: 'the composition-root call sites — the two named in the proposal, and the serve startup\'s image\n' +
+        'readiness (design D17 of add-sandbox-base-image), which stamps its helper as a box is — and no others'
         callers.collect { it.name }.toSorted() ==
         [
             'ContainerRunSupportFactory.java',
-            'SandboxLifecyclePassFactory.java'
+            'SandboxLifecyclePassFactory.java',
+            'TrackedImageReadiness.java'
         ]
 
         and: 'each reaches the identity only through the resolver, never past it'

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.serve.SlotLedger
+import com.github.oinsio.gnomish.app.take.DaemonConditionKind
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
@@ -86,6 +87,35 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
         json.get('wallMillis').asLong() == Duration.ofMinutes(5).toMillis()
     }
 
+    // FR18 of add-sandbox-base-image (design D20): the crash arm's line, with no result to read.
+    def "writes one aborted line for a crashed slot, with no stage, attempt or tokens, and the slot's wall time"() {
+        given:
+        def ref = new TaskRef('PROJ-1')
+        clock.advance(Duration.between(clock.instant(), Instant.parse('2026-08-03T10:00:00Z')))
+        slotLedger.assign(ref)
+        def now = Instant.parse('2026-08-03T10:07:00Z')
+
+        when:
+        writer(now).writeCrashed(ref)
+
+        then:
+        def lines = Files.readString(ledgerFile(now)).split('\n').findAll {
+            !it.isBlank()
+        }
+        lines.size() == 1
+        def json = JSON.readTree(lines[0])
+        json.get('type').asText() == 'taskOutcome'
+        json.get('taskId').asText() == 'PROJ-1'
+        json.get('outcome').asText() == 'aborted'
+        json.get('parkReason').isNull()
+        json.get('stage').isNull()
+        json.get('attemptsUsed').asInt() == 0
+        json.get('startedAt').asText() == '2026-08-03T10:00:00Z'
+        json.get('finishedAt').asText() == '2026-08-03T10:07:00Z'
+        json.get('wallMillis').asLong() == Duration.ofMinutes(7).toMillis()
+        json.get('tokensByModel').size() == 0
+    }
+
     def "writes an awaitingHuman line carrying its parkReason"() {
         given:
         def ref = new TaskRef('PROJ-2')
@@ -130,6 +160,22 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
 
         when:
         writer(now).write(ref, new TakeResult.Skipped(UntrustedText.tracker('lost claim race')))
+
+        then:
+        !Files.exists(ledgerFile(now))
+    }
+
+    // FR14 of add-sandbox-base-image: a precondition refusal ran no engine, so it writes no
+    // taskOutcome line — the episode is the daemon condition's to record.
+    def "writes nothing to the ledger directory for OperatorPreconditionUnmet"() {
+        given:
+        def ref = new TaskRef('PROJ-9')
+        clock.advance(Duration.between(clock.instant(), Instant.parse('2026-08-03T10:00:00Z')))
+        slotLedger.assign(ref)
+        def now = Instant.parse('2026-08-03T10:01:00Z')
+
+        when:
+        writer(now).write(ref, new TakeResult.OperatorPreconditionUnmet(UntrustedText.factory('Task PROJ-9 claim released: re-clone on reftable'), DaemonConditionKind.CLONE_REF_FORMAT))
 
         then:
         !Files.exists(ledgerFile(now))

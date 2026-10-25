@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
 import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.app.port.git.TaskListingFailedException
+import com.github.oinsio.gnomish.app.port.run.ImageContractRefusedException
 import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.sandbox.environment.DockerCommandFailedException
 import com.github.oinsio.gnomish.sandbox.environment.DockerUnavailableException
@@ -277,7 +278,16 @@ class TypedExceptionMessageSpec extends Specification {
                 'BoxGitVersionRefusedException',
                 { String raw -> UntrustedText.container(raw) },
                 { UntrustedText carried ->
-                    new BoxGitVersionRefusedException('img:1', '2.51.0', carried, 'why')
+                    new BoxGitVersionRefusedException('img:1', '2.56.0', carried, 'why')
+                }
+            ],
+            [
+                // The contract label a refused sandbox image carries, as the image author wrote it
+                // (FR5 of add-sandbox-base-image).
+                'ImageContractRefusedException',
+                { String raw -> UntrustedText.subprocess(raw) },
+                { UntrustedText carried ->
+                    new ImageContractRefusedException('img:1', carried, 'io.gnomish.image-contract', 2, 'rebuild')
                 }
             ],
             [

@@ -42,7 +42,12 @@ public final class ContainerEnvironmentFactory {
     public ContainerEnvironmentFactory(
             SandboxProperties sandbox, BoxTiming timing, Path guardConfigRoot, OwnershipMode ownershipMode) {
         this.equipment = new BoxEquipment(
-                new DockerCli(timing.dockerCommandTimeout()), sandbox, timing, guardConfigRoot, ownershipMode);
+                new DockerCli(timing.dockerCommandTimeout()),
+                sandbox,
+                timing,
+                guardConfigRoot,
+                ownershipMode,
+                ImageContractCheck.current());
     }
 
     /**

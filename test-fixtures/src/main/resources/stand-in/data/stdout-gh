@@ -1,0 +1,105 @@
+# What `gh release list --json tagName,isDraft,isPrerelease` prints on stdout: the raw JSON the weekly
+# base rebuild's selection reads (scripts/latest-final-release.sh; FR8 of add-sandbox-base-image,
+# design D15). gh lists releases newest-created first. The arrays are indented as gh prints them on a
+# terminal rather than on one line as it prints them into a pipe: the script reads either form
+# through jq, and a one-line array of objects would read as a section header of this file. Some
+# answers hold drafts and pre-releases that `--exclude-drafts --exclude-pre-releases` keeps out of a
+# real listing: the script leaves them out by itself, whatever the server returned.
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[mixed]
+[
+  {
+    "isDraft": false,
+    "isPrerelease": false,
+    "tagName": "v0.1.5"
+  },
+  {
+    "isDraft": true,
+    "isPrerelease": false,
+    "tagName": "v0.4.0"
+  },
+  {
+    "isDraft": false,
+    "isPrerelease": true,
+    "tagName": "v0.3.0-rc.1"
+  },
+  {
+    "isDraft": false,
+    "isPrerelease": false,
+    "tagName": "v0.2.0"
+  }
+]
+
+[numeric]
+[
+  {
+    "isDraft": false,
+    "isPrerelease": false,
+    "tagName": "v0.9.12"
+  },
+  {
+    "isDraft": false,
+    "isPrerelease": false,
+    "tagName": "v0.10.0"
+  },
+  {
+    "isDraft": false,
+    "isPrerelease": false,
+    "tagName": "v0.9.2"
+  }
+]
+
+[malformed]
+[
+  {
+    "isDraft": false,
+    "isPrerelease": false,
+    "tagName": "v9.0"
+  },
+  {
+    "isDraft": false,
+    "isPrerelease": false,
+    "tagName": "9.1.0"
+  },
+  {
+    "isDraft": false,
+    "isPrerelease": false,
+    "tagName": "v9.2.0.1"
+  },
+  {
+    "isDraft": false,
+    "isPrerelease": false,
+    "tagName": "v09.3.0"
+  },
+  {
+    "isDraft": false,
+    "isPrerelease": false,
+    "tagName": "v9.4.0-final"
+  },
+  {
+    "isDraft": false,
+    "isPrerelease": false,
+    "tagName": "v0.2.0"
+  }
+]
+
+[only-unfinal]
+[
+  {
+    "isDraft": true,
+    "isPrerelease": false,
+    "tagName": "v0.2.0"
+  },
+  {
+    "isDraft": false,
+    "isPrerelease": true,
+    "tagName": "v0.1.0-rc.1"
+  }
+]
+
+[none]
+[]
+
+[not-json]
+<html><body>Service Unavailable</body></html>

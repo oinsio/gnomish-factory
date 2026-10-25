@@ -13,7 +13,7 @@ package com.github.oinsio.gnomish.app.take;
  * and {@code Delivered.summary} are the exceptions and need none: each is a report builder's
  * finished output, already rendered once through the comment exit for its two readers (design D6).
  *
- * <p>Implements NFR-O2 of add-factory-serve; FR5 of type-untrusted-text.
+ * <p>Implements NFR-O2 of add-factory-serve; FR5 of type-untrusted-text; FR14 of add-sandbox-base-image.
  */
 public final class TakeResultDescription {
 
@@ -37,6 +37,9 @@ public final class TakeResultDescription {
             case TakeResult.InfrastructureUnavailable infrastructureUnavailable ->
                 "released (infrastructure unavailable): "
                         + infrastructureUnavailable.reason().forLog();
+            case TakeResult.OperatorPreconditionUnmet unmet ->
+                "released (operator precondition " + unmet.kind() + " unmet): "
+                        + unmet.reason().forLog();
         };
     }
 }

@@ -60,11 +60,12 @@ class EgressGuardSpec extends Specification {
                 'mitmproxy/mitmproxy:12',
                 tempDir.resolve('guard-cfg').toAbsolutePath().toString(),
                 OWNERSHIP,
-                overrides)
+                overrides,
+                ImageContract.current())
     }
 
     private static final List<String> GUARD_IMAGE_INSPECT =
-    DockerCommands.inspectImageVolumes('mitmproxy/mitmproxy:12')
+    DockerCommands.inspectImageConfig('mitmproxy/mitmproxy:12')
 
     def "FR7: a missing guard is created on the task network and connected to the bridge"() {
         given: 'no guard container exists, and every create step succeeds'
@@ -96,7 +97,7 @@ class EgressGuardSpec extends Specification {
         given:
         docker.onRun = { List<String> args ->
             if (args == GUARD_IMAGE_INSPECT) {
-                return ok('{"/home/mitmproxy/.mitmproxy":{},"/gnomish-guard":{}}')
+                return ok('{"Volumes":{"/home/mitmproxy/.mitmproxy":{},"/gnomish-guard":{}}}')
             }
             args == GuardCommands.inspectGuardRunning('k1') && !docker.runs.any {
                 it[0] == 'run'
@@ -124,7 +125,7 @@ class EgressGuardSpec extends Specification {
         given:
         docker.onRun = { List<String> args ->
             if (args == GUARD_IMAGE_INSPECT) {
-                return ok(answer)
+                return ok('{"Volumes":' + answer + '}')
             }
             args == GuardCommands.inspectGuardRunning('k1') && !docker.runs.any {
                 it[0] == 'run'
@@ -982,12 +983,14 @@ class EgressGuardSpec extends Specification {
 
     def "FR9: the proxy env fragment names the guard by its stable network alias in both spellings"() {
         expect: 'the alias, not the per-task container name — the address baked image configs dial (9.1, D7)'
-        guard().proxyUrl() == 'http://gnomish-guard:8080'
+        def contract = ImageContract.current()
+        def url = "http://${contract.guardAlias()}:${contract.guardPort()}" as String
+        guard().proxyUrl() == url
         guard().proxyEnvironment() == [
-            HTTP_PROXY : 'http://gnomish-guard:8080',
-            HTTPS_PROXY: 'http://gnomish-guard:8080',
-            http_proxy : 'http://gnomish-guard:8080',
-            https_proxy: 'http://gnomish-guard:8080',
+            HTTP_PROXY : url,
+            HTTPS_PROXY: url,
+            http_proxy : url,
+            https_proxy: url,
         ]
     }
 

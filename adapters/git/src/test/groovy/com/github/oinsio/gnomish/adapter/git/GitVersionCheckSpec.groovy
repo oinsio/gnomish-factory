@@ -57,7 +57,7 @@ class GitVersionCheckSpec extends Specification {
 
     // Scenario: git/git-transfer / Old git is refused before any work
     def "FR10, UX2, NFR-O1: a git below the floor is refused, naming floor, installed and reason: #installed"() {
-        given: 'a git below the factory\'s floor — 2.55.x meets the box\'s floor but not the factory\'s (FR10 of own-git-invocation-policy)'
+        given: 'a git below the factory\'s one floor (FR10 of own-git-invocation-policy; design D9 of add-sandbox-base-image)'
         def check = new GitVersionCheck(new GitProcessRunner(StandIn.recording(tempDir, preset).toString()))
 
         when:

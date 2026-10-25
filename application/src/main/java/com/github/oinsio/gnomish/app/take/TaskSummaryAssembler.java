@@ -12,8 +12,8 @@ import org.jspecify.annotations.Nullable;
  * {@code AnchorLog.taskSummary} renders.
  *
  * <p>Only the four variants carrying a {@code finalState} map to a summary. {@link
- * TakeResult.EmptyQueue}, {@link TakeResult.Skipped} and {@link TakeResult.InfrastructureUnavailable}
- * map to {@code null} — no engine run happened, so there is no task to summarize, the same boundary
+ * TakeResult.EmptyQueue}, {@link TakeResult.Skipped}, {@link TakeResult.InfrastructureUnavailable}
+ * and {@link TakeResult.OperatorPreconditionUnmet} map to {@code null} — no engine run happened, so there is no task to summarize, the same boundary
  * {@code TaskOutcomeLineAssembler} draws for the ledger.
  *
  * <p>This is deliberately the <em>shared</em> fact extraction rather than a second one:
@@ -37,13 +37,13 @@ public final class TaskSummaryAssembler {
     private TaskSummaryAssembler() {}
 
     /**
-     * Assembles the summary facts for {@code result}, or returns {@code null} for the two variants
+     * Assembles the summary facts for {@code result}, or returns {@code null} for the variants
      * that describe a run that never happened.
      *
      * @param result the terminal result of a claimed-and-worked task; never null
      * @param wall how long the work took; never negative
      * @return the summary facts, or {@code null} for {@code EmptyQueue}/{@code Skipped}/{@code
-     *     InfrastructureUnavailable}
+     *     InfrastructureUnavailable}/{@code OperatorPreconditionUnmet}
      */
     public static @Nullable TaskSummary assemble(TakeResult result, Duration wall) {
         return switch (result) {
@@ -60,6 +60,7 @@ public final class TaskSummaryAssembler {
             case TakeResult.EmptyQueue ignored -> null;
             case TakeResult.Skipped ignored -> null;
             case TakeResult.InfrastructureUnavailable ignored -> null;
+            case TakeResult.OperatorPreconditionUnmet ignored -> null;
         };
     }
 

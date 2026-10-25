@@ -49,6 +49,13 @@ jobs:
           # base branch tip, so the diff is exactly the pull request's changes.
           fetch-depth: 0
 
+      # Every workflow file is linted before anything builds (design D15 of add-sandbox-base-image):
+      # a malformed step of the release or the rebuild fails here, on a branch push, not on a
+      # pushed tag. The image bundles shellcheck, so the `run:` scripts are checked too. Pinned
+      # by tag and raised by hand: Dependabot does not track an image run this way.
+      - name: Lint the workflows (actionlint)
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
+
       # The factory refuses a git below its floor, 2.56.0 (GitVersion.FLOOR; FR10, UX3 of
       # own-git-invocation-policy, design D11), ubuntu-latest ships an older one (2.55.0 on run
       # 39484184528), and no Ubuntu package source publishes 2.56.0. scripts/install-git.sh builds

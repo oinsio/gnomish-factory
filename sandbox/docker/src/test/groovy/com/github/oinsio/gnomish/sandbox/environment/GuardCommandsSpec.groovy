@@ -12,10 +12,12 @@ class GuardCommandsSpec extends Specification {
 
     static final ObjectOwnership OWNERSHIP = new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1')
     static final DeclaredVolumeOverrides NO_OVERRIDES = new DeclaredVolumeOverrides([])
+    static final ImageContract CONTRACT = ImageContract.current()
 
     def "FR7: runGuard runs mitmdump on the task network with the config mounted read-only"() {
         when:
-        def argv = GuardCommands.runGuard('k1', 'mitmproxy/mitmproxy:12', '/tmp/guard-cfg', OWNERSHIP, NO_OVERRIDES)
+        def argv = GuardCommands.runGuard(
+                'k1', 'mitmproxy/mitmproxy:12', '/tmp/guard-cfg', OWNERSHIP, NO_OVERRIDES, CONTRACT)
 
         then: 'the guard container is named, labelled, and joined to the task network'
         argv.containsAll(['--name', 'gnomish-guard-k1'])
@@ -24,7 +26,7 @@ class GuardCommandsSpec extends Specification {
         and: 'it carries the stable alias baked image configs dial (task 9.1, D7)'
         argv.containsAll([
             '--network-alias',
-            'gnomish-guard'
+            CONTRACT.guardAlias()
         ])
         argv.containsAll([
             '--label',
@@ -52,7 +54,10 @@ class GuardCommandsSpec extends Specification {
         and: 'mitmdump runs the addon script in regular mode on the guard port, lazy upstream'
         argv.indexOf('mitmproxy/mitmproxy:12') <argv.indexOf('mitmdump')
         argv.containsAll(['--mode', 'regular'])
-        argv.containsAll(['--listen-port', '8080'])
+        argv.containsAll([
+            '--listen-port',
+            CONTRACT.guardPort() as String
+        ])
         argv.containsAll([
             '--set',
             'connection_strategy=lazy'
@@ -73,7 +78,8 @@ class GuardCommandsSpec extends Specification {
                 'mitmproxy/mitmproxy:12',
                 '/tmp/guard-cfg',
                 OWNERSHIP,
-                new DeclaredVolumeOverrides(['/home/mitmproxy/.mitmproxy']))
+                new DeclaredVolumeOverrides(['/home/mitmproxy/.mitmproxy']),
+                CONTRACT)
 
         then: 'the fragment follows the read-only config mount'
         def fragment = argv.indexOf(
@@ -89,7 +95,7 @@ class GuardCommandsSpec extends Specification {
             '--mode',
             'regular',
             '--listen-port',
-            '8080',
+            CONTRACT.guardPort() as String,
             '--set',
             'connection_strategy=lazy',
             '-s',
@@ -99,7 +105,20 @@ class GuardCommandsSpec extends Specification {
 
     def "FR3: a guard image declaring nothing new adds no mount fragment"() {
         expect:
-        !GuardCommands.runGuard('k1', 'img', '/tmp/guard-cfg', OWNERSHIP, NO_OVERRIDES).contains('--mount')
+        !GuardCommands.runGuard('k1', 'img', '/tmp/guard-cfg', OWNERSHIP, NO_OVERRIDES, CONTRACT).contains('--mount')
+    }
+
+    def "FR6: the guard's alias, port and proxy URL are the image contract's, never a spelling of their own"() {
+        given: 'a contract whose values no source spells'
+        def contract = new ImageContract(7, 'contract-guard', 3128)
+
+        when:
+        def argv = GuardCommands.runGuard('k1', 'img', '/tmp/guard-cfg', OWNERSHIP, NO_OVERRIDES, contract)
+
+        then:
+        argv[argv.indexOf('--network-alias') + 1] == 'contract-guard'
+        argv[argv.indexOf('--listen-port') + 1] == '3128'
+        GuardCommands.proxyUrl(contract) == 'http://contract-guard:3128'
     }
 
     def "FR7: connectBridge gives the guard its only route out"() {

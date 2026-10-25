@@ -35,7 +35,7 @@ class FeedCycleSlotStateSpec extends Specification {
             Duration.ofSeconds(1)
         }, RepeatSuppressorFixture.quiet())
         def resilience = new FeedResilience(
-                outageRetry, new FinishedDecline(RepeatSuppressorFixture.quiet()), RemoteOutageGateFixtures.closedGate())
+                outageRetry, new FinishedDecline(RepeatSuppressorFixture.quiet()), DaemonConditionFixtures.closedConditions())
         // Each slot runs until the spec lets its task finish, so the slots really are full at once.
         def runner = { TaskRef ref ->
             finishTasks.await(5, TimeUnit.SECONDS)

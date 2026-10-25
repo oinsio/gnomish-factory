@@ -10,7 +10,8 @@ import org.jspecify.annotations.Nullable;
  * sandboxed resume does to the task's box before the engine continues from a recorded position.
  * Used by both commands — {@code run --resume} ({@link ContainerResumeOutcomes#resumeFromRecordedPosition})
  * and {@code take} ({@link TakeContainerResumeRunner#resumeWithoutDecision}) — each of which then
- * drives the run its own way. It is the only caller of {@link SandboxRunSupport#reattachFor}.
+ * drives the run its own way. The other caller of {@link SandboxRunSupport#reattachFor} is the
+ * fresh paths' {@link FirstBoxStep} (D22 of add-sandbox-base-image).
  *
  * <p>Stateless, like its neighbours {@link CheckpointApproval} and {@link ContainerResumeOutcomes}:
  * the support it acts on is the per-run bundle of the task being resumed, so it is a per-call

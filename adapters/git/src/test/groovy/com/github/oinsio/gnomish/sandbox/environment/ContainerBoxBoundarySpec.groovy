@@ -145,7 +145,8 @@ class ContainerBoxBoundarySpec extends Specification implements BareGitRepoFixtu
 
         then: 'the fork is refused inside the box and the exec reports a failure'
         forks.exit != 0
-        forks.out.contains("can't fork")
+        // The image's /bin/sh says it in its own words: dash "Cannot fork", busybox ash "can't fork".
+        forks.out =~ /(?i)can(no|')t fork/
 
         and: 'the box forks again once its orphaned children are gone, and the factory clone is untouched'
         (1..100).any { inBox(e, 'echo alive | cat').out == 'alive' }

@@ -181,14 +181,15 @@ final class DockerCommands {
     }
 
     /**
-     * {@code image inspect} of the image's declared volume paths — the one read behind
-     * {@link DeclaredVolumeOverrides#resolve} (FR1 of fix-image-declared-volumes), so the
-     * resolver issues no literal argv of its own. The Go template is a single argv element
-     * carrying no shell quoting: a quoted form would make the quotes part of the template. The
-     * answer is {@code null} for an image declaring nothing, else a JSON object keyed by path.
+     * {@code image inspect} of the image's {@code Config} — the one read behind {@link
+     * ImageFacts#read} (design D3 of add-sandbox-base-image), so the image's declared volume paths
+     * and its labels come from a single runtime call and no reader issues a literal argv of its
+     * own. The Go template is a single argv element carrying no shell quoting: a quoted form would
+     * make the quotes part of the template. The answer is a JSON object whose {@code Volumes} and
+     * {@code Labels} members are each {@code null} or an object.
      */
-    static List<String> inspectImageVolumes(String image) {
-        return List.of("image", "inspect", "-f", "{{json .Config.Volumes}}", image);
+    static List<String> inspectImageConfig(String image) {
+        return List.of("image", "inspect", "-f", "{{json .Config}}", image);
     }
 
     /** {@code rm -f} the container by name (force removes it even while running). */

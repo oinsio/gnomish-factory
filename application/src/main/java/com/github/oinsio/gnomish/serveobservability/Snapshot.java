@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,6 +34,9 @@ import java.util.Map;
  * @param tracker tracker-port outage visibility; never null
  * @param remote the remote outage gate section, one entry per remote target (NFR-O3, UX6 of
  *     add-base-ref-resolution); never null, empty when no gate exists yet
+ * @param conditions the daemon conditions section (design D19, NFR-O2, UX4 of
+ *     add-sandbox-base-image), one entry per condition, the remote's first — it carries what
+ *     {@code remote} carries, which stays beside it for one release; never null
  */
 public record Snapshot(
         int version,
@@ -44,7 +48,38 @@ public record Snapshot(
         SlotsSnapshot slots,
         VitalsSnapshot vitals,
         TrackerHealth tracker,
-        Map<String, RemoteHealth> remote) {
+        Map<String, RemoteHealth> remote,
+        List<ConditionHealth> conditions) {
+
+    /**
+     * A snapshot that knows only the {@code remote} section — one read from a daemon written before
+     * the {@code conditions} section existed: its conditions are the remote's entries (NFR-O2 of
+     * add-sandbox-base-image, "A snapshot with only the remote section is read as one condition").
+     */
+    public Snapshot(
+            int version,
+            Instant writtenAt,
+            long intervalSeconds,
+            InstanceInfo instance,
+            LifecycleState lifecycle,
+            FeedSnapshot feed,
+            SlotsSnapshot slots,
+            VitalsSnapshot vitals,
+            TrackerHealth tracker,
+            Map<String, RemoteHealth> remote) {
+        this(
+                version,
+                writtenAt,
+                intervalSeconds,
+                instance,
+                lifecycle,
+                feed,
+                slots,
+                vitals,
+                tracker,
+                remote,
+                remote.values().stream().map(ConditionHealth::ofRemote).toList());
+    }
 
     /**
      * Returns a copy with the self-description fields ({@code writtenAt},
@@ -66,6 +101,16 @@ public record Snapshot(
      */
     public Snapshot withSelfDescription(Instant writtenAt, long intervalSeconds) {
         return new Snapshot(
-                version, writtenAt, intervalSeconds, instance, lifecycle, feed, slots, vitals, tracker, remote);
+                version,
+                writtenAt,
+                intervalSeconds,
+                instance,
+                lifecycle,
+                feed,
+                slots,
+                vitals,
+                tracker,
+                remote,
+                conditions);
     }
 }

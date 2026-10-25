@@ -1,0 +1,9 @@
+# An operator layer that loosens a control surface (BaseImageHelpersSpec, task 2.2 of
+# add-sandbox-base-image): it hands /etc/gnomish to the gnome, then runs the base's verification,
+# whose failure must fail this build. BASE is the base fixture's tag.
+ARG BASE
+FROM ${BASE}
+USER root
+RUN chown gnome /etc/gnomish
+RUN gnomish-verify-image
+USER gnome

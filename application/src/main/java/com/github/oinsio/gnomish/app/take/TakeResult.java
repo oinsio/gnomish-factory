@@ -19,13 +19,15 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * penalty (FR9 of add-base-ref-resolution; produced by every claim-time fetch origin never
  * answered — a fresh claim's base resolution, a resume's pinned-ref refresh, and the task-branch
  * lookup (finding F6 of tighten-spec-contract) — and the type task 7.3's remote outage gate
- * consults to learn a slot hit an infrastructure failure).
+ * consults to learn a slot hit an infrastructure failure); {@link OperatorPreconditionUnmet} — an
+ * operator precondition refused the claimed run before any engine run (FR14 of
+ * add-sandbox-base-image), so the claim was released plain, as for an outage.
  *
  * <p>This is deliberately a runner-level type, not a {@code TaskOutcome} variant
  * (design D2): the engine knows nothing about trackers, claims, or revocation: those
  * are external events of the run, layered on top by {@code app.take}. Every variant
  * carries the final {@link TaskState} it was produced from (except {@link EmptyQueue},
- * {@link Skipped} and {@link InfrastructureUnavailable}, which have none, since no engine run
+ * {@link Skipped}, {@link InfrastructureUnavailable} and {@link OperatorPreconditionUnmet}, which have none, since no engine run
  * happened) so a later reporting step (task 5.11) can render a summary from the result alone,
  * mirroring how {@code TaskOutcome} carries {@code finalState} for the same reason.
  *
@@ -40,7 +42,8 @@ public sealed interface TakeResult
                 TakeResult.Revoked,
                 TakeResult.EmptyQueue,
                 TakeResult.Skipped,
-                TakeResult.InfrastructureUnavailable {
+                TakeResult.InfrastructureUnavailable,
+                TakeResult.OperatorPreconditionUnmet {
 
     /**
      * The engine reached {@code Completed}: the task was (or is about to be)
@@ -183,6 +186,29 @@ public sealed interface TakeResult
     }
 
     /**
+     * An operator precondition refused the claimed run before any engine run — the factory clone's
+     * ref format, the container runtime, the sandbox image's contract or its git floor — so the
+     * claim was released plain, with no abort marker, backoff or fuse charge (design D18 of
+     * add-sandbox-base-image). Distinct from {@link InfrastructureUnavailable}: a dead remote
+     * recovers by itself, a precondition does not, so a retry without the operator's fix meets the
+     * same refusal. Under {@code serve} the slot reports it, and {@code kind}'s condition holds the
+     * feed off the tracker until its probe passes (design D19). Carries no {@link TaskState}: no
+     * engine run happened.
+     *
+     * <p>Implements FR14 of add-sandbox-base-image.
+     *
+     * @param reason the refusal and its fix, carried: the check's message quotes what git or the
+     *     runtime printed; never blank
+     * @param kind which precondition refused; never null
+     */
+    record OperatorPreconditionUnmet(UntrustedText reason, DaemonConditionKind kind) implements TakeResult {
+
+        public OperatorPreconditionUnmet {
+            reason = requireNonBlank(reason, "reason");
+        }
+    }
+
+    /**
      * Fails fast on a blank {@link AwaitingHuman#report} or {@link Delivered#summary}: every
      * {@link TakeResult} variant's free-text field must describe what happened, since a caller
      * renders a report from it alone (FR18). Kept as a shared static method rather than inline in
@@ -198,7 +224,7 @@ public sealed interface TakeResult
     }
 
     /**
-     * The carrier twin of the validator above, for the four variants whose free text embeds
+     * The carrier twin of the validator above, for the five variants whose free text embeds
      * captured text and therefore travels as {@code UntrustedText} (design D4 of
      * type-untrusted-text). {@link AwaitingHuman#report} and {@link Delivered#summary} deliberately
      * keep the {@code String} form: each is a report builder's finished output, already rendered

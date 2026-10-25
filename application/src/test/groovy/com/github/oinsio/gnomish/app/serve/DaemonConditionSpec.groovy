@@ -11,7 +11,7 @@ import spock.lang.Specification
 
 /**
  * FR14, NFR-R3, D9 of add-base-ref-resolution (task 7.3): the remote outage gate's own mechanics,
- * on virtual time — a fresh gate starts closed; it opens on {@link RemoteOutageGate#openOnFailure},
+ * on virtual time — a fresh gate starts closed; it opens on {@link DaemonCondition#openOnFailure},
  * probes on a jittered interval that grows from the idle interval to a configured cap ({@link
  * com.github.oinsio.gnomish.app.daemon.RestartBackoff}'s policy, reused rather than forked), closes
  * on the first successful probe, and resets its interval to the idle floor ONLY on the first
@@ -21,7 +21,7 @@ import spock.lang.Specification
  * <p>{@link FeedCycle}'s own consultation of the gate (zero tracker claim calls while open) is
  * {@code FeedCycleSpec}'s job; this spec drives the gate in isolation.
  */
-class RemoteOutageGateSpec extends Specification {
+class DaemonConditionSpec extends Specification {
 
     private static final Duration IDLE = Duration.ofSeconds(30)
     private static final Duration CAP = Duration.ofMinutes(10)
@@ -33,8 +33,8 @@ class RemoteOutageGateSpec extends Specification {
 
     private VirtualClock clock = new VirtualClock()
 
-    private RemoteOutageGate gate(BaseRefGit baseRefGit, Random random = NO_JITTER) {
-        new RemoteOutageGate(baseRefGit, Path.of('.'), clock, random, IDLE, CAP)
+    private DaemonCondition gate(BaseRefGit baseRefGit, Random random = NO_JITTER) {
+        new DaemonCondition(ConditionSubject.remote(baseRefGit, Path.of('.')), clock, random, IDLE, CAP)
     }
 
     // FR14: "the gate is process-local: a restart forgets it" — a freshly constructed gate is
@@ -52,7 +52,9 @@ class RemoteOutageGateSpec extends Specification {
         given:
         def source = new VirtualClock(Instant.parse('2026-10-09T10:00:00Z'))
         def g = RemoteOutageGates.forServe(BaseRefGit.UNWIRED, Path.of('.'),
-                new ServeProperties(0, null, null, null, null, null, null, null, null, null), source, {}, { ignored -> })
+                new ServeProperties(0, null, null, null, null, null, null, null, null, null), source, {}, { ignored -> }, { kind ->
+                    Optional.empty()
+                }).remote()
 
         when:
         g.openOnFailure('boom')
@@ -76,7 +78,7 @@ class RemoteOutageGateSpec extends Specification {
     }
 
     // FR14, NFR-O1: opening resets the outage's own failure count to one, even carried across a
-    //     prior outage that left it non-zero — RemoteOutageGate delegates this to
+    //     prior outage that left it non-zero — DaemonCondition delegates this to
     //     RemoteOutageCounters#opened() rather than tracking it itself.
     def "openOnFailure resets the health's consecutive-failure count to one"() {
         given:
@@ -156,9 +158,11 @@ class RemoteOutageGateSpec extends Specification {
         g.openOnFailure("boom")
         g.probeIfDue()
 
-        then: 'still due at the ORIGINAL idle interval, not restarted from a later openOnFailure call'
+        and: 'the original idle interval elapses'
         clock.advance(IDLE)
         g.probeIfDue()
+
+        then: 'still due at the ORIGINAL idle interval, not restarted from a later openOnFailure call'
         probes.get() == 1
     }
 

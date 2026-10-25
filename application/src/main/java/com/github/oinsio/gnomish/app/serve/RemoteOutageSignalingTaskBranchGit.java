@@ -15,7 +15,7 @@ import java.util.function.Supplier;
 
 /**
  * The {@link TaskBranchGit} a serve slot is handed: the real one, with every task-branch lookup
- * that could not reach {@code origin} reported to the {@link RemoteOutageGate} at the moment it
+ * that could not reach {@code origin} reported to the remote {@link DaemonCondition} at the moment it
  * returns (FR14 of add-base-ref-resolution; finding F88 of tighten-spec-contract).
  *
  * <p><b>Why the lookup signals too.</b> A fresh claim's first read of {@code origin} is the
@@ -44,7 +44,7 @@ import java.util.function.Supplier;
  * @param gate the gate the slot's lookups report to — the SAME instance the feed consults; never
  *     null
  */
-record RemoteOutageSignalingTaskBranchGit(TaskBranchGit delegate, RemoteOutageGate gate) implements TaskBranchGit {
+record RemoteOutageSignalingTaskBranchGit(TaskBranchGit delegate, DaemonCondition gate) implements TaskBranchGit {
 
     @Override
     public void requireRefFormat(Path cloneDir) {

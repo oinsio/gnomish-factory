@@ -37,15 +37,20 @@ factory:
       - repo.maven.apache.org
 ```
 
-Build the image from the reference recipe in
-`docs/examples/sandbox-image/` — it bakes the image contract the factory
-assumes (git 2.51.0 or newer, curl, a non-root `gnome` user owning `/gnomish/**`,
-root-owned control surfaces) plus your project's toolchain. The image's git is
-judged against the box's own floor, 2.51.0 — not the factory's host floor,
-2.56.0, which applies to the git the factory itself runs — and is
-checked before every seed clone: the seed clone reads the factory clone, which is
+Build the image `FROM` the sandbox base image, as the reference recipe in
+`docs/examples/sandbox-image/` does (see [Building your sandbox
+image](#building-your-sandbox-image)): the base carries the image contract the
+factory assumes (git 2.56.0 or newer, curl, a non-root `gnome` user owning
+`/gnomish/**`, root-owned control surfaces and home), and your layer adds your
+project's toolchain and the agent CLI. The factory has one
+git floor, 2.56.0: it applies to the git the factory itself runs and to the
+image's git alike. The sandbox base image the recipe builds on carries a git at
+that floor, so keep it rather than installing another ahead of it on `PATH`. The
+image's git is checked before every seed clone: the seed clone reads the factory clone, which is
 on the reftable ref backend, with the image's own git, and an image whose git is
-older is refused with a `[GF163]` line naming it. Without Docker the factory
+older is refused with a message naming it — under `serve` once at startup (`[GF173]`) or,
+for an image rebuilt under a running daemon, as the box-git-floor daemon condition
+(`[GF180]`); `take` and `run` exit 8. Without Docker the factory
 refuses with an error naming the two ways out — install Docker, or explicitly
 bind host — and never falls back to host silently.
 
@@ -71,6 +76,208 @@ denied, an allowlisted host passes, and the isolation in effect matches the
 adapter's passport. A failed probe rejects the environment as an
 infrastructure failure naming the probe (UX2) — no round executes in a box
 whose protection cannot be demonstrated.
+
+## Building your sandbox image
+
+<!-- implements FR5, FR9, FR12, NFR-O1, UX1, UX2 of add-sandbox-base-image (design D6, D11–D14) -->
+
+The **image contract** is everything the factory assumes about a box image: the
+`gnome` user (uid 1000) owning `/gnomish/**`, the root-owned control surfaces
+and home, the egress guard's proxy in the environment, `git` at the factory's
+floor, `curl`, and the helper commands. You do not copy it by hand: the
+**sandbox base image**, `ghcr.io/oinsio/gnomish-sandbox-base`, carries all of
+it, and your Dockerfile builds `FROM` it and adds only your toolchain and the
+agent CLI. The reference recipe, `docs/examples/sandbox-image/Dockerfile`, is
+that Dockerfile for a JDK and Node project; its instructions, without the
+recipe's comments:
+
+<!-- recipe: docs/examples/sandbox-image/Dockerfile -->
+```dockerfile
+ARG GNOMISH_BASE_TAG=0.1
+# Downloads happen in stages of their own (see "Download in a stage of your own").
+FROM eclipse-temurin:25-jdk-noble AS jdk
+FROM ubuntu:24.04 AS node
+ARG TARGETARCH
+ARG NODE_VERSION=24.22.1
+ARG NODE_DIST_URL=https://nodejs.org/dist
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+ARG AGENT_CLI_PACKAGE=@anthropic-ai/claude-code
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
+ && case "${TARGETARCH}" in \
+      amd64) arch=x64 sum=6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6 ;; \
+      arm64) arch=arm64 sum=dbabf7a1cbf947e6059ffad2c27b80041db97dea1e553b62afdee7f13fca336e ;; \
+      *) echo "no Node build for ${TARGETARCH}" >&2; exit 1 ;; esac \
+ && curl -fsSL -o /tmp/node.tar.xz "${NODE_DIST_URL}/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${arch}.tar.xz" \
+ && echo "${sum}  /tmp/node.tar.xz" | sha256sum -c - \
+ && mkdir /opt/node && tar -xJf /tmp/node.tar.xz -C /opt/node --strip-components=1 --no-same-owner \
+ && PATH="/opt/node/bin:${PATH}" npm install -g --registry "${NPM_REGISTRY}" "${AGENT_CLI_PACKAGE}"
+# The final stage: the base, plus what the stages above fetched.
+FROM ghcr.io/oinsio/gnomish-sandbox-base:${GNOMISH_BASE_TAG}
+USER root
+COPY --from=jdk /opt/java/openjdk /opt/java/openjdk
+COPY --from=node /opt/node /opt/node
+ENV JAVA_HOME=/opt/java/openjdk \
+    PATH=/opt/java/openjdk/bin:/opt/node/bin:${PATH}
+COPY --chmod=0644 ca/ /etc/gnomish/ca/
+# As root, after every other step: declare home directories, import CAs, verify the contract.
+RUN gnomish-home-dir .m2 .gradle .npm && gnomish-trust-ca && gnomish-verify-image
+USER gnome
+```
+
+Swap the JDK image or add your own toolchain the same way, and keep the end:
+one `RUN` as root that declares your toolchain's home directories, imports the
+certificates in `/etc/gnomish/ca` (`gnomish-trust-ca`) and checks the whole
+contract (`gnomish-verify-image`, which fails the build naming every violation
+it finds), then `USER gnome`. The recipe's
+[README](../examples/sandbox-image/README.md) lists its build arguments.
+
+### Which base tag
+
+The base is published with every factory release. The **base tag** is the tag
+a factory release names for it — in the recipe's `GNOMISH_BASE_TAG` default
+(the release archive stamps its own) and in the contract refusal below:
+
+| Release                   | Tags pushed         | Base tag the release names |
+|---------------------------|---------------------|----------------------------|
+| final, `0.4.1`            | `0.4.1` and `0.4`   | `0.4`                      |
+| pre-release, `0.5.0-rc.1` | `0.5.0-rc.1` only   | `0.5.0-rc.1`               |
+
+- `X.Y.Z` (and a pre-release's full version) is never pushed again: it is the
+  image the release's notes and attestation name.
+- `X.Y` moves: a final release moves it to its own build, and a weekly rebuild
+  of the highest final release refreshes it with Ubuntu's security updates. A
+  pre-release never moves `X.Y`.
+
+`FROM …:X.Y` gives you those updates on your next build. For an image that
+never changes under you, pin `X.Y.Z` or a digest
+(`ghcr.io/oinsio/gnomish-sandbox-base@sha256:…`) and move the pin yourself.
+
+### The contract refusal
+
+The base carries the label `io.gnomish.image-contract=<N>`, the contract
+version it was built for. Before it creates a box, the factory reads the
+label of `factory.sandbox.image` and refuses an image whose label is missing
+or names another version, with an error that ends in the fix — written once by the layer
+that decides (`serve` at startup `[GF173]`, a running daemon's image-contract condition
+`[GF178]`, `take` `[GF171]`, `run` `[GF172]`):
+
+```text
+the sandbox image "my-project-sandbox:1" has io.gnomish.image-contract=1, this factory needs 2; rebuild: FROM ghcr.io/oinsio/gnomish-sandbox-base:0.4
+```
+
+A missing label reads `is not built on the base (no io.gnomish.image-contract=2
+label)`. The fix is the same either way: rebuild your image `FROM` the base
+tag the line names, with your factory's recipe. A development build of the
+factory has no published base, so its line names a base built from the same
+checkout's `sandbox-image/Dockerfile` instead.
+
+### Download in a stage of your own
+
+The base's proxy variables name the egress guard, which exists only on a
+box's task network. At build time there is no guard, so a `curl`,
+`npm install` or `apt-get` in a stage `FROM` the base fails. Fetch in a stage
+built on another image and graft the result with `COPY --from`, as the
+recipe's `jdk` and `node` stages do.
+
+Operating-system packages are the one exception: `apt` spreads a package
+across the filesystem, and no single `COPY --from` carries it. Install them in
+the final stage with the proxy variables unset for that one command, inside
+one `RUN`:
+
+```dockerfile
+RUN env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY \
+      sh -c 'apt-get update && apt-get install -y --no-install-recommends jq && rm -rf /var/lib/apt/lists/*'
+```
+
+`env -u` changes only that command's environment: the image keeps the base's
+proxy variables, `JAVA_TOOL_OPTIONS`, `GRADLE_OPTS` and `MAVEN_ARGS`, which
+the box needs. Never set or clear a proxy variable with `ENV`. No check
+catches an image that does, but it fails closed: the task network has no
+other route out, so a tool left without the proxy reaches nothing.
+
+### The Maven mirror
+
+The base's root-owned Maven `settings.xml` reads its mirror from the variable
+`GNOMISH_MAVEN_MIRROR`, which the base sets to Maven Central. Select your own
+mirror with one line after `FROM` the base; the settings file stays as the
+base wrote it:
+
+```dockerfile
+ENV GNOMISH_MAVEN_MIRROR=https://maven.example.com/maven2
+```
+
+The mirror's host must still be on `factory.sandbox.egress-allowlist`: the
+mirror chooses where Maven asks, the allowlist decides whether the box may
+reach it.
+
+### The root-owned home and `gnomish-home-dir`
+
+A box lives for the whole task and every round runs in it, so anything a
+round writes into the gnome's home could run in a later round. The base
+therefore keeps `/home/gnome` root-owned: `.bashrc`, `.profile` and
+`.bash_logout` are root-owned stubs with no code, and the gnome can create
+nothing directly under the home — no `.bash_profile`, `.gitconfig`, `.curlrc`
+or `.npmrc`. The only gnome-writable entries are the declared directories:
+the base declares the agent CLI's `.claude` and `.cache`, and you declare
+every other directory your toolchain writes under the home, as root:
+
+```dockerfile
+RUN gnomish-home-dir .m2 .gradle .npm
+```
+
+`gnomish-home-dir` creates each directory owned by the gnome and records its
+name in the root-owned `/etc/gnomish/home-dirs`; `gnomish-verify-image` fails
+the build on any gnome-writable entry of the home that file does not list. A
+tool that writes an undeclared path under the home fails visibly in the box:
+declare its directory and rebuild.
+
+### Your own agent policy
+
+The base's agent policy, `/etc/claude-code/managed-settings.json`, is
+`{"allowManagedHooksOnly": true}`: no hook from the gnome's
+`~/.claude/settings.json` or from the working copy's `.claude/settings.json`
+runs. You may replace the file, as root, with a managed policy of your own;
+keep `"allowManagedHooksOnly": true` in it. `gnomish-verify-image` fails the
+build when the key is missing or not `true`, and the file stays root-owned.
+
+### An image not built on the base
+
+The factory checks the label, not where the image came from, so a non-Ubuntu
+or otherwise custom image can run in a box, but it must provide the whole
+contract itself: everything listed at the top of this section, with `git` at
+the factory's floor. Check it with the base's own verifier before you set the
+label — copy the helpers from the base, run the check as the last step as
+root, and only then declare the contract version your factory needs:
+
+```dockerfile
+COPY --from=ghcr.io/oinsio/gnomish-sandbox-base:0.4 /usr/local/bin/gnomish-home-dir /usr/local/bin/gnomish-verify-image /usr/local/bin/
+RUN gnomish-verify-image
+LABEL io.gnomish.image-contract="<N>"
+```
+
+The helpers are POSIX `sh` scripts. `<N>` is the `contract-version` of
+`sandbox-image/image-contract.properties` at your factory's release tag — the
+number a refusal says "this factory needs". A label you set without passing
+the verifier only moves the failure into the box.
+
+### What the root-owned home does not cover
+
+Two things a round writes still carry into later rounds of the same box:
+
+- **The agent CLI's own configuration under `~/.claude`** — its `CLAUDE.md`,
+  `rules/`, and the `env` and `permissions` of its `settings.json`. The CLI
+  must write there, so the directory stays gnome-writable. A factory-owned
+  configuration directory per round is planned (NG7 of
+  `add-sandbox-base-image`); until then, threat row #5 of
+  [`sandbox-threat-registry.md`](../sandbox-threat-registry.md) records it.
+- **The content of your declared toolchain directories** — a Gradle init
+  script under `~/.gradle/init.d`, a `~/.gradle/gradle.properties`, an
+  `.npmrc` under a declared directory — and processes a round leaves running.
+  A reset of the box at the round boundary is planned (NG8 of
+  `add-sandbox-base-image`); until then, threat row #39 records it.
+
+`verify-in: fresh-box` (below) is the answer for the final gate today: its
+check runs in a new box built from the attempt commit, where neither survives.
 
 ## Binding stages
 
@@ -252,8 +459,10 @@ make a round edit files.
 
 One threat note: auto-approved edits cover every file under the working copy,
 `.claude/settings.json` included, which the agent CLI reads as project
-settings. Isolating the CLI from settings files in the working copy is not
-done yet; treat a change to that file in a gnome's diff as a finding.
+settings. The base's agent policy stops the hooks of that file from running
+(see [Your own agent policy](#your-own-agent-policy)), but nothing else of it:
+isolating the CLI from settings files in the working copy is not done yet, so
+treat a change to that file in a gnome's diff as a finding.
 
 ## Egress allowlist maintenance
 

@@ -12,8 +12,9 @@ import java.time.InstantSource
  * The installation's {@link BoxEquipment} for specs that build one container box directly (FR13
  * of tighten-spec-contract, design D12): the docker seam and the clock the spec drives, the image
  * and limits it runs, and the installation defaults for everything else — the runtime {@code
- * runc}, no egress allowlist, no disk quota, a fixed guard config root and a sleeper that returns
- * at once. A spec that needs another value of the sandbox config builds the record itself.
+ * runc}, no egress allowlist, no disk quota, a fixed guard config root, a sleeper that returns
+ * at once and the running factory's image-contract check. A spec that needs another value of the
+ * sandbox config builds the record itself.
  */
 final class BoxEquipmentFixture {
 
@@ -38,6 +39,6 @@ final class BoxEquipmentFixture {
             OwnershipMode mode = OwnershipMode.TRACKED) {
         def sandbox = new SandboxProperties(image, 'runc', null, limits, null, null, false, null, null, null, null)
         def timing = new BoxTiming(VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper), DockerCli.DEFAULT_COMMAND_TIMEOUT)
-        new BoxEquipment(docker, sandbox, timing, GUARD_CONFIG_ROOT, mode)
+        new BoxEquipment(docker, sandbox, timing, GUARD_CONFIG_ROOT, mode, ImageContractCheck.current())
     }
 }

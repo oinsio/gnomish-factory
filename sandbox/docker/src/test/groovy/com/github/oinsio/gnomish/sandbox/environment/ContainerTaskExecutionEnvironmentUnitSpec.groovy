@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeUnavailableException
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
@@ -52,7 +53,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
     }
 
     static final List<String> INSPECT = DockerCommands.inspectContainerState('gnomish-box-' + KEY)
-    static final List<String> IMAGE_INSPECT = DockerCommands.inspectImageVolumes('gnomish/img')
+    static final List<String> IMAGE_INSPECT = DockerCommands.inspectImageConfig('gnomish/img')
     static final DeclaredVolumeOverrides NO_OVERRIDES = new DeclaredVolumeOverrides([])
 
     /** The box's git-floor probe that precedes every seed clone (design D13 of tighten-spec-contract). */
@@ -74,13 +75,15 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         env().materialize('gnomish/task-x', null)
 
         then:
+        // The image's one inspection comes before any object exists (design D3 of
+        // add-sandbox-base-image): what it says is decided on before anything is left behind.
         docker.runs == [
             INSPECT,
+            IMAGE_INSPECT,
             GIT_PROBE,
             DockerCommands.createNetwork(KEY, OWNERSHIP),
             DockerCommands.createVolume(KEY, OWNERSHIP),
             DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', null, OWNERSHIP),
-            IMAGE_INSPECT,
             runArgv(),
             DockerCommands.exec(KEY, '/gnomish/work', [:], StdinSource.NONE, [
                 'mkdir',
@@ -255,7 +258,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         env().materialize('gnomish/task-x', null)
 
         then: 'the one-shot helper is --rm, off-network, with the factory clone ro beside the task volume'
-        def seed = docker.runs[4]
+        def seed = docker.runs[5]
         seed[0] == 'run'
         seed.contains('--rm')
         seed.contains('none')
@@ -293,7 +296,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         env().materialize('gnomish/task-x', 'abc123')
 
         then:
-        def seed = docker.runs[4]
+        def seed = docker.runs[5]
         seed == DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', 'abc123', OWNERSHIP)
         seed.last() == 'abc123'
         seed[seed.size() - 2] == 'gnomish/task-x'
@@ -396,9 +399,13 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
 
         and: 'no container was started — the leak window never opened'
         !docker.runs.any { it[0] == 'run' && !it.contains('--rm') }
+
+        and: 'nothing at all was created: the image is read before the first object (design D3 of add-sandbox-base-image)'
+        !docker.runs.any { it[0] in ['network', 'volume', 'run'] }
     }
 
-    def "NFR-R1: a daemon outage at materialize propagates as an infrastructure failure, not a quality failure"() {
+    // Scenario: sandbox/execution-environment / Runtime unreachable at materialize returns the task
+    def "D19, NFR-R2: a runtime unreachable at the first inspect leaves as the operator's precondition, and nothing is created"() {
         given:
         docker.onRun = { args ->
             throw new DockerUnavailableException('Cannot connect to the Docker daemon', null as Throwable)
@@ -407,8 +414,37 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
         when:
         env().materialize('task/x', null)
 
-        then: 'the caller sees the infrastructure-outage type — never a command failure it might read as a real refusal'
-        thrown(DockerUnavailableException)
+        then: 'the typed precondition, the adapter outage kept as its cause — never a command failure'
+        def refused = thrown(ContainerRuntimeUnavailableException)
+        refused.cause instanceof DockerUnavailableException
+        refused.message.contains(KEY)
+        refused.message.contains('Cannot connect to the Docker daemon')
+
+        and: 'the inspect was the only call: create never ran'
+        docker.runs == [INSPECT]
+    }
+
+    def "D19, NFR-R2: a runtime lost while a reattach starts the kept container leaves as the same precondition"() {
+        given: 'the container exists, stopped; the runtime is gone when the reattach starts it'
+        docker.onRun = { List<String> args ->
+            if (args == INSPECT) {
+                return DockerResult.of(0, 'false 2026-08-07T10:00:00Z\n', '')
+            }
+            throw new DockerUnavailableException('Cannot connect to the Docker daemon', null as Throwable)
+        }
+
+        when:
+        env().materialize('task/x', null)
+
+        then:
+        def refused = thrown(ContainerRuntimeUnavailableException)
+        refused.cause instanceof DockerUnavailableException
+
+        and: 'the start was the call that met the outage; no fresh create was attempted'
+        docker.runs == [
+            INSPECT,
+            DockerCommands.startContainer('gnomish-box-' + KEY),
+        ]
     }
 
     def "FR3: the container adapter cannot be constructed without an image"() {

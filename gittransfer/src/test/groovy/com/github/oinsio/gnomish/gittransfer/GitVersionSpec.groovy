@@ -24,20 +24,6 @@ class GitVersionSpec extends Specification {
         GitVersion.FLOOR_REASON.contains('one transaction (2.51)')
     }
 
-    // FR10 of own-git-invocation-policy, design D11; NFR-S2 of tighten-spec-contract: the box keeps
-    //     today's floor and today's reason — local-clone protections, reftable lock retry and fetch
-    //     ref updates in one transaction — with no event switch, since no factory policy runs there.
-    def "FR10: the box's floor stays 2.51.0 with today's reason, below the factory's"() {
-        expect:
-        GitVersion.BOX_FLOOR == new GitVersion(2, 51, 0)
-        GitVersion.BOX_FLOOR.isBelow(GitVersion.FLOOR)
-        GitVersion.BOX_FLOOR_REASON == 'the seed clone relies on git\'s local-clone hook protections (2.39.4/2.45.1),' +
-                ' the factory clone\'s concurrent ref writes on reftable lock retry (2.47), and the touchpoint' +
-                ' fetch on writing its ref updates in one transaction (2.51)'
-        !GitVersion.BOX_FLOOR_REASON.contains('2.56')
-        GitVersion.FLOOR_REASON.endsWith(GitVersion.BOX_FLOOR_REASON.substring('the seed clone'.length()))
-    }
-
     // FR10: lenient parse — the three numbers after `git version`, anything after them ignored.
     def "a version line parses to its three numbers, suffixes ignored"() {
         expect:

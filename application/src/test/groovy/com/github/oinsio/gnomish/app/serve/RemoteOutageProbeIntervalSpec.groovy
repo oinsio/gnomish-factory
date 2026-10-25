@@ -23,7 +23,7 @@ class RemoteOutageProbeIntervalSpec extends Specification {
     /** The gaps between {@code count} consecutive failed probes, the first measured from the open. */
     private List<Duration> gapsBetweenFailedProbes(int count) {
         def failing = [probe: { Path p -> false }] as BaseRefGit
-        def gate = new RemoteOutageGate(failing, Path.of('.'), clock, new Random(42), IDLE, CAP)
+        def gate = new DaemonCondition(ConditionSubject.remote(failing, Path.of('.')), clock, new Random(42), IDLE, CAP)
         gate.openOnFailure('remote unreachable')
         def gaps = []
         def last = clock.instant()

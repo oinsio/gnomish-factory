@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeUnavailableException;
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
@@ -33,13 +34,14 @@ import org.slf4j.LoggerFactory;
  * clone read-only — the task container itself mounts only the volume, so no
  * factory-clone path, remote address, or credential ever exists inside the box.
  * The fast-forward-only fetch behind {@code harvest} arrives with the harvest
- * task (FR5). Runtime outages ({@link DockerUnavailableException}) surface as
- * infrastructure failures, no attempt burned (NFR-R1).
+ * task (FR5). A runtime outage in {@code materialize} is the operator's precondition and leaves as
+ * {@link ContainerRuntimeUnavailableException} (design D19 of add-sandbox-base-image); every other
+ * operation's outage stays {@link DockerUnavailableException}, an infrastructure failure (NFR-R1).
  *
  * <p>Implements FR3, FR4, FR10, FR11, NFR-R1, NFR-R2 of add-sandbox-core; FR6 of
  * add-parameter-count-gate (the materialize half is an instance held here); FR13 of
  * tighten-spec-contract (the installation's equipment arrives as one {@link BoxEquipment}, the
- * task's inputs beside it).
+ * task's inputs beside it); FR14, NFR-R2 of add-sandbox-base-image (the runtime at materialize).
  */
 public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnvironment {
 
@@ -93,18 +95,34 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
         this.clock = equipment.timing().equipment().clock();
         this.allowlist = allowlist;
         this.materializer = new ContainerMaterializer(
-                docker, key, link.sourceClone(), equipment.containerSettings(), equipment.ownership(projectId));
+                docker,
+                key,
+                link.sourceClone(),
+                equipment.containerSettings(),
+                equipment.ownership(projectId),
+                equipment.imageContract());
     }
 
+    /**
+     * @throws ContainerRuntimeUnavailableException when the runtime is unreachable at any docker call
+     *     of the materialize, the first being the inspect both create and reattach start from
+     */
     @Override
     public void materialize(String branch, @Nullable String commitPin) {
         log.debug("container environment materializing on branch {} (pin {}) as key {}", branch, commitPin, key);
         String name = FactoryDockerLabels.containerName(key);
-        DockerResult inspect = docker.run(DockerCommands.inspectContainerState(name));
-        if (inspect.ok()) {
-            materializer.reattach(name, inspect, branch, commitPin);
-        } else {
-            materializer.create(branch, commitPin);
+        try {
+            DockerResult inspect = docker.run(DockerCommands.inspectContainerState(name));
+            if (inspect.ok()) {
+                materializer.reattach(name, inspect, branch, commitPin);
+            } else {
+                materializer.create(branch, commitPin);
+            }
+        } catch (DockerUnavailableException e) {
+            throw new ContainerRuntimeUnavailableException(
+                    "the container runtime is unreachable while materializing" + " environment " + key + " ("
+                            + e.getMessage() + ") — start Docker, or set DOCKER_HOST",
+                    e);
         }
         channel = new ContainerFileChannel(docker, key, WORKING_COPY, SCRATCH);
         this.branch = branch;
@@ -179,8 +197,6 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
     }
 
     private void requireMaterialized() {
-        if (channel == null) {
-            throw new IllegalStateException("environment not materialized: key " + key);
-        }
+        channel();
     }
 }

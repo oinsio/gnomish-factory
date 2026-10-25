@@ -1,0 +1,175 @@
+# Weekly rebuild of the sandbox base image: the source of the final release with the highest
+# version, built again on fresh upstream packages and pushed under its X.Y tag only, attested and
+# scanned like the release's own build. Implements FR8, NFR-S3, NFR-C1 of add-sandbox-base-image
+# (design D6, D11, D15, D16). Two jobs:
+#   select   the release to rebuild, from scripts/latest-final-release.sh (drafts, pre-releases and
+#            tags not of the form vX.Y.Z left out; the highest version, never the latest creation
+#            date); no final release yet → an empty tag, and the rebuild is skipped;
+#   rebuild  (needs select) check out that tag, take X.Y from the checked-out
+#            scripts/release-preflight.sh --base-tag (the shape check only), build and push X.Y
+#            for both platforms, attest, scan.
+# The release tag X.Y.Z is never pushed here: it keeps the digest its release notes and
+# attestations name (design D6). A missing X.Y after an interrupted final release is converged by
+# the next run. The workflow holds no logic of its own: every decision is a script under scripts/
+# with a spec in :bootstrap (design D15).
+#
+# Action versions are pinned by major tag, as in release.yml; Dependabot keeps them fresh.
+name: Sandbox image rebuild
+
+on:
+  schedule:
+    # Mondays 04:17 UTC, off the top of the hour that every scheduled workflow crowds.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+# No workflow-level grants: each job declares only what it uses (NFR-S3).
+permissions: {}
+
+# One rebuild at a time; a dispatch during a scheduled run waits rather than racing its push.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  # The release to rebuild (FR8; design D15): LatestFinalReleaseScriptSpec drives every outcome.
+  # A gh failure fails this job, so it is never read as "no release".
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      tag: ${{ steps.latest.outputs.tag }}
+      version: ${{ steps.latest.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Select the final release with the highest version
+        id: latest
+        run: sh scripts/latest-final-release.sh
+
+  # The base of that release, rebuilt (FR8, NFR-S3; design D6, D11, D16). Every script below runs
+  # from the checked-out tag, so the rebuild builds the release's own source the release's own way.
+  rebuild:
+    needs: select
+    if: ${{ needs.select.outputs.tag != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90 # two platforms, one under QEMU, each compiling git (design Risks)
+    # Only this job writes packages (NFR-S3): `packages: write` pushes to ghcr.io, `id-token: write`
+    # and `attestations: write` sign and store the image's attestation, `security-events: write`
+    # uploads the scan report, and `actions: read` lets that upload read the run it belongs to.
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+      security-events: write
+    env:
+      IMAGE: ghcr.io/oinsio/gnomish-sandbox-base
+      TAG: ${{ needs.select.outputs.tag }}
+      VERSION: ${{ needs.select.outputs.version }}
+
+    steps:
+      - name: Check out the release
+        id: checkout
+        uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ needs.select.outputs.tag }}
+
+      # The base tag from its one owner on the shell side (design D11, single-owner row 4): the
+      # shape check only — no history, no CI-run lookup — and a final tag always yields X.Y.
+      - name: Name the release's base tag
+        id: base
+        run: bash scripts/release-preflight.sh --base-tag "$TAG"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # The contract values from their one source (design D2), one build argument each, through
+      # the one translation of the file, scripts/image-contract-build-args.sh (design D16;
+      # ImageContractBuildArgsScriptSpec pins its rule) — the same step as the release's `image`
+      # job. The capture fails the step when the script refuses the file, so `args` is never empty.
+      - name: Read the image contract into build arguments
+        id: contract
+        run: |
+          args="$(sh scripts/image-contract-build-args.sh)"
+          {
+            echo 'args<<CONTRACT'
+            printf '%s\n' "$args"
+            echo 'CONTRACT'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push the base's X.Y for both platforms
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: sandbox-image
+          build-contexts: scripts=scripts
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ steps.base.outputs.base_tag }}
+          build-args: |
+            ${{ steps.contract.outputs.args }}
+            IMAGE_VERSION=${{ env.VERSION }}
+            IMAGE_REVISION=${{ steps.checkout.outputs.commit }}
+          # The reason this rebuild exists: the published stage is built without the layer cache
+          # on a freshly pulled Ubuntu, so its packages are this week's. The git build stage,
+          # whose inputs are the pinned script and tarball, is reused from the cache it shares
+          # with the release's `image` job.
+          pull: true
+          no-cache-filters: published
+          cache-from: type=gha,scope=sandbox-base
+          cache-to: type=gha,mode=max,scope=sandbox-base
+
+      - name: Attest the base's build provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      # The scan reports and never blocks (FR8, NG3): findings reach code scanning, the job stays
+      # green, and a scan that cannot run leaves the pushed image as it is.
+      - name: Save the pushed base for the scan
+        continue-on-error: true
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker pull --platform linux/amd64 "$IMAGE@$DIGEST"
+          docker save -o sandbox-base.tar "$IMAGE@$DIGEST"
+
+      - name: Scan the base (OSV-Scanner)
+        continue-on-error: true
+        uses: google/osv-scanner-action/osv-scanner-action@v2.6.0
+        with:
+          scan-args: |-
+            scan
+            image
+            --archive
+            ./sandbox-base.tar
+            --format=sarif
+            --output=osv-sandbox-base.sarif
+
+      - name: Upload the scan report
+        if: ${{ !cancelled() && hashFiles('osv-sandbox-base.sarif') != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: osv-sandbox-base.sarif
+          category: sandbox-base-image-rebuild

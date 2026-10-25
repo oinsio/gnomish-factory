@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.serveobservability.json;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.oinsio.gnomish.serveobservability.ConditionHealth;
 import com.github.oinsio.gnomish.serveobservability.FeedPhase;
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshot;
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState;
@@ -83,7 +84,10 @@ public final class SnapshotJsonMapper {
                 toSlots(snapshot.slots()),
                 toVitals(snapshot.vitals()),
                 toTracker(snapshot.tracker()),
-                toRemote(snapshot.remote()));
+                toRemote(snapshot.remote()),
+                snapshot.conditions().stream()
+                        .map(SnapshotJsonMapper::toCondition)
+                        .toList());
     }
 
     private static LifecycleDto toLifecycle(LifecycleState state) {
@@ -203,6 +207,19 @@ public final class SnapshotJsonMapper {
         Map<String, RemoteDto> result = new LinkedHashMap<>();
         remote.forEach((target, health) -> result.put(target, toRemoteEntry(health)));
         return result;
+    }
+
+    /** NFR-O2, UX4 of add-sandbox-base-image: one entry per daemon condition, the remote's first. */
+    private static ConditionDto toCondition(ConditionHealth health) {
+        return new ConditionDto(
+                health.condition(),
+                health.target(),
+                health.open() ? "open" : "closed",
+                toInstant(health.openSince()),
+                health.lastError(),
+                toInstant(health.nextProbeAt()),
+                health.consecutiveFailures(),
+                toInstant(health.lastSuccessAt()));
     }
 
     private static RemoteDto toRemoteEntry(RemoteHealth health) {

@@ -37,11 +37,11 @@ class FeedAutomatonFixture {
             Duration backoffBase, Duration backoffCap, Duration idlePollInterval, int wipLimit,
             Random random, DirtyNotifier dirtyNotifier) {
         new FeedAssembly(time, new IdleTiming(idlePollInterval, backoffBase, backoffCap, random), wipLimit)
-                .feedAutomaton(tracker, instanceId, slotLedger, slotRunner, dirtyNotifier, closedGate(idlePollInterval))
+                .feedAutomaton(tracker, instanceId, slotLedger, slotRunner, dirtyNotifier, closedConditions(idlePollInterval))
     }
 
-    private static RemoteOutageGate closedGate(Duration idlePollInterval) {
-        new RemoteOutageGate(BaseRefGit.UNWIRED, Path.of('.'), new VirtualClock(), new Random(0), idlePollInterval,
-                Duration.ofMinutes(10))
+    private static DaemonConditions closedConditions(Duration idlePollInterval) {
+        new DaemonConditions(new DaemonCondition(ConditionSubject.remote(BaseRefGit.UNWIRED, Path.of('.')),
+                new VirtualClock(), new Random(0), idlePollInterval, Duration.ofMinutes(10)), [])
     }
 }

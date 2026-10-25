@@ -7,9 +7,18 @@
 // `product-version-conventions` set, read by `FactoryVersion` and nothing else (FR3, FR6,
 // design D2). `time` is excluded: Boot would stamp `build.time` with the wall clock, so two
 // builds of one commit would differ (NFR-R1, design D5). `BuildInfoSpec` pins both.
+//
+// The release's base tag rides beside it as `build.baseTag` (design D11 of add-sandbox-base-image),
+// taken whole from the `baseTag` provider `product-version-conventions` computes. Boot's
+// `MapProperty` refuses a null value, so a development build — whose provider is absent — omits
+// the key rather than writing an empty one; `FactoryVersion` reads the absence as `0.0.0-dev`'s.
+def baseTag = project.baseTag
 springBoot {
     buildInfo {
         excludes = ['time']
+        properties {
+            additional.putAll(baseTag.map { [baseTag: it] }.orElse([:]))
+        }
     }
 }
 
@@ -26,6 +35,22 @@ apply plugin: 'distribution'
 
 def productVersion = version.toString()
 def examples = rootProject.layout.projectDirectory.dir('docs/examples')
+
+// The recipe builds FROM the base of the factory release it ships with (FR9 of
+// add-sandbox-base-image): a release build stamps its base tag — the `baseTag` provider of
+// `product-version-conventions`, the tag the release's image job pushes and the contract refusal
+// names (design D11) — into the `ARG GNOMISH_BASE_TAG=` line of the shipped Dockerfile and of the
+// shipped README, which shows the same line. A local build (`0.0.0-dev`) has no published base and
+// ships the repository's default unchanged. A recipe file without the line fails the build rather
+// than shipping unstamped. `RecipeBaseTagStampSpec` pins the result.
+def recipeBaseTagArg = 'ARG GNOMISH_BASE_TAG='
+def stampedRecipeFiles = ['Dockerfile', 'README.md']
+stampedRecipeFiles.each { name ->
+    if (!examples.file("sandbox-image/${name}").asFile.readLines().any { it.startsWith(recipeBaseTagArg) }) {
+        throw new GradleException("docs/examples/sandbox-image/${name} has no '${recipeBaseTagArg}<tag>' line to stamp")
+    }
+}
+def recipeBaseTag = baseTag.getOrNull()
 distributions {
     main {
         distributionBaseName = 'gnomish'
@@ -48,6 +73,13 @@ distributions {
             }
             from(examples.dir('sandbox-image')) {
                 into 'share/sandbox-image'
+                if (recipeBaseTag != null) {
+                    filesMatching(stampedRecipeFiles) {
+                        filter { String line ->
+                            line.startsWith(recipeBaseTagArg) ? "${recipeBaseTagArg}${recipeBaseTag}".toString() : line
+                        }
+                    }
+                }
             }
         }
     }

@@ -3,31 +3,20 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.app.ThreadSleeper
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
-import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
-import com.github.oinsio.gnomish.sandbox.DenialRestoration
-import com.github.oinsio.gnomish.sandbox.ExecCommand
-import com.github.oinsio.gnomish.sandbox.SandboxProperties
-import com.github.oinsio.gnomish.sandbox.StderrPolicy
-import com.github.oinsio.gnomish.sandbox.environment.BoxGitLink
-import com.github.oinsio.gnomish.sandbox.environment.BoxTiming
-import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironmentFactory
-import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments
-import com.github.oinsio.gnomish.sandbox.environment.GuardImageAvailability
-import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
-import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException
+import com.github.oinsio.gnomish.sandbox.*
+import com.github.oinsio.gnomish.sandbox.environment.*
+import spock.lang.IgnoreIf
+import spock.lang.Specification
+import spock.lang.TempDir
+import spock.lang.Timeout
+
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.time.InstantSource
 import java.util.concurrent.TimeUnit
-import spock.lang.IgnoreIf
-import spock.lang.Specification
-import spock.lang.TempDir
-import spock.lang.Timeout
-
 /**
  * M2 + M3 of add-sandbox-core (task 9.3), over the production {@link
  * ContainerEnvironments} seam — exactly what the container-mode runner
@@ -127,17 +116,15 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
         }
 
         then: 'every observed variable is either image ENV or the factory-set proxy fragment'
-        def allowed = [
-            'PATH',
+        // The image's own ENV is read from the image, not listed by hand: the sandbox base image
+        //     bakes the JVM and Maven proxy plumbing too (design D7 of add-sandbox-base-image).
+        def allowed = imageEnvNames(FakeAgentSandboxImage.ensureBuilt('plain-round')) + [
             'HOME',
             'HOSTNAME',
             'PWD',
             'OLDPWD',
             'SHLVL',
             'TERM',
-            'CHARSET',
-            'LC_COLLATE',
-            'GNOMISH_FAKE_SCENARIO',
             'HTTP_PROXY',
             'HTTPS_PROXY',
             'http_proxy',
@@ -152,5 +139,18 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
         and: 'not one of the factory process own env vars leaked in (M3)'
         def hostOnly = System.getenv().keySet() - allowed
         names.intersect(hostOnly).isEmpty()
+    }
+
+    /** The variable names the image's own {@code ENV} sets, from its configuration. */
+    private static Set<String> imageEnvNames(String image) {
+        def env = TestDockerCommand.succeed([
+            'image',
+            'inspect',
+            '-f',
+            '{{range .Config.Env}}{{println .}}{{end}}',
+            image
+        ])
+        .readLines().findAll { it.contains('=') }
+        env.collect { it.substring(0, it.indexOf('=')) } as Set
     }
 }

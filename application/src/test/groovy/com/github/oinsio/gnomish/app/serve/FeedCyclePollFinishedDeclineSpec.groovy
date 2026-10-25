@@ -47,7 +47,7 @@ class FeedCyclePollFinishedDeclineSpec extends Specification {
         def resilience = new FeedResilience(
                 outageRetry,
                 new FinishedDecline(new RepeatSuppressor(clock, Duration.ofMinutes(5))),
-                RemoteOutageGateFixtures.closedGate())
+                DaemonConditionFixtures.closedConditions())
         new FeedCycle(
                 new FeedTracker(tracker, INSTANCE), new SlotLedger(1, new VirtualClock()), { TaskRef ref -> } as SlotRunner,
                 new FeedSelection(BASE, CAP, wipLimit, new Random(0)), new FeedStateLogger(), resilience)

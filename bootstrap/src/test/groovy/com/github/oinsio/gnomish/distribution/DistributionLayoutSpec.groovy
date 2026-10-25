@@ -23,6 +23,7 @@ import spock.lang.Specification
 class DistributionLayoutSpec extends Specification {
 
     private static final String RECIPE = 'docs/examples/sandbox-image'
+    private static final String BASE_SOURCE = 'sandbox-image'
 
     @Shared
     String version = TestTaskProperty.required('e2e.productVersion')
@@ -87,8 +88,11 @@ class DistributionLayoutSpec extends Specification {
                 sameBytes(root.resolve(path), root.resolve(it))
             }
         }
+        // By name, the base's own directory is no copy: the sandbox base image's source lives at the
+        // repository root (design D1 of add-sandbox-base-image), apart from the recipe. Its bytes
+        // are still compared above like every other file.
         def namedCopies = tracked.findAll {
-            it.contains('sandbox-image/') && !it.startsWith("${RECIPE}/")
+            it.contains('sandbox-image/') && !it.startsWith("${RECIPE}/") && !it.startsWith("${BASE_SOURCE}/")
         }
 
         then:

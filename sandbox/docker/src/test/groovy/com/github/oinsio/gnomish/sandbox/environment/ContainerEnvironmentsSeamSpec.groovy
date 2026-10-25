@@ -74,7 +74,7 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
 
         and:
         new ContainerEnvironments(
-                new BoxEquipment(docker, sandbox, timing, Path.of('/factory/guard-config'), OwnershipMode.MANUAL),
+                new BoxEquipment(docker, sandbox, timing, Path.of('/factory/guard-config'), OwnershipMode.MANUAL, ImageContractCheck.current()),
                 KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), ChildEnvAllowlist.none(), 'proj-1',
                 { -> DenialRestoration.none() })
                 .ownershipMode() == OwnershipMode.MANUAL

@@ -1,0 +1,80 @@
+#!/bin/sh
+# gnomish-trust-ca: imports every certificate an operator dropped into the image's CA folder into
+# the system trust store and, when `keytool` is on PATH, into the JVM trust store.
+# Implements FR2, NFR-O1 of add-sandbox-base-image (design D5).
+#
+# Usage (in an operator Dockerfile, as root, after grafting a JDK):
+#   COPY corporate-ca.crt /etc/gnomish/ca/
+#   RUN gnomish-trust-ca
+#
+# Input: every *.pem and *.crt file in GNOMISH_CA_DIR (default /etc/gnomish/ca), each holding one
+# or more PEM certificates. With no such file it prints one line and exits 0, touching neither
+# store. Otherwise it must run as root:
+#   - each certificate is written as its own .crt under /usr/local/share/ca-certificates/gnomish/
+#     and `update-ca-certificates` rebuilds the system bundle;
+#   - when `keytool` is on PATH, each certificate is imported into the JDK's `cacerts` under the
+#     alias gnomish-<file>-<n>, replacing an earlier import of the same alias, so a rerun is a
+#     no-op and an edited file replaces its old certificate.
+# A refusal names the item, the expected state and the fix, and exits 1.
+set -eu
+
+ca_dir="${GNOMISH_CA_DIR:-/etc/gnomish/ca}"
+system_dir=/usr/local/share/ca-certificates/gnomish
+store_password=changeit
+
+refuse() {
+    printf 'gnomish-trust-ca: %s\n' "$1" >&2
+    exit 1
+}
+
+found=no
+for file in "$ca_dir"/*.pem "$ca_dir"/*.crt; do
+    [ -f "$file" ] && found=yes
+done
+if [ "$found" = no ]; then
+    echo "gnomish-trust-ca: no *.pem or *.crt file in $ca_dir; nothing to import"
+    exit 0
+fi
+
+[ "$(id -u)" -eq 0 ] \
+    || refuse "running as uid $(id -u); expected root, because the trust stores are root-owned; fix: run it before USER gnome, or after USER root"
+command -v update-ca-certificates >/dev/null 2>&1 \
+    || refuse "update-ca-certificates is not on PATH; expected the ca-certificates package; fix: build FROM the sandbox base image"
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+mkdir -p "$system_dir"
+have_keytool=no
+command -v keytool >/dev/null 2>&1 && have_keytool=yes
+
+for file in "$ca_dir"/*.pem "$ca_dir"/*.crt; do
+    [ -f "$file" ] || continue
+    name="$(basename "$file")"
+    rm -rf "$work/split" && mkdir "$work/split"
+    # One output file per certificate block, numbered from 1.
+    awk -v out="$work/split" '
+        /-----BEGIN CERTIFICATE-----/ { n++; inside = 1 }
+        inside { print > (out "/" n ".pem") }
+        /-----END CERTIFICATE-----/ { inside = 0; close(out "/" n ".pem") }
+    ' "$file"
+    count=0
+    for cert in "$work"/split/*.pem; do
+        [ -f "$cert" ] || continue
+        count=$((count + 1))
+        part="$(basename "$cert" .pem)"
+        cp "$cert" "$system_dir/$name-$part.crt"
+        chmod 0644 "$system_dir/$name-$part.crt"
+        if [ "$have_keytool" = yes ]; then
+            alias="gnomish-$name-$part"
+            keytool -delete -cacerts -storepass "$store_password" -alias "$alias" >/dev/null 2>&1 || true
+            keytool -importcert -cacerts -noprompt -storepass "$store_password" \
+                -alias "$alias" -file "$cert" >/dev/null \
+                || refuse "$file: certificate $part was refused by keytool; expected a PEM X.509 certificate; fix: replace the file"
+        fi
+    done
+    [ "$count" -gt 0 ] \
+        || refuse "$file holds no PEM certificate; expected one or more -----BEGIN CERTIFICATE----- blocks; fix: convert it with 'openssl x509 -inform der -in <file> -out <file>.pem'"
+    echo "gnomish-trust-ca: $file: $count certificate(s) imported (JVM trust store: $have_keytool)"
+done
+
+update-ca-certificates >/dev/null

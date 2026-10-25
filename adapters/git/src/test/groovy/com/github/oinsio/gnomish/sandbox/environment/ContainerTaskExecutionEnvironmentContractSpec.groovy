@@ -99,9 +99,26 @@ class ContainerTaskExecutionEnvironmentContractSpec extends TaskExecutionEnviron
         ]))
         def line = readFully(version.output())
 
-        then: 'it parses, and it is not below the box\'s floor (FR10, design D11 of own-git-invocation-policy)'
+        then: 'it parses, and it is not below the factory\'s one floor (FR11, design D9 of add-sandbox-base-image)'
         version.waitForExit() == 0
         GitVersion.parse(line).present
-        !GitVersion.parse(line).get().isBelow(GitVersion.BOX_FLOOR)
+        !GitVersion.parse(line).get().isBelow(GitVersion.FLOOR)
+    }
+
+    // FR11 of add-sandbox-base-image (design D7, D9): the test image is built FROM the base and adds
+    //     no git; the floor check runs the image's own git on the real daemon and lets it through.
+    // Scenario: sandbox/sandbox-base-image / The base's git passes the box's floor check
+    def "FR11: an image FROM the base with no git of its own passes the seed-clone floor check"() {
+        given: 'the image\'s only git is the base\'s, under /opt/git'
+        def which = TestDockerCommand.shell(GitSandboxImage.IMAGE, 'gnome', 'command -v git')
+        assert which.success().strip() == '/opt/git/bin/git'
+
+        when: 'the floor check probes the image\'s git through the real daemon'
+        new BoxGitFloor(new DockerCli(), 'sbx-floor-' + System.nanoTime(), new ObjectOwnership(OwnershipMode.TRACKED, 'proj-1'))
+                .require(GitSandboxImage.IMAGE)
+
+        then: 'it passes, and a box materializes on the image (its seed clone ran behind the same check)'
+        noExceptionThrown()
+        materialized() != null
     }
 }

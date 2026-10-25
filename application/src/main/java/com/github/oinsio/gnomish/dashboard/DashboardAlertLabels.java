@@ -41,6 +41,10 @@ final class DashboardAlertLabels {
                 "an instance died or hung: stopped " + incident.objectName() + " of task " + incident.taskKey() + " ("
                         + incident.reason() + ")";
             case AlertCondition.RemoteGateOpen gate -> remoteGateOpenLabel(gate);
+            case AlertCondition.PreconditionOpen precondition ->
+                "operator precondition unmet, no task is claimed: " + precondition.condition() + " open since "
+                        + precondition.openSince() + ", last cause: " + precondition.lastError() + ", next probe at "
+                        + precondition.nextProbeAt();
         };
     }
 

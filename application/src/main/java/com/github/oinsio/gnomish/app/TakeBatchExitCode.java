@@ -14,9 +14,11 @@ import java.util.List;
  * correctly: an ordinary {@link com.github.oinsio.gnomish.app.take.TakeResult}'s code (10 and
  * above, legitimate outcome) and a per-ref tool failure's code (below 10) — "smallest non-zero
  * wins" is exactly what makes the below-10 family dominate arithmetically, with no separate code
- * table (design D7).
+ * table (design D7). One {@link com.github.oinsio.gnomish.app.take.TakeResult} maps below 10 too:
+ * an operator precondition the claimed run met exits 8 (FR14 of add-sandbox-base-image), and the
+ * same rule lets it dominate every legitimate outcome, since a retry without the fix refuses again.
  *
- * <p>Implements FR3, NFR-O2, D7 of add-factory-serve.
+ * <p>Implements FR3, NFR-O2, D7 of add-factory-serve; FR14 of add-sandbox-base-image.
  */
 final class TakeBatchExitCode {
 

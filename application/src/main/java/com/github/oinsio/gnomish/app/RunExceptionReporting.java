@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
-import com.github.oinsio.gnomish.app.port.git.BoxGitVersionRefusedException;
-import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException;
 import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException;
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
@@ -22,19 +20,22 @@ import org.slf4j.Logger;
  *
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3 of add-manual-run; FR5 of
  * harden-untrusted-text-sinks; NFR-O1, FR16 of fix-operator-blockers; FR7 of add-project-registry;
- * FR4, NFR-O1 of make-run-headless; FR9 of supervise-daemon-loops-and-embed-dashboard.
+ * FR4, NFR-O1 of make-run-headless; FR9 of supervise-daemon-loops-and-embed-dashboard; FR5, FR14 of
+ * add-sandbox-base-image.
  */
 final class RunExceptionReporting {
 
-    /** Families whose own message is the operator's line. */
+    /**
+     * Families whose own message is the operator's line — beside the operator precondition
+     * refusals, which {@link OperatorPreconditionRefusals} names (design D22 of
+     * add-sandbox-base-image) and which print their own message too.
+     */
     private static final List<Class<? extends Throwable>> PRINTS_OWN_MESSAGE = List.of(
             UsageException.class,
             PipelineLoadFailedException.class,
             InternalErrorException.class,
             DefaultBranchUnboundException.class,
             GitVersionRefusedException.class, // UX2 of own-git-transfer-argv: a precondition, not a crash
-            CloneRefFormatRefusedException.class, // D13 of tighten-spec-contract: the clone's precondition
-            BoxGitVersionRefusedException.class, // D13 of tighten-spec-contract: the image's precondition
             UnsupportedStateFileVersionException.class, // FR4: clean refusal, no WARN/stack trace
             ConfigurationViolationsException.class); // FR7 of add-project-registry: the loader's report
 
@@ -83,6 +84,11 @@ final class RunExceptionReporting {
                 log.info("{}", required.stopRecord());
             }
             String line = calmLine(ex);
+            if (OperatorPreconditionRefusals.kindOf(ex).isPresent()) {
+                // throwable-not-subject: the refusal is a precondition, not a defect; its message is
+                // the operator's line and the fix, and a stack would only name the check that met it.
+                log.error(OperatorEvent.COMMAND_OPERATOR_PRECONDITION_REFUSED.head() + "{}", line);
+            }
             if (line == null) {
                 log.warn(
                         OperatorEvent.RUN_UNHANDLED_EXCEPTION.head()
@@ -105,7 +111,7 @@ final class RunExceptionReporting {
      * FR16 of fix-operator-blockers).
      */
     static @Nullable String calmLine(Throwable failure) {
-        if (isAny(failure, PRINTS_OWN_MESSAGE)) {
+        if (OperatorPreconditionRefusals.kindOf(failure).isPresent() || isAny(failure, PRINTS_OWN_MESSAGE)) {
             return String.valueOf(failure.getMessage());
         }
         if (isAny(failure, ALREADY_REPORTED)) {

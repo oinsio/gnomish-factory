@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.serve
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.app.take.DaemonConditionKind
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
@@ -102,6 +103,25 @@ class SlotOutcomeLogSpec extends Specification {
         capture.detach()
     }
 
+    // FR14, D19 of add-sandbox-base-image: under serve the daemon condition writes the one opening
+    // WARN, so the slot's detail line for a precondition is DEBUG, naming the kind and the fix.
+    def "a released-on-precondition task is DEBUG detail naming the kind and the fix"() {
+        given:
+        def capture = LogCaptureSupport.attach(SlotOutcomeLogSpec, Level.DEBUG)
+
+        when:
+        outcomeLog.detail(ref, new TakeResult.OperatorPreconditionUnmet(UntrustedText.factory('Task PROJ-9 claim released: re-clone on reftable'), DaemonConditionKind.CLONE_REF_FORMAT))
+
+        then:
+        capture.list.size() == 1
+        capture.list[0].level == Level.DEBUG
+        capture.list[0].formattedMessage ==
+                'slot for task task-7 released on operator precondition CLONE_REF_FORMAT: Task PROJ-9 claim released: re-clone on reftable'
+
+        cleanup:
+        capture.detach()
+    }
+
     // FR3: the canonical summary is emitted for every outcome that ran, at the level the outcome
     // warrants — and for the two that never ran, not at all.
     def "summarize writes one summary line for an outcome that ran"() {
@@ -137,7 +157,8 @@ class SlotOutcomeLogSpec extends Specification {
         result << [
             new TakeResult.EmptyQueue(),
             new TakeResult.Skipped(UntrustedText.tracker('lost claim race')),
-            new TakeResult.InfrastructureUnavailable(UntrustedText.subprocess('origin never answered'))
+            new TakeResult.InfrastructureUnavailable(UntrustedText.subprocess('origin never answered')),
+            new TakeResult.OperatorPreconditionUnmet(UntrustedText.factory('Task PROJ-9 claim released: re-clone on reftable'), DaemonConditionKind.CLONE_REF_FORMAT)
         ]
     }
 

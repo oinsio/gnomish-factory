@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.serveobservability.writer
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.serve.RemoteOutageClosedOutage
+import com.github.oinsio.gnomish.app.take.DaemonConditionKind
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -38,10 +39,10 @@ class RemoteOutageLedgerWriterSpec extends Specification implements RotatingLedg
     }
 
     // Scenario: observability/serve-observability / One line per outage
-    def "one remoteOutage line is appended per closed outage"() {
+    def "one daemonCondition line naming the remote is appended per closed outage"() {
         given:
         def outage = new RemoteOutageClosedOutage(
-                'origin', Instant.parse('2026-08-06T08:00:00Z'), Instant.parse('2026-08-06T08:30:00Z'), 5, 2,
+                DaemonConditionKind.REMOTE, 'origin', Instant.parse('2026-08-06T08:00:00Z'), Instant.parse('2026-08-06T08:30:00Z'), 5, 2,
                 'connection refused')
 
         when:
@@ -50,7 +51,8 @@ class RemoteOutageLedgerWriterSpec extends Specification implements RotatingLedg
         then:
         def lines = ledgerLines()
         lines.size() == 1
-        lines[0].contains('"type":"remoteOutage"')
+        lines[0].contains('"type":"daemonCondition"')
+        lines[0].contains('"condition":"remote"')
         lines[0].contains('"target":"origin"')
         lines[0].contains('"probeCount":5')
         lines[0].contains('"releasedClaims":2')
@@ -62,7 +64,7 @@ class RemoteOutageLedgerWriterSpec extends Specification implements RotatingLedg
         Files.writeString(serveDir(), 'not a directory')
         def logs = LogCaptureSupport.attach(RemoteOutageLedgerWriter)
         def outage = new RemoteOutageClosedOutage(
-                'origin', Instant.parse('2026-08-06T08:00:00Z'), Instant.parse('2026-08-06T08:30:00Z'), 1, 0, 'boom')
+                DaemonConditionKind.REMOTE, 'origin', Instant.parse('2026-08-06T08:00:00Z'), Instant.parse('2026-08-06T08:30:00Z'), 1, 0, 'boom')
 
         when:
         writer().outageClosed(outage)
@@ -77,5 +79,26 @@ class RemoteOutageLedgerWriterSpec extends Specification implements RotatingLedg
 
         cleanup:
         logs.detach()
+    }
+
+    // Scenario: observability/serve-observability / A precondition episode is one line naming its condition
+    def "a precondition's episode is one daemonCondition line naming its condition, with no target"() {
+        given:
+        def outage = new RemoteOutageClosedOutage(
+                DaemonConditionKind.BOX_GIT_FLOOR, 'BOX_GIT_FLOOR', Instant.parse('2026-08-06T08:00:00Z'),
+                Instant.parse('2026-08-06T09:00:00Z'), 6, 2, 'git 2.39 below the floor')
+
+        when:
+        writer().outageClosed(outage)
+
+        then:
+        def lines = ledgerLines()
+        lines.size() == 1
+        lines[0].contains('"type":"daemonCondition"')
+        lines[0].contains('"condition":"boxGitFloor"')
+        lines[0].contains('"target":null')
+        lines[0].contains('"probeCount":6')
+        lines[0].contains('"releasedClaims":2')
+        !lines[0].contains('taskOutcome')
     }
 }

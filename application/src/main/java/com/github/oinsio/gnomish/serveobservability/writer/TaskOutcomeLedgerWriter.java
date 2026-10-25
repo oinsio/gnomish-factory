@@ -6,11 +6,14 @@ import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
+import com.github.oinsio.gnomish.serveobservability.TaskOutcome;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcomeLine;
 import com.github.oinsio.gnomish.serveobservability.TaskOutcomeLineAssembler;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.InstantSource;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,6 +67,38 @@ public final class TaskOutcomeLedgerWriter {
      * @param result the terminal result the slot reached; never null
      */
     public void write(TaskRef claimed, TakeResult result) {
+        append(
+                claimed,
+                (startedAt, finishedAt) ->
+                        TaskOutcomeLineAssembler.assemble(instance, claimed.id(), result, startedAt, finishedAt));
+    }
+
+    /**
+     * Writes the line of a slot that ended with no result (design D20, FR18 of
+     * add-sandbox-base-image): {@code aborted}, no stage, no attempt, no tokens, the wall time —
+     * what the task's accounting records when the slot's crash arm runs, so the ledger counts the
+     * slots that ended worst too.
+     *
+     * @param claimed the task whose slot crashed; never null
+     */
+    public void writeCrashed(TaskRef claimed) {
+        append(
+                claimed,
+                (startedAt, finishedAt) -> new TaskOutcomeLine(
+                        instance,
+                        claimed.id(),
+                        TaskOutcome.ABORTED,
+                        null,
+                        null,
+                        0,
+                        startedAt,
+                        finishedAt,
+                        Duration.between(startedAt, finishedAt).toMillis(),
+                        Map.of()));
+    }
+
+    /** The one append path: the slot's start, the line {@code assemble} builds, the one append. */
+    private void append(TaskRef claimed, LineFactory assemble) {
         Instant startedAt = startedAtFor(claimed);
         if (startedAt == null) {
             log.warn(
@@ -72,8 +107,7 @@ public final class TaskOutcomeLedgerWriter {
                     claimed.id());
             return;
         }
-        TaskOutcomeLine line =
-                TaskOutcomeLineAssembler.assemble(instance, claimed.id(), result, startedAt, clock.instant());
+        TaskOutcomeLine line = assemble.line(startedAt, clock.instant());
         if (line == null) {
             return;
         }
@@ -86,6 +120,13 @@ public final class TaskOutcomeLedgerWriter {
                     claimed.id(),
                     e);
         }
+    }
+
+    /** Builds a slot's line from its start and finish, or none. */
+    @FunctionalInterface
+    private interface LineFactory {
+        @Nullable
+        TaskOutcomeLine line(Instant startedAt, Instant finishedAt);
     }
 
     private @Nullable Instant startedAtFor(TaskRef claimed) {

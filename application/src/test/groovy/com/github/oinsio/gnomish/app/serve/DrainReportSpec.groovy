@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.serve
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
+import com.github.oinsio.gnomish.app.take.DaemonConditionKind
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -40,6 +41,20 @@ class DrainReportSpec extends Specification {
         report.summary().contains('github:o/r#1')
         report.summary().contains('delivered')
         report.summary() == 'drain worked 1 task(s): github:o/r#1 -> delivered: shipped it'
+    }
+
+    // FR14 of add-sandbox-base-image: a precondition refusal is a result the drain report records,
+    // named by its kind, rather than a crash it never heard of.
+    def "records an operator precondition result naming its kind"() {
+        given:
+        def report = new DrainReport()
+
+        when:
+        report.record(new TaskRef('github:o/r#9'), new TakeResult.OperatorPreconditionUnmet(UntrustedText.factory('Task PROJ-9 claim released: re-clone on reftable'), DaemonConditionKind.CLONE_REF_FORMAT))
+
+        then:
+        report.summary() == 'drain worked 1 task(s): github:o/r#9 -> released (operator precondition' +
+                ' CLONE_REF_FORMAT unmet): Task PROJ-9 claim released: re-clone on reftable'
     }
 
     // FR10, NFR-O2: several worked tasks are all named, in the order they finished.

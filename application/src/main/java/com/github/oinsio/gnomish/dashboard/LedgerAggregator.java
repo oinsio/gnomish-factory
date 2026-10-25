@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.dashboard;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.github.oinsio.gnomish.serveobservability.ConditionTokens;
 import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage;
 import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths;
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts;
@@ -92,7 +93,7 @@ public final class LedgerAggregator {
         Duration outageDuration = Duration.ZERO;
         for (JsonNode line : lines) {
             String type = line.path("type").asText(null);
-            if ("remoteOutage".equals(type)) {
+            if (remoteEpisode(type, line)) {
                 // NFR-O3 of add-base-ref-resolution: a malformed durationMillis (missing or a
                 // newer factory version's non-numeric shape) still counts the outage but adds
                 // no duration, rather than dropping the line and crashing the render (FR6, FR3,
@@ -124,6 +125,17 @@ public final class LedgerAggregator {
         }
         return new DayOutcomeCounts(
                 date, new OutcomeCounts(delivered, awaitingHuman, aborted, revoked), outageCount, outageDuration);
+    }
+
+    /**
+     * NFR-O2 of add-sandbox-base-image: a closed remote episode is a {@code daemonCondition} line
+     * naming the remote, or a {@code remoteOutage} line a daemon wrote before the conditions; a
+     * precondition's episode is no remote outage and adds nothing to the day's outage count.
+     */
+    private static boolean remoteEpisode(@Nullable String type, JsonNode line) {
+        return "remoteOutage".equals(type)
+                || ("daemonCondition".equals(type)
+                        && ConditionTokens.REMOTE.equals(line.path("condition").asText(null)));
     }
 
     private static void accumulateTokens(JsonNode tokensNode, Map<String, LedgerTokenUsage> totals) {

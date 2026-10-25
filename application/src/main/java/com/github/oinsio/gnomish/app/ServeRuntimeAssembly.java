@@ -4,11 +4,12 @@ import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
+import com.github.oinsio.gnomish.app.serve.DaemonConditions;
 import com.github.oinsio.gnomish.app.serve.DaemonLoops;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.ForwardingRemoteOutageLedgerSink;
-import com.github.oinsio.gnomish.app.serve.RemoteOutageGate;
+import com.github.oinsio.gnomish.app.serve.PreconditionRecheck;
 import com.github.oinsio.gnomish.app.serve.RemoteOutageGates;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecycleTick;
@@ -82,7 +83,8 @@ final class ServeRuntimeAssembly {
      * SandboxLifecycleTick}, then the {@link DaemonLoops} over the three serve-lifetime loops and the
      * {@link ServeShutdown} that stops them, and attaches the ledger writer to the slot runner.
      */
-    ServeRuntime assemble(ServeArguments serveArguments, BoundTracker bound, int effectiveSlots) {
+    ServeRuntime assemble(
+            ServeArguments serveArguments, BoundTracker bound, int effectiveSlots, PreconditionRecheck rechecks) {
         // FR8, D12: shared by every downstream caller (heartbeat, slot runner, feed automaton) — the
         // raw tracker reaches nothing below this line.
         TrackerHealthTracker trackerHealth = builders.trackerHealth(bound.tracker());
@@ -97,27 +99,31 @@ final class ServeRuntimeAssembly {
         TakeHeartbeat heartbeat = builders.heartbeat(served, dirtyNotifier);
 
         SlotLedger slotLedger = builders.slotLedger(effectiveSlots, dirtyNotifier);
-        // FR14, NFR-R3 of add-base-ref-resolution (task 7.3): ONE gate instance shared by the slot
-        // runner (which opens it on an InfrastructureUnavailable result) and the feed automaton
+        // FR14, NFR-R3 of add-base-ref-resolution (task 7.3): ONE set of daemon conditions (D19 of
+        // add-sandbox-base-image) shared by the slots' git decorations (which open the remote) and the feed automaton
         // (which consults it before every claim) — a fresh daemon starts closed (FR14).
         // FR14, NFR-O1, NFR-O3 of add-base-ref-resolution (task 7.4): the gate is built before
         // ObservabilityAssembly constructs the ledger appender its remoteOutage line needs, so the
         // ledger sink is a forwarding stand-in — same construction-order cycle ForwardingDirtyNotifier
         // already breaks for the snapshot writer, bound below once ObservabilityAssembly returns.
         ForwardingRemoteOutageLedgerSink remoteOutageLedgerSink = new ForwardingRemoteOutageLedgerSink();
-        RemoteOutageGate remoteOutageGate =
-                builders.remoteOutageGate(git.baseRefs(), serveArguments.dir(), dirtyNotifier, remoteOutageLedgerSink);
+        DaemonConditions conditions = builders.daemonConditions(
+                git.baseRefs(), serveArguments.dir(), dirtyNotifier, remoteOutageLedgerSink, rechecks);
         // The serve side's one slot wiring (design "Where a SlotWiring is built" of
         // introduce-slot-wiring; built by the factory of design D9 of collapse-composition-roots):
         // built once per daemon, as soon as the heartbeat and the gate exist, and shared by every
         // slot through the one slot runner. Its git is the gate-signaling one (D6): the decoration
         // is this root's decision, not the slot's.
-        var wiring =
-                slotWiringFactory.slotWiring(served, RemoteOutageGates.signaling(git, remoteOutageGate), heartbeat);
+        var wiring = slotWiringFactory.slotWiring(served, RemoteOutageGates.signaling(git, conditions), heartbeat);
         // FR13: the one slot runner every slot shares, over the daemon's one wiring — so the
         // heartbeat's ClaimBeat/ClaimLossFlag in its tenure are shared by every slot.
+        // D19 of add-sandbox-base-image: the slot reports a typed precondition refusal to the same set.
         TakeSlotRunner slotRunner = new TakeSlotRunner(
-                wiring, serveArguments.slotRunOrder(served.definition()), served.tracker(), served.instanceId());
+                wiring,
+                serveArguments.slotRunOrder(served.definition()),
+                served.tracker(),
+                served.instanceId(),
+                conditions);
         FeedAutomaton automaton = builders.feedAutomaton(
                 served.trackerConfig(),
                 served.tracker(),
@@ -125,8 +131,8 @@ final class ServeRuntimeAssembly {
                 slotLedger,
                 slotRunner,
                 dirtyNotifier,
-                remoteOutageGate);
-        WorktreeJanitor worktreeJanitor = builders.worktreeJanitor(slotLedger, git, served, wiring);
+                conditions);
+        WorktreeJanitor worktreeJanitor = builders.worktreeJanitor(slotLedger, git, served, wiring, conditions);
         // NFR-O1 of add-serve-sandbox-lifecycle: built before the observability wiring, which reads
         // it for `vitals.sweep`, and before the tick, which writes it — the log, not the tick
         // thread, is what the two share, so neither construction waits on the other. The reap
@@ -148,7 +154,7 @@ final class ServeRuntimeAssembly {
                         heartbeat.standingReaper(),
                         worktreeJanitor,
                         sweepTickLog,
-                        remoteOutageGate));
+                        conditions));
         // NFR-O1, NFR-O3 of add-base-ref-resolution: only now, with the ledger appender built, can
         // the gate's stand-in ledger sink be rebound to the real remoteOutage write point.
         remoteOutageLedgerSink.bind(observability.remoteOutageLedgerWriter());

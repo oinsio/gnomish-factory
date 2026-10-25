@@ -147,7 +147,9 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                         newStandingReaper(),
                         newWorktreeJanitor(),
                         new SweepTickLog(Duration.ofDays(7), clock, 20),
-                        RemoteOutageGates.forServe(BaseRefGit.UNWIRED, homeDir, new ServeProperties(0, null, null, null, null, null, null, null, null, null), clock, {}, { ignored -> })))
+                        RemoteOutageGates.forServe(BaseRefGit.UNWIRED, homeDir, new ServeProperties(0, null, null, null, null, null, null, null, null, null), clock, {}, { ignored -> }, { kind ->
+                            Optional.empty()
+                        })))
 
         then: 'a genuine, non-null wiring is returned'
         observability != null
@@ -210,7 +212,9 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                         newStandingReaper(),
                         newWorktreeJanitor(),
                         new SweepTickLog(Duration.ofDays(7), clock, 20),
-                        RemoteOutageGates.forServe(BaseRefGit.UNWIRED, homeDir, new ServeProperties(0, null, null, null, null, null, null, null, null, null), clock, {}, { ignored -> })))
+                        RemoteOutageGates.forServe(BaseRefGit.UNWIRED, homeDir, new ServeProperties(0, null, null, null, null, null, null, null, null, null), clock, {}, { ignored -> }, { kind ->
+                            Optional.empty()
+                        })))
         def finalState = new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none())
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(finalState, 'done'))
 

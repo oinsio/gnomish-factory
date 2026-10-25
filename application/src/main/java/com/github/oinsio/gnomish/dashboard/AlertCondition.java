@@ -36,7 +36,8 @@ public sealed interface AlertCondition
                 AlertCondition.SweepTickOverdue,
                 AlertCondition.SweepTicksSkipped,
                 AlertCondition.StoppedOrphanIncident,
-                AlertCondition.RemoteGateOpen {
+                AlertCondition.RemoteGateOpen,
+                AlertCondition.PreconditionOpen {
 
     /**
      * Rule 1: the snapshot is stale and its last reported lifecycle is not
@@ -95,7 +96,7 @@ public sealed interface AlertCondition
      * an open gate — the daemon is releasing claims with no tracker call because the remote is
      * unreachable. {@code sustainedOpen} escalates the label from "remote outage, probing" to
      * "blocked on the remote" once the gate has been open longer than the sustained-open duration
-     * (the same threshold {@code RemoteOutageGate}'s own ERROR uses).
+     * (the same threshold the remote {@code DaemonCondition}'s own ERROR uses).
      *
      * @param target the remote target identity; never blank
      * @param openSince when the gate opened; null only if the source snapshot's own data is
@@ -112,4 +113,19 @@ public sealed interface AlertCondition
             @Nullable Instant nextProbeAt,
             boolean sustainedOpen)
             implements AlertCondition {}
+
+    /**
+     * NFR-O2, UX4 of add-sandbox-base-image: an operator precondition's condition is open — the
+     * daemon claims nothing until the operator fixes it, and the line names what to fix.
+     *
+     * @param condition the condition's wire token, as the snapshot carries it; never blank
+     * @param openSince when it opened; null only when the snapshot's own data is inconsistent
+     * @param lastError the check's last message, which names the fix; null under the same condition
+     * @param nextProbeAt when the next probe is due; null under the same condition
+     */
+    record PreconditionOpen(
+            String condition,
+            @Nullable Instant openSince,
+            @Nullable String lastError,
+            @Nullable Instant nextProbeAt) implements AlertCondition {}
 }

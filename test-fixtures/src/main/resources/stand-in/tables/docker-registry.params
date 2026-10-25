@@ -1,0 +1,39 @@
+# Stand-ins for `docker manifest inspect` against ghcr, the registry check of the release's image
+# job (ImageTagRefusalScriptSpec; FR7 of add-sandbox-base-image, design D15). Each records its
+# runs, so the spec reads which reference was asked. The answers under data/stderr-registry are
+# docker's own texts; see that file's header for where they were recorded.
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
+
+[docker-manifest-present]
+# The registry holds the tag: docker prints its manifest index and succeeds.
+* record
+manifest,inspect answer data/stdout-docker#manifest-index 0
+
+[docker-manifest-unknown]
+# ghcr's answer for a tag missing from an existing package.
+* record
+manifest,inspect refuse 1 data/stderr-registry#manifest-unknown
+
+[docker-manifest-no-such]
+# docker's answer for a registry's not-found, which names the reference it asked for.
+* record
+manifest,inspect,ghcr.io/oinsio/gnomish-sandbox-base:0.2.0 refuse 1 data/stderr-registry#no-such-manifest-final
+manifest,inspect,ghcr.io/oinsio/gnomish-sandbox-base:0.3.0-rc.1 refuse 1 data/stderr-registry#no-such-manifest-pre
+
+[docker-manifest-denied]
+# ghcr refusing the read: what an anonymous client gets for a package not yet created, and what
+# any client gets for a package it may not read — so never an absent tag.
+* record
+manifest,inspect refuse 1 data/stderr-registry#denied
+
+[docker-manifest-no-host]
+# The registry unreachable: the name does not resolve.
+* record
+manifest,inspect refuse 1 data/stderr-registry#no-such-host
+
+[docker-manifest-two-lines]
+# A failure printed on two lines, the first of them an absent tag's text: never read as absent,
+# and reported as one annotation.
+* record
+* stderr data/stderr-registry#manifest-unknown
+manifest,inspect refuse 1 data/stderr-registry#no-such-host

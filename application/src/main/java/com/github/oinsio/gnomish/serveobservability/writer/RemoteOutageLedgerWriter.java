@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.serveobservability.writer;
 
 import com.github.oinsio.gnomish.app.serve.RemoteOutageClosedOutage;
 import com.github.oinsio.gnomish.app.serve.RemoteOutageLedgerSink;
+import com.github.oinsio.gnomish.app.take.DaemonConditionKind;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.RemoteOutageLine;
@@ -40,8 +41,8 @@ public final class RemoteOutageLedgerWriter implements RemoteOutageLedgerSink {
     }
 
     /**
-     * Appends one {@code remoteOutage} line for {@code outage}. Called by {@code
-     * RemoteOutageGate} exactly once per closed outage.
+     * Appends one {@code daemonCondition} line for {@code outage}. Called by {@code
+     * DaemonCondition} exactly once per closed outage.
      *
      * @param outage the closed outage's summary; never null
      */
@@ -50,7 +51,9 @@ public final class RemoteOutageLedgerWriter implements RemoteOutageLedgerSink {
         try {
             appender.append(new RemoteOutageLine(
                     instance,
-                    outage.target(),
+                    outage.kind(),
+                    // Only the remote has a target; a precondition is named by its condition alone.
+                    outage.kind() == DaemonConditionKind.REMOTE ? outage.target() : null,
                     outage.openedAt(),
                     outage.closedAt(),
                     Duration.between(outage.openedAt(), outage.closedAt()),
@@ -60,7 +63,7 @@ public final class RemoteOutageLedgerWriter implements RemoteOutageLedgerSink {
         } catch (IOException e) {
             log.error(
                     OperatorEvent.REMOTE_OUTAGE_LEDGER_APPEND_FAILED.head()
-                            + "failed to append remoteOutage ledger line",
+                            + "failed to append daemonCondition ledger line",
                     e);
         }
     }

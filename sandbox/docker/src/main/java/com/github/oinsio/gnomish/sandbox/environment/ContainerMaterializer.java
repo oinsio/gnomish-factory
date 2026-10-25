@@ -27,7 +27,8 @@ import org.slf4j.LoggerFactory;
  * gnomish-box-<key>}) beside the environment key, so an operator pastes it into {@code docker
  * logs} / {@code docker cp} without deriving it by hand (FR2, UX1 of polish-sandbox-forensics).
  *
- * <p>Implements FR6 of add-parameter-count-gate.
+ * <p>A reattach creates no box, so it reads no image facts and checks no image contract (FR5 of
+ * add-sandbox-base-image). Implements FR6 of add-parameter-count-gate; FR5 of add-sandbox-base-image.
  */
 @UntrustedParser
 final class ContainerMaterializer {
@@ -40,6 +41,7 @@ final class ContainerMaterializer {
     private final TaskContainerSettings settings;
     private final ObjectOwnership ownership;
     private final BoxGitFloor boxGit;
+    private final ImageContractCheck imageContract;
 
     /**
      * @param docker the docker subprocess seam; never null
@@ -48,15 +50,22 @@ final class ContainerMaterializer {
      *     one-shot seed helper only; never null
      * @param settings the image, runtime, limits and quota flag the task container runs with
      * @param ownership the mode and project identity stamped on every object created here
+     * @param imageContract the check the sandbox image's contract label must pass (FR5)
      */
     ContainerMaterializer(
-            DockerCli docker, String key, Path sourceClone, TaskContainerSettings settings, ObjectOwnership ownership) {
+            DockerCli docker,
+            String key,
+            Path sourceClone,
+            TaskContainerSettings settings,
+            ObjectOwnership ownership,
+            ImageContractCheck imageContract) {
         this.docker = docker;
         this.key = key;
         this.sourceClone = sourceClone;
         this.settings = settings;
         this.ownership = ownership;
         this.boxGit = new BoxGitFloor(docker, key, ownership);
+        this.imageContract = imageContract;
     }
 
     /**
@@ -90,6 +99,13 @@ final class ContainerMaterializer {
     /** The fresh-materialize path (FR3): network, volume, seed clone, task container, scratch. */
     void create(String branch, @Nullable String commitPin) {
         String image = settings.image();
+        // The image's one inspection (design D3 of add-sandbox-base-image) comes first, before any
+        // object exists: what it says decides the box's declared-volume overrides below, and an
+        // image the runtime cannot answer for is refused with nothing left behind.
+        ImageFacts facts = imageFacts(image);
+        // FR5, NFR-R1 of add-sandbox-base-image: the contract label is judged from the same facts,
+        // before the git probe's helper container — no second inspection, no container start.
+        imageContract.require(facts);
         // The seed clone runs with the image's own git and reads the reftable factory clone: an
         // image below the floor is refused before any object exists (design D13 as amended).
         boxGit.require(image);
@@ -107,12 +123,14 @@ final class ContainerMaterializer {
                 DockerCommands.seedClone(
                         key, image, sourceClone.toAbsolutePath().toString(), branch, commitPin, ownership),
                 "seed clone");
-        // The image's declared volume paths are read here, at the call site that owns the
-        // runtime-outage policy, and never inside the pure argv builder (design D3): a declared
-        // path with no explicit mount would otherwise get an anonymous, unlabelled volume the
-        // lifecycle model cannot see. The working copy is the one destination this container
-        // mounts itself, so an image declaring it keeps the factory's volume.
-        DeclaredVolumeOverrides overrides = declaredVolumeOverrides(image);
+        // The image's declared volume paths come from the facts read above, at the call site that
+        // owns the runtime-outage policy, and never inside the pure argv builder (design D3 of
+        // fix-image-declared-volumes): a declared path with no explicit mount would otherwise get an
+        // anonymous, unlabelled volume the lifecycle model cannot see. The working copy is the one
+        // destination this container mounts itself, so an image declaring it keeps the factory's
+        // volume.
+        DeclaredVolumeOverrides overrides =
+                DeclaredVolumeOverrides.resolve(facts, Set.of(ContainerTaskExecutionEnvironment.WORKING_COPY));
         management(
                 DockerCommands.runContainer(new ContainerRunSpec(
                         key,
@@ -132,12 +150,9 @@ final class ContainerMaterializer {
                         StdinSource.NONE,
                         List.of("mkdir", "-p", ContainerTaskExecutionEnvironment.SCRATCH)),
                 "create scratch");
-        // FR2: the creation anchor, logged after the last step rather than before the first — the
-        // line states that the environment exists, and a materialize that threw part-way through
-        // has not created one. Its failure is already reported by the throw.
-        // The override set rides this anchor rather than a line of its own (design D7): one
-        // lifecycle event, one anchor, and what the box's declared paths became is part of what
-        // "created" means here.
+        // FR2: the creation anchor, logged after the last step — a materialize that threw part-way
+        // created nothing, and its throw reports it. The override set rides this anchor (design D7):
+        // one lifecycle event, one anchor; what the declared paths became is part of "created".
         log.info(
                 "container environment {} created for branch {} (image {}); declared volumes made ephemeral: {}",
                 key,
@@ -147,22 +162,21 @@ final class ContainerMaterializer {
     }
 
     /**
-     * The declared-volume override set for the task container, with the owner's refusal re-thrown
-     * under this class's own naming convention: an image whose declared volumes cannot be read
-     * fails the materialize as an infrastructure failure (NFR-R1, design D4) rather than
-     * proceeding with an empty set, which would silently recreate the anonymous-volume leak. The
-     * message names the task container an operator would reach for, exactly as {@link
-     * #management} does.
+     * The sandbox image's facts, read once for this box (design D3 of add-sandbox-base-image), with
+     * the owner's refusal re-thrown under this class's own naming convention: an image whose
+     * configuration cannot be read fails the materialize as an infrastructure failure (NFR-R1,
+     * design D4 of fix-image-declared-volumes) rather than proceeding with an empty override set,
+     * which would silently recreate the anonymous-volume leak. The message names the task
+     * container an operator would reach for, exactly as {@link #management} does.
      */
-    private DeclaredVolumeOverrides declaredVolumeOverrides(String image) {
+    private ImageFacts imageFacts(String image) {
         try {
-            return DeclaredVolumeOverrides.resolve(
-                    docker, image, Set.of(ContainerTaskExecutionEnvironment.WORKING_COPY));
+            return ImageFacts.read(docker, image);
         } catch (DockerCommandFailedException e) {
             // The lower message is already inert — it was composed from the carrier docker wrote
             // (design D5) — so it is folded as text and the original stays attached as the cause.
             throw new DockerCommandFailedException(
-                    "read declared volumes",
+                    "inspect image",
                     key,
                     FactoryDockerLabels.containerName(key),
                     UntrustedText.subprocess(String.valueOf(e.getMessage())),

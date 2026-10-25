@@ -19,7 +19,10 @@ import java.io.Serial;
  * subject differs — the factory's git there, the box's here. What the image printed travels as a
  * carrier and renders through the log exit.
  *
- * <p>Implements NFR-S2 of tighten-spec-contract (findings F122, F135).
+ * <p>The remedy names the sandbox base image: its git is built at the floor, so an image built
+ * {@code FROM} it passes (FR11 of add-sandbox-base-image).
+ *
+ * <p>Implements NFR-S2 of tighten-spec-contract (findings F122, F135); FR11 of add-sandbox-base-image.
  */
 public final class BoxGitVersionRefusedException extends RuntimeException {
 
@@ -35,7 +38,8 @@ public final class BoxGitVersionRefusedException extends RuntimeException {
     public BoxGitVersionRefusedException(String image, String floor, UntrustedText printed, String reason) {
         super("the sandbox image \"" + image + "\" must carry git " + floor + " or newer (git --version in the"
                 + " image printed: " + printed.forLog() + "); the box's seed clone reads the factory clone with"
-                + " the image's git: " + reason + ". Rebuild the image with a newer git (the reference recipe"
-                + " in docs/examples/sandbox-image installs one) and point factory.sandbox.image at it.");
+                + " the image's git: " + reason + ". Rebuild the image FROM the sandbox base image, whose git meets"
+                + " the floor (the reference recipe in docs/examples/sandbox-image builds on it), keep no other"
+                + " git ahead of it on PATH, and point factory.sandbox.image at the rebuilt image.");
     }
 }

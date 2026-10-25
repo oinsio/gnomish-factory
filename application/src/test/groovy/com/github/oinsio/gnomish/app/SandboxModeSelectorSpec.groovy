@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeUnavailableException
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -174,15 +175,18 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
     }
 
     // D13, G2: an unreachable Docker runtime refuses naming both ways out — never a host fallback.
+    // D19 of add-sandbox-base-image, NFR-R2: the plan meets the runtime first, so its refusal is the
+    // typed operator precondition the box would throw, the message unchanged; the plan's other
+    // refusals (blank image above, mixed bindings, unmet needs below) stay UsageException.
     // Scenario: sandbox/execution-environment / No silent weakening
-    def "D13: an unreachable Docker runtime refuses naming both ways out"() {
+    def "D13, D19: an unreachable Docker runtime refuses as the typed runtime precondition, naming both ways out"() {
         when:
         plan(
                 pipeline(stage('a')), new BindingProperties(null, [:]), sandbox('img:1'),
                 registry(), false)
 
         then:
-        def e = thrown(UsageException)
+        def e = thrown(ContainerRuntimeUnavailableException)
         e.message.contains('Docker runtime is unreachable')
         e.message.contains("factory.bindings.default: host in ${PROJECT_FILE}")
     }
@@ -224,5 +228,20 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
         e.message.contains('[host]')
         e.message.contains("invalid factory.bindings configuration in ${PROJECT_FILE}")
         e.message.contains('factory.bindings.default: host in the project file')
+    }
+
+    def "FR13 of add-sandbox-base-image: runsInBox answers the planned mode: #binding"() {
+        given:
+        def selector = new SandboxModeSelector(new BindingProperties(binding, [:]), sandbox('img:1'), registry(), {
+            -> true
+        } as ContainerRuntimeProbe)
+
+        expect:
+        selector.runsInBox(pipeline(stage('a')), CLONE) == boxed
+
+        where:
+        binding | boxed
+        'host' | false
+        'container' | true
     }
 }

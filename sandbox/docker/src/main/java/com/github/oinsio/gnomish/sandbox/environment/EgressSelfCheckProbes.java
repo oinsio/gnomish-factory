@@ -21,6 +21,11 @@ import org.slf4j.LoggerFactory;
  * add-sandbox-core): direct egress fails, a non-allowlisted destination via the guard is denied,
  * an allowlisted one passes. Extracted from {@link EnvironmentSelfCheck} for file size; the
  * behavior is unchanged.
+ *
+ * <p>Every probe's {@code curl} takes {@code -q} as its first argument — the only position where
+ * curl honours it — so no {@code ~/.curlrc} an operator layer bakes into the image can change a
+ * verdict; the self-check runs again on every reattach (FR3, NFR-S2 of add-sandbox-base-image,
+ * design D14).
  */
 @UntrustedParser
 record EgressSelfCheckProbes(
@@ -50,7 +55,7 @@ record EgressSelfCheckProbes(
      */
     String probeDirectEgressFails() {
         String target = dialableAllowlistHost().orElse(FALLBACK_PROBE_HOST);
-        Probe probe = run("curl", "--noproxy", "*", "-sS", "-o", "/dev/null", "--max-time", "5", url(target));
+        Probe probe = run("curl", "-q", "--noproxy", "*", "-sS", "-o", "/dev/null", "--max-time", "5", url(target));
         if (probe.exitCode() == 0) {
             throw new SelfCheckFailedException(
                     "direct-egress", "direct connection to " + target + " unexpectedly succeeded");
@@ -77,6 +82,7 @@ record EgressSelfCheckProbes(
             }
             probe = run(
                     "curl",
+                    "-q",
                     "-sS",
                     "-o",
                     "/dev/null",
@@ -120,8 +126,8 @@ record EgressSelfCheckProbes(
             log.debug("self-check probe allowlisted-host skipped for {}: allowlist names no dialable host", key);
             return "allowlisted-host probe skipped (allowlist names no dialable host)";
         }
-        Probe probe =
-                run("curl", "-sS", "-o", "/dev/null", "--max-time", "15", "-x", guard.proxyUrl(), url(target.get()));
+        Probe probe = run(
+                "curl", "-q", "-sS", "-o", "/dev/null", "--max-time", "15", "-x", guard.proxyUrl(), url(target.get()));
         if (probe.exitCode() != 0) {
             throw new SelfCheckFailedException(
                     "allowlisted-host", "allowlisted " + target.get() + " unreachable via guard: " + probe);

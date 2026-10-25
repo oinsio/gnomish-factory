@@ -56,14 +56,14 @@ class FeedCycleSpec extends Specification {
 
     private static FeedCycle cycle(
             Tracker tracker, SlotLedger ledger, SlotRunner runner = { TaskRef ref -> } as SlotRunner,
-            RemoteOutageGate gate = RemoteOutageGateFixtures.closedGate()) {
+            DaemonCondition gate = DaemonConditionFixtures.closedGate()) {
         // Budgeted: a mutant that breaks claimOrAbandon outright (e.g. assign(null) -> NPE) spins
         // FeedOutageRetry's retry-forever loop; the budget fails the spec instead of hanging it.
         def sleeper = new BudgetedVirtualSleeper(new VirtualClock())
         def outageRetry = new FeedOutageRetry(sleeper, {
             Duration.ofSeconds(1)
         }, RepeatSuppressorFixture.quiet())
-        def resilience = new FeedResilience(outageRetry, new FinishedDecline(RepeatSuppressorFixture.quiet()), gate)
+        def resilience = new FeedResilience(outageRetry, new FinishedDecline(RepeatSuppressorFixture.quiet()), new DaemonConditions(gate, []))
         new FeedCycle(new FeedTracker(tracker, INSTANCE), ledger, runner, new FeedSelection(BASE, CAP, 2, new Random(0)),
                 new FeedStateLogger(), resilience)
     }
@@ -112,7 +112,7 @@ class FeedCycleSpec extends Specification {
                 claimCalls.incrementAndGet(); new ClaimResult.Acquired(new ClaimEpoch(1))
             },
         ] as Tracker
-        def gate = RemoteOutageGateFixtures.closedGate()
+        def gate = DaemonConditionFixtures.closedGate()
         gate.openOnFailure("boom")
 
         when:
@@ -128,7 +128,7 @@ class FeedCycleSpec extends Specification {
     }
 
     // FR14, NFR-O1 of add-base-ref-resolution: abandoning while the gate is open feeds the
-    //     outage's own releasedClaims count (RemoteOutageGate#claimReleasedWhileOpen), so the
+    //     outage's own releasedClaims count (DaemonCondition#claimReleasedWhileOpen), so the
     //     eventual remoteOutage ledger line reports how many claims the outage cost — read back
     //     here through onClosedOutage once the gate closes.
     def "claimOrAbandon while the gate is open counts the abandoned permit toward the outage's released claims"() {
@@ -149,8 +149,8 @@ class FeedCycleSpec extends Specification {
                         0.0
                     }
                 }
-        def gate = new RemoteOutageGate(
-                baseRefGit, Path.of('.'), clock, noJitter, Duration.ofSeconds(1), Duration.ofMinutes(1),
+        def gate = new DaemonCondition(
+                ConditionSubject.remote(baseRefGit, Path.of('.')), clock, noJitter, Duration.ofSeconds(1), Duration.ofMinutes(1),
                 new RemoteOutageWiring('origin', RepeatSuppressorFixture.quiet(), Duration.ofHours(1), {}, { RemoteOutageClosedOutage outage ->
                     received.set(outage)
                 }))

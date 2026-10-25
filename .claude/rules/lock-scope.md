@@ -154,7 +154,7 @@ share; its step table is the model, and `DeliveredCleanupRaceSpec` is the race s
 
 The property is invisible to a single-threaded spec — the one that would catch it drives real
 threads against a collaborator that blocks on a latch and asserts the waiter returns promptly
-(`RemoteOutageGateProbeConcurrencySpec` is the in-repo model). A change that introduces the
+(`DaemonConditionProbeConcurrencySpec` is the in-repo model). A change that introduces the
 three-phase shape writes that spec; without it the regression is silent.
 
 ## How this is checked

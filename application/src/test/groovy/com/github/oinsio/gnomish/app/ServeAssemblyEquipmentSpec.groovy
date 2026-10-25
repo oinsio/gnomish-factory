@@ -83,10 +83,12 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
     // Scenario: serve/factory-serve / A restart forgets the gate
     def "the remote-outage gate starts closed"() {
         when:
-        def gate = builders.remoteOutageGate(BaseRefGit.UNWIRED, CLONE_DIR, { -> }, { outage -> })
+        def conditions = builders.daemonConditions(BaseRefGit.UNWIRED, CLONE_DIR, { -> }, { outage -> }, { kind ->
+            Optional.empty()
+        })
 
         then:
-        !gate.health().open()
+        !conditions.remote().health().open()
     }
 
     // FR9 of add-serve-observability; FR10 of add-project-registry: the ledger lands in the

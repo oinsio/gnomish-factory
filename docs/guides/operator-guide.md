@@ -51,8 +51,9 @@ directory *inside* a registered clone stops naming the clone to use instead.
 Make every clone on git's **reftable** ref backend: `git clone --ref-format=reftable
 <origin-url> <dir>`. The factory moves a task branch and its register in one ref
 transaction, and only reftable writes that transaction atomically on disk. A run on a
-clone with the default `files` backend stops before it writes anything, with a `[GF162]`
-line naming the clone; the remedy is a fresh clone made that way and registered with
+clone with the default `files` backend stops before it writes anything with the check's
+message naming the clone: `take` and `run` exit 8 with their one line (`[GF171]`, `[GF172]`),
+and `serve` refuses at startup, before its first claim, with `[GF173]` (exit 1); the remedy is a fresh clone made that way and registered with
 `gnomish project add` — push any branch that exists only in the old clone first — or,
 for a clone with no worktrees, git's own in-place `git refs migrate --ref-format=reftable`
 (the factory migrates nothing itself; git refuses the migration while worktrees exist).
@@ -833,6 +834,7 @@ queue is a clean no-op — the expected steady state of a cron-driven factory.
 | 1    | failure outside a claimed run (tracker unreachable at startup, label provisioning failure)                                                                                                                          |
 | 2    | usage error — including an unregistered `--dir` or a configuration violation, reported before any tracker call                                                                                                      |
 | 3    | pipeline load failure                                                                                                                                                                                               |
+| 8    | operator precondition unmet after the claim — the clone's ref backend, the container runtime, the image contract or the image's git floor; the claim is released plain and the `[GF171]` line carries the fix       |
 | 10   | parked as escalation — a decision is needed                                                                                                                                                                         |
 | 11   | parked as a manual checkpoint, awaiting approval — move the task back to ready to approve it                                                                                                                        |
 | 12   | infrastructure abort, below the abort threshold — task returned to `Ready`                                                                                                                                          |
@@ -841,6 +843,6 @@ queue is a clean no-op — the expected steady state of a cron-driven factory.
 | 15   | refused or skipped (held by another instance, already delivered, closed/nonexistent, foreign repo)                                                                                                                  |
 | 16   | infrastructure unavailable — claim released because a base-ref remote could not be reached; see [`operator-guide-serve.md`](operator-guide-serve.md#base-ref-resolution-task-branchbase-and-the-remote-outage-gate) |
 
-Codes shared with `gnomish run` (0/1/2/3/10/11/12) keep the same meaning. An
+Codes shared with `gnomish run` (0/1/2/3/8/10/11/12) keep the same meaning. An
 uncaught exception during a take run always runs the abort protocol first and
 exits 12 or 13 — never a bare 1.

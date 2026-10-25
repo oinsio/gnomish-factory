@@ -30,14 +30,14 @@ class RemoteOutageGatesSignalingSpec extends Specification {
     //     bundle came with; the branch port is the one the lookup's outage signals through (F88).
     def "signaling returns the same bundle with only its base-ref and branch ports replaced"() {
         given:
-        def gate = RemoteOutageGateFixtures.closedGate()
+        def gate = DaemonConditionFixtures.closedGate()
         def push = UnaryOperator.identity()
         def git = new TaskGit(
                 Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), push, BaseRefGit.UNWIRED,
                 new ClaimEpochBook())
 
         when:
-        def decorated = RemoteOutageGates.signaling(git, gate)
+        def decorated = RemoteOutageGates.signaling(git, new DaemonConditions(gate, []))
 
         then:
         decorated.store().is(git.store())
@@ -57,7 +57,7 @@ class RemoteOutageGatesSignalingSpec extends Specification {
     //     forwarded unchanged.
     def "a base read through the decorated git reports to the gate"() {
         given:
-        def gate = RemoteOutageGateFixtures.closedGate()
+        def gate = DaemonConditionFixtures.closedGate()
         def outage = new BaseRefreshOutcome.Unavailable(UntrustedText.subprocess('connection refused'))
         def remote = [refresh: { Path d, String r ->
                 outage
@@ -67,7 +67,7 @@ class RemoteOutageGatesSignalingSpec extends Specification {
                 new ClaimEpochBook())
 
         when:
-        def outcome = RemoteOutageGates.signaling(git, gate).baseRefs().refresh(CLONE, 'main')
+        def outcome = RemoteOutageGates.signaling(git, new DaemonConditions(gate, [])).baseRefs().refresh(CLONE, 'main')
 
         then:
         outcome.is(outage)
@@ -79,7 +79,7 @@ class RemoteOutageGatesSignalingSpec extends Specification {
     //     git its outage opens the same gate a base refresh would.
     def "a task-branch lookup through the decorated git reports to the gate"() {
         given:
-        def gate = RemoteOutageGateFixtures.closedGate()
+        def gate = DaemonConditionFixtures.closedGate()
         def branches = Stub(TaskBranchGit) {
             classifyShape(CLONE, 'PROJ-1') >> {
                 throw new BranchLocationUnavailableException('PROJ-1', UntrustedText.subprocess('connection refused'))
@@ -90,7 +90,7 @@ class RemoteOutageGatesSignalingSpec extends Specification {
                 new ClaimEpochBook())
 
         when:
-        RemoteOutageGates.signaling(git, gate).branches().classifyShape(CLONE, 'PROJ-1')
+        RemoteOutageGates.signaling(git, new DaemonConditions(gate, [])).branches().classifyShape(CLONE, 'PROJ-1')
 
         then:
         thrown(BranchLocationUnavailableException)

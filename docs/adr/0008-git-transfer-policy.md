@@ -62,11 +62,11 @@ flowchart LR
 
 ### The transfer sources
 
-| Source | Trust | Subcommand | `GIT_ALLOW_PROTOCOL` | Configuration isolation | Per-source flags |
-|--------|-------|------------|----------------------|-------------------------|------------------|
-| `Origin` | trusted remote | `fetch origin <refspec>` | `https:http:ssh:file` | keeps the operator's global configuration; every key the common set depends on is re-asserted by `-c` | `--refmap=` |
-| `Container(extUrl)` | untrusted box | `fetch <ext-url> <refspec>` | `ext` | global file, system file and XDG config home point at `/dev/null` | none |
-| `SeedPath(source, destination)` | operator clone read into a box | `clone --no-local --no-hardlinks --single-branch --branch <b> <source> <destination>` | `file` | system file and XDG config home point at `/dev/null`; the global file is the seed helper's throwaway `safe.directory` file, holding nothing else | no fetch-only flag |
+| Source                          | Trust                          | Subcommand                                                                            | `GIT_ALLOW_PROTOCOL`  | Configuration isolation                                                                                                                          | Per-source flags   |
+|---------------------------------|--------------------------------|---------------------------------------------------------------------------------------|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|--------------------|
+| `Origin`                        | trusted remote                 | `fetch origin <refspec>`                                                              | `https:http:ssh:file` | keeps the operator's global configuration; every key the common set depends on is re-asserted by `-c`                                            | `--refmap=`        |
+| `Container(extUrl)`             | untrusted box                  | `fetch <ext-url> <refspec>`                                                           | `ext`                 | global file, system file and XDG config home point at `/dev/null`                                                                                | none               |
+| `SeedPath(source, destination)` | operator clone read into a box | `clone --no-local --no-hardlinks --single-branch --branch <b> <source> <destination>` | `file`                | system file and XDG config home point at `/dev/null`; the global file is the seed helper's throwaway `safe.directory` file, holding nothing else | no fetch-only flag |
 
 `Origin` and `Container` are fetch sources; `SeedPath` is a clone source. The
 split is a type, so a clone value can never carry a fetch-only flag and a
@@ -129,11 +129,11 @@ holds exactly the task branch and no tag.
 
 ### What each source may and may not change
 
-| Source | May change | May not change |
-|--------|------------|----------------|
-| `Origin` | the one destination the refspec names (`refs/remotes/origin/<n>`, or a `refs/tags/<n>` that did not exist, per ADR 0006); the object database | the working tree, the index, `HEAD`, any `refs/heads/*`, any pre-existing `refs/tags/*`, any other `refs/remotes/origin/*`, `FETCH_HEAD`, any submodule |
-| `Container` | the one task-branch ref the factory-fixed refspec names, fast-forward only; the object database | everything else in the operator clone: no tag, no other ref, no `FETCH_HEAD`, no submodule, no configuration, no hook |
-| `SeedPath` | the new working copy in the box: the one task branch and its objects | the factory clone (read only, through the transport path, no hardlinks); the box receives no tag, no other branch, no credential, no remote address |
+| Source      | May change                                                                                                                                    | May not change                                                                                                                                          |
+|-------------|-----------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Origin`    | the one destination the refspec names (`refs/remotes/origin/<n>`, or a `refs/tags/<n>` that did not exist, per ADR 0006); the object database | the working tree, the index, `HEAD`, any `refs/heads/*`, any pre-existing `refs/tags/*`, any other `refs/remotes/origin/*`, `FETCH_HEAD`, any submodule |
+| `Container` | the one task-branch ref the factory-fixed refspec names, fast-forward only; the object database                                               | everything else in the operator clone: no tag, no other ref, no `FETCH_HEAD`, no submodule, no configuration, no hook                                   |
+| `SeedPath`  | the new working copy in the box: the one task branch and its objects                                                                          | the factory clone (read only, through the transport path, no hardlinks); the box receives no tag, no other branch, no credential, no remote address     |
 
 The operator's `git for-each-ref` before and after any factory operation
 differs only in the refs this table names for it (UX1).
@@ -175,11 +175,11 @@ Git reports a refusal as `error: object <id>: <msg-id>: …` per object and
 a failed fetch asks it first, before its own daemon, non-fast-forward, or
 probe decision, and maps a present value in its own vocabulary:
 
-| Site | Refusal becomes |
-|------|-----------------|
-| harvest classification | a boundary violation of the box, the same outcome as a rewritten history |
-| branch and tag base refresh, commit base fetch | a task-level park (`Refused`) with a report naming the object and the message id |
-| task-branch locate | `BranchLocation.Refused`; the claimed take parks the task as a corrupt-branch quarantine, every other reader throws a deterministic refusal exception, so no consumer can route it to a fresh claim or to absence |
+| Site                                           | Refusal becomes                                                                                                                                                                                                   |
+|------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| harvest classification                         | a boundary violation of the box, the same outcome as a rewritten history                                                                                                                                          |
+| branch and tag base refresh, commit base fetch | a task-level park (`Refused`) with a report naming the object and the message id                                                                                                                                  |
+| task-branch locate                             | `BranchLocation.Refused`; the claimed take parks the task as a corrupt-branch quarantine, every other reader throws a deterministic refusal exception, so no consumer can route it to a fresh claim or to absence |
 
 A validation refusal is the repository's or the box's, never the daemon's:
 it burns no stage attempt as a quality failure and never charges the outage
@@ -282,6 +282,9 @@ inside the box — keeps its own floor, 2.51.0, with the reasons above, until
 `add-sandbox-base-image` raises it to 2.56.0 and joins the two again. No
 factory policy runs inside the box, so the box needs no event switch, and the
 images it runs today ship 2.53 or 2.54.
+`add-sandbox-base-image` (design D9) did so: the sandbox base image builds its
+git from the same pinned script as the factory's CI, every test image builds on
+it, and the box is held to the one floor, 2.56.0.
 
 ### Origin contact for the outage accounting of ADR 0005
 

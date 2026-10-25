@@ -7,7 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Every log line {@link RemoteOutageGate} emits, extracted so the gate's own file stays a state
+ * Every log line {@link DaemonCondition} emits, extracted so the gate's own file stays a state
  * machine (process-invariants.md file-size target) — mirrors {@link SlotOutcomeLog}'s split from
  * its caller. One WARN on open, one ERROR the first time an outage crosses the sustained-open
  * threshold, DEBUG-only for every failed probe in between (the {@link
@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
  */
 final class RemoteOutageGateLog {
 
-    private static final Logger log = LoggerFactory.getLogger(RemoteOutageGate.class);
+    private static final Logger log = LoggerFactory.getLogger(DaemonCondition.class);
 
     private RemoteOutageGateLog() {}
 

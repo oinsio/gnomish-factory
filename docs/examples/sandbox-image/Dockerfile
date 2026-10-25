@@ -1,114 +1,55 @@
 # Reference sandbox image for gnomish-factory container mode.
-# Implements UX4, FR20 of add-sandbox-core (design D7).
+# Implements FR9, UX1 of add-sandbox-base-image (design D1, D5, D14); UX4 of add-sandbox-core.
 #
-# The factory's image contract (what the container adapter and self-check assume):
-#   - git 2.51.0 or newer and curl on PATH: the seed clone runs the image's git
-#     against the factory clone, which is on the reftable ref backend, judged
-#     against the box's git floor (2.51.0; the factory's host floor, 2.56.0,
-#     does not apply in the box), and the factory refuses an older git
-#     before seeding; curl runs the egress self-check probes (FR8)
-#   - a non-root user with uid 1000 named `gnome` owning /gnomish/** — every
-#     exec, including the seed clone, runs as this user, never root
-#   - injection-persistence surfaces (agent-CLI policy, proxy/CA/build configs)
-#     root-owned, so the gnome cannot rewrite the rules of its own cage (FR20)
+# Every item of the factory's image contract comes from the sandbox base image: the `gnome` user
+# (uid 1000) owning /gnomish/**, the root-owned control surfaces and home, the egress guard's proxy
+# for curl-class tools, JVM tools and Maven, git at the factory's floor, and the helpers. This file
+# adds only a toolchain and the agent CLI, declares the toolchain's home directories, then runs the
+# helpers.
 #
-# Registry endpoints and the proxy address are build parameters, never
-# hardcoded (D7): a future artifact depot or a private mirror is a --build-arg,
-# not an image edit.
-# Ubuntu 26.04: its archive git (2.53) meets the box's floor; noble's 2.43 does not
-# (a noble-based image needs the git-core PPA).
-ARG BASE_IMAGE=eclipse-temurin:21-jdk-resolute
-FROM ${BASE_IMAGE}
+# The base's proxy names the egress guard, which exists only on a box's task network, so a
+# download in a stage FROM the base fails at build time. Everything this recipe downloads is
+# fetched in a stage of its own and grafted into the final stage with COPY --from.
+#
+# GNOMISH_BASE_TAG: the base of the factory release this recipe ships with (the release archive
+# stamps its own base tag here: X.Y, or the full version of a pre-release). Pin X.Y.Z or a digest
+# for a build that never moves; X.Y is rebuilt weekly with Ubuntu's security updates.
+ARG GNOMISH_BASE_TAG=0.1
 
+# The JDK, grafted from the official image.
+FROM eclipse-temurin:25-jdk-noble AS jdk
+
+# Node from the official tarball, checksum-verified (a new NODE_VERSION needs its two SHA-256 sums
+# from SHASUMS256.txt), and the agent CLI installed into it — baked at build time, since the box
+# has no route to any registry at run time. Download endpoints are build parameters, never
+# hardcoded (design D7 of add-sandbox-core).
+FROM ubuntu:24.04 AS node
+ARG TARGETARCH
+ARG NODE_VERSION=24.22.1
+ARG NODE_DIST_URL=https://nodejs.org/dist
 ARG NPM_REGISTRY=https://registry.npmjs.org/
-ARG MAVEN_MIRROR_URL=https://repo.maven.apache.org/maven2
 ARG AGENT_CLI_PACKAGE=@anthropic-ai/claude-code
-# The egress guard's stable network alias on the task network; matches the
-# factory's GuardCommands alias. Override only if the factory's changes.
-ARG PROXY_HOST=gnomish-guard
-ARG PROXY_PORT=8080
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
+ && case "${TARGETARCH}" in \
+      amd64) arch=x64 sum=6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6 ;; \
+      arm64) arch=arm64 sum=dbabf7a1cbf947e6059ffad2c27b80041db97dea1e553b62afdee7f13fca336e ;; \
+      *) echo "no Node build for ${TARGETARCH}" >&2; exit 1 ;; esac \
+ && curl -fsSL -o /tmp/node.tar.xz "${NODE_DIST_URL}/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${arch}.tar.xz" \
+ && echo "${sum}  /tmp/node.tar.xz" | sha256sum -c - \
+ && mkdir /opt/node && tar -xJf /tmp/node.tar.xz -C /opt/node --strip-components=1 --no-same-owner \
+ && PATH="/opt/node/bin:${PATH}" npm install -g --registry "${NPM_REGISTRY}" "${AGENT_CLI_PACKAGE}"
 
-# Toolchain: git (>= 2.51.0, the box's floor, from the base's own archive) + curl are the image
-# contract; node runs the agent CLI.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends git curl ca-certificates nodejs npm \
- && rm -rf /var/lib/apt/lists/*
-
-# Agent CLI baked at build time — the box has no route to any registry at run
-# time (the guard default-denies), so nothing may rely on in-box installs.
-RUN npm install -g --registry "${NPM_REGISTRY}" "${AGENT_CLI_PACKAGE}"
-
-# Factory CA seam (design D4): any *.pem / *.crt dropped into ca/ next to this
-# Dockerfile is imported into the system and JVM trust stores at build time.
-# Until change B the factory does not intercept TLS, so ca/ may stay empty —
-# baking the seam now means change B is a rebuild with one file, not a redesign.
-COPY ca/ /tmp/gnomish-ca/
-RUN set -e; \
-    for cert in /tmp/gnomish-ca/*.pem /tmp/gnomish-ca/*.crt; do \
-      [ -f "$cert" ] || continue; \
-      b="$(basename "$cert")"; \
-      cp "$cert" "/usr/local/share/ca-certificates/${b%.*}.crt"; \
-      keytool -importcert -noprompt -cacerts -storepass changeit \
-        -alias "gnomish-${b%.*}" -file "$cert"; \
-    done; \
-    update-ca-certificates; \
-    rm -rf /tmp/gnomish-ca
-
-# The in-box task user: uid 1000, owns the adapter's two file-channel roots.
-# The factory never overrides the image user, so everything — seed clone, agent
-# rounds, checks — runs as gnome. Ubuntu-family bases ship a uid-1000 `ubuntu`
-# user, so an existing uid 1000 is renamed rather than duplicated.
-RUN if getent passwd 1000 >/dev/null; then \
-      old="$(getent passwd 1000 | cut -d: -f1)"; \
-      usermod -l gnome -d /home/gnome -m "$old"; \
-      groupmod -n gnome "$(getent group "$(id -g gnome)" | cut -d: -f1)"; \
-    else \
-      useradd -m -u 1000 gnome; \
-    fi \
- && mkdir -p /gnomish/work /gnomish/scratch \
- && chown -R gnome:gnome /gnomish
-
-# Root-owned build configs (FR20). The JVM ignores proxy environment variables,
-# so Gradle/Maven builds reach the guard only through baked system properties;
-# Maven additionally gets a settings file with the proxy and a mirror whose URL
-# is a build parameter (the artifact-depot seam, D7). /etc/gnomish is root-owned
-# end to end — a root-owned file inside a gnome-writable directory could simply
-# be unlinked, so the whole directory is the surface.
-RUN mkdir -p /etc/gnomish/maven \
- && printf '%s\n' \
-    '<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">' \
-    '  <proxies>' \
-    "    <proxy><id>gnomish</id><active>true</active><protocol>http</protocol><host>${PROXY_HOST}</host><port>${PROXY_PORT}</port></proxy>" \
-    "    <proxy><id>gnomish-s</id><active>true</active><protocol>https</protocol><host>${PROXY_HOST}</host><port>${PROXY_PORT}</port></proxy>" \
-    '  </proxies>' \
-    '  <mirrors>' \
-    "    <mirror><id>gnomish-mirror</id><mirrorOf>central</mirrorOf><url>${MAVEN_MIRROR_URL}</url></mirror>" \
-    '  </mirrors>' \
-    '</settings>' \
-    > /etc/gnomish/maven/settings.xml \
- && chown -R root:root /etc/gnomish \
- && chmod -R a+rX,go-w /etc/gnomish
-
-# Agent-CLI policy surface (FR20): managed settings override anything the gnome
-# writes under its own home, and the directory is root-owned. Operators put
-# their agent policy here (e.g. disallowed tools); an empty object is a valid
-# baseline.
-RUN mkdir -p /etc/claude-code \
- && printf '{}\n' > /etc/claude-code/managed-settings.json \
- && chown -R root:root /etc/claude-code \
- && chmod 0755 /etc/claude-code && chmod 0644 /etc/claude-code/managed-settings.json
-
-# Runtime environment (D6: the image, not the factory, supplies the box env).
-# ENV is fixed at container creation — an in-box process cannot persist a
-# change into later execs. Proxy spellings for both tool families; JVM system
-# properties because the JVM ignores the env-var spellings.
-ENV HTTP_PROXY=http://${PROXY_HOST}:${PROXY_PORT} \
-    HTTPS_PROXY=http://${PROXY_HOST}:${PROXY_PORT} \
-    http_proxy=http://${PROXY_HOST}:${PROXY_PORT} \
-    https_proxy=http://${PROXY_HOST}:${PROXY_PORT} \
-    JAVA_TOOL_OPTIONS="-Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}" \
-    GRADLE_OPTS="-Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT}" \
-    MAVEN_ARGS="-s /etc/gnomish/maven/settings.xml"
-
+FROM ghcr.io/oinsio/gnomish-sandbox-base:${GNOMISH_BASE_TAG}
+USER root
+COPY --from=jdk /opt/java/openjdk /opt/java/openjdk
+COPY --from=node /opt/node /opt/node
+ENV JAVA_HOME=/opt/java/openjdk \
+    PATH=/opt/java/openjdk/bin:/opt/node/bin:${PATH}
+# The CA seam: any *.pem / *.crt dropped into ca/ next to this file is imported into the system and
+# JVM trust stores by gnomish-trust-ca; ca/ may stay empty.
+COPY --chmod=0644 ca/ /etc/gnomish/ca/
+# The gnome's home is root-owned: gnomish-home-dir declares the toolchains' own directories under it
+# gnome-writable (design D14), and a write anywhere else under the home fails. Then the trust stores
+# and the verification of the whole contract, as root, after every other step.
+RUN gnomish-home-dir .m2 .gradle .npm && gnomish-trust-ca && gnomish-verify-image
 USER gnome
-WORKDIR /gnomish/work

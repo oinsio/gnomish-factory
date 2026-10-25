@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.serveobservability.json;
 
+import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
@@ -25,6 +26,8 @@ import org.jspecify.annotations.Nullable;
  * @param remote the remote outage gate section, one entry per remote target (NFR-O3, UX6 of
  *     add-base-ref-resolution); {@code null} only when reading a document written before this
  *     change — a reader treats that as "no gate known", never as an empty-but-known section
+ * @param conditions the daemon conditions section, the remote's entry first; {@code null} in a
+ *     document written before it existed, which a reader derives from {@code remote}
  */
 public record SnapshotDto(
         int version,
@@ -36,4 +39,5 @@ public record SnapshotDto(
         SlotsDto slots,
         VitalsDto vitals,
         TrackerDto tracker,
-        @Nullable Map<String, RemoteDto> remote) {}
+        @Nullable Map<String, RemoteDto> remote,
+        @Nullable List<ConditionDto> conditions) {}

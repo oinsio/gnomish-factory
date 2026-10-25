@@ -10,3 +10,27 @@
 // module applying both lists this plugin AFTER it; the release workflow's identity check
 // (the unpacked archive's `--version` against the tag, FR8) is what catches the reverse order.
 version = providers.gradleProperty('releaseVersion').getOrElse('0.0.0-dev')
+
+// The base tag of the release (design D11 of add-sandbox-base-image), computed here once: the tag
+// of the sandbox base image this release names — `X.Y` for a final release (the leading
+// `MAJOR.MINOR` of a version with no `-` suffix), the whole version for a pre-release, which never
+// moves `X.Y`. A development build (`0.0.0-dev`) has none, so the provider is absent. Exposed to
+// the applying project as `baseTag` (a `Provider<String>`): `packaging.gradle` hands it to Boot's
+// build info (`build.baseTag`, read by `FactoryVersion`) and stamps it into the shipped recipe.
+// A `releaseVersion` with no leading `MAJOR.MINOR.` fails the build: the release workflow only
+// hands over a version its preflight accepted, so no real release meets this.
+//
+// Kept in sync with `scripts/release-preflight.sh` (`base_tag_of`, printed as `base_tag=`): both
+// take `MAJOR.MINOR` of a version without a suffix and the whole version with one, so the base
+// the release job pushes is the one the factory names. `BaseTagIdentityFunctionalSpec` pins it.
+def productVersion = version.toString()
+def productBaseTag = null
+if (productVersion != '0.0.0-dev') {
+    def line = productVersion =~ /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\./
+    if (!line.find()) {
+        throw new GradleException("releaseVersion '${productVersion}' has no leading MAJOR.MINOR.; " +
+                'expected MAJOR.MINOR.PATCH with an optional -suffix (e.g. 0.2.0, 0.2.0-rc.1)')
+    }
+    productBaseTag = productVersion.contains('-') ? productVersion : "${line.group(1)}.${line.group(2)}".toString()
+}
+ext.baseTag = providers.provider { productBaseTag }

@@ -174,7 +174,7 @@ doubling off `RestartBackoff`, capped at `factory.serve.remote-probe-interval-ca
 (default 10 minutes) — resets to the idle value only on the first
 *successful base refresh* after a close, never on the probe that closed the
 gate — a flapping remote that answers `ls-remote` but fails the fetch
-therefore meets a growing pause, not a restarted one. This is `RemoteOutageGate`
+therefore meets a growing pause, not a restarted one. This is the remote `DaemonCondition` (named `RemoteOutageGate` until `add-sandbox-base-image`)
 and its extracted `RemoteOutageProbeSchedule`: `openedFreshly()` arms a
 pending reset, `probeFailed()` re-arms the next interval off the *same*
 backoff instance so a gate that closes and reopens before a refresh ever

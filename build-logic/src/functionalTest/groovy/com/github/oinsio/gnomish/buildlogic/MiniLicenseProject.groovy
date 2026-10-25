@@ -93,7 +93,7 @@ dependencies {
 
     private static Path allowlist() {
         String path = System.getProperty('gnomish.allowedLicensesFile')
-        assert path != null: 'functionalTest must pass -Dgnomish.allowedLicensesFile (see build-logic/build.gradle)'
+        assert path != null: 'functionalTest must pass -Dgnomish.allowedLicensesFile (see build-logic/functional-test-inputs.gradle)'
         Path.of(path)
     }
 

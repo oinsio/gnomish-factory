@@ -156,6 +156,10 @@ class RawCaptureOwners {
             'no mint owed: test-time only — drains a docker prerequisite probe whose bytes are discarded, so a spec skips instead of failing offline',
         ],
         [
+            'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/sandbox/environment/TestDockerCommand.groovy',
+            'no mint owed: test-time only — the one launch of the container fixtures (FR10 of add-sandbox-base-image): runs a docker command, or the contract build-arguments script SandboxBaseImage feeds into its docker build, with its merged output in a file read after the exit, and answers that text to the calling fixture or spec for assertions and build arguments. It is not on any runtime path, and the scan sees it because RepoSourceTree walks every src/main in the build, :test-fixtures included',
+        ],
+        [
             'test-fixtures/src/main/groovy/com/github/oinsio/gnomish/sandbox/environment/GroupLeader.groovy',
             'no mint owed: test-time only — reads the one readiness line a committed stand-in preset prints once it leads its process group, compares it with the library\'s own answer and discards it (design D19 of fix-terminal-receipt-convergence, the group sweep specs)',
         ],

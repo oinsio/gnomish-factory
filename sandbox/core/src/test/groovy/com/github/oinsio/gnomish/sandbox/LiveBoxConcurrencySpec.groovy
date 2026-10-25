@@ -12,7 +12,7 @@ import spock.lang.Specification
  * FR21, M9 of make-checkpoint-gate-durable (D13): a materialize runs with the live box's monitor
  * released (`lock-scope.md`) — a reader never waits for it, a same-key request joins the one
  * build, every other writer waits on the build's future, never on the monitor. Real threads and a
- * materializer blocked on a latch, the {@code RemoteOutageGateProbeConcurrencySpec} model; {@code
+ * materializer blocked on a latch, the {@code DaemonConditionProbeConcurrencySpec} model; {@code
  * LiveBoxSpec} owns the single-threaded contract. A thread waits on the build once it parks
  * ({@code WAITING}); every wait here is bounded.
  */

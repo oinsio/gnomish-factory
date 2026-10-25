@@ -69,7 +69,9 @@ class TakeSlotRunnerSpec extends Specification implements BareGitRepoFixture, Ap
     RegisteredClone registeredClone
     def gitRunner = new GitProcessRunner()
     Tracker tracker = Mock()
-    RemoteOutageGate remoteOutageGate = RemoteOutageGates.forServe(BaseRefGit.UNWIRED, Path.of('.'), new ServeProperties(0, null, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> })
+    DaemonConditions conditions = RemoteOutageGates.forServe(BaseRefGit.UNWIRED, Path.of('.'), new ServeProperties(0, null, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> }, { kind ->
+        Optional.empty()
+    })
 
     def setup() {
         cloneDir = initWorkingRepo(tempDir, 'my-project')
@@ -139,13 +141,13 @@ tracker:
         def assembly = newAssembly(properties, VirtualTimeEquipment.create())
         def abortHandler = new AbortHandler(tracker, assembly.timeEquipment().clock())
         def wiring = new SlotWiring(
-                assembly, RemoteOutageGates.signaling(TaskGitFixture.real(), remoteOutageGate),
+                assembly, RemoteOutageGates.signaling(TaskGitFixture.real(), conditions),
                 registeredClone, MDC_KEY, new AbortFuse(abortHandler, ABORT_THRESHOLD), [],
                 ContainerTakeSupportFixture.hostOnly(), new ClaimTenure(ClaimBeat.NONE, new ClaimLossFlag()),
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
         new TakeSlotRunner(
                 wiring, new RunOrder(cloneDir, null, pipeline(), false),
-                tracker, INSTANCE)
+                tracker, INSTANCE, conditions)
     }
 
     // Slot body unchanged — a pre-claimed fresh task dispatches through
@@ -173,14 +175,14 @@ tracker:
         given:
         tracker.fetchTask(new TaskRef('PROJ-1')) >> workingTask('PROJ-1')
         def slotRunner = newSlotRunner()
-        assert remoteOutageGate.health().lastSuccessAt() == null
+        assert conditions.remote().health().lastSuccessAt() == null
 
         when:
         slotRunner.run(new TaskRef('PROJ-1'))
 
         then:
-        remoteOutageGate.health().lastSuccessAt() != null
-        !remoteOutageGate.isOpen()
+        conditions.remote().health().lastSuccessAt() != null
+        !conditions.remote().isOpen()
     }
 
     // MDC is set to the claimed ref's id for the duration of the run and cleared once it

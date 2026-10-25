@@ -33,6 +33,9 @@ plugins {
 // growth is additive for every pre-existing type, so no pre-1.0 version bump is
 // owed and `japicmpApiGate` stays green against the committed jars.
 //
+// D19 of add-sandbox-base-image: 0.12.0 -> 0.13.0, the eleventh BREAKING move — two retired
+// `OperatorEvent` constants removed (README, "Versioning"); `compat-baseline/` regenerated.
+//
 // FR13, NFR-S2 of tighten-spec-contract (design D13): 0.11.0 -> 0.12.0, the tenth BREAKING move.
 // `BranchTipFacts` reads the registered commit: `cleanupCommitInHistory` gave way to
 // `registeredCleanup` and `TipRelation` (README, "Versioning"); `compat-baseline/` regenerated.
@@ -137,7 +140,7 @@ plugins {
 // which removes their old canonical constructors. Pre-1.0, a breaking change is
 // a MINOR bump; `compat-baseline/` was regenerated in the same commit so a
 // reviewer sees the break and the bump that accepts it in one diff.
-version = '0.12.0'
+version = '0.13.0'
 
 description = 'Third-party contract surface: tracker/secrets ports, the tracker and check SPI factories with their validators, the attempt-commit workspace capability and the findings sanitizer.'
 

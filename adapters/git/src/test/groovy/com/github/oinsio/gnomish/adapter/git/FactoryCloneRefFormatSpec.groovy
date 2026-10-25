@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException
-import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
 import java.nio.file.Path
@@ -16,6 +15,8 @@ import spock.lang.TempDir
  * register moved together — is one write on disk. The factory does not create the clone, so it
  * refuses any other backend where a run first touches the clone, with an operator reason naming
  * the remedy, before it writes anything. Real git on both backends: the backend is the subject.
+ * Design D19 of add-sandbox-base-image: the check logs nothing; the layer that decides on the
+ * refusal writes the one line.
  */
 class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixture {
 
@@ -50,7 +51,7 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         logs.list.isEmpty()
     }
 
-    def "F135, NFR-S2: a clone on the files backend is refused with the operator's remedy and one coded ERROR"() {
+    def "F135, NFR-S2: a clone on the files backend is refused with the operator's remedy, and the check writes no line"() {
         given: 'a clone the operator made before the factory required reftable'
         Path clone = filesClone()
 
@@ -69,12 +70,8 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         refused.message.contains('`git refs migrate --ref-format=reftable`')
         refused.message.contains('a clone with no worktrees')
 
-        and: 'one ERROR carries the catalog code, the clone and the reported backend'
-        logs.list.size() == 1
-        logs.list[0].level == Level.ERROR
-        logs.list[0].formattedMessage.startsWith(OperatorEvent.FACTORY_CLONE_REF_FORMAT_REFUSED.head())
-        logs.list[0].formattedMessage.contains(clone.toString())
-        logs.list[0].formattedMessage.contains('reported: files')
+        and: 'D19: the refusal is the message; the command, the startup or the condition writes the line'
+        logs.list.isEmpty()
     }
 
     def "F135: a directory git cannot read as a repository is refused, quoting git's own complaint"() {
@@ -87,7 +84,7 @@ class FactoryCloneRefFormatSpec extends Specification implements BareGitRepoFixt
         then:
         def refused = thrown(CloneRefFormatRefusedException)
         refused.message.contains('not a git repository')
-        logs.list*.level == [Level.ERROR]
+        logs.list.isEmpty()
     }
 
     def "F135: the ref-backend check refuses a files-backend clone and writes nothing to it"() {

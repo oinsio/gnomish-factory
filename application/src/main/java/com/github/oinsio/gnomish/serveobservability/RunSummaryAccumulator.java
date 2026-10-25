@@ -34,7 +34,8 @@ public final class RunSummaryAccumulator {
 
     /**
      * Records {@code result}'s contribution to the run's totals, or does nothing for {@link
-     * TakeResult.EmptyQueue}/{@link TakeResult.Skipped}/{@link TakeResult.InfrastructureUnavailable}.
+     * TakeResult.EmptyQueue}/{@link TakeResult.Skipped}/{@link TakeResult.InfrastructureUnavailable}/{@link
+     * TakeResult.OperatorPreconditionUnmet}.
      * Safe to call from any number of concurrently-finishing slot threads.
      *
      * @param result the slot's terminal result; never null
@@ -58,7 +59,10 @@ public final class RunSummaryAccumulator {
                         revoked++;
                         yield r.finalState();
                     }
-                    case TakeResult.EmptyQueue _, TakeResult.Skipped _, TakeResult.InfrastructureUnavailable _ -> null;
+                    case TakeResult.EmptyQueue _,
+                            TakeResult.Skipped _,
+                            TakeResult.InfrastructureUnavailable _,
+                            TakeResult.OperatorPreconditionUnmet _ -> null;
                 };
         if (finalState == null) {
             return;

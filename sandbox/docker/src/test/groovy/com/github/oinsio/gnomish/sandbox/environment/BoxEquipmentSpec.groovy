@@ -15,7 +15,7 @@ class BoxEquipmentSpec extends Specification implements ContainerEnvironmentsFix
     static final ResourceLimits LIMITS = new ResourceLimits('2', '2g', 512L, '10g')
 
     private BoxEquipment equipment(SandboxProperties properties) {
-        new BoxEquipment(docker, properties, timing, Path.of('/factory/guard-config'), OwnershipMode.MANUAL)
+        new BoxEquipment(docker, properties, timing, Path.of('/factory/guard-config'), OwnershipMode.MANUAL, ImageContractCheck.current())
     }
 
     def "FR13: a role's guard config renders under the installation's guard config root, in the key's own directory"() {

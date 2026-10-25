@@ -11,17 +11,17 @@ import spock.lang.Specification
 
 /**
  * FR14, NFR-R3 of add-base-ref-resolution: what the gate's monitor may and may not be held across.
- * {@link RemoteOutageGate#probeIfDue} runs a {@code git ls-remote} subprocess bounded by {@code
+ * {@link DaemonCondition#probeIfDue} runs a {@code git ls-remote} subprocess bounded by {@code
  * factory.git-network-timeout} (five minutes by default), so it runs with the monitor released
  * (CERT LCK09-J) — otherwise a dead remote stalls every slot whose base read reports back through
- * {@link RemoteOutageGate#openOnFailure}/{@link RemoteOutageGate#onSuccessfulRefresh}, both of
+ * {@link DaemonCondition#openOnFailure}/{@link DaemonCondition#onSuccessfulRefresh}, both of
  * which are pure no-ops while the gate is open.
  *
  * <p>Real threads and a probe that blocks on a latch, since the property under test is exactly the
- * one a single-threaded spec cannot see. {@code RemoteOutageGateSpec} owns the gate's mechanics on
+ * one a single-threaded spec cannot see. {@code DaemonConditionSpec} owns the gate's mechanics on
  * virtual time; this spec owns only the lock discipline around the probe.
  */
-class RemoteOutageGateProbeConcurrencySpec extends Specification {
+class DaemonConditionProbeConcurrencySpec extends Specification {
 
     private static final Duration IDLE = Duration.ofSeconds(30)
     private static final Duration CAP = Duration.ofMinutes(10)
@@ -48,8 +48,8 @@ class RemoteOutageGateProbeConcurrencySpec extends Specification {
             }] as BaseRefGit
     }
 
-    private RemoteOutageGate openGateDueForProbe(BaseRefGit baseRefGit) {
-        def gate = new RemoteOutageGate(baseRefGit, Path.of('.'), clock, NO_JITTER, IDLE, CAP)
+    private DaemonCondition openGateDueForProbe(BaseRefGit baseRefGit) {
+        def gate = new DaemonCondition(ConditionSubject.remote(baseRefGit, Path.of('.')), clock, NO_JITTER, IDLE, CAP)
         gate.openOnFailure('origin is unreachable')
         clock.advance(IDLE)
         gate

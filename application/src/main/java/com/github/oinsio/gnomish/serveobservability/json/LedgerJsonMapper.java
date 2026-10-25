@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictCategory;
+import com.github.oinsio.gnomish.serveobservability.ConditionTokens;
 import com.github.oinsio.gnomish.serveobservability.LedgerLifecycleEvent;
 import com.github.oinsio.gnomish.serveobservability.LedgerLine;
 import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage;
@@ -180,8 +181,9 @@ public final class LedgerJsonMapper {
     }
 
     /**
-     * Builds the JSON-contract DTO for a {@code remoteOutage} line (NFR-O1, NFR-O3 of
-     * add-base-ref-resolution).
+     * Builds the JSON-contract DTO for a {@code daemonCondition} line (NFR-O1, NFR-O3 of
+     * add-base-ref-resolution; NFR-O2 of add-sandbox-base-image, where the remote's former {@code
+     * remoteOutage} line became the line of every condition, named by its {@code condition}).
      *
      * @param line the line to map; never null
      * @return the equivalent DTO
@@ -189,8 +191,9 @@ public final class LedgerJsonMapper {
     public RemoteOutageLineDto toDto(RemoteOutageLine line) {
         return new RemoteOutageLineDto(
                 1,
-                "remoteOutage",
+                "daemonCondition",
                 InstanceDto.from(line.instance()),
+                ConditionTokens.token(line.condition()),
                 line.target(),
                 line.openedAt().toString(),
                 line.closedAt().toString(),

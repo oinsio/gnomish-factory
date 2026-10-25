@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.dashboard;
 
+import com.github.oinsio.gnomish.serveobservability.ConditionHealth;
+import com.github.oinsio.gnomish.serveobservability.ConditionTokens;
 import com.github.oinsio.gnomish.serveobservability.FeedPhase;
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState;
 import com.github.oinsio.gnomish.serveobservability.RemoteHealth;
@@ -47,7 +49,7 @@ public final class AlertConditionEvaluator {
 
     /**
      * The sustained-open escalation threshold (NFR-O3, UX6 of add-base-ref-resolution), matching
-     * {@code RemoteOutageGate}'s own default. The dashboard reads only the persisted snapshot,
+     * the remote {@code DaemonCondition}'s own default. The dashboard reads only the persisted snapshot,
      * which carries no configured threshold of its own (a known limitation: a daemon configured
      * with a different {@code factory.serve.remote-sustained-open-threshold} escalates its own
      * ERROR at a different point than this label does) — until the snapshot carries the
@@ -94,6 +96,14 @@ public final class AlertConditionEvaluator {
         for (RemoteHealth remote : snapshot.remote().values()) {
             if (remote.open()) {
                 flagged.add(remoteGateOpen(remote, now));
+            }
+        }
+        // NFR-O2, UX4 of add-sandbox-base-image: the remote's entry is the remote section's, flagged
+        // above; every other open condition is an operator precondition to fix.
+        for (ConditionHealth condition : snapshot.conditions()) {
+            if (condition.open() && !ConditionTokens.REMOTE.equals(condition.condition())) {
+                flagged.add(new AlertCondition.PreconditionOpen(
+                        condition.condition(), condition.openSince(), condition.lastError(), condition.nextProbeAt()));
             }
         }
         return List.copyOf(flagged);

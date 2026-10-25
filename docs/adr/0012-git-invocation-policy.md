@@ -60,16 +60,16 @@ flowchart LR
 
 The eight pairs, each neutralizing a key that runs a program or changes what git reads or writes:
 
-| Pair | Closes |
-|------|--------|
-| `core.hooksPath=/dev/null` | every hook, wherever the local configuration points |
-| `commit.gpgSign=false` | a signing program run during a factory commit |
-| `tag.gpgSign=false` | the same for a tag |
-| `core.fsmonitor=false` | a filesystem-monitor command run on index reads |
-| `branch.autoSetupMerge=false` | the `branch.<name>.*` write of branch creation |
-| `maintenance.auto=false` | detached background maintenance in the shared clone |
-| `gc.auto=0` | automatic garbage collection in the shared clone |
-| `core.useReplaceRefs=false` | `refs/replace/` substituting what an object id reads as |
+| Pair                          | Closes                                                  |
+|-------------------------------|---------------------------------------------------------|
+| `core.hooksPath=/dev/null`    | every hook, wherever the local configuration points     |
+| `commit.gpgSign=false`        | a signing program run during a factory commit           |
+| `tag.gpgSign=false`           | the same for a tag                                      |
+| `core.fsmonitor=false`        | a filesystem-monitor command run on index reads         |
+| `branch.autoSetupMerge=false` | the `branch.<name>.*` write of branch creation          |
+| `maintenance.auto=false`      | detached background maintenance in the shared clone     |
+| `gc.auto=0`                   | automatic garbage collection in the shared clone        |
+| `core.useReplaceRefs=false`   | `refs/replace/` substituting what an object id reads as |
 
 `/dev/null` needs no filesystem state; an empty hook directory under `.git` is writable by anyone
 who can write `.git/config`. Gitaly and the Jenkins git plugin use the same value.
@@ -90,7 +90,9 @@ with a fatal error by design — a refused command, not a hook that runs — and
 The switches are why the factory's git floor is 2.56.0 (ADR 0008, the floor paragraph as amended
 by this change): the switch is documented and verified there, and a policy naming a key the
 installed git ignores neutralizes nothing. The box's git keeps its own floor, 2.51.0, until
-`add-sandbox-base-image`: no factory policy runs inside the box, so the box needs no switch.
+`add-sandbox-base-image`: no factory policy runs inside the box, so the box needs no switch. That
+change joined the two floors (design D9): the box's git is now held to 2.56.0 as well, because the
+sandbox base image carries a git at it, not because the box needs the switch.
 
 Removed from every factory git process's environment: `GIT_CONFIG_PARAMETERS` and
 `GIT_CONFIG_COUNT`, so a per-process configuration inherited by the factory cannot add a key

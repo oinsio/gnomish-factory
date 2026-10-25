@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.e2e
 
+import com.github.oinsio.gnomish.app.BaseTag
+import com.github.oinsio.gnomish.app.FactoryVersion
 import com.github.oinsio.gnomish.testsupport.TestTaskProperty
 import java.util.zip.ZipFile
 import spock.lang.Shared
@@ -27,6 +29,23 @@ class BuildInfoSpec extends Specification {
 
         expect:
         buildInfo.getProperty('build.version') == expected
+    }
+
+    // FR9 of add-sandbox-base-image (design D11): the base tag travels beside the version
+    def "FR9: the jar's build info carries the build's base tag for a release, and no key for a development build"() {
+        given:
+        def version = TestTaskProperty.required('e2e.productVersion')
+        def expected = TestTaskProperty.required('e2e.baseTag')
+
+        expect:
+        if (version == FactoryVersion.DEVELOPMENT.value()) {
+            assert expected.isEmpty()
+            assert !buildInfo.containsKey('build.baseTag')
+        } else {
+            assert buildInfo.getProperty('build.baseTag') == expected
+            // the runtime reader accepts the pair: present, well-shaped and consistent with the version
+            assert new FactoryVersion(version, Optional.of(new BaseTag(expected))).baseTag().isPresent()
+        }
     }
 
     // Scenario: build-system/quality-gates / No archive records when it was built

@@ -196,6 +196,7 @@ When it fails, it reports on the tracker: an open issue labelled `nightly-mutati
 ## Releasing
 
 <!-- implements FR1, FR2, NFR-O1 of add-release-pipeline (design D6, D8) -->
+<!-- implements FR7, FR8, NFR-S3 of add-sandbox-base-image (design D6, D15) -->
 
 A release is one pushed tag; `.github/workflows/release.yml` does the rest. The product version is the tag without its `v` — no file in the repository records it, and every other build reports `0.0.0-dev`.
 
@@ -216,7 +217,31 @@ The workflow checks before it builds (`scripts/release-preflight.sh`); each fail
 | `CI status`      | `is still in_progress` (or `queued`)                 | CI has not finished; re-run the release workflow when it does                                         |
 | `CI status`      | `concluded 'failure'` (or another conclusion)        | CI is red for that commit; fix `main` and tag a green commit                                          |
 
-After the gate, the workflow builds the archives twice and fails on differing sums (`Reproducible archive`), checks that the unpacked `bin/gnomish --version` prints the tag's version (`Archive version`) and that the archive's `LICENSE`/`NOTICE` equal the root files, and only then attests and publishes. A failed run publishes nothing, so re-running it for the same tag is safe; the tag never moves.
+The workflow has three jobs, and every decision in them is a script under `scripts/` with a spec in `:bootstrap`; the YAML only calls them:
+
+| Job         | Needs       | What it does                                                                                                    |
+|-------------|-------------|-----------------------------------------------------------------------------------------------------------------|
+| `preflight` | —           | the checks above; outputs `version`, `prerelease`, `base_tag` and `image_tags`, the only source of those values |
+| `release`   | `preflight` | the distribution archives, built and published as described below                                               |
+| `image`     | `preflight` | the sandbox base image for `linux/amd64` and `linux/arm64`: refuse an existing tag, push, attest, scan          |
+
+A malformed tag stops both builds before either starts, and the two builds run side by side, so neither waits for the other or fails because of it.
+
+**`release`.** It builds the archives twice and fails on differing sums (`Reproducible archive`), checks that the unpacked `bin/gnomish --version` prints the tag's version (`Archive version`), that the shipped recipe carries the release's base tag (`Recipe stamp`) and that the archive's `LICENSE`/`NOTICE` equal the root files, and only then attests and publishes. A failed run publishes nothing, so re-running it for the same tag is safe; the tag never moves.
+
+**`image`.** It pushes `ghcr.io/oinsio/gnomish-sandbox-base` under `X.Y.Z` and `X.Y` for a final release, under the full version alone for a pre-release (which never moves `X.Y`), then attests the pushed digest with `push-to-registry` and uploads an OSV-Scanner report to code scanning without failing on findings. Before the push, `scripts/image-tag-refusal.sh` asks the registry for `X.Y.Z`: `Image tag exists` means a release tag is never overwritten, and `Image tag check` means the registry did not answer — re-run once it does. Only this job holds `packages: write`.
+
+**`sandbox-image-rebuild.yml`** rebuilds the base every Monday: it picks the final release with the highest version (`scripts/latest-final-release.sh`), checks out its tag, builds its published stage without the layer cache on a freshly pulled Ubuntu, and pushes `X.Y` alone, attested and scanned like the release's build; before the first final release it skips. Run it by hand with `gh workflow run sandbox-image-rebuild.yml`.
+
+**Recovering an interrupted `image` job.** The job's durable steps are, in order, the push of every tag, the attestation pushed to the registry and the scan report. A run that stops after the push leaves `X.Y.Z` in the registry without its attestation, and every re-run then stops at `Image tag exists`. Do not delete the tag; attest what was pushed, by its digest, in a separate run:
+
+1. Read the digest: `docker buildx imagetools inspect ghcr.io/oinsio/gnomish-sandbox-base:<X.Y.Z>` — the `Digest:` line of the image index.
+2. Attest that digest in a workflow run with the `image` job's permissions: its `Attest the base's build provenance` step, with `subject-digest` set to the digest from step 1 and `push-to-registry: true`.
+3. Scan it in the same run: the job's three scan steps, pulling `ghcr.io/oinsio/gnomish-sandbox-base@<digest>`.
+
+If an interrupted final release left `X.Y` on the previous release's base, the next weekly rebuild moves it to this one; run the rebuild by hand to converge it at once.
+
+**The package's visibility** is a one-time setting. The first push creates the `gnomish-sandbox-base` package as private, and operators cannot pull it until a maintainer makes it public: *Package settings → Danger Zone → Change visibility → Public* (`https://github.com/users/oinsio/packages/container/gnomish-sandbox-base/settings`). The workflows push with the repository's token, so they need no change.
 
 **Tag protection** is a repository setting, set once by a maintainer: a ruleset restricting creation, update and deletion of `v*` tags to the Maintain and Admin roles.
 

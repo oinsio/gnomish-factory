@@ -1,0 +1,22 @@
+# What `docker manifest inspect` prints on stderr when it fails against a registry, exactly as docker
+# 29.4.0 printed it on 2026-10-22 (task 5.1 of add-sandbox-base-image), with no registry login:
+# `manifest-unknown` from ghcr for a tag missing from an existing public package, `denied` from ghcr
+# for a package not yet created, `no-such-manifest-*` docker's text for a registry's not-found
+# (recorded from other registries, ghcr's answer to a logged-in client unrecorded), `no-such-host`
+# against an unresolvable registry name.
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[manifest-unknown]
+manifest unknown
+
+[no-such-manifest-final]
+no such manifest: ghcr.io/oinsio/gnomish-sandbox-base:0.2.0
+
+[no-such-manifest-pre]
+no such manifest: ghcr.io/oinsio/gnomish-sandbox-base:0.3.0-rc.1
+
+[denied]
+Get "https://ghcr.io/v2/oinsio/gnomish-sandbox-base/manifests/0.2.0": denied
+
+[no-such-host]
+failed to configure transport: error pinging v2 registry: Get "https://no-such-registry.invalid/v2/": dial tcp: lookup no-such-registry.invalid: no such host

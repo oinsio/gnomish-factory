@@ -41,6 +41,35 @@ final class ContainerTerminalDrive {
         // Runner start prunes objects a dead instance left labelled (FR11, NFR-R2), keeping this
         // task's own environments so a reattaching resume is never swept; no daemon = a no-op.
         support.sweepOrphans();
+        drive(assembly, support, order, context, state, lawBinding, pending);
+    }
+
+    /**
+     * The fresh run's drive (design D22 of add-sandbox-base-image): the runner-start sweep, then the
+     * first stage's box made live through {@link FirstBoxStep}, then the engine. The box comes after
+     * the sweep, as the lazily made box did: with no liveness verdict the sweep judges this run's
+     * own {@code manual} objects by their age alone, so a box made before it would be judged too.
+     */
+    static void runFresh(
+            RunAssembly assembly,
+            SandboxRunSupport support,
+            RunOrder order,
+            TaskContext context,
+            TaskState state,
+            LawBinding lawBinding) {
+        support.sweepOrphans();
+        FirstBoxStep.makeLive(support, order.definition().stages().getFirst().name());
+        drive(assembly, support, order, context, state, lawBinding, null);
+    }
+
+    private static void drive(
+            RunAssembly assembly,
+            SandboxRunSupport support,
+            RunOrder order,
+            TaskContext context,
+            TaskState state,
+            LawBinding lawBinding,
+            @Nullable PendingVerification pending) {
         PipelineDefinition definition = order.definition();
         var assembled = assembly.withSandbox(support.pieces(pending))
                 .assemble(order, context, state, support.persistence(), List.of(), lawBinding);

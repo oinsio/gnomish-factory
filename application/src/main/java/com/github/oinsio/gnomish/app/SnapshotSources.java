@@ -5,11 +5,12 @@ import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat;
 import com.github.oinsio.gnomish.app.lease.StandingReaper;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerHealthTracker;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
+import com.github.oinsio.gnomish.app.serve.DaemonConditions;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker;
-import com.github.oinsio.gnomish.app.serve.RemoteOutageGate;
 import com.github.oinsio.gnomish.app.serve.SlotLedger;
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor;
+import com.github.oinsio.gnomish.serveobservability.ConditionHealthAssembler;
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshotAssembler;
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.LifecycleSnapshotAssembler;
@@ -21,7 +22,6 @@ import com.github.oinsio.gnomish.serveobservability.TrackerHealthAssembler;
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshotAssembler;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 
 /**
  * The live collaborators one {@code serve} daemon's status snapshot is read from, and the reading
@@ -44,8 +44,9 @@ import java.util.List;
  * @param worktreeJanitor the worktree janitor behind {@code vitals.janitor} (FR7); never null
  * @param sweepTickLog the sandbox-lifecycle sweep's per-tick record behind {@code vitals.sweep}
  *     (NFR-O1 of add-serve-sandbox-lifecycle); never null
- * @param remoteOutageGate the shared remote outage gate behind the {@code remote} section (NFR-O3,
- *     UX6 of add-base-ref-resolution); never null
+ * @param conditions the daemon's conditions, whose remote is behind the {@code remote} section and
+ *     the {@code conditions} section (NFR-O3, UX6 of add-base-ref-resolution; D19, NFR-O2 of
+ *     add-sandbox-base-image); never null
  */
 record SnapshotSources(
         FeedAutomaton automaton,
@@ -57,7 +58,7 @@ record SnapshotSources(
         StandingReaper standingReaper,
         WorktreeJanitor worktreeJanitor,
         SweepTickLog sweepTickLog,
-        RemoteOutageGate remoteOutageGate) {
+        DaemonConditions conditions) {
 
     /**
      * Reads the current state of every source into one snapshot.
@@ -84,6 +85,7 @@ record SnapshotSources(
                 VitalsSnapshotAssembler.assemble(
                         heartbeat, standingReaper, worktreeJanitor, sweepTickLog, sweepInterval),
                 TrackerHealthAssembler.assemble(trackerHealth),
-                RemoteHealthAssembler.assemble(List.of(remoteOutageGate)));
+                RemoteHealthAssembler.assemble(conditions),
+                ConditionHealthAssembler.assemble(conditions));
     }
 }

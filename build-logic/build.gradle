@@ -133,66 +133,6 @@ tasks.named('functionalTest') {
     systemProperty 'gnomish.gradleUserHome', gradle.gradleUserHomeDir.absolutePath
 }
 
-// FR8 of add-project-license: the license-gate scenarios run against the
-// repository's OWN allowlist, not a copy written for the test, so a rule the real
-// file drops or a canonical name the plugin's bundle renames turns them red.
-def allowedLicenses = layout.projectDirectory.file('../config/allowed-licenses.json')
-tasks.named('functionalTest') {
-    inputs.file(allowedLicenses).withPropertyName('allowedLicenses').withPathSensitivity(PathSensitivity.NONE)
-    systemProperty 'gnomish.allowedLicensesFile', allowedLicenses.asFile.absolutePath
-}
-
-// NFR-R1, design D10 of add-parameter-count-gate: the parameter-count wiring scenario
-// applies `java-conventions` to a miniature project whose settings `includeBuild` the
-// REAL `build-checks` directory, so the check the mini build compiles under is the one the
-// main build ships — not a copy. `java-conventions` reads the `libs` catalog, so the mini
-// settings import the repository's own catalog file too. Both are inputs: a change to the
-// check's source or to a pinned version re-runs the scenario.
-def buildChecksDir = layout.projectDirectory.dir('../build-checks')
-def versionCatalog = layout.projectDirectory.file('../gradle/libs.versions.toml')
-tasks.named('functionalTest') {
-    inputs.files(fileTree(buildChecksDir) { include '**/src/main/**', '**/*.gradle', '**/*.lockfile' })
-            .withPropertyName('buildChecksSources')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.file(versionCatalog).withPropertyName('versionCatalog').withPathSensitivity(PathSensitivity.NONE)
-    systemProperty 'gnomish.buildChecksDir', buildChecksDir.asFile.absolutePath
-    systemProperty 'gnomish.versionCatalog', versionCatalog.asFile.absolutePath
-}
-
-// FR6, design D5 of tighten-spec-contract: "the manual launcher is the same gate" runs the
-// command the REAL `scripts/check-spec-contract.sh` spells against the mini tree, so a launcher
-// that grows a rule of its own, or stops passing its arguments through, turns the scenario red.
-def specContractLauncher = layout.projectDirectory.file('../scripts/check-spec-contract.sh')
-tasks.named('functionalTest') {
-    inputs.file(specContractLauncher).withPropertyName('specContractLauncher').withPathSensitivity(PathSensitivity.NONE)
-    systemProperty 'gnomish.specContractLauncher', specContractLauncher.asFile.absolutePath
-}
-
-// FR6, design D5 of tighten-spec-contract: the same scenario runs the verify command of the REAL
-// fix-artifacts and archive stage manifests, read with a YAML parser, so a stage launcher that
-// holds a rule of its own, or calls something other than the task, turns it red.
-def fixArtifactsStage = layout.projectDirectory.file('../.gnomish/stages/fix-artifacts/stage.yaml')
-def archiveStage = layout.projectDirectory.file('../.gnomish/stages/archive/stage.yaml')
-tasks.named('functionalTest') {
-    inputs.file(fixArtifactsStage).withPropertyName('fixArtifactsStage').withPathSensitivity(PathSensitivity.NONE)
-    inputs.file(archiveStage).withPropertyName('archiveStage').withPathSensitivity(PathSensitivity.NONE)
-    systemProperty 'gnomish.fixArtifactsStage', fixArtifactsStage.asFile.absolutePath
-    systemProperty 'gnomish.archiveStage', archiveStage.asFile.absolutePath
-}
-
-// FR7, UX3 of tighten-spec-contract: the example the REAL `.claude/rules/delta-specs.md` shows an
-// author is run through `checkSpecContract`, so a template that drifts from the gate turns red.
-def deltaSpecsRule = layout.projectDirectory.file('../.claude/rules/delta-specs.md')
-tasks.named('functionalTest') {
-    inputs.file(deltaSpecsRule).withPropertyName('deltaSpecsRule').withPathSensitivity(PathSensitivity.NONE)
-    systemProperty 'gnomish.deltaSpecsRule', deltaSpecsRule.asFile.absolutePath
-}
-
-// FR14 of fix-terminal-receipt-convergence (design D14): the Docker endpoint scenarios run the
-// REAL committed stand-in library as the `docker` the inner build resolves a context through, so a
-// preset that changes its answer turns them red. The library is an input by content.
-def standInLibrary = layout.projectDirectory.dir('../test-fixtures/src/main/resources/stand-in')
-tasks.named('functionalTest') {
-    inputs.files(fileTree(standInLibrary)).withPropertyName('standInLibrary').withPathSensitivity(PathSensitivity.RELATIVE)
-    systemProperty 'gnomish.standInLibrary', standInLibrary.asFile.absolutePath
-}
+// The real repository files the functional scenarios read (licenses allowlist, build-checks,
+// launchers, stage manifests, rules, the stand-in library, release scripts).
+apply from: 'functional-test-inputs.gradle'

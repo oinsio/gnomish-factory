@@ -171,19 +171,20 @@ on 11, inspect the branch and resume, which approves the checkpoint; repeat unti
 
 The process exit code reports the outcome — anything `>= 10` means the engine reached a legitimate terminal state:
 
-| Code | Meaning                                                                                                                                                                          |
-|------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 0    | completed                                                                                                                                                                        |
-| 1    | internal error                                                                                                                                                                   |
-| 2    | usage error — including a configuration violation or an unregistered `--dir`, reported before anything runs                                                                      |
-| 3    | pipeline load failure — including an `api` stage or an `external` check on an unconfigured provider                                                                              |
-| 4    | retired — used in the MVP for stdin ending inside an interactive adapter; removed as unneeded; kept as a gap so other codes do not shift; may be filled by a future tool failure |
-| 5    | diverged branch on a claimless resume (see above — under a claim it reconciles automatically)                                                                                    |
-| 6    | task not found (`status`/`usage` only — no `gnomish/<task>` branch)                                                                                                              |
-| 7    | branch shape refused on pickup (`status` on a branch in a quarantine shape)                                                                                                      |
-| 10   | escalated (attempts exhausted / undecidable); parked on the branch in git mode                                                                                                   |
-| 11   | paused at a manual checkpoint, awaiting approval; parked on the branch in git mode                                                                                               |
-| 12   | aborted                                                                                                                                                                          |
+| Code | Meaning                                                                                                                                                                             |
+|------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0    | completed                                                                                                                                                                           |
+| 1    | internal error                                                                                                                                                                      |
+| 2    | usage error — including a configuration violation or an unregistered `--dir`, reported before anything runs                                                                         |
+| 3    | pipeline load failure — including an `api` stage or an `external` check on an unconfigured provider                                                                                 |
+| 4    | retired — used in the MVP for stdin ending inside an interactive adapter; removed as unneeded; kept as a gap so other codes do not shift; may be filled by a future tool failure    |
+| 5    | diverged branch on a claimless resume (see above — under a claim it reconciles automatically)                                                                                       |
+| 6    | task not found (`status`/`usage` only — no `gnomish/<task>` branch)                                                                                                                 |
+| 7    | branch shape refused on pickup (`status` on a branch in a quarantine shape)                                                                                                         |
+| 8    | operator precondition unmet — the clone's ref backend, the container runtime, the image contract or the image's git floor; one `[GF172]` line and the check's message, with the fix |
+| 10   | escalated (attempts exhausted / undecidable); parked on the branch in git mode                                                                                                      |
+| 11   | paused at a manual checkpoint, awaiting approval; parked on the branch in git mode                                                                                                  |
+| 12   | aborted                                                                                                                                                                             |
 
 `take` and `serve` carry their own exit-code tables — see
 [`operator-guide.md`](operator-guide.md) and

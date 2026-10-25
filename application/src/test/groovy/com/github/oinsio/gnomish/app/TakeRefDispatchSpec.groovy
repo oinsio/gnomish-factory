@@ -1,10 +1,15 @@
 package com.github.oinsio.gnomish.app
 
+import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
+import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException
+import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
+import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -14,7 +19,11 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.file.Path
 import java.time.Duration
+import java.util.function.UnaryOperator
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.Timeout
@@ -59,16 +68,16 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
         summaryLogger.addAppender(logged)
     }
 
-    private TakeDispatcher dispatcher(RunAssembly assembly, TakeHeartbeat heartbeat) {
-        new TakeDispatcher(slotWiring(assembly, bareGit(), tracker, CLONE, ContainerTakeSupportFixture.hostOnly(),
+    private TakeDispatcher dispatcher(RunAssembly assembly, TakeHeartbeat heartbeat, TaskGit git = bareGit()) {
+        new TakeDispatcher(slotWiring(assembly, git, tracker, CLONE, ContainerTakeSupportFixture.hostOnly(),
                 heartbeat.tenure()), testProperties(),
                 new TrackerWiring(['github': Stub(TrackerAdapterFactory)], MapSecretsProvider.NONE, TrackerValidatorStub.acceptingGithubSource(), VirtualTimeEquipment.create()),
                 TakeoverConfirmation.UNAVAILABLE)
     }
 
-    private void dispatch(List<String> refs) {
+    private void dispatch(List<String> refs, TaskGit git = bareGit()) {
         def heartbeat = TakeHeartbeat.forRun(tracker, TRACKER_CONFIG, VirtualTimeEquipment.on(new VirtualClock(), { Duration d -> } as Sleeper))
-        TakeRefDispatch.run(dispatcher(assemblyRunning(null), heartbeat),
+        TakeRefDispatch.run(dispatcher(assemblyRunning(null), heartbeat, git),
                 new TakeArguments(CLONE_DIR, refs, null, false, false),
                 new BoundTracker(pipeline(), DEFAULT_TRUSTED_BASE, TRACKER_CONFIG, factory, tracker, INSTANCE),
                 SERVE_PROPERTIES, LOG)
@@ -102,6 +111,49 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
 
         and:
         thrown(TakeExitCodeException)
+    }
+
+    // FR14, D18/D19 of add-sandbox-base-image: a single-shot take whose claimed run meets an
+    // operator precondition ends on the typed result: the claim released, no abort written, the
+    // command's one coded ERROR naming the kind and the refusal's fix, and exit 8.
+    // Scenario: tracker/tracker-take / Operator precondition refused after the claim exits 8
+    def "a refused factory clone after the claim exits 8 with one coded line"() {
+        given:
+        def git = bareGit()
+        def refusingGit = new TaskGit(git.store(), [
+            requireRefFormat: { Path cloneDir ->
+                throw new CloneRefFormatRefusedException(cloneDir.toString(), 'reftable', UntrustedText.subprocess('files'))
+            },
+            locate: { Path cloneDir, String taskId ->
+                throw new CloneRefFormatRefusedException(cloneDir.toString(), 'reftable', UntrustedText.subprocess('files'))
+            },
+            classifyShape: { Path cloneDir, String taskId ->
+                throw new CloneRefFormatRefusedException(cloneDir.toString(), 'reftable', UntrustedText.subprocess('files'))
+            },
+        ] as TaskBranchGit, git.worktrees(), UnaryOperator.identity(), git.baseRefs(), new ClaimEpochBook())
+
+        when:
+        dispatch(['github:o/r#1'], refusingGit)
+
+        then:
+        1 * tracker.fetchTask(REF) >> readyTask()
+        1 * tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
+        1 * tracker.release(REF)
+        0 * tracker.recordAbort(_, _)
+        0 * tracker.park(_, _, _)
+
+        and:
+        def ex = thrown(TakeExitCodeException)
+        ex.exitCode() == 8
+
+        and:
+        def coded = logged.list.findAll {
+            it.formattedMessage.startsWith(OperatorEvent.TAKE_OPERATOR_PRECONDITION_UNMET.head())
+        }
+        coded.size() == 1
+        coded[0].level == Level.ERROR
+        coded[0].formattedMessage.contains('CLONE_REF_FORMAT')
+        coded[0].formattedMessage.contains('git refs migrate')
     }
 
     // FR2, FR3, D2: two or more refs means BATCH mode — every ref goes through the disposition

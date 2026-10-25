@@ -298,7 +298,10 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                         commands.serveAssembly(factoryProperties, serveProperties, timeEquipment, resolvedClone), git,
                         sandboxLifecyclePass, sandboxProperties,
                         commands.serveDashboard(trackerWiring, scope, factoryProperties, timeEquipment)),
-                        git, scope, serveProperties, trackerWiring, errorConsole))
+                        commands.serveStartupGates(trackerWiring, git, modeSelector,
+                        commands.sandboxImageReadiness(resolvedClone, sandboxProperties, factoryProperties),
+                        sandboxProperties, errorConsole),
+                        scope, serveProperties, trackerWiring, errorConsole))
         def drive = manualRun.manualRunDrive(
                 scope,
                 new PipelineStartup(TrackerValidatorStub.plainSource(), workspaceFactory),

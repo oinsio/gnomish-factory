@@ -150,7 +150,7 @@ autonomy:
                 new TrustedBaseContext(BaseDefinition.none(), new DefaultBranch(currentBranch(cloneDir))))
         new TakeSlotRunner(
                 wiring, new RunOrder(cloneDir, null, pipeline(), false),
-                tracker, INSTANCE)
+                tracker, INSTANCE, DaemonConditionsFixture.closed())
     }
 
     // Scenario (factory-serve): two slots hold container-bound tasks at once — each task runs in

@@ -69,6 +69,13 @@ pitest {
         // (ServeBackgroundDutiesSpec); plus ServeRuntimeWiringSpec, 3 scenarios — the shared
         // heartbeat and its progress listener, the ledger-writer attach, the tracker health decorator.
         'com.github.oinsio.gnomish.app.ServeCommand',
+        // The three pre-claim steps moved out of ServeCommand for the parameter limit (design D17 of
+        // add-sandbox-base-image), covered by the same family: ServeStartupFailureSpec, 4 scenarios —
+        // the unbound default branch, both binding descriptions, the logged provisioning failure;
+        // ServeCommandPreconditionsSpec, 4 scenarios — each refusal kind's exit, console line and
+        // coded line, and the pass reaching the smoke test. Its TrackerWiring is a final class
+        // assembled from adapters this module cannot see.
+        'com.github.oinsio.gnomish.app.ServeStartupGates',
         // TakeSlotRunnerSpec, 11 scenarios — the take cycle, the MDC frame, all three optional
         // attachments present and absent, outcome logging, the swallowed fetch failure, and both
         // halves of the crash classification (ERROR with a stack, WARN without one during the stop).

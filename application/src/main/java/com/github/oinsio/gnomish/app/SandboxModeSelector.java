@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe;
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeUnavailableException;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
@@ -46,7 +47,7 @@ import java.util.List;
  * readers — not a duplicate to thread through here.
  *
  * <p>Implements FR14, G2, UX2, D13 of add-sandbox-core; FR6, NFR-S1 of add-project-registry; FR18
- * of supervise-daemon-loops-and-embed-dashboard.
+ * of supervise-daemon-loops-and-embed-dashboard; NFR-R2 of add-sandbox-base-image.
  */
 public final class SandboxModeSelector {
 
@@ -94,7 +95,9 @@ public final class SandboxModeSelector {
      *     refusal names as the place for the fix
      * @return the resolved mode and the planned segments; never null
      * @throws UsageException on an unmet stage need, a mixed-binding pipeline, or a container
-     *     run without its prerequisites (image + Docker)
+     *     run without a configured image
+     * @throws ContainerRuntimeUnavailableException on a container run whose Docker runtime is
+     *     unreachable
      */
     Plan plan(PipelineDefinition definition, RegisteredClone clone) {
         Path projectFile = clone.layout().config();
@@ -115,6 +118,19 @@ public final class SandboxModeSelector {
             return new Plan(Plan.Mode.CONTAINER, segments);
         }
         return new Plan(Plan.Mode.HOST, segments);
+    }
+
+    /**
+     * Plans {@code definition} exactly as {@link #plan} does and answers whether the run is boxed:
+     * the question the {@code serve} startup assessment asks before it assesses the image (design
+     * D17 of add-sandbox-base-image), so a host-bound daemon is never asked for one.
+     *
+     * @return true iff the planned mode is the container mode
+     * @throws UsageException as {@link #plan} does
+     * @throws ContainerRuntimeUnavailableException as {@link #plan} does
+     */
+    boolean runsInBox(PipelineDefinition definition, RegisteredClone clone) {
+        return plan(definition, clone).mode() == Plan.Mode.CONTAINER;
     }
 
     /**
@@ -155,7 +171,12 @@ public final class SandboxModeSelector {
         }
     }
 
-    /** The D13 refusal: container is the default, and its absence names the two ways out — never silent host. */
+    /**
+     * The D13 refusal: container is the default, and its absence names the two ways out — never
+     * silent host. A missing image is configuration ({@link UsageException}); an unreachable runtime
+     * is the operator precondition the plan meets first, so it is the same typed refusal a box
+     * would throw (design D19 of add-sandbox-base-image), with the same message.
+     */
     private void requireContainerPrerequisites(Path projectFile) {
         String image = sandbox.image();
         if (image == null || image.isBlank()) {
@@ -165,7 +186,7 @@ public final class SandboxModeSelector {
                             + hostOptOut(projectFile));
         }
         if (!runtimeProbe.available()) {
-            throw new UsageException(
+            throw new ContainerRuntimeUnavailableException(
                     "stages bind the container adapter (the default) but the Docker runtime is unreachable — install"
                             + " or start Docker, or" + hostOptOut(projectFile));
         }

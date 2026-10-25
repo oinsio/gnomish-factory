@@ -121,13 +121,13 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
 
     // F88: a dead origin is met first by the claim-time task-branch lookup; its outage opens the gate too.
     // Scenario: observability/serve-observability / An outage open at stop writes no line
-    def "NFR-O3: an outage still open at stop writes no remoteOutage line, and the next daemon starts closed"() {
+    def "NFR-O3: an outage still open at stop writes no daemonCondition line, and the next daemon starts closed"() {
         when: 'the drain stops with the gate open'
         drain()
 
-        then: 'no remoteOutage line, and the final stopped snapshot shows the gate open'
+        then: 'no daemonCondition line, and the final stopped snapshot shows the gate open'
         ledgerLines().findAll {
-            it.get('type').asText() == 'remoteOutage'
+            it.get('type').asText() == 'daemonCondition'
         }.isEmpty()
         readJson(ObservabilityPaths.snapshotFile(serveDir())).get('lifecycle').get('state').asText() == 'stopped'
         remoteSection().get('state').asText() == 'open'
@@ -144,9 +144,9 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         remote.get('lastError').isNull()
         remote.get('consecutiveFailures').asInt() == 0
 
-        and: 'neither daemon ever wrote a remoteOutage line'
+        and: 'neither daemon ever wrote a daemonCondition line'
         ledgerLines().findAll {
-            it.get('type').asText() == 'remoteOutage'
+            it.get('type').asText() == 'daemonCondition'
         }.isEmpty()
     }
 }

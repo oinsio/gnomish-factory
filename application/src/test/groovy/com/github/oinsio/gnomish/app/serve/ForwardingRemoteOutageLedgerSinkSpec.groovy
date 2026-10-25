@@ -1,11 +1,12 @@
 package com.github.oinsio.gnomish.app.serve
 
+import com.github.oinsio.gnomish.app.take.DaemonConditionKind
 import java.time.Instant
 import spock.lang.Specification
 
 /**
  * {@link ForwardingRemoteOutageLedgerSink}: the construction-order-cycle seam task 7.4 of
- * add-base-ref-resolution uses to hand every {@link RemoteOutageGate} a real ledger sink before the
+ * add-base-ref-resolution uses to hand every {@link DaemonCondition} a real ledger sink before the
  * {@code RemoteOutageLedgerWriter} it will eventually feed even exists — mirrors {@link
  * ForwardingDirtyNotifier}'s role for the same cycle.
  *
@@ -14,7 +15,7 @@ import spock.lang.Specification
 class ForwardingRemoteOutageLedgerSinkSpec extends Specification {
 
     private static RemoteOutageClosedOutage outage() {
-        new RemoteOutageClosedOutage('origin', Instant.EPOCH, Instant.EPOCH.plusSeconds(1), 1, 0, 'boom')
+        new RemoteOutageClosedOutage(DaemonConditionKind.REMOTE, 'origin', Instant.EPOCH, Instant.EPOCH.plusSeconds(1), 1, 0, 'boom')
     }
 
     def "outageClosed() before bind() is a harmless no-op"() {

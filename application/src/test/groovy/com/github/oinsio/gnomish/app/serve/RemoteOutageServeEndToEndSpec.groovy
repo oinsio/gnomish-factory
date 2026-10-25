@@ -25,14 +25,14 @@ import spock.lang.Specification
 
 /**
  * M4, G5 of add-base-ref-resolution (task 7.5): the end-to-end proof that the feed
- * ({@link FeedAutomaton}/{@link FeedCycle}), the remote outage gate ({@link RemoteOutageGate}) and a
+ * ({@link FeedAutomaton}/{@link FeedCycle}), the remote outage gate ({@link DaemonCondition}) and a
  * slot's own outage signal ({@link RemoteOutageSignalingBaseRefGit}, the base-ref decoration every
  * slot reads through, mirrored here by a lightweight {@link SlotRunner} double) compose correctly
  * on virtual time: three slots claim three
  * seeded tasks, the remote goes dead for an hour, and comes back.
  *
  * <p>The scenario drives a REAL {@link InMemoryTracker} (so the tracker-state read-back — Ready
- * again, zero abort facts — is genuine) and a REAL {@link RemoteOutageGate} wired to a stubbed
+ * again, zero abort facts — is genuine) and a REAL {@link DaemonCondition} wired to a stubbed
  * {@link BaseRefGit} whose {@code probe} answers strictly off the SAME {@link VirtualClock} the
  * automaton runs on: false before the one-hour recovery instant, true at and after it. The double
  * standing in for {@code TakeSlotRunner} does exactly what the decoration does at the slot's
@@ -41,7 +41,7 @@ import spock.lang.Specification
  * post-recovery refresh confirms the refresh instead.
  *
  * <p><b>Scope of its "one WARN" assertions.</b> The capture below is attached to {@link
- * RemoteOutageGate}'s own logger, so it proves the gate transitions exactly once per outage — NOT
+ * DaemonCondition}'s own logger, so it proves the gate transitions exactly once per outage — NOT
  * that the console as a whole sees one WARN, since the slot double here stands in for the real
  * emitters around it. {@code OutageWarnFanOutSpec} owns that second invariant: it walks one
  * released task through {@code FreshClaimBaseBinding} and {@link SlotOutcomeLog} for real and
@@ -50,7 +50,7 @@ import spock.lang.Specification
  * <p>G5 ("a dead remote costs the tracker nothing beyond the claims already in flight when it
  * died") and M4 ("at most one claim per slot for the whole outage ... claimable again after the
  * first successful probe") are both read directly off {@link FeedCycle#claimOrAbandon}: once
- * {@link RemoteOutageGate#isOpen} is true, the claim walk is never entered at all — no {@code
+ * {@link DaemonCondition#isOpen} is true, the claim walk is never entered at all — no {@code
  * tracker.claim} call happens while the gate is open, by construction, not by a timing accident
  * this spec has to race. The three claims that trigger the outage are the ONLY claims made while
  * the gate is open or opening; the fourth claim recorded below happens only after the recovering
@@ -94,10 +94,10 @@ class RemoteOutageServeEndToEndSpec extends Specification {
         }
     }
 
-    private RemoteOutageGate gate(BaseRefGit baseRefGit) {
+    private DaemonCondition gate(BaseRefGit baseRefGit) {
         def suppressor = new RepeatSuppressor(clock, Duration.ofMinutes(5))
-        new RemoteOutageGate(
-                baseRefGit, Path.of('.'), clock, new FixedRandom(), IDLE, PROBE_CAP,
+        new DaemonCondition(
+                ConditionSubject.remote(baseRefGit, Path.of('.')), clock, new FixedRandom(), IDLE, PROBE_CAP,
                 new RemoteOutageWiring('origin', suppressor, SUSTAINED_OPEN_THRESHOLD, {}, { ignored -> }))
     }
 
@@ -112,7 +112,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
                 !clock.instant().isBefore(recoversAt)
             }] as BaseRefGit
         def gate = gate(baseRefGit)
-        def logs = LogCaptureSupport.attach(RemoteOutageGate)
+        def logs = LogCaptureSupport.attach(DaemonCondition)
 
         and: 'a SlotRunner double mirroring RemoteOutageSignalingBaseRefGit: while the remote is dead, a claimed slot opens the gate and releases its claim; once recovered, it confirms the refresh instead'
         def claims = new CopyOnWriteArrayList<TaskRef>()
@@ -153,7 +153,7 @@ class RemoteOutageServeEndToEndSpec extends Specification {
         def ledger = new SlotLedger(3, new VirtualClock())
         def automaton = new FeedAssembly(
                 VirtualTimeEquipment.on(clock, sleeper), new IdleTiming(IDLE, BACKOFF_BASE, BACKOFF_CAP, new FixedRandom()), WIP_LIMIT)
-                .feedAutomaton(tracker, INSTANCE, ledger, runner, DirtyNotifier.NOOP, gate)
+                .feedAutomaton(tracker, INSTANCE, ledger, runner, DirtyNotifier.NOOP, new DaemonConditions(gate, []))
 
         when: 'the feed fills all three slots — the only claims the outage costs the tracker (G5)'
         3.times { automaton.step() }

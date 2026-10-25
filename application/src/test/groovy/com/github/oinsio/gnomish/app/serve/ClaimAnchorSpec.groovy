@@ -110,8 +110,8 @@ class ClaimAnchorSpec extends Specification {
             Duration.ofSeconds(1)
         }, RepeatSuppressorFixture.quiet())
 
-        def gate = RemoteOutageGateFixtures.closedGate()
-        def resilience = new FeedResilience(outageRetry, new FinishedDecline(RepeatSuppressorFixture.quiet()), gate)
+        def gate = DaemonConditionFixtures.closedGate()
+        def resilience = new FeedResilience(outageRetry, new FinishedDecline(RepeatSuppressorFixture.quiet()), new DaemonConditions(gate, []))
         new FeedCycle(new FeedTracker(tracker, INSTANCE), ledger, runner,
                 new FeedSelection(Duration.ofMinutes(2), Duration.ofHours(1), 2, new Random(0)),
                 new FeedStateLogger(), resilience)

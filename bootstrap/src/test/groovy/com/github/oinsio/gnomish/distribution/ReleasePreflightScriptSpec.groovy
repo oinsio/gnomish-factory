@@ -72,25 +72,30 @@ class ReleasePreflightScriptSpec extends Specification {
         ]
     }
 
-    // FR1, FR3: a well-shaped tag yields the product version, and a suffix marks a pre-release
+    // FR1, FR3: a well-shaped tag yields the product version, a suffix marks a pre-release, and
+    // FR9 of add-sandbox-base-image (design D11): the base tag is X.Y, or the whole pre-release;
+    // FR7 of add-sandbox-base-image (design D15): the image tags are the version and, for a final
+    // release only, its X.Y, so X.Y never moves to a pre-release
     // Scenario: release/release-distribution / A pre-release suffix is accepted
-    def "FR1: tag #tag passes and yields version #version, prerelease #prerelease"() {
+    def "FR1: tag #tag passes and yields version #version, prerelease #prerelease, base tag #baseTag, image tags #imageTags"() {
         given:
         runs << run(onMain, 'main', 'push', 'completed', 'success')
         def outputs = tmp.resolve('github-output')
+        def expected = "version=${version}\nprerelease=${prerelease}\nbase_tag=${baseTag}\nimage_tags=${imageTags}\n"
 
         when:
         def result = preflight(tag, onMain, [GITHUB_OUTPUT: outputs.toString()])
 
         then:
         result.exit == 0
-        Files.readString(outputs) == "version=${version}\nprerelease=${prerelease}\n"
+        Files.readString(outputs) == expected
+        result.output.endsWith(expected)
 
         where:
-        tag | version | prerelease
-        'v0.1.0' | '0.1.0' | false
-        'v10.20.30' | '10.20.30' | false
-        'v0.2.0-rc.1' | '0.2.0-rc.1' | true
+        tag | version | prerelease | baseTag | imageTags
+        'v0.1.0' | '0.1.0' | false | '0.1' | '["0.1.0","0.1"]'
+        'v10.20.30' | '10.20.30' | false | '10.20' | '["10.20.30","10.20"]'
+        'v0.2.0-rc.1' | '0.2.0-rc.1' | true | '0.2.0-rc.1' | '["0.2.0-rc.1"]'
     }
 
     // FR2: a commit that never reached main is refused before the CI query

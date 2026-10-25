@@ -33,10 +33,10 @@ final class GradleRunnerSupport {
         home
     }
 
-    /** A system property {@code functionalTest} must pass (see {@code build-logic/build.gradle}). */
+    /** A system property {@code functionalTest} must pass (see {@code build-logic/functional-test-inputs.gradle}). */
     static String requiredProperty(String name) {
         String value = System.getProperty(name)
-        assert value != null: "functionalTest must pass -D${name} (see build-logic/build.gradle)"
+        assert value != null: "functionalTest must pass -D${name} (see build-logic/functional-test-inputs.gradle)"
         value
     }
 

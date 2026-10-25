@@ -28,6 +28,10 @@ import spock.lang.TempDir
  */
 class EnvironmentSelfCheckSpec extends Specification {
 
+    /** The address the probes dial the guard at: the image contract's alias and port (FR6 of add-sandbox-base-image). */
+    static final String GUARD_PROXY =
+    "http://${ImageContract.current().guardAlias()}:${ImageContract.current().guardPort()}"
+
     static final String ALLOWED = 'registry.example.com'
 
     @TempDir
@@ -135,10 +139,22 @@ class EnvironmentSelfCheckSpec extends Specification {
             }
         }
         environment.execs.any { argv ->
-            argv.contains('http://gnomish-guard:8080') && argv.any {
+            argv.contains(GUARD_PROXY) && argv.any {
                 it.contains(ALLOWED)
             }
         }
+    }
+
+    // FR3, NFR-S2 of add-sandbox-base-image (design D14): curl honours -q only as its first argument,
+    //     so it leads every probe's argv and no ~/.curlrc in the image can change a verdict.
+    def "D14: every probe's curl ignores the image's curlrc"() {
+        when:
+        selfCheck().verify()
+
+        then: 'all three network probes ran, each curl with -q first'
+        def probes = environment.execs.findAll { it[0] == 'curl' }
+        probes.size() == 3
+        probes.every { it[1] == '-q' }
     }
 
     // Scenario: sandbox/sandbox-egress / A root-running image is refused
@@ -260,7 +276,7 @@ class EnvironmentSelfCheckSpec extends Specification {
         given: 'the allowlisted host cannot be reached through the guard'
         def check = selfCheck()
         environment.onExec = { List<String> argv ->
-            if (argv.contains('http://gnomish-guard:8080') && argv.any {
+            if (argv.contains(GUARD_PROXY) && argv.any {
                 it.contains(ALLOWED)
             }) {
                 return [
@@ -307,7 +323,7 @@ class EnvironmentSelfCheckSpec extends Specification {
             }
         }
         !environment.execs.any { argv ->
-            argv.contains('http://gnomish-guard:8080') && argv.any {
+            argv.contains(GUARD_PROXY) && argv.any {
                 it.contains('example.com/') && !it.contains('invalid')
             }
         }

@@ -164,9 +164,6 @@ class UntrustedTextGateSpec extends Specification {
         'rev-parse output into the commit id a resolution established, or empty',
         'com.github.oinsio.gnomish.sandbox.environment.ContainerMaterializer':
         'a container inspect answer into whether the surviving container is running (a boolean)',
-        'com.github.oinsio.gnomish.sandbox.environment.DeclaredVolumeOverrides':
-        'an image inspect answer into the declared volume paths, which travel back to docker as' +
-        ' mount destinations and are never rendered to a reader',
         'com.github.oinsio.gnomish.sandbox.environment.EgressGuard':
         'a guard inspect answer into whether the guard container is running (a boolean)',
         'com.github.oinsio.gnomish.sandbox.environment.EgressSelfCheckProbes':
@@ -177,6 +174,12 @@ class UntrustedTextGateSpec extends Specification {
         'the guard log into denial findings, a saturation boolean and an RFC-3339 read position',
         'com.github.oinsio.gnomish.sandbox.environment.GuardSourceIdentity':
         'a guard inspect answer into the denial source id, held to ContainerIdSyntax',
+        'com.github.oinsio.gnomish.sandbox.environment.ImageContractCheck':
+        'the sandbox image\'s contract label into whether it names the required version (a boolean)',
+        'com.github.oinsio.gnomish.sandbox.environment.ImageFacts':
+        'an image inspect answer into the declared volume paths, which travel back to docker as' +
+        ' mount destinations and are never rendered to a reader, and the labels, each value' +
+        ' re-minted in its own carrier',
         'com.github.oinsio.gnomish.sandbox.environment.OomAnnotatedExecHandle':
         'a container state line into whether the cgroup OOM killer fired (a boolean)',
         'com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleObjectReader':

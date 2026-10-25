@@ -35,4 +35,15 @@ class TakeExitCodeMapperSpec extends Specification {
         new TakeResult.Skipped(UntrustedText.tracker('held by another instance')) | 15
         new TakeResult.InfrastructureUnavailable(UntrustedText.subprocess('origin never answered')) | 16
     }
+
+    // FR14 of add-sandbox-base-image: every precondition kind a claimed run can meet exits 8, the
+    // below-10 configuration code, whichever kind refused.
+    def "an operator precondition unmet after the claim exits 8 for kind #kind"() {
+        expect:
+        TakeExitCodeMapper.exitCodeFor(
+                new TakeResult.OperatorPreconditionUnmet(UntrustedText.factory('re-clone on reftable'), kind)) == 8
+
+        where:
+        kind << DaemonConditionKind.values()
+    }
 }

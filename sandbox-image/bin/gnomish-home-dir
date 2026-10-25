@@ -1,0 +1,53 @@
+#!/bin/sh
+# gnomish-home-dir: declares the directories under the gnome's home that the gnome may write.
+# Implements FR3, FR12, NFR-S2 of add-sandbox-base-image (design D14).
+#
+# Usage (as root, in an image layer built FROM the sandbox base; the reference recipe declares its
+# toolchain's directories this way):
+#   RUN gnomish-home-dir .m2 .gradle .npm
+#
+# The gnome's home, /home/gnome, is owned by root and holds root-owned files only; the gnome cannot
+# create, replace or remove anything directly under it. For each name this helper creates
+# /home/gnome/<name> (an existing directory is kept), hands it and its content to the gnome, and
+# records the name in /etc/gnomish/home-dirs — the one list of gnome-writable home directories,
+# against which gnomish-verify-image checks the home. Nothing else writes the list.
+#
+# A name is one entry directly under the home: it is refused when it is empty, contains a `/`, a
+# `..` or a line break, or names an existing entry that is not a directory (a symbolic link
+# included). A run as a user other than root is refused. Every name is checked before anything is
+# written, so a refused call changes nothing. Exit 0 on success, 1 on a refusal.
+set -eu
+
+home=/home/gnome
+list=/etc/gnomish/home-dirs
+newline='
+'
+
+refuse() {
+    printf 'gnomish-home-dir: %s\n' "$1" >&2
+    exit 1
+}
+
+[ "$(id -u)" = 0 ] || refuse "must run as root (in an image layer, before USER gnome); ran as uid $(id -u)"
+[ "$#" -gt 0 ] || refuse "no directory named; usage: gnomish-home-dir <name>..."
+
+for name in "$@"; do
+    case "$name" in
+        '' | */* | *..* | *"$newline"*)
+            refuse "'$name' is not one entry directly under $home (no '/', no '..', not empty)" ;;
+    esac
+    if [ -L "$home/$name" ] || { [ -e "$home/$name" ] && [ ! -d "$home/$name" ]; }; then
+        refuse "$home/$name exists and is not a directory"
+    fi
+done
+
+mkdir -p /etc/gnomish
+touch "$list"
+for name in "$@"; do
+    mkdir -p "$home/$name"
+    chown -R gnome:gnome "$home/$name"
+    chmod 0755 "$home/$name"
+    grep -qxF -- "$name" "$list" || printf '%s\n' "$name" >>"$list"
+done
+chown root:root "$list"
+chmod 0644 "$list"

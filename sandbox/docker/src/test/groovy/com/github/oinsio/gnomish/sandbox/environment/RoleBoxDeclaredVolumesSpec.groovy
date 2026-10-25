@@ -50,7 +50,7 @@ class RoleBoxDeclaredVolumesSpec extends Specification implements ContainerEnvir
         !carries(box, new DeclaredVolumeOverrides(['/gnomish/work']).argv())
 
         and: 'every declared path is accounted for: the image inspect ran for the role box before its run'
-        docker.runs.indexOf(DockerCommands.inspectImageVolumes(sandbox.image())) <docker.runs.indexOf(box)
+        docker.runs.indexOf(DockerCommands.inspectImageConfig(sandbox.image())) <docker.runs.indexOf(box)
 
         where:
         role | suffix | pick

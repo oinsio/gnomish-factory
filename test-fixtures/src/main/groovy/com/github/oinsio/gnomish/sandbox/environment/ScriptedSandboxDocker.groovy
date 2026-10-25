@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
+import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
+import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
@@ -40,8 +42,19 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
      */
     String agentRound = FakeAgentScenario.stdout('plain-round')
 
+    /**
+     * What the image inspection answers with (its {@code .Config} JSON), or {@code null} — the
+     * default — for an image declaring no volume and carrying this factory's contract label
+     * ({@link RecordingDockerCli#answerDeclaredVolumes}). A scenario about the image-contract
+     * refusal sets a {@code Config} without the label (design D22 of add-sandbox-base-image).
+     */
+    String imageConfig = null
+
     ScriptedSandboxDocker() {
         onRun = { List<String> args ->
+            if (imageConfig != null && args == DockerCommands.inspectImageConfig(args.last())) {
+                return DockerResult.of(0, imageConfig, '')
+            }
             // Matched against the production command itself, never a copy of its format string:
             // the container-state inspect grows fields over time, and a stale copy here would
             // silently stop matching and turn the fresh-materialize path into the reattach path
@@ -107,14 +120,14 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
                         // wall clock (FR21 of supervise-daemon-loops-and-embed-dashboard).
                         new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), { d -> } as Sleeper), DEFAULT_COMMAND_TIMEOUT)
         new ContainerEnvironments(
-                new BoxEquipment(this, sandbox, timing, guardRoot, mode),
+                new BoxEquipment(this, sandbox, timing, guardRoot, mode, ImageContractCheck.current()),
                 key,
                 // A scripted box changed nothing: its harvest lands the branch's own tip in the
                 // task's quarantine, as a real harvest of an unchanged box does (design D18 of
                 // tighten-spec-contract), so the admission finds the range already on the branch.
                 new BoxGitLink(sourceClone, { String container, String branch ->
-                    new com.github.oinsio.gnomish.adapter.git.GitProcessRunner().run(sourceClone, 'update-ref',
-                    com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch.quarantine(branch).name(), 'refs/heads/' + branch)
+                    new GitProcessRunner().run(sourceClone, 'update-ref',
+                        ContainerHarvestFetch.quarantine(branch).name(), 'refs/heads/' + branch)
                 } as ContainerHarvest),
                 ChildEnvAllowlist.none(),
                 projectId,

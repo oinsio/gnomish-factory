@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.serveobservability.json;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.oinsio.gnomish.serveobservability.ConditionHealth;
 import com.github.oinsio.gnomish.serveobservability.FeedPhase;
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshot;
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState;
@@ -21,6 +22,7 @@ import com.github.oinsio.gnomish.serveobservability.TrackerHealth;
 import com.github.oinsio.gnomish.serveobservability.VitalsSnapshot;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
@@ -57,7 +59,8 @@ public final class SnapshotJsonReader {
     }
 
     private static Snapshot fromDto(SnapshotDto dto) {
-        return new Snapshot(
+        List<ConditionDto> conditions = dto.conditions();
+        Snapshot read = new Snapshot(
                 dto.version(),
                 Instant.parse(dto.writtenAt()),
                 dto.intervalSeconds(),
@@ -71,6 +74,36 @@ public final class SnapshotJsonReader {
                 fromVitals(dto.vitals()),
                 fromTracker(dto.tracker()),
                 fromRemote(dto.remote()));
+        // NFR-O2 of add-sandbox-base-image: a document written before the conditions section
+        // derives it from the remote section (the constructor above); one that carries it is read.
+        return conditions == null
+                ? read
+                : new Snapshot(
+                        read.version(),
+                        read.writtenAt(),
+                        read.intervalSeconds(),
+                        read.instance(),
+                        read.lifecycle(),
+                        read.feed(),
+                        read.slots(),
+                        read.vitals(),
+                        read.tracker(),
+                        read.remote(),
+                        conditions.stream()
+                                .map(SnapshotJsonReader::fromCondition)
+                                .toList());
+    }
+
+    private static ConditionHealth fromCondition(ConditionDto dto) {
+        return new ConditionHealth(
+                dto.condition(),
+                dto.target(),
+                "open".equals(dto.state()),
+                fromInstant(dto.openSince()),
+                dto.lastError(),
+                fromInstant(dto.nextProbeAt()),
+                dto.consecutiveFailures(),
+                fromInstant(dto.lastSuccessAt()));
     }
 
     private static LifecycleState fromLifecycle(LifecycleDto dto) {

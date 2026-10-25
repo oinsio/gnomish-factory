@@ -4,7 +4,7 @@ import spock.lang.Specification
 
 /**
  * FR14, NFR-O1, NFR-O3 of add-base-ref-resolution: {@link RemoteOutageCounters} in isolation —
- * {@link RemoteOutageGate} exercises it only through a live open/probe/close sequence, so this spec
+ * {@link DaemonCondition} exercises it only through a live open/probe/close sequence, so this spec
  * pins each count's own read-modify-write behavior directly, including {@code opened()} resetting
  * every count for a freshly opened outage even when the previous outage left them non-zero.
  */

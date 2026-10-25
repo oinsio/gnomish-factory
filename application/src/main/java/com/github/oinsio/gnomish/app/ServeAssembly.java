@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.sandboxlifecycle.ObservedSandboxLifecyclePa
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog;
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener;
+import com.github.oinsio.gnomish.app.serve.DaemonConditions;
 import com.github.oinsio.gnomish.app.serve.DaemonLoops;
 import com.github.oinsio.gnomish.app.serve.DeliveredBranchPass;
 import com.github.oinsio.gnomish.app.serve.DirtyNotifier;
@@ -21,8 +22,8 @@ import com.github.oinsio.gnomish.app.serve.FeedAssembly;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.IdleTiming;
+import com.github.oinsio.gnomish.app.serve.PreconditionRecheck;
 import com.github.oinsio.gnomish.app.serve.RealProcessTreeKiller;
-import com.github.oinsio.gnomish.app.serve.RemoteOutageGate;
 import com.github.oinsio.gnomish.app.serve.RemoteOutageGates;
 import com.github.oinsio.gnomish.app.serve.RemoteOutageLedgerSink;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
@@ -90,12 +91,18 @@ final class ServeAssembly {
     }
 
     /**
-     * FR14, NFR-R3 of add-base-ref-resolution: the one gate the slot runner opens and the feed
-     * consults; {@code onTransition} and {@code ledgerSink} are the snapshot and ledger hooks.
+     * FR14, NFR-R3 of add-base-ref-resolution; D19 of add-sandbox-base-image: the daemon's one set of
+     * conditions, which the slots' git decorations signal and the feed consults; {@code onTransition} and {@code ledgerSink} are the snapshot and ledger hooks, and
+     * {@code rechecks} the startup checks the precondition conditions probe with.
      */
-    RemoteOutageGate remoteOutageGate(
-            BaseRefGit baseRefs, Path cloneDir, DirtyNotifier onTransition, RemoteOutageLedgerSink ledgerSink) {
-        return RemoteOutageGates.forServe(baseRefs, cloneDir, serveProperties, time.clock(), onTransition, ledgerSink);
+    DaemonConditions daemonConditions(
+            BaseRefGit baseRefs,
+            Path cloneDir,
+            DirtyNotifier onTransition,
+            RemoteOutageLedgerSink ledgerSink,
+            PreconditionRecheck rechecks) {
+        return RemoteOutageGates.forServe(
+                baseRefs, cloneDir, serveProperties, time.clock(), onTransition, ledgerSink, rechecks);
     }
 
     /**
@@ -131,7 +138,7 @@ final class ServeAssembly {
             SlotLedger slotLedger,
             TakeSlotRunner slotRunner,
             DirtyNotifier dirtyNotifier,
-            RemoteOutageGate remoteOutageGate) {
+            DaemonConditions conditions) {
         FactoryProperties.Tracker trackerProperties = factoryProperties.tracker();
         // D7 of add-parameter-count-gate: the feed's collaborators are built by its assembly object,
         // constructed here over the daemon's timing equipment.
@@ -143,7 +150,7 @@ final class ServeAssembly {
                         trackerProperties.abortBackoffCap(),
                         new Random()),
                 trackerConfig.wipLimit());
-        return assembly.feedAutomaton(tracker, instanceId, slotLedger, slotRunner, dirtyNotifier, remoteOutageGate);
+        return assembly.feedAutomaton(tracker, instanceId, slotLedger, slotRunner, dirtyNotifier, conditions);
     }
 
     /**
@@ -162,11 +169,12 @@ final class ServeAssembly {
      * add-project-registry), held tasks read fresh from {@code slotLedger}; its branch pass (FR4 of
      * fix-terminal-receipt-convergence) runs on the slot's git and claimless cleanup.
      */
-    WorktreeJanitor worktreeJanitor(SlotLedger slotLedger, TaskGit git, BoundTracker served, SlotWiring wiring) {
+    WorktreeJanitor worktreeJanitor(
+            SlotLedger slotLedger, TaskGit git, BoundTracker served, SlotWiring wiring, DaemonConditions conditions) {
         RegisteredClone clone = resolvedClone.getObject();
         var cleanup = ClaimlessDeliveredCleanup.forSlot(wiring, served.tracker());
-        var branchPass =
-                new DeliveredBranchPass(clone.clonePath(), wiring.git().branches(), cleanup, served.definition());
+        var branchPass = new DeliveredBranchPass(
+                clone.clonePath(), wiring.git().branches(), cleanup, served.definition(), conditions);
         var disposal = git.worktrees().environmentDisposal(clone);
         return new WorktreeJanitor(
                 clone, serveProperties.worktreeAgeThreshold(), disposal, time, slotLedger, branchPass);

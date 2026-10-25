@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.app.take.DaemonConditionKind
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -45,6 +46,20 @@ class TakeBatchExitCodeSpec extends Specification {
 
         expect:
         TakeBatchExitCode.aggregate(outcomes) == 10
+    }
+
+    // FR14 of add-sandbox-base-image: a precondition result maps below 10, so it dominates every
+    // legitimate outcome in the batch the way a tool failure does — a retry without the fix refuses.
+    def "an operator precondition result dominates the legitimate-outcome family with 8"() {
+        given:
+        def outcomes = [
+            new TakeBatchOutcome('42', new TakeResult.AwaitingHuman(STATE, ParkReason.ESCALATION, 'needs a human')),
+            new TakeBatchOutcome('43', new TakeResult.OperatorPreconditionUnmet(UntrustedText.factory('Task PROJ-9 claim released: re-clone on reftable'), DaemonConditionKind.CLONE_REF_FORMAT)),
+        ]
+
+        expect:
+        TakeBatchExitCode.aggregate(outcomes) == 8
+        outcomes[1].describe().startsWith('released (operator precondition CLONE_REF_FORMAT unmet): Task PROJ-9')
     }
 
     // Delta spec scenario "Tool failure dominates": WHEN one ref fails with a pipeline load

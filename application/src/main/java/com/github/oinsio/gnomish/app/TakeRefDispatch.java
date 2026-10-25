@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.ServeProperties;
 import com.github.oinsio.gnomish.app.take.TakeExitCodeMapper;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.io.IOException;
 import java.util.List;
 import org.slf4j.Logger;
@@ -12,7 +13,10 @@ import org.slf4j.Logger;
  * outcome to the process exit code via {@link TakeExitCodeException}, extracted from {@link
  * TakeCommand#run} for file size.
  *
- * <p>Implements FR2, FR3 of add-factory-serve.
+ * <p>A single-shot take that ends on an operator precondition writes its one coded line here,
+ * before the exit code 8 (FR14 of add-sandbox-base-image).
+ *
+ * <p>Implements FR2, FR3 of add-factory-serve; FR14 of add-sandbox-base-image.
  */
 final class TakeRefDispatch {
 
@@ -42,6 +46,15 @@ final class TakeRefDispatch {
             result = dispatcher.runBare(takeArguments, bound);
         } else {
             result = dispatcher.runExplicit(takeArguments, refs.getFirst(), bound);
+        }
+        if (result instanceof TakeResult.OperatorPreconditionUnmet unmet) {
+            // The command the refusal ends writes the operator's one line (design D19 of
+            // add-sandbox-base-image): the checks throw without logging, and the dispatch that
+            // classified the refusal logged it at DEBUG.
+            log.error(
+                    OperatorEvent.TAKE_OPERATOR_PRECONDITION_UNMET.head() + "operator precondition {} unmet: {}",
+                    unmet.kind(),
+                    unmet.reason().forLog());
         }
         throw new TakeExitCodeException(TakeExitCodeMapper.exitCodeFor(result));
     }

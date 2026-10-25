@@ -106,6 +106,9 @@ final class TakeContainerFreshClaim {
                 bound.lawCommit(),
                 baseBound.pin(),
                 synthesized.initialState());
+        // D22 of add-sandbox-base-image: the first box is live before the engine, so an operator
+        // precondition refusal ends this claim with its typed result rather than a park.
+        FirstBoxStep.makeLive(support, taskDefinition.stages().getFirst().name());
 
         var execution = new TakeContainerEngineExecution(
                 wiring.assembly(),

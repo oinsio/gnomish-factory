@@ -26,7 +26,7 @@ class RemoteOutageSignalingTaskBranchGitSpec extends Specification {
     private static final String TASK = 'PROJ-1'
     private static final String CAUSE = 'connection refused'
 
-    def gate = RemoteOutageGateFixtures.closedGate()
+    def gate = DaemonConditionFixtures.closedGate()
     def delegate = Mock(TaskBranchGit)
     def decorated = new RemoteOutageSignalingTaskBranchGit(delegate, gate)
 

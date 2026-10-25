@@ -131,7 +131,7 @@ tracker:
         writeConfig(GITHUB_TRACKER_SECTION)
         def failure = new IllegalStateException('connection refused')
         def command = newCommand([github: factoryThrowingOnCreate(failure)], new CapturingStarter())
-        def capture = LogCaptureSupport.attach(ServeCommand)
+        def capture = LogCaptureSupport.attach(ServeStartupGates)
 
         when:
         runExpectingExit(command)

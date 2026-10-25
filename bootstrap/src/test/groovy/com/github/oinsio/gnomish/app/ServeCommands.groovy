@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.port.git.TaskGit
+import com.github.oinsio.gnomish.app.port.run.SandboxImageReadiness
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
@@ -26,12 +27,16 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
  */
 final class ServeCommands {
 
+    /** An image every check accepts: the default for a spec whose subject is not the image. */
+    static final SandboxImageReadiness PASSING_IMAGE = { String image -> } as SandboxImageReadiness
+
     private ServeCommands() {}
 
     static ServeCommand of(RunAssembly assembly, TaskGit git, RegisteredClone clone, String taskIdMdcKey,
             FactoryProperties factoryProperties, ServeProperties serveProperties, TrackerWiring trackerWiring,
             FeedAutomatonStarter starter, SandboxLifecyclePass sandboxLifecyclePass,
-            ContainerTakeSupport containerTakeSupport, ConsoleIO errorConsole) {
+            ContainerTakeSupport containerTakeSupport, ConsoleIO errorConsole,
+            SandboxImageReadiness imageReadiness = PASSING_IMAGE) {
         def resolvedClone = RegisteredCloneFixture.provider(clone)
         def scope = new ProjectScope(resolvedClone, factoryProperties)
         def slotWiringFactory = new SlotWiringFactory(
@@ -49,6 +54,15 @@ final class ServeCommands {
                 // The page inside serve, as the root builds it: the tracker wiring in its BoardReaders
                 // role, over the command's own project scope and the daemon's one time equipment.
                 new ServeDashboard(trackerWiring, scope, factoryProperties, assembly.timeEquipment()))
-        new ServeCommand(runtimeAssembly, git, scope, serveProperties, trackerWiring, starter, errorConsole)
+        // The startup assessment through the production owner, over the slots' own mode selector
+        // and a host-only sandbox config: a host-bound spec never asks the image (design D17 of
+        // add-sandbox-base-image); a boxed one passes unless it scripts a refusal.
+        def startupGates = new ServeStartupGates(
+                trackerWiring,
+                git,
+                new ServePreconditions(git.branches(), containerTakeSupport.modeSelector(), imageReadiness,
+                new SandboxProperties('gnomish/fixture-image', null, null, null, null, null, false, null, null, null, null)),
+                errorConsole)
+        new ServeCommand(runtimeAssembly, startupGates, scope, serveProperties, trackerWiring, starter, errorConsole)
     }
 }

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.dashboard
 
+import com.github.oinsio.gnomish.serveobservability.ConditionHealth
 import com.github.oinsio.gnomish.serveobservability.FeedPhase
 import com.github.oinsio.gnomish.serveobservability.FeedSnapshot
 import com.github.oinsio.gnomish.serveobservability.HeartbeatState
@@ -129,6 +130,37 @@ class AlertConditionEvaluatorSpec extends Specification {
         // referenceSnapshot's own remote entry is closed, so no line either.
         !AlertConditionEvaluator.evaluate(new DaemonSnapshotView.Fresh(absent), FRESH_NOW)
                 .any { it instanceof AlertCondition.RemoteGateOpen }
+    }
+
+    // NFR-O2, UX4 of add-sandbox-base-image: an open operator precondition is its own field,
+    //     beside the remote's entry, with its label naming the condition, since when, the cause
+    //     and the next probe; the remote's entry stays the remote gate's line, never a second one.
+    // Scenario: serve/factory-serve / An open precondition is a dashboard field
+    def "an open precondition is flagged with its condition, since, cause and next probe; the remote entry is not repeated"() {
+        given:
+        def base = SnapshotJsonMapperSpec.referenceSnapshot()
+        def snapshot = new Snapshot(base.version(), base.writtenAt(), base.intervalSeconds(), base.instance(),
+                base.lifecycle(), base.feed(), base.slots(), base.vitals(), base.tracker(), base.remote(), [
+                    new ConditionHealth('remote', 'origin', true, FRESH_NOW.minusSeconds(30), 'down', FRESH_NOW, 1, null),
+                    new ConditionHealth('containerRuntime', null, true, FRESH_NOW.minusSeconds(600),
+                    'Docker runtime is unreachable; start it', FRESH_NOW.plusSeconds(60), 4, null),
+                    new ConditionHealth('imageContract', null, false, null, null, null, 0, null)
+                ])
+
+        when:
+        def flagged = AlertConditionEvaluator.evaluate(new DaemonSnapshotView.Fresh(snapshot), FRESH_NOW)
+                .findAll { it instanceof AlertCondition.PreconditionOpen }
+
+        then:
+        flagged == [
+            new AlertCondition.PreconditionOpen('containerRuntime', FRESH_NOW.minusSeconds(600),
+            'Docker runtime is unreachable; start it', FRESH_NOW.plusSeconds(60))
+        ]
+        def label = DashboardAlertLabels.label(flagged[0])
+        label.contains('containerRuntime')
+        label.contains(FRESH_NOW.minusSeconds(600).toString())
+        label.contains('start it')
+        label.contains(FRESH_NOW.plusSeconds(60).toString())
     }
 
     // Scenario: observability/dashboard-page / A sustained outage escalates the wording

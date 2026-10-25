@@ -24,7 +24,9 @@ import spock.lang.TempDir
  * {@code sandboxModeSelector} join (the execution-mode decision is built once by the root); FR9,
  * FR10 (design D11, D12): {@code serveDashboard} joins (the page inside serve, holding the tracker
  * wiring only as its board-reader role). F119 of tighten-spec-contract (design D12): {@code
- * workspaceFactory} joins (the host workspace realization the root hands to the use cases).
+ * workspaceFactory} joins (the host workspace realization the root hands to the use cases). FR13 of
+ * add-sandbox-base-image (design D17): {@code sandboxImageReadiness} and {@code serveStartupGates}
+ * join (the image half of serve's startup assessment, and the three pre-claim steps that hold it).
  */
 class ApplicationBeanInventorySpec extends Specification {
 
@@ -77,6 +79,7 @@ class ApplicationBeanInventorySpec extends Specification {
         'reportCommands',
         'runExitCodeMapper',
         'sandboxLifecyclePass',
+        'sandboxImageReadiness',
         'sandboxModeSelector',
         'secretsProvider',
         'serveAssembly',
@@ -84,6 +87,7 @@ class ApplicationBeanInventorySpec extends Specification {
         'serveDashboard',
         'serveExitCodeExceptionMapper',
         'serveRuntimeAssembly',
+        'serveStartupGates',
         'shellCommandCheckRunner',
         'slotWiringFactory',
         'statusCommand',

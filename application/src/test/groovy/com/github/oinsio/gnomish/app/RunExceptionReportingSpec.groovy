@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.app.port.git.BoxGitVersionRefusedException
 import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException
 import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeUnavailableException
+import com.github.oinsio.gnomish.app.port.run.ImageContractRefusedException
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -93,12 +95,65 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
             new GitVersionRefusedException('2.51.0', '2.50.1', 'the seed clone relies on it'),
             // D13 of tighten-spec-contract: a factory clone off the reftable backend is a precondition
             new CloneRefFormatRefusedException('/clones/x', 'reftable', UntrustedText.subprocess('files')),
-            new BoxGitVersionRefusedException('img:1', '2.51.0', UntrustedText.container('git version 2.43.0'), 'why'),
+            new BoxGitVersionRefusedException('img:1', '2.56.0', UntrustedText.container('git version 2.43.0'), 'why'),
+            // FR5 of add-sandbox-base-image: an image refused on its contract label is a precondition
+            new ImageContractRefusedException('img:1', null, 'io.gnomish.image-contract', 2, 'rebuild'),
+            // D19 of add-sandbox-base-image: the plan's unreachable runtime is the operator's precondition
+            new ContainerRuntimeUnavailableException('the Docker runtime is unreachable — start Docker'),
             // FR7 of add-project-registry: the configuration report is its message
             new ConfigurationViolationsException([
                 'factory.x is not a known key'
             ])
         ]
+    }
+
+    // FR14, D19 of add-sandbox-base-image: the checks throw without logging, so the command a
+    // precondition ends writes its one coded ERROR — the refusal and its fix, no stack — beside the
+    // line it prints; every other operator-error family stays unlogged here.
+    // Scenario: cli/manual-run / A precondition refusal in run exits 8, never 1
+    // Scenario: sandbox/execution-environment / An image whose git is below the floor is refused before the seed clone
+    def "an operator precondition writes one coded line with its message and no stack"() {
+        given:
+        def logs = LogCaptureSupport.attach(RunExceptionReportingSpec)
+
+        when:
+        def output = reportOf({
+            throw failure
+        } as RunExceptionReporting.ThrowingAction)
+
+        then:
+        output.trim() == failure.message
+        rethrown.is(failure)
+
+        and:
+        logs.list.size() == 1
+        logs.list[0].level == Level.ERROR
+        logs.list[0].formattedMessage == OperatorEvent.COMMAND_OPERATOR_PRECONDITION_REFUSED.head() + failure.message
+        logs.list[0].throwableProxy == null
+
+        cleanup:
+        logs.detach()
+
+        where:
+        failure << OperatorPreconditionRefusalSamples.kinds().collect {
+            OperatorPreconditionRefusalSamples.of(it)
+        }
+    }
+
+    def "an operator-error family that is no precondition writes no line"() {
+        given:
+        def logs = LogCaptureSupport.attach(RunExceptionReportingSpec)
+
+        when:
+        reportOf({
+            throw new UsageException('bad flag')
+        } as RunExceptionReporting.ThrowingAction)
+
+        then:
+        logs.list.isEmpty()
+
+        cleanup:
+        logs.detach()
     }
 
     // FR16 of fix-operator-blockers; UX3, design D15: a task-not-found already printed a calm

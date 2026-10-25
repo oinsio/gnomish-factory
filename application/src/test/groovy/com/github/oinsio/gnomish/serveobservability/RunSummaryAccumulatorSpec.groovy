@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability
 
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
+import com.github.oinsio.gnomish.app.take.DaemonConditionKind
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Position
@@ -113,6 +114,8 @@ class RunSummaryAccumulatorSpec extends Specification {
         accumulator.record(new TakeResult.EmptyQueue())
         accumulator.record(new TakeResult.Skipped(UntrustedText.tracker('lost claim race')))
         accumulator.record(new TakeResult.InfrastructureUnavailable(UntrustedText.subprocess('origin never answered')))
+        // FR14 of add-sandbox-base-image: a precondition refusal ran no engine either
+        accumulator.record(new TakeResult.OperatorPreconditionUnmet(UntrustedText.factory('Task PROJ-9 claim released: re-clone on reftable'), DaemonConditionKind.CLONE_REF_FORMAT))
 
         then:
         accumulator.counts() == new OutcomeCounts(0, 0, 0, 0)

@@ -23,7 +23,7 @@ import org.slf4j.Logger;
  * <p>Takes the runner's own {@link Logger} rather than declaring one, so every line stays
  * attributed to the slot class an operator greps for.
  *
- * <p>Implements FR3, FR9 of harden-logging-observability.
+ * <p>Implements FR3, FR9 of harden-logging-observability; FR14 of add-sandbox-base-image.
  */
 final class SlotOutcomeLog {
 
@@ -62,6 +62,10 @@ final class SlotOutcomeLog {
      * single-shot {@code take} is the deciding layer's WARN plus the typed result and exit code 16,
      * not this line.
      *
+     * <p>{@code OperatorPreconditionUnmet} takes the same DEBUG line, naming the precondition and the
+     * fix: under {@code serve} the daemon condition the slot reports writes the one opening WARN
+     * (design D19 of add-sandbox-base-image), so a WARN here would be its second line.
+     *
      * @param claimed the task the slot ran; never null
      * @param result the terminal result of that run; never null
      */
@@ -95,6 +99,12 @@ final class SlotOutcomeLog {
                         "slot for task {} released: {}",
                         claimed.id(),
                         infrastructureUnavailable.reason().forLog());
+            case TakeResult.OperatorPreconditionUnmet unmet ->
+                log.debug(
+                        "slot for task {} released on operator precondition {}: {}",
+                        claimed.id(),
+                        unmet.kind(),
+                        unmet.reason().forLog());
             case TakeResult.EmptyQueue _ ->
                 log.debug("slot for task {} reported an unexpected empty-queue result", claimed.id());
         }
@@ -102,7 +112,8 @@ final class SlotOutcomeLog {
 
     /**
      * FR3: the canonical task summary, emitted last so a {@code grep taskId=<id>} ends on it.
-     * {@code EmptyQueue}/{@code Skipped}/{@code InfrastructureUnavailable} assemble to no summary —
+     * {@code EmptyQueue}/{@code Skipped}/{@code InfrastructureUnavailable}/{@code
+     * OperatorPreconditionUnmet} assemble to no summary —
      * no run happened, so there is nothing to summarize (the same boundary the ledger draws).
      *
      * @param result the terminal result to summarize; never null

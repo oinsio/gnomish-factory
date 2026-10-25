@@ -1,13 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -29,7 +23,7 @@ import java.util.Set;
  * GuardCommands#runGuard} and {@code DockerCommands.runContainer} take it as a
  * typed parameter, so a {@code run} builder that skipped the override does not
  * compile. Nothing here names a path of any particular image — the set is read
- * from the image at creation time (G2).
+ * from the image at creation time (G2), through the one inspection {@link ImageFacts} owns.
  *
  * <p><b>The one path that does not come through here</b>, recorded as the single-owner
  * exemption this mechanism is allowed ({@code implementation.md}, old-way sweep): the Testcontainers
@@ -43,12 +37,12 @@ import java.util.Set;
  * that ever stops being reaped — a container started outside Testcontainers, or one kept alive
  * past the JVM — leaves this exemption and needs the override, via {@code withTmpFs}.
  *
- * <p>Implements FR1, FR2, FR3, NFR-R1, NFR-R2 of fix-image-declared-volumes.
+ * <p>Implements FR1, FR2, FR3, NFR-R1, NFR-R2 of fix-image-declared-volumes; design D3 of
+ * add-sandbox-base-image.
  *
  * @param paths the declared paths to override, in the order the runtime reported
  *     them; never null, already stripped of the factory's explicit destinations
  */
-@UntrustedParser
 record DeclaredVolumeOverrides(List<String> paths) {
 
     /**
@@ -79,8 +73,6 @@ record DeclaredVolumeOverrides(List<String> paths) {
      */
     static final String TMPFS_MODE = "1777";
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
     DeclaredVolumeOverrides {
         paths = List.copyOf(paths);
     }
@@ -90,69 +82,24 @@ record DeclaredVolumeOverrides(List<String> paths) {
      * destinations this container already mounts explicitly (the working copy in the
      * box, the read-only config directory in the guard), which keep their own mount.
      *
-     * <p>A read that cannot be trusted fails the caller rather than yielding an empty
-     * set (NFR-R1, design D4): an empty set on failure would silently recreate the very
-     * leak this class exists to close. The caller wraps the throw into its own
-     * infrastructure-failure signal, which is where the runtime-outage policy lives.
+     * <p>A pure function of the facts: the one inspection that produced them is {@link
+     * ImageFacts#read}, whose refusal of an answer it cannot trust is what keeps an unread
+     * image from yielding an empty set (NFR-R1, design D4) — an empty set on failure would
+     * silently recreate the very leak this class exists to close. Taking the facts rather than
+     * the runtime seam is what keeps the read single (design D3 of add-sandbox-base-image).
      *
-     * @param docker the runtime seam to ask; never null
-     * @param image the image reference the container will run; never blank
+     * @param facts the image's facts, read once for the container being created; never null
      * @param explicitDestinations the in-container paths this container mounts itself
      * @return the overrides; never null, empty when the image declares nothing new
-     * @throws DockerCommandFailedException if the runtime refused the inspect or answered a
-     *     shape other than {@code null} or a JSON object of paths
      */
-    static DeclaredVolumeOverrides resolve(DockerCli docker, String image, Set<String> explicitDestinations) {
-        DockerResult result = docker.run(DockerCommands.inspectImageVolumes(image));
-        if (!result.ok()) {
-            throw new DockerCommandFailedException("image inspect", image, null, result.stderr());
-        }
+    static DeclaredVolumeOverrides resolve(ImageFacts facts, Set<String> explicitDestinations) {
         List<String> overridden = new ArrayList<>();
-        for (String declared : declaredPaths(image, result.stdout())) {
+        for (String declared : facts.declaredVolumes()) {
             if (!explicitDestinations.contains(declared)) {
                 overridden.add(declared);
             }
         }
         return new DeclaredVolumeOverrides(overridden);
-    }
-
-    /**
-     * The keys of {@code .Config.Volumes}, in the runtime's own order. Docker writes the
-     * field as a JSON object keyed by path, or {@code null} when the image declares none;
-     * both are normal answers and anything else is a shape this parser refuses to guess at
-     * (fail closed, design D4).
-     */
-    private static List<String> declaredPaths(String image, UntrustedText answer) {
-        JsonNode node;
-        try {
-            // @UntrustedParser warrant (design D11): docker's inspect answer becomes the list of
-            //     declared volume paths, which travel into a `docker run` argv as mount
-            //     destinations and are never rendered to a reader; the answer itself leaves this
-            //     class only through the carrier's log exit, in the messages below.
-            node = MAPPER.readTree(answer.forParsing());
-        } catch (JsonProcessingException e) {
-            throw new DockerCommandFailedException(
-                    "image inspect",
-                    image,
-                    null,
-                    UntrustedText.subprocess("unparseable declared volumes: " + answer),
-                    e);
-        }
-        if (node.isNull()) {
-            return List.of();
-        }
-        if (!node.isObject()) {
-            throw new DockerCommandFailedException(
-                    "image inspect",
-                    image,
-                    null,
-                    UntrustedText.subprocess("declared volumes of an unexpected shape: " + answer));
-        }
-        List<String> declared = new ArrayList<>();
-        for (Map.Entry<String, JsonNode> property : node.properties()) {
-            declared.add(property.getKey());
-        }
-        return declared;
     }
 
     /**

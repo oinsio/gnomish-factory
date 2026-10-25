@@ -23,9 +23,10 @@ import spock.lang.TempDir
  * serve} are all refused by a git below the floor before a transfer, a claim or a tracker write.
  * The evidence is the fake git's own record — every git-backed port of the assembly, the task-git
  * bundle included, runs through it, and it sees {@code --version} alone — and a tracker that
- * records every interaction and receives none. The refusing git reports 2.55.2: above the box's
- * floor (2.51.0) and below the factory's (2.56.0), so the startup check is shown to judge by the
- * factory's floor, not the box's (FR10, design D11 of own-git-invocation-policy).
+ * records every interaction and receives none. The refusing git reports 2.55.2, one release below
+ * the factory's one floor (2.56.0, design D9 of add-sandbox-base-image), so the check is shown to
+ * judge by that floor and not by the lower box floor it once stood beside (FR10, design D11 of
+ * own-git-invocation-policy).
  */
 class GitVersionFloorSpec extends Specification implements AppAssemblyFixture {
 
@@ -50,7 +51,7 @@ class GitVersionFloorSpec extends Specification implements AppAssemblyFixture {
 
     // Scenario: git/git-transfer / Old git is refused before any work
     def "FR10: '#subcommand' is refused below the floor before any transfer, claim or tracker write"() {
-        given: 'a git one release below the factory\'s floor that records every invocation — 2.55.x, which still meets the box\'s (FR10 of own-git-invocation-policy)'
+        given: 'a git one release below the factory\'s floor that records every invocation — 2.55.x (FR10 of own-git-invocation-policy)'
         def oldGit = StandIn.link(homeDir.resolve('old-git'), 'version-2-55')
         def git = new GitProcessRunner(oldGit.toString())
 

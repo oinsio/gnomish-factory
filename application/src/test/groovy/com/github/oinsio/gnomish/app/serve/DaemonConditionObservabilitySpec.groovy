@@ -7,12 +7,11 @@ import com.github.oinsio.gnomish.logtext.RepeatOccurrence
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import java.nio.file.Path
-import java.time.Duration
-import java.time.Instant
-import java.util.concurrent.atomic.AtomicReference
 import spock.lang.Specification
 
+import java.nio.file.Path
+import java.time.Duration
+import java.util.concurrent.atomic.AtomicReference
 /**
  * FR14, NFR-O1, NFR-O3, UX6 of add-base-ref-resolution (task 7.4): the gate's own observability —
  * one WARN ({@link OperatorEvent#REMOTE_OUTAGE_GATE_OPENED}) on open, DEBUG-only for every failed
@@ -22,10 +21,10 @@ import spock.lang.Specification
  * {@code onTransition}/{@code onClosedOutage} callbacks, and that the suppression key is scoped
  * per remote target so two gates sharing one {@link RepeatSuppressor} never cross-count.
  *
- * <p>{@link RemoteOutageGateSpec} covers the gate's open/close/backoff state machine in isolation;
+ * <p>{@link DaemonConditionSpec} covers the gate's open/close/backoff state machine in isolation;
  * this spec is purely about what it logs and hands its callbacks.
  */
-class RemoteOutageGateObservabilitySpec extends Specification {
+class DaemonConditionObservabilitySpec extends Specification {
 
     private static final Duration IDLE = Duration.ofSeconds(30)
     private static final Duration CAP = Duration.ofMinutes(10)
@@ -42,20 +41,20 @@ class RemoteOutageGateObservabilitySpec extends Specification {
     // First/Repeat are deterministic and no roll-up interleaves.
     private RepeatSuppressor suppressor = new RepeatSuppressor(clock, Duration.ofDays(1))
 
-    private RemoteOutageGate gate(
+    private DaemonCondition gate(
             BaseRefGit baseRefGit,
             String target = 'origin',
             DirtyNotifier onTransition = {},
             RemoteOutageLedgerSink onClosedOutage = { ignored -> }) {
-        new RemoteOutageGate(
-                baseRefGit, Path.of('.'), clock, NO_JITTER, IDLE, CAP,
+        new DaemonCondition(
+                ConditionSubject.remote(baseRefGit, Path.of('.')), clock, NO_JITTER, IDLE, CAP,
                 new RemoteOutageWiring(target, suppressor, SUSTAINED_OPEN, onTransition, onClosedOutage))
     }
 
     // Scenario: serve/factory-serve / One WARN, one recovery line, roll-ups between
     def "opening logs exactly one WARN naming the target and cause"() {
         given:
-        def logs = LogCaptureSupport.attach(RemoteOutageGate)
+        def logs = LogCaptureSupport.attach(DaemonCondition)
         def g = gate(BaseRefGit.UNWIRED)
 
         when:
@@ -77,7 +76,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
     //     streak too, not only the ones observed after the WARN.
     def "opening also logs the DEBUG-level suppressor line, beside the WARN"() {
         given:
-        def logs = LogCaptureSupport.attach(RemoteOutageGate, Level.DEBUG)
+        def logs = LogCaptureSupport.attach(DaemonCondition, Level.DEBUG)
         def g = gate(BaseRefGit.UNWIRED)
 
         when:
@@ -94,7 +93,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
 
     def "openOnFailure while already open logs no second WARN"() {
         given:
-        def logs = LogCaptureSupport.attach(RemoteOutageGate)
+        def logs = LogCaptureSupport.attach(DaemonCondition)
         def g = gate(BaseRefGit.UNWIRED)
         g.openOnFailure('first failure')
 
@@ -111,7 +110,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
     // Scenario: serve/factory-serve / One WARN, one recovery line, roll-ups between
     def "a failed probe after open logs DEBUG only, never a second WARN"() {
         given:
-        def logs = LogCaptureSupport.attach(RemoteOutageGate, Level.DEBUG)
+        def logs = LogCaptureSupport.attach(DaemonCondition, Level.DEBUG)
         def baseRefGit = [probe: { Path p -> false }] as BaseRefGit
         def g = gate(baseRefGit)
         g.openOnFailure('boom')
@@ -132,7 +131,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
     // Scenario: serve/factory-serve / One WARN, one recovery line, roll-ups between
     def "closing logs one INFO recovery line with duration and probe count"() {
         given:
-        def logs = LogCaptureSupport.attach(RemoteOutageGate)
+        def logs = LogCaptureSupport.attach(DaemonCondition)
         def open = true
         def baseRefGit = [probe: { Path p -> open }] as BaseRefGit
         def g = gate(baseRefGit)
@@ -159,7 +158,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
     // Scenario: serve/factory-serve / One WARN, one recovery line, roll-ups between
     def "an outage past the sustained-open threshold logs exactly one ERROR"() {
         given:
-        def logs = LogCaptureSupport.attach(RemoteOutageGate)
+        def logs = LogCaptureSupport.attach(DaemonCondition)
         def baseRefGit = [probe: { Path p -> false }] as BaseRefGit
         def g = gate(baseRefGit)
         g.openOnFailure('boom')
@@ -184,7 +183,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
     //     threshold gets its own ERROR — the latch from the first outage must not carry over.
     def "a second outage past the sustained-open threshold logs its own ERROR too"() {
         given:
-        def logs = LogCaptureSupport.attach(RemoteOutageGate)
+        def logs = LogCaptureSupport.attach(DaemonCondition)
         def open = false
         def baseRefGit = [probe: { Path p -> open }] as BaseRefGit
         def g = gate(baseRefGit)
@@ -317,7 +316,7 @@ class RemoteOutageGateObservabilitySpec extends Specification {
     // with two arbitrary targets independent of how many gates production actually wires.
     def "two gates sharing one suppressor keep independent failure streaks per target"() {
         given:
-        def logsA = LogCaptureSupport.attach(RemoteOutageGate, Level.DEBUG)
+        def logsA = LogCaptureSupport.attach(DaemonCondition, Level.DEBUG)
         def baseRefGitA = [probe: { Path p -> false }] as BaseRefGit
         def baseRefGitB = [probe: { Path p -> false }] as BaseRefGit
         def gateA = gate(baseRefGitA, 'origin-a')

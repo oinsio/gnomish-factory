@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Optional;
 import java.util.Properties;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -26,17 +27,31 @@ import org.slf4j.LoggerFactory;
  * resource does not stop the factory, and the release workflow — which compares the packaged
  * {@code --version} with the tag — is where such a jar is stopped (FR8).
  *
+ * <p>The version carries the {@link BaseTag} the build computed beside it ({@code build.baseTag},
+ * written by {@code product-version-conventions} through {@code packaging.gradle}; design D11 of
+ * add-sandbox-base-image). The canonical constructor refuses a pair that disagrees: the base tag is
+ * absent exactly for {@code 0.0.0-dev}, is {@code X.Y} — the prefix up to the second dot — for a
+ * version with no {@code -} suffix, and equals a suffixed version. So a release version read
+ * without a valid, consistent base tag is a malformed resource ({@code GF150}, {@link
+ * #DEVELOPMENT}), and no consumer re-derives the tag from {@link #value()}.
+ *
  * @param value the version string, {@code 0.0.0-dev} outside a release build; never blank
- *     <p>Implements FR3, FR6 of add-release-pipeline (design D2).
+ * @param baseTag the release's base tag; empty exactly for {@code 0.0.0-dev}
+ *     <p>Implements FR3, FR6 of add-release-pipeline (design D2); FR5, FR9 of
+ *     add-sandbox-base-image (design D11).
  */
-public record FactoryVersion(String value) {
+public record FactoryVersion(String value, Optional<BaseTag> baseTag) {
+
+    private static final String DEVELOPMENT_VALUE = "0.0.0-dev";
 
     /** The version of every build that was not handed a release version. */
-    public static final FactoryVersion DEVELOPMENT = new FactoryVersion("0.0.0-dev");
+    public static final FactoryVersion DEVELOPMENT = new FactoryVersion(DEVELOPMENT_VALUE, Optional.empty());
 
     static final String BUILD_INFO = "META-INF/build-info.properties";
 
     private static final String VERSION_KEY = "build.version";
+
+    private static final String BASE_TAG_KEY = "build.baseTag";
 
     private static final Logger log = LoggerFactory.getLogger(FactoryVersion.class);
 
@@ -44,6 +59,19 @@ public record FactoryVersion(String value) {
         if (value.isBlank()) {
             throw new IllegalArgumentException("factory version must not be blank");
         }
+        if (!consistent(value, baseTag)) {
+            throw new IllegalArgumentException("factory version " + value + " does not carry its base tag (found "
+                    + baseTag.map(BaseTag::value).orElse("none") + ")");
+        }
+    }
+
+    /** Absent exactly for a development build; {@code X.Y} unsuffixed; the whole suffixed version. */
+    private static boolean consistent(String value, Optional<BaseTag> baseTag) {
+        if (value.equals(DEVELOPMENT_VALUE)) {
+            return baseTag.isEmpty();
+        }
+        return baseTag.map(tag -> value.contains("-") ? tag.value().equals(value) : value.startsWith(tag.value() + "."))
+                .orElse(false);
     }
 
     /** The running factory's version, read from the class path on first use and kept. */
@@ -66,7 +94,10 @@ public record FactoryVersion(String value) {
         }
     }
 
-    /** Throws {@link IllegalArgumentException} for a malformed escape, a missing or blank version. */
+    /**
+     * Throws {@link IllegalArgumentException} for a malformed escape, a missing or blank version, and
+     * a missing, malformed or inconsistent base tag beside a release version.
+     */
     private static FactoryVersion parse(InputStream in) throws IOException {
         Properties properties = new Properties();
         properties.load(in);
@@ -74,7 +105,9 @@ public record FactoryVersion(String value) {
         if (version == null) {
             throw new IllegalArgumentException(BUILD_INFO + " carries no " + VERSION_KEY);
         }
-        return new FactoryVersion(version.strip());
+        @Nullable String baseTag = properties.getProperty(BASE_TAG_KEY);
+        return new FactoryVersion(
+                version.strip(), baseTag == null ? Optional.empty() : Optional.of(new BaseTag(baseTag.strip())));
     }
 
     @Override

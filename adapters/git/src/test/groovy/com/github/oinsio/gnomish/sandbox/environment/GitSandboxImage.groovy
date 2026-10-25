@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 /**
- * Builds (once per JVM) the minimal git-capable sandbox image the Docker-gated
- * environment specs run against: alpine + git, a non-root {@code gnome} user
- * owning {@code /gnomish/**} — the same shape the reference image recipe (task
- * 9.1) bakes for real. The seed clone of FR3 runs in-box as the image's user,
- * so a bare {@code alpine:3} (no git, root user) can no longer materialize an
- * environment; every spec that materializes uses this image instead.
+ * Builds (once per JVM) the git-capable sandbox image the Docker-gated environment specs run
+ * against: the sandbox base image and nothing of its own. The base carries everything the seed
+ * clone and the file channel need — a git at the factory's floor, the non-root {@code gnome} user
+ * owning {@code /gnomish/**} — and the image-contract label the box start checks, so this image is
+ * the smallest operator image there is: one built {@code FROM} the base with no git of its own
+ * (design D7 of add-sandbox-base-image).
  */
 class GitSandboxImage {
 
@@ -19,15 +19,9 @@ class GitSandboxImage {
         if (built) {
             return IMAGE
         }
-        def dockerfile = '''
-            FROM alpine:3
-            RUN apk add --no-cache git \\
-             && adduser -D -u 1000 gnome \\
-             && mkdir -p /gnomish/work /gnomish/scratch \\
-             && chown -R gnome:gnome /gnomish
-            USER gnome
-        '''.stripIndent()
-        DockerImageBuilder.build(IMAGE, dockerfile)
+        DockerImageBuilder.build(IMAGE, '''
+            FROM ${BASE}
+        ''')
         built = true
         IMAGE
     }

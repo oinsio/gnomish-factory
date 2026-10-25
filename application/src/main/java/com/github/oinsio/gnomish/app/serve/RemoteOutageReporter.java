@@ -9,10 +9,10 @@ import java.time.Instant;
  * target's identity, its failed-probe streak ({@link RepeatSuppressor}) and the one-shot
  * sustained-open latch, which together decide the <em>form</em> of each line.
  *
- * <p>Split from {@link RemoteOutageGate} as its own responsibility, not for line count: the gate
+ * <p>Split from {@link DaemonCondition} as its own responsibility, not for line count: the gate
  * owns whether the remote is up, this owns what that costs the console — it says <em>opened</em>,
  * <em>probe failed</em>, <em>closed</em>, and nothing here can change its decisions. Levels and
- * {@code [GFnnn]} codes stay in {@link RemoteOutageGateLog}, the catalog site specs pin
+ * {@code [GFnnn]} codes stay in the {@link ConditionLog} it is handed, the catalog site specs pin
  * ({@code logging.md}). Per-outage state is the latch alone; every call arrives from the gate's
  * guarded phases, so no synchronization lives here.
  *
@@ -36,17 +36,21 @@ final class RemoteOutageReporter {
     static final String DEFAULT_TARGET = "origin";
 
     private final String target;
+    private final ConditionLog lines;
     private final RepeatSuppressor suppressor;
     private final RemoteOutageSustainedOpenWatch sustainedOpenWatch;
 
     /**
-     * @param target the remote-target identity named in every line; never blank
+     * @param target the identity named in every line and the snapshot's entry; never blank
+     * @param lines the condition's own lines ({@link ConditionLog#forKind}); never null
      * @param suppressor the edge-logging owner for this target's failed-probe streak; never null
      * @param sustainedOpenThreshold how long an outage may run before the one-shot ERROR fires;
      *     never null, positive
      */
-    RemoteOutageReporter(String target, RepeatSuppressor suppressor, Duration sustainedOpenThreshold) {
+    RemoteOutageReporter(
+            String target, ConditionLog lines, RepeatSuppressor suppressor, Duration sustainedOpenThreshold) {
         this.target = target;
+        this.lines = lines;
         this.suppressor = suppressor;
         this.sustainedOpenWatch = new RemoteOutageSustainedOpenWatch(sustainedOpenThreshold);
     }
@@ -65,13 +69,13 @@ final class RemoteOutageReporter {
      */
     void opened(String scrubbedReason) {
         sustainedOpenWatch.reset();
-        RemoteOutageGateLog.opened(target, scrubbedReason);
-        RemoteOutageGateLog.probeFailed(target, suppressor.failed(key(), scrubbedReason));
+        lines.opened(scrubbedReason);
+        lines.probeFailed(suppressor.failed(key(), scrubbedReason));
     }
 
     /** One negative probe, in whichever repeat form the suppressor's streak makes it. */
     void probeFailed(String reason) {
-        RemoteOutageGateLog.probeFailed(target, suppressor.failed(key(), reason));
+        lines.probeFailed(suppressor.failed(key(), reason));
     }
 
     /**
@@ -81,7 +85,7 @@ final class RemoteOutageReporter {
      */
     void sustainedOpen(Instant openedAt, Instant now, String reason) {
         if (sustainedOpenWatch.shouldFire(openedAt, now)) {
-            RemoteOutageGateLog.sustainedOpen(target, sustainedOpenWatch.threshold(), reason);
+            lines.sustainedOpen(sustainedOpenWatch.threshold(), reason);
         }
     }
 
@@ -90,7 +94,7 @@ final class RemoteOutageReporter {
      * probes failed, and the streak cleared so the next outage reads as a first occurrence again.
      */
     void closed(Duration outage, int failedProbes) {
-        RemoteOutageGateLog.closed(target, outage, failedProbes);
+        lines.closed(outage, failedProbes);
         suppressor.recovered(key());
     }
 

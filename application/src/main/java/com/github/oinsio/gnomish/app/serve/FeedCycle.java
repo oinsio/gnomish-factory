@@ -37,9 +37,9 @@ import org.slf4j.LoggerFactory;
  * slot keeps running) is skipped with a WARN, never re-claimed by this instance (FR2 of
  * fix-reaper-idle-liveness, design D6).
  *
- * <p>{@link #poll} also drives {@link RemoteOutageGate#probeIfDue} forward every cycle — whether or
- * not the poll yields any claim candidates, so the gate's schedule advances during Idle cycles too
- * — and {@link #claimOrAbandon} consults {@link RemoteOutageGate#isOpen} before it ever calls
+ * <p>{@link #held} drives {@link DaemonConditions#probeDue} forward every cycle — whether or
+ * not the poll yields any claim candidates, so each condition's schedule advances during Idle cycles too
+ * — and {@link #claimOrAbandon} consults {@link DaemonConditions#anyOpen} before it ever calls
  * {@link FeedTracker#claim}: an open gate abandons the reserved permit with NO tracker claim call
  * at all (FR14, NFR-R3 of add-base-ref-resolution), so a dead remote burns zero tracker traffic for
  * the whole outage.
@@ -70,6 +70,19 @@ record FeedCycle(
     record Poll(List<ReadyTask> readyTasks, int openFrontCount, Instant now, List<ReadyTask> candidates) {}
 
     /**
+     * Advances every due probe and answers whether a condition holds the feed (FR14 of
+     * add-base-ref-resolution; D19 of add-sandbox-base-image as amended 2026-10-25). Asked before
+     * the tracker is read, every cycle: the probes are tracker-free and run outside {@code
+     * outageRetry}, and a held cycle reads nothing from the tracker.
+     *
+     * @return true when any condition is open
+     */
+    boolean held() {
+        resilience.conditions().probeDue();
+        return resilience.conditions().anyOpen();
+    }
+
+    /**
      * Polls the tracker once and applies the eligibility filter (design D2), at instant {@code
      * now}. The tracker reads run through {@link FeedOutageRetry} (NFR-R3): a sustained outage
      * retries with backoff instead of propagating.
@@ -83,9 +96,6 @@ record FeedCycle(
      *     shutdown stop signal, FR11) — see {@link FeedOutageRetry#run}
      */
     Poll poll(Instant now) throws InterruptedException {
-        // FR14: advances the gate's own schedule every cycle, candidates or not — a tracker-free
-        // git probe, so it runs outside outageRetry (which only wraps tracker calls).
-        resilience.remoteOutageGate().probeIfDue();
         return Objects.requireNonNull(resilience.outageRetry().run("feed poll", () -> {
             List<ReadyTask> readyTasks = feed.listReady();
             resilience.finishedDecline().declineObserved(feed.tracker(), readyTasks);
@@ -115,8 +125,8 @@ record FeedCycle(
         // FR14, NFR-R3 of add-base-ref-resolution: an open gate abandons the reserved permit with
         // NO call into attemptClaim at all — outageRetry.run is never entered, so feed.claim is
         // never invoked while the remote is down.
-        if (resilience.remoteOutageGate().isOpen()) {
-            resilience.remoteOutageGate().claimReleasedWhileOpen();
+        if (resilience.conditions().anyOpen()) {
+            resilience.conditions().claimReleasedWhileOpen();
             slotLedger.abandon();
             return;
         }

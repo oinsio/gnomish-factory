@@ -14,7 +14,7 @@ import spock.lang.Specification
 /**
  * The snapshot's {@code remote} section while the gate probes a dead remote (NFR-O3, UX6 of
  * add-base-ref-resolution), read through the same assemblers {@code SnapshotSources} writes the
- * snapshot from: a real {@link RemoteOutageGate} on virtual time whose probe keeps failing, beside
+ * snapshot from: a real {@link DaemonCondition} on virtual time whose probe keeps failing, beside
  * the daemon's {@link TrackerHealthTracker}, which the probes never touch.
  *
  * <p>Implements NFR-O3, UX6 of add-base-ref-resolution.
@@ -32,13 +32,13 @@ class RemoteSectionProbeSpec extends Specification {
     private final VirtualClock clock = new VirtualClock()
     private final Tracker delegate = Mock()
     private final TrackerHealthTracker trackerHealth = new TrackerHealthTracker(delegate, clock)
-    private final RemoteOutageGate gate =
-    new RemoteOutageGate([probe: { Path p ->
+    private final DaemonCondition gate =
+    new DaemonCondition(ConditionSubject.remote([probe: { Path p ->
             false
-        }] as BaseRefGit, Path.of('.'), clock, NO_JITTER, IDLE, CAP)
+        }] as BaseRefGit, Path.of('.')), clock, NO_JITTER, IDLE, CAP)
 
     private RemoteHealth remoteSection() {
-        RemoteHealthAssembler.assemble([gate])['origin']
+        RemoteHealthAssembler.assemble(new DaemonConditions(gate, []))['origin']
     }
 
     /** Lets each scheduled probe come due, runs it, and returns the section after every probe. */

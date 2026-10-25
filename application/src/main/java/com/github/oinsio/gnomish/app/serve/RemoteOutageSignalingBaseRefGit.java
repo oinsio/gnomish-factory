@@ -12,7 +12,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@link BaseRefGit} a serve slot is handed: the real one, with every claim-time base read
- * reported to the {@link RemoteOutageGate} at the moment it returns (FR14, D9 of
+ * reported to the remote {@link DaemonCondition} at the moment it returns (FR14, D9 of
  * add-base-ref-resolution).
  *
  * <p><b>Why here and not from the slot's terminal result.</b> The gate's two signals are facts
@@ -47,7 +47,7 @@ import org.jspecify.annotations.Nullable;
  * @param gate the gate the slot's reads report to — the SAME instance the feed consults; never
  *     null
  */
-record RemoteOutageSignalingBaseRefGit(BaseRefGit delegate, RemoteOutageGate gate) implements BaseRefGit {
+record RemoteOutageSignalingBaseRefGit(BaseRefGit delegate, DaemonCondition gate) implements BaseRefGit {
 
     @Override
     public DefaultBranchDiscovery discoverDefaultBranch(Path cloneDir) {

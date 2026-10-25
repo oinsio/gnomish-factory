@@ -108,6 +108,15 @@ class EgressGuardIntegrationSpec extends Specification implements BareGitRepoFix
 
     // Scenario: sandbox/sandbox-egress / Direct DNS query fails
     def "FR7: a direct DNS query to an external resolver gets no answer"() {
+        given: 'the box has nslookup, so a failing query below is the network\'s answer, not a missing tool'
+        def probe = env.exec(ExecCommand.of([
+            'sh',
+            '-c',
+            'command -v nslookup'
+        ]))
+        probe.output().stream().readAllBytes()
+        assert probe.waitForExit() == 0
+
         when: 'a process in the box resolves a name against 8.8.8.8 directly, bypassing the guard'
         def handle = env.exec(new ExecCommand(
                         [

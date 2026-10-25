@@ -39,9 +39,12 @@ import org.slf4j.MDC;
  * #run(TaskRef)}: {@link FeedAutomaton} installs no uncaught-exception handler on its virtual
  * thread. This class catches every {@link Throwable} here, hands it to {@link SlotOutcomeLog} and
  * swallows it — a failed slot must not take down the daemon. Implements FR1, M2 of add-factory-serve.
+ * With every operator precondition refusal a typed result, this arm — and its {@code GF076} line
+ * — is reached only by a failure nothing classifies, and it writes the slot's {@code taskOutcome}
+ * line itself (NFR-O3, FR18 of add-sandbox-base-image).
  *
  * <p><b>Remote outage gate (task 7.3 of add-base-ref-resolution, FR14).</b> The slot signals the
- * shared {@link RemoteOutageGate} from its reads of origin themselves, not from its terminal
+ * shared {@link DaemonCondition} from its reads of origin themselves, not from its terminal
  * {@link TakeResult}: the {@link com.github.oinsio.gnomish.app.port.git.BaseRefGit} and the task
  * branch port inside the wiring's {@link com.github.oinsio.gnomish.app.port.git.TaskGit} are
  * already wrapped in {@link RemoteOutageSignalingBaseRefGit} and {@link
@@ -72,6 +75,7 @@ public final class TakeSlotRunner implements SlotRunner {
     private final Tracker tracker;
     private final InstanceId instanceId;
     private final String taskIdMdcKey;
+    private final DaemonConditions conditions;
     private final SlotOutcomeLog outcomeLog = new SlotOutcomeLog(log);
     private volatile @Nullable DrainReport drainReport;
     private volatile @Nullable TaskOutcomeLedgerWriter ledgerWriter;
@@ -87,13 +91,17 @@ public final class TakeSlotRunner implements SlotRunner {
      *     settings; never null
      * @param tracker the tracker port every slot fetches and dispatches through; never null
      * @param instanceId this factory instance's identity; never null
+     * @param conditions the daemon's conditions a typed precondition refusal is reported to (design
+     *     D19 of add-sandbox-base-image); never null
      */
-    public TakeSlotRunner(SlotWiring wiring, RunOrder run, Tracker tracker, InstanceId instanceId) {
+    public TakeSlotRunner(
+            SlotWiring wiring, RunOrder run, Tracker tracker, InstanceId instanceId, DaemonConditions conditions) {
         this.claimAndWork = new TakeClaimAndWorkFactory(wiring).forSlot();
         this.run = run;
         this.tracker = tracker;
         this.instanceId = instanceId;
         this.taskIdMdcKey = wiring.taskIdMdcKey();
+        this.conditions = conditions;
     }
 
     /**
@@ -134,15 +142,31 @@ public final class TakeSlotRunner implements SlotRunner {
     /**
      * Runs {@code claimed} to a terminal {@link TakeResult}, logs the outcome, and never
      * propagates a throwable (see class javadoc's exception-boundary note).
+     * The crash arm's ledger line (design D20, FR18 of add-sandbox-base-image), written only when
+     * the slot wrote none: a failure of this write is suppressed on the crash, whose own line still
+     * follows and carries it.
      *
      * <p>Implements FR1, M2, FR4 of add-factory-serve.
      *
      * @param claimed the just-claimed task's identity; never null
      */
+    private void writeCrashedLine(TaskRef claimed, Throwable crash) {
+        TaskOutcomeLedgerWriter writer = ledgerWriter;
+        if (writer == null) {
+            return;
+        }
+        try {
+            writer.writeCrashed(claimed);
+        } catch (RuntimeException unwritten) {
+            crash.addSuppressed(unwritten);
+        }
+    }
+
     @Override
     public void run(TaskRef claimed) {
         MDC.put(taskIdMdcKey, claimed.id());
         long startedNanos = System.nanoTime();
+        boolean lineWritten = false;
         try {
             // The order for an already-claimed task is assembled by its one owner (FR6 of
             // collapse-composition-roots), shared with bare take's claim walk.
@@ -159,10 +183,19 @@ public final class TakeSlotRunner implements SlotRunner {
             TaskOutcomeLedgerWriter writer = ledgerWriter;
             if (writer != null) {
                 writer.write(claimed, result);
+                lineWritten = true;
             }
             outcomeLog.summarize(result, WallTime.since(startedNanos));
+            // FR15, D19 of add-sandbox-base-image: after every sink, so the episode's one WARN is the
+            // condition's and the result above is the task's record.
+            if (result instanceof TakeResult.OperatorPreconditionUnmet refusal) {
+                conditions.report(refusal);
+            }
         } catch (Throwable crash) {
             // Deliberate boundary: see class javadoc. A slot never crashes the daemon.
+            if (!lineWritten) {
+                writeCrashedLine(claimed, crash);
+            }
             outcomeLog.crashed(claimed, crash, WallTime.since(startedNanos));
         } finally {
             MDC.remove(taskIdMdcKey);

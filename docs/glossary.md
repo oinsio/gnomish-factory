@@ -553,7 +553,20 @@ trusted/task tier split, and the law-root rule.
   the local tip in a clone with no `origin` remote. It is set by the adapter
   at the return the path arrives at, never derived from git's output, and it
   costs no extra call. Only the **remote outage gate** reads it.
-- **Remote outage gate** — the one daemon-level state per remote target that
+- **Daemon condition** — one precondition a running `serve` daemon holds the feed
+  on: the remote (the remote outage gate below) or an operator precondition — the
+  container runtime, the clone's ref format, the image contract, the image's git
+  floor. While any is open the feed claims nothing and reads nothing from the
+  tracker; each is probed by the check that opened it, and only a passing probe
+  closes it. Owned by `DaemonConditions`; opened only by a typed refusal. ADR
+  0019. *Not:* a task failure — no abort is charged.
+- **Operator precondition** — something the factory needs from the operator's
+  setup and cannot fix itself (a reftable clone, a reachable container runtime,
+  an image with this factory's contract and git floor). Assessed by `serve`
+  before its first claim; met after a claim, it is
+  `TakeResult.OperatorPreconditionUnmet` (exit 8) and, under `serve`, a daemon
+  condition. ADR 0019.
+- **Remote outage gate** — the first daemon condition: the one daemon-level state per remote target that
   a slot's base-refresh (or default-branch-discovery) reachability failure
   opens: while open, the feed claims nothing and the daemon probes the
   remote with a tracker-free reachability check on a jittered, growing,
@@ -576,6 +589,25 @@ trusted/task tier split, and the law-root rule.
   it already mounts that path explicitly, so no anonymous volume is ever
   created; content the image ships under a declared path is therefore not
   visible in the box. *Never:* implicit volume, image volume.
+- **Image contract** — what the factory assumes about a box image, at one
+  contract version: the `gnome` user (uid 1000) owning `/gnomish/**`, the
+  root-owned control surfaces (`/etc/gnomish`, the agent policy in
+  `/etc/claude-code`) and home with only declared directories gnome-writable,
+  the egress guard's proxy in the environment, `git` at the factory's floor,
+  `curl`, and the helpers `gnomish-trust-ca`, `gnomish-home-dir` and
+  `gnomish-verify-image`. The version, the guard alias and the guard port have
+  one source, `sandbox-image/image-contract.properties`; an image states its
+  version in the label `io.gnomish.image-contract`, and the factory refuses a
+  box image whose label is missing or names another version. Introduced by
+  `add-sandbox-base-image`. *Not:* the capability passport, which describes a
+  sandbox backend, not an image.
+- **Sandbox base image** — `ghcr.io/oinsio/gnomish-sandbox-base`, built from
+  `sandbox-image/` and published with every release: Ubuntu LTS carrying the
+  whole image contract and no agent CLI, toolchain or credential. An
+  operator's box image builds `FROM` it and adds only a toolchain and the agent
+  CLI. Introduced by `add-sandbox-base-image`. *Not:* the reference recipe
+  (`docs/examples/sandbox-image/`), an operator image built on it. *Never:*
+  sandbox template, parent image.
 - **Passport (capability passport)** — the capability declaration a sandbox
   backend ships with its binding (isolation level, egress control, ...). A
   stage's needs are reconciled against the bound adapter's passport,
@@ -1171,6 +1203,16 @@ Introduced by `add-release-pipeline`; the release flow is the developer guide's
   `sh` script that finds Java (`JAVA_HOME`, else `PATH`), refuses one older than
   25, adds `GNOMISH_JAVA_OPTS` and passes every argument to the factory
   unchanged, injecting no factory option. *Never:* start script, wrapper script.
+- **Base tag** — the tag of the sandbox base image a factory release names: in
+  the recipe's `GNOMISH_BASE_TAG` default, in the contract refusal's `FROM`
+  line, and among the tags the release's image job pushes. `X.Y` for a final
+  release (a tag the weekly rebuild refreshes), the full version for a
+  pre-release (which never moves `X.Y`); a development build has none. Computed
+  once by the build (`product-version-conventions`, read at runtime through
+  `FactoryVersion.baseTag()`) and, on the shell side, by
+  `scripts/release-preflight.sh`. Introduced by `add-sandbox-base-image`.
+  *Not:* the product version, which is `X.Y.Z` for a final release.
+  *Never:* base line.
 - **Release notes file** — `docs/releases/<tag>.md`: the hand-written body of
   one release, used by the release workflow instead of notes generated from the
   merged pull requests when it exists at the tagged commit. *Never:* changelog.

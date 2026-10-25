@@ -1,0 +1,41 @@
+# Stand-ins for `gh release list`, the release listing the weekly base rebuild selects from
+# (LatestFinalReleaseScriptSpec; FR8 of add-sandbox-base-image, design D15). Each answers the raw
+# JSON of data/stdout-gh and records its runs, so the spec reads the arguments gh was asked with.
+# The match stops at `release,list`: the `--json` field list is one argument holding commas, which
+# a match word cannot spell.
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
+
+[gh-releases-mixed]
+# Finals, a draft, a pre-release, and a patch of an older line created after the current one.
+* record
+release,list answer data/stdout-gh#mixed 0
+
+[gh-releases-numeric]
+# Versions whose order differs as numbers and as text: v0.10.0 above v0.9.12.
+* record
+release,list answer data/stdout-gh#numeric 0
+
+[gh-releases-malformed]
+# Tag names not of the form vX.Y.Z, each above the one final release that is.
+* record
+release,list answer data/stdout-gh#malformed 0
+
+[gh-releases-only-unfinal]
+# A draft and a pre-release, no final release.
+* record
+release,list answer data/stdout-gh#only-unfinal 0
+
+[gh-releases-none]
+# No release at all.
+* record
+release,list answer data/stdout-gh#none 0
+
+[gh-releases-not-json]
+# gh succeeding with a body that is not JSON.
+* record
+release,list answer data/stdout-gh#not-json 0
+
+[gh-releases-unauthorized]
+# The API refusing the listing.
+* record
+release,list refuse 1 data/stderr-gh#unauthorized

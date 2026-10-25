@@ -4,7 +4,7 @@ package com.github.oinsio.gnomish.app.serve;
  * A {@link RemoteOutageLedgerSink} that starts as a no-op and is rebound, exactly
  * once, to the real {@code RemoteOutageLedgerWriter} once that writer exists (task 7.4 wiring) —
  * mirrors {@link ForwardingDirtyNotifier}'s role for the same construction-order cycle: {@link
- * RemoteOutageGate} is built before {@code ObservabilityAssembly} constructs the ledger appender
+ * DaemonCondition} is built before {@code ObservabilityAssembly} constructs the ledger appender
  * its writer needs, so every gate is handed this stand-in and {@link #bind} is called once the
  * real writer exists.
  *

@@ -1,0 +1,6 @@
+# What `gh release list` prints on stderr when it fails, exactly as gh 2.102.0 printed it on
+# 2026-10-23 (task 5.2 of add-sandbox-base-image) against this repository with no token.
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[unauthorized]
+non-200 OK status code: 401 Unauthorized body: "{\r\n  \"message\": \"Requires authentication\",\r\n  \"documentation_url\": \"https://docs.github.com/rest\",\r\n  \"status\": \"401\"\r\n}"

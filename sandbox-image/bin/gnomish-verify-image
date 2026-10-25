@@ -1,0 +1,144 @@
+#!/bin/sh
+# gnomish-verify-image: checks the filesystem half of the factory's image contract and fails
+# listing every violation.
+# Implements FR3, FR12, NFR-S2, NFR-O1 of add-sandbox-base-image (design D4, D14).
+#
+# Usage (the last step of an operator Dockerfile):
+#   RUN gnomish-trust-ca && gnomish-verify-image
+#
+# What it checks — facts fixed when the image is built:
+#   - the tools the contract promises are on PATH (git, curl, update-ca-certificates) and the
+#     system CA bundle exists;
+#   - a user `gnome` with uid 1000 exists, and every entry under /gnomish (the work and scratch
+#     roots included) is owned by that uid and writable by its owner;
+#   - every entry under /etc/gnomish and the agent-policy folder /etc/claude-code is owned by root
+#     and writable by neither group nor others, so the gnome cannot rewrite its own cage;
+#   - the agent policy /etc/claude-code/managed-settings.json sets "allowManagedHooksOnly": true (a
+#     grep, not a JSON parse: it catches a policy overwritten without the key);
+#   - the gnome's home (design D14), taken from the user database, never from $HOME: it is
+#     /home/gnome, owned by root and writable by neither group nor others; every entry directly
+#     under it is owned by root and not writable by group or others (a symbolic link is judged by
+#     its target), except the names listed in /etc/gnomish/home-dirs — the list gnomish-home-dir
+#     writes — each of which is a directory owned by the gnome and writable by it.
+# What it does not check (design D4): the user a process runs as and the egress route (the box
+# self-check), the git version (the factory's floor check). It inspects owners and mode bits, never
+# tries a write, so its answer is the same whichever user runs it.
+#
+# Output: one line per violation — the path, what was found, what was expected and the fix — then a
+# count; exit 1 when there is any violation, 0 otherwise.
+set -u
+
+gnome_uid=1000
+violations=0
+
+found="$(mktemp)"
+trap 'rm -f "$found"' EXIT
+
+violation() {
+    violations=$((violations + 1))
+    printf 'gnomish-verify-image: %s: %s; expected %s; fix: %s\n' "$1" "$2" "$3" "$4" >&2
+}
+
+for tool in git curl update-ca-certificates; do
+    command -v "$tool" >/dev/null 2>&1 \
+        || violation "$tool" "not found on PATH" "$tool on PATH" "build FROM the sandbox base image and do not remove $tool"
+done
+[ -s /etc/ssl/certs/ca-certificates.crt ] \
+    || violation /etc/ssl/certs/ca-certificates.crt "missing or empty" "the system CA bundle" "keep the ca-certificates package and run gnomish-trust-ca"
+
+passwd_uid="$(getent passwd gnome | cut -d: -f3)"
+[ "$passwd_uid" = "$gnome_uid" ] \
+    || violation "user gnome" "uid '${passwd_uid:-absent}'" "a user gnome with uid $gnome_uid" "build FROM the sandbox base image and do not change the gnome user"
+
+# The gnome's roots: each must exist, and every entry beneath them belongs to the gnome.
+for root in /gnomish /gnomish/work /gnomish/scratch; do
+    [ -d "$root" ] \
+        || violation "$root" "not a directory" "a directory owned by uid $gnome_uid" "mkdir -p $root && chown $gnome_uid:$gnome_uid $root"
+done
+if [ -d /gnomish ]; then
+    find /gnomish ! -user "$gnome_uid" -print >"$found"
+    while IFS= read -r path; do
+        violation "$path" "owned by uid $(stat -c %u "$path")" "owned by gnome (uid $gnome_uid)" "chown -R gnome:gnome /gnomish"
+    done <"$found"
+    find /gnomish ! -type l ! -perm -u+w -print >"$found"
+    while IFS= read -r path; do
+        violation "$path" "mode $(stat -c %a "$path")" "writable by its owner, gnome" "chmod -R u+w /gnomish"
+    done <"$found"
+fi
+
+# The control surfaces: each must exist, and nothing beneath them is the gnome's to change.
+for surface in /etc/gnomish /etc/claude-code; do
+    if [ ! -d "$surface" ]; then
+        violation "$surface" "not a directory" "a root-owned directory" "build FROM the sandbox base image"
+        continue
+    fi
+    find "$surface" ! -user 0 -print >"$found"
+    while IFS= read -r path; do
+        violation "$path" "owned by uid $(stat -c %u "$path")" "owned by root and not writable by gnome" "chown -R root:root $surface"
+    done <"$found"
+    find "$surface" ! -type l \( -perm -g+w -o -perm -o+w \) -print >"$found"
+    while IFS= read -r path; do
+        violation "$path" "mode $(stat -c %a "$path")" "owned by root and not writable by gnome (no group or other write)" "chmod -R go-w $surface"
+    done <"$found"
+done
+
+# The agent policy: hooks run only from the managed settings (design D14).
+policy=/etc/claude-code/managed-settings.json
+grep -Eq '"allowManagedHooksOnly"[[:space:]]*:[[:space:]]*true' "$policy" 2>/dev/null \
+    || violation "$policy" "allowManagedHooksOnly is not set to true" "\"allowManagedHooksOnly\": true" "keep the key in your own managed policy, or build FROM the sandbox base image"
+
+# The gnome's home (design D14): root's, apart from the declared directories.
+home=/home/gnome
+home_dirs=/etc/gnomish/home-dirs
+passwd_home="$(getent passwd gnome | cut -d: -f6)"
+[ "$passwd_home" = "$home" ] \
+    || violation "user gnome" "home '${passwd_home:-absent}'" "the home $home" "build FROM the sandbox base image and do not move the gnome's home"
+[ -f "$home_dirs" ] \
+    || violation "$home_dirs" "missing" "the list gnomish-home-dir writes" "build FROM the sandbox base image; declare home directories with gnomish-home-dir"
+
+declared() {
+    [ -f "$home_dirs" ] && grep -qxF -- "$1" "$home_dirs"
+}
+
+# Owner uid and octal mode of $1, following a symbolic link; empty for a dangling one.
+owner_mode() {
+    stat -L -c '%u %a' "$1" 2>/dev/null
+}
+
+# True when $1 (followed) is owned by root and writable by neither group nor others.
+root_only() {
+    set -- "$1" "$(owner_mode "$1")"
+    [ "${2%% *}" = 0 ] && [ -z "$(find -L "$1" -maxdepth 0 \( -perm -g+w -o -perm -o+w \) -print 2>/dev/null)" ]
+}
+
+if [ ! -d "$home" ] || [ -L "$home" ]; then
+    violation "$home" "not a directory" "a root-owned directory" "build FROM the sandbox base image"
+else
+    root_only "$home" \
+        || violation "$home" "owner and mode '$(owner_mode "$home")'" "owned by root and not writable by gnome (no group or other write)" "chown root:root $home && chmod 0755 $home"
+    find "$home" -mindepth 1 -maxdepth 1 -print >"$found"
+    while IFS= read -r path; do
+        name="${path##*/}"
+        if declared "$name"; then
+            [ ! -L "$path" ] && [ -d "$path" ] && [ "$(stat -c %u "$path")" = "$gnome_uid" ] \
+                && [ -n "$(find "$path" -maxdepth 0 -perm -u+w -print)" ] \
+                || violation "$path" "listed in $home_dirs but owner and mode '$(owner_mode "$path")'" "a directory owned and writable by gnome" "gnomish-home-dir $name"
+        else
+            root_only "$path" \
+                || violation "$path" "owner and mode '$(owner_mode "$path")'" "owned by root and not writable by gnome; only the directories listed in $home_dirs are the gnome's" "chown root:root $path && chmod go-w $path, or declare a directory with gnomish-home-dir"
+        fi
+    done <"$found"
+    if [ -f "$home_dirs" ]; then
+        while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            [ -e "$home/$name" ] || [ -L "$home/$name" ] \
+                || violation "$home/$name" "missing, though listed in $home_dirs" "a directory owned and writable by gnome" "gnomish-home-dir $name"
+        done <"$home_dirs"
+    fi
+fi
+
+if [ "$violations" -gt 0 ]; then
+    printf 'gnomish-verify-image: %d violation(s) of the image contract\n' "$violations" >&2
+    exit 1
+fi
+echo 'gnomish-verify-image: the image meets the filesystem half of the image contract'

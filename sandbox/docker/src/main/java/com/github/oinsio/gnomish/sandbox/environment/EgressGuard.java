@@ -98,12 +98,16 @@ public final class EgressGuard {
         if (live(state)) {
             return;
         }
+        // The guard image is inspected at most once per pass (design D3 of add-sandbox-base-image):
+        // the facts a first creation read are handed to the recreation rather than asked again.
+        DeclaredVolumeOverrides overrides = null;
         if (state.ok()) {
             log.info("egress guard for {} is stopped; restarting it (NFR-R1)", key);
             repairStep("start", docker.run(GuardCommands.startGuard(key)));
         } else {
             log.info("egress guard for {} is missing; creating it", key);
-            create();
+            overrides = guardOverrides();
+            create(overrides);
         }
         DockerResult repaired = inspect();
         if (live(repaired)) {
@@ -113,7 +117,7 @@ public final class EgressGuard {
                 OperatorEvent.EGRESS_GUARD_RECREATED.head() + "egress guard for {} did not come up; recreating it once",
                 key);
         repairStep("remove", docker.run(GuardCommands.removeGuard(key)));
-        create();
+        create(overrides != null ? overrides : guardOverrides());
         DockerResult recreated = inspect();
         if (!live(recreated)) {
             throw new GuardUnavailableException(
@@ -147,8 +151,8 @@ public final class EgressGuard {
     }
 
     /**
-     * The proxy URL the box reaches the guard at — the stable {@code
-     * gnomish-guard} network alias, resolvable through the task network's
+     * The proxy URL the box reaches the guard at — the image contract's stable
+     * guard network alias and port ({@link ImageContract}), the alias resolvable through the task network's
      * container DNS. The alias, not the per-task container name, is what the
      * reference image bakes into JVM/Gradle proxy configs (task 9.1, D7), so
      * the self-check probes verify exactly the address baked configs will use.
@@ -156,7 +160,7 @@ public final class EgressGuard {
      * @return the guard proxy URL; never null
      */
     public String proxyUrl() {
-        return "http://" + GuardCommands.PROXY_ALIAS + ":" + GuardCommands.PROXY_PORT;
+        return GuardCommands.proxyUrl(ImageContract.current());
     }
 
     /**
@@ -247,31 +251,38 @@ public final class EgressGuard {
         return docker;
     }
 
-    /** The fresh-create path: run the guard on the task network, then give it its bridge leg. */
-    private void create() {
-        // A new container is a new denial source: its id, and any cursor matched against it, differ.
-        reads.sourceRecreated();
-        // FR2 of fix-image-declared-volumes: the default mitmproxy image declares its confdir, and
-        // a declared path left to the runtime becomes an anonymous volume outliving the guard. The
-        // read-only config directory is the one destination the guard mounts itself; an untrusted
-        // read takes the guard down as an infrastructure failure (NFR-R1, D4).
-        DeclaredVolumeOverrides overrides;
+    /**
+     * The guard container's declared-volume overrides, from the guard image's one inspection
+     * (design D3 of add-sandbox-base-image). FR2 of fix-image-declared-volumes: the default
+     * mitmproxy image declares its confdir, and a declared path left to the runtime becomes an
+     * anonymous volume outliving the guard. The read-only config directory is the one destination
+     * the guard mounts itself; an untrusted read takes the guard down as an infrastructure failure
+     * (NFR-R1, D4).
+     */
+    private DeclaredVolumeOverrides guardOverrides() {
         try {
-            overrides = DeclaredVolumeOverrides.resolve(docker, guardImage, Set.of(GuardCommands.CONFIG_MOUNT));
+            return DeclaredVolumeOverrides.resolve(
+                    ImageFacts.read(docker, guardImage), Set.of(GuardCommands.CONFIG_MOUNT));
         } catch (DockerCommandFailedException e) {
             // The lower message is already inert — composed from the carrier docker wrote (design
             // D5) — so it is folded as text and the original stays attached as the cause.
             throw new GuardUnavailableException(
-                    "reading the declared volumes of the egress guard image for " + key + " (container "
-                            + FactoryDockerLabels.guardName(key) + ") failed: " + e.getMessage(),
+                    "inspecting the egress guard image for " + key + " (container " + FactoryDockerLabels.guardName(key)
+                            + ") failed: " + e.getMessage(),
                     e);
         }
+    }
+
+    /** The fresh-create path: run the guard on the task network, then give it its bridge leg. */
+    private void create(DeclaredVolumeOverrides overrides) {
+        // A new container is a new denial source: its id, and any cursor matched against it, differ.
+        reads.sourceRecreated();
         // NFR-O1, design D7: the guard has no INFO creation anchor of its own — its lifecycle is
         // narrated by ensureRunning — so the override set is stated at DEBUG, where an operator
         // diagnosing a guard that lost its confdir between runs looks.
         log.debug("egress guard for {} declared volumes made ephemeral: {}", key, overrides.describe());
         DockerResult run = docker.run(GuardCommands.runGuard(
-                key, guardImage, configDir.toAbsolutePath().toString(), ownership, overrides));
+                key, guardImage, configDir.toAbsolutePath().toString(), ownership, overrides, ImageContract.current()));
         if (!run.ok()) {
             throw new GuardUnavailableException(
                     "docker run of the egress guard for " + key + " (container " + FactoryDockerLabels.guardName(key)

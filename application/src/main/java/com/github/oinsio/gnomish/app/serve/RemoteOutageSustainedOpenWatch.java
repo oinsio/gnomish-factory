@@ -4,7 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 /**
- * The one-shot latch behind {@link RemoteOutageGate}'s sustained-open ERROR (task 7.4 of
+ * The one-shot latch behind {@link DaemonCondition}'s sustained-open ERROR (task 7.4 of
  * add-base-ref-resolution): fires at most once per outage, the first time the outage's elapsed
  * duration crosses a threshold. Extracted so the gate's own file does not also own this
  * comparison-and-latch bookkeeping (process-invariants.md file-size target).

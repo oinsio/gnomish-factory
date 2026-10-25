@@ -1,11 +1,14 @@
 package com.github.oinsio.gnomish.app.serve;
 
 import com.github.oinsio.gnomish.app.ClaimlessDeliveredCleanup;
+import com.github.oinsio.gnomish.app.OperatorPreconditionRefusals;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit;
 import com.github.oinsio.gnomish.app.port.git.TaskListRow;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.app.take.DaemonConditionKind;
+import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.logtext.MdcAwareThread;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
@@ -41,7 +44,15 @@ import org.slf4j.LoggerFactory;
  * own); the next tick tries again. A listing that could not run at all fails the tick, which is the
  * supervised loop's to report.
  *
- * <p>Implements FR4, FR11, FR12, UX2, NFR-C2, NFR-O2 of fix-terminal-receipt-convergence.
+ * <p>An operator precondition refusal (design D21 of add-sandbox-base-image) — the clone's ref
+ * format, the container runtime, the image contract, the box's git floor, met by the listing or by
+ * a branch's cleanup — is no branch failure: it is reported to the daemon's conditions, whose
+ * opening WARN is the operator's line, and the pass goes on. While any precondition condition is
+ * open the pass waits, with one DEBUG line naming it, since every forwarded branch would meet the
+ * same check again.
+ *
+ * <p>Implements FR4, FR11, FR12, UX2, NFR-C2, NFR-O2 of fix-terminal-receipt-convergence; FR17 of
+ * add-sandbox-base-image.
  */
 public final class DeliveredBranchPass implements BranchPass {
 
@@ -51,6 +62,7 @@ public final class DeliveredBranchPass implements BranchPass {
     private final TaskBranchGit branches;
     private final ClaimlessDeliveredCleanup cleanup;
     private final PipelineDefinition definition;
+    private final DaemonConditions conditions;
 
     /**
      * @param cloneDir the clone whose task branches are listed; never null
@@ -58,21 +70,41 @@ public final class DeliveredBranchPass implements BranchPass {
      * @param cleanup the claimless cleanup owner, which reads the tracker for the branches it is
      *     handed; never null
      * @param definition the daemon's pipeline, whose bindings select the cleanup's medium; never null
+     * @param conditions the daemon's conditions a precondition refusal is reported to; never null
      */
     public DeliveredBranchPass(
-            Path cloneDir, TaskBranchGit branches, ClaimlessDeliveredCleanup cleanup, PipelineDefinition definition) {
+            Path cloneDir,
+            TaskBranchGit branches,
+            ClaimlessDeliveredCleanup cleanup,
+            PipelineDefinition definition,
+            DaemonConditions conditions) {
         this.cloneDir = cloneDir;
         this.branches = branches;
         this.cleanup = cleanup;
         this.definition = definition;
+        this.conditions = conditions;
     }
 
     @Override
     public void run(Set<String> heldKeys) {
+        Set<DaemonConditionKind> held = conditions.openPreconditions();
+        if (!held.isEmpty()) {
+            log.debug("worktree janitor: branch pass waits while daemon condition(s) {} are open", held);
+            return;
+        }
+        List<TaskListRow> rows;
+        try {
+            rows = branches.list(cloneDir);
+        } catch (RuntimeException e) {
+            if (reported(e)) {
+                return;
+            }
+            throw e;
+        }
         List<String> failed = new ArrayList<>();
         List<String> unregistered = new ArrayList<>();
         @Nullable RuntimeException firstFailure = null;
-        for (TaskListRow row : branches.list(cloneDir)) {
+        for (TaskListRow row : rows) {
             String taskId = row.taskId();
             if (!row.shape().forwardedByBranchPass()) {
                 log.debug(
@@ -113,10 +145,30 @@ public final class DeliveredBranchPass implements BranchPass {
                 converge(taskId, heldKeys).ifPresent(location -> unregistered.add(named(taskId, location)));
                 return null;
             } catch (RuntimeException e) {
+                if (reported(e)) {
+                    return null;
+                }
                 log.debug("worktree janitor: delivered cleanup of {} failed", taskId, e);
                 return e;
             }
         }
+    }
+
+    /**
+     * Reports {@code failure} to the daemon's conditions when it is an operator precondition
+     * refusal (design D21); the condition's WARN is its line, so this one is DEBUG.
+     *
+     * @return whether {@code failure} was such a refusal
+     */
+    private boolean reported(RuntimeException failure) {
+        Optional<TakeResult.OperatorPreconditionUnmet> refusal = OperatorPreconditionRefusals.unmet(failure);
+        refusal.ifPresent(unmet -> {
+            // throwable-not-subject: the refusal is a precondition, not a defect; its condition
+            //     carries the message and the fix.
+            log.debug("worktree janitor: precondition {} refused; reported to its condition", unmet.kind());
+            conditions.report(unmet);
+        });
+        return refusal.isPresent();
     }
 
     private Optional<BranchLocation> converge(String taskId, Set<String> heldKeys) {

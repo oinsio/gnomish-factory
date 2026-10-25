@@ -32,8 +32,8 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
     }
 
     private VirtualClock clock = new VirtualClock()
-    private RemoteOutageGate gate = new RemoteOutageGate(
-    BaseRefGit.UNWIRED, CLONE, clock, new Random(0), IDLE, Duration.ofMinutes(10))
+    private DaemonCondition gate = new DaemonCondition(
+    ConditionSubject.remote(BaseRefGit.UNWIRED, CLONE), clock, new Random(0), IDLE, Duration.ofMinutes(10))
 
     private BaseRefGit signaling(BaseRefGit delegate) {
         new RemoteOutageSignalingBaseRefGit(delegate, gate)
@@ -133,7 +133,7 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
     //     through a real gate on virtual time: after an outage closes, a base served by the clone
     //     alone must NOT spend the pending interval reset, so the next flap meets the grown pause
     //     FR14 of add-base-ref-resolution promised rather than the idle floor. The mirror of
-    //     RemoteOutageGateSpec's "the first successful refresh after a close resets the interval to
+    //     DaemonConditionSpec's "the first successful refresh after a close resets the interval to
     //     idle", which ends with a third probe where this one must stay at two.
     // Scenario: serve/factory-serve / A clone-served success after a close keeps the grown interval
     def "a clone-served success after a close keeps the grown probe interval"() {
@@ -149,7 +149,7 @@ class RemoteOutageSignalingBaseRefGitSpec extends Specification {
                 new BaseRefreshOutcome.Refreshed('main', 'abc', BaseRefKind.COMMIT, OriginContact.CLONE_ONLY)
             },
         ] as BaseRefGit
-        def grownGate = new RemoteOutageGate(remote, CLONE, clock, NO_JITTER, IDLE, Duration.ofMinutes(10))
+        def grownGate = new DaemonCondition(ConditionSubject.remote(remote, CLONE), clock, NO_JITTER, IDLE, Duration.ofMinutes(10))
         def git = new RemoteOutageSignalingBaseRefGit(remote, grownGate)
         grownGate.openOnFailure('boom')
 

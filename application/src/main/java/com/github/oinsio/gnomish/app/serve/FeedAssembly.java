@@ -40,9 +40,9 @@ public record FeedAssembly(TimeEquipment time, IdleTiming idleTiming, int wipLim
      *
      * @param dirtyNotifier woken on a feed-state transition (FR1 of add-serve-observability, design
      *     D4); {@link DirtyNotifier#NOOP} absent a writer
-     * @param remoteOutageGate the remote outage gate the feed's {@link FeedCycle} consults and
-     *     advances every cycle (FR14, NFR-R3 of add-base-ref-resolution) — the SAME instance a
-     *     slot's {@code TakeSlotRunner} opens on an {@code InfrastructureUnavailable} result
+     * @param conditions the daemon's conditions the feed's {@link FeedCycle} consults and advances
+     *     every cycle (FR14, NFR-R3 of add-base-ref-resolution; D19 of add-sandbox-base-image) — the
+     *     SAME set a slot's git decorations signal
      */
     public FeedAutomaton feedAutomaton(
             Tracker tracker,
@@ -50,14 +50,14 @@ public record FeedAssembly(TimeEquipment time, IdleTiming idleTiming, int wipLim
             SlotLedger slotLedger,
             SlotRunner slotRunner,
             DirtyNotifier dirtyNotifier,
-            RemoteOutageGate remoteOutageGate) {
+            DaemonConditions conditions) {
         // NFR-R3: the outage backoff reuses the Idle state's jittered interval, not a separate policy.
         // FR4: the retry's edge logging and the finished-decline latch measure on the feed's own
         //     clock (FR18 of supervise-daemon-loops-and-embed-dashboard): one time source per feed.
         var outageRetry = new FeedOutageRetry(
                 time.sleeper(), idleTiming::jittered, RepeatSuppressor.withDefaultRollUp(time.clock()));
         var resilience = new FeedResilience(
-                outageRetry, new FinishedDecline(RepeatSuppressor.withDefaultRollUp(time.clock())), remoteOutageGate);
+                outageRetry, new FinishedDecline(RepeatSuppressor.withDefaultRollUp(time.clock())), conditions);
         var cycle = new FeedCycle(
                 new FeedTracker(tracker, instanceId),
                 slotLedger,

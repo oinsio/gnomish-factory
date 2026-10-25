@@ -246,15 +246,16 @@ class DockerCommandsSpec extends Specification {
         !DockerCommands.exec(KEY, '/w', [:], StdinSource.NONE, ['cat']).contains('-i')
     }
 
-    // FR1 of fix-image-declared-volumes: the template is one argv element and carries no shell
-    // quoting — quotes would become part of the Go template rather than delimit it.
-    def "FR1: inspectImageVolumes asks the runtime for the image's declared volume paths"() {
+    // FR1 of fix-image-declared-volumes, design D3 of add-sandbox-base-image: one inspect of the
+    // whole Config yields declared volumes and labels; the template is one argv element and
+    // carries no shell quoting — quotes would become part of the Go template rather than delimit it.
+    def "FR5: inspectImageConfig asks the runtime for the image's whole configuration"() {
         expect:
-        DockerCommands.inspectImageVolumes('gnomish/img:1') == [
+        DockerCommands.inspectImageConfig('gnomish/img:1') == [
             'image',
             'inspect',
             '-f',
-            '{{json .Config.Volumes}}',
+            '{{json .Config}}',
             'gnomish/img:1'
         ]
     }

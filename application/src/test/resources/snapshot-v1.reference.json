@@ -84,5 +84,15 @@
       "consecutiveFailures" : 0,
       "lastSuccessAt" : "2026-08-02T08:59:50Z"
     }
-  }
+  },
+  "conditions" : [ {
+    "condition" : "remote",
+    "target" : "origin",
+    "state" : "closed",
+    "openSince" : null,
+    "lastError" : null,
+    "nextProbeAt" : null,
+    "consecutiveFailures" : 0,
+    "lastSuccessAt" : "2026-08-02T08:59:50Z"
+  } ]
 }

@@ -3,11 +3,14 @@ package com.github.oinsio.gnomish.architecture
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import spock.lang.Specification
 
+import java.util.regex.Pattern
+
 /**
  * FR1, FR2 of fix-image-declared-volumes: the ephemeral overrides a factory container runs with
  * come only from the image's own declaration, read when the container is created. One producer
- * builds an override set — {@code DeclaredVolumeOverrides.resolve}, which reads the runtime's
- * answer — and it is called where a box or a guard is created; no production source names the
+ * builds an override set — {@code DeclaredVolumeOverrides.resolve}, which takes the image's facts
+ * from its one inspection ({@code ImageFacts}, design D3 of add-sandbox-base-image) — and it is
+ * called where a box or a guard is created; no production source names the
  * declared path of any particular image (the default guard image's {@code VOLUME} is the one a
  * hand-written list would reach for first).
  *
@@ -49,6 +52,6 @@ class DeclaredVolumeOwnerSpec extends Specification {
         ]
 
         and: 'no production source spells a particular image\'s declared path'
-        namers(code, java.util.regex.Pattern.quote(MITMPROXY_DECLARED)) == []
+        namers(code, Pattern.quote(MITMPROXY_DECLARED)) == []
     }
 }

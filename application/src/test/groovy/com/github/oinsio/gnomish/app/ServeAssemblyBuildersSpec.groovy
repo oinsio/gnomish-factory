@@ -1,40 +1,23 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.ServeProperties
-import com.github.oinsio.gnomish.app.lease.CachedOpenTaskListing
-import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.lease.InstanceHeartbeat
-import com.github.oinsio.gnomish.app.lease.LivenessOracle
-import com.github.oinsio.gnomish.app.lease.StalenessMemory
-import com.github.oinsio.gnomish.app.lease.SystemMonotonicTime
-import com.github.oinsio.gnomish.app.port.git.BaseRefGit
-import com.github.oinsio.gnomish.app.port.git.BranchAdoption
-import com.github.oinsio.gnomish.app.port.git.BranchLocation
-import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
-import com.github.oinsio.gnomish.app.port.git.TaskGit
-import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
-import com.github.oinsio.gnomish.app.port.git.TaskListRow
-import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
-import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
+import com.github.oinsio.gnomish.app.lease.*
+import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickListener
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepTickLog
 import com.github.oinsio.gnomish.app.sandboxlifecycle.SweepVerdictListener
-import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier
-import com.github.oinsio.gnomish.app.serve.RemoteOutageGates
-import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
-import com.github.oinsio.gnomish.app.serve.SlotLedger
-import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
+import com.github.oinsio.gnomish.app.serve.*
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
-import java.nio.file.Path
+import spock.lang.Specification
+
 import java.time.Duration
 import java.time.Instant
-import spock.lang.Specification
 /**
  * FR2, FR14 (design D9, D10) of add-factory-serve: {@link ServeAssembly}'s remaining leaf
  * builders (the slot run order moved to {@code ServeArguments}, {@code ServeArgumentsSpec}). {@code ServeAssemblySpec} covers {@code shutdown}; this covers the rest, to the
@@ -96,7 +79,9 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         when:
         def automaton = new ServeAssembly(testProperties(), SERVE_PROPERTIES, VirtualTimeEquipment.on(clock), null).feedAutomaton(trackerConfig,
                 Stub(Tracker), INSTANCE, new SlotLedger(2, clock, notifier), null, notifier,
-                RemoteOutageGates.forServe(BaseRefGit.UNWIRED, CLONE_DIR, new ServeProperties(0, null, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> }))
+                RemoteOutageGates.forServe(BaseRefGit.UNWIRED, CLONE_DIR, new ServeProperties(0, null, null, null, null, null, null, null, null, null), new VirtualClock(), {}, { ignored -> }, { kind ->
+                    Optional.empty()
+                }))
 
         then:
         automaton.view().wipLimit() == 7
@@ -114,7 +99,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
 
         when:
         def janitor = new ServeAssembly(null, SERVE_PROPERTIES, VirtualTimeEquipment.create(), RegisteredCloneFixture.provider(CLONE))
-                .worktreeJanitor(new SlotLedger(1, new VirtualClock()), git, served, slotWiring(assemblyRunning(null), git, Stub(Tracker)))
+                .worktreeJanitor(new SlotLedger(1, new VirtualClock()), git, served, slotWiring(assemblyRunning(null), git, Stub(Tracker)), DaemonConditionsFixture.closed())
 
         then:
         1 * worktrees.environmentDisposal(CLONE) >> Stub(TaskEnvironmentDisposal)
@@ -140,7 +125,7 @@ class ServeAssemblyBuildersSpec extends Specification implements RunChainFakes {
         def janitor = new ServeAssembly(null, SERVE_PROPERTIES, VirtualTimeEquipment.create(), RegisteredCloneFixture.provider(CLONE))
                 .worktreeJanitor(new SlotLedger(1, new VirtualClock()),
                 new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook()),
-                served, slotWiring(assemblyRunning(null), slotGit, Stub(Tracker)))
+                served, slotWiring(assemblyRunning(null), slotGit, Stub(Tracker)), DaemonConditionsFixture.closed())
 
         when:
         janitor.tick()

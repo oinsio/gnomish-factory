@@ -4,36 +4,28 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.FreshClaimBaseBindingLogRun
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.Designator
-import com.github.oinsio.gnomish.app.port.tracker.TaskDesignators
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
+import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.nio.file.Path
-import java.nio.file.Paths
-import java.time.Duration
-import java.time.Instant
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.time.Duration
 /**
  * "One failure, one log" (.claude/rules/logging.md) across the three emitters a dead remote passes
- * through. {@code RemoteOutageServeEndToEndSpec} captures only {@link RemoteOutageGate}'s own
+ * through. {@code RemoteOutageServeEndToEndSpec} captures only {@link DaemonCondition}'s own
  * logger, so it cannot see a second WARN written elsewhere for the same fault; this spec walks ONE
  * released task through the exact production sequence a slot performs — {@code
  * FreshClaimBaseBinding#bind} (run through {@link
  * com.github.oinsio.gnomish.app.FreshClaimBaseBindingLogRun}, since that class is package-private
  * to a sibling package) returns the {@code InfrastructureUnavailable}, {@code
- * TakeSlotRunner#run} hands it to {@link RemoteOutageGate#openOnFailure} and then to {@link
+ * TakeSlotRunner#run} hands it to {@link DaemonCondition#openOnFailure} and then to {@link
  * SlotOutcomeLog#detail} (TakeSlotRunner.java: signalRemoteOutageGate then outcomeLog.detail) — and
  * counts what the whole console sees.
  *
@@ -51,11 +43,11 @@ class OutageWarnFanOutSpec extends Specification {
     private BaseRefGit baseRefGit = Mock()
     private Tracker tracker = Mock()
 
-    private RemoteOutageGate gate() {
+    private DaemonCondition gate() {
         def clock = new VirtualClock()
         def suppressor = new RepeatSuppressor(clock, Duration.ofMinutes(5))
-        new RemoteOutageGate(
-                baseRefGit, ROOT, clock, new Random(1), Duration.ofSeconds(30), Duration.ofMinutes(10),
+        new DaemonCondition(
+                ConditionSubject.remote(baseRefGit, ROOT), clock, new Random(1), Duration.ofSeconds(30), Duration.ofMinutes(10),
                 new RemoteOutageWiring('origin', suppressor, Duration.ofHours(1), {}, { ignored -> }))
     }
 

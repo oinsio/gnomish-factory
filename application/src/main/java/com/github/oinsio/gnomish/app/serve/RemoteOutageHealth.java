@@ -4,7 +4,7 @@ import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A read-only view of one {@link RemoteOutageGate}'s current state, for the snapshot's {@code
+ * A read-only view of one {@link DaemonCondition}'s current state, for the snapshot's {@code
  * remote} section (serve-observability spec of add-base-ref-resolution, task 7.4) — deliberately
  * its own small type rather than exposing the gate's fields directly, so a reader never sees a
  * state combination the gate itself never produces.

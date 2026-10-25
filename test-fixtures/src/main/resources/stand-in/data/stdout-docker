@@ -6,3 +6,20 @@ out:inspect
 
 [out-network]
 out:network
+
+[manifest-index]
+{
+   "schemaVersion": 2,
+   "mediaType": "application/vnd.oci.image.index.v1+json",
+   "manifests": [
+      {
+         "mediaType": "application/vnd.oci.image.manifest.v1+json",
+         "size": 2332,
+         "digest": "sha256:c6955f4adccbf1ba5164c1336cff2c4b6dd30574e599afd1a02edf762b71467b",
+         "platform": {
+            "architecture": "amd64",
+            "os": "linux"
+         }
+      }
+   ]
+}

@@ -95,6 +95,17 @@ dependencies {
     testImplementation libs.logback.classic
 }
 
+// The image contract (FR6, design D2 of add-sandbox-base-image): the one source file the
+// sandbox base image's build and the factory both read lives in `sandbox-image/` at the
+// repository root; it is copied, unchanged, into this module's resources beside `ImageContract`,
+// which reads it once. `from` makes the file an input of `processResources`, so an edit
+// rebuilds the resource; `ImageContractSourceSpec` in `:bootstrap` pins the copy's identity.
+tasks.named('processResources') {
+    from(layout.settingsDirectory.file('sandbox-image/image-contract.properties')) {
+        into 'com/github/oinsio/gnomish/sandbox/environment'
+    }
+}
+
 // The backends sit beside the adapters in the layer diagram (FR2, design
 // D1/D7): they reach the port layer they implement, the domain, and the one
 // application port named above — plus what `:application` re-exposes

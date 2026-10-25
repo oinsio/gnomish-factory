@@ -34,13 +34,15 @@ abstract class DeliveredBranchPassWorld extends Specification {
     TaskLifecycleStore store = Mock(TaskLifecycleStore)
     TaskEnvironmentDisposal disposal = Mock(TaskEnvironmentDisposal)
 
+    DaemonConditions conditions = DaemonConditionsFixture.closed()
+
     DeliveredBranchPass pass = new DeliveredBranchPass(CLONE_DIR, branches,
     new ClaimlessDeliveredCleanup(new TaskGit(Stub(TaskStoreGit) {
         taskRepository(CLONE) >> store
     }, branches, Stub(TaskWorktreeGit) {
         environmentDisposal(CLONE) >> disposal
     }, new ClaimEpochBook()), CLONE, ContainerTakeSupportFixture.hostOnly(), [], tracker),
-    TrackerTaskFixtures.oneStagePipeline())
+    TrackerTaskFixtures.oneStagePipeline(), conditions)
 
     protected static TaskListRow row(String taskId, BranchShape shape) {
         new TaskListRow(taskId, null, 0, null, shape)

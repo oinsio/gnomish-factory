@@ -1,6 +1,10 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.git.BoxGitVersionRefusedException;
+import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException;
 import com.github.oinsio.gnomish.app.port.git.DivergedBranchException;
+import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeUnavailableException;
+import com.github.oinsio.gnomish.app.port.run.ImageContractRefusedException;
 import org.springframework.boot.ExitCodeExceptionMapper;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +33,10 @@ import org.springframework.stereotype.Component;
  *       branch found (FR13, UX3) — a normal outcome, not a crash</td></tr>
  *   <tr><td>{@link BranchShapeRefusedException}</td><td>7</td><td>{@code status}: the branch
  *       classifies as a quarantine shape and refuses inspection (FR16)</td></tr>
+ *   <tr><td>{@link CloneRefFormatRefusedException}, {@link ContainerRuntimeUnavailableException},
+ *       {@link BoxGitVersionRefusedException}, {@link ImageContractRefusedException}</td><td>8</td>
+ *       <td>an operator precondition the run could not meet, printed with its fix (FR14 of
+ *       add-sandbox-base-image; {@code take}'s typed result shares the code)</td></tr>
  *   <tr><td>{@link RunParkedException}, {@code Escalated}</td><td>10</td><td>the run stopped at an
  *       escalation, parked on its branch (FR1, FR7 of make-run-headless)</td></tr>
  *   <tr><td>{@link DecisionRequiredException}</td><td>10</td><td>a resume without {@code --decision}
@@ -45,7 +53,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>Implements FR9, FR12, FR13, UX3, D10 of add-git-workflow, add-manual-run; FR8, FR16 of
  * harden-task-branch-contract; FR5, FR8 of remove-interactive-console; FR4, FR7 of
- * make-run-headless; FR9 of supervise-daemon-loops-and-embed-dashboard.
+ * make-run-headless; FR9 of supervise-daemon-loops-and-embed-dashboard; FR14 of add-sandbox-base-image.
  */
 @Component
 public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
@@ -57,6 +65,9 @@ public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
      */
     @Override
     public int getExitCode(Throwable exception) {
+        if (OperatorPreconditionRefusals.kindOf(exception).isPresent()) {
+            return 8;
+        }
         return switch (exception) {
             case UsageException ignored -> 2;
             case PipelineLoadFailedException ignored -> 3;

@@ -1,12 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException;
-import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The factory clone's ref backend, checked where a run first touches the clone (design D13 of
@@ -27,17 +24,17 @@ import org.slf4j.LoggerFactory;
  * ref every task touchpoint writes, including the take router's classification and the {@code
  * status}/{@code usage} reads that no run path precedes. A worktree shares its clone's ref store, so checking the clone
  * covers every worktree of it. {@code git rev-parse --show-ref-format} exists since git 2.45, below
- * the factory's floor of 2.51 ({@code GitVersionCheck}).
+ * the factory's git floor ({@code GitVersion.FLOOR}, checked by {@code GitVersionCheck}).
  *
- * <p>The one ERROR of this failure class is logged here; the command that ends on the exception
- * prints its message and nothing else, so the operator reads a precondition.
+ * <p>The check logs nothing: the refusal carries the message, and the layer that decides on it —
+ * the startup assessment, the command, or the daemon condition — writes the one line (design D19
+ * of add-sandbox-base-image).
  *
- * <p>Implements NFR-S2 of tighten-spec-contract (findings F122, F135).
+ * <p>Implements NFR-S2 of tighten-spec-contract (findings F122, F135); NFR-O2 of
+ * add-sandbox-base-image.
  */
 @UntrustedParser
 final class FactoryCloneRefFormat {
-
-    private static final Logger log = LoggerFactory.getLogger(FactoryCloneRefFormat.class);
 
     /** The ref backend a factory clone must be on, as {@code --ref-format} spells it. */
     static final String REQUIRED = "reftable";
@@ -65,12 +62,6 @@ final class FactoryCloneRefFormat {
             return;
         }
         UntrustedText reported = result.exitCode() == 0 ? result.stdout() : result.stderr();
-        log.error(
-                OperatorEvent.FACTORY_CLONE_REF_FORMAT_REFUSED.head()
-                        + "factory clone refused: {} is not on the {} ref backend (reported: {})",
-                cloneDir,
-                REQUIRED,
-                reported.forLog());
         throw new CloneRefFormatRefusedException(cloneDir.toString(), REQUIRED, reported);
     }
 }

@@ -112,55 +112,7 @@ dependencies {
     testImplementation libs.logback.classic
 }
 
-// PIT exclusions documented for THIS module (task 8.1: each module carries its
-// own exceptions, next to the mutation scope they narrow). Moved here with the
-// specs they name when task 10.2 carved the git seam out of `:adapters`.
-pitest {
-    // Arid wiring (`.claude/rules/testing.md`, "Per-class exemptions (`excludedClasses`, arid
-    // wiring)"): `GitTaskBackend` is the one public assembly of the task-git bundle (design D12, F74
-    // of tighten-spec-contract). It carries no decision — its only body builds the three writers
-    // and the base-ref reader over its own parameters and returns them in a `TaskGit` — so its every
-    // mutant is a nulled return a spec could kill only by asserting "method calls method". The
-    // bundle it builds is driven end to end in `:bootstrap`, through `ManualRunConfiguration` and
-    // `TaskGitFixture`: `ServeClaimEpochStampSpec`, `InMemoryTakeLifecycleCrashReapReclaimSpec` and
-    // `InMemoryTakeLifecycleEscalateResumeSpec` assert on a real origin that the commits carry the
-    // epoch the bundle's own book recorded, which a split or a null bundle would break.
-    excludedClasses = [
-        'com.github.oinsio.gnomish.adapter.git.GitTaskBackend',
-    ]
-    // add-sandbox-core (tasks 4.5, 4.6, 5.5, 6.5, 9.2-9.4): the Docker-gated integration
-    // suites below drive a real daemon — real containers, volumes and networks through
-    // subprocess `docker`/`git`. A mutant that breaks a wait/retry/kill loop in that
-    // territory doesn't fail fast, it blocks on real OS/Docker I/O that PIT's per-mutation
-    // timeout cannot always interrupt (observed: a killed-container resume mutant hung a
-    // minion for 30+ minutes with zero CPU progress, leaving an orphaned box). Excluding them
-    // removes no production line from mutation coverage — every class they exercise is also
-    // covered by fast, Docker-free unit specs (DockerCommandsSpec,
-    // ContainerTaskExecutionEnvironmentUnitSpec, EgressGuardSpec, ContainerResumeBranch/
-    // ContainerRunSupportSpec) that already feed the gate. Their `app.ContainerMode*E2ESpec`
-    // siblings live in `:bootstrap` and are excluded there.
-    //
-    // They travel with the git seam (task 10.2): each one stands up a bare repo and drives
-    // `ContainerHarvestFetch` / `GitProcessRunner` / `EnvironmentSalvage` against a live
-    // container, so this module's production classes are their real subject.
-    // fix-image-declared-volumes (task 4.2): the same category — `ContainerDeclaredVolumesSpec`
-    // is the identity spec of that change's single-owner table and only exists on a live daemon
-    // (an anonymous volume cannot come into existence anywhere else). It builds an image, runs a
-    // box and a real mitmproxy guard, and its assertions read `docker volume ls` between
-    // materialize and dispose — all out-of-process I/O a mutant blocks on rather than fails on.
-    // It removes no production line from the gate: `DeclaredVolumeOverrides`, `DockerCommands`,
-    // `GuardCommands`, `ContainerMaterializer` and `EgressGuard` are all mutated through the
-    // Docker-free `DeclaredVolumeOverridesSpec`, `DockerCommandsSpec`, `GuardCommandsSpec`,
-    // `ContainerTaskExecutionEnvironmentUnitSpec` and `EgressGuardSpec` in `:sandbox:docker`.
-    excludedTestClasses = [
-        'com.github.oinsio.gnomish.sandbox.environment.ContainerDeclaredVolumesSpec',
-        'com.github.oinsio.gnomish.sandbox.environment.EgressGuardIntegrationSpec',
-        'com.github.oinsio.gnomish.sandbox.environment.JvmProxyEgressE2ESpec',
-        'com.github.oinsio.gnomish.sandbox.environment.ContainerGitMechanicsSpec',
-        'com.github.oinsio.gnomish.sandbox.environment.ContainerReadOnlySurfacesSpec',
-        'com.github.oinsio.gnomish.sandbox.environment.ContainerTaskExecutionEnvironmentContractSpec',
-    ]
-}
+apply from: 'verification.gradle'
 
 // A technology adapter reaches the ports and use cases below it, plus the
 // sandbox backend it hands work to, and nothing sideways (FR2, M4, design D1):

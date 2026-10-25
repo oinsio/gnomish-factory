@@ -113,7 +113,8 @@ class AgedContainerEnvironmentReapSpec extends Specification {
 
         then: 'no box is left to reattach to: a fresh network, volume and box, the working copy seeded from the task branch'
         def created = docker.runs.findAll {
-            it != DockerCommands.inspectContainerState(BOX) && it.takeRight(2) != ['git', '--version']
+            it != DockerCommands.inspectContainerState(BOX) && it != DockerCommands.inspectImageConfig(IMAGE) &&
+            it.takeRight(2) != ['git', '--version']
         }
         created.take(3) == [
             DockerCommands.createNetwork(KEY, OWNERSHIP),

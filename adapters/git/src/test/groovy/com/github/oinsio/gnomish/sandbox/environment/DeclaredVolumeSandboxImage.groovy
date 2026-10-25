@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 /**
  * Builds (once per JVM) the sandbox image the declared-volume identity spec runs
- * against: {@link GitSandboxImage}'s shape plus two {@code VOLUME} declarations —
+ * against: the sandbox base image ({@link GitSandboxImage}'s shape) plus two {@code VOLUME} declarations —
  * one path outside the factory's own mounts ({@code /cache}) and one equal to the
  * working copy ({@code /gnomish/work}), so a single materialize exercises both
  * halves of the rule (FR5 of fix-image-declared-volumes): the outside path is made
@@ -38,18 +38,15 @@ class DeclaredVolumeSandboxImage {
         if (built) {
             return IMAGE
         }
-        def dockerfile = """
-            FROM alpine:3
-            RUN apk add --no-cache git \\
-             && adduser -D -u 1000 gnome \\
-             && mkdir -p /gnomish/work /gnomish/scratch ${DECLARED_PATH} \\
-             && chown -R gnome:gnome /gnomish \\
+        DockerImageBuilder.build(IMAGE, """
+            FROM \${BASE}
+            USER root
+            RUN mkdir -p ${DECLARED_PATH} \\
              && printf 'baked\\n' > ${BAKED_FILE} \\
              && chown -R gnome:gnome ${DECLARED_PATH}
             VOLUME ["${DECLARED_PATH}", "${ContainerTaskExecutionEnvironment.WORKING_COPY}"]
             USER gnome
-        """.stripIndent()
-        DockerImageBuilder.build(IMAGE, dockerfile)
+        """)
         built = true
         IMAGE
     }

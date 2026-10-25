@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.app.serve;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * The failure/probe/released-claim counts {@link RemoteOutageGate} reports through {@link
+ * The failure/probe/released-claim counts {@link DaemonCondition} reports through {@link
  * RemoteOutageHealth} and the {@code remoteOutage} ledger line, extracted so the gate's own file
  * stays a state machine rather than also owning three counters' read-modify-write bookkeeping
  * (process-invariants.md file-size target). This class owns only the counts; it does not know why

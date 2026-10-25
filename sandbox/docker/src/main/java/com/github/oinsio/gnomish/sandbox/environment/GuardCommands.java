@@ -12,25 +12,20 @@ import org.jspecify.annotations.Nullable;
  * values are distinct list elements (never a shell string), and nothing here is
  * assembled from environment-originated content.
  *
- * <p>Implements FR7, FR8, NFR-O1 of add-sandbox-core.
+ * <p>The guard's network alias and proxy port are not spelled here: they are the image contract's
+ * ({@link ImageContract}), the values the sandbox base image bakes into its proxy configuration, so
+ * every builder that needs them takes the contract as a parameter.
+ *
+ * <p>Implements FR7, FR8, NFR-O1 of add-sandbox-core; FR6 of add-sandbox-base-image.
  */
 final class GuardCommands {
 
-    /** Where the guard container sees its factory-rendered config, mounted read-only. */
-    static final String CONFIG_MOUNT = "/gnomish-guard";
-
-    /** The guard's proxy listen port on the task network. */
-    static final int PROXY_PORT = 8080;
-
     /**
-     * The guard's stable DNS alias on the task network. The container's own name
-     * is per-task ({@code gnomish-guard-<key>}), but baked image configs — the
-     * JVM/Gradle proxy system properties and Maven settings the reference image
-     * recipe carries (task 9.1, design D7) — need one address that is identical
-     * in every environment; aliases are network-scoped, so concurrent tasks'
-     * guards never collide.
+     * Where the guard container sees its factory-rendered config, mounted read-only. A path inside
+     * the guard's own filesystem, shared with the addon script {@link EgressGuardConfig} renders —
+     * not the guard's network alias, which is the image contract's.
      */
-    static final String PROXY_ALIAS = "gnomish-guard";
+    static final String CONFIG_MOUNT = "/gnomish-guard";
 
     private GuardCommands() {}
 
@@ -49,20 +44,26 @@ final class GuardCommands {
      * fix-image-declared-volumes). The CA the guard serves arrives through the config
      * mount, so an ephemeral confdir costs it nothing. The value is a required
      * parameter: a call site that skipped resolving it does not compile.
+     *
+     * <p>The guard answers on the contract's stable network alias — the container's own name is
+     * per-task, but baked image configs need one address identical in every environment; aliases
+     * are network-scoped, so concurrent tasks' guards never collide — and listens on the
+     * contract's port (FR6 of add-sandbox-base-image).
      */
     static List<String> runGuard(
             String key,
             String guardImage,
             String configDirHostPath,
             ObjectOwnership ownership,
-            DeclaredVolumeOverrides overrides) {
+            DeclaredVolumeOverrides overrides,
+            ImageContract contract) {
         List<String> argv = new ArrayList<>(List.of("run", "-d", "--name", FactoryDockerLabels.guardName(key)));
         argv.addAll(FactoryDockerLabels.ownershipLabelArgs(key, ownership));
         argv.addAll(List.of(
                 "--network",
                 FactoryDockerLabels.networkName(key),
                 "--network-alias",
-                PROXY_ALIAS,
+                contract.guardAlias(),
                 "-v",
                 configDirHostPath + ":" + CONFIG_MOUNT + ":ro"));
         argv.addAll(overrides.argv());
@@ -72,12 +73,20 @@ final class GuardCommands {
                 "--mode",
                 "regular",
                 "--listen-port",
-                Integer.toString(PROXY_PORT),
+                Integer.toString(contract.guardPort()),
                 "--set",
                 "connection_strategy=lazy",
                 "-s",
                 CONFIG_MOUNT + "/" + EgressGuardConfig.SCRIPT_FILE));
         return List.copyOf(argv);
+    }
+
+    /**
+     * The proxy URL a box reaches the guard at: the contract's alias and port, the address the
+     * sandbox base image bakes into its proxy configuration (FR6 of add-sandbox-base-image).
+     */
+    static String proxyUrl(ImageContract contract) {
+        return "http://" + contract.guardAlias() + ":" + contract.guardPort();
     }
 
     /**

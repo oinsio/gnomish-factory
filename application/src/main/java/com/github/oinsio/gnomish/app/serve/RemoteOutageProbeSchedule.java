@@ -7,7 +7,7 @@ import java.time.InstantSource;
 import java.util.Random;
 
 /**
- * {@link RemoteOutageGate}'s probe-scheduling policy, extracted so the gate's own file stays an
+ * {@link DaemonCondition}'s probe-scheduling policy, extracted so the gate's own file stays an
  * outage/observability state machine rather than also owning "when is the next probe due"
  * (process-invariants.md file-size target). This class answers exactly that question and nothing
  * about outage lifecycle, counters, or logging — it does not know whether the gate is open.

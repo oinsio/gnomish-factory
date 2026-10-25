@@ -24,7 +24,7 @@ import java.time.InstantSource;
  * FeedState#IDLE_BLOCKED} (backoff-eligible but all fresh and WIP-blocked).
  *
  * <p><b>Drain mode</b> (FR10, M3): {@link #drain()} runs the same {@link FeedCycle} as Filling, but
- * the first empty poll stops for good, then blocks on {@link SlotLedger#awaitDrained()}.
+ * the first empty poll or held cycle stops for good, then blocks on {@link SlotLedger#awaitDrained()}.
  *
  * <p><b>Observability</b>: every feed-state transition is logged once via {@link FeedStateLogger}
  * (NFR-O1, UX2); {@link FeedCycle}'s tracker calls run through {@link FeedOutageRetry}, so a
@@ -108,7 +108,7 @@ public final class FeedAutomaton {
 
     /**
      * Drain mode (FR10, NFR-O2, M3): claims and runs eligible tasks like {@link #step()}'s Filling
-     * path, but the first empty poll stops for good (no idle sleep, no re-poll), then blocks on
+     * path, but the first empty poll — or a feed a daemon condition holds — stops for good (no idle sleep, no re-poll), then blocks on
      * {@link SlotLedger#awaitDrained()} so every already-running slot finishes; an empty queue at the
      * first poll returns immediately. Outcome collection is {@code ServeCommand}'s job — it attaches
      * a {@link DrainReport} to the real {@link SlotRunner} first, since only the slot body knows each
@@ -119,6 +119,11 @@ public final class FeedAutomaton {
     public void drain() throws InterruptedException {
         while (true) {
             slotLedger.acquire();
+            // A held feed claims nothing, so a drain stops as on an empty poll (D19, amended).
+            if (cycle.held()) {
+                slotLedger.abandon();
+                break;
+            }
             FeedCycle.Poll poll = cycle.poll(clock.instant());
             if (poll.candidates().isEmpty()) {
                 slotLedger.abandon();
@@ -139,6 +144,14 @@ public final class FeedAutomaton {
             viewTracker.transitionTo(FeedState.FULL, clock.instant());
         }
         slotLedger.acquire();
+        if (cycle.held()) {
+            // D19 of add-sandbox-base-image (amended 2026-10-25): a held feed reads nothing and
+            // waits; the condition's own WARN is the operator's line, so the feed logs none.
+            slotLedger.abandon();
+            viewTracker.transitionTo(FeedState.IDLE_BLOCKED, clock.instant());
+            sleeper.sleep(idleTiming.jittered());
+            return FeedState.IDLE_BLOCKED;
+        }
         FeedCycle.Poll poll = cycle.poll(clock.instant());
         viewTracker.recordPoll(poll.now(), poll.openFrontCount());
 

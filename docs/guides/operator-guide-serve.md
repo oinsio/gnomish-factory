@@ -68,7 +68,7 @@ story) is:
 | Code | Meaning                                                                                                                                                                                           |
 |------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 0    | clean stop — drain completed, or a graceful SIGTERM within grace                                                                                                                                  |
-| 1    | startup failure — the label-provisioning smoke test could not reach the configured tracker binding                                                                                                |
+| 1    | startup failure — an operator precondition refused the daemon (`[GF173]`, see "Lifecycle"), or the label-provisioning smoke test could not reach the configured tracker binding                   |
 | 2    | usage error — malformed flags (including `--dashboard-out` with the dashboard off), an unregistered `--dir`, or a configuration violation (every problem listed at once, before any tracker call) |
 
 Batch `take` reuses the single-`take` exit-code table (see "`take` CLI
@@ -82,8 +82,14 @@ maintain.
 ## Lifecycle
 
 **Startup.** `serve` loads the pipeline, requires a `tracker:` section (same
-as `take`), then runs the same label-provisioning call the tracker adapter
-always makes as a startup smoke test — for GitHub this provisions the four
+as `take`), then assesses the operator preconditions a slot would otherwise meet
+after its claim, in the order a slot meets them — the clone's ref backend, the
+sandbox plan (which meets the container runtime first), and for a boxed pipeline
+the image's contract and git floor (one short-lived helper container). The first
+refusal ends the process before the tracker is touched: one `[GF173]` line, the
+check's own message with its fix on the console, exit 1 (ADR
+[0019](../adr/0019-operator-preconditions.md)). Then it runs the same
+label-provisioning call the tracker adapter always makes as a startup smoke test — for GitHub this provisions the four
 `gnomish:*` labels. An unreachable repository or bad token fails here, before
 any task is claimed, with an error naming the binding (exit 1). Every restart
 is a clean start: a previous instance id's claims are never adopted as this
@@ -355,6 +361,32 @@ calls and its law source stays the working tree; with `--base <ref>` the ref
 is resolved locally (no fetch) and its law is read from git objects at that
 ref's commit, offline.
 
+### Daemon conditions: the remote outage gate and the operator preconditions (UX6, UX4)
+
+A precondition can also be lost while the daemon runs: the operator migrates the
+clone, Docker stops, the image is rebuilt on the wrong base. The daemon keeps one
+**daemon condition** per precondition — the remote (below), the container runtime,
+the clone's ref format, the image contract and the image's git floor — and the
+feed reads them all before every claim: while any is open the feed claims nothing,
+reads nothing from the tracker and waits the idle interval (a `--drain` stops as
+on an empty queue). A slot or the janitor that meets a typed refusal opens its
+condition — the slot's task is released plain, with no abort marker; a failure
+nothing classifies stays the slot's crash, with its abort accounting. An open
+condition is probed by its own startup check on the same growing, capped cadence
+as the remote, and only a passing probe closes it.
+
+| Signal          | What you see                                                                                                                                                                     |
+|-----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Log — open      | one WARN per episode, its own code per condition — `[GF174]` runtime, `[GF176]` ref format, `[GF178]` image contract, `[GF180]` git floor — with the check's message and the fix |
+| Log — during    | DEBUG only, roll-up-suppressed; a refusal a second slot meets is no second WARN                                                                                                  |
+| Log — sustained | one ERROR past the sustained-open threshold: `[GF175]`, `[GF177]`, `[GF179]`, `[GF181]`                                                                                          |
+| Log — close     | one INFO naming the condition, the duration and the probe count                                                                                                                  |
+| Snapshot        | a `conditions` section, one entry per condition (`condition`, `state`, `openSince`, `lastError`, `nextProbeAt`, `consecutiveFailures`, `lastSuccessAt`), the remote's first      |
+| Ledger          | one `daemonCondition` line per closed episode, naming its `condition`                                                                                                            |
+| Dashboard       | an open precondition is a status line naming the condition, since when, the cause and the next probe                                                                             |
+
+The remote is the first condition of the set, described next.
+
 ### The remote outage gate (UX6)
 
 A base-refresh or default-branch-discovery failure classified as an
@@ -366,14 +398,14 @@ first successful probe closes it.
 
 Operator-visible surface:
 
-| Signal          | What you see                                                                                                                                                                                                                                                                                                     |
-|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Log — open      | one WARN, `[GF145] remote outage gate opened for <target>: ...`, naming the target and the cause                                                                                                                                                                                                                 |
-| Log — during    | DEBUG-only, roll-up-suppressed lines per failed probe; no repeated WARN                                                                                                                                                                                                                                          |
-| Log — sustained | one ERROR, `[GF146] remote outage gate for <target> has been open longer than <threshold>: ...`, the first time the outage crosses the configured duration                                                                                                                                                       |
-| Log — close     | one INFO recovery line naming the outage duration and probe count                                                                                                                                                                                                                                                |
-| Snapshot        | a `remote` section beside `tracker`, one entry per target: `state` (`open` \| `closed`), `openSince`, `lastError` (scrubbed), `nextProbeAt`, `consecutiveFailures`, `lastSuccessAt` — `gnomish dashboard` and the raw `snapshot.json` answer "blocked on remote X since T, next probe at T'" from this one place |
-| Exit code       | a single-shot `take` hitting the same failure ends with `TakeResult.InfrastructureUnavailable`, exit code **16**; `serve` itself has no exit code for it — the daemon stays up, the gate is its degraded-but-alive state                                                                                         |
+| Signal          | What you see                                                                                                                                                                                                                                                                                                                                              |
+|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Log — open      | one WARN, `[GF145] remote outage gate opened for <target>: ...`, naming the target and the cause                                                                                                                                                                                                                                                          |
+| Log — during    | DEBUG-only, roll-up-suppressed lines per failed probe; no repeated WARN                                                                                                                                                                                                                                                                                   |
+| Log — sustained | one ERROR, `[GF146] remote outage gate for <target> has been open longer than <threshold>: ...`, the first time the outage crosses the configured duration                                                                                                                                                                                                |
+| Log — close     | one INFO recovery line naming the outage duration and probe count                                                                                                                                                                                                                                                                                         |
+| Snapshot        | a `remote` section beside `tracker` (and the remote's entry in `conditions`), one entry per target: `state` (`open` \| `closed`), `openSince`, `lastError` (scrubbed), `nextProbeAt`, `consecutiveFailures`, `lastSuccessAt` — `gnomish dashboard` and the raw `snapshot.json` answer "blocked on remote X since T, next probe at T'" from this one place |
+| Exit code       | a single-shot `take` hitting the same failure ends with `TakeResult.InfrastructureUnavailable`, exit code **16**; `serve` itself has no exit code for it — the daemon stays up, the gate is its degraded-but-alive state                                                                                                                                  |
 
 No task-level abort marker is written and no stage attempt is burned: the
 outage is charged to the daemon, never to the task (see the glossary's

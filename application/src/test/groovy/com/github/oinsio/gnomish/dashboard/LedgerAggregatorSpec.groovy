@@ -180,6 +180,33 @@ class LedgerAggregatorSpec extends Specification {
         view.perDay()[1].outageDuration() == Duration.ofMillis(3_600_000L + 1_800_000L)
     }
 
+    // NFR-O2 of add-sandbox-base-image: the remote's episode is a daemonCondition line now; a
+    //     ledger written before keeps its remoteOutage lines, counted alike; a precondition's
+    //     episode is no remote outage.
+    // Scenario: observability/serve-observability / Old remoteOutage lines still aggregate
+    def "old remoteOutage lines and daemonCondition lines naming the remote count alike, precondition episodes not at all"() {
+        given:
+        writeLedgerFile(TODAY, [
+            remoteOutageLine(1_000L),
+            daemonConditionLine('remote', 2_000L),
+            daemonConditionLine('boxGitFloor', 4_000L)
+        ])
+
+        when:
+        def view = aggregator.aggregate(tempDir, TODAY, 1)
+
+        then:
+        view.perDay()[0].outageCount() == 2
+        view.perDay()[0].outageDuration() == Duration.ofMillis(3_000L)
+    }
+
+    private static String daemonConditionLine(String condition, long durationMillis) {
+        return "{\"version\":1,\"type\":\"daemonCondition\",\"condition\":\"${condition}\",\"target\":null," +
+                "\"openedAt\":\"2026-08-06T00:00:00Z\",\"closedAt\":\"2026-08-06T01:00:00Z\"," +
+                "\"durationMillis\":${durationMillis},\"probeCount\":5,\"releasedClaims\":1," +
+                "\"lastError\":\"boom\"}"
+    }
+
     private static String remoteOutageLine(long durationMillis) {
         return "{\"version\":1,\"type\":\"remoteOutage\",\"target\":\"origin\"," +
                 "\"openedAt\":\"2026-08-06T00:00:00Z\",\"closedAt\":\"2026-08-06T01:00:00Z\"," +

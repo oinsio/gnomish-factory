@@ -1,15 +1,23 @@
-# Release: a pushed version tag publishes a verified GitHub Release.
+# Release: a pushed version tag publishes a verified GitHub Release and the sandbox base image.
 # Implements FR1, FR2, FR7, FR8, NFR-S1, NFR-S2, NFR-R1, NFR-R2, NFR-O1, NFR-C1 of
-# add-release-pipeline (design D6, D7). One job, in four phases:
-#   gate     (steps 1-3) tag shape, commit on main, green CI run — before any build;
-#   build    (step 4)    distribution archives and SBOM, then a second archive build
-#                        whose SHA-256 sums must match the first (M2);
-#   verify   (steps 5-6) the unpacked archive reports the tag's version and carries the
-#                        root LICENSE/NOTICE, in its top-level folder and in its jar;
-#   publish  (steps 7-9) SHA256SUMS, provenance and SBOM attestations, the release.
-# Publishing is the last step, so a failed run publishes nothing and a re-run for the same
-# tag starts from scratch (NFR-R2). The verification suite is not re-run: the release trusts
-# the green `main` CI run of the tagged commit that step 3 finds (NFR-C1, NG6).
+# add-release-pipeline (design D6, D7) and FR7, FR9, NFR-S3 of add-sandbox-base-image (design D6,
+# D11, D15, D16). Three jobs:
+#   preflight  tag shape, commit on main, green CI run — before any build; its outputs (version,
+#              prerelease, base tag, image tags) are the only source of those values below;
+#   release    (needs preflight) the distribution, in three phases:
+#              build    distribution archives and SBOM, then a second archive build whose
+#                       SHA-256 sums must match the first (M2);
+#              verify   the unpacked archive reports the tag's version, ships the recipe stamped
+#                       with the base tag, and carries the root LICENSE/NOTICE, in its top-level
+#                       folder and in its jar;
+#              publish  SHA256SUMS, provenance and SBOM attestations, the release;
+#   image      (needs preflight, beside release) the sandbox base for both platforms: refuse an
+#              existing release tag, push under the preflight's image tags, attest, scan.
+# Publishing the release is the release job's last step, so a failed run publishes no release and
+# a re-run for the same tag starts from scratch (NFR-R2). The verification suite is not re-run:
+# the release trusts the green `main` CI run of the tagged commit that the preflight finds
+# (NFR-C1, NG6). The workflow holds no logic of its own: every decision is a script under
+# scripts/ with a spec in :bootstrap (design D15 of add-sandbox-base-image).
 #
 # Action versions are pinned by major tag, as in ci.yml; Dependabot keeps them fresh.
 name: Release
@@ -21,14 +29,9 @@ on:
   push:
     tags: ['v*']
 
-# Only what the job uses (NFR-S1): `contents: write` creates the release and uploads its
-# assets; `id-token: write` and `attestations: write` sign and store the attestations;
-# `actions: read` lets step 3 list the CI runs of the tagged commit.
-permissions:
-  actions: read
-  attestations: write
-  contents: write
-  id-token: write
+# No workflow-level grants: each job declares only what it uses (NFR-S1 of add-release-pipeline,
+# NFR-S3 of add-sandbox-base-image).
+permissions: {}
 
 # One release run per tag; a second push of the same tag waits rather than racing it.
 concurrency:
@@ -36,25 +39,57 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  # Steps 1-3 (FR1, FR2, NFR-O1 of add-release-pipeline; design D6, D11, D15 of
+  # add-sandbox-base-image): shared with ReleasePreflightScriptSpec, which drives every red path. A
+  # malformed tag stops both jobs below before either builds. `actions: read` lets the script list
+  # the CI runs of the tagged commit.
+  preflight:
     runs-on: ubuntu-latest
-    timeout-minutes: 30 # 30-min budget: one distribution build is the target, under 10 (NFR-C1)
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ github.ref_name }}
+    outputs:
+      version: ${{ steps.preflight.outputs.version }}
+      prerelease: ${{ steps.preflight.outputs.prerelease }}
+      base_tag: ${{ steps.preflight.outputs.base_tag }}
+      image_tags: ${{ steps.preflight.outputs.image_tags }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          # Full history: step 2 needs origin/main to decide reachability.
+          # Full history: the script needs origin/main to decide reachability.
           fetch-depth: 0
 
-      # Steps 1-3 (FR1, FR2, NFR-O1): shared with ReleasePreflightScriptSpec, which drives
-      # every red path. Writes `version` and `prerelease` to the step outputs.
       - name: Preflight (tag shape, commit on main, green CI)
         id: preflight
         run: bash scripts/release-preflight.sh "$TAG" "$GITHUB_SHA"
+
+  release:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 30 # 30-min budget: one distribution build is the target, under 10 (NFR-C1)
+    # `contents: write` creates the release and uploads its assets; `id-token: write` and
+    # `attestations: write` sign and store the archives' attestations.
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.preflight.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Full history, as the preflight checks out: the build sees the same checkout shape.
+          fetch-depth: 0
 
       - name: Set up JDK 25 (Temurin)
         uses: actions/setup-java@v6
@@ -75,8 +110,6 @@ jobs:
       # the build cache; both tars must have the same SHA-256 sum. The SBOM is not compared:
       # it records its generation time (design D7).
       - name: Build the distribution twice and compare
-        env:
-          VERSION: ${{ steps.preflight.outputs.version }}
         run: |
           ./gradlew :bootstrap:distTar :bootstrap:distZip :bootstrap:cyclonedxDirectBom "-PreleaseVersion=$VERSION"
           mkdir release
@@ -93,8 +126,6 @@ jobs:
 
       # Step 5 (FR8, M3): the archive an operator downloads reports the tag's version.
       - name: Unpacked archive reports the tag's version
-        env:
-          VERSION: ${{ steps.preflight.outputs.version }}
         run: |
           mkdir unpacked
           tar -xzf "release/gnomish-$VERSION.tar.gz" -C unpacked
@@ -104,11 +135,18 @@ jobs:
             exit 1
           fi
 
+      # Beside step 5 (FR9 of add-sandbox-base-image; design D11, D15, single-owner row 4): the unpacked
+      # archive's recipe Dockerfile and README carry the release's base tag, handed in from the
+      # preflight, never derived here. The release branch of the packaging stamp, which no CI
+      # test build reaches; RecipeStampArchiveScriptSpec drives the script.
+      - name: Unpacked archive ships the recipe stamped with the base tag
+        env:
+          BASE_TAG: ${{ needs.preflight.outputs.base_tag }}
+        run: sh scripts/check-recipe-stamp.sh "unpacked/gnomish-$VERSION" "$BASE_TAG"
+
       # Step 6 (NFR-S2): the archive's LICENSE/NOTICE and its jar's META-INF copies equal the
       # root files byte for byte. Run from the repository root, whose files are the reference.
       - name: Archive carries the root LICENSE and NOTICE
-        env:
-          VERSION: ${{ steps.preflight.outputs.version }}
         run: bash scripts/check-distribution-terms.sh archive "unpacked/gnomish-$VERSION"
 
       # Step 7 (FR7): one checksum file covering both archives, by bare file name.
@@ -131,7 +169,7 @@ jobs:
           subject-path: |
             release/gnomish-*.tar.gz
             release/gnomish-*.zip
-          sbom-path: release/gnomish-${{ steps.preflight.outputs.version }}-cyclonedx.json
+          sbom-path: release/gnomish-${{ needs.preflight.outputs.version }}-cyclonedx.json
 
       # Step 9 (NFR-R2): `gh release create` deletes its own draft when an upload or the publish
       # fails, but not when the job is killed between the two (timeout, lost runner, cancel); its
@@ -151,8 +189,7 @@ jobs:
       # create a tag, so the release stays on the commit the maintainer tagged.
       - name: Publish the release
         env:
-          VERSION: ${{ steps.preflight.outputs.version }}
-          PRERELEASE: ${{ steps.preflight.outputs.prerelease }}
+          PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
         run: |
           notes=(--generate-notes)
           if [ -f "docs/releases/$TAG.md" ]; then
@@ -167,3 +204,120 @@ jobs:
             "release/gnomish-$VERSION.zip" \
             release/SHA256SUMS \
             "release/gnomish-$VERSION-cyclonedx.json"
+
+  # The sandbox base image (FR7, NFR-S3 of add-sandbox-base-image; design D6, D15), beside the
+  # distribution so neither build waits for the other. The image tags are the preflight's
+  # `image_tags` — the version and its X.Y for a final release, the full version alone for a
+  # pre-release — turned into references by one fixed expression; the YAML holds no condition.
+  # Durable steps, in order: the push of every tag (one build-push), the attestation pushed to the
+  # registry, the scan report. A run stopped after the push leaves a tag without its attestation;
+  # a re-run stops at the refusal, whose message names the recovery (attest the existing tag by
+  # its digest in a separate run, never delete it; the developer guide's Releasing section).
+  image:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 90 # two platforms, one under QEMU, each compiling git (design Risks)
+    # Only this job writes packages (NFR-S3): `packages: write` pushes to ghcr.io, `id-token: write`
+    # and `attestations: write` sign and store the image's attestation, `security-events: write`
+    # uploads the scan report, and `actions: read` lets that upload read the run it belongs to.
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+      security-events: write
+    env:
+      IMAGE: ghcr.io/oinsio/gnomish-sandbox-base
+      VERSION: ${{ needs.preflight.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # A release tag is never overwritten (design D6, D15): exit 1 when the tag exists, exit 2
+      # when the registry does not answer — either way nothing below runs. ImageTagRefusalScriptSpec
+      # drives the three outcomes.
+      - name: Refuse an existing release tag
+        run: sh scripts/image-tag-refusal.sh "$IMAGE" "$VERSION"
+
+      # The contract values from their one source (design D2), one build argument each, through
+      # the one translation of the file, scripts/image-contract-build-args.sh (design D16;
+      # ImageContractBuildArgsScriptSpec pins its rule). The capture fails the step when the script
+      # refuses the file, so `args` is never empty.
+      - name: Read the image contract into build arguments
+        id: contract
+        run: |
+          args="$(sh scripts/image-contract-build-args.sh)"
+          {
+            echo 'args<<CONTRACT'
+            printf '%s\n' "$args"
+            echo 'CONTRACT'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push the base for both platforms
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: sandbox-image
+          build-contexts: scripts=scripts
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ join(fromJSON(needs.preflight.outputs.image_tags), format(',{0}:', env.IMAGE)) }}
+          build-args: |
+            ${{ steps.contract.outputs.args }}
+            IMAGE_VERSION=${{ env.VERSION }}
+            IMAGE_REVISION=${{ github.sha }}
+          # Shared with the weekly rebuild: the git build stage is reused while its inputs hold.
+          cache-from: type=gha,scope=sandbox-base
+          cache-to: type=gha,mode=max,scope=sandbox-base
+
+      - name: Attest the base's build provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      # The scan reports and never blocks (FR7, NG3): findings reach code scanning, the job stays
+      # green, and a scan that cannot run leaves the published image as it is.
+      - name: Save the pushed base for the scan
+        continue-on-error: true
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker pull --platform linux/amd64 "$IMAGE@$DIGEST"
+          docker save -o sandbox-base.tar "$IMAGE@$DIGEST"
+
+      - name: Scan the base (OSV-Scanner)
+        continue-on-error: true
+        uses: google/osv-scanner-action/osv-scanner-action@v2.6.0
+        with:
+          scan-args: |-
+            scan
+            image
+            --archive
+            ./sandbox-base.tar
+            --format=sarif
+            --output=osv-sandbox-base.sarif
+
+      - name: Upload the scan report
+        if: ${{ !cancelled() && hashFiles('osv-sandbox-base.sarif') != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: osv-sandbox-base.sarif
+          category: sandbox-base-image
