@@ -868,6 +868,28 @@ this change never argued. *Alternative rejected:* calling
 of the check beside the materializer's own, and it still misses a runtime that
 dies before the first box.
 
+**D23 — `DaemonCondition` stays one class above the file-size cap (amends the
+Risks row on `RemoteOutageGate`'s size; added 2026-10-25 after the check of
+audit finding 4).** `DaemonCondition.java` is 331 lines against the 200-line
+hard cap of `process-invariants.md`, after the subject, reporter, schedule and
+counter splits (task 7.5a). The deviation was recorded only in the class
+javadoc; this decision is its record. What is left is one responsibility: the
+open/closed transition with its three-phase probe, under one monitor.
+*Alternative rejected:* a `ConditionProbeCycle` holding the probe phases
+(`beginProbe`, `recordUnanswered`, `applyProbeResult`, `close`) with the
+schedule, counters and reporter — every phase reads and writes `open`,
+`probeInFlight`, `openedAt` and `lastError` under the condition's monitor, so
+the halves would reach into each other's state, the split
+`process-invariants.md` names as the worse outcome. *Alternative rejected:* an
+episode record (`openedAt`, `lastError`, `lastSuccessAt`, the counters,
+`health()` and the close summary) — a genuine ownership transfer, but it
+removes about 50 lines and leaves about 280; the cap is then reachable only by
+cutting the class javadoc (40 lines) and the `probeIfDue` javadoc (30), which
+carry the signal-source and lock-scope reasoning, so the cost is paid for
+nothing. *Pickup condition:* the class gains a second condition-level
+behaviour beyond the transition (a per-kind policy, a second probe shape), or
+the episode record earns a second reader; then the episode split lands first.
+
 ### Sync surfaces
 
 The guard alias and port are an undeclared pair today (recipe build-argument
@@ -1000,7 +1022,8 @@ startup owner, the slot and the probe call the one class per precondition.
   line count (`process-invariants.md`): the state machine and its log edges
   stay one class, the kind and its probe another; it lands first with the
   remote as the only kind (task 7.5a, the existing specs green under the
-  rename), and the new kinds after it (task 7.5b).
+  rename), and the new kinds after it (task 7.5b). The generalization landed
+  and the file stayed over the cap; the deviation is decision D23.
 - [A snapshot or ledger written before this change has `remote` and
   `remoteOutage` only] → both readers accept the old spellings (Sync surfaces);
   the ledger is disposable history and the snapshot is rewritten within one
