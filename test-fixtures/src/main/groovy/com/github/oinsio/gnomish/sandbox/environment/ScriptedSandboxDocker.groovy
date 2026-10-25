@@ -127,7 +127,7 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
                 // tighten-spec-contract), so the admission finds the range already on the branch.
                 new BoxGitLink(sourceClone, { String container, String branch ->
                     new GitProcessRunner().run(sourceClone, 'update-ref',
-                        ContainerHarvestFetch.quarantine(branch).name(), 'refs/heads/' + branch)
+                    ContainerHarvestFetch.quarantine(branch).name(), 'refs/heads/' + branch)
                 } as ContainerHarvest),
                 ChildEnvAllowlist.none(),
                 projectId,

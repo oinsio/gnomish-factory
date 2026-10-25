@@ -34,18 +34,17 @@ record PreconditionConditionLog(DaemonConditionKind kind) implements ConditionLo
     @Override
     public void opened(String reason) {
         switch (kind) {
-            case CONTAINER_RUNTIME -> logReason(OperatorEvent.CONDITION_CONTAINER_RUNTIME_OPENED, reason);
-            case CLONE_REF_FORMAT -> logReason(OperatorEvent.CONDITION_CLONE_REF_FORMAT_OPENED, reason);
-            case IMAGE_CONTRACT -> logReason(OperatorEvent.CONDITION_IMAGE_CONTRACT_OPENED, reason);
-            case BOX_GIT_FLOOR -> logReason(OperatorEvent.CONDITION_BOX_GIT_FLOOR_OPENED, reason);
+            case CONTAINER_RUNTIME ->
+                log.warn(OperatorEvent.CONDITION_CONTAINER_RUNTIME_OPENED.head() + OPENED, kind, reason);
+            case CLONE_REF_FORMAT ->
+                log.warn(OperatorEvent.CONDITION_CLONE_REF_FORMAT_OPENED.head() + OPENED, kind, reason);
+            case IMAGE_CONTRACT ->
+                log.warn(OperatorEvent.CONDITION_IMAGE_CONTRACT_OPENED.head() + OPENED, kind, reason);
+            case BOX_GIT_FLOOR -> log.warn(OperatorEvent.CONDITION_BOX_GIT_FLOOR_OPENED.head() + OPENED, kind, reason);
             case REMOTE -> {
                 // refused by the compact constructor
             }
         }
-    }
-
-    private void logReason(OperatorEvent operatorEvent, String reason) {
-        log.warn(operatorEvent.head() + OPENED, kind, reason);
     }
 
     @Override
@@ -77,20 +76,33 @@ record PreconditionConditionLog(DaemonConditionKind kind) implements ConditionLo
     public void sustainedOpen(Duration threshold, String lastError) {
         switch (kind) {
             case CONTAINER_RUNTIME ->
-                logError(OperatorEvent.CONDITION_CONTAINER_RUNTIME_SUSTAINED_OPEN, threshold, lastError);
+                log.error(
+                        OperatorEvent.CONDITION_CONTAINER_RUNTIME_SUSTAINED_OPEN.head() + SUSTAINED,
+                        kind,
+                        threshold,
+                        lastError);
             case CLONE_REF_FORMAT ->
-                logError(OperatorEvent.CONDITION_CLONE_REF_FORMAT_SUSTAINED_OPEN, threshold, lastError);
+                log.error(
+                        OperatorEvent.CONDITION_CLONE_REF_FORMAT_SUSTAINED_OPEN.head() + SUSTAINED,
+                        kind,
+                        threshold,
+                        lastError);
             case IMAGE_CONTRACT ->
-                logError(OperatorEvent.CONDITION_IMAGE_CONTRACT_SUSTAINED_OPEN, threshold, lastError);
-            case BOX_GIT_FLOOR -> logError(OperatorEvent.CONDITION_BOX_GIT_FLOOR_SUSTAINED_OPEN, threshold, lastError);
+                log.error(
+                        OperatorEvent.CONDITION_IMAGE_CONTRACT_SUSTAINED_OPEN.head() + SUSTAINED,
+                        kind,
+                        threshold,
+                        lastError);
+            case BOX_GIT_FLOOR ->
+                log.error(
+                        OperatorEvent.CONDITION_BOX_GIT_FLOOR_SUSTAINED_OPEN.head() + SUSTAINED,
+                        kind,
+                        threshold,
+                        lastError);
             case REMOTE -> {
                 // refused by the compact constructor
             }
         }
-    }
-
-    private void logError(OperatorEvent operatorEvent, Duration threshold, String lastError) {
-        log.error(operatorEvent.head() + SUSTAINED, kind, threshold, lastError);
     }
 
     @Override
