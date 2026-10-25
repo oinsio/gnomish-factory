@@ -1,0 +1,6 @@
+spec: sandbox/sandbox-base-image
+
+# Verified by a mechanism other than a test: the workflow named (registry state; design D10).
+Release pushes both tags => .github/workflows/release.yml (image job: step "Build and push the base for both platforms" pushes the preflight's image_tags, the version and its X.Y, for linux/amd64 and linux/arm64; step "Attest the base's build provenance" attests the pushed digest)
+A pre-release pushes only its full tag => .github/workflows/release.yml (the preflight job emits the full version alone as image_tags for a pre-release, from scripts/release-preflight.sh, whose specs decide the selection; the same push step then creates no X.Y tag)
+Weekly rebuild leaves the release tag alone => .github/workflows/sandbox-image-rebuild.yml (rebuild job: step "Build and push the base's X.Y for both platforms" pushes only the X.Y tag taken from scripts/release-preflight.sh --base-tag, never X.Y.Z)
