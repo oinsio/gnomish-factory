@@ -357,7 +357,7 @@ Before 5.1 starts: `/review-artifacts add-sandbox-base-image D15`
 (`design-decisions.md`, "A decision added during implementation is reviewed
 before its task runs").
 
-- [ ] 5.1 Release workflow: move the preflight step into a `preflight` job with
+- [x] 5.1 Release workflow: move the preflight step into a `preflight` job with
       outputs `version`, `prerelease`, `base_tag` (D11) and `image_tags` (D15);
       `scripts/release-preflight.sh` gains the `image_tags` output — a JSON
       array, `["X.Y.Z","X.Y"]` for a final release and `["X.Y.Z-<pre>"]` for a
@@ -414,10 +414,31 @@ before its task runs").
       package and for a package not yet created — those texts are the
       presets' answers (D15), and a difference found later is a visible
       refusal, never a push.
+      *Local part done 2026-10-25; open: the dry run and the logged-in ghcr answer.*
+      `actionlint` 1.7.12 (`rhysd/actionlint:1.7.12`, the `ci.yml` step's command) over
+      `.github/workflows/*.yml`: no findings, exit 0. `./gradlew :bootstrap:distTar
+      -PreleaseVersion=0.3.0`, unpacked: `release-preflight.sh --base-tag v0.3.0` →
+      `base_tag=0.3`; `check-recipe-stamp.sh <unpacked> 0.3` exit 0 (`ARG
+      GNOMISH_BASE_TAG=0.3` at `share/sandbox-image/Dockerfile:17` and `README.md:27`);
+      `bin/gnomish --version` → `0.3.0`; the same archive against `0.2` exit 1 with one
+      `::error` per file. `-PreleaseVersion=0.3.0-rc.1`: `base_tag=0.3.0-rc.1`, the stamp check
+      exit 0. Specs green: `ImageTagRefusalScriptSpec` 10, `RecipeStampArchiveScriptSpec` 7,
+      `ReleasePreflightScriptSpec` 17. ghcr, docker 29.4.0, no login: a missing tag in an
+      existing public package (`ghcr.io/gitleaks/gitleaks:9.9.9-nonexistent`) answers
+      `manifest unknown`, as `data/stderr-registry` records; `ghcr.io/oinsio/gnomish-sandbox-base`
+      does not exist yet (its package page answers 404), and every tag of it answers
+      `Get "https://ghcr.io/v2/oinsio/gnomish-sandbox-base/manifests/<tag>": denied`, which
+      `image-tag-refusal.sh` reads as exit 2. **Finding, unverified:** if the release job's
+      logged-in client gets the same `denied` for the package not yet created, the first image
+      release is refused on every re-run — a permanent stall, not the visible one-off refusal
+      the risk row of D15 (`design.md`, "ghcr's answer … differs") assumes. The logged-in answer
+      is not recorded (no `gh` login on the machine). It must be read before the dry run, since
+      the dry run's push creates the package and that answer can no longer be observed; if it is
+      `denied`, the question goes through `/architect` (`spec-mismatch.md`) before the release.
 Before 5.2 starts: `/review-artifacts add-sandbox-base-image D16` (added
 during the apply of 5.1, same rule as above).
 
-- [ ] 5.2 `sandbox-image-rebuild.yml`: weekly schedule plus manual dispatch;
+- [x] 5.2 `sandbox-image-rebuild.yml`: weekly schedule plus manual dispatch;
       the final release with the highest version, from
       `scripts/latest-final-release.sh` (D15: raw JSON of `gh release list
       --exclude-drafts --exclude-pre-releases --limit 1000 --json
@@ -504,6 +525,16 @@ during the apply of 5.1, same rule as above).
       leaves the release tag alone" gets no exemption file here (D10 as
       amended; task 6.5). Acceptance: one manual dispatch run; `:X.Y.Z`
       digest unchanged afterwards.
+      *Verified 2026-10-25; open: the acceptance run, which needs a published final image (after 5.1).*
+      `actionlint` 1.7.12 (`rhysd/actionlint:1.7.12`) over `.github/workflows/*.yml`: no
+      findings, exit 0. Specs green (`--rerun`): `LatestFinalReleaseScriptSpec` 8,
+      `ImageContractBuildArgsScriptSpec` 13, `ImageContractSourceSpec` 11,
+      `ImageContractBuildArgsSpellingSpec` 5, `BaseImageContractSpec` 7 (the base built through
+      the fixture's run of the script; docker layer cache warm). `git grep -n CONTRACT_ARGUMENTS`:
+      no hit in code, only the quotations in this change's `design.md` and `tasks.md`. The `sed`
+      key table is gone from `release.yml`; its `contract` step and `sandbox-image-rebuild.yml`
+      both run `args="$(sh scripts/image-contract-build-args.sh)"` (`release.yml:264`,
+      `sandbox-image-rebuild.yml:111`).
 
 ## 6. Docs and wrap-up
 
@@ -533,7 +564,7 @@ during the apply of 5.1, same rule as above).
       -- ':!openspec'` finds a reference, the loop printing each id it does
       not; and `./gradlew checkSpecContract --change add-sandbox-base-image`.
 - [x] 6.3 Root `./gradlew check` green, once. Verify the exit code.
-- [ ] 6.4 Operator-stand acceptance (human step): rewrite the stand's
+- [x] 6.4 Operator-stand acceptance (human step): rewrite the stand's
       Dockerfile `FROM` the base and run one container-mode task. The stand's
       image today differs from the base in exactly what D14 closes — a
       distribution image in its `FROM`, a home the gnome owns with the
@@ -550,7 +581,65 @@ during the apply of 5.1, same rule as above).
       one INFO, no `GF076`, at most one claim and release per slot. Remove the
       stale `gnomish:working` label the 2026-10-23 incident left on the
       stand's issue #30 (or let the reaper return it) before the replay.
-- [ ] 6.5 At archive (D10 as amended 2026-10-23), in the same step that merges
+      *Verified 2026-10-25 on the `time-zones` stand; six findings below go to `/architect`.*
+      Stand: jar built from `389bee90` (`:bootstrap:bootJar`), base `gnomish-sandbox-base:local`
+      built from the same tree with `scripts/image-contract-build-args.sh`, the stand's
+      Dockerfile `FROM ${GNOMISH_BASE_IMAGE}` (time-zones `5ae7c8b`), image
+      `time-zones-gnomish-sandbox:5`. `gnomish-verify-image` passes on it: the home root-owned
+      with `.cache`, `.claude`, `.local`, `.npm` owned by the gnome, `managed-settings.json` =
+      `{"allowManagedHooksOnly": true}`, git 2.56.0, label `io.gnomish.image-contract=1`.
+      Container-mode runs with the real agent CLI, every stage of the pipeline to a terminal
+      outcome: #30 `delivered` (PR time-zones#37, 47 min 16 s; resumed after the finding-2
+      park below) and #38 `delivered` (PR time-zones#39, 59 min 15 s; `specify` passed on its
+      second attempt after a judge `Fail`, every other stage on its first).
+      M6 (18:15): clone on `files`, #40 `Ready` → `serve` exits at startup with the
+      `CLONE_REF_FORMAT` refusal (`[GF173]`); the issue's timeline shows only `labeled
+      gnomish:ready`: no claim, no `gnomish:working`.
+      M7 (18:31–18:51): clone on `reftable`, `serve` started, then the clone migrated to
+      `files` under the running daemon and #40 labelled `Ready`. One claim (18:33:09), one
+      WARN `[GF176] daemon condition CLONE_REF_FORMAT opened … claim released` (18:33:10), no
+      further claim while open; clone migrated back, one INFO `daemon condition
+      CLONE_REF_FORMAT closed: open PT17M46S over 4 failed probe(s)` at the next probe
+      (18:50:56); `grep -c GF076` over the daemon's log 0; WARN/ERROR lines over the episode: 1.
+      #40 then ran on: parked INFRA by finding 2, returned to `Ready` by hand, resumed at
+      `specify` with the interrupted attempt not counted, and was `delivered` (PR
+      time-zones#41, 1 h 59 min; attempts after judge `Fail`s: `specify` 4, `fix-specs` 2,
+      `implement` 3, `review-code` 2, each inside its stage's `attemptLimit`; its summary
+      again says `attempts=0`, finding 6).
+      **Deviation from the task text:** the clone itself was migrated, not a copy one slot
+      points at: the project registers one clone, and the slot's precondition path is the
+      same either way.
+      Findings, each to `/architect` (Mode A) per `spec-mismatch.md`, none fixed here:
+      1. **Image lookup answered "No such image" → `GF054` stack trace at startup, twice
+         (12:56, 18:24).** Docker Desktop's Resource Saver stopped its VM after 5 min idle
+         (`com.docker.backend.log`: `VM stopped`); while stopped, its API cache answers 404 to
+         `GET /images/<tag>/json` for every tag, while `docker image ls` lists the image and
+         `inspect` by id finds it; one `docker run` woke the VM. `ImageFacts.read` throws
+         `DockerCommandFailedException`, which `DockerImageReadiness.assess` leaves
+         unclassified, so neither a missing image nor this false answer reaches the operator
+         as a coded precondition line with its remedy. Its effect under a running `serve`
+         (a claim-time check) is inferred from code, not reproduced.
+      2. **The sandbox sweep stops a live box the same daemon reclaimed after a stale-claim
+         removal, twice.** #30: reaper removed the stale claim 13:26:13, reclaim 13:26:41,
+         sweep 13:31:11; #40: removal 18:51:35, reclaim 18:52:09, sweep 18:56:25 (box age
+         4 min 7 s), each ~2–10 s before the reaper's next tick. `StalenessMemory.staleRefs()`
+         keeps the task until the reaper's next `observe()`, and `LivenessOracle` subtracts it
+         from the live set, so the sweep disposes the guard ("unowned guard") and stops the
+         main box ("unowned running main-box") mid-round; the task parks INFRA with
+         `gnomish:needs-human`. One fault yields three lines (`GF121`, `GF006`, `GF112`), and
+         the dashboard renders the stop as "an instance died or hung". Predates this change
+         (add-serve-sandbox-lifecycle, add-claim-heartbeat).
+      3. **`GF122` is a false WARN.** On #30, #38 and #40 the 1000-line tail window of the guard's
+         log filled with allowed connections (registry.npmjs.org); the only denials in both
+         guard logs were the self-check's probe of `selfcheck-denied.gnomish.invalid`.
+      4. **A trailing newline is escaped, not trimmed**: `printed: files\n` in the
+         `CLONE_REF_FORMAT` refusal and condition lines, and docker's stderr in finding 1.
+      5. **The `COMPLETED` lifecycle commit is logged twice** (#30: 15:17:24 and 15:17:31;
+         #38: 17:42:43 and 17:42:51; #40: 20:58:04 and 20:58:11), and the main box's "disposed" line twice; whether two
+         commits land or one write is logged twice is not yet checked.
+      6. **Attempt counts read zero**: `attempt finished: attemptsUsed=0` after a passing
+         attempt, and #38's `task summary` says `attempts=0` although `specify` ran two.
+- [x] 6.5 At archive (D10 as amended 2026-10-23), in the same step that merges
       this change's deltas into `openspec/specs/`: write
       `config/spec-contract-exemptions/sandbox-sandbox-base-image.txt` with
       exactly this content (the titles are the delta's scenario headings,
