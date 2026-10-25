@@ -7,11 +7,10 @@ import com.github.oinsio.gnomish.logtext.RepeatOccurrence
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
-import spock.lang.Specification
-
 import java.nio.file.Path
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicReference
+import spock.lang.Specification
 /**
  * FR14, NFR-O1, NFR-O3, UX6 of add-base-ref-resolution (task 7.4): the gate's own observability —
  * one WARN ({@link OperatorEvent#REMOTE_OUTAGE_GATE_OPENED}) on open, DEBUG-only for every failed

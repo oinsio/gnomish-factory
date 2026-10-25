@@ -4,9 +4,8 @@ import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.serve.RemoteOutageGates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import spock.lang.Specification
-
 import java.nio.file.Path
+import spock.lang.Specification
 /**
  * NFR-O3, UX6 of add-base-ref-resolution: {@link RemoteHealthAssembler#assemble} builds the
  * snapshot's {@code remote} section from whatever gates the daemon runs — an empty section when

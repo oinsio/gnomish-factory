@@ -81,16 +81,18 @@ final class ServeStartupGates {
      * @return the assessed checks, bound for the daemon's conditions; never null
      */
     PreconditionRecheck assessPreconditions(RegisteredClone clone, PipelineDefinition definition) {
-        if (preconditions.assess(clone, definition) instanceof ServePreconditions.StartupAssessment.Refused(
-            RuntimeException refusal, com.github.oinsio.gnomish.app.take.DaemonConditionKind kind
-        )) {
+        if (preconditions.assess(clone, definition)
+                instanceof
+                ServePreconditions.StartupAssessment.Refused(
+                        RuntimeException refusal,
+                        com.github.oinsio.gnomish.app.take.DaemonConditionKind kind)) {
             String message = String.valueOf(refusal.getMessage());
             // throwable-not-subject: the refusal is a precondition, not a defect; its message is the
             //     operator's line and the fix, and a stack would only name the check that met it.
             log.error(
                     OperatorEvent.SERVE_OPERATOR_PRECONDITION_REFUSED.head()
                             + "gnomish serve: startup refused: operator precondition {} unmet: {}",
-                kind,
+                    kind,
                     message);
             errorConsole.print("gnomish serve: startup failed: " + message + ConsoleIO.LINE_END);
             throw new ServeExitCodeException(1);

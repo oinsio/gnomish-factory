@@ -21,6 +21,13 @@ interface ConditionLog {
     /** The DEBUG line of one failed probe, in whichever repeat form the streak made it. */
     void probeFailed(RepeatOccurrence occurrence);
 
+    /**
+     * The DEBUG line of one probe that threw instead of answering: the same streak line, with the
+     * failure's trace on the streak's first occurrence (logging.md: no swallowed failure without a
+     * trace) and none on a repeat or a roll-up, which the first already carried.
+     */
+    void probeUnanswered(RepeatOccurrence occurrence, RuntimeException cause);
+
     /** The one ERROR of a condition open longer than {@code threshold}. */
     void sustainedOpen(Duration threshold, String lastError);
 
@@ -49,6 +56,11 @@ interface ConditionLog {
         @Override
         public void probeFailed(RepeatOccurrence occurrence) {
             RemoteOutageGateLog.probeFailed(target, occurrence);
+        }
+
+        @Override
+        public void probeUnanswered(RepeatOccurrence occurrence, RuntimeException cause) {
+            RemoteOutageGateLog.probeUnanswered(target, occurrence, cause);
         }
 
         @Override

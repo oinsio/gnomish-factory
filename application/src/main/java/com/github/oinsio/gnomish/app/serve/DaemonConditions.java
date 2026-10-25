@@ -109,8 +109,8 @@ public final class DaemonConditions {
 
     /**
      * Runs every probe that is due, the remote's first; a refusal of another precondition a probe
-     * met first opens that one. A probe that throws propagates to the feed's poll, as the remote's
-     * always did, and the later probes run on the next poll.
+     * met first opens that one. A probe that throws is its own condition's failed probe ({@link
+     * DaemonCondition#probeIfDue}); nothing propagates to the feed, and the later probes run.
      */
     void probeDue() {
         for (DaemonCondition condition : all) {

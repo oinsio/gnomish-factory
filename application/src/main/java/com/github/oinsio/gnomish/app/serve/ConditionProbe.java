@@ -10,8 +10,9 @@ import com.github.oinsio.gnomish.app.take.TakeResult;
  * ({@link ConditionSubject#precondition}).
  *
  * <p>Called with no lock held ({@code lock-scope.md}): a probe is a subprocess bounded by its own
- * deadline. A probe that cannot answer at all throws; the condition records nothing and probes again
- * on its schedule.
+ * deadline. A probe that cannot answer at all throws; the condition counts it as a failed probe
+ * (the failure's words as the reason, its trace on the DEBUG line), grows its schedule and probes
+ * again when that schedule says so — the throw never reaches the feed.
  *
  * <p>Implements FR15 of add-sandbox-base-image.
  */

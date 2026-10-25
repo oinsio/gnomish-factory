@@ -78,6 +78,11 @@ final class RemoteOutageReporter {
         lines.probeFailed(suppressor.failed(key(), reason));
     }
 
+    /** One probe that threw instead of answering: the same streak, the trace on its first line. */
+    void probeUnanswered(String reason, RuntimeException cause) {
+        lines.probeUnanswered(suppressor.failed(key(), reason), cause);
+    }
+
     /**
      * The one ERROR an over-long outage owes its operator; the watch's latch decides, so repeated
      * calls within one outage emit nothing. Parameters: when the outage began, when this probe

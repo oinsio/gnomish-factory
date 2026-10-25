@@ -131,7 +131,8 @@ class DaemonConditionProbeConcurrencySpec extends Specification {
 
     // FR14: a probe that cannot run at all (no git binary) must release the latch on its way out —
     //     a leaked latch would leave the gate unable to probe, and so unable to close, for the
-    //     rest of the daemon's life.
+    //     rest of the daemon's life. It is a failed probe, not a propagated failure: the caller is
+    //     the feed thread, which a throw would end.
     def "a probe that throws leaves the gate able to probe again"() {
         given:
         def failFirst = true
@@ -147,10 +148,11 @@ class DaemonConditionProbeConcurrencySpec extends Specification {
         gate.probeIfDue()
 
         then:
-        thrown(IllegalStateException)
+        noExceptionThrown()
         gate.isOpen()
 
         when: 'the next due probe finds origin answering'
+        clock.advance(CAP)
         gate.probeIfDue()
 
         then:

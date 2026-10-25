@@ -11,12 +11,11 @@ import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import org.slf4j.LoggerFactory
-import spock.lang.Specification
-
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Duration
+import org.slf4j.LoggerFactory
+import spock.lang.Specification
 /**
  * "One failure, one log" (.claude/rules/logging.md) across the three emitters a dead remote passes
  * through. {@code RemoteOutageServeEndToEndSpec} captures only {@link DaemonCondition}'s own

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.serve
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
@@ -272,9 +273,10 @@ class DaemonConditionsSpec extends Specification {
         logs.detach()
     }
 
-    def "NFR-R2: an unclassified probe failure propagates and the condition probes again on its schedule"() {
+    // Scenario: serve/factory-serve / A probe that cannot answer is a failed probe
+    def "a probe that throws is a failed probe: nothing propagates, the schedule grows, the trace is logged once"() {
         given:
-        def set = conditions()
+        def logs = LogCaptureSupport.attach(DaemonCondition, Level.DEBUG)
         def calls = new AtomicInteger()
         def throwing = new DaemonConditions(
                 condition(ConditionSubject.remote(BaseRefGit.UNWIRED, Path.of('.'))),
@@ -287,22 +289,70 @@ class DaemonConditionsSpec extends Specification {
                     } as PreconditionRecheck))
                 ])
         throwing.report(refusal(DaemonConditionKind.CLONE_REF_FORMAT))
+        def failedBefore = throwing.members()[1].health().consecutiveFailures()
 
-        when:
+        when: 'the due probe throws'
         clock.advance(IDLE)
         throwing.probeDue()
 
-        then:
-        thrown(IllegalStateException)
+        then: 'the feed is not told; the condition recorded a failed probe with the failure\'s words'
+        noExceptionThrown()
+        throwing.anyOpen()
+        with(throwing.members()[1].health()) {
+            consecutiveFailures() == failedBefore + 1
+            lastError().contains('IllegalStateException')
+            lastError().contains('git crashed')
+        }
+        and: 'one DEBUG line of the streak carries the trace'
+        def traced = logs.list.findAll { it.throwableProxy != null }
+        traced.size() == 1
+        traced[0].level == Level.DEBUG
+        traced[0].throwableProxy.className == IllegalStateException.name
+        traced[0].formattedMessage.contains('git crashed')
+
+        when: 'the feed polls again at once'
+        throwing.probeDue()
+
+        then: 'the schedule grew: no second probe until the grown interval has passed'
+        calls.get() == 1
         throwing.anyOpen()
 
         when:
+        clock.advance(CAP)
         throwing.probeDue()
 
         then:
         calls.get() == 2
         !throwing.anyOpen()
-        !set.anyOpen()
+
+        cleanup:
+        logs.detach()
+    }
+
+    def "a probe that throws past the sustained-open threshold still earns the one ERROR"() {
+        given:
+        def logs = LogCaptureSupport.attach(DaemonCondition, Level.DEBUG)
+        def throwing = new DaemonConditions(
+                condition(ConditionSubject.remote(BaseRefGit.UNWIRED, Path.of('.'))),
+                [
+                    condition(ConditionSubject.precondition(DaemonConditionKind.IMAGE_CONTRACT, { kind ->
+                        throw new IllegalStateException('No such image')
+                    } as PreconditionRecheck))
+                ])
+        throwing.report(refusal(DaemonConditionKind.IMAGE_CONTRACT))
+
+        when: 'the condition has been open past the threshold when its probe throws'
+        clock.advance(SUSTAINED_OPEN)
+        throwing.probeDue()
+
+        then:
+        def errors = logs.list.findAll { it.level == Level.ERROR }
+        errors.size() == 1
+        errors[0].formattedMessage.startsWith(OperatorEvent.CONDITION_IMAGE_CONTRACT_SUSTAINED_OPEN.head())
+        errors[0].formattedMessage.contains('No such image')
+
+        cleanup:
+        logs.detach()
     }
 
     def "FR15: a set without a condition on a refusal's kind refuses the report"() {
@@ -328,7 +378,7 @@ class DaemonConditionsSpec extends Specification {
         given:
         def logs = LogCaptureSupport.attach(DaemonCondition)
         def set = RemoteOutageGates.forServe(BaseRefGit.UNWIRED, Path.of('.'),
-                new com.github.oinsio.gnomish.ServeProperties(0, null, null, null, null, null, null, null, null, null),
+                new ServeProperties(0, null, null, null, null, null, null, null, null, null),
                 clock, {}, { ignored -> }, rechecks)
         def fresh = !set.anyOpen()
 

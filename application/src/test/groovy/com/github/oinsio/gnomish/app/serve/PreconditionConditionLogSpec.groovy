@@ -92,6 +92,34 @@ class PreconditionConditionLogSpec extends Specification {
         new RepeatOccurrence.RollUp('stale label', 7, Duration.ofMinutes(6)) | '7x over PT6M'
     }
 
+    def "a probe that threw is the same DEBUG streak line, with its trace on the first occurrence only"() {
+        given:
+        def logs = LogCaptureSupport.attach(DaemonCondition, Level.DEBUG)
+        def cause = new IllegalStateException('No such image')
+
+        when:
+        lines.probeUnanswered(occurrence, cause)
+
+        then:
+        logs.list.size() == 1
+        logs.list[0].level == Level.DEBUG
+        logs.list[0].formattedMessage.contains('probe did not answer')
+        (logs.list[0].throwableProxy != null) == traced
+        !traced || logs.list[0].throwableProxy.className == IllegalStateException.name
+
+        cleanup:
+        logs.detach()
+
+        where:
+        lines | occurrence | traced
+        new PreconditionConditionLog(DaemonConditionKind.IMAGE_CONTRACT) | new RepeatOccurrence.First('probe did not answer') | true
+        new PreconditionConditionLog(DaemonConditionKind.IMAGE_CONTRACT) | new RepeatOccurrence.Repeat('probe did not answer', 3) | false
+        new PreconditionConditionLog(DaemonConditionKind.IMAGE_CONTRACT) | new RepeatOccurrence.RollUp('probe did not answer', 7, Duration.ofMinutes(6)) | false
+        new ConditionLog.RemoteLines('origin') | new RepeatOccurrence.First('probe did not answer') | true
+        new ConditionLog.RemoteLines('origin') | new RepeatOccurrence.Repeat('probe did not answer', 3) | false
+        new ConditionLog.RemoteLines('origin') | new RepeatOccurrence.RollUp('probe did not answer', 7, Duration.ofMinutes(6)) | false
+    }
+
     def "NFR-O2: closing is one INFO with the episode's duration and failed probe count"() {
         given:
         def logs = LogCaptureSupport.attach(DaemonCondition, Level.DEBUG)

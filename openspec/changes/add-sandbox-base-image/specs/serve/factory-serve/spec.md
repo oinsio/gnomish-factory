@@ -118,6 +118,10 @@ A typed operator-precondition refusal met after a claim SHALL end the claimed ru
 - **WHEN** `serve --drain` runs while a condition is open and the tracker holds Ready tasks
 - **THEN** the feed claims nothing, the running slots finish, and the process exits as on an empty queue
 
+#### Scenario: A probe that cannot answer is a failed probe
+- **WHEN** a condition is open and its probe throws instead of answering (the image inspection refused because the tag is gone, a git binary missing)
+- **THEN** the feed thread survives and steps again, the condition stays open with the failure's words as its last error, the next probe waits for the grown interval, and the failure's trace is logged once at DEBUG in the probe streak
+
 #### Scenario: A container start is the box git floor's probe cadence
 - **WHEN** the box-git-floor condition is open for an hour
 - **THEN** every probe is one one-shot container running the image's `git --version`, the intervals grow to the cap, and no box, volume or network is created

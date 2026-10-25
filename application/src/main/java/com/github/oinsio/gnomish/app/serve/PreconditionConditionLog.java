@@ -65,6 +65,15 @@ record PreconditionConditionLog(DaemonConditionKind kind) implements ConditionLo
     }
 
     @Override
+    public void probeUnanswered(RepeatOccurrence occurrence, RuntimeException cause) {
+        if (occurrence instanceof RepeatOccurrence.First first) {
+            log.debug("daemon condition {} still unmet: {}", kind, first.reason(), cause);
+            return;
+        }
+        probeFailed(occurrence);
+    }
+
+    @Override
     public void sustainedOpen(Duration threshold, String lastError) {
         switch (kind) {
             case CONTAINER_RUNTIME ->
@@ -73,8 +82,7 @@ record PreconditionConditionLog(DaemonConditionKind kind) implements ConditionLo
                 logError(OperatorEvent.CONDITION_CLONE_REF_FORMAT_SUSTAINED_OPEN, threshold, lastError);
             case IMAGE_CONTRACT ->
                 logError(OperatorEvent.CONDITION_IMAGE_CONTRACT_SUSTAINED_OPEN, threshold, lastError);
-            case BOX_GIT_FLOOR ->
-                logError(OperatorEvent.CONDITION_BOX_GIT_FLOOR_SUSTAINED_OPEN, threshold, lastError);
+            case BOX_GIT_FLOOR -> logError(OperatorEvent.CONDITION_BOX_GIT_FLOOR_SUSTAINED_OPEN, threshold, lastError);
             case REMOTE -> {
                 // refused by the compact constructor
             }
@@ -82,11 +90,7 @@ record PreconditionConditionLog(DaemonConditionKind kind) implements ConditionLo
     }
 
     private void logError(OperatorEvent operatorEvent, Duration threshold, String lastError) {
-        log.error(
-            operatorEvent.head() + SUSTAINED,
-            kind,
-            threshold,
-            lastError);
+        log.error(operatorEvent.head() + SUSTAINED, kind, threshold, lastError);
     }
 
     @Override

@@ -50,6 +50,15 @@ final class RemoteOutageGateLog {
         }
     }
 
+    /** The failed-probe line of a probe that threw: the trace rides the streak's first occurrence. */
+    static void probeUnanswered(String target, RepeatOccurrence occurrence, RuntimeException cause) {
+        if (occurrence instanceof RepeatOccurrence.First first) {
+            log.debug("remote outage gate for {} still failing: {}", target, first.reason(), cause);
+            return;
+        }
+        probeFailed(target, occurrence);
+    }
+
     /** The one-shot ERROR an outage crossing the sustained-open threshold emits. */
     static void sustainedOpen(String target, Duration threshold, String lastError) {
         log.error(

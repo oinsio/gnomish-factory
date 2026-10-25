@@ -202,6 +202,15 @@ public final class DaemonCondition {
      * flight the condition is open and no path can change that (both slot signals return early while
      * open, and {@link #close()} is reached only from here).
      *
+     * <p><b>A probe that throws is a failed probe.</b> A check that cannot answer at all (an image
+     * inspection refused because the tag is gone, a git binary missing) proves nothing about the
+     * precondition, so the condition stays open, counts the probe as failed, grows its schedule and
+     * writes the failure's trace into the DEBUG streak — it never propagates. The caller is the feed
+     * thread, which has no catch of its own: a propagated probe failure ended it, and with it the
+     * daemon's duty to claim, with a green build (finding 1 of the 2026-10-25 audit of
+     * add-sandbox-base-image). NFR-R2's crash arm is a slot's, with its abort accounting; a probe
+     * has none, and the condition it probes is already open on a typed signal.
+     *
      * @return the refusal of another precondition the probe met first ({@link
      *     ConditionProbe.Answer.RefusedElsewhere}), for the caller to open outside this monitor;
      *     empty otherwise
@@ -214,10 +223,8 @@ public final class DaemonCondition {
         try {
             answer = subject.probe().probe();
         } catch (RuntimeException e) {
-            // The probe never answered, so nothing is recorded — but the latch must not leak, or
-            // this condition would never probe again and could only close on a daemon restart.
-            abandonProbe();
-            throw e;
+            recordUnanswered(e);
+            return Optional.empty();
         }
         return applyProbeResult(answer);
     }
@@ -234,9 +241,17 @@ public final class DaemonCondition {
         return due;
     }
 
-    /** Phase three, when the probe threw: releases the latch without recording an answer. */
-    private synchronized void abandonProbe() {
+    /**
+     * Phase three, when the probe threw: a failed probe whose reason is the failure's own words,
+     * with its trace on the DEBUG line; the latch is released, or this condition would never probe
+     * again and could only close on a daemon restart.
+     */
+    private synchronized void recordUnanswered(RuntimeException cause) {
         probeInFlight = false;
+        String reason = "probe did not answer: " + LogText.forLog(cause.toString());
+        recordProbeFailure(reason);
+        reporter.probeUnanswered(reason, cause);
+        reportSustainedOpen(reason);
     }
 
     /**
@@ -258,10 +273,18 @@ public final class DaemonCondition {
     }
 
     private void onProbeFailed(String reason) {
+        recordProbeFailure(reason);
+        reporter.probeFailed(reason);
+        reportSustainedOpen(reason);
+    }
+
+    private void recordProbeFailure(String reason) {
         counters.probeFailed();
         lastError = reason;
         schedule.probeFailed();
-        reporter.probeFailed(reason);
+    }
+
+    private void reportSustainedOpen(String reason) {
         Instant since = openedAt;
         if (since != null) {
             reporter.sustainedOpen(since, clock.instant(), reason);

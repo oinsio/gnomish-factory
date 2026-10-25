@@ -14,10 +14,9 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
-import spock.lang.Specification
-
 import java.time.Duration
 import java.time.Instant
+import spock.lang.Specification
 /**
  * FR2, FR14 (design D9, D10) of add-factory-serve: {@link ServeAssembly}'s remaining leaf
  * builders (the slot run order moved to {@code ServeArguments}, {@code ServeArgumentsSpec}). {@code ServeAssemblySpec} covers {@code shutdown}; this covers the rest, to the
