@@ -26,7 +26,7 @@ The container adapter SHALL, before every seed clone of a box (a fresh materiali
 
 #### Scenario: An image whose git is below the floor is refused before the seed clone
 - **WHEN** a box is materialized on an image whose `git --version` reports 2.43.0
-- **THEN** the run stops with a message naming the image, the floor, the reported version and the remedy, one coded ERROR is logged, and no network, volume or container was created
+- **THEN** the run stops with a message naming the image, the floor, the reported version and the remedy; the check itself logs nothing and the layer that decides writes one coded line — `take` and `run` an ERROR beside the message they print, `serve` the box-git-floor condition's opening WARN — and no network, volume or container was created
 
 #### Scenario: An image without git is refused with the runtime's complaint
 - **WHEN** a box is materialized on an image in which `git` cannot be executed

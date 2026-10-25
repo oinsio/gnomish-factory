@@ -14,7 +14,10 @@
 #     and `update-ca-certificates` rebuilds the system bundle;
 #   - when `keytool` is on PATH, each certificate is imported into the JDK's `cacerts` under the
 #     alias gnomish-<file>-<n>, replacing an earlier import of the same alias, so a rerun is a
-#     no-op and an edited file replaces its old certificate.
+#     no-op and an edited file replaces its old certificate. keytool folds aliases to lower case,
+#     so two files whose names differ only in letter case would replace each other's import; such
+#     a pair is refused before anything is written, with or without keytool, so an image that
+#     later grafts a JDK does not change the answer.
 # A refusal names the item, the expected state and the fix, and exits 1.
 set -eu
 
@@ -43,6 +46,19 @@ command -v update-ca-certificates >/dev/null 2>&1 \
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+
+# Every file name is checked before anything is written: two names that keytool cannot tell apart
+# (it folds aliases to lower case) are refused, so a refused run changes neither store.
+: >"$work/names"
+for file in "$ca_dir"/*.pem "$ca_dir"/*.crt; do
+    [ -f "$file" ] || continue
+    folded="$(printf '%s' "$file" | tr '[:upper:]' '[:lower:]')"
+    other="$(grep -F -- "$folded " "$work/names" | head -n 1)"
+    [ -z "$other" ] \
+        || refuse "$file and ${other#* } differ only in letter case; expected file names keytool tells apart (it folds aliases to lower case); fix: rename one of them"
+    printf '%s %s\n' "$folded" "$file" >>"$work/names"
+done
+
 mkdir -p "$system_dir"
 have_keytool=no
 command -v keytool >/dev/null 2>&1 && have_keytool=yes

@@ -890,6 +890,20 @@ nothing. *Pickup condition:* the class gains a second condition-level
 behaviour beyond the transition (a per-kind policy, a second probe shape), or
 the episode record earns a second reader; then the episode split lands first.
 
+**D24 — The box-git-floor scenario names the deciding layer's line, not an
+ERROR of the check (amends the "An image whose git is below the floor is
+refused before the seed clone" scenario of the `sandbox/execution-environment`
+delta; added 2026-10-25 after the check of audit finding 7).** D19 moved the
+line out of `BoxGitFloor`: the check throws and logs nothing
+(`BoxGitFloorSpec` asserts the empty log), and the layer that decides writes
+it — `take` `GF171` and `run` `GF172` at ERROR beside the message they print,
+`serve` the condition's opening WARN `GF180`. The scenario's THEN kept D19's
+predecessor wording, "one coded ERROR is logged", which is false under `serve`.
+The THEN now states the decision; the title is unchanged, so the two markers
+(`BoxGitFloorSpec`, `RunExceptionReportingSpec`) still resolve. *Alternative
+rejected:* leaving the sentence and reading "ERROR" loosely — a scenario is a
+promise (`spec-mismatch.md`), and the one it made was the pre-D19 behaviour.
+
 ### Sync surfaces
 
 The guard alias and port are an undeclared pair today (recipe build-argument

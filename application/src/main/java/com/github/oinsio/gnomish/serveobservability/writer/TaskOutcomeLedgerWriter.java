@@ -26,8 +26,9 @@ import org.slf4j.LoggerFactory;
  * com.github.oinsio.gnomish.serveobservability.SlotEntryAssembler} reads the same source for the
  * snapshot (FR6, FR11 share this need per design D6) — assembles the line via {@link
  * TaskOutcomeLineAssembler}, and appends it through the shared {@link RotatingLedgerAppender}.
- * {@link TakeResult.EmptyQueue}/{@link TakeResult.Skipped} assemble to no line, so this writes
- * nothing for them.
+ * {@link TakeResult.EmptyQueue}, {@link TakeResult.Skipped}, {@link
+ * TakeResult.InfrastructureUnavailable} and {@link TakeResult.OperatorPreconditionUnmet} assemble
+ * to no line — no engine run happened — so this writes nothing for them.
  *
  * <p>Write failures never propagate (NFR-R1): an {@link IOException} from the appender is logged
  * and swallowed, exactly as a slot must never crash the daemon or fail a task over an
@@ -60,8 +61,9 @@ public final class TaskOutcomeLedgerWriter {
     }
 
     /**
-     * Writes {@code result}'s ledger line for {@code claimed}, or does nothing for {@link
-     * TakeResult.EmptyQueue}/{@link TakeResult.Skipped}.
+     * Writes {@code result}'s ledger line for {@code claimed}, or does nothing for the variants
+     * without an engine run ({@code EmptyQueue}, {@code Skipped}, {@code InfrastructureUnavailable},
+     * {@code OperatorPreconditionUnmet}).
      *
      * @param claimed the task whose slot just reached a terminal result; never null
      * @param result the terminal result the slot reached; never null

@@ -560,9 +560,15 @@ during the apply of 5.1, same rule as above).
       comment; every scenario of the three deltas has a marker, except the
       three workflow-verified scenarios of `sandbox/sandbox-base-image`, whose
       exemption lines land at archive (task 6.5, D10). Verify by one command, not by reading: for every `FR`, `NFR-*` and
-      `UX` id of `proposal.md`, `git grep -q "<id> of add-sandbox-base-image"
-      -- ':!openspec'` finds a reference, the loop printing each id it does
-      not; and `./gradlew checkSpecContract --change add-sandbox-base-image`.
+      `UX` id of `proposal.md`, `git grep -qP '\b<id>\b[^;]*\bof
+      add-sandbox-base-image' -- ':!openspec'` finds a reference, the loop
+      printing each id it does not; and `./gradlew checkSpecContract --change
+      add-sandbox-base-image`. (Corrected 2026-10-25, audit finding 9: the
+      literal `"<id> of add-sandbox-base-image"` misses every id cited in a list
+      — `FR1, FR2, FR3, FR4, FR11, FR12, … of add-sandbox-base-image` in
+      `sandbox-image/Dockerfile`, the helpers and the image suites — so it
+      reported FR1–FR4 and FR12 as unreferenced while the references exist; the
+      PCRE form finds every id, verified over the whole proposal id set.)
 - [x] 6.3 Root `./gradlew check` green, once. Verify the exit code.
 - [x] 6.4 Operator-stand acceptance (human step): rewrite the stand's
       Dockerfile `FROM` the base and run one container-mode task. The stand's

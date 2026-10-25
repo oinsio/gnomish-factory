@@ -190,7 +190,9 @@ box](../../guides/operator-guide-sandbox.md#agent-authentication-in-the-box).
 Drop the factory's CA certificate (`*.pem` or `*.crt`) into `ca/` before
 building: the recipe copies it into the base's CA folder, `/etc/gnomish/ca`,
 and `gnomish-trust-ca` imports it into both the system trust store and the
-JVM `cacerts`. Until change B (TLS interception) the directory may stay empty —
+JVM `cacerts`. Two files whose names differ only in letter case are refused:
+`keytool` folds aliases to lower case, so one would silently replace the
+other's import. Until change B (TLS interception) the directory may stay empty —
 the guard forwards TLS unmodified today.
 
 ## Proxy plumbing

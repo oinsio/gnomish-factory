@@ -74,6 +74,10 @@ The base image SHALL provide `gnomish-trust-ca`, which imports every certificate
 - **WHEN** `gnomish-trust-ca` runs with no certificate in the CA drop folder
 - **THEN** it succeeds and changes neither trust store
 
+#### Scenario: Two CA files whose names differ only in letter case are refused
+- **WHEN** the CA drop folder holds two files whose names differ only in letter case, and `gnomish-trust-ca` runs with or without `keytool` on `PATH`
+- **THEN** it fails before writing anything, naming both files and the fix, because `keytool` folds aliases to lower case and the second file's import would replace the first's
+
 #### Scenario: Every violation is listed
 - **WHEN** `gnomish-verify-image` finds more than one violation
 - **THEN** it fails listing every violation, each with its path and the expected state

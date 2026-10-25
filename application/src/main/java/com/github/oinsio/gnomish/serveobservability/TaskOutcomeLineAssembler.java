@@ -15,9 +15,11 @@ import org.jspecify.annotations.Nullable;
  * The pure mapping from a terminal {@link TakeResult} to the ledger's {@code taskOutcome} line
  * (design D6, FR11): only the four variants carrying a {@code finalState} —
  * {@link TakeResult.Delivered}, {@link TakeResult.AwaitingHuman}, {@link TakeResult.Aborted},
- * {@link TakeResult.Revoked} — map to a {@link TaskOutcomeLine}; {@link TakeResult.EmptyQueue}
- * and {@link TakeResult.Skipped} map to {@code null} since no engine run happened, so no line is
- * written for them ("engine run happened iff spend happened iff line exists", design D6).
+ * {@link TakeResult.Revoked} — map to a {@link TaskOutcomeLine}; {@link TakeResult.EmptyQueue},
+ * {@link TakeResult.Skipped}, {@link TakeResult.InfrastructureUnavailable} and {@link
+ * TakeResult.OperatorPreconditionUnmet} map to {@code null} since no engine run happened, so no
+ * line is written for them ("engine run happened iff spend happened iff line exists", design D6;
+ * the last two added by design D9 of `add-base-ref-resolution` and D18 of `add-sandbox-base-image`).
  *
  * <p>{@code stage}, {@code attemptsUsed} and {@code tokensByModel} are not derived here: they come
  * from {@link TaskSummaryAssembler}, the one extraction of a terminal result's facts, which the
@@ -43,16 +45,17 @@ public final class TaskOutcomeLineAssembler {
     private TaskOutcomeLineAssembler() {}
 
     /**
-     * Assembles a {@link TaskOutcomeLine} for {@code result}, or returns {@code null} for {@link
-     * TakeResult.EmptyQueue}/{@link TakeResult.Skipped} — the only variants with no {@code
-     * finalState} to derive a line from.
+     * Assembles a {@link TaskOutcomeLine} for {@code result}, or returns {@code null} for the
+     * variants with no {@code finalState} to derive a line from — {@code EmptyQueue}, {@code Skipped},
+     * {@code InfrastructureUnavailable} and {@code OperatorPreconditionUnmet} (the ones {@link
+     * TaskSummaryAssembler} summarizes to {@code null}).
      *
      * @param instance the writing process's identity; never null
      * @param taskId the tracker's original task id; never blank
      * @param result the slot's terminal result; never null
      * @param startedAt when the run started; never null
      * @param finishedAt when the run finished; never null (must not precede {@code startedAt})
-     * @return the assembled line, or {@code null} for {@code EmptyQueue}/{@code Skipped}
+     * @return the assembled line, or {@code null} for a result without an engine run
      */
     public static @Nullable TaskOutcomeLine assemble(
             InstanceInfo instance, String taskId, TakeResult result, Instant startedAt, Instant finishedAt) {

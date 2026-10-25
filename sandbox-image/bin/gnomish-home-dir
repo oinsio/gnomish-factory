@@ -16,7 +16,8 @@
 # itself: `chown -R` on it would hand the gnome the whole home with its root-owned rc files),
 # contains a `/`, a `..` or a line break, or names an existing entry that is not a directory (a
 # symbolic link included). A run as a user other than root is refused. Every name is checked before anything is
-# written, so a refused call changes nothing. Exit 0 on success, 1 on a refusal.
+# written, so a refused call changes nothing. A refusal names the item, the expected state and the
+# fix (NFR-O1). Exit 0 on success, 1 on a refusal.
 set -eu
 
 home=/home/gnome
@@ -29,16 +30,16 @@ refuse() {
     exit 1
 }
 
-[ "$(id -u)" = 0 ] || refuse "must run as root (in an image layer, before USER gnome); ran as uid $(id -u)"
-[ "$#" -gt 0 ] || refuse "no directory named; usage: gnomish-home-dir <name>..."
+[ "$(id -u)" = 0 ] || refuse "must run as root (in an image layer, before USER gnome); ran as uid $(id -u); fix: move the RUN line before USER gnome, or after a USER root"
+[ "$#" -gt 0 ] || refuse "no directory named; expected one or more names; fix: gnomish-home-dir <name>..."
 
 for name in "$@"; do
     case "$name" in
         '' | . | */* | *..* | *"$newline"*)
-            refuse "'$name' is not one entry directly under $home (no '/', no '..', not '.', not empty)" ;;
+            refuse "'$name' is not one entry directly under $home; expected a bare name (no '/', no '..', not '.', not empty); fix: name the directory itself, such as .m2, and let the helper create it under $home" ;;
     esac
     if [ -L "$home/$name" ] || { [ -e "$home/$name" ] && [ ! -d "$home/$name" ]; }; then
-        refuse "$home/$name exists and is not a directory"
+        refuse "$home/$name exists and is not a directory; expected a directory or nothing there; fix: remove it in an earlier layer, or choose another name"
     fi
 done
 
