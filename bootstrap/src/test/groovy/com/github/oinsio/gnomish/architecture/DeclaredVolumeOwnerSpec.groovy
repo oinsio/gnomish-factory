@@ -1,9 +1,8 @@
 package com.github.oinsio.gnomish.architecture
 
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
-import spock.lang.Specification
-
 import java.util.regex.Pattern
+import spock.lang.Specification
 
 /**
  * FR1, FR2 of fix-image-declared-volumes: the ephemeral overrides a factory container runs with

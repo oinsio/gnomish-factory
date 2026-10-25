@@ -12,9 +12,10 @@
 # records the name in /etc/gnomish/home-dirs — the one list of gnome-writable home directories,
 # against which gnomish-verify-image checks the home. Nothing else writes the list.
 #
-# A name is one entry directly under the home: it is refused when it is empty, contains a `/`, a
-# `..` or a line break, or names an existing entry that is not a directory (a symbolic link
-# included). A run as a user other than root is refused. Every name is checked before anything is
+# A name is one entry directly under the home: it is refused when it is empty, is `.` (the home
+# itself: `chown -R` on it would hand the gnome the whole home with its root-owned rc files),
+# contains a `/`, a `..` or a line break, or names an existing entry that is not a directory (a
+# symbolic link included). A run as a user other than root is refused. Every name is checked before anything is
 # written, so a refused call changes nothing. Exit 0 on success, 1 on a refusal.
 set -eu
 
@@ -33,8 +34,8 @@ refuse() {
 
 for name in "$@"; do
     case "$name" in
-        '' | */* | *..* | *"$newline"*)
-            refuse "'$name' is not one entry directly under $home (no '/', no '..', not empty)" ;;
+        '' | . | */* | *..* | *"$newline"*)
+            refuse "'$name' is not one entry directly under $home (no '/', no '..', not '.', not empty)" ;;
     esac
     if [ -L "$home/$name" ] || { [ -e "$home/$name" ] && [ ! -d "$home/$name" ]; }; then
         refuse "$home/$name exists and is not a directory"

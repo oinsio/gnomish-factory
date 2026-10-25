@@ -67,8 +67,9 @@ class BaseImageHomeSpec extends Specification {
                 ]
     }
 
-    // FR3, FR12: a name that is not one entry directly under the home, a name of an existing file, and
-    //     a run as gnome are refused, and a refused call creates nothing — not even its valid names.
+    // FR3, FR12: a name that is not one entry directly under the home (the home itself, `.`, included:
+    //     a chown of it would hand the gnome the whole home), a name of an existing file, and a run as
+    //     gnome are refused, and a refused call creates nothing — not even its valid names.
     def "FR3, FR12: gnomish-home-dir refuses '#names' run as #user and changes nothing"() {
         when:
         def result = TestDockerCommand.shell(base, user,
@@ -92,6 +93,7 @@ class BaseImageHomeSpec extends Specification {
         names | user | reason
         '.ok .m2/../.x' | 'root' | 'not one entry directly under /home/gnome'
         '.ok ..' | 'root' | 'not one entry directly under /home/gnome'
+        '.ok .' | 'root' | 'not one entry directly under /home/gnome'
         '.ok .bashrc' | 'root' | '/home/gnome/.bashrc exists and is not a directory'
         '.ok' | 'gnome' | 'must run as root'
     }

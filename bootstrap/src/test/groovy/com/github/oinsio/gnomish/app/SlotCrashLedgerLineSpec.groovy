@@ -26,14 +26,13 @@ import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppende
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import spock.lang.Specification
-import spock.lang.TempDir
-
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneOffset
+import spock.lang.Specification
+import spock.lang.TempDir
 /**
  * FR18, M8 of add-sandbox-base-image (design D20): the slot boundary writes the ledger line of a
  * slot that ended with no result — {@code aborted}, no stage, no attempt, no tokens, the wall time
