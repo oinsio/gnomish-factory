@@ -3,11 +3,16 @@ inputs:
   - kind: source
   - kind: internal
     producerOutputId: pull-request
-# The whole work is report.sh beside this manifest: it renders `gnomish usage --json` and
-# creates or edits one marked comment on the open pull request. No gnome counts anything.
+# The whole work is report.sh beside this manifest: it reads the usage the factory wrote into
+# .gnomish-task/state.json of every round commit on the task branch, and creates or edits one
+# marked comment on the open pull request. No gnome counts anything.
 # The comment goes to the pull request, not the issue: the factory reads every plain comment
 # in the issue thread after its last ack as a human's decision (GithubDecisions), so a
 # report there could be taken for an answer if the task were ever parked again.
+#
+# The script needs only git, jq and gh - no factory jar, which a worktree does not carry - so
+# the stage runs under any binding, box or host. The agent may run only Bash, and the
+# instructions name one script.
 #
 # Until the factory has a command executor (the add-command-executor change), a stage needs
 # an agent round, so the cheapest model runs the one script and stops. Once that change lands,
@@ -43,14 +48,15 @@ verify:
   # infrastructure failure that burns no attempt.
   - type: command
     command: |
+      repo=$(sed -n 's/^[[:space:]]*repo:[[:space:]]*//p' .gnomish/config.yaml | head -1)
       branch=$(git branch --show-current)
       marker='<!-- gnomish:usage-report -->'
-      if ! number=$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number // empty' 2>&1); then
+      if ! number=$(gh pr list --repo "$repo" --head "$branch" --base main --state open --json number --jq '.[0].number // empty' 2>&1); then
         echo "cannot verify: gh pr list failed: $number"
         exit 126
       fi
       [ -n "$number" ] || { echo "no open pull request from $branch into main - the deliver stage opens it"; exit 1; }
-      if ! found=$(gh api "repos/{owner}/{repo}/issues/$number/comments" --paginate \
+      if ! found=$(gh api "repos/$repo/issues/$number/comments" --paginate \
           --jq ".[] | select(.body | startswith(\"$marker\")) | .body" 2>&1); then
         echo "cannot verify: listing the comments of pull request #$number failed: $found"
         exit 126
