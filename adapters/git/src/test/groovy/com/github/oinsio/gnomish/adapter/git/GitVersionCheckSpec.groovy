@@ -141,6 +141,65 @@ class GitVersionCheckSpec extends Specification {
         logs.list.size() == 1
     }
 
+    def "FR4, FR7: verify refuses exactly when assess fails, and assess itself logs nothing and refuses nothing: #preset"() {
+        given: 'two checks over the same git, one per form'
+        def assessing = new GitVersionCheck(new GitProcessRunner(StandIn.recording(tempDir, preset).toString()))
+        def verifying = new GitVersionCheck(new GitProcessRunner(StandIn.recording(tempDir, preset).toString()))
+
+        when: 'the non-refusing form judges the git'
+        def verdict = assessing.assess()
+
+        then: 'a verdict of the expected kind, with no line on the operator plane'
+        verdict.getClass() == kind
+        verdict.fails() == fails
+        logs.list.empty
+
+        when: 'the refusing form judges the same git'
+        def refused = null
+        try {
+            verifying.verify()
+        } catch (GitVersionRefusedException e) {
+            refused = e
+        }
+
+        then: 'it refuses exactly when the verdict fails'
+        (refused != null) == verdict.fails()
+
+        where:
+        preset || kind | fails
+        'version-2-56-0' || GitVersionVerdict.Meets | false
+        'version-2-56-apple' || GitVersionVerdict.Meets | false
+        'version-2-55' || GitVersionVerdict.Below | true
+        'version-2-50' || GitVersionVerdict.Below | true
+        'version-not-git' || GitVersionVerdict.Unreported | true
+        'version-broken' || GitVersionVerdict.Unreported | true
+    }
+
+    def "FR4: assess carries the reported version, or what git printed instead of one"() {
+        expect:
+        new GitVersionCheck(new GitProcessRunner(StandIn.git('version-2-56-apple').toString())).assess() ==
+                new GitVersionVerdict.Meets(new GitVersion(2, 56, 1))
+        new GitVersionCheck(new GitProcessRunner(StandIn.recording(tempDir, 'version-2-55').toString())).assess() ==
+                new GitVersionVerdict.Below(new GitVersion(2, 55, 2))
+        (new GitVersionCheck(new GitProcessRunner(StandIn.git('version-broken').toString())).assess()
+                as GitVersionVerdict.Unreported).printed().contains(brokenInstall())
+        (new GitVersionCheck(new GitProcessRunner(StandIn.git('version-not-git').toString())).assess()
+                as GitVersionVerdict.Unreported).printed().contains('not a git at all')
+    }
+
+    def "FR4: assess asks git on every call — the once-per-process record belongs to verify"() {
+        given:
+        def git = StandIn.recording(tempDir, 'version-record-2-56')
+        def check = new GitVersionCheck(new GitProcessRunner(git.toString()))
+
+        when:
+        check.assess()
+        check.assess()
+
+        then:
+        StandInLog.blocks(git).size() == 2
+    }
+
     /** The stderr of the broken-install stand-in, read from its preset rather than retyped. */
     private static String brokenInstall() {
         StandIn.data('stderr#git-broken-install').trim()

@@ -281,6 +281,11 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
         def containerSupports = new ContainerSupports(checkClientRegistry, assembly.checks, factoryProperties, sandboxProperties,
                 modeSelector, git, timeEquipment)
         def trackerWiring = new TrackerWiring(trackerAdapterRegistry, MapSecretsProvider.NONE, TrackerValidatorStub.plainSource(), timeEquipment)
+        // The process's one preconditions owner, through its own bean method, which serve's startup
+        // gates and doctor's checks share (design D1 of add-doctor-command).
+        def imageReadiness = commands.sandboxImageReadiness(resolvedClone, sandboxProperties, factoryProperties)
+        def preconditions = new OperatorPreconditionsConfiguration().servePreconditions(
+                git, modeSelector, imageReadiness, sandboxProperties)
         def serveProperties = new ServeProperties(0, null, null, null, null, null, null, null, null, null)
         def sandboxLifecyclePass = commands.sandboxLifecyclePass(sandboxProperties, factoryProperties, instantSource)
         def slotWiringFactory = commands.slotWiringFactory(assembly, resolvedClone, containerSupports, trackerWiring)
@@ -298,9 +303,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                         commands.serveAssembly(factoryProperties, serveProperties, timeEquipment, resolvedClone), git,
                         sandboxLifecyclePass, sandboxProperties,
                         commands.serveDashboard(trackerWiring, scope, factoryProperties, timeEquipment)),
-                        commands.serveStartupGates(trackerWiring, git, modeSelector,
-                        commands.sandboxImageReadiness(resolvedClone, sandboxProperties, factoryProperties),
-                        sandboxProperties, errorConsole),
+                        commands.serveStartupGates(trackerWiring, git, preconditions, errorConsole),
                         scope, serveProperties, trackerWiring, errorConsole))
         def drive = manualRun.manualRunDrive(
                 scope,
@@ -314,7 +317,12 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 })
         def projectCommand = new ProjectCommand(projectHome, ProjectRegistry.scan(projectHome), factoryProperties,
                 new StandardEnvironment(), new DefaultListableBeanFactory().getBeanProvider(RegisteredClone), console)
-        new ManualRunRunner(gitVersionCheck, dispatch, projectCommand, drive, errorConsole)
+        def doctorCommand = DoctorFixture.command(home: projectHome, clonePath: clonePath,
+        sandboxProperties: sandboxProperties, imageReadiness: imageReadiness, preconditions: preconditions,
+        trackerWiring: trackerWiring, checks: assembly.checks, bindingProperties: bindingProperties,
+        bindingRegistry: DiscoveredBindings.real(), gitVersionCheck: gitVersionCheck, secretLocator: secrets,
+        factoryProperties: factoryProperties, resolvedClone: resolvedClone, console: console)
+        new ManualRunRunner(gitVersionCheck, dispatch, projectCommand, doctorCommand, drive, errorConsole)
     }
 
     /** The runners as the drive's lazily read provider yields them: built on the first git-mode run. */

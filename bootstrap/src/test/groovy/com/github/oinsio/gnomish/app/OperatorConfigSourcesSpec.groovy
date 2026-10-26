@@ -17,7 +17,7 @@ import spock.lang.TempDir
  * handed to the context (FR3, design D9), and each operator file read once (NFR-P1). The level
  * checks are {@code OperatorConfigViolationsSpec}'s.
  *
- * <p>Implements FR3, FR5, NFR-P1, UX2 of add-project-registry.
+ * <p>Implements FR3, FR5, NFR-P1, UX2 of add-project-registry; FR7 of add-doctor-command.
  */
 class OperatorConfigSourcesSpec extends Specification {
 
@@ -125,6 +125,44 @@ class OperatorConfigSourcesSpec extends Specification {
             'systemProperties',
             OperatorConfigCheck.PROJECT_SOURCE,
             OperatorConfigCheck.HOST_SOURCE
+        ]
+    }
+
+    // FR7 of add-doctor-command (design D1): one decision, two forms — the violations a refusing
+    // command stops on are the ones doctor's collect mode publishes, and doctor neither throws nor prints
+    def "FR7: with doctor the violations #refusing refuses on are published and nothing is thrown"() {
+        given:
+        harness.hostConfig('factory:\n  sandbox:\n    image: img:1\n  git-netwrok-timeout: 5m\n')
+        def variables = [FACTORY_SERVE_SLOTS: '4']
+
+        when: 'a refusing command runs over the configuration'
+        harness.load([
+            refusing,
+            "--dir=$widgets".toString()
+        ], variables)
+
+        then:
+        def refused = thrown(ConfigurationViolationsException)
+        refused.violations().size() == 3
+
+        when: 'doctor runs over the same configuration'
+        def printed = harness.console.printed.size()
+        def loaded = harness.load([
+            'doctor',
+            "--dir=$widgets".toString()
+        ], variables)
+
+        then:
+        noExceptionThrown()
+        loaded.context.getBean(OperatorConfigLoader.VIOLATIONS_BEAN, ConfigurationViolations).lines() == refused.violations()
+        harness.console.printed.size() == printed
+
+        where:
+        refusing << [
+            'run',
+            'take',
+            'serve',
+            'status'
         ]
     }
 

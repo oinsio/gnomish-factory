@@ -161,21 +161,16 @@ public class TrackerCommandConfiguration {
     /**
      * The three pre-claim startup steps of {@code serve} (FR12 of add-factory-serve; design D17 of
      * add-sandbox-base-image), the operator preconditions assessed through the ports a slot reaches
-     * them by: the clone's ref format, the process's one mode selector, the image readiness.
+     * them by: the clone's ref format, the process's one mode selector, the image readiness — held by
+     * the process's one {@link ServePreconditions}, which {@code doctor} asks too.
      */
     @Bean
     ServeStartupGates serveStartupGates(
             TrackerWiring trackerWiring,
             TaskGit git,
-            SandboxModeSelector sandboxModeSelector,
-            SandboxImageReadiness sandboxImageReadiness,
-            SandboxProperties sandboxProperties,
+            ServePreconditions servePreconditions,
             @Qualifier("errorConsoleIO") ConsoleIO errorConsoleIO) {
-        return new ServeStartupGates(
-                trackerWiring,
-                git,
-                new ServePreconditions(git.branches(), sandboxModeSelector, sandboxImageReadiness, sandboxProperties),
-                errorConsoleIO);
+        return new ServeStartupGates(trackerWiring, git, servePreconditions, errorConsoleIO);
     }
 
     /** {@code gnomish serve}, driving the real {@link FeedAutomaton#run}. */

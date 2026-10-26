@@ -25,9 +25,16 @@ import java.util.Optional;
  * plan's configuration refusals ({@link UsageException}) and any unclassified failure propagate
  * unchanged, as they would from a slot.
  *
- * <p>Implements FR13, NFR-R3, UX3 of add-sandbox-base-image.
+ * <p>{@code doctor} reads the same checks one kind at a time through {@link #verdict}, which never
+ * refuses (design D1 of add-doctor-command): the image is judged there by the readiness port's
+ * contract inspection alone, which starts no container, so the box git floor is not probed by it.
+ * {@link #assess} and {@link #rechecks} keep asking the port's {@link SandboxImageReadiness#assess},
+ * both halves in order.
+ *
+ * <p>Implements FR13, NFR-R3, UX3 of add-sandbox-base-image; FR1, FR4, NFR-R1 of
+ * add-doctor-command.
  */
-final class ServePreconditions {
+public final class ServePreconditions {
 
     /** The verdict: every precondition holds, or the first one that did not. */
     sealed interface StartupAssessment {
@@ -111,17 +118,81 @@ final class ServePreconditions {
     }
 
     /**
+     * The non-refusing verdict on one precondition, for {@code doctor} (design D1 of
+     * add-doctor-command): the check {@link #assess} runs for {@code kind}, except that the image
+     * contract is the port's contract inspection alone, with no container. Needs no claim and no
+     * running daemon; logs nothing and throws nothing a check threw.
+     *
+     * @param kind {@link DaemonConditionKind#CLONE_REF_FORMAT}, {@link
+     *     DaemonConditionKind#CONTAINER_RUNTIME} or {@link DaemonConditionKind#IMAGE_CONTRACT}
+     * @param clone the registered clone the verdict is about; never null
+     * @param definition the clone's pipeline definition, which the plan reads; never null
+     * @return the check's verdict; never null
+     * @throws IllegalArgumentException for {@link DaemonConditionKind#BOX_GIT_FLOOR}, whose probe is
+     *     a container start, and {@link DaemonConditionKind#REMOTE}, which no startup check owns
+     */
+    public PreconditionVerdict verdict(DaemonConditionKind kind, RegisteredClone clone, PipelineDefinition definition) {
+        Runnable check =
+                switch (kind) {
+                    case CLONE_REF_FORMAT, CONTAINER_RUNTIME -> () -> check(kind, clone, definition);
+                    case IMAGE_CONTRACT -> () -> imageReadiness.inspectContract(configuredImage());
+                    case BOX_GIT_FLOOR ->
+                        throw new IllegalArgumentException(
+                                "the box git floor probe is a container start, never a verdict");
+                    case REMOTE -> throw new IllegalArgumentException("the remote is probed by its own ls-remote");
+                };
+        return judge(check);
+    }
+
+    /**
+     * The non-refusing verdict on the clone's ref format alone, for {@code doctor}'s ref backend
+     * check (FR1 of add-doctor-command): {@link #verdict} for {@link
+     * DaemonConditionKind#CLONE_REF_FORMAT}, which reads no definition, so a pipeline that fails to
+     * load does not hide the clone's ref backend.
+     *
+     * @param clone the registered clone the verdict is about; never null
+     * @return the check's verdict; never null
+     */
+    public PreconditionVerdict refFormatVerdict(RegisteredClone clone) {
+        return judge(() -> requireRefFormat(clone));
+    }
+
+    /** Runs {@code check} and turns its outcome into a verdict, throwing nothing it threw. */
+    private static PreconditionVerdict judge(Runnable check) {
+        try {
+            check.run();
+            return new PreconditionVerdict.Holds();
+        } catch (RuntimeException failure) {
+            return OperatorPreconditionRefusals.unmet(failure)
+                    .<PreconditionVerdict>map(PreconditionVerdict.Unmet::new)
+                    .orElseGet(() -> new PreconditionVerdict.Failed(failure));
+        }
+    }
+
+    /**
      * Runs the check that owns {@code kind}: the ref format, the plan (which meets the runtime
      * first), or the image's contract and git floor, which one inspection judges together.
      */
     private void check(DaemonConditionKind kind, RegisteredClone clone, PipelineDefinition definition) {
         switch (kind) {
-            case CLONE_REF_FORMAT -> branches.requireRefFormat(clone.clonePath());
+            case CLONE_REF_FORMAT -> requireRefFormat(clone);
             case CONTAINER_RUNTIME -> modeSelector.runsInBox(definition, clone);
-            // A boxed plan has already refused a container run with no image configured.
-            case IMAGE_CONTRACT, BOX_GIT_FLOOR ->
-                imageReadiness.assess(Objects.requireNonNull(sandbox.image(), "factory.sandbox.image"));
+            case IMAGE_CONTRACT, BOX_GIT_FLOOR -> imageReadiness.assess(configuredImage());
             case REMOTE -> throw new IllegalArgumentException("the remote is probed by its own ls-remote");
         }
+    }
+
+    /** The ref-format check, the one spelling {@link #check} and {@link #refFormatVerdict} share. */
+    private void requireRefFormat(RegisteredClone clone) {
+        branches.requireRefFormat(clone.clonePath());
+    }
+
+    /**
+     * The configured image. Startup and the rechecks ask it only after a boxed plan, which has
+     * already refused a container run with none configured; for {@link #verdict} an absent image is
+     * the {@link PreconditionVerdict.Failed} of this null check.
+     */
+    private String configuredImage() {
+        return Objects.requireNonNull(sandbox.image(), "factory.sandbox.image");
     }
 }

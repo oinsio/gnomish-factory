@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.adapter.git.GitInfrastructureRetry;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.GitTaskBackend;
 import com.github.oinsio.gnomish.adapter.git.GitVersionCheck;
+import com.github.oinsio.gnomish.adapter.git.HooksPathLeftover;
 import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds;
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishDirPipelineSource;
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider;
@@ -86,9 +87,14 @@ public class ManualRunConfiguration {
      * <p>The project's and the host's secrets folders come first (FR8, design D7 of
      * add-project-registry), from the home the configuration loader resolved against; a command
      * that resolved no project consults the host folder alone.
+     *
+     * <p>Declared as the adapter's type, so the one instance is also the {@link
+     * com.github.oinsio.gnomish.app.SecretLocator} {@code doctor} asks where a secret is (FR1,
+     * NFR-S1 of add-doctor-command): one search answers both.
      */
     @Bean
-    public SecretsProvider secretsProvider(FactoryHome factoryHome, ObjectProvider<RegisteredClone> registeredClone) {
+    public EnvFileSecretsProvider secretsProvider(
+            FactoryHome factoryHome, ObjectProvider<RegisteredClone> registeredClone) {
         RegisteredClone clone = registeredClone.getIfAvailable();
         return new EnvFileSecretsProvider(factoryHome, clone == null ? null : clone.layout());
     }
@@ -116,6 +122,15 @@ public class ManualRunConfiguration {
     @Bean
     public GitVersionCheck gitVersionCheck(GitProcessRunner gitProcessRunner) {
         return new GitVersionCheck(gitProcessRunner);
+    }
+
+    /**
+     * The reader of the hooks-path line earlier factory versions left in a clone (FR8, design D6 of
+     * add-doctor-command), over the process's one runner, so the invocation policy is in force.
+     */
+    @Bean
+    public HooksPathLeftover hooksPathLeftover(GitProcessRunner gitProcessRunner) {
+        return new HooksPathLeftover(gitProcessRunner);
     }
 
     /**

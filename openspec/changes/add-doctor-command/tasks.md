@@ -6,15 +6,15 @@ Starts after `add-project-registry`, `add-release-pipeline` and
 
 ## 1. Assess, then refuse (design D1) — single-owner rows 1–4
 
-- [ ] 1.1 `GitVersionCheck.assess()` returning `GitVersionVerdict`; `verify()`
+- [x] 1.1 `GitVersionCheck.assess()` returning `GitVersionVerdict`; `verify()`
       becomes assess + the existing ERROR line and exception (FR4, FR7). Verify
       `GitVersionCheckSpec` data table: `verify` refuses exactly when `assess`
       fails; the existing log and exception specs pass unchanged.
-- [ ] 1.2 `OperatorConfigLoader` collect mode for the `doctor` subcommand:
+- [x] 1.2 `OperatorConfigLoader` collect mode for the `doctor` subcommand:
       violations published as a bean instead of thrown; every other subcommand
       unchanged (FR7). Verify `OperatorConfigSourcesSpec` gains a row: with
       `doctor` the same violations are published and no exception is thrown.
-- [ ] 1.3 Split the port `SandboxImageReadiness` (D1): a contract inspection
+- [x] 1.3 Split the port `SandboxImageReadiness` (D1): a contract inspection
       (one `ImageFacts` read through `ImageContractCheck`, no container)
       beside the box git floor probe in its adapter `DockerImageReadiness`;
       `assess(image)` keeps running both, so `ServePreconditions.assess` and
@@ -28,15 +28,15 @@ Starts after `add-project-registry`, `add-release-pipeline` and
 
 ## 2. New owners (design D4, D6)
 
-- [ ] 2.1 `AgentCredentials.presentNames` in `:adapters:agent` (names only,
+- [x] 2.1 `AgentCredentials.presentNames` in `:adapters:agent` (names only,
       never values; javadoc cites FR1, NFR-S1). Verify Spock specs with a fake
       environment map; PIT 100%.
-- [ ] 2.2 `FactoryHome.legacyFolders()` listing old root-level
+- [x] 2.2 `FactoryHome.legacyFolders()` listing old root-level
       `logs/gnomish.log`, `serve/`, `worktrees/`, `secrets/` entries. Verify a
       spec over a temporary home with and without leftovers, and that
       `FactoryHomeBoundarySpec` still passes.
 
-- [ ] 2.3 Two non-refusing assessments on the host launch owner of
+- [x] 2.3 Two non-refusing assessments on the host launch owner of
       `fix-terminal-receipt-convergence` (`:subprocess`, D19 there), as a public
       seam its launching form is built on (D1, D4): `assessHelper()`, the verdict
       over both tools the launching form refuses on — the platform's launcher and
@@ -48,7 +48,7 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       `assessExecutable` fails, over a fake `PATH` directory (relative entry,
       non-executable file, missing `#!` interpreter).
 
-- [ ] 2.4 `HooksPathLeftover.assess(clone)` in `:adapters:git` (D6; FR8 of
+- [x] 2.4 `HooksPathLeftover.assess(clone)` in `:adapters:git` (D6; FR8 of
       this change, UX2 of `own-git-invocation-policy`): reads
       `git config --local --get core.hooksPath` through `GitRunner`; `warn` with
       the fix `git config --local --unset core.hooksPath` only when the value
@@ -59,12 +59,12 @@ Starts after `add-project-registry`, `add-release-pipeline` and
 
 ## 3. The `doctor` subcommand (design D2, D3, D5)
 
-- [ ] 3.1 `doctor` in `Subcommand` with accepted options `--dir`, `--online`,
+- [x] 3.1 `doctor` in `Subcommand` with accepted options `--dir`, `--online`,
       `--json` (through `rejectUnknownOptions`); dispatched in
       `ManualRunRunner` before `gitVersionCheck.verify()` (FR7). Verify a spec
       that `doctor` runs with a fake git below the floor and still reports every
       check.
-- [ ] 3.2 `DoctorCheck`, `DoctorContext` and the fourteen checks of FR1 as thin
+- [x] 3.2 `DoctorCheck`, `DoctorContext` and the fourteen checks of FR1 as thin
       adapters over their owners (`FactoryVersion`, `GitVersionCheck`,
       `OperatorConfigLoader` bean, `ProjectRegistry`, `ServePreconditions`
       for the clone's ref backend (1.3), `PipelineLoader`,

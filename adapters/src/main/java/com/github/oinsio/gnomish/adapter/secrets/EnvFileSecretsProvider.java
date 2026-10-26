@@ -1,24 +1,15 @@
 package com.github.oinsio.gnomish.adapter.secrets;
 
+import com.github.oinsio.gnomish.app.SecretLocation;
+import com.github.oinsio.gnomish.app.SecretLocator;
 import com.github.oinsio.gnomish.app.UsageException;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.project.FactoryHome;
 import com.github.oinsio.gnomish.app.project.ProjectLayout;
-import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
-import java.nio.file.attribute.PosixFileAttributeView;
-import java.nio.file.attribute.PosixFilePermission;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The env/file {@link SecretsProvider} adapter (design D12 of add-sandbox-core, D7 of
@@ -52,23 +43,16 @@ import org.slf4j.LoggerFactory;
  * secret. Resolved values are never logged; only a file-read failure is logged, and its message
  * carries the file, never the secret's content.
  *
- * <p>Implements FR18, NFR-S1 of add-sandbox-core; FR8, NFR-S2 of add-project-registry.
+ * <p>It is also the factory's {@link SecretLocator}: {@link #locate} runs the one search {@link
+ * #find} runs ({@link EnvFileSecretSearch}) and answers where, never what (FR1, NFR-S1 of
+ * add-doctor-command).
+ *
+ * <p>Implements FR18, NFR-S1 of add-sandbox-core; FR8, NFR-S2 of add-project-registry; FR1, NFR-S1
+ * of add-doctor-command.
  */
-public final class EnvFileSecretsProvider implements SecretsProvider {
+public final class EnvFileSecretsProvider implements SecretsProvider, SecretLocator {
 
-    private static final Logger log = LoggerFactory.getLogger(EnvFileSecretsProvider.class);
-
-    /** The suffix that names the file-indirection variable for a secret {@code N}: {@code N_FILE}. */
-    static final String FILE_SUFFIX = "_FILE";
-
-    private static final Set<PosixFilePermission> LOOSE = Set.of(
-            PosixFilePermission.GROUP_READ,
-            PosixFilePermission.GROUP_WRITE,
-            PosixFilePermission.OTHERS_READ,
-            PosixFilePermission.OTHERS_WRITE);
-
-    private final List<Function<String, Path>> folders;
-    private final Function<String, @Nullable String> env;
+    private final EnvFileSecretSearch search;
 
     /**
      * The production adapter: the two secrets folders of {@code home}, then the JVM's process
@@ -92,8 +76,8 @@ public final class EnvFileSecretsProvider implements SecretsProvider {
      *     null} when the variable is unset; never null itself
      */
     EnvFileSecretsProvider(FactoryHome home, @Nullable ProjectLayout project, Function<String, @Nullable String> env) {
-        this.folders = project == null ? List.of(home::hostSecret) : List.of(project::secret, home::hostSecret);
-        this.env = env;
+        this.search = new EnvFileSecretSearch(
+                project == null ? List.of(home::hostSecret) : List.of(project::secret, home::hostSecret), env);
     }
 
     /**
@@ -105,92 +89,19 @@ public final class EnvFileSecretsProvider implements SecretsProvider {
      */
     @Override
     public Optional<String> find(String name) {
-        for (Function<String, Path> folder : folders) {
-            Path file = fileIn(folder, name);
-            if (Files.exists(file)) {
-                return readFolderFile(file);
-            }
-        }
-        String fileRef = env.apply(name + FILE_SUFFIX);
-        if (fileRef != null && !fileRef.isBlank()) {
-            return readFile(name + FILE_SUFFIX, fileRef.strip());
-        }
-        return present(env.apply(name));
-    }
-
-    /** The file of {@code name} in one secrets folder; a name that is not one segment is the operator's mistake. */
-    private static Path fileIn(Function<String, Path> folder, String name) {
-        try {
-            return folder.apply(name);
-        } catch (IllegalArgumentException e) {
-            throw new UsageException(e.getMessage() + " — a secret is named by its variable name");
-        }
-    }
-
-    /** A secrets-folder file: refused when group or others may read or write it, else read. */
-    private static Optional<String> readFolderFile(Path file) {
-        try {
-            if (isLoose(file)) {
-                throw new UsageException("secret file " + file + " is readable or writable by group or others,"
-                        + " so it was not read: run chmod 600 " + file);
-            }
-            return present(Files.readString(file).strip());
-        } catch (IOException e) {
-            warnUnreadable(file.toString(), e);
-            return Optional.empty();
-        }
-    }
-
-    /** Whether group or others may read or write {@code file}; a file system with no POSIX view has neither. */
-    private static boolean isLoose(Path file) throws IOException {
-        PosixFileAttributeView view = Files.getFileAttributeView(file, PosixFileAttributeView.class);
-        return view != null && !Collections.disjoint(view.readAttributes().permissions(), LOOSE);
+        EnvFileSecretSearch.Hit hit = search.search(name);
+        return hit == null ? Optional.empty() : Optional.of(hit.value());
     }
 
     /**
-     * Reads the secret from {@code path}, returning its stripped contents or
-     * empty when the file is absent, unreadable, or blank — the fail-closed
-     * leg: a referenced file that cannot be read is an absent secret, never a
-     * fall-through to the direct env value.
+     * Where {@link #find} finds {@code name}, by the same one search, or every place it looks: the
+     * place, never the value (FR1, NFR-S1 of add-doctor-command).
      *
-     * @param variable the {@code *_FILE} variable that named {@code path}; the warning's subject,
-     *     since "a secret would not resolve" is only actionable if the operator knows which one
-     *     (FR5, NFR-S1 of harden-logging-observability — the variable, never the value)
+     * @throws UsageException as {@link #find} does
      */
-    private static Optional<String> readFile(String variable, String path) {
-        try {
-            return present(Files.readString(Path.of(path)).strip());
-        } catch (IOException | InvalidPathException e) {
-            warnUnreadable(variable, e);
-            return Optional.empty();
-        }
-    }
-
-    /**
-     * The one warning of a read that failed; the caller returns the fail-closed empty itself, a
-     * literal {@code Optional.empty()} that no return-value mutant can distinguish from its own.
-     *
-     * @param subject what named the file — the {@code *_FILE} variable, or the secrets-folder file
-     *     itself
-     */
-    private static void warnUnreadable(String subject, Exception e) {
-        // The message carries the path or the variable, never the file's content (a secret) — and
-        // the throwable is passed as a throwable, not as a format argument, so the WARN keeps the
-        // stack trace that says WHICH read failed and why. Neither an IOException from a file read
-        // nor an InvalidPathException carries file content, so the stack leaks nothing the message
-        // does not already say.
-        log.warn(
-                OperatorEvent.SECRET_FILE_UNREADABLE.head()
-                        + "secret file named by {} could not be read; the secret resolves as absent",
-                subject,
-                e);
-    }
-
-    /** Present a value only when it is non-null and non-blank; the fail-closed "never a silent empty". */
-    private static Optional<String> present(@Nullable String value) {
-        if (value == null || value.isBlank()) {
-            return Optional.empty();
-        }
-        return Optional.of(value);
+    @Override
+    public SecretLocation locate(String name) {
+        EnvFileSecretSearch.Hit hit = search.search(name);
+        return hit == null ? new SecretLocation.Absent(search.places(name)) : new SecretLocation.Found(hit.place());
     }
 }

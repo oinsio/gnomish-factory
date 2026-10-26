@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.config;
 
-import com.github.oinsio.gnomish.app.ConfigurationViolationsException;
+import com.github.oinsio.gnomish.app.ConfigurationViolations;
 import com.github.oinsio.gnomish.operatorconfig.Level;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -111,19 +111,12 @@ public final class ConfigViolations {
         lines.putIfAbsent("refusal" + message, message);
     }
 
-    /** Whether nothing was found. */
-    public boolean isEmpty() {
-        return lines.isEmpty();
-    }
-
-    /** The collected lines, in the order found. */
-    public List<String> lines() {
-        return List.copyOf(lines.values());
-    }
-
-    /** The report of every line, ready to throw; call only when {@link #isEmpty()} is false. */
-    public ConfigurationViolationsException exception() {
-        return new ConfigurationViolationsException(lines());
+    /**
+     * The collected lines, in the order found — the value both forms of the loader decide on: the
+     * startup refusal and {@code doctor}'s listing (FR7 of add-doctor-command).
+     */
+    public ConfigurationViolations collected() {
+        return new ConfigurationViolations(List.copyOf(lines.values()));
     }
 
     /** "an any key", "a host key". */

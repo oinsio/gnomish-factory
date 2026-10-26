@@ -129,8 +129,9 @@ public final class CheckEquipment {
      * configured connection subsection, and — for the built-in {@code http} provider, which serves
      * arbitrary endpoints — from each check's own manifest params (FR11). A manifest-named
      * credential is therefore scrubbed and refused in passthrough exactly like a configured one.
+     * {@code doctor}'s secrets check reads the same union (FR1 of add-doctor-command).
      */
-    private List<String> credentialNames(PipelineDefinition definition, List<String> credentialEnvVarsToScrub) {
+    List<String> credentialNames(PipelineDefinition definition, List<String> credentialEnvVarsToScrub) {
         var names = new ArrayList<>(credentialEnvVarsToScrub);
         names.addAll(CheckProviderSeam.credentialEnvVars(checkSubsections(), checkClientRegistry));
         names.addAll(CheckProviderSeam.checkCredentialEnvVars(definition, checkClientRegistry));

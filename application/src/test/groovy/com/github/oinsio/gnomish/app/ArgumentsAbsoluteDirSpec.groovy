@@ -28,6 +28,7 @@ class ArgumentsAbsoluteDirSpec extends Specification {
         project : { Path d ->
             new ProjectArguments(ProjectArguments.Verb.ADD, new ProjectName('widgets'), d)
         },
+        doctor : { Path d -> new DoctorArguments(d, false, false) },
     ]
 
     def "FR7: the #name arguments record refuses a relative directory, naming it"() {
@@ -58,5 +59,19 @@ class ArgumentsAbsoluteDirSpec extends Specification {
         RECORDS.keySet() == Subcommand.values().collect {
             it.name().toLowerCase()
         } as Set
+    }
+
+    def "FR2 of add-doctor-command: --dir names the directory exactly when it is given: #args"() {
+        expect:
+        ArgumentsParsingSupport.namesDir(new org.springframework.boot.DefaultApplicationArguments(args as String[])) == named
+
+        where:
+        args || named
+        [
+            'doctor',
+            '--dir=/src/widgets'
+        ] || true
+        ['doctor'] || false
+        ['doctor', '--online'] || false
     }
 }

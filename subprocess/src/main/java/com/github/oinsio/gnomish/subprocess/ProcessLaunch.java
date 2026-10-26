@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.subprocess;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The one way a supervised process is started (design D16 of fix-terminal-receipt-convergence): a
@@ -24,7 +25,8 @@ import java.nio.file.Path;
  * LaunchOwnerGateSpec} keeps {@code getOutputStream()} and {@code redirectInput(} out of every other
  * production source.
  *
- * <p>Implements FR18, FR21, FR22, FR23 of fix-terminal-receipt-convergence.
+ * <p>Implements FR18, FR21, FR22, FR23 of fix-terminal-receipt-convergence; FR1, FR4 of
+ * add-doctor-command ({@link #assessHelper()}, {@link #assessExecutable}).
  */
 public interface ProcessLaunch {
 
@@ -59,6 +61,35 @@ public interface ProcessLaunch {
      */
     static boolean launcherCouldNotExec(Termination termination, int exitCode, String stderr) {
         return HostLauncher.couldNotExec(termination, exitCode, stderr);
+    }
+
+    /**
+     * Whether this host has the helpers every launch needs — the platform's process-group launcher
+     * and the group sweep's {@code kill} — starting nothing (design D1, D4 of add-doctor-command).
+     * It is the launch owner's own decision: {@link #grouped()} refuses exactly when this is {@link
+     * HelperVerdict.Missing}, with its reason as the exception's message.
+     *
+     * @return the helpers present, or the missing tool and what provides it
+     */
+    static HelperVerdict assessHelper() {
+        return new GroupedLaunch(Path.of(System.getProperty("java.io.tmpdir"))).assessHelper();
+    }
+
+    /**
+     * What a command's first word resolves to under the launch owner's rule, its {@code #!}
+     * interpreter chain judged, starting nothing (design D1, D4 of add-doctor-command): {@link
+     * #grouped()} refuses a command exactly when this is {@link ExecutableVerdict.Unresolved}, with
+     * its reason as the exception's message.
+     *
+     * @param name the command's first word
+     * @param directory the child's working directory, or {@code null} for the JVM's
+     * @param path the {@code PATH} the child's environment names, or {@code null} for none, when the
+     *     JVM's stands in for it as it does at the launch
+     * @return the absolute executable, or the reason the name does not resolve
+     */
+    static ExecutableVerdict assessExecutable(String name, @Nullable Path directory, @Nullable String path) {
+        return new GroupedLaunch(Path.of(System.getProperty("java.io.tmpdir")))
+                .assessExecutable(name, directory == null ? null : directory.toFile(), path);
     }
 
     /**

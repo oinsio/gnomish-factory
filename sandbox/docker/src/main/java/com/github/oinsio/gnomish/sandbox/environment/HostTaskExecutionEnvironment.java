@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.InstantSource;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -66,6 +67,17 @@ public final class HostTaskExecutionEnvironment implements TaskExecutionEnvironm
      */
     public static final List<String> BASE_ENV_NAMES =
             List.of("PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "USER", "SHELL");
+
+    /**
+     * The {@code PATH} a host child's environment carries under {@code allowlist} — the value the
+     * launch owner resolves the child's first word on — composed as {@link #exec} composes it,
+     * before any per-command variable (FR1, FR4 of add-doctor-command).
+     *
+     * @return the child's {@code PATH}, or {@code null} when none resolves
+     */
+    public static @Nullable String childPath(ChildEnvAllowlist allowlist) {
+        return allowlist.compose(BASE_ENV_NAMES, Map.of()).get("PATH");
+    }
 
     private final Path workingCopy;
     private final InstantSource clock;

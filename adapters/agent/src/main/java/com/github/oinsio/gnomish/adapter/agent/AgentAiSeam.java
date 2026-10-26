@@ -26,17 +26,25 @@ import java.util.Map;
  * only production source that names the two variables ({@code AgentCredentialSeamBoundarySpec}).
  *
  * <p>Implements FR9 of add-sandbox-core; FR5, NFR-S3 of fix-operator-blockers; NFR-S3 of
- * tighten-spec-contract.
+ * tighten-spec-contract; FR1, NFR-S1 of add-doctor-command (the credential subset).
  */
 final class AgentAiSeam {
 
+    private static final String AUTH_TOKEN = "ANTHROPIC_AUTH_TOKEN";
+    private static final String OAUTH_TOKEN = "CLAUDE_CODE_OAUTH_TOKEN";
+    private static final String API_KEY = "ANTHROPIC_API_KEY";
+
     /** The seam variable names, in the order they are applied. */
-    static final List<String> NAMES = List.of(
-            "ANTHROPIC_BASE_URL",
-            "ANTHROPIC_AUTH_TOKEN",
-            "ANTHROPIC_MODEL",
-            "CLAUDE_CODE_OAUTH_TOKEN",
-            "ANTHROPIC_API_KEY");
+    static final List<String> NAMES =
+            List.of("ANTHROPIC_BASE_URL", AUTH_TOKEN, "ANTHROPIC_MODEL", OAUTH_TOKEN, API_KEY);
+
+    /**
+     * The seam names that carry a secret the agent CLI authenticates with, in {@link #NAMES} order:
+     * the provider's auth token and the CLI's own two credentials. The base URL and the model name
+     * point the CLI somewhere; they authenticate nothing. {@link AgentCredentials} reports which of
+     * these are present (FR1, NFR-S1 of add-doctor-command).
+     */
+    static final List<String> CREDENTIAL_NAMES = List.of(AUTH_TOKEN, OAUTH_TOKEN, API_KEY);
 
     private AgentAiSeam() {}
 

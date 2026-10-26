@@ -66,4 +66,38 @@ class TrackedImageReadinessSpec extends Specification implements BareGitRepoFixt
         def failure = thrown(RuntimeException)
         failure instanceof DockerCommandFailedException || failure instanceof ContainerRuntimeUnavailableException
     }
+
+    def "FR1, NFR-R1 of add-doctor-command: the contract inspection reads no clone and asks the real runtime"() {
+        given: 'a clone provider that fails if it is ever read'
+        def readiness = new TrackedImageReadiness(
+                RegisteredCloneFixture.lazy({
+                    -> throw new AssertionError('the inspection read the clone')
+                }),
+                new SandboxProperties(null, null, null, null, null, null, false, 'acme-widgets', null, null, null),
+                new FactoryProperties(null, null, null, null))
+
+        when:
+        readiness.inspectContract('gnomish-test/no-such-image:absent')
+
+        then: 'an inspect the runtime answered with a refusal, or a runtime it could not reach — never a pass'
+        def failure = thrown(RuntimeException)
+        failure instanceof DockerCommandFailedException || failure instanceof ContainerRuntimeUnavailableException
+    }
+
+    def "FR1, NFR-R1 of add-doctor-command: the presence inspection reads no clone and asks the real runtime"() {
+        given: 'a clone provider that fails if it is ever read'
+        def readiness = new TrackedImageReadiness(
+                RegisteredCloneFixture.lazy({
+                    -> throw new AssertionError('the inspection read the clone')
+                }),
+                new SandboxProperties(null, null, null, null, null, null, false, 'acme-widgets', null, null, null),
+                new FactoryProperties(null, null, null, null))
+
+        when:
+        readiness.inspectPresence('gnomish-test/no-such-image:absent')
+
+        then: 'an inspect the runtime answered with a refusal, or a runtime it could not reach — never a pass'
+        def failure = thrown(RuntimeException)
+        failure instanceof DockerCommandFailedException || failure instanceof ContainerRuntimeUnavailableException
+    }
 }

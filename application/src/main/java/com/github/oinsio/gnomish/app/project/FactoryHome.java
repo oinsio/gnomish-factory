@@ -1,6 +1,13 @@
 package com.github.oinsio.gnomish.app.project;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -14,9 +21,11 @@ import org.jspecify.annotations.Nullable;
  * GNOMISH_HOME} as the OS variable or, in in-process specs, as a system property of the same name
  * — never from {@code System.getenv} directly (D1).
  *
- * <p>Pure path computation — no filesystem access, nothing created.
+ * <p>Pure path computation — nothing created, and no filesystem access but {@link
+ * #legacyFolders()}, which looks for the pre-registry layout's leftovers by the names only this
+ * class knows.
  *
- * <p>Implements FR1, FR8, FR11 of add-project-registry.
+ * <p>Implements FR1, FR8, FR11 of add-project-registry; FR1 of add-doctor-command.
  */
 public final class FactoryHome {
 
@@ -111,6 +120,43 @@ public final class FactoryHome {
      */
     public ProjectLayout project(ProjectName name) {
         return new ProjectLayout(name, projects().resolve(name.value()));
+    }
+
+    /**
+     * The leftovers of the pre-registry layout at the root, each with where its state lives now:
+     * the host-wide log {@code logs/gnomish.log}, the {@code serve/} and {@code worktrees/}
+     * folders, and the per-repository folders the old setup made under {@code secrets/} (the host
+     * secrets folder itself is current; a secret there is one file, never a folder). The only
+     * method that reads the filesystem; it changes nothing.
+     *
+     * <p>Implements FR1 of add-doctor-command.
+     *
+     * @return the leftovers in that order, the secrets folders sorted; empty on a clean home
+     * @throws UncheckedIOException if the secrets folder exists but cannot be listed
+     */
+    public List<LegacyEntry> legacyFolders() {
+        List<LegacyEntry> entries = new ArrayList<>();
+        addIfPresent(entries, root.resolve("logs").resolve("gnomish.log"), "projects/<name>/logs/<instance>.log");
+        addIfPresent(entries, root.resolve("serve"), "projects/<name>/serve/<instance>/");
+        addIfPresent(entries, root.resolve("worktrees"), "projects/<name>/worktrees/<clone>/");
+        Path secrets = root.resolve("secrets");
+        if (Files.isDirectory(secrets)) {
+            try (Stream<Path> children = Files.list(secrets)) {
+                children.filter(Files::isDirectory)
+                        .sorted()
+                        .forEach(dir -> entries.add(
+                                new LegacyEntry(dir, "one file per secret in projects/<name>/secrets/ or secrets/")));
+            } catch (IOException e) {
+                throw new UncheckedIOException("cannot list " + secrets, e);
+            }
+        }
+        return List.copyOf(entries);
+    }
+
+    private static void addIfPresent(List<LegacyEntry> entries, Path path, String successor) {
+        if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+            entries.add(new LegacyEntry(path, successor));
+        }
     }
 
     @Override

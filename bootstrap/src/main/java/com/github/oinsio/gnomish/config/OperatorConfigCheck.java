@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.config;
 
-import com.github.oinsio.gnomish.app.ConfigurationViolationsException;
+import com.github.oinsio.gnomish.app.ConfigurationViolations;
 import com.github.oinsio.gnomish.app.UsageException;
 import com.github.oinsio.gnomish.app.project.FactoryHome;
 import com.github.oinsio.gnomish.app.project.OperatorFile;
@@ -18,10 +18,13 @@ import org.springframework.core.env.PropertySource;
  * One startup's operator configuration, checked whole (FR5, FR6, FR7): the host file's and the
  * resolved project's {@code factory:} blocks, every other source Spring assembled, and the
  * permissions of every operator file — each finding collected with the refusals the project
- * resolution already made, and the lot thrown as one report. Only a configuration with no finding
- * yields its two blocks, placed into the environment by {@link OperatorSources#add}.
+ * resolution already made into one {@link ConfigurationViolations}, returned beside the two blocks
+ * rather than thrown: the loader decides whether to refuse on it or to publish it for {@code
+ * doctor} (design D1 of add-doctor-command). The blocks are placed into the environment by {@link
+ * OperatorSources#add}.
  *
- * <p>Implements FR5, FR6, FR7, NFR-S1, NFR-S2, NFR-O2 of add-project-registry.
+ * <p>Implements FR5, FR6, FR7, NFR-S1, NFR-S2, NFR-O2 of add-project-registry; FR7 of
+ * add-doctor-command.
  */
 public final class OperatorConfigCheck {
 
@@ -42,9 +45,14 @@ public final class OperatorConfigCheck {
         this.reader = reader;
     }
 
-    /** The two checked blocks, each {@code null} when its file sets no {@code factory.*} key. */
-    public record Blocks(
-            @Nullable PropertySource<?> project, @Nullable PropertySource<?> host) {}
+    /**
+     * The two checked blocks, each {@code null} when its file sets no {@code factory.*} key, and
+     * every finding of the check.
+     */
+    public record Checked(
+            @Nullable PropertySource<?> project,
+            @Nullable PropertySource<?> host,
+            ConfigurationViolations violations) {}
 
     /**
      * Checks every source.
@@ -52,9 +60,9 @@ public final class OperatorConfigCheck {
      * @param registry the registry, or {@code null} when it could not be read (a refusal says why)
      * @param project the project whose block applies, or {@code null} for a project-less command
      * @param refusals what resolving the project already refused, reported first
-     * @throws ConfigurationViolationsException listing every finding, when there is one
+     * @return the blocks and every finding, the refusals first; never thrown
      */
-    public Blocks check(
+    public Checked check(
             ConfigurableEnvironment environment,
             @Nullable ProjectRegistry registry,
             @Nullable ProjectName project,
@@ -81,10 +89,7 @@ public final class OperatorConfigCheck {
         List<Path> files = new ArrayList<>(List.of(home.hostConfig()));
         projects.forEach(p -> files.add(p.layout().config()));
         OperatorSources.checkWritable(files, violations);
-        if (!violations.isEmpty()) {
-            throw violations.exception();
-        }
-        return new Blocks(projectBlock, host);
+        return new Checked(projectBlock, host, violations.collected());
     }
 
     private @Nullable PropertySource<?> hostBlock(ConfigViolations violations) {

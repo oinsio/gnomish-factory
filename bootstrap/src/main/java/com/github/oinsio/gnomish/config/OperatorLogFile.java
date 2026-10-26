@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.config;
 
 import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.app.ConfigurationViolationsException;
+import com.github.oinsio.gnomish.app.ConfigurationViolations;
 import com.github.oinsio.gnomish.app.project.FactoryHome;
 import com.github.oinsio.gnomish.app.project.ProjectName;
 import java.nio.file.Path;
@@ -27,7 +27,7 @@ import org.springframework.core.env.MapPropertySource;
  * Every other {@code factory.*} key is left to the context's own binding, which reports a bad value
  * of it — this step must not fail on a key it does not read.
  *
- * <p>Implements FR11, UX3 of add-project-registry.
+ * <p>Implements FR11, UX3 of add-project-registry; FR7 of add-doctor-command.
  */
 public final class OperatorLogFile {
 
@@ -46,15 +46,29 @@ public final class OperatorLogFile {
 
     /**
      * Publishes the log file ahead of every other source, so no operator setting can move it.
+     * An instance name that cannot name a file is a configuration violation, returned rather than
+     * thrown so the loader decides on it with the rest (design D1 of add-doctor-command); the
+     * project-less log file is published in its place.
      *
      * @param environment the environment the operator sources were already added to
      * @param home the factory home
      * @param project the project the command resolved to, or {@code null} for a project-less one
-     * @throws ConfigurationViolationsException if the instance name cannot name a file
+     * @return the instance-name violation, or {@link ConfigurationViolations#NONE}
      */
-    public static void publish(ConfigurableEnvironment environment, FactoryHome home, @Nullable ProjectName project) {
-        Path file = project == null ? home.hostLogFile() : projectLogFile(environment, home, project);
+    public static ConfigurationViolations publish(
+            ConfigurableEnvironment environment, FactoryHome home, @Nullable ProjectName project) {
+        Path file = home.hostLogFile();
+        ConfigurationViolations violations = ConfigurationViolations.NONE;
+        if (project != null) {
+            try {
+                file = home.project(project).logFile(instanceName(environment));
+            } catch (IllegalArgumentException e) {
+                violations = new ConfigurationViolations(List.of(INSTANCE_NAME + ": " + e.getMessage()
+                        + " — the instance name is a folder and file name under the project's logs and serve folders"));
+            }
+        }
         environment.getPropertySources().addFirst(new MapPropertySource(SOURCE, properties(file)));
+        return violations;
     }
 
     /**
@@ -68,17 +82,12 @@ public final class OperatorLogFile {
         return Map.of(PROPERTY, path, ARCHIVE_BASE_PROPERTY, path.replaceFirst("\\.log$", ""));
     }
 
-    private static Path projectLogFile(ConfigurableEnvironment environment, FactoryHome home, ProjectName project) {
+    /** The instance name as the context will bind it; throws when it cannot name a file. */
+    private static String instanceName(ConfigurableEnvironment environment) {
         @Nullable
         String configured =
                 Binder.get(environment).bind(INSTANCE_NAME, String.class).orElse(null);
-        try {
-            // the five-argument constructor resolves the unset and blank cases as the binding does
-            String instance = new FactoryProperties(configured, null, null, null, null).instanceName();
-            return home.project(project).logFile(instance);
-        } catch (IllegalArgumentException e) {
-            throw new ConfigurationViolationsException(List.of(INSTANCE_NAME + ": " + e.getMessage()
-                    + " — the instance name is a folder and file name under the project's logs and serve folders"));
-        }
+        // the five-argument constructor resolves the unset and blank cases as the binding does
+        return new FactoryProperties(configured, null, null, null, null).instanceName();
     }
 }

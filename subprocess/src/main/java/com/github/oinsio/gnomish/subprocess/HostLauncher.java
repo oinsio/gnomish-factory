@@ -32,7 +32,11 @@ import org.jspecify.annotations.Nullable;
  * or a platform with none, fails the invocation naming it before any process exists — never an
  * ungrouped run.
  *
- * <p>Implements FR21, FR22 of fix-terminal-receipt-convergence (D19 as amended 2026-10-17).
+ * <p>One judgement, read two ways (D1, D4 of add-doctor-command): {@link #assess()}, starting
+ * nothing, and {@link #prefix()}, so the launch refuses exactly when the verdict is missing.
+ *
+ * <p>Implements FR21, FR22 of fix-terminal-receipt-convergence (D19 as amended 2026-10-17); FR1,
+ * FR4 of add-doctor-command.
  */
 final class HostLauncher {
 
@@ -50,6 +54,18 @@ final class HostLauncher {
             + " my $e = $! + 0; print STDERR \"gnomish-launch: cannot exec $ARGV[0]: $!\\n\";"
             + " exit($e == POSIX::ENOENT() ? 127 : 126)";
 
+    /** What provides the sweep's {@code kill}. */
+    private static final String KILL_PACKAGE = "procps (or util-linux) on Linux; macOS ships it";
+
+    /** What provides macOS's launcher: nothing to install, the OS's own copy. */
+    private static final String PERL_PACKAGE = "macOS ships it: restore the operating system's own perl";
+
+    /** What provides Linux's launcher. */
+    private static final String SETSID_PACKAGE = "util-linux";
+
+    /** A platform with no launcher: nothing to install. */
+    private static final String NO_PACKAGE = "none: host processes are launched on Linux and macOS only";
+
     /** Linux's launcher, util-linux's {@code setsid}, looked up on the JVM's {@code PATH}. */
     private static final String SETSID = "setsid";
 
@@ -60,6 +76,7 @@ final class HostLauncher {
     private static final String SENTINEL = "gnomish-launch: cannot exec ";
 
     private final String osName;
+    private final Path perl;
     private final @Nullable String jvmPath;
     private final Path kill;
 
@@ -69,7 +86,18 @@ final class HostLauncher {
      * @param kill the sweep's signaller: {@link #KILL} in production
      */
     HostLauncher(String osName, @Nullable String jvmPath, Path kill) {
+        this(osName, Path.of(PERL), jvmPath, kill);
+    }
+
+    /**
+     * @param osName the platform, as {@code os.name} names it, which picks the launcher
+     * @param perl macOS's launcher: the OS's own {@code /usr/bin/perl} in production
+     * @param jvmPath the factory's own {@code PATH}, where {@code setsid} is looked up
+     * @param kill the sweep's signaller: {@link #KILL} in production
+     */
+    HostLauncher(String osName, Path perl, @Nullable String jvmPath, Path kill) {
         this.osName = osName;
+        this.perl = perl;
         this.jvmPath = jvmPath;
         this.kill = kill;
     }
@@ -92,30 +120,76 @@ final class HostLauncher {
         return stderr.lines().anyMatch(line -> line.startsWith(SENTINEL) || line.startsWith(SETSID_REFUSAL));
     }
 
+    /**
+     * The verdict over both helpers, starting nothing: the decision {@link #prefix()} refuses on
+     * (design D1, D4 of add-doctor-command).
+     */
+    HelperVerdict assess() {
+        return judge().verdict();
+    }
+
     /** The platform's launcher prefix, it and the sweep's {@code kill} checked before anything starts. */
     List<String> prefix() throws IOException {
+        Judgement judgement = judge();
+        if (judgement.verdict() instanceof HelperVerdict.Missing missing) {
+            throw new IOException(missing.reason(), judgement.cause());
+        }
+        return judgement.prefix();
+    }
+
+    private Judgement judge() {
         if (!Files.isExecutable(kill)) {
-            throw new IOException(
-                    "the process group sweep's " + kill + " is missing, and no host process is started unswept");
+            return missing(
+                    kill.toString(),
+                    "the process group sweep's " + kill + " is missing, and no host process is started unswept",
+                    KILL_PACKAGE,
+                    null);
         }
         if (osName.startsWith("Mac")) {
-            if (!Files.isExecutable(Path.of(PERL))) {
-                throw new IOException("process-group launcher " + PERL + " is missing: macOS ships it, and no host"
-                        + " process is started ungrouped");
+            if (!Files.isExecutable(perl)) {
+                return missing(
+                        perl.toString(),
+                        "process-group launcher " + perl + " is missing: macOS ships it, and no host"
+                                + " process is started ungrouped",
+                        PERL_PACKAGE,
+                        null);
             }
-            return List.of(PERL, "-e", PERL_SETSID);
+            return present(List.of(perl.toString(), "-e", PERL_SETSID));
         }
         if (osName.equals("Linux")) {
             try {
-                return List.of(ExecutableLookup.resolve(SETSID, null, jvmPath).toString());
+                return present(
+                        List.of(ExecutableLookup.resolve(SETSID, null, jvmPath).toString()));
             } catch (IOException e) {
-                throw new IOException(
+                return missing(
+                        SETSID,
                         "process-group launcher " + SETSID + " (util-linux) is missing from the"
                                 + " factory's PATH, and no host process is started ungrouped",
+                        SETSID_PACKAGE,
                         e);
             }
         }
-        throw new IOException(
-                "no process-group launcher for os.name '" + osName + "': no host process is started" + " ungrouped");
+        return missing(
+                "a process-group launcher for os.name '" + osName + "'",
+                "no process-group launcher for os.name '" + osName + "': no host process is started ungrouped",
+                NO_PACKAGE,
+                null);
     }
+
+    private Judgement present(List<String> prefix) {
+        return new Judgement(new HelperVerdict.Present(prefix.getFirst(), kill.toString()), prefix, null);
+    }
+
+    private static Judgement missing(String tool, String reason, String install, @Nullable IOException cause) {
+        return new Judgement(new HelperVerdict.Missing(tool, reason, install), List.of(), cause);
+    }
+
+    /**
+     * The one decision over the helpers, read two ways: as a verdict, and as the prefix the launch
+     * puts in front — or the refusal, with the lookup's own exception as its cause.
+     */
+    private record Judgement(
+            HelperVerdict verdict,
+            List<String> prefix,
+            @Nullable IOException cause) {}
 }

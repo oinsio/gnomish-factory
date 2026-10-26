@@ -58,6 +58,11 @@ class CliArgumentsContractSpec extends Specification implements ApplicationArgum
             parse : { ApplicationArguments a ->
                 new ProjectArgumentsParser().parse(a)
             }],
+        // FR7 of add-doctor-command: doctor takes the clone the loader resolved, when there is one
+        (Subcommand.DOCTOR) : [tokens: ['doctor'], dirRequired: false,
+            parse : { ApplicationArguments a ->
+                new DoctorArgumentsParser().parse(a, CLONE)
+            }],
     ]
 
     private static final Path WORKING_DIRECTORY = Path.of('').toAbsolutePath()

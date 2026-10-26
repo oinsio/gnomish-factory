@@ -22,8 +22,8 @@ class ProjectDirResolutionBoundarySpec extends Specification {
 
     /** The owners of the one resolution, and the one exemption (design, single-owner row 3). */
     private static final Map<String, String> CALLERS = [
-        'bootstrap/src/main/java/com/github/oinsio/gnomish/app/OperatorConfigLoader.java':
-        'the owner: resolves the directory once, before any bean exists',
+        'bootstrap/src/main/java/com/github/oinsio/gnomish/app/ConfigurationTarget.java':
+        'the owner: the configuration loader\'s target, resolved once before any bean exists',
         'application/src/main/java/com/github/oinsio/gnomish/app/ProjectArgumentsParser.java':
         'project add: registers a path rather than looking one up',
     ]

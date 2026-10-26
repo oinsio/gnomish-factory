@@ -95,7 +95,7 @@ class OperatorSourcesSpec extends Specification {
         def violations = new ConfigViolations(ConfigLevels.application(),
                 new ConfigPlaces(FactoryHome.at(tmp.resolve('home')), new ProjectName('widgets'), []))
         OperatorSources.check(environment, violations)
-        violations.lines()[0].split(' — ')[1]
+        violations.collected().lines()[0].split(' — ')[1]
     }
 
     /** A source whose every origin is line 3 (zero-based 2) of {@code resource}, which may be null. */

@@ -44,7 +44,7 @@ import org.jspecify.annotations.Nullable;
  * group no waiter has swept yet; this file and the sweep are the registry's only writers.
  *
  * <p>Implements FR18, FR21, FR22, FR23 of fix-terminal-receipt-convergence (D19 as amended
- * 2026-10-17, second and fourth).
+ * 2026-10-17, second and fourth); FR1, FR4 of add-doctor-command ({@link #assessExecutable}).
  */
 @NonAtomicWrite("scratch handed to a subprocess: the stdin file is read only by the child it is"
         + " redirected into, through the descriptor it inherited, and deleted once start() returns, so"
@@ -106,8 +106,7 @@ final class GroupedLaunch implements ProcessLaunch {
     public Process start(ProcessBuilder builder, StdinSource stdin) throws IOException {
         List<String> command = builder.command();
         String childPath = builder.environment().get("PATH");
-        Path executable = ExecutableLookup.resolve(
-                command.getFirst(), builder.directory(), childPath == null ? jvmPath : childPath);
+        Path executable = ExecutableLookup.resolve(command.getFirst(), builder.directory(), pathOf(childPath));
         List<String> launched = new ArrayList<>(launcher.prefix());
         launched.add(executable.toString());
         launched.addAll(command.subList(1, command.size()));
@@ -124,6 +123,28 @@ final class GroupedLaunch implements ProcessLaunch {
         // Only once start() returned: a launch that threw started no group, and registers none.
         groups.register(started.pid());
         return started;
+    }
+
+    /**
+     * What {@link #start} would resolve {@code name} to, starting nothing (design D1, D4 of
+     * add-doctor-command): the launch's own lookup over the {@code PATH} it would read — the
+     * child's {@code childPath}, or the JVM's when that is {@code null}, as at the launch.
+     */
+    ExecutableVerdict assessExecutable(String name, @Nullable File directory, @Nullable String childPath) {
+        return ExecutableLookup.assess(name, directory, pathOf(childPath));
+    }
+
+    /**
+     * Whether this host has the helpers {@link #start} needs, starting nothing (design D1, D4 of
+     * add-doctor-command): the verdict of the launcher this launch prefixes every command with.
+     */
+    HelperVerdict assessHelper() {
+        return launcher.assess();
+    }
+
+    /** The {@code PATH} a command's first word is looked up on: the child's, else the JVM's. */
+    private @Nullable String pathOf(@Nullable String childPath) {
+        return childPath == null ? jvmPath : childPath;
     }
 
     /** The group sweep's signal over this host's {@code kill} (design D19). */

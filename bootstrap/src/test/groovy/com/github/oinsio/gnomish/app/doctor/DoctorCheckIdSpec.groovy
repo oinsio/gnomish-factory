@@ -1,0 +1,71 @@
+package com.github.oinsio.gnomish.app.doctor
+
+import spock.lang.Specification
+
+/**
+ * FR1, FR5, FR8 of add-doctor-command: the check list is the fourteen checks of FR1 followed by
+ * FR8's hooks-path check, in report order, each with a stable id the JSON document will carry and
+ * the name its line shows. Pinned whole, so a renamed id fails here rather than in a consumer.
+ */
+class DoctorCheckIdSpec extends Specification {
+
+    def "FR5: the ids and names are the stable vocabulary, in report order"() {
+        expect:
+        DoctorCheckId.values().collect { [it.id(), it.displayName()] } == [
+            [
+                'factory-version',
+                'factory version'
+            ],
+            [
+                'git-floor',
+                'git version floor'
+            ],
+            [
+                'configuration',
+                'operator configuration'
+            ],
+            [
+                'project-registration',
+                'project registration'
+            ],
+            [
+                'ref-format',
+                'clone ref backend'
+            ],
+            ['pipeline', 'pipeline law'],
+            ['secrets', 'declared secret'],
+            [
+                'agent-credential',
+                'agent credential'
+            ],
+            ['docker', 'Docker runtime'],
+            [
+                'sandbox-image',
+                'sandbox image'
+            ],
+            ['guard-image', 'guard image'],
+            [
+                'agent-cli',
+                'agent CLI binary'
+            ],
+            [
+                'launcher-helper',
+                'process-group launcher'
+            ],
+            [
+                'legacy-layout',
+                'pre-registry layout'
+            ],
+            [
+                'hooks-path',
+                'clone hooks path'
+            ],
+        ]
+    }
+
+    def "FR1, FR8: fourteen checks of FR1 come first, the hooks-path check of FR8 last"() {
+        expect:
+        DoctorCheckId.values().size() == 15
+        DoctorCheckId.values().last() == DoctorCheckId.HOOKS_PATH
+    }
+}

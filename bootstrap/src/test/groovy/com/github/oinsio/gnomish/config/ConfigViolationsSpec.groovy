@@ -32,7 +32,7 @@ class ConfigViolationsSpec extends Specification {
         violations.variable('FACTORY_SERVE_SLOTS', '4')
 
         then:
-        violations.lines()[0].endsWith(
+        violations.collected().lines()[0].endsWith(
                 " — set 'factory.serve.slots: 4' in ${projectFile()} or ${home.hostConfig()}" +
                 ', or pass --factory.serve.slots=4')
     }
@@ -43,7 +43,7 @@ class ConfigViolationsSpec extends Specification {
         violations.variable('FACTORY_SERVE_SLOTS', value)
 
         then:
-        violations.lines() == [
+        violations.collected().lines() == [
             'environment variable FACTORY_SERVE_SLOTS is not allowed — found in the environment' +
             ' — factory.* settings are not read from environment variables' +
             " — set 'factory.serve.slots: <value>' in ${projectFile()} or ${home.hostConfig()}" +

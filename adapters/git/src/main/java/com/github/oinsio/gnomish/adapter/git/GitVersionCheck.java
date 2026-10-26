@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.app.port.git.GitVersionRefusedException;
 import com.github.oinsio.gnomish.gittransfer.GitVersion;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -34,7 +33,12 @@ import org.slf4j.LoggerFactory;
  * <p>The one ERROR of this failure class is logged here (NFR-O1); the command that ends on the
  * exception prints its message and nothing else, so the operator reads a precondition (UX2).
  *
- * <p>Implements FR10, NFR-R2, NFR-O1, UX2 of own-git-transfer-argv; FR10 of own-git-invocation-policy.
+ * <p>The decision itself is {@link #assess()}, which refuses nothing: {@link #verify()} is that
+ * verdict plus the log line and the exception, so a non-refusing reader ({@code doctor}) and the
+ * startup refusal judge one git one way (design D1 of add-doctor-command).
+ *
+ * <p>Implements FR10, NFR-R2, NFR-O1, UX2 of own-git-transfer-argv; FR10 of own-git-invocation-policy;
+ * FR4, FR7 of add-doctor-command.
  */
 @UntrustedParser
 public final class GitVersionCheck {
@@ -57,9 +61,30 @@ public final class GitVersionCheck {
     }
 
     /**
-     * Reads the installed git's version, once per process, and refuses below the floor. Returns
-     * nothing rather than the version: the leaf's type is an implementation edge of this module,
-     * and the composition root that calls this needs only the refusal.
+     * Reads the installed git's version and judges it against the floor, refusing nothing and logging
+     * nothing: the one decision of this check, on which {@link #verify()} is built (design D1 of
+     * add-doctor-command). Runs {@code git --version} on every call; the once-per-process record
+     * belongs to the refusing form.
+     *
+     * @return the verdict: meets the floor, below it, or no version reported
+     */
+    public GitVersionVerdict assess() {
+        GitCommandResult result = runner.run(ANY_DIRECTORY, "--version");
+        Optional<GitVersion> reported =
+                result.exitCode() == 0 ? GitVersion.parse(result.stdout().forParsing()) : Optional.empty();
+        if (reported.isEmpty()) {
+            return new GitVersionVerdict.Unreported(result.exitCode() == 0 ? result.stdout() : result.stderr());
+        }
+        GitVersion installed = reported.get();
+        return installed.isBelow(GitVersion.FLOOR)
+                ? new GitVersionVerdict.Below(installed)
+                : new GitVersionVerdict.Meets(installed);
+    }
+
+    /**
+     * Refuses below the floor, once per process: {@link #assess()}, then the one INFO line on a pass
+     * or the one ERROR line and the exception on a failure. Returns nothing rather than the version:
+     * the composition root that calls this needs only the refusal.
      *
      * @throws GitVersionRefusedException below the floor, or when git reports no version
      */
@@ -67,24 +92,23 @@ public final class GitVersionCheck {
         if (accepted != null) {
             return;
         }
-        GitCommandResult result = runner.run(ANY_DIRECTORY, "--version");
-        Optional<GitVersion> reported =
-                result.exitCode() == 0 ? GitVersion.parse(result.stdout().forParsing()) : Optional.empty();
-        if (reported.isEmpty()) {
-            UntrustedText printed = result.exitCode() == 0 ? result.stdout() : result.stderr();
-            throw refuse(
-                    "unreported (git --version printed: " + printed.forLog() + ")",
-                    new GitVersionRefusedException(GitVersion.FLOOR.toString(), printed, GitVersion.FLOOR_REASON));
+        switch (assess()) {
+            case GitVersionVerdict.Meets meets -> {
+                log.info("git version {} meets the floor {}", meets.installed(), GitVersion.FLOOR);
+                accepted = meets.installed();
+            }
+            case GitVersionVerdict.Below below ->
+                throw refuse(
+                        below.installed().toString(),
+                        new GitVersionRefusedException(
+                                GitVersion.FLOOR.toString(), below.installed().toString(), GitVersion.FLOOR_REASON));
+            case GitVersionVerdict.Unreported unreported ->
+                throw refuse(
+                        "unreported (git --version printed: "
+                                + unreported.printed().forLog() + ")",
+                        new GitVersionRefusedException(
+                                GitVersion.FLOOR.toString(), unreported.printed(), GitVersion.FLOOR_REASON));
         }
-        GitVersion installed = reported.get();
-        if (installed.isBelow(GitVersion.FLOOR)) {
-            throw refuse(
-                    installed.toString(),
-                    new GitVersionRefusedException(
-                            GitVersion.FLOOR.toString(), installed.toString(), GitVersion.FLOOR_REASON));
-        }
-        log.info("git version {} meets the floor {}", installed, GitVersion.FLOOR);
-        accepted = installed;
     }
 
     /** The one ERROR of this failure class: logged here, printed by the command that ends on it. */

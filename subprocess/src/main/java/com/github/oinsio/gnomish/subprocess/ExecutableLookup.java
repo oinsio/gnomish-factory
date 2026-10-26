@@ -35,7 +35,8 @@ import org.jspecify.annotations.Nullable;
  * refusal line. {@code #!/usr/bin/env x} ends at {@code env}, a binary: what {@code env} then finds
  * on {@code PATH} is the command's own result. A file the factory cannot read is not judged further.
  *
- * <p>Implements FR21 of fix-terminal-receipt-convergence (D19 as amended 2026-10-17, second).
+ * <p>Implements FR21 of fix-terminal-receipt-convergence (D19 as amended 2026-10-17, second); FR1,
+ * FR4 of add-doctor-command ({@link #assess}).
  */
 final class ExecutableLookup {
 
@@ -76,6 +77,25 @@ final class ExecutableLookup {
             throw refused(name, "not a path the OS can open", e);
         }
         return executable;
+    }
+
+    /**
+     * The verdict of {@link #resolve}, starting nothing and throwing nothing (design D1, D4 of
+     * add-doctor-command): the refusal's message as the reason when it refuses, so the launch, which
+     * refuses through {@link #resolve} with its own exception and cause, refuses exactly when this
+     * is {@link ExecutableVerdict.Unresolved}.
+     *
+     * @param name the command's first word
+     * @param directory the child's working directory, or {@code null} for the JVM's
+     * @param path the child's {@code PATH}, or {@code null} when nothing names one
+     * @return the resolved executable, or the reason the name does not resolve
+     */
+    static ExecutableVerdict assess(String name, @Nullable File directory, @Nullable String path) {
+        try {
+            return new ExecutableVerdict.Resolved(resolve(name, directory, path));
+        } catch (IOException refused) {
+            return new ExecutableVerdict.Unresolved(String.valueOf(refused.getMessage()));
+        }
     }
 
     private static Path atPath(String name, String file, @Nullable File directory, String missing) throws IOException {

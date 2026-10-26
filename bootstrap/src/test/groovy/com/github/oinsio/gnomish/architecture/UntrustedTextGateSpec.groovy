@@ -132,6 +132,9 @@ class UntrustedTextGateSpec extends Specification {
         'rev-parse --git-common-dir output into the Path the mutation lock keys on',
         'com.github.oinsio.gnomish.adapter.git.GitVersionCheck':
         'git --version output into the transfer leaf\'s typed GitVersion, judged against the floor',
+        'com.github.oinsio.gnomish.adapter.git.HooksPathLeftover':
+        'git config --local --get core.hooksPath output into whether it is the leftover line (a' +
+        ' boolean); the value it quotes stays a carrier',
         'com.github.oinsio.gnomish.adapter.git.GitShowTip':
         'the registered commit\'s subject into whether it is the cleanup commit (a boolean); the file' +
         ' content it reads there is the document itself and stays a carrier',

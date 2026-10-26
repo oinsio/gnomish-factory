@@ -35,6 +35,11 @@ final class FixtureGitConfig {
         git(repo, 'config', '--add', key, value)
     }
 
+    /** {@code git config --local --unset <key>} in {@code repo}: the key removed from its local configuration. */
+    static void unset(Path repo, String key) {
+        git(repo, 'config', '--local', '--unset', key)
+    }
+
     /** {@code git remote add <name> <url>} in {@code repo}. */
     static void addRemote(Path repo, String name, String url) {
         git(repo, 'remote', 'add', name, url)

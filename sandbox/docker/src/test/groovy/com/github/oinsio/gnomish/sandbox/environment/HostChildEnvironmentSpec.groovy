@@ -110,4 +110,28 @@ class HostChildEnvironmentSpec extends Specification {
         def values = shell.values() + ['/scratch/findings.json']
         values.every { !line.formattedMessage.contains(it) }
     }
+
+    def "FR1, FR4 of add-doctor-command: childPath is the PATH a host child really receives"() {
+        given: 'a factory environment whose PATH is a planted value'
+        def allowlist = ChildEnvAllowlist.of([], [], TestChildEnvironment.valuesOf(operatorShell()))
+        def env = new HostTaskExecutionEnvironment(workingCopy, new VirtualClock(), allowlist, ProcessLaunch.grouped())
+
+        when: 'a host-bound process prints the PATH it sees'
+        def handle = env.exec(new ExecCommand([
+            'sh',
+            '-c',
+            'printf %s "$PATH"'
+        ], [:], null, StderrPolicy.PIPED))
+        def seen = new String(handle.output().stream().readAllBytes(), StandardCharsets.UTF_8)
+        handle.waitForExit()
+
+        then:
+        HostTaskExecutionEnvironment.childPath(allowlist) == '/usr/bin:/bin'
+        seen == HostTaskExecutionEnvironment.childPath(allowlist)
+    }
+
+    def "FR1 of add-doctor-command: no PATH resolves to none"() {
+        expect:
+        HostTaskExecutionEnvironment.childPath(ChildEnvAllowlist.none()) == null
+    }
 }

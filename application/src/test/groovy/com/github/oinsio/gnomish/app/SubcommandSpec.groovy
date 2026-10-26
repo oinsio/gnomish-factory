@@ -76,6 +76,38 @@ class SubcommandSpec extends Specification {
         Subcommand.parse(args) == Subcommand.PROJECT
     }
 
+    // FR7 of add-doctor-command: a 'doctor' token dispatches to DOCTOR
+    def "FR7: parse() recognizes a 'doctor' token"() {
+        given:
+        def args = new DefaultApplicationArguments('doctor', '--dir=/tmp/x')
+
+        expect:
+        Subcommand.parse(args) == Subcommand.DOCTOR
+    }
+
+    // FR7 of add-doctor-command (design D2): namesDoctor and parse read one token, so the loader's
+    // collect mode and the runner's dispatch cannot disagree about a command line parse accepts
+    def "FR7: namesDoctor() agrees with parse() for #argv"() {
+        given:
+        def args = new DefaultApplicationArguments(argv as String[])
+
+        expect:
+        Subcommand.namesDoctor(args) == (Subcommand.parse(args) == Subcommand.DOCTOR)
+
+        where:
+        argv << [
+            ['doctor'],
+            [
+                '--json',
+                'doctor',
+                '--online'
+            ],
+            ['run', '--task=doctor'],
+            ['project', 'list'],
+            [],
+        ]
+    }
+
     // FR13, FR14: an unrecognized first positional token is a usage error (exit 2 family)
     def "parse() rejects an unrecognized subcommand"() {
         given:
@@ -91,6 +123,7 @@ class SubcommandSpec extends Specification {
         ex.message.contains('status')
         ex.message.contains('usage')
         ex.message.contains("'gnomish project'")
+        ex.message.contains("'gnomish doctor'")
     }
 
     // FR13, FR14: a flag-only invocation with no subcommand token still defaults to RUN, even
@@ -101,5 +134,20 @@ class SubcommandSpec extends Specification {
 
         expect:
         Subcommand.parse(args) == Subcommand.RUN
+    }
+
+    // FR7 of add-doctor-command (design D2): the configuration loader's collect mode is chosen by
+    // the first positional token alone
+    def "FR7: namesDoctor() is #expected for #argv"() {
+        expect:
+        Subcommand.namesDoctor(new DefaultApplicationArguments(argv as String[])) == expected
+
+        where:
+        argv || expected
+        ['doctor', '--dir=/tmp/x'] || true
+        ['--json', 'doctor'] || true
+        ['run', 'doctor'] || false
+        ['--task=doctor'] || false
+        [] || false
     }
 }

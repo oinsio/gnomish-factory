@@ -99,6 +99,11 @@ final class ArgumentsParsingSupport {
         return resolve(value == null ? "" : value);
     }
 
+    /** Whether {@code --dir} is given, rather than the working directory standing in (FR2 of add-doctor-command). */
+    static boolean namesDir(ApplicationArguments args) {
+        return args.containsOption(DIR);
+    }
+
     /**
      * The {@code --dir} value, or {@code null} when the flag is absent. An empty value ({@code
      * --dir=}) is the usage error of a missing one: resolved, it would silently become the

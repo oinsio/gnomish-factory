@@ -119,7 +119,7 @@ class RawCaptureOwners {
             'TRACKER: reads an operator-supplied task file and mints its title and body one call later',
         ],
         [
-            'adapters/src/main/java/com/github/oinsio/gnomish/adapter/secrets/EnvFileSecretsProvider.java',
+            'adapters/src/main/java/com/github/oinsio/gnomish/adapter/secrets/EnvFileSecretSearch.java',
             'no mint owed: a secret value, which never reaches a log line or a comment by construction (NFR-S1) — minting it would put it one accessor away from an exit',
         ],
         [
