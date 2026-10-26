@@ -20,11 +20,11 @@ no side effects, reported one line per check or as one JSON document.
 - **WHEN** `gnomish doctor --dir=<clone>` runs on a registered clone
 - **THEN** it reports the factory version and Java runtime (informational), the git version
   floor, the operator configuration (one line per violation), the registration of `--dir`, the
-  pipeline law of the clone loading and validating, and the presence of every secret the
-  tracker and the configured checks declare
+  clone's ref backend, the pipeline law of the clone loading and validating, and the presence of
+  every secret the tracker and the configured checks declare
 - **AND** when any stage is container-bound it also reports the presence of an agent
   credential, Docker reachable, the sandbox image present locally with a matching contract
-  version, and the guard image present locally
+  version (naming the box image's git floor as not probed), and the guard image present locally
 - **AND** when any stage is host-bound it also reports the agent CLI binary locatable and the
   host process-group launcher helper and the group sweep's `/bin/kill` present
 - **AND** it reports leftovers of the pre-registry folder layout

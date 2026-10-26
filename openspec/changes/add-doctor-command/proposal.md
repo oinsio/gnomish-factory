@@ -3,9 +3,10 @@
 Sequenced last: after `add-project-registry` (registry, configuration loader),
 `add-release-pipeline` (product version) and `add-sandbox-base-image` (image
 contract label). It reports on what those changes introduce.
-Also sequenced after `tighten-spec-contract`: the MODIFIED blocks of `operator-configuration`
-("Violations stop startup with one complete report") and `git-transfer` ("Git version floor at
-startup") are layered on that change's text, which must sync first. Also sequenced after
+Also sequenced after `tighten-spec-contract`: the MODIFIED block of `operator-configuration`
+("Violations stop startup with one complete report") is layered on that change's text, which
+must sync first; the MODIFIED block of `git-transfer` ("Git version floor at startup") is
+layered on the text of `own-git-invocation-policy` (floor 2.56.0). Also sequenced after
 `fix-terminal-receipt-convergence` (design D19): the host process-group launcher helper that
 `doctor` checks is introduced there. Also sequenced after `own-git-invocation-policy`: that
 change stops writing `core.hooksPath` into the operator's clone and leaves the line earlier
@@ -64,12 +65,16 @@ is a way to ask them without stopping at the first refusal.
 ## Non-Goals
 
 - **NG1**: starting a box, running the egress self-check or an agent round —
-  `doctor` inspects, it does not execute gnome work.
+  `doctor` inspects, it does not execute gnome work. This includes the one
+  helper container the startup path starts to read the box image's git version
+  (`add-sandbox-base-image`): `doctor` does not probe the box git floor and says
+  so in the sandbox image line; `serve`, `take` and `run` still refuse on it
+  before any work.
 - **NG2**: fixing anything automatically.
 - **NG3**: diagnosing the target project's toolchain inside the image.
-- **NG4**: new checks with no existing owner beyond locating the agent CLI
-  binary, detecting the pre-registry folder layout, and detecting the
-  `core.hooksPath` leftover of earlier factory versions (FR8).
+- **NG4**: new checks with no existing owner beyond detecting the pre-registry
+  folder layout and detecting the `core.hooksPath` leftover of earlier factory
+  versions (FR8).
 
 ## Users & Scenarios
 
@@ -90,10 +95,13 @@ is a way to ask them without stopping at the first refusal.
 - **FR1**: `gnomish doctor` SHALL run these checks, each reported as `ok`,
   `warn` or `fail`: factory version and Java runtime (info); git version floor;
   configuration (every violation of the configuration report); project
-  registration of `--dir`; the pipeline law loads and validates; secrets the
+  registration of `--dir`; the factory clone's ref backend (reftable), through
+  the ref-format check the startup assessment runs; the pipeline law loads and
+  validates; secrets the
   tracker and the checks declare; agent credential presence when a stage is
   container-bound; Docker reachable when a stage is container-bound; the
-  sandbox image present with a matching contract version; the guard image
+  sandbox image present with a matching contract version (the box image's git
+  floor is named as not probed, NG1); the guard image
   present (warn when absent — it is pulled on first use); the agent CLI binary
   locatable when a stage is host-bound; the host process-group launcher helper
   present when a stage is host-bound (`setsid` on Linux, `/usr/bin/perl` with
@@ -144,7 +152,7 @@ is a way to ask them without stopping at the first refusal.
 
 ## Success Metrics
 
-- **M1**: for each of the 13 checks of FR1, a spec shows `doctor` and the real
+- **M1**: for each of the 14 checks of FR1, a spec shows `doctor` and the real
   startup path reach the same verdict on the same fixture (one data table). The
   hooks-path check of FR8, which no startup path decides, is pinned by its
   owner's spec instead.
@@ -163,10 +171,13 @@ None.
 - `:bootstrap`: the `doctor` subcommand, its check list and renderer; the
   subcommand dispatch runs `doctor` before the git floor refusal.
 - Owners gaining a non-refusing assessment: `GitVersionCheck` (`:adapters:git`),
-  `OperatorConfigLoader` (`:bootstrap`), `ImageContractCheck`
-  (`:sandbox:docker`); `FactoryHome` gains legacy-layout detection;
-  `:adapters:agent` gains agent-CLI binary location; the host launch owner in
-  `:subprocess` (`fix-terminal-receipt-convergence`, D19) gains a non-refusing
-  assessment of its platform helper; `:adapters:git` gains the read of the
-  `core.hooksPath` leftover (FR8).
+  `OperatorConfigLoader` (`:bootstrap`), the startup owner of the operator
+  preconditions (`ServePreconditions`, `add-sandbox-base-image`) with the
+  sandbox image readiness port split into its contract inspection and its box
+  git floor probe (`:application`, `:sandbox:docker`); `FactoryHome` gains
+  legacy-layout detection; `:adapters:agent` gains the agent credential names;
+  the host launch owner in `:subprocess` (`fix-terminal-receipt-convergence`,
+  D19) gains non-refusing assessments of its platform helper and of a
+  command's executable; `:adapters:git` gains the read of the `core.hooksPath`
+  leftover (FR8).
 - Docs: `README.md` (install → `gnomish doctor`), operator guides.
