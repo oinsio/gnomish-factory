@@ -1,8 +1,7 @@
 package com.github.oinsio.gnomish.sandbox
 
-import spock.lang.Specification
-
 import java.lang.reflect.Modifier
+import spock.lang.Specification
 
 /**
  * FR9, D6 of add-sandbox-core (task 7.1): the layered positive child-environment
