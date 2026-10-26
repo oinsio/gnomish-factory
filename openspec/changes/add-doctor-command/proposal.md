@@ -39,6 +39,10 @@ is a way to ask them without stopping at the first refusal.
   decision per check.
 - **MODIFIED**: `doctor` runs where startup would refuse — git below the floor,
   a configuration with violations — and reports the refusal instead.
+- **ADDED**: the tracker adapter SPI (`TrackerAdapterFactory`) gains a default
+  read-only probe, the one request `--online` makes; the GitHub adapter answers
+  it with the label listing its startup provisioning begins with, extracted as
+  the non-refusing assessment that provisioning is built on (design D7).
 
 ## Capabilities
 
@@ -54,6 +58,9 @@ is a way to ask them without stopping at the first refusal.
 - `operator-configuration` (added by `add-project-registry`): "Violations stop
   startup with one complete report" — `doctor` lists the violations instead of
   stopping.
+- `github-tracker`: "Idempotent label provisioning as startup smoke test" —
+  provisioning is built on a non-refusing listing assessment, which is also the
+  adapter's read-only probe (D7).
 
 ## Goals
 
@@ -75,6 +82,13 @@ is a way to ask them without stopping at the first refusal.
 - **NG4**: new checks with no existing owner beyond detecting the pre-registry
   folder layout and detecting the `core.hooksPath` leftover of earlier factory
   versions (FR8).
+- **NG5**: verifying that the tracker token can write. GitHub offers no
+  read-only way to evaluate a write (no `can-i`; scope headers exist for classic
+  tokens only, a fine-grained token reports its permissions only on a 403), so
+  the probe confirms reading and says so; a read-only token is caught by the
+  startup provisioning, as today. Pickup condition: GitHub exposes a
+  permission-evaluation endpoint, or an operator reports `doctor` green and
+  `take` refused on the token's first write more than once.
 
 ## Users & Scenarios
 
@@ -110,8 +124,12 @@ is a way to ask them without stopping at the first refusal.
   layout (warn).
 - **FR2**: without `--dir` and outside a registered clone, `doctor` SHALL run
   only the host-level checks and say that project checks were skipped and why.
-- **FR3**: `--online` SHALL add a read-only tracker probe using the configured
-  credential; without it `doctor` SHALL make no network call.
+- **FR3**: `--online` SHALL add exactly one read-only tracker probe using the
+  configured credential: the adapter's own probe, which for GitHub is the label
+  listing the startup provisioning makes first, so the probe fails exactly when
+  startup's first request would and names the same cause; the line SHALL say
+  that write access is not verified. Without `--online` `doctor` SHALL make no
+  network call.
 - **FR4**: every check SHALL delegate its decision to the component the real
   startup path uses; `doctor` SHALL NOT run a subprocess, read an environment
   variable or parse a configuration file itself.

@@ -84,8 +84,9 @@ class per FR1 item, each a thin adapter over its owner; `DoctorContext` carries
 the resolved project (or its absence, FR2) and the beans. Checks that need a
 project are skipped with a reason when there is none. Container-bound checks
 run when `BindingResolver` binds any stage to `container`; the agent-CLI check
-when any stage binds `host`. `--online` adds `TrackerReadProbe`, using the
-tracker's existing read-only resolution (FR1–FR3).
+when any stage binds `host`. `--online` adds `TrackerReadProbe`, which asks
+the tracker adapter's own read-only probe (D7), never the read-only tracker
+resolution of `board` (FR1–FR3).
 *Alternative rejected:* a plugin SPI for checks — no second contributor exists;
 a `ServiceLoader` seam can be added when a plugin needs a check.
 
@@ -134,6 +135,44 @@ of the report. `doctor` holds no git argv itself (FR4, M2).
 *Alternative rejected:* removing the line automatically — `doctor` has no side
 effects (NFR-R1, NG2), and the operator may rely on it.
 
+**D7 — The online probe is the provisioner's assessment, reached through the
+SPI.** `TrackerWiring.resolveReadOnly` and `boardReader` build the adapter
+through `TrackerAdapterFactory.create`, and the GitHub `create` always runs
+`GithubLabelProvisioner.provision` first: one `GET /repos/{o}/{r}/labels`, then a
+`POST` for every missing label. A probe built on it would write to a repository
+that lacks the factory's labels and spend two requests, against NFR-R1 and FR3.
+So D1 is applied to the provisioner: `GithubLabelProvisioner.assess(owner, repo,
+labelDefs)` makes the listing request alone and returns a verdict (the
+repository is readable, with the configured labels still missing; or a refusal
+carrying the HTTP class, the cause startup names — a 404 is "not found or not
+visible to this token", GitHub returns it for both — and, on a 403, the
+`X-Accepted-GitHub-Permissions` header verbatim, GitHub's own diagnostic for a
+fine-grained token); `provision` becomes "assess, then create the missing
+labels, then refuse on a failed verdict" with its current exception and message.
+The SPI `TrackerAdapterFactory` gains a default method `probeRead(secrets,
+config)` returning the probe verdict; the default (the in-memory adapter) makes
+no call and reports the probe as not applicable, and the GitHub adapter overrides
+it with `assess`. `TrackerWiring` relays it as the one credential seam, the same
+way it relays `refuseForeignRef` — the existing precedent of a read-only SPI
+operation that takes the secrets and makes one `GET`. The doctor line reports
+reading confirmed, the labels startup will create, and that write access is not
+verified (NG5); the probe never retries a 401. The api addition is a compatible
+default method, re-baselined under the japicmp gate (`plugin-api-contract`,
+"Surface growth is additive and re-baselined").
+*Rationale:* the probe is the first request startup makes, classified by the
+same code, so `doctor` and startup cannot disagree on the tracker (G2) — the
+`--dry-run=server` shape, which predicts the real operation, rather than a
+whoami probe, which succeeds while the real operation is denied.
+*Alternatives rejected:* the read-only tracker resolution as D3 first said — it
+writes labels and makes two or more requests (NFR-R1, FR3). A `GET
+/repos/{owner}/{repo}` probe through `GithubForeignRepoCheck` — one read too, but
+a second decision on the repository's visibility beside the startup smoke test,
+an undeclared pair that drifts from it (G2). A read-only mode of `create()`
+that skips provisioning, probing with `listReady(1)` — one to two reads (a
+comments fetch per ready issue), and a behaviour change for `board` and
+`dashboard` and their spec. Dropping the probe (alternative zero) — U4 unmet,
+and a bad token caught only by the first `take` or `serve`.
+
 ### Sync surfaces
 
 Sync surfaces: none — this change adds no parallel implementation: every
@@ -155,6 +194,7 @@ touches no declared pair.
 | `AgentCredentials`, `FactoryHome.legacyFolders` (new) | present credential names, legacy entries | the matching doctor checks | none — no other code answers these | `DoctorBoundarySpec` |
 | `HooksPathLeftover.assess` (new, `:adapters:git`, D6) | hooks-path leftover verdict (`ok`, or `warn` with the unset line) | `HooksPathDoctorCheck` | none — no other code answers this (the factory no longer writes the line) | `DoctorBoundarySpec`; owner spec over a real clone: `warn` only for a local value ending in `/gnomish-empty-hooks`, `ok` for unset and for an operator's own path, with the policy in force |
 | the host launch owner's `assessHelper` (`:subprocess`, from `fix-terminal-receipt-convergence` D19) | launcher helper verdict (present, or the missing tool — the platform's launcher or `/bin/kill` — and the package to install) | the launching form's refusal (FR21 there), `LauncherHelperDoctorCheck` | none — the launching form is built on it | `DoctorBoundarySpec`; M1 table row: the launch refuses exactly when `assessHelper` fails |
+| `GithubLabelProvisioner.assess` (D7), reached through `TrackerAdapterFactory.probeRead` and relayed by `TrackerWiring` | tracker read-probe verdict (readable with the missing label names; or refused with the HTTP class, the cause startup names and, on 403, the accepted-permissions header) | `GithubLabelProvisioner.provision` (startup, through `create`), `TrackerReadProbe` (`doctor --online`) | the listing request and its status classification move out of `provision` into `assess`; `provision` keeps create-and-refuse; `TrackerReadProbe` never calls `create` or the read-only tracker resolution | `GithubLabelProvisionerSpec`: `provision` refuses exactly when `assess` fails, over one data table of statuses; the probe spec: on a WireMock repository without the labels, `doctor --online` makes exactly one `GET` and no `POST`; `DoctorBoundarySpec` |
 
 `DoctorBoundarySpec` in `:bootstrap` (M2): no source in the doctor package
 references `ProcessBuilder`, `Runtime.exec`, `System.getenv`,
@@ -173,7 +213,12 @@ through both the startup path and `doctor` and asserts the same verdict.
   below the floor passes `doctor` and is refused by `serve`/`take` at startup]
   → the sandbox image line names the floor as not probed and why (NG1); the
   startup refusal still runs before any claim.
-- [`--online` spends a tracker request] → one read, opt-in (FR3).
+- [`--online` spends a tracker request] → one read, opt-in, the request
+  startup makes first anyway (FR3, D7).
+- [A token that can read but not write passes the probe, and startup's first
+  write refuses] → the probe line says write access is not verified and names
+  the labels startup will create; a fine-grained token's permissions are
+  reported when GitHub refuses (NG5, D7).
 - [New checks added later bypass the owner rule] → `DoctorBoundarySpec` fails on
   the first subprocess or environment read in the package.
 

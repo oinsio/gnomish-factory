@@ -77,15 +77,37 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       `FactoryHome.legacyFolders`), plus the hooks-path check of FR8 over
       `HooksPathLeftover` (2.4); project checks skipped with a reason when no
       project resolves (FR1, FR2, FR8). Verify one spec per check for ok/warn/fail.
-- [ ] 3.3 `TrackerReadProbe` behind `--online`, using the tracker's read-only
-      resolution; without `--online` no network call (FR3). Verify with
-      WireMock: one read with `--online`, none without.
+- [ ] 3.3a `GithubLabelProvisioner.assess(owner, repo, labelDefs)` in
+      `:adapters:github` (D1 applied, D7): the listing request and its status
+      classification move out of `provision` into `assess`, returning a verdict
+      (readable with the missing label names; or refused with the HTTP class,
+      the cause the current message names — 404 worded as not found or not
+      visible to this token — and, on 403, the `X-Accepted-GitHub-Permissions`
+      header verbatim); `provision` becomes assess, create the missing labels,
+      refuse on a failed verdict, with its current exception and message. Verify
+      `GithubLabelProvisionerSpec`: `provision` refuses exactly when `assess`
+      fails, over one data table of statuses, and `assess` sends no `POST`.
+- [ ] 3.3b `TrackerAdapterFactory.probeRead(SecretsProvider, TrackerConfig)` in
+      `:gnomish-plugin-api` (D7), a default method returning a probe verdict
+      type of the api; the default makes no call and reports not applicable
+      (the in-memory adapter keeps it), the GitHub override builds its client
+      as `refuseForeignRef` does and returns `assess`; the japicmp baseline is
+      regenerated in the same task. Verify the in-memory factory's default makes
+      no call, the GitHub override's spec on WireMock, and the compatibility
+      gate green on the regenerated baseline.
+- [ ] 3.3c `TrackerReadProbe` behind `--online` over `TrackerWiring.probeRead`
+      (a relay, like `refuseForeignRef`), never `create` or the read-only
+      tracker resolution; the line reports reading confirmed, the labels startup
+      will create, and that write access is not verified; without `--online` no
+      network call (FR3, NG5). Verify with WireMock on a repository without the
+      labels: exactly one `GET` and no `POST` with `--online`, no request
+      without; and the refused scenario (404 and 403 lines).
 - [ ] 3.4 `DoctorReport` text and `--json` renderings through `ConsoleIO`
       `print`/`printMachine`; exit 0 without `fail`, 1 with (FR5, FR6, NFR-O1,
       NFR-S1, UX1, UX2). Verify specs for both renderings, the exit codes, and
       that a present secret's value never appears in either output.
 
-## 4. Enforcement and identity (single-owner rows 5–9)
+## 4. Enforcement and identity (single-owner rows 5–10)
 
 - [ ] 4.1 `DoctorBoundarySpec` in `:bootstrap`: no `ProcessBuilder`,
       `Runtime.exec`, `System.getenv`, `System.getProperty`, YAML/JSON parser

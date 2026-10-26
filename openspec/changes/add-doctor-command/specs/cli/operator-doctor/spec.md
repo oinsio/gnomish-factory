@@ -78,9 +78,19 @@ Each doctor check SHALL obtain its verdict from the component the real startup p
 - **THEN** no network connection is opened
 
 #### Scenario: Online adds a read-only tracker probe
-- **WHEN** `gnomish doctor --online` runs
-- **THEN** it adds one read-only tracker probe made with the configured credential, and makes
-  no other network call and no tracker write
+- **WHEN** `gnomish doctor --online` runs against a repository that lacks the factory's labels
+- **THEN** it adds one read-only tracker probe made with the configured credential — the
+  adapter's own probe, for GitHub the label listing the startup provisioning makes first — and
+  makes no other network call and no tracker write
+- **AND** the line reports reading confirmed, the labels startup will create, and that write
+  access is not verified
+
+#### Scenario: Online probe refused
+- **WHEN** the tracker answers the probe with a refusal (a 404 or a 403)
+- **THEN** the line is `fail` with the cause the startup provisioning would name for the same
+  status, a 404 worded as not found or not visible to this token, and a 403 quoting the
+  permissions the tracker reports as accepted
+- **AND** the probe is not retried on a bad credential
 
 ### Requirement: Doctor output is readable and machine-parseable
 Each result SHALL be one line with status, check name, detail and — for `warn` and `fail` — the fix. Text captured from tools SHALL be rendered through the console exit. No secret value SHALL appear; a secret check names the secret and the places searched. `--json` SHALL print the same results as one JSON document whose checks carry stable ids.
