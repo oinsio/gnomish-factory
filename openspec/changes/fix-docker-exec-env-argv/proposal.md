@@ -19,9 +19,10 @@ transport carry no secret, the host adapter already passes its child environment
 `ProcessBuilder.environment()` after clearing it, and no log writes a full argv. The fix is one
 seam. It is already designed as decision D11 / FR14 of the active `add-subprocess-access-log`
 (created 2026-08-30, no task started), but it sits in that change's seventh task group behind
-observability work and behind `own-git-invocation-policy` in the queue. A security defect with a
-public exploit path does not wait two large changes; this change lifts the fix out and lands it
-first. The files it touches overlap neither queued change.
+observability work. A security defect with a public exploit path does not wait behind a large
+change; this change lifts the fix out and lands it first. The files it touches overlap no queued
+change; the two archived changes that rewrote the same seam (`fix-terminal-receipt-convergence`,
+`own-git-invocation-policy`) are already in the base this change is written against.
 
 ## What Changes
 
@@ -42,9 +43,11 @@ first. The files it touches overlap neither queued change.
 - **Queue effect** (recorded here, applied by `/opsx:update` on the other changes after this one
   lands): `add-subprocess-access-log` drops tasks 7.1 and 7.2 and its `execution-environment`
   delta sentence on argv, re-layering its remaining delta over this change's text; its argv
-  redactor stays as the second net. Task 7.3 (the git client's environment) belongs to
-  `GitInvocation`, the single owner `own-git-invocation-policy` introduces, and moves there in the
-  same subtractive form.
+  redactor stays as the second net. Task 7.3 (the git client's environment) is reworked there, not
+  moved: `own-git-invocation-policy` (archived 2026-10-21) gave the git client's environment one
+  owner, `GitInvocation.removedEnvironment()`, which subtracts the invocation-policy variables and
+  nothing else; 7.3 adds the declared credential names to that subtraction, in the form ADR 0017
+  states, instead of its current clear-and-re-add wording.
 
 ## Capabilities
 
@@ -84,9 +87,13 @@ None.
 
 ## Non-Goals
 
-- **NG1** The git client's environment (`GitProcessRunner`, `GitExec` inherit the factory
-  environment today). It has a single owner arriving in `own-git-invocation-policy`; the
-  subtraction belongs there, not in a second place here.
+- **NG1** The git client's environment. It has one owner since `own-git-invocation-policy`
+  (archived 2026-10-21): `GitInvocation.removedEnvironment()`, applied by `GitProcessRunner`,
+  subtracts the invocation-policy variables but not the declared credentials, so the git client
+  still inherits them. The subtraction belongs there, not in a second place here. Pickup
+  condition: the change that next touches `GitInvocation.removedEnvironment()` — today task 7.3 of
+  `add-subprocess-access-log` — takes the credential subtraction there, in the subtractive form of
+  ADR 0017; a clear-and-re-add allowlist is not that form (design D3 says why).
 - **NG2** The docker client's environment for **management** commands (`run`, `inspect`, `rm`,
   `network`, `volume`, guard commands). They carry no `-e` and forward nothing into a box; their
   inherited environment stays as it is, and the follow-up that minimizes it is FR15 of
@@ -142,8 +149,9 @@ None.
   environment with every name the run's child-environment allowlist declares as a credential
   removed, and the composed map laid on top. Nothing else SHALL be removed.
 - **FR5** Callers of the exec seam that pass no environment (the container file channel's write and
-  read, the materializer's scratch-directory creation) SHALL keep producing an argv with no `-e`
-  flag at all and a client environment with no overlay.
+  read) SHALL keep producing an argv with no `-e` flag at all and a client environment with no
+  overlay. The materializer's scratch-directory creation, a bounded management command, SHALL keep
+  producing an argv with no `-e` flag; its client environment is the management commands' (NG2).
 - **FR6** The host adapter SHALL stay unchanged: it already clears the child's environment and
   fills it from the same composed map, and it is the medium twin of the container path, not a
   second implementation of this rule.
@@ -205,6 +213,9 @@ None.
 - **M4** The container-mode credential E2E and every existing sandbox spec pass; the two specs
   that asserted the `NAME=value` shape are inverted, not deleted.
 - **M5** Mutation score of `:sandbox:docker` stays at the module gate after the change.
+- **M6** The first release, `v0.1.0`, is published (the human step `add-release-pipeline` task 6.3
+  left unverified and handed to this change): the release page holds the four assets with their
+  attestations.
 
 ## Open Questions
 

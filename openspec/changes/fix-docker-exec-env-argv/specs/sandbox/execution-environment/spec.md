@@ -88,8 +88,12 @@ The container adapter SHALL produce the argv and the docker client environment o
 - **THEN** the docker client process for that exec observes the passthrough variable with its live value and does not observe the declared credential, while an unrelated variable of the factory's environment (such as the docker daemon address) is still present
 
 #### Scenario: Environment-free exec stays flag-free
-- **WHEN** the container file channel writes or reads a file, or the materializer creates the scratch directory
+- **WHEN** the container file channel writes or reads a file
 - **THEN** the exec argv contains no environment flag and the docker client's environment is the inherited environment minus declared credentials, with nothing laid on top
+
+#### Scenario: Scratch directory creation carries no environment flag
+- **WHEN** the materializer creates the scratch directory, a bounded management command
+- **THEN** its exec argv contains no environment flag, and its docker client environment is the management commands' inherited environment, unchanged by this requirement
 
 #### Scenario: The bare form is unconstructible
 - **WHEN** production code under the sandbox tree is scanned
