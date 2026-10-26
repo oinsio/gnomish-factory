@@ -14,44 +14,41 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Shells out to the real {@code docker} binary via {@link ProcessBuilder} — no
- * docker-java, no socket library (design D2), exactly as {@code GitProcessRunner}
- * shells out to {@code git}. Each command is a direct argv (never a shell
- * string), so keys and other values that flow into docker args carry no
- * injection risk. Two seams: {@link #run} for management commands
- * (create/inspect/remove/list) that capture output and finish, and {@link
- * #start} for {@code docker exec}, which returns a live {@link Process} the
- * caller streams.
+ * Shells out to the real {@code docker} binary via {@link ProcessBuilder} — no docker-java, no
+ * socket library (design D2), exactly as {@code GitProcessRunner} shells out to {@code git}. Each
+ * command is a direct argv (never a shell string), so keys and other values that flow into docker
+ * args carry no injection risk. Two seams: {@link #run} for management commands
+ * (create/inspect/remove/list) that capture output and finish, and {@link #start} for {@code docker
+ * exec}, which returns a live {@link Process} the caller streams.
  *
- * <p>Runtime outages are classified here, once (NFR-R1): a {@code docker} binary
- * that cannot be launched at all, or a daemon that answers "Cannot connect to
- * the Docker daemon", becomes a {@link DockerUnavailableException} — an
- * infrastructure failure — never a {@link DockerResult} a caller might mistake
- * for a command that merely exited non-zero.
+ * <p>Runtime outages are classified here, once (NFR-R1): a {@code docker} binary that cannot be
+ * launched at all, or a daemon that answers "Cannot connect to the Docker daemon", becomes a {@link
+ * DockerUnavailableException} — an infrastructure failure — never a {@link DockerResult} a caller
+ * might mistake for a command that merely exited non-zero.
  *
- * <p>Every management command is bounded (FR10, design D11): it runs under the
- * shared subprocess supervisor, which drains both streams concurrently with the
- * process and, on expiry or interruption, kills the whole process tree and reaps
- * it before returning a named {@link Termination}. The bound matters because a
- * management command is not always local — {@code docker run} on an image the
- * host does not have reaches a registry, and a registry that accepts the
- * connection and then never answers used to hold the whole take. {@link #start}
- * stays unbounded: its process is a live streaming exec whose caller
- * ({@code HostExecHandle}, {@link ContainerFileChannel}) owns the wait.
+ * <p>Every management command is bounded (FR10, design D11): it runs under the shared subprocess
+ * supervisor, which drains both streams concurrently with the process and, on expiry or
+ * interruption, kills the whole process tree and reaps it before returning a named {@link
+ * Termination}. The bound matters because a management command is not always local — {@code docker
+ * run} on an image the host does not have reaches a registry, and a registry that accepts the
+ * connection and then never answers used to hold the whole take. {@link #start} stays unbounded:
+ * its process is a live streaming exec whose caller ({@code HostExecHandle}, {@link
+ * ContainerFileChannel}) owns the wait.
  *
  * <p>Implements FR3, FR4, NFR-R1 of add-sandbox-core; FR6, FR10, NFR-O1 of
- * bound-subprocess-commands; NFR-O3 of fix-terminal-receipt-convergence.
+ * bound-subprocess-commands; NFR-O3 of fix-terminal-receipt-convergence; FR3, FR4, NFR-S2, NFR-S4 of
+ * fix-docker-exec-env-argv.
  */
 class DockerCli {
 
     /**
-     * The documented default for a management command (FR5): generous enough
-     * that a real {@code docker run} pulling a real image finishes under it,
-     * short enough that a wedged daemon or registry does not hold a take for the
-     * rest of the night. An installation raises it through {@code
-     * factory.docker-command-timeout}.
+     * The documented default for a management command (FR5): generous enough that a real {@code
+     * docker run} pulling a real image finishes under it, short enough that a wedged daemon or
+     * registry does not hold a take for the rest of the night. An installation raises it through
+     * {@code factory.docker-command-timeout}.
      */
     static final Duration DEFAULT_COMMAND_TIMEOUT = Duration.ofMinutes(5);
 
@@ -101,12 +98,11 @@ class DockerCli {
     }
 
     /**
-     * Runs {@code docker <args...>} under the command deadline, capturing
-     * stdout/stderr as separate UTF-8 strings, the exit code, and how the
-     * invocation ended. A non-zero exit is returned, not thrown — callers decide
-     * what it means, after reading {@link DockerResult#termination()} first —
-     * <em>unless</em> the daemon reported itself unreachable, which is thrown as
-     * {@link DockerUnavailableException}.
+     * Runs {@code docker <args...>} under the command deadline, capturing stdout/stderr as separate
+     * UTF-8 strings, the exit code, and how the invocation ended. A non-zero exit is returned, not
+     * thrown — callers decide what it means, after reading {@link DockerResult#termination()} first
+     * — <em>unless</em> the daemon reported itself unreachable, which is thrown as {@link
+     * DockerUnavailableException}.
      *
      * @param args the docker subcommand and its arguments (no leading {@code docker})
      * @return the named termination, the captured exit code and separate stdout/stderr
@@ -132,24 +128,24 @@ class DockerCli {
     }
 
     /**
-     * Starts {@code docker <args...>} and returns the live process for streaming
-     * — the {@code docker exec} seam behind {@link
-     * TaskExecutionEnvironment#exec}. Applies {@code stderr} to the client on the host
-     * side, matching the host adapter (design D18 of fix-terminal-receipt-convergence):
-     * merged into its stdout, a pipe of its own, or a host file — the {@code docker exec}
-     * client's stderr carries the exec'd process's, so the file holds the box's. The client
-     * is started by the launch owner the capture runner holds, which sets its
-     * standard input from {@code stdin} (design D20 of fix-terminal-receipt-convergence):
-     * the file the {@code docker exec -i} client forwards into the box, or nothing.
+     * Starts one {@code docker exec} for streaming, the seam behind {@link
+     * TaskExecutionEnvironment#exec}, from a {@link DockerExecLaunch}, never a bare argv; the
+     * client's environment is the inherited one rewritten by {@link DockerClientEnvironment#compose}
+     * (design D2, D3 of fix-docker-exec-env-argv). {@code stderr} is applied host-side (design D18 of
+     * fix-terminal-receipt-convergence); the launch owner sets the input from {@code stdin} (D20).
      *
-     * @param args        the docker subcommand and its arguments (no leading {@code docker})
+     * @param launch      the exec's argv (no leading {@code docker}) and client environment
      * @param stderr      where the client's stderr goes
      * @param stdin       what the client reads: {@link StdinSource#NONE}, or the whole input
      * @return the started process; never null
      * @throws ProcessStartException if the docker binary could not be launched
      */
-    Process start(List<String> args, StderrPolicy stderr, StdinSource stdin) {
-        ProcessBuilder builder = builder(args);
+    Process start(DockerExecLaunch launch, StderrPolicy stderr, StdinSource stdin) {
+        ProcessBuilder builder = builder(launch.argv());
+        Map<String, String> env = builder.environment();
+        Map<String, String> composed = DockerClientEnvironment.compose(Map.copyOf(env), launch);
+        env.clear();
+        env.putAll(composed);
         stderr.applyTo(builder);
         try {
             return captureRunner.launch().start(builder, stdin);
@@ -159,9 +155,9 @@ class DockerCli {
     }
 
     /**
-     * The supervisor a caller of {@link #start} waits under, and whose post-exit bound
-     * it joins that process's output with (design D17 of fix-terminal-receipt-convergence)
-     * — the one the management commands run under, never a bound of the caller's own.
+     * The supervisor a caller of {@link #start} waits under, and whose post-exit bound it joins
+     * that process's output with (design D17 of fix-terminal-receipt-convergence) — the one the
+     * management commands run under, never a bound of the caller's own.
      *
      * @return the capture runner's supervisor
      */
@@ -170,9 +166,9 @@ class DockerCli {
     }
 
     /**
-     * Runs the management command under the shared supervisor and reports what its
-     * outcome owes the operator ({@link DockerCommandReport}). A binary that cannot be launched at all is the daemon-outage
-     * classification this class owns, not a result: there is no docker to ask.
+     * Runs the management command under the shared supervisor and reports what its outcome owes the
+     * operator ({@link DockerCommandReport}). A binary that cannot be launched at all is the
+     * daemon-outage classification this class owns, not a result: there is no docker to ask.
      *
      * <p>A clean exit whose drain the post-exit bound cut is refused by the capture runner; the
      * holder is logged once here and the refusal rethrown (NFR-O3, design D15 as amended

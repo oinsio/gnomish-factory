@@ -14,7 +14,7 @@ import spock.lang.Specification
 class ContainerFileChannelBoundarySpec extends Specification {
 
     private static ContainerFileChannel channel(DockerCli docker) {
-        new ContainerFileChannel(docker, 'k1', '/gnomish/work', '/gnomish/scratch')
+        new ContainerFileChannel(docker, new ContainerExecLaunches('k1', '/gnomish/work', [] as Set), '/gnomish/work', '/gnomish/scratch')
     }
 
     // FR1, NFR-S3: the channel's content travels through the exec — handed to the launch owner as the

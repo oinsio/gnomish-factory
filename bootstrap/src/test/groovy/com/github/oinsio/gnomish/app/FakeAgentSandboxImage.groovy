@@ -76,7 +76,9 @@ class FakeAgentSandboxImage {
      * Builds (once per JVM) an image whose {@link #CREDENTIAL_CAPTURING_BINARY} writes the values
      * of {@code CLAUDE_CODE_OAUTH_TOKEN} and {@code ANTHROPIC_API_KEY} it received into {@link
      * #CREDENTIAL_CAPTURE} in its working copy, then plays {@code plain-round} (FR5, NFR-S3 of
-     * fix-operator-blockers, container mode). The file is harvested into the snapshot commit, so
+     * fix-operator-blockers, container mode), and whether the two passthrough probe names of
+     * {@code ContainerModeAgentCredentialE2ESpec} are set (FR2 of fix-docker-exec-env-argv). The
+     * file is harvested into the snapshot commit, so
      * the spec reads back what the agent round's in-box environment held. The wrapper is the test
      * resource {@code fake-agent-env-capture/env-capturing-agent.sh}, embedded the same way as the
      * argv-checking one.

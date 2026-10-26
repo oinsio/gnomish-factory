@@ -217,18 +217,24 @@ class DockerCommandsSpec extends Specification {
                 .subList(0, 2) == ['run', '--rm']
     }
 
-    def "FR4: exec sets the workdir, per-entry env, and container, then appends the argv"() {
+    /** The elements that follow each {@code -e} of an argv, in order. */
+    private static List<String> envFlagOperands(List<String> argv) {
+        argv.indices.findAll { argv[it] == '-e' }.collect { argv[it + 1] }
+    }
+
+    // FR1, NFR-S1, M1 of fix-docker-exec-env-argv (design D1): the argv names each variable and
+    //     carries no value; the value travels in the docker client's environment.
+    // Scenario: sandbox/execution-environment / No environment value on any spawn argv
+    def "FR1: exec sets the workdir, one -e per name, and container, then appends the argv"() {
         when:
-        def argv = DockerCommands.exec(KEY, '/gnomish/work', [FOO: 'bar', BAZ: 'qux'], StdinSource.NONE, ['echo', 'hi'])
+        def argv = DockerCommands.exec(KEY, '/gnomish/work', ['FOO', 'BAZ'] as LinkedHashSet,
+        StdinSource.NONE, ['echo', 'hi'])
 
         then:
         argv.subList(0, 3) == ['exec', '-w', '/gnomish/work']
-        argv.containsAll([
-            '-e',
-            'FOO=bar',
-            '-e',
-            'BAZ=qux'
-        ])
+        envFlagOperands(argv) == ['FOO', 'BAZ']
+        argv.count { it == '-e' } == 2
+        argv.every { !it.contains('=') }
         !argv.contains('-i')
         argv[-3..-1] == [
             'gnomish-box-' + KEY,
@@ -237,13 +243,33 @@ class DockerCommandsSpec extends Specification {
         ]
     }
 
+    // FR1, NFR-S1, M1 of fix-docker-exec-env-argv: the composed argv is the docker process's
+    //     command line, which is what `ps` shows an operator during a round.
+    // Scenario: sandbox/execution-environment / Process table during a round shows names only
+    def "NFR-S1: the exec argv carries exactly the names, in order, and no value, for #label"() {
+        when:
+        def argv = DockerCommands.exec(KEY, '/gnomish/work', names as LinkedHashSet,
+                StdinSource.NONE, ['claude', '-p'])
+
+        then:
+        envFlagOperands(argv) == names
+        argv.count { it == '-e' } == names.size()
+        argv.every { !it.contains('=') }
+
+        where:
+        label | names
+        'an empty set' | []
+        'a single name' | ['JAVA_HOME']
+        'a credential-shaped name' | ['ANTHROPIC_AUTH_TOKEN']
+    }
+
     // FR23, D20 of fix-terminal-receipt-convergence: -i follows from the input source, never
     //     chosen beside it, so input cannot travel to a client that does not forward it
     def "FR24: exec adds -i exactly when the source carries input"() {
         expect:
-        DockerCommands.exec(KEY, '/w', [:], StdinSource.of('x'.bytes), ['cat']).contains('-i')
-        DockerCommands.exec(KEY, '/w', [:], StdinSource.of(new byte[0]), ['cat']).contains('-i')
-        !DockerCommands.exec(KEY, '/w', [:], StdinSource.NONE, ['cat']).contains('-i')
+        DockerCommands.exec(KEY, '/w', [] as Set, StdinSource.of('x'.bytes), ['cat']).contains('-i')
+        DockerCommands.exec(KEY, '/w', [] as Set, StdinSource.of(new byte[0]), ['cat']).contains('-i')
+        !DockerCommands.exec(KEY, '/w', [] as Set, StdinSource.NONE, ['cat']).contains('-i')
     }
 
     // FR1 of fix-image-declared-volumes, design D3 of add-sandbox-base-image: one inspect of the

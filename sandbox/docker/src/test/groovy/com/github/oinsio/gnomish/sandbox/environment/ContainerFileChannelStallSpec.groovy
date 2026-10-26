@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
-import java.io.InterruptedIOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import spock.lang.Specification
@@ -24,7 +23,7 @@ class ContainerFileChannelStallSpec extends Specification {
     }
 
     private ContainerFileChannel channel() {
-        new ContainerFileChannel(docker, 'k1', '/gnomish/work', '/gnomish/scratch')
+        new ContainerFileChannel(docker, new ContainerExecLaunches('k1', '/gnomish/work', [] as Set), '/gnomish/work', '/gnomish/scratch')
     }
 
     /**

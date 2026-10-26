@@ -4,35 +4,32 @@ import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.subprocess.StdinSource;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Pure builders for the {@code docker} argument vectors the container adapter
- * runs (design D2): every method returns an immutable argv <em>without</em> the
- * leading {@code docker} binary — {@link DockerCli} prepends that, exactly as
- * {@code GitProcessRunner} owns the {@code git} binary. Keeping argv assembly
- * pure and side-effect-free is what makes the interesting logic — resource-limit
- * flags, factory labels, the volume mount, the runtime knob, the opt-in disk
- * quota — unit-testable to the mutation gate without a Docker daemon; {@link
- * DockerCli} carries only the un-mutatable subprocess plumbing.
+ * Pure builders for the {@code docker} argument vectors the container adapter runs (design D2):
+ * every method returns an immutable argv <em>without</em> the leading {@code docker} binary —
+ * {@link DockerCli} prepends that, exactly as {@code GitProcessRunner} owns the {@code git} binary.
+ * Keeping argv assembly pure and side-effect-free is what makes the interesting logic —
+ * resource-limit flags, factory labels, the volume mount, the runtime knob, the opt-in disk quota —
+ * unit-testable to the mutation gate without a Docker daemon; {@link DockerCli} carries only the
+ * un-mutatable subprocess plumbing.
  *
- * <p>Object names and label assignments come from {@link FactoryDockerLabels}, so
- * a key's network/volume/container names are identical at create and dispose.
- * Nothing here is ever assembled from environment-originated content: keys are
- * factory-sanitized, argv entries are passed as distinct list elements (never a
- * shell string), so no value can inject an extra flag.
+ * <p>Object names and label assignments come from {@link FactoryDockerLabels}, so a key's
+ * network/volume/container names are identical at create and dispose. Nothing here is ever
+ * assembled from environment-originated content: keys are factory-sanitized, argv entries are
+ * passed as distinct list elements (never a shell string), so no value can inject an extra flag.
  *
  * <p>Implements FR3, FR4, FR10, FR11 of add-sandbox-core.
  */
 final class DockerCommands {
 
     /**
-     * Keep-alive as an argv the image's shell need not provide: {@code sleep}
-     * with the max 32-bit second count (~68 years) idles the container between
-     * {@code exec} calls, portable across BusyBox and coreutils {@code sleep}
-     * (unlike {@code sleep infinity}). The image is replaced as PID 1's command,
-     * never relied on for its own entrypoint.
+     * Keep-alive as an argv the image's shell need not provide: {@code sleep} with the max 32-bit
+     * second count (~68 years) idles the container between {@code exec} calls, portable across
+     * BusyBox and coreutils {@code sleep} (unlike {@code sleep infinity}). The image is replaced as
+     * PID 1's command, never relied on for its own entrypoint.
      */
     private static final List<String> KEEP_ALIVE = List.of("sleep", "2147483647");
 
@@ -71,14 +68,12 @@ final class DockerCommands {
     }
 
     /**
-     * {@code run -d} the keep-alive container: factory-labelled, joined to the
-     * internal task network, the working-copy volume mounted at {@code
-     * workingCopy} as the working directory, under the configured runtime with
-     * CPU/memory/PID limits applied (FR10). The disk quota is added only when
-     * {@code enforceDiskQuota} is set: {@code --storage-opt size=} requires a
-     * quota-capable storage driver (overlay-on-xfs with {@code pquota}) that
-     * ordinary daemons lack, so it stays opt-in rather than failing every
-     * container start (operator docs, task 9.5).
+     * {@code run -d} the keep-alive container: factory-labelled, joined to the internal task
+     * network, the working-copy volume mounted at {@code workingCopy} as the working directory,
+     * under the configured runtime with CPU/memory/PID limits applied (FR10). The disk quota is
+     * added only when {@code enforceDiskQuota} is set: {@code --storage-opt size=} requires a
+     * quota-capable storage driver (overlay-on-xfs with {@code pquota}) that ordinary daemons lack,
+     * so it stays opt-in rather than failing every container start (operator docs, task 9.5).
      *
      * <p>Implements FR2, FR3 of fix-image-declared-volumes: the image's declared volume paths are
      * occupied last, after the working-copy mount, by {@link DeclaredVolumeOverrides#argv()} — a
@@ -118,18 +113,18 @@ final class DockerCommands {
     }
 
     /**
-     * {@code exec} of {@code argv} in the task container with {@code workdir} as
-     * the working directory and each {@code env} entry passed by {@code -e
-     * name=value}; {@code -i} is added exactly when {@code stdin} carries input, derived
-     * here from the one source the launch owner applies, never chosen beside it (design
-     * D20 of fix-terminal-receipt-convergence), so input cannot travel to a client that
-     * does not forward it. The image's
-     * own {@code ENV} supplies the runtime environment (container base is empty,
-     * D6) — these {@code -e} entries are the composed allowlist layered on top:
-     * operator passthrough plus the factory-set fragment ({@link ChildEnvAllowlist}).
+     * {@code exec} of {@code argv} in the task container, in {@code workdir}, each of {@code
+     * envNames} as a bare {@code -e NAME} in the set's order; {@code -i} is added exactly when
+     * {@code stdin} carries input, derived from the one source the launch owner applies (design D20
+     * of fix-terminal-receipt-convergence), so input cannot reach a client that does not forward it.
+     *
+     * <p>Only names reach this builder, never values: the docker client resolves each bare {@code
+     * -e NAME} from its own environment (design D1 of fix-docker-exec-env-argv; ADR 0017). The names
+     * are the composed allowlist ({@link ChildEnvAllowlist}) over the image's own {@code ENV}.
+     *
+     * <p>Implements FR1 of fix-docker-exec-env-argv.
      */
-    static List<String> exec(
-            String key, String workdir, Map<String, String> env, StdinSource stdin, List<String> argv) {
+    static List<String> exec(String key, String workdir, Set<String> envNames, StdinSource stdin, List<String> argv) {
         List<String> command = new ArrayList<>();
         command.add("exec");
         command.add("-w");
@@ -137,9 +132,9 @@ final class DockerCommands {
         if (stdin != StdinSource.NONE) {
             command.add("-i");
         }
-        for (Map.Entry<String, String> entry : env.entrySet()) {
+        for (String name : envNames) {
             command.add("-e");
-            command.add(entry.getKey() + "=" + entry.getValue());
+            command.add(name);
         }
         command.add(FactoryDockerLabels.containerName(key));
         command.addAll(argv);
@@ -152,16 +147,16 @@ final class DockerCommands {
     }
 
     /**
-     * {@code inspect} the container's running state, finished-at timestamp and OOM
-     * flag, so the aged-environment reaper measures age by runtime metadata — never
-     * by file mtimes inside the volume (factory-serve delta) — and an exit 137 can be
-     * told apart from a plain kill. Output is one line: {@code <running> <finishedAt>
-     * <oomKilled>}, e.g. {@code false 2026-08-07T10:00:00Z true}.
+     * {@code inspect} the container's running state, finished-at timestamp and OOM flag, so the
+     * aged-environment reaper measures age by runtime metadata — never by file mtimes inside the
+     * volume (factory-serve delta) — and an exit 137 can be told apart from a plain kill. Output is
+     * one line: {@code <running> <finishedAt> <oomKilled>}, e.g. {@code false 2026-08-07T10:00:00Z
+     * true}.
      *
-     * <p>{@code OOMKilled} is appended rather than inserted on purpose: the reattach
-     * branch reads the leading field with a {@code startsWith("true")} prefix check,
-     * so a field added at the end cannot change how a running container is
-     * recognized (FR1, design D1 of polish-sandbox-forensics).
+     * <p>{@code OOMKilled} is appended rather than inserted on purpose: the reattach branch reads
+     * the leading field with a {@code startsWith("true")} prefix check, so a field added at the end
+     * cannot change how a running container is recognized (FR1, design D1 of
+     * polish-sandbox-forensics).
      */
     static List<String> inspectContainerState(String name) {
         return List.of("inspect", "-f", "{{.State.Running}} {{.State.FinishedAt}} {{.State.OOMKilled}}", name);

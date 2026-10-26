@@ -41,6 +41,13 @@ import spock.lang.Timeout
  * FakeAgentSandboxImage#ensureBuiltCapturingCredentials}); each command check passes only when
  * both names are unset in its own box, so the stage completing is the proof they stayed out.
  *
+ * <p>The same round probes the passthrough layer (FR2, NFR-S3 of fix-docker-exec-env-argv): the
+ * operator passes through one name the factory holds ({@code verification.gradle} sets it) and one
+ * it does not. The docker client gets each exec's values in its own environment and only the names
+ * on its argv, so the absent name is unset in the box only because it is absent from that client
+ * environment; the present one reaching the box shows the layer is wired, so its absence is not
+ * vacuous.
+ *
  * <p>Docker- and guard-image-gated: skips cleanly with no daemon or no pullable mitmproxy image.
  */
 @Timeout(value = 420, unit = TimeUnit.SECONDS)
@@ -55,6 +62,12 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
         'CLAUDE_CODE_OAUTH_TOKEN',
         'ANTHROPIC_API_KEY'
     ]
+
+    /** A passthrough name the test task sets in the factory environment ({@code verification.gradle}). */
+    private static final String PRESENT_PASSTHROUGH = 'GF_E2E_PASSTHROUGH_PRESENT'
+
+    /** A passthrough name nothing sets; the feature asserts it is absent from the factory environment. */
+    private static final String ABSENT_PASSTHROUGH = 'GF_E2E_PASSTHROUGH_ABSENT'
 
     /** Exit 0 only when neither credential is set in the check's own environment. */
     private static final String CREDENTIALS_ABSENT =
@@ -104,7 +117,10 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
     //     stays out of command checks", for both names at once.
     // Scenario: executor/agent-executor / Subscription token reaches the box with no passthrough
     // Scenario: executor/agent-executor / Agent credential stays out of command checks
-    def "FR5, NFR-S3: agent credentials reach the round in the box without passthrough and stay out of command checks"() {
+    // FR2 of fix-docker-exec-env-argv: a passthrough name absent from the factory's environment, and
+    //     so from the docker client's, is unset in the box, and the run raises no error.
+    // Scenario: sandbox/execution-environment / An absent name stays unset in the box
+    def "FR5, NFR-S3: agent credentials reach the round in the box without passthrough and stay out of command checks; an absent passthrough name stays unset"() {
         given: 'placeholder credentials in the factory environment (set by the test task)'
         def factoryValues = CREDENTIAL_NAMES.collectEntries {
             [(it): System.getenv(it)]
@@ -113,9 +129,18 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
             it
         }: "run through Gradle: :bootstrap's test task sets ${CREDENTIAL_NAMES} (verification.gradle)"
 
-        and: 'a container-mode runner with an empty env-passthrough over the credential-capturing agent'
+        and: 'one passthrough name the factory holds and one it does not'
+        def presentValue = System.getenv(PRESENT_PASSTHROUGH)
+        assert presentValue: "run through Gradle: :bootstrap's test task sets ${PRESENT_PASSTHROUGH} (verification.gradle)"
+        assert !System.getenv().containsKey(ABSENT_PASSTHROUGH): "${ABSENT_PASSTHROUGH} must be absent from the factory environment"
+
+        and: 'a container-mode runner passing through only the two probe names, over the credential-capturing agent'
         def image = FakeAgentSandboxImage.ensureBuiltCapturingCredentials()
-        def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        def sandbox = new SandboxProperties(image, null, null, null, [], [
+            PRESENT_PASSTHROUGH,
+            ABSENT_PASSTHROUGH
+        ], false,
+        null, null, null, null)
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.CREDENTIAL_CAPTURING_BINARY)
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
@@ -131,16 +156,24 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
         segments, new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'),
         List.<Decision> of()), TaskState.atStageStart('work'))
 
-        then: 'the agent round held both credentials with their current factory values'
+        then: 'the run raised no error'
+        noExceptionThrown()
+
+        and: 'the agent round held both credentials with their current factory values'
         def branch = "gnomish/${taskId}"
         def snapshotSha = gitOutput(cloneDir, 'log', branch, '--format=%H', '--grep',
                 '^gnomish: snapshot work#0 [0-9a-f][0-9a-f]*$')
         def captured = gitOutput(cloneDir, 'show', "${snapshotSha}:${FakeAgentSandboxImage.CREDENTIAL_CAPTURE}")
-        captured.readLines().collectEntries { line ->
+        Map<String, String> observed = captured.readLines().collectEntries { line ->
             line.split('=', 2).with {
                 [(it[0]): it[1]]
             }
-        } == factoryValues
+        }
+        observed.subMap(CREDENTIAL_NAMES) == factoryValues
+
+        and: 'the present passthrough name reached the box with its value, and the absent one is unset there'
+        observed[PRESENT_PASSTHROUGH] == "[${presentValue}]".toString()
+        observed[ABSENT_PASSTHROUGH] == 'unset'
 
         and: 'both command checks passed, which each allows only with neither credential in its box'
         def tipTree = gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', branch)

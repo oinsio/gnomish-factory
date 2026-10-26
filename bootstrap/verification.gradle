@@ -51,6 +51,9 @@ tasks.named('test') {
     // from the box. Every fake agent in this module ignores them.
     environment 'CLAUDE_CODE_OAUTH_TOKEN', 'placeholder-oauth-token-not-a-credential'
     environment 'ANTHROPIC_API_KEY', 'placeholder-api-key-not-a-credential'
+    // The present half of its passthrough probe (FR2 of fix-docker-exec-env-argv): a passthrough
+    // name the factory holds, so the absent half's "unset in the box" is not vacuous.
+    environment 'GF_E2E_PASSTHROUGH_PRESENT', 'placeholder-passthrough-value'
 
     // `SecretsPortBoundarySpec` walks every module's build metadata asserting no credential name
     // reaches it (NFR-S1, task 5.5), and `ModuleBuildFileSpec` measures those same files against

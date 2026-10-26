@@ -9,8 +9,10 @@ import com.github.oinsio.gnomish.subprocess.StdinSource
  * unit specs: Spock cannot mock a concrete class here (no byte-buddy on the
  * classpath), and the docker seam is a subprocess runner best faked directly —
  * the same reason {@code GitProcessRunner} is exercised against a real/fake
- * binary rather than mocked. It records every {@code run} and {@code start} argv
- * and answers {@code run} through a caller-supplied closure (default: exit 0),
+ * binary rather than mocked. It records every {@code run} argv and every {@code start}
+ * launch — whole in {@link #launches} (argv, client environment, withheld names; FR3 of
+ * fix-docker-exec-env-argv), and its argv alone in {@link #starts} for the specs that read only
+ * the command line — and answers {@code run} through a caller-supplied closure (default: exit 0),
  * so a spec scripts list output, failures, or a daemon outage per command and
  * then asserts which objects were created or removed.
  */
@@ -18,6 +20,7 @@ class RecordingDockerCli extends DockerCli {
 
     final List<List<String>> runs = []
     final List<List<String>> starts = []
+    final List<DockerExecLaunch> launches = []
 
     /** Maps a run argv to its result; may throw to simulate a runtime outage. Default: exit 0. */
     Closure<DockerResult> onRun = { List<String> args ->
@@ -81,7 +84,9 @@ class RecordingDockerCli extends DockerCli {
     }
 
     @Override
-    Process start(List<String> args, StderrPolicy stderr, StdinSource stdin) {
+    Process start(DockerExecLaunch launch, StderrPolicy stderr, StdinSource stdin) {
+        List<String> args = launch.argv()
+        launches << launch
         starts << args
         throw new IllegalStateException('start() not expected in a daemon-free unit spec: ' + args)
     }

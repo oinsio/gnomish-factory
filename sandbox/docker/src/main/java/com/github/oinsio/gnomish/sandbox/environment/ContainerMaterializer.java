@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -142,11 +141,14 @@ final class ContainerMaterializer {
                         ownership,
                         overrides)),
                 "run container");
+        // The scratch mkdir is a management command, bounded through `docker.run`, not a streaming
+        // exec, so it takes its argv from the builder directly with no name to forward — the one
+        // exemption from `ContainerExecLaunches` (design D4 of fix-docker-exec-env-argv).
         management(
                 DockerCommands.exec(
                         key,
                         ContainerTaskExecutionEnvironment.WORKING_COPY,
-                        Map.of(),
+                        Set.of(),
                         StdinSource.NONE,
                         List.of("mkdir", "-p", ContainerTaskExecutionEnvironment.SCRATCH)),
                 "create scratch");

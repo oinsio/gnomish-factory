@@ -94,8 +94,8 @@ class HostSweepSpec extends Specification {
         docker.handed = client
 
         when:
-        new ContainerFileChannel(docker, 'k1', '/gnomish/work', '/gnomish/scratch')
-                .putFile('note.txt', 'x'.getBytes(StandardCharsets.UTF_8))
+        new ContainerFileChannel(docker, new ContainerExecLaunches('k1', '/gnomish/work', [] as Set), '/gnomish/work', '/gnomish/scratch')
+        .putFile('note.txt', 'x'.getBytes(StandardCharsets.UTF_8))
 
         then: 'the group was swept'
         survivor.waitFor(10, TimeUnit.SECONDS)

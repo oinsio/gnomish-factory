@@ -25,7 +25,7 @@ class ContainerFileChannelPostExitSpec extends Specification {
     }
 
     private ContainerFileChannel channel() {
-        new ContainerFileChannel(docker, 'k1', '/gnomish/work', '/gnomish/scratch')
+        new ContainerFileChannel(docker, new ContainerExecLaunches('k1', '/gnomish/work', [] as Set), '/gnomish/work', '/gnomish/scratch')
     }
 
     /** A process that wrote {@code stdout} and {@code stderr} and exited with {@code code}, a holder still writing to stdout. */

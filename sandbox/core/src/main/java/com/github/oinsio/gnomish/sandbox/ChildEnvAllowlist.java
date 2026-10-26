@@ -26,6 +26,9 @@ import org.slf4j.LoggerFactory;
  * tighten-spec-contract). The allowlist exposes no accessor for that source: a
  * holder can compose a child environment or resolve the factory-set variables an
  * agent round names ({@link #resolve}), never enumerate or read around the policy.
+ * The declared credential <em>names</em> are readable ({@link #credentialNames}):
+ * a name resolves no value, so the docker client can withhold them without
+ * reaching the source (design D2 of fix-docker-exec-env-argv).
  *
  * <p>A passthrough name the active tracker adapter declares as a credential is
  * refused at construction — a startup configuration error naming the variable,
@@ -35,7 +38,8 @@ import org.slf4j.LoggerFactory;
  * logged at debug per composition, so a missing-variable diagnosis is one log
  * read (UX6).
  *
- * <p>Implements FR9, NFR-S1 of add-sandbox-core; NFR-S3 of tighten-spec-contract.
+ * <p>Implements FR9, NFR-S1 of add-sandbox-core; NFR-S3 of tighten-spec-contract;
+ * FR3 of fix-docker-exec-env-argv.
  */
 public final class ChildEnvAllowlist {
 
@@ -91,6 +95,20 @@ public final class ChildEnvAllowlist {
         Set<String> union = new LinkedHashSet<>(credentialNames);
         union.addAll(moreCredentials);
         return validated(new ChildEnvAllowlist(passthroughNames, union, values));
+    }
+
+    /**
+     * The declared credential names — those of {@link #of} plus every
+     * {@link #declaring} — names only, never a value: the set a container exec
+     * withholds from the docker client's environment (design D2 of
+     * fix-docker-exec-env-argv).
+     *
+     * <p>Implements FR3 of fix-docker-exec-env-argv.
+     *
+     * @return the declared names, unmodifiable; never null, empty when none is declared
+     */
+    public Set<String> credentialNames() {
+        return credentialNames;
     }
 
     private static ChildEnvAllowlist validated(ChildEnvAllowlist allowlist) {

@@ -86,7 +86,8 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
     }
 
     @Override
-    Process start(List<String> args, StderrPolicy stderr, StdinSource stdin) {
+    Process start(DockerExecLaunch launch, StderrPolicy stderr, StdinSource stdin) {
+        List<String> args = launch.argv()
         starts << args
         // The agent CLI's own exec: every round and vote asks for stream-json output.
         if (args.contains('stream-json')) {

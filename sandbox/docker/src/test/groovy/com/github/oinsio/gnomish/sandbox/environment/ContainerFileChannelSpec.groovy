@@ -25,7 +25,7 @@ class ContainerFileChannelSpec extends Specification {
     }
 
     private ContainerFileChannel channel() {
-        new ContainerFileChannel(docker, 'k1', '/gnomish/work', '/gnomish/scratch')
+        new ContainerFileChannel(docker, new ContainerExecLaunches('k1', '/gnomish/work', [] as Set), '/gnomish/work', '/gnomish/scratch')
     }
 
     /** Migrated to the shared helper (`.claude/rules/logging.md`) when task 5.3 touched this spec. */

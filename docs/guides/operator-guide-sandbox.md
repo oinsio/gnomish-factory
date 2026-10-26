@@ -394,6 +394,22 @@ wholesale. Credential names (the tracker token, the external-check token) are
 refused in passthrough at startup. The applied names (never values) are logged
 at debug per exec, so "my build can't see X" is one log read (UX6).
 
+**How values reach the box (container mode).** A value never travels on the
+`docker exec` command line, which every local user can read. The command line
+carries only the names, as bare `-e NAME` flags; the values sit in the docker
+client process's own environment, which only your account and root can read
+(see [ADR 0017](../adr/0017-secret-channels-to-child-processes.md)). So a `ps`
+during a round shows names only. The docker client of an exec keeps the
+factory's whole inherited environment — `HOME`, `PATH`, `DOCKER_HOST`,
+`DOCKER_CONTEXT`, the TLS and proxy variables, `SSH_AUTH_SOCK` — so a custom
+docker context or daemon address works as before. It loses one thing: the
+run's declared credential names (the tracker token, the external-check token)
+are removed from it. Management commands (`docker run`, `inspect`, `rm`,
+network and volume commands) keep the inherited environment unchanged. The
+docker client forwards into the box only the variables named by a `-e` flag,
+so a variable the client merely holds, such as an AI-seam credential on a
+command check's exec, does not reach that process.
+
 **`SSH_AUTH_SOCK`** is deliberately outside the host base set: on-disk keys
 are already exposed by host mode's absent filesystem isolation, but the agent
 socket is the only route to locked or hardware-backed keys. A project with

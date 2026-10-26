@@ -17,15 +17,22 @@ class ProcessOwnerStandInSpec extends Specification {
     // Scenario: build-system/quality-gates / A process-owning class keeps its stand-in
     def "FR27: the specs of every ProcessBuilder owner drive the owner itself, and no end-to-end suite uses the fake"() {
         given: 'the production classes that construct a process, comments stripped'
-        def owners = RepoSourceTree.productionSources { it.endsWith('.java') }
-        .findAll {
+        def production = RepoSourceTree.productionSources {
+            it.endsWith('.java')
+        }
+        def owners = production.findAll {
             RepoSourceTree.code(it).contains('new ProcessBuilder(')
         }
         .collect { it.name - '.java' }
+        def classNames = production.collect { it.name - '.java' } as Set
         def tests = RepoSourceTree.testSources { it.endsWith('Spec.groovy') }
+        // A spec belongs to the longest production class its name starts with: DockerClientEnvironmentSpec
+        //     is the spec of DockerClientEnvironment, not of DockerCli
         def specsOf = { String owner ->
-            tests.findAll {
-                it.name ==~ /${owner}(\w*)Spec\.groovy/
+            tests.findAll { spec ->
+                spec.name ==~ /${owner}(\w*)Spec\.groovy/ && !classNames.any {
+                    it.length() > owner.length() && it.startsWith(owner) && spec.name.startsWith(it)
+                }
             }
         }
 

@@ -85,7 +85,7 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
             DockerCommands.createVolume(KEY, OWNERSHIP),
             DockerCommands.seedClone(KEY, 'gnomish/img', '/factory/project-clone', 'gnomish/task-x', null, OWNERSHIP),
             runArgv(),
-            DockerCommands.exec(KEY, '/gnomish/work', [:], StdinSource.NONE, [
+            DockerCommands.exec(KEY, '/gnomish/work', [] as Set, StdinSource.NONE, [
                 'mkdir',
                 '-p',
                 '/gnomish/scratch'
@@ -592,32 +592,129 @@ class ContainerTaskExecutionEnvironmentUnitSpec extends Specification {
 
     // FR9, D6, M3 (task 7.2): the exec child environment is the composed allowlist with an EMPTY
     // container base — passthrough names (values live from the factory environment) plus the
-    // factory-set fragment become -e entries; no other factory variable reaches the argv.
+    // factory-set fragment become the exec's environment; no other factory variable reaches it.
+    // FR1, FR2, FR3, NFR-O1 of fix-docker-exec-env-argv: the argv names each variable as a
+    // value-less -e NAME, the launch's client environment carries the values, the declared
+    // credential names are withheld, and the exec's log names the applied names and no value.
     // Scenario: sandbox/execution-environment / The container base set is empty
     def "FR9: exec passes exactly the composed allowlist as --env entries, with an empty container base"() {
         given: 'an allowlist passing JAVA_HOME through, over a factory env that also holds a noise key'
         def factoryEnv = [JAVA_HOME: '/jdk', AWS_SECRET_ACCESS_KEY: 'never', PATH: '/usr/bin']
-        def allowlist = ChildEnvAllowlist.of(['JAVA_HOME'], [], TestChildEnvironment.valuesOf(factoryEnv))
-        def e = new ContainerTaskExecutionEnvironment(
-                BoxEquipmentFixture.forBox(docker, 'gnomish/img', LIMITS, clock, OWNERSHIP.mode()),
-                KEY, new BoxGitLink(SOURCE_CLONE, harvester), allowlist, OWNERSHIP.projectId())
+        def allowlist = ChildEnvAllowlist.of(['JAVA_HOME'], ['GNOMISH_GITHUB_TOKEN'], TestChildEnvironment.valuesOf(factoryEnv))
+        def e = environmentWith(allowlist)
         e.materialize('task/x', null)
+        def logs = [
+            LogCaptureSupport.attach(ChildEnvAllowlist, Level.DEBUG),
+            LogCaptureSupport.attach(ContainerTaskExecutionEnvironment, Level.DEBUG)
+        ]
 
         when: 'an exec with a factory-set fragment starts (the recording fake then stops it)'
-        e.exec(new ExecCommand(['sh', '-c', 'true'], [GNOMISH_FINDINGS_FILE: '/gnomish/scratch/f.json'], null, StderrPolicy.PIPED))
+        try {
+            e.exec(new ExecCommand(['sh', '-c', 'true'], [GNOMISH_FINDINGS_FILE: '/gnomish/scratch/f.json'], null, StderrPolicy.PIPED))
+        } finally {
+            logs*.detach()
+        }
 
-        then: 'the argv carries exactly the passthrough and factory-set entries — nothing else'
+        then: 'the argv names exactly the passthrough and factory-set variables, each without a value'
         thrown(IllegalStateException)
-        def argv = docker.starts.last()
-        def envEntries = []
+        def launch = docker.launches.last()
+        envFlagValues(launch.argv()) == [
+            'JAVA_HOME',
+            'GNOMISH_FINDINGS_FILE'
+        ] as Set
+        !launch.argv().any { it.contains('=') }
+        !launch.argv().any {
+            it.contains('AWS_SECRET_ACCESS_KEY') || it.contains('never')
+        }
+
+        and: 'the launch environment carries their values, and nothing else'
+        launch.environment() == [JAVA_HOME: '/jdk', GNOMISH_FINDINGS_FILE: '/gnomish/scratch/f.json']
+
+        and: 'the docker client withholds the allowlist\'s declared credential names'
+        launch.withheld() == allowlist.credentialNames()
+
+        and: 'the exec\'s log names the applied names and no value of the composed map'
+        def messages = logs.collectMany { it.list*.formattedMessage }
+        messages.any {
+            it.contains('JAVA_HOME') && it.contains('GNOMISH_FINDINGS_FILE')
+        }
+        messages.every { m ->
+            !([
+                '/jdk',
+                '/gnomish/scratch/f.json',
+                'never'
+            ].any {
+                m.contains(it)
+            })
+        }
+    }
+
+    // FR5 of fix-docker-exec-env-argv: the file channel's write and read forward no variable — no
+    // -e on either argv, an empty overlay — while the declared credentials stay withheld.
+    // Scenario: sandbox/execution-environment / Environment-free exec stays flag-free
+    def "FR5: the file channel's write and read exec carry no environment flag and an empty overlay"() {
+        given: 'an environment whose allowlist passes a variable through and declares a credential'
+        def allowlist = ChildEnvAllowlist.of(['JAVA_HOME'], ['GNOMISH_GITHUB_TOKEN'],
+        TestChildEnvironment.valuesOf([JAVA_HOME: '/jdk']))
+        def e = environmentWith(allowlist)
+        e.materialize('task/x', null)
+
+        when: 'the channel writes a file (the recording fake stops the exec)'
+        e.putFile('note.txt', 'x'.getBytes(StandardCharsets.UTF_8))
+
+        then:
+        thrown(IllegalStateException)
+
+        when: 'the channel reads a file'
+        e.readFile('note.txt', 64)
+
+        then:
+        thrown(IllegalStateException)
+        docker.launches.size() == 2
+        docker.launches.every { launch ->
+            !launch.argv().contains('-e') && launch.environment().isEmpty() &&
+            launch.withheld() == allowlist.credentialNames()
+        }
+    }
+
+    // FR5 of fix-docker-exec-env-argv (design D4): the scratch mkdir is a management command
+    // through docker.run whose argv forwards no variable, whatever the allowlist passes through.
+    // Scenario: sandbox/execution-environment / Scratch directory creation carries no environment flag
+    def "FR5: the materializer's scratch mkdir carries no environment flag"() {
+        given:
+        def allowlist = ChildEnvAllowlist.of(['JAVA_HOME'], ['GNOMISH_GITHUB_TOKEN'],
+        TestChildEnvironment.valuesOf([JAVA_HOME: '/jdk']))
+
+        when:
+        environmentWith(allowlist).materialize('task/x', null)
+
+        then: 'the recorded run is the scratch mkdir, and its argv holds no -e'
+        def mkdir = docker.runs.findAll {
+            it.first() == 'exec' && it.takeRight(3) == [
+                'mkdir',
+                '-p',
+                '/gnomish/scratch'
+            ]
+        }
+        mkdir.size() == 1
+        !mkdir[0].contains('-e')
+        !mkdir[0].any { it.contains('JAVA_HOME') }
+        docker.launches.isEmpty()
+    }
+
+    private ContainerTaskExecutionEnvironment environmentWith(ChildEnvAllowlist allowlist) {
+        new ContainerTaskExecutionEnvironment(
+                BoxEquipmentFixture.forBox(docker, 'gnomish/img', LIMITS, clock, OWNERSHIP.mode()),
+                KEY, new BoxGitLink(SOURCE_CLONE, harvester), allowlist, OWNERSHIP.projectId())
+    }
+
+    private static Set<String> envFlagValues(List<String> argv) {
+        def names = [] as Set
         argv.eachWithIndex { token, i ->
             if (token == '-e') {
-                envEntries << argv[i + 1]
+                names << argv[i + 1]
             }
         }
-        envEntries.toSet() == [
-            'JAVA_HOME=/jdk',
-            'GNOMISH_FINDINGS_FILE=/gnomish/scratch/f.json'
-        ].toSet()
+        names
     }
 }

@@ -64,6 +64,7 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
     private final InstantSource clock;
     private final ChildEnvAllowlist allowlist;
     private final ContainerMaterializer materializer;
+    private final ContainerExecLaunches launches;
 
     private @Nullable ContainerFileChannel channel;
     private @Nullable String branch;
@@ -82,7 +83,9 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
      * @param link the factory's local clone the working copy is seeded from (design D3, FR3) and
      *     the factory-side fetch behind {@link #harvest} (FR5); never null
      * @param allowlist the layered child-environment allowlist (D6, FR9); the container base is
-     *     empty — only composed {@code --env} entries reach an exec child, the image's own {@code
+     *     empty — only the composed names reach an exec child, each as a value-less {@code -e NAME},
+     *     and its declared credential names are withheld from the docker client (FR3 of
+     *     fix-docker-exec-env-argv); the image's own {@code
      *     ENV} supplies the runtime environment; never null
      * @param projectId the project identity stamped, beside the installation's ownership mode, on
      *     every object this environment creates; never blank
@@ -101,6 +104,10 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
                 equipment.containerSettings(),
                 equipment.ownership(projectId),
                 equipment.imageContract());
+        // FR3 of fix-docker-exec-env-argv: the one producer of this box's exec launches — the
+        // agent's exec and both file-channel execs build their argv through it, and the docker
+        // client withholds the allowlist's declared credential names.
+        this.launches = new ContainerExecLaunches(key, WORKING_COPY, allowlist.credentialNames());
     }
 
     /**
@@ -124,7 +131,7 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
                             + e.getMessage() + ") — start Docker, or set DOCKER_HOST",
                     e);
         }
-        channel = new ContainerFileChannel(docker, key, WORKING_COPY, SCRATCH);
+        channel = new ContainerFileChannel(docker, launches, WORKING_COPY, SCRATCH);
         this.branch = branch;
     }
 
@@ -136,10 +143,10 @@ public final class ContainerTaskExecutionEnvironment implements TaskExecutionEnv
         String prompt = command.stdin();
         StdinSource stdin = prompt == null ? StdinSource.NONE : StdinSource.of(prompt.getBytes(StandardCharsets.UTF_8));
         // Layered allowlist with an empty container base (D6, FR9): only passthrough names read
-        // live from the factory environment plus the factory-set fragment become --env entries.
+        // live from the factory environment plus the factory-set fragment become the launch's
+        // value-less -e names (FR3 of fix-docker-exec-env-argv), never a value on the argv.
         Map<String, String> env = allowlist.compose(List.of(), command.env());
-        List<String> argv = DockerCommands.exec(key, WORKING_COPY, env, stdin, command.command());
-        Process process = docker.start(argv, command.stderr(), stdin);
+        Process process = docker.start(launches.launch(env, stdin, command.command()), command.stderr(), stdin);
         Instant startedAt = clock.instant();
         // FR1 of polish-sandbox-forensics: the container handle annotates an exit 137 with the
         // container's own OOM state — advisory only, and only at this one seam every in-box

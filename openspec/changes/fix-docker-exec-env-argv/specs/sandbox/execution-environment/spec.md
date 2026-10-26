@@ -69,8 +69,8 @@ The child environment of every `exec()` SHALL be composed of exactly three layer
 - **THEN** the docker process's command line shows the environment variable names and no value
 
 #### Scenario: An absent name stays unset in the box
-- **WHEN** a container exec's composed environment names a passthrough variable absent from the docker client's environment
-- **THEN** the variable is unset in the box, as it is when the name is absent from the factory environment, and no error is raised
+- **WHEN** a container exec runs with a passthrough variable absent from the factory's environment
+- **THEN** the variable is unset in the box and no error is raised
 
 ## ADDED Requirements
 

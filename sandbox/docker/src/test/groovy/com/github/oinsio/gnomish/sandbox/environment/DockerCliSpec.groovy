@@ -119,7 +119,7 @@ class DockerCliSpec extends Specification {
         def cli = cliBackedBy('docker-speaks-both')
 
         when: 'stderr is merged'
-        def merged = cli.start(['exec', 'box', 'cmd'], StderrPolicy.MERGED, StdinSource.NONE)
+        def merged = cli.start(execLaunch(StdinSource.NONE, ['cmd']), StderrPolicy.MERGED, StdinSource.NONE)
         def mergedOut = readFully(merged.inputStream)
         merged.waitFor()
 
@@ -128,7 +128,7 @@ class DockerCliSpec extends Specification {
         mergedOut.contains(ERR)
 
         when: 'stderr is kept separate'
-        def split = cli.start(['exec', 'box', 'cmd'], StderrPolicy.PIPED, StdinSource.NONE)
+        def split = cli.start(execLaunch(StdinSource.NONE, ['cmd']), StderrPolicy.PIPED, StdinSource.NONE)
         def splitOut = readFully(split.inputStream)
         split.waitFor()
 
@@ -145,7 +145,7 @@ class DockerCliSpec extends Specification {
         def file = tempDir.resolve('round-stderr')
 
         when:
-        def started = cli.start(['exec', 'box', 'cmd'], StderrPolicy.toFile(file), StdinSource.NONE)
+        def started = cli.start(execLaunch(StdinSource.NONE, ['cmd']), StderrPolicy.toFile(file), StdinSource.NONE)
         def out = readFully(started.inputStream)
         started.waitFor()
 
@@ -160,7 +160,7 @@ class DockerCliSpec extends Specification {
         def cli = new DockerCli(tempDir.resolve('nope').toString())
 
         when:
-        cli.start(['exec', 'box', 'cmd'], StderrPolicy.PIPED, StdinSource.NONE)
+        cli.start(execLaunch(StdinSource.NONE, ['cmd']), StderrPolicy.PIPED, StdinSource.NONE)
 
         then:
         thrown(ProcessStartException)
@@ -182,19 +182,13 @@ class DockerCliSpec extends Specification {
         def input = StdinSource.of('content'.bytes)
 
         when:
-        def started = cli.start(['exec', '-i', 'box', 'cat'], StderrPolicy.MERGED, input)
+        def exec = execLaunch(input, ['cat'])
+        def started = cli.start(exec, StderrPolicy.MERGED, input)
 
-        then:
+        then: 'the builder runs exactly the launch argv, which asks for input with -i'
         started.is(process)
-        builders*.command() == [
-            [
-                'docker',
-                'exec',
-                '-i',
-                'box',
-                'cat'
-            ]
-        ]
+        builders*.command() == [['docker'] + exec.argv()]
+        exec.argv().contains('-i')
         builders[0].redirectErrorStream()
         sources == [input]
     }
@@ -207,5 +201,75 @@ class DockerCliSpec extends Specification {
         expect:
         new DockerCli('docker', Duration.ofSeconds(30), new CaptureRunner(supervisor, ProcessLaunch.grouped()))
                 .supervisor().is(supervisor)
+    }
+
+    /**
+     * The tracker credential's name, spelled here as a test constant: the credential-name boundary
+     * spec covers production sources only.
+     */
+    private static final String CREDENTIAL = 'GNOMISH_GITHUB_TOKEN'
+
+    /** The passthrough value the launch delivers, distinct from any JDK the JVM itself names. */
+    private static final String LAUNCH_JAVA_HOME = '/opt/launch-jdk'
+
+    /** Starts one exec of {@code launch} through the docker-record-env stand-in; returns its log's lines. */
+    private List<String> recordedClientEnvironment(DockerExecLaunch launch) {
+        def link = StandIn.recording(tempDir, 'docker-record-env')
+        def started = new DockerCli(link.toString()).start(launch, StderrPolicy.PIPED, StdinSource.NONE)
+        readFully(started.inputStream)
+        assert started.waitFor() == 0
+        Files.readAllLines(StandIn.log(link))
+    }
+
+    /** The log line the stand-in's record row writes for {@code name} holding {@code value}. */
+    private static String recorded(String name, String value) {
+        value == null ? "${name}=unset" : "${name}=[${value}]"
+    }
+
+    // Scenario: sandbox/execution-environment / Declared credential is subtracted from the client
+    def "FR2, FR4, NFR-S2 of fix-docker-exec-env-argv: the exec client sees the launch's passthrough value, not the credential, and keeps the daemon address"() {
+        given: 'a launch delivering JAVA_HOME and withholding the tracker credential'
+        def launch = new ContainerExecLaunches('box', '/gnomish/work', [CREDENTIAL] as Set)
+        .launch([JAVA_HOME: LAUNCH_JAVA_HOME], StdinSource.NONE, ['cmd'])
+
+        when:
+        def lines = recordedClientEnvironment(launch)
+
+        then: 'the passthrough carries the launch value, the credential is absent'
+        lines.contains(recorded('JAVA_HOME', LAUNCH_JAVA_HOME))
+        lines.contains(recorded(CREDENTIAL, null))
+
+        and: "an unrelated variable of the factory's environment reaches the client unchanged"
+        lines.contains(recorded('DOCKER_HOST', System.getenv('DOCKER_HOST')))
+    }
+
+    // The test build strips every inherited GNOMISH_* variable (TestEnvironmentHygiene), so the
+    //     credential above is absent from the JVM too, and its absence alone cannot show that the
+    //     client's environment is cleared before the composition is laid in. The build always sets
+    //     DOCKER_CONFIG (TestDockerEnvironment; DOCKER_HOST only when the context names an endpoint,
+    //     so not on every Linux host), so withholding it is a subtraction the client could only
+    //     miss if the inherited copy had been replaced.
+    // Scenario: sandbox/execution-environment / Declared credential is subtracted from the client
+    def "FR4, NFR-S2 of fix-docker-exec-env-argv: a withheld name present in the factory's environment is subtracted from the client"() {
+        given: 'the JVM itself holds the name the launch withholds'
+        def inherited = System.getenv('DOCKER_CONFIG')
+        assert inherited != null
+
+        and:
+        def launch = new ContainerExecLaunches('box', '/gnomish/work', ['DOCKER_CONFIG'] as Set)
+        .launch([JAVA_HOME: LAUNCH_JAVA_HOME], StdinSource.NONE, ['cmd'])
+
+        when:
+        def lines = recordedClientEnvironment(launch)
+
+        then:
+        lines.contains(recorded('DOCKER_CONFIG', null))
+        lines.contains(recorded('JAVA_HOME', LAUNCH_JAVA_HOME))
+    }
+
+    // FR3 of fix-docker-exec-env-argv: the seam takes a launch, never a bare argv; these features
+    //     forward no variable, so every launch is built from an empty map
+    private static DockerExecLaunch execLaunch(StdinSource stdin, List<String> command) {
+        new ContainerExecLaunches('box', '/gnomish/work', [] as Set).launch([:], stdin, command)
     }
 }

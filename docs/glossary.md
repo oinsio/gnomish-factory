@@ -681,6 +681,17 @@ trusted/task tier split, and the law-root rule.
   deny-by-default set of the git transfer policy (ADR 0008) that a transfer
   adds after the invocation policy's pairs. *Not:* the in-box git of a task
   environment, which is outside the policy.
+- **Exec launch** — one `docker exec` into a box as a value: the argument
+  list, which names each variable it forwards as a value-less `-e NAME`, and
+  the docker client's environment, which supplies those values, so no value
+  appears on the host's command line. The two are one value because the flag
+  names are derived from the environment's own keys: one producer,
+  `ContainerExecLaunches`, builds every `DockerExecLaunch` from one composed
+  map, and the launch also carries the declared credential names withheld from
+  the client's inherited environment. Introduced by `fix-docker-exec-env-argv`;
+  the principle is ADR 0017
+  (`docs/adr/0017-secret-channels-to-child-processes.md`). *Not:* a transfer,
+  which is a git fetch or clone.
 - **Ownership asymmetry** — the repo may only tighten its sandbox; adapter
   bindings and any loosening are operator-only; reconciliation is fail-closed.
 

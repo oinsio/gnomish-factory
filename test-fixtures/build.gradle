@@ -79,8 +79,9 @@ dependencies {
     // host backend's spec (`:sandbox:docker`) and the container contract suite
     // (`:adapters`) run the same scenarios (task 6.1).
     api project(':sandbox:docker')
-    // The docker-CLI fakes override `DockerCli.start(List, boolean, StdinSource)` (design D20 of
-    // fix-terminal-receipt-convergence), so the input source type is on their own signatures.
+    // The docker-CLI fakes override `DockerCli.start(DockerExecLaunch, StderrPolicy, StdinSource)`
+    // (design D20 of fix-terminal-receipt-convergence), so the input source type is on their own
+    // signatures.
     api project(':subprocess')
     // The git-transfer owner leaf (FR8 of own-git-transfer-argv): the seed fixture's
     // origin fetch goes through the owner's value and the runner's typed entry, since the

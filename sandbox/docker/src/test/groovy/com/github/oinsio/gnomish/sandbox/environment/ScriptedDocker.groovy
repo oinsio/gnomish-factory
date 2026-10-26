@@ -38,7 +38,8 @@ final class ScriptedDockerCli extends DockerCli {
     }
 
     @Override
-    Process start(List<String> args, StderrPolicy stderr, StdinSource stdin) {
+    Process start(DockerExecLaunch launch, StderrPolicy stderr, StdinSource stdin) {
+        List<String> args = launch.argv()
         starts << args
         sources << stdin
         stderrs << stderr

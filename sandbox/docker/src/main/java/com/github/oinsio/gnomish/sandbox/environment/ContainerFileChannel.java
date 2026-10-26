@@ -61,9 +61,15 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Implements FR1, NFR-S3 of add-sandbox-core; FR11 of
  * bound-subprocess-commands; FR17, FR19, FR23 of fix-terminal-receipt-convergence; FR1, FR3 of
- * make-pipe-reads-non-parking.
+ * make-pipe-reads-non-parking; FR3, FR5 of fix-docker-exec-env-argv.
+ *
+ * @param docker the docker seam the channel's execs start through
+ * @param launches the environment's one producer of exec launches, which also names the container
+ *     key and the in-box working directory each exec runs in
+ * @param workingCopy the working-copy root a path is validated against
+ * @param scratch the per-environment scratch root a path is validated against
  */
-record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path scratch) {
+record ContainerFileChannel(DockerCli docker, ContainerExecLaunches launches, Path workingCopy, Path scratch) {
 
     private static final Logger log = LoggerFactory.getLogger(ContainerFileChannel.class);
 
@@ -77,8 +83,8 @@ record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path
     private static final String READ_SCRIPT = "if [ -f \"$1\" ]; then head -c \"$2\" \"$1\"; else exit 42; fi";
     private static final int ABSENT_EXIT = 42;
 
-    ContainerFileChannel(DockerCli docker, String key, String workingCopy, String scratch) {
-        this(docker, key, Path.of(workingCopy), Path.of(scratch));
+    ContainerFileChannel(DockerCli docker, ContainerExecLaunches launches, String workingCopy, String scratch) {
+        this(docker, launches, Path.of(workingCopy), Path.of(scratch));
     }
 
     void putFile(String path, byte[] content) {
@@ -111,7 +117,7 @@ record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path
                     OperatorEvent.CONTAINER_CHANNEL_FILE_TRUNCATED.head()
                             + "channel file {} in {} exceeded read cap {} bytes; truncated",
                     path,
-                    key,
+                    launches.key(),
                     sizeCap);
             byte[] capped = new byte[(int) sizeCap];
             System.arraycopy(bytes, 0, capped, 0, capped.length);
@@ -157,9 +163,11 @@ record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path
     /**
      * Starts the exec, drains both pipes on the owner's {@link Drain} concurrently
      * with the supervised wait, and joins them under the supervisor's post-exit
-     * bound (design D15, D17 of fix-terminal-receipt-convergence). The {@code -i}
-     * flag follows from {@code stdin} inside {@link DockerCommands#exec}, never
-     * chosen beside it (D20).
+     * bound (design D15, D17 of fix-terminal-receipt-convergence). The exec is
+     * built by the environment's {@link ContainerExecLaunches} with an empty map — a
+     * channel exec forwards no variable, so its argv carries no {@code -e} (FR3, FR5 of
+     * fix-docker-exec-env-argv). The {@code -i} flag follows from {@code stdin} inside
+     * {@link DockerCommands#exec}, never chosen beside it (D20).
      *
      * <p>An interrupted wait kills and reaps the tree and leaves the flag set; the
      * flag is read after the joins, so a join it cut short fails the operation too
@@ -169,8 +177,7 @@ record ContainerFileChannel(DockerCli docker, String key, Path workingCopy, Path
      * CutCaptureException#notice}; otherwise the cut rides the failure's stderr.
      */
     private ChannelExec run(List<String> argv, StdinSource stdin, String what) {
-        Process process = docker.start(
-                DockerCommands.exec(key, workingCopy.toString(), Map.of(), stdin, argv), StderrPolicy.PIPED, stdin);
+        Process process = docker.start(launches.launch(Map.of(), stdin, argv), StderrPolicy.PIPED, stdin);
         Drain stdout = Drain.start(ChildOutput.stdout(process), "channel-stdout");
         Drain stderr = Drain.start(ChildOutput.stderr(process), "channel-stderr");
         ProcessSupervisor supervisor = docker.supervisor();

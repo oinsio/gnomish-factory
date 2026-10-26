@@ -42,8 +42,7 @@ See `proposal.md` — Why. The seam today, in `sandbox/docker` (signatures as of
   for file size" static helpers that re-take an origin's fields as parameters.
 
 External facts the design rests on: the docker CLI resolves a value-less `-e NAME` from its own
-environment and leaves the variable unset when the name is absent there (documented for `docker
-run`; `exec` shares the flag parser); the GitHub Actions runner passes `-e NAME` to `docker exec`
+environment (documented for `docker run`; `exec` shares the flag parser); the GitHub Actions runner passes `-e NAME` to `docker exec`
 without clearing the client's environment; the exposure class is CWE-214.
 
 ## Goals / Non-Goals
@@ -96,6 +95,13 @@ refuses anything else. `ContainerExecLaunches` is an instance holding the equipm
 then be re-supplied by every caller (the fields-into-parameters failure the invariants rule names);
 and handing the withheld set to `ContainerExecLaunches` by another route than the allowlist (a
 constructor parameter from the root) — it duplicates a set the run already declares once.
+*Amended 2026-10-26:* the factory does not rely on docker leaving a variable unset when a `-e
+NAME` is absent from the client's environment: by construction no argv name is absent there (the
+names are the launch map's keys, and `DockerClientEnvironment.compose` lays that map over the
+client's environment). A passthrough name absent from the factory's environment is dropped
+earlier, by `ChildEnvAllowlist.compose`, and never reaches the argv; the scenario "An absent name
+stays unset in the box" and FR2 name that reachable state (premise verified in code by the
+implementation audit of 2026-10-26).
 
 **D3 — The client environment is subtractive: inherited minus declared credentials plus the
 composed map (FR4, NFR-S2).** Applied in one pure function, `DockerClientEnvironment.compose

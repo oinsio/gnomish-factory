@@ -45,3 +45,10 @@
 # recording each run (TestDockerEnvironmentFunctionalSpec, build-logic).
 * record DOCKER_CONFIG DOCKER_CONTEXT
 context,inspect answer data/stdout-docker-context#@name 0
+
+[docker-record-env]
+# A docker exec client that records the credential, passthrough, daemon-address and client
+# configuration variables of its own environment and succeeds (DockerCliSpec,
+# fix-docker-exec-env-argv).
+* record GNOMISH_GITHUB_TOKEN JAVA_HOME DOCKER_HOST DOCKER_CONFIG
+* exit 0

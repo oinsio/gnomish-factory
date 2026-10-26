@@ -117,6 +117,12 @@ None.
   argv this change has already made secret-free.
 - **NG8** A `hidepid` recommendation to operators as the fix. It mitigates on Linux only and only
   where the operator applied it; the defect is the factory's.
+- **NG9** The first release, `v0.1.0`. Task 6.3 of `add-release-pipeline` (archived 2026-10-04)
+  handed its human step to this change as task 6.3 and metric M6; a human step whose moment
+  depends on which changes are merged does not belong in a code change, since it blocks the
+  archive of code that is done. The step now lives in `publish-first-release`, which also carries
+  the verification of that pipeline's M1 and M3. Pickup condition: `publish-first-release` runs
+  after this change is merged (its FR1).
 
 ## Users & Scenarios
 
@@ -141,7 +147,8 @@ None.
   from the entry **names** alone, so the argv builder cannot be handed a value.
 - **FR2** The values SHALL be delivered through the docker client process's own environment for
   that exec, relying on the docker CLI's documented behaviour of resolving a value-less `-e NAME`
-  from its environment and leaving the variable unset in the box when the name is absent there.
+  from its environment. A passthrough name absent from the factory's environment is never named on
+  the argv, so it stays unset in the box.
 - **FR3** One owner SHALL produce the argv and the client environment of an exec together, from
   one composed map, as one value; the docker start seam SHALL accept only that value, so an argv
   cannot be started without the environment that completes it.
@@ -213,9 +220,6 @@ None.
 - **M4** The container-mode credential E2E and every existing sandbox spec pass; the two specs
   that asserted the `NAME=value` shape are inverted, not deleted.
 - **M5** Mutation score of `:sandbox:docker` stays at the module gate after the change.
-- **M6** The first release, `v0.1.0`, is published (the human step `add-release-pipeline` task 6.3
-  left unverified and handed to this change): the release page holds the four assets with their
-  attestations.
 
 ## Open Questions
 
