@@ -133,8 +133,8 @@ Agent-CLI rounds, CLI judge votes, and command checks SHALL execute exclusively 
 - **THEN** the process runs inside the task container against the volume working copy, and its exit code and output tail reach the engine unchanged
 
 ### Requirement: Layered positive environment allowlist
-The child environment of every `exec()` SHALL be composed of exactly three layers, with nothing inherited implicitly: (1) the adapter's base set; (2) operator-configured passthrough variables, whose values are read from the factory process environment at exec time, never stored in config; (3) factory-set protocol variables (the AI base-url/auth-token seam, findings/decision file paths).
-**Implements**: FR9 of add-sandbox-core; FR22 of make-checkpoint-gate-durable
+The child environment of every `exec()` SHALL be composed of exactly three layers, with nothing inherited implicitly: (1) the adapter's base set; (2) operator-configured passthrough variables, whose values are read from the factory process environment at exec time, never stored in config; (3) factory-set protocol variables (the AI base-url/auth-token seam, findings/decision file paths). It SHALL reach the child through environment channels only, never as a value on any spawn argv on the host.
+**Implements**: FR9 of add-sandbox-core; FR22 of make-checkpoint-gate-durable; FR1, FR2, FR6, NFR-R1, NFR-S1 of fix-docker-exec-env-argv
 
 #### Scenario: Host secrets never reach the box
 - **WHEN** the factory process holds a tracker token and unrelated cloud keys in its environment
@@ -175,6 +175,18 @@ The child environment of every `exec()` SHALL be composed of exactly three layer
 #### Scenario: Every test spawner composes over a cleared environment
 - **WHEN** a test spawns a gnome-product process — through the fixture box that stands in for the host adapter, the fake-agent invocation, or the end-to-end harness
 - **THEN** the child environment is composed over a cleared environment, through the production allowlist where one exists and from an explicit list otherwise, so the spawner is never laxer than the production owner and the child observes no `GNOMISH_*` variable the test itself did not set
+
+#### Scenario: No environment value on any spawn argv
+- **WHEN** a container exec runs with passthrough entries and factory-set entries, including a credential-shaped AI-seam value, and the composed docker argv is inspected
+- **THEN** every environment flag on the argv names a variable and carries no `=` and no value, the same names appear with their values in the docker client's environment for that exec, and the in-box child observes the same names and values it observed before this change
+
+#### Scenario: Process table during a round shows names only
+- **WHEN** an operator lists host processes while an agent round or judge vote runs in container mode
+- **THEN** the docker process's command line shows the environment variable names and no value
+
+#### Scenario: An absent name stays unset in the box
+- **WHEN** a container exec runs with a passthrough variable absent from the factory's environment
+- **THEN** the variable is unset in the box and no error is raised
 
 ### Requirement: Read-only control surfaces inside the box
 Injection-persistence surfaces inside the container SHALL be read-only for the gnome: agent-CLI configuration, shell rc files, and the baked proxy/CA/build configs SHALL be root-owned or `:ro`-mounted so in-box writes to them fail. The gnome's own clone (including its hooks) stays writable — hooks execute only inside the box and never cross the harvest boundary.
@@ -564,3 +576,28 @@ Before creating a box, the container adapter SHALL read the configured sandbox i
 #### Scenario: Matching image starts normally
 - **WHEN** the configured image carries the required contract version
 - **THEN** the box is created with exactly one inspection of the sandbox image: the labels are read by the same inspection that reads its declared volumes
+
+### Requirement: Container exec launch is one value
+The container adapter SHALL produce the argv and the docker client environment of one exec together, from one composed child environment, as a single launch value, and the docker start seam SHALL accept only that value. The docker client's environment for an exec SHALL be the factory's inherited process environment with every name the run's child-environment allowlist declares as a credential removed, and the composed child environment laid on top.
+**Implements**: FR3, FR4, FR5, NFR-S2, NFR-S4 of fix-docker-exec-env-argv
+**Notes**: Only declared credentials are removed, so the docker client keeps the home, path, docker-configuration, certificate and proxy variables its own setup depends on.
+
+#### Scenario: Names and values cannot diverge
+- **WHEN** an exec launch is built from a composed child environment
+- **THEN** the set of variable names on its argv equals the key set of the environment it delivers, for every composed map
+
+#### Scenario: Declared credential is subtracted from the client
+- **WHEN** the factory process exports a declared tracker credential and a passthrough variable, and an exec is launched whose composed environment carries the passthrough variable only
+- **THEN** the docker client process for that exec observes the passthrough variable with its live value and does not observe the declared credential, while an unrelated variable of the factory's environment (such as the docker daemon address) is still present
+
+#### Scenario: Environment-free exec stays flag-free
+- **WHEN** the container file channel writes or reads a file
+- **THEN** the exec argv contains no environment flag and the docker client's environment is the inherited environment minus declared credentials, with nothing laid on top
+
+#### Scenario: Scratch directory creation carries no environment flag
+- **WHEN** the materializer creates the scratch directory, a bounded management command
+- **THEN** its exec argv contains no environment flag, and its docker client environment is the management commands' inherited environment, unchanged by this requirement
+
+#### Scenario: The bare form is unconstructible
+- **WHEN** production code under the sandbox tree is scanned
+- **THEN** exactly one source spells the environment flag, the only sources constructing a process are the docker client seam and the host adapter, and the docker start seam exposes no entry taking a bare argv
