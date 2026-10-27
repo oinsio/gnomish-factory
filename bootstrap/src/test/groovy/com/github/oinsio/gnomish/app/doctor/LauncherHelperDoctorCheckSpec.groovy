@@ -24,6 +24,8 @@ class LauncherHelperDoctorCheckSpec extends Specification {
         ]
     }
 
+    // Scenario: cli/operator-doctor / Missing launcher helper
+    // Scenario: cli/operator-doctor / Missing group sweep signaller
     def "FR1: a missing #tool fails with the owner's reason, the fix naming its package"() {
         given:
         launch.helper() >> new HelperVerdict.Missing(tool, reason, install)

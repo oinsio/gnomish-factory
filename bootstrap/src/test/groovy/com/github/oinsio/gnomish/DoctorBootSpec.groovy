@@ -91,6 +91,7 @@ class DoctorBootSpec extends Specification {
         }
     }
 
+    // Scenario: operator/operator-configuration / Doctor lists violations instead of stopping
     def "FR7: a configuration with a violation still boots doctor, which lists the violation among its lines"() {
         given:
         operatorHome.hostConfig('factory:\n  git-netwrok-timeout: 5m\n')
@@ -111,6 +112,7 @@ class DoctorBootSpec extends Specification {
         lines.last().startsWith('summary: ')
     }
 
+    // Scenario: cli/operator-doctor / Absent guard image and old layout leftovers only warn
     def "FR1: a leftover of the pre-registry layout only warns"() {
         given:
         Files.createDirectories(operatorHome.home.root().resolve('serve'))

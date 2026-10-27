@@ -31,6 +31,7 @@ class HooksPathDoctorCheckSpec extends Specification implements BareGitRepoFixtu
         AdversarialGitConfig.assertInEffect(runner)
     }
 
+    // Scenario: cli/operator-doctor / Leftover hooks path of an earlier version
     def "FR8, UX2 of own-git-invocation-policy: the leftover line warns with the unset fix, and the configuration is unchanged"() {
         given:
         Path clone = initWorkingRepo(tempDir)

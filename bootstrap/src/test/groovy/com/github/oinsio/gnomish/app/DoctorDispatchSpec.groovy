@@ -60,6 +60,8 @@ class DoctorDispatchSpec extends Specification implements AppAssemblyFixture {
         logs.detach()
     }
 
+    // Scenario: cli/operator-doctor / Every readiness check is reported
+    // Scenario: git/git-transfer / Doctor reports an old git
     // FR1, FR7, D2: a git below the floor refuses nothing in doctor, and every check is reported
     def "FR7: doctor runs with a git below the floor, refuses nothing and reports every check"() {
         given: 'a git one release below the factory\'s floor'

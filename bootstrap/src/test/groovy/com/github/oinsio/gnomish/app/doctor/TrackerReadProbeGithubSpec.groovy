@@ -115,6 +115,7 @@ class TrackerReadProbeGithubSpec extends Specification {
         !failed
     }
 
+    // Scenario: cli/operator-doctor / Offline by default
     // FR3, NFR-R1: without --online doctor opens no connection to the tracker
     def "FR3: without --online no request reaches the tracker and the probe has no line"() {
         given:

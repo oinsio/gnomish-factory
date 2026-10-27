@@ -27,6 +27,7 @@ class GuardImageDoctorCheckSpec extends Specification {
         ]
     }
 
+    // Scenario: cli/operator-doctor / Absent guard image and old layout leftovers only warn
     def "FR1, NFR-O1: an absent guard image warns (#label), with the pull that fetches it"() {
         given:
         readiness.inspectPresence(GUARD) >> {
