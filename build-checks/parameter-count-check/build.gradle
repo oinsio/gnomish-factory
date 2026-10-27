@@ -10,6 +10,12 @@ def libs = rootProject.extensions.getByType(VersionCatalogsExtension).named('lib
 // same list opens them to the harness's in-process compiler in the test JVM.
 def javacPackages = ['api', 'code', 'comp', 'file', 'main', 'model', 'parser', 'processing', 'tree', 'util']
 
+// GHSA-xxph-c9ww-hj94: Error Prone's check API drags in an affected guava; the catalog's pin
+// ([versions].guava) applies to this separate build as it does to the modules.
+configurations.configureEach {
+    resolutionStrategy.force libs.findLibrary('guava').get().get()
+}
+
 dependencies {
     // The check names the exemption annotation by class, so a rename cannot leave it
     // looking for a type that no longer exists; the class must then be loadable wherever

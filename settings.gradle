@@ -7,6 +7,15 @@ pluginManagement {
     includeBuild 'build-logic'
 }
 
+// GHSA-xxph-c9ww-hj94: the build-health plugin below drags guava 33.5.0-jre onto this settings
+// classpath, which the root build script's force does not reach. The version is the one
+// gradle.properties names for every buildscript classpath (`buildscriptGuavaVersion`).
+buildscript {
+    configurations.classpath {
+        resolutionStrategy.force "com.google.guava:guava:${buildscriptGuavaVersion}"
+    }
+}
+
 plugins {
     // Auto-provisions the pinned JDK toolchain on machines that lack it (design D7).
     // Version is declared here literally because the version catalog is not

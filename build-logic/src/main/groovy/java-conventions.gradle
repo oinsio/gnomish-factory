@@ -148,6 +148,37 @@ def fixedJackson = libs.findVersion('jackson').get().requiredVersion
     }
 }
 
+// GHSA-xxph-c9ww-hj94: Error Prone and NullAway bring guava 33.5.0-jre onto every module's
+// processor path, and Spotless's formatter another. Forced on every configuration of the module,
+// as the catalog documents ([versions].guava).
+configurations.configureEach {
+    resolutionStrategy.force libs.findLibrary('guava').get().get()
+}
+
+// Spotless resolves the formatter in a detached configuration the force above does not reach
+// either; lifted like the Jackson edges, so no vulnerable guava is ever a candidate there.
+def fixedGuava = libs.findVersion('guava').get().requiredVersion
+['com.palantir.javaformat:palantir-java-format', 'com.palantir.javaformat:palantir-java-format-spi'].each { formatterModule ->
+    dependencies.components.withModule(formatterModule) {
+        allVariants {
+            withDependencies { deps ->
+                deps.findAll { it.group == 'com.google.guava' && it.name == 'guava' }.each { it.version { require fixedGuava } }
+            }
+        }
+    }
+}
+
+// guava 33.7.2 declares jspecify 1.0.1; lifted to the version the boot jar bundles so the test
+// classpaths carry the shipped jar (catalog: [versions].jspecify-bundled).
+def bundledJspecify = libs.findVersion('jspecify-bundled').get().requiredVersion
+dependencies.components.withModule('com.google.guava:guava') {
+    allVariants {
+        withDependencies { deps ->
+            deps.findAll { it.group == 'org.jspecify' }.each { it.version { require bundledJspecify } }
+        }
+    }
+}
+
 spotless {
     java {
         target 'src/*/java/**/*.java'

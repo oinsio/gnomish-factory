@@ -47,6 +47,8 @@ buildscript {
         // the advisories gradle.properties names. Forcing the bom moves the whole family through
         // its constraints. Same version as the catalog's pin (F113 of tighten-spec-contract).
         resolutionStrategy.force "com.fasterxml.jackson:jackson-bom:${buildscriptJackson2BomVersion}"
+        // guava: a plugin drags in 33.6.0-jre (GHSA-xxph-c9ww-hj94). Same version as the catalog's pin.
+        resolutionStrategy.force "com.google.guava:guava:${buildscriptGuavaVersion}"
     }
     // json-schema-validator declares Jackson 2.18.4; lifted as in build-logic/build.gradle, so its
     // metadata never reaches the verification metadata OSV-Scanner reads.

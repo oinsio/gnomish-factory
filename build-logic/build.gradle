@@ -23,6 +23,8 @@ dependencyLocking {
 // imports, so the version is the one the modules pin (F113 of tighten-spec-contract).
 configurations.configureEach {
     resolutionStrategy.force "${libs.jackson.bom.get().module}:${libs.versions.jackson.get()}"
+    // GHSA-xxph-c9ww-hj94: a plugin marker below drags in guava 33.6.0-jre.
+    resolutionStrategy.force libs.guava.get()
 }
 // The force makes the fixed line win, but the CycloneDX plugin's json-schema-validator declares
 // Jackson 2.18.4, and whether Gradle fetches that loser's metadata depends on the traversal order;

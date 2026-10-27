@@ -178,3 +178,7 @@ reason = "guava 30.1.1-jre, hardcoded inside japicmp-plugin 0.4.6's own worker r
 id = "GHSA-7g45-4rm6-3mm3"
 ignoreUntil = 2026-11-01
 reason = "guava 30.1.1-jre, hardcoded inside japicmp-plugin 0.4.6's own worker resolution (resolveGuava(), a detached configuration outside our version catalog/forces) for the japicmpApiGate report task. 0.4.6 is the latest release on the Gradle Plugin Portal; build-tool-only, never shipped. Re-review 2026-11-01."
+[[IgnoredVulns]]
+id = "GHSA-xxph-c9ww-hj94"
+ignoreUntil = 2026-11-01
+reason = "Build-tool-only guava recorded in gradle/verification-metadata.xml, never shipped, no lockfile resolves either: 30.1.1-jre hardcoded inside japicmp-plugin 0.4.6's own worker resolution (resolveGuava(), a detached configuration outside our version catalog/forces; 0.4.6 is the latest on the Gradle Plugin Portal), and 33.5.0-jre as a metadata-only (.module, no .jar) superseded candidate Error Prone declares on the annotationProcessor path. Every guava on a real classpath is forced to 33.7.2-jre (gradle/libs.versions.toml). Re-review 2026-11-01."
