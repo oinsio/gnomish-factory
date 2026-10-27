@@ -177,8 +177,13 @@ is a way to ask them without stopping at the first refusal.
 - **M2**: an architecture spec finds no `ProcessBuilder`, `System.getenv`, or
   YAML parsing in the `doctor` package.
 - **M3**: on the operator stand, a deliberately broken setup (old image, missing
-  token, unregistered clone) is reported in one `doctor` run with three `fail`
-  lines.
+  token, unregistered clone) is reported in two `doctor` runs, each `fail` line
+  with its fix. On the registered clone, the image without the factory's image
+  contract and the missing tracker token give two `fail` lines. With `--dir`
+  naming an unregistered clone, the registration gives one `fail` line naming
+  the `project add` line, and every project check is `skipped`: no project
+  resolves, so the image and the token cannot be judged there, and no single
+  run can show all three.
 
 ## Open Questions
 

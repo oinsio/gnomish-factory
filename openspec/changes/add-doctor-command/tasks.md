@@ -131,6 +131,11 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       `own-git-invocation-policy` named by the hooks-path check's spec. Verify
       `git grep -n "of add-doctor-command"` against the proposal's IDs.
 - [x] 5.3 Root `./gradlew check` green. Verify the exit code.
-- [ ] 5.4 Operator-stand acceptance (M3, human step): break three things
-      (old image, missing token, unregistered clone), run `gnomish doctor` once.
-      Verify three `fail` lines with fixes.
+- [x] 5.4 Operator-stand acceptance (M3, human step): break three things
+      (old image, missing token, unregistered clone), run `gnomish doctor` on
+      the registered clone, then with `--dir` naming an unregistered clone.
+      Verify two `fail` lines with fixes on the first run, one `fail` line and
+      the project checks `skipped` on the second. Done by the operator on the
+      time-zones stand, 2026-10-27: first run 2 `fail` (declared secret, sandbox
+      image without the image-contract label), exit 1; second run 1 `fail`
+      (project registration), 10 `skipped`, exit 1.
