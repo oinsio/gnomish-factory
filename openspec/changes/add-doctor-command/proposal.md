@@ -59,8 +59,9 @@ is a way to ask them without stopping at the first refusal.
   startup with one complete report" — `doctor` lists the violations instead of
   stopping.
 - `github-tracker`: "Idempotent label provisioning as startup smoke test" —
-  provisioning is built on a non-refusing listing assessment, which is also the
-  adapter's read-only probe (D7).
+  provisioning is built on a non-refusing listing assessment (D7); the
+  assessment itself is the added requirement "Read-only label probe" in the
+  same capability, so the existing requirement keeps one behavior.
 
 ## Goals
 
