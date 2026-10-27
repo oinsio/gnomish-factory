@@ -111,4 +111,6 @@
 - Verified: `./gradlew check` → BUILD SUCCESSFUL in 1h 1m 30s, exit 0 (one clean run; an earlier run overlapped a second Gradle build by mistake and was discarded).
 
 ### 5.4 Operator-stand acceptance (human step)
-- Not done here: it is a human step (M3) — break three things (old image, missing token, unregistered clone) on an operator stand, run `gnomish doctor` once, expect three `fail` lines with fixes. Left unticked, per the human's decision.
+- Not done here: it is a human step (M3). Left unticked in the earlier round, per the human's decision.
+- Done by the operator on the time-zones stand, 2026-10-27, recorded in `tasks.md` (commit a6b08589, M3 split into two runs): registered clone — 2 `fail` (declared secret, sandbox image without the image-contract label), exit 1; `--dir` on an unregistered clone — 1 `fail` (project registration), 10 `skipped`, exit 1. The decision "5.4 is verified. Continue." confirms it; the tick is the human's.
+- Verified (this round): root `./gradlew check` → BUILD SUCCESSFUL, exit 0 (943 of 993 tasks up to date; no source changed since the 5.3 run).
