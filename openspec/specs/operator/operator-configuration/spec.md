@@ -56,7 +56,8 @@ Every `factory.*` key SHALL declare exactly one level: `host` — the host file 
 
 ### Requirement: Violations stop startup with one complete report
 Before any tracker call, branch, worktree or box, the factory SHALL check the configuration sources and stop when it finds: a key set where its level forbids; a `factory.*` key no component defines (including removed keys such as `factory.agent-cli-env-passthrough`); an environment variable whose name starts with `FACTORY_`; or a configuration file writable by group or others.
-**Implements**: FR7, FR12, NFR-S2, NFR-R1, NFR-O2, UX1 of add-project-registry
+**Implements**: FR7, FR12, NFR-S2, NFR-R1, NFR-O2, UX1 of add-project-registry; FR7 of add-doctor-command
+**Notes**: `gnomish doctor` is the one command that does not stop on violations; it lists them as check results.
 
 #### Scenario: Several violations reported together
 - **WHEN** `factory.yaml` sets a boundary key and misspells another key, and `FACTORY_SERVE_SLOTS` is exported
@@ -77,3 +78,7 @@ Before any tracker call, branch, worktree or box, the factory SHALL check the co
 #### Scenario: The report exits with code 2 and no stack trace
 - **WHEN** startup stops on configuration violations
 - **THEN** the report is printed once, without a stack trace, and the process exits with the usage-error exit code 2
+
+#### Scenario: Doctor lists violations instead of stopping
+- **WHEN** `gnomish doctor` runs with a boundary key in `factory.yaml`
+- **THEN** the violation appears as a `fail` line with its location and fix, and the remaining checks still run
