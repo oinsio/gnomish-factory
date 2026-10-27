@@ -11,7 +11,9 @@ import org.springframework.stereotype.Component;
  * An agent credential is present when a stage is container-bound (FR1 of add-doctor-command):
  * {@link AgentCredentials#presentNames}, over the child-environment allowlist an agent round of
  * the clone's pipeline composes, so a credential counts exactly when it would reach the agent CLI.
- * Names only (NFR-S1). Skipped when no stage binds the container adapter (design D3).
+ * Names only (NFR-S1). Skipped when no stage binds the container adapter (design D3). An allowlist
+ * that cannot be composed — a passthrough name that is a declared credential, an unregistered
+ * tracker type — is thrown on to {@link DoctorCommand}, the one owner of a check that could not run.
  *
  * <p>Implements FR1, FR4, NFR-S1 of add-doctor-command.
  */
@@ -37,12 +39,7 @@ final class AgentCredentialDoctorCheck implements DoctorCheck {
     }
 
     private DoctorVerdict present(PipelineDefinition definition) {
-        List<String> present;
-        try {
-            present = AgentCredentials.presentNames(readings.roundChildEnv(definition));
-        } catch (RuntimeException e) {
-            return new DoctorVerdict(id(), DoctorStatus.FAIL, String.valueOf(e.getMessage()), null);
-        }
+        List<String> present = AgentCredentials.presentNames(readings.roundChildEnv(definition));
         if (present.isEmpty()) {
             return new DoctorVerdict(
                     id(),

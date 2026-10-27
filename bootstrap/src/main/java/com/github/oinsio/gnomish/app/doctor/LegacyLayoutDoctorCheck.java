@@ -10,9 +10,11 @@ import org.springframework.stereotype.Component;
 /**
  * Leftovers of the pre-registry folder layout, a warning each (FR1 of add-doctor-command): {@link
  * FactoryHome#legacyFolders()}, the only code that knows the old names, so the check lists no
- * folder name itself (design D4). Host-level: it runs with or without a project.
+ * folder name itself (design D4). Host-level: it runs with or without a project. A home it cannot
+ * list stays a warning, as every line of this check is, with the owner's words rendered for the
+ * console (NFR-O1) and the folder to make listable (UX1).
  *
- * <p>Implements FR1, FR4 of add-doctor-command.
+ * <p>Implements FR1, FR4, NFR-O1, UX1 of add-doctor-command.
  */
 @NullMarked
 @Component
@@ -37,7 +39,11 @@ final class LegacyLayoutDoctorCheck implements DoctorCheck {
             entries = home.legacyFolders();
         } catch (UncheckedIOException e) {
             return List.of(new DoctorVerdict(
-                    id(), DoctorStatus.WARN, "the factory home could not be inspected: " + e.getMessage(), null));
+                    id(),
+                    DoctorStatus.WARN,
+                    "the factory home could not be inspected: " + DoctorText.words(e),
+                    "make " + home.root() + " and its folders listable by the factory's user (ls -la " + home.root()
+                            + "), then run gnomish doctor again"));
         }
         if (entries.isEmpty()) {
             return List.of(new DoctorVerdict(id(), DoctorStatus.OK, "no leftover in " + home.root(), null));

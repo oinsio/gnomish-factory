@@ -79,9 +79,28 @@ class ImageFactsSpec extends Specification {
 
         then:
         def e = thrown(DockerCommandFailedException)
-        // The runtime's answer leaves the carrier through its log exit, so the trailing newline
-        // it arrived with is inert notation rather than a second line (design D1, D5, D6).
-        e.message == 'docker image inspect for gnomish/img:1 failed: No such image: gnomish/img:1\\n'
+        // The line end closing docker's stderr is not part of its answer, so the message ends with
+        // the answer's last word rather than with an inert \\n (task 4.3 of add-doctor-command).
+        e.message == 'docker image inspect for gnomish/img:1 failed: No such image: gnomish/img:1'
+    }
+
+    // Task 4.3 of add-doctor-command: only the closing line ends go; a break inside stays inert notation
+    def "a refused inspect keeps a line break inside the answer and drops only its closing line ends"() {
+        given:
+        def docker = new RecordingDockerCli()
+        docker.onRun = { List<String> args ->
+            DockerResult.of(1, '', "first\nsecond${ending}")
+        }
+
+        when:
+        ImageFacts.read(docker, IMAGE)
+
+        then:
+        def e = thrown(DockerCommandFailedException)
+        e.message == 'docker image inspect for gnomish/img:1 failed: first\\nsecond'
+
+        where:
+        ending << ['', '\n', '\r\n', '\n\n']
     }
 
     // Scenario: sandbox/execution-environment / Declared-volume read failure is an infrastructure failure

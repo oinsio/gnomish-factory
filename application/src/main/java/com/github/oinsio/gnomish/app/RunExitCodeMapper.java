@@ -53,7 +53,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>Implements FR9, FR12, FR13, UX3, D10 of add-git-workflow, add-manual-run; FR8, FR16 of
  * harden-task-branch-contract; FR5, FR8 of remove-interactive-console; FR4, FR7 of
- * make-run-headless; FR9 of supervise-daemon-loops-and-embed-dashboard; FR14 of add-sandbox-base-image.
+ * make-run-headless; FR9 of supervise-daemon-loops-and-embed-dashboard; FR14 of add-sandbox-base-image;
+ * FR6 of add-doctor-command.
  */
 @Component
 public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
@@ -79,6 +80,7 @@ public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
             case AbortedException ignored -> 12;
             case InternalErrorException ignored -> 1;
             case DashboardDisabledException ignored -> 1;
+            case DoctorFailedException ignored -> 1;
             default -> 1;
         };
     }

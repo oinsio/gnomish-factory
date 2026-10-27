@@ -171,6 +171,12 @@ tag the line names, with your factory's recipe. A development build of the
 factory has no published base, so its line names a base built from the same
 checkout's `sandbox-image/Dockerfile` instead.
 
+To check the image without starting a command, `gnomish doctor --dir=<clone>` reports the
+sandbox image (present locally, contract version), the guard image and Docker, each `fail`
+line with its fix; it pulls nothing and starts no box, so the box image's git floor is left
+to startup — see
+[*Checking a setup*](operator-guide.md#checking-a-setup-gnomish-doctor).
+
 ### Download in a stage of your own
 
 The base's proxy variables name the egress guard, which exists only on a

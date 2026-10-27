@@ -16,13 +16,22 @@ import org.springframework.stereotype.Component;
  * add-doctor-command): the directory's resolution the configuration loader published, and on a
  * registered clone its pipeline law, loaded and validated and its stage bindings resolved through
  * the owners {@link DoctorProjectReadings} asks. A law that does not load is a reading, not a
- * refusal: the pipeline check reports it and the checks that need the law are skipped (FR1, FR7).
+ * refusal: the pipeline check reports it, each reason rendered for the console and with its fix
+ * (NFR-O1, UX1), and the checks that need the law are skipped (FR1, FR7).
  *
- * <p>Implements FR1, FR2, FR4 of add-doctor-command.
+ * <p>Implements FR1, FR2, FR4, NFR-O1, UX1 of add-doctor-command.
  */
 @NullMarked
 @Component
 public final class DoctorSurvey {
+
+    /** The fix of a law that loaded with located errors. */
+    static final String LAW_FIX =
+            "correct the pipeline law at the location each line names, then run gnomish doctor again";
+
+    /** The fix of stage bindings the operator configuration does not resolve. */
+    static final String BINDINGS_FIX =
+            "correct factory.bindings in the operator configuration as the line names, then run gnomish doctor again";
 
     private final ObjectProvider<ProjectResolution> resolution;
     private final DoctorProjectReadings readings;
@@ -48,14 +57,17 @@ public final class DoctorSurvey {
         try {
             definition = readings.loadPipeline(clone);
         } catch (PipelineLoadFailedException e) {
-            return new PipelineReading.Unloaded(e.renderedErrors());
+            return new PipelineReading.Unloaded(e.renderedErrors(), LAW_FIX);
         } catch (IOException e) {
-            return new PipelineReading.Unloaded(List.of("the pipeline law could not be read: " + e.getMessage()));
+            return new PipelineReading.Unloaded(
+                    List.of("the pipeline law could not be read: " + DoctorText.fault(e)),
+                    "make the pipeline law of " + clone.clonePath() + " readable, then run gnomish doctor again");
         }
         try {
             return new PipelineReading.Loaded(definition, readings.bindings(definition));
         } catch (IllegalArgumentException e) {
-            return new PipelineReading.Unloaded(List.of("the stage bindings do not resolve: " + e.getMessage()));
+            return new PipelineReading.Unloaded(
+                    List.of("the stage bindings do not resolve: " + DoctorText.words(e)), BINDINGS_FIX);
         }
     }
 }

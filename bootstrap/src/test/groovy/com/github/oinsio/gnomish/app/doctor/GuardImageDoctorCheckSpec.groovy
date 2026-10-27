@@ -27,17 +27,23 @@ class GuardImageDoctorCheckSpec extends Specification {
         ]
     }
 
-    def "FR1: an absent guard image warns, with the pull that fetches it"() {
+    def "FR1, NFR-O1: an absent guard image warns (#label), with the pull that fetches it"() {
         given:
         readiness.inspectPresence(GUARD) >> {
-            throw new IllegalStateException('No such image')
+            throw new IllegalStateException((String) message)
         }
 
         expect:
         check.run(DoctorSpecSupport.bound(true, false)) == [
             new DoctorVerdict(DoctorCheckId.GUARD_IMAGE, DoctorStatus.WARN,
-            GUARD + ' is not present locally (No such image); a box pulls it on first use', 'docker pull ' + GUARD)
+            GUARD + " is not present locally (${words}); a box pulls it on first use".toString(), 'docker pull ' + GUARD)
         ]
+
+        where:
+        label | message || words
+        "the runtime's words" | 'No such image' || 'No such image'
+        'no words' | null || 'java.lang.IllegalStateException'
+        'a control sequence in the answer' | 'No such \u001b[2Jimage' || 'No such ^[[2Jimage'
     }
 
     def "D3: no container-bound stage skips the check without inspecting"() {

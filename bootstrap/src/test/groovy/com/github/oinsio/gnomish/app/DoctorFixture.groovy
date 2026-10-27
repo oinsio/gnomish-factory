@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.doctor.AgentCredentialDoctorCheck
 import com.github.oinsio.gnomish.app.doctor.ConfigurationDoctorCheck
 import com.github.oinsio.gnomish.app.doctor.DockerDoctorCheck
 import com.github.oinsio.gnomish.app.doctor.DoctorCommand
+import com.github.oinsio.gnomish.app.doctor.DoctorCommandFixture
 import com.github.oinsio.gnomish.app.doctor.DoctorSurvey
 import com.github.oinsio.gnomish.app.doctor.FactoryVersionDoctorCheck
 import com.github.oinsio.gnomish.app.doctor.GitFloorDoctorCheck
@@ -22,6 +23,7 @@ import com.github.oinsio.gnomish.app.doctor.RefFormatDoctorCheck
 import com.github.oinsio.gnomish.app.doctor.RegistrationDoctorCheck
 import com.github.oinsio.gnomish.app.doctor.SandboxImageDoctorCheck
 import com.github.oinsio.gnomish.app.doctor.SecretsDoctorCheck
+import com.github.oinsio.gnomish.app.doctor.TrackerReadProbe
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.port.run.SandboxImageReadiness
 import com.github.oinsio.gnomish.app.project.FactoryHome
@@ -75,12 +77,14 @@ final class DoctorFixture {
             new LauncherHelperDoctorCheck(launch),
             new LegacyLayoutDoctorCheck(home),
             new HooksPathDoctorCheck(new HooksPathLeftover(new GitProcessRunner())),
+            new TrackerReadProbe(readings),
         ]
         def resolution = provider(ProjectResolution) {
             resolution(home, clonePath)
         }
         new DoctorCommand(checks, new DoctorSurvey(resolution, readings),
-                graph.resolvedClone as ObjectProvider<RegisteredClone>, graph.console as ConsoleIO)
+                graph.resolvedClone as ObjectProvider<RegisteredClone>, graph.console as ConsoleIO,
+                DoctorCommandFixture.logFileEnvironment(home.hostLogFile()))
     }
 
     /** What the loader publishes for {@code --dir=clonePath}: the registry's one answer. */

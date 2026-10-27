@@ -35,6 +35,8 @@ final class RefFormatDoctorCheck implements DoctorCheck {
                 clone -> PreconditionLines.of(
                         id(),
                         preconditions.refFormatVerdict(clone),
-                        clone.clonePath() + " passes the startup ref-format check"));
+                        clone.clonePath() + " passes the startup ref-format check",
+                        "run git -C " + clone.clonePath() + " rev-parse --show-ref-format to see what git"
+                                + " answers, fix what it names, then run gnomish doctor again"));
     }
 }

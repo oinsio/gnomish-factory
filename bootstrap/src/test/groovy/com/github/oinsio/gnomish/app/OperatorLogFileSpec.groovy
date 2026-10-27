@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.project.ProjectName
 import com.github.oinsio.gnomish.config.OperatorLogFile
 import java.nio.file.Path
+import org.springframework.core.env.MapPropertySource
+import org.springframework.core.env.StandardEnvironment
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -124,6 +126,26 @@ class OperatorLogFileSpec extends Specification {
         key | value
         'git-network-timeout' | 'not-a-duration'
         'docker-command-timeout' | '-5s'
+    }
+
+    // UX1 of add-doctor-command: a line that sends the operator to the log file reads the file the
+    // owner published, never a second spelling of its path
+    def "UX1: the published log file reads back as the file publish put in the environment"() {
+        given:
+        def environment = new StandardEnvironment()
+        def file = logFile('widgets', 'default')
+        environment.propertySources.addFirst(new MapPropertySource(OperatorLogFile.SOURCE, OperatorLogFile.properties(file)))
+
+        expect:
+        OperatorLogFile.published(environment) == file
+    }
+
+    def "UX1: reading the log file back before it was published refuses"() {
+        when:
+        OperatorLogFile.published(new StandardEnvironment())
+
+        then:
+        thrown(IllegalStateException)
     }
 
     private Path logFile(String project, String instance) {

@@ -30,7 +30,8 @@ import spock.lang.TempDir
  * FR1, FR4 of add-doctor-command (design D3): the fifteen doctor checks, {@code doctorSurvey},
  * {@code doctorProjectReadings}, {@code processLaunchAssessment} and {@code hooksPathLeftover} join,
  * and {@code servePreconditions} (with its {@code operatorPreconditionsConfiguration}) becomes a bean
- * serve's gates and doctor share.
+ * serve's gates and doctor share. FR3 of add-doctor-command (design D7): {@code trackerReadProbe}, the
+ * online check, joins.
  */
 class ApplicationBeanInventorySpec extends Specification {
 
@@ -130,6 +131,7 @@ class ApplicationBeanInventorySpec extends Specification {
         'timeEquipment',
         'trackerAdapterRegistry',
         'trackerCommandConfiguration',
+        'trackerReadProbe',
         'trackerSubsectionValidatorRegistry',
         'trackerWiring',
         'usageCommand',

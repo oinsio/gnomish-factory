@@ -46,17 +46,17 @@ class AgentCliDoctorCheckSpec extends Specification {
         ]
     }
 
-    def "FR1: a round environment the configuration refuses fails with its refusal, the owner not asked"() {
+    def "FR1, UX1: a round environment the configuration refuses is thrown on to the command, the owner not asked"() {
         when:
-        def verdicts = new AgentCliDoctorCheck(launch, readings([:], [passthrough: [
+        new AgentCliDoctorCheck(launch, readings([:], [passthrough: [
                 DoctorSpecSupport.TRACKER_TOKEN
             ]]), properties)
         .run(DoctorSpecSupport.bound(false, true, DoctorSpecSupport.definition(true)))
 
-        then:
+        then: 'DoctorCommand, the one owner of a check that could not run, renders it with the log-file fix'
         0 * launch._
-        verdicts*.status() == [DoctorStatus.FAIL]
-        verdicts[0].detail().contains('must not name declared credential variables')
+        def refusal = thrown(IllegalArgumentException)
+        refusal.message.contains('must not name declared credential variables')
     }
 
     def "D3: no host-bound stage skips the check without asking the owner"() {

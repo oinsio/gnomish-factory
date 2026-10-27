@@ -188,6 +188,11 @@ gnomish take --dir=/path/to/target-repo
 
 # autonomous daemon under a WIP-bounded scheduler
 gnomish serve --dir=/path/to/target-repo</code></pre>
+            <h3>Check the setup</h3>
+<pre><code># every readiness check in one run; add --online to try the tracker credential
+gnomish doctor --dir=/path/to/target-repo</code></pre>
+            <p>Each check is one line, <code>ok</code>, <code>warn</code>, <code>fail</code> or <code>skipped</code>,
+                and every <code>fail</code> line names its fix. It changes nothing; the exit code is 1 when a check failed.</p>
             <p class="small">Releases and checksums: <a href="https://github.com/oinsio/gnomish-factory/releases">github.com/oinsio/gnomish-factory/releases</a>.
                 The full command reference lives in the <a href="https://github.com/oinsio/gnomish-factory/blob/main/docs/guides/operator-guide.md">operator guide</a>.</p>
         </section>

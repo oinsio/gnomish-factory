@@ -14,7 +14,8 @@ import org.springframework.stereotype.Component;
  * launch owner's {@code assessExecutable}, the rule its launch refuses on, asked for {@code
  * factory.agent-cli-binary} with the {@code PATH} a host agent round hands its child — so {@code
  * doctor} reads no {@code PATH} and holds no lookup rule itself (design D4). Skipped when no stage
- * binds the host adapter (design D3).
+ * binds the host adapter (design D3). A child {@code PATH} that cannot be composed is thrown on to
+ * {@link DoctorCommand}, the one owner of a check that could not run.
  *
  * <p>Implements FR1, FR4 of add-doctor-command.
  */
@@ -50,13 +51,7 @@ final class AgentCliDoctorCheck implements DoctorCheck {
 
     private DoctorVerdict locate(RegisteredClone clone, PipelineDefinition definition) {
         String binary = factoryProperties.agentCliBinary();
-        ExecutableVerdict verdict;
-        try {
-            verdict = launch.executable(binary, clone.clonePath(), readings.childPath(definition));
-        } catch (RuntimeException e) {
-            return new DoctorVerdict(id(), DoctorStatus.FAIL, String.valueOf(e.getMessage()), null);
-        }
-        return switch (verdict) {
+        return switch (launch.executable(binary, clone.clonePath(), readings.childPath(definition))) {
             case ExecutableVerdict.Resolved resolved ->
                 new DoctorVerdict(id(), DoctorStatus.OK, binary + " resolves to " + resolved.executable(), null);
             case ExecutableVerdict.Unresolved unresolved ->

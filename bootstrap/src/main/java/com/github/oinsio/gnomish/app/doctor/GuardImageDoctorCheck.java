@@ -10,9 +10,11 @@ import org.springframework.stereotype.Component;
  * The egress guard image is present locally, when a stage is container-bound (FR1 of
  * add-doctor-command): one image inspection through the sandbox adapter's {@link
  * SandboxImageReadiness#inspectPresence}, no container and no pull (NFR-R1). An absent image only
- * warns: a box pulls it on first use.
+ * warns: a box pulls it on first use. The inspection's throw is its answer (the owner's contract),
+ * so it is caught here and its words — which may quote the runtime — rendered for the console
+ * (NFR-O1).
  *
- * <p>Implements FR1, FR4, NFR-R1 of add-doctor-command.
+ * <p>Implements FR1, FR4, NFR-O1, NFR-R1 of add-doctor-command.
  */
 @NullMarked
 @Component
@@ -48,7 +50,7 @@ final class GuardImageDoctorCheck implements DoctorCheck {
             return new DoctorVerdict(
                     id(),
                     DoctorStatus.WARN,
-                    image + " is not present locally (" + e.getMessage() + "); a box pulls it on first use",
+                    image + " is not present locally (" + DoctorText.words(e) + "); a box pulls it on first use",
                     "docker pull " + image);
         }
     }

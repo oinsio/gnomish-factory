@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerReadVerdict;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.util.List;
 import java.util.Optional;
@@ -33,7 +34,7 @@ import java.util.Set;
  * supervise-daemon-loops-and-embed-dashboard).
  *
  * <p>Implements FR9, FR17 of add-tracker-port; FR1, FR2, FR4, FR17 of add-plugin-architecture;
- * FR23 of supervise-daemon-loops-and-embed-dashboard.
+ * FR23 of supervise-daemon-loops-and-embed-dashboard; FR3 of add-doctor-command.
  */
 public interface TrackerAdapterFactory {
 
@@ -107,6 +108,28 @@ public interface TrackerAdapterFactory {
      */
     default Optional<String> refuseForeignRef(SecretsProvider secrets, TrackerConfig config, TaskRef ref) {
         return Optional.empty();
+    }
+
+    /**
+     * Probes the configured tracker binding read-only, with the configured credential, and
+     * classifies the answer as {@link TrackerReadVerdict} (FR3, design D7 of add-doctor-command):
+     * the probe is the first request this adapter's startup makes, classified by the same code, and
+     * it writes nothing — {@code gnomish doctor --online} relays it, never {@link
+     * #create(TrackerAdapterContext)}, whose startup provisioning may write. A bad credential is
+     * answered once, never retried. A failure to obtain an answer is not a verdict: the probe
+     * throws, as {@link #refuseForeignRef} does (a missing credential, an outage that outlasted the
+     * adapter's own retry budget), and the caller reports a probe that could not run.
+     *
+     * <p>The default makes no call and reports {@link TrackerReadVerdict.NotApplicable}: an adapter
+     * with no remote binding (the in-memory reference adapter) needs no override.
+     *
+     * @param secrets the seam through which this adapter resolves its named credentials (FR2,
+     *     design D2 of add-plugin-architecture); never null
+     * @param config the project's validated {@code tracker} section; never null
+     * @return the probe's verdict; never null
+     */
+    default TrackerReadVerdict probeRead(SecretsProvider secrets, TrackerConfig config) {
+        return new TrackerReadVerdict.NotApplicable();
     }
 
     /**

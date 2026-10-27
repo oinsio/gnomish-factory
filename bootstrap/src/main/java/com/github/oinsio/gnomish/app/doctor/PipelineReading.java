@@ -28,8 +28,9 @@ public sealed interface PipelineReading {
      * The law did not load, or its stage bindings did not resolve.
      *
      * @param reasons one console-ready line per located error
+     * @param fix what fixes every one of them (UX1 of add-doctor-command)
      */
-    record Unloaded(List<String> reasons) implements PipelineReading {
+    record Unloaded(List<String> reasons, String fix) implements PipelineReading {
 
         public Unloaded {
             reasons = List.copyOf(reasons);

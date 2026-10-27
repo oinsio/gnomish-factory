@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerReadVerdict;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.time.InstantSource;
 import java.util.List;
@@ -39,7 +40,8 @@ import java.util.Set;
  * supervise-daemon-loops-and-embed-dashboard).
  *
  * <p>Implements FR5, FR9, FR17, NFR-R4, NFR-S1 of add-tracker-port; FR1, FR2, FR4, FR17 of
- * add-plugin-architecture; FR20, FR23 of supervise-daemon-loops-and-embed-dashboard.
+ * add-plugin-architecture; FR20, FR23 of supervise-daemon-loops-and-embed-dashboard; FR3 of
+ * add-doctor-command.
  */
 public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory {
 
@@ -72,7 +74,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         return create(
                 config,
                 context.instanceId(),
-                requireToken(context.secrets(), config),
+                GithubTrackerAdapterFactorySupport.requireToken(context.secrets(), config),
                 context.epochs(),
                 context.timeEquipment().clock());
     }
@@ -101,14 +103,11 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         String owner = repoRef.owner();
         String repo = repoRef.repo();
 
-        GithubLabelDef readyLabel = GithubTrackerAdapterFactorySupport.resolveLabel(
-                subsection, "ready", GithubTrackerAdapterFactorySupport.DEFAULT_READY);
-        GithubLabelDef workingLabel = GithubTrackerAdapterFactorySupport.resolveLabel(
-                subsection, "working", GithubTrackerAdapterFactorySupport.DEFAULT_WORKING);
-        GithubLabelDef needsHumanLabel = GithubTrackerAdapterFactorySupport.resolveLabel(
-                subsection, "needs-human", GithubTrackerAdapterFactorySupport.DEFAULT_NEEDS_HUMAN);
-        GithubLabelDef deliveredLabel = GithubTrackerAdapterFactorySupport.resolveLabel(
-                subsection, "delivered", GithubTrackerAdapterFactorySupport.DEFAULT_DELIVERED);
+        var labels = GithubTrackerAdapterFactorySupport.resolveLabels(subsection);
+        GithubLabelDef readyLabel = labels.ready();
+        GithubLabelDef workingLabel = labels.working();
+        GithubLabelDef needsHumanLabel = labels.needsHuman();
+        GithubLabelDef deliveredLabel = labels.delivered();
 
         var httpClient = GithubTrackerAdapterFactorySupport.httpClientFor(subsection, token);
         var cache = new GithubConditionalRequestCache(httpClient);
@@ -120,8 +119,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         var stateLabels = new GithubStateLabels(
                 readyLabel.name(), workingLabel.name(), needsHumanLabel.name(), deliveredLabel.name());
 
-        new GithubLabelProvisioner(httpClient)
-                .provision(owner, repo, List.of(readyLabel, workingLabel, needsHumanLabel, deliveredLabel));
+        new GithubLabelProvisioner(httpClient).provision(owner, repo, labels.all());
 
         return new GithubTracker(
                 new GithubFeedQuery(cache, owner, repo, readyLabel.name()),
@@ -162,7 +160,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     @DoNotMutate
     @Override
     public Optional<String> refuseForeignRef(SecretsProvider secrets, TrackerConfig config, TaskRef ref) {
-        return refuseForeignRef(config, ref, requireToken(secrets, config));
+        return refuseForeignRef(config, ref, GithubTrackerAdapterFactorySupport.requireToken(secrets, config));
     }
 
     /**
@@ -194,6 +192,31 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     private static String refusalMessageOf(GithubForeignRepoException e) {
         String message = e.getMessage();
         return message == null ? "foreign-repo refusal" : message;
+    }
+
+    /**
+     * The read-only probe of the binding (FR3, design D7 of add-doctor-command): the label listing
+     * {@code create}'s provisioning makes first, through {@link GithubLabelProvisioner#assess} over
+     * the labels {@code create} provisions, and nothing else — no {@code POST}, never {@code
+     * create}. The client is built as {@code refuseForeignRef} builds it, with its retry policy (a
+     * 401 is answered once); like {@code refuseForeignRef}, a missing credential throws {@link
+     * GithubTrackerConfigException} and an exhausted retry budget throws the client's {@code
+     * GithubHttpException}, since neither is an answer of GitHub's.
+     */
+    @Override
+    public TrackerReadVerdict probeRead(SecretsProvider secrets, TrackerConfig config) {
+        String token = GithubTrackerAdapterFactorySupport.requireToken(secrets, config);
+        Map<String, Object> subsection = config.subsection();
+        GithubRepoRef repoRef = GithubTrackerAdapterFactorySupport.requireRepoRef(subsection);
+        var provisioner =
+                new GithubLabelProvisioner(GithubTrackerAdapterFactorySupport.httpClientFor(subsection, token));
+        return provisioner
+                .assess(
+                        repoRef.owner(),
+                        repoRef.repo(),
+                        GithubTrackerAdapterFactorySupport.resolveLabels(subsection)
+                                .all())
+                .toReadVerdict();
     }
 
     /**
@@ -229,19 +252,5 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     @Override
     public Optional<TrackerSubsectionValidator> subsectionValidator() {
         return Optional.of(new GithubTrackerSubsectionValidator());
-    }
-
-    /**
-     * Resolves the connection's credential — {@code GNOMISH_GITHUB_TOKEN} unless a profile renamed
-     * it (FR16) — through the {@link SecretsProvider} (FR18, NFR-S1 of
-     * add-sandbox-core), failing closed with a clear {@link GithubTrackerConfigException} when it is
-     * absent or blank — the provider's {@link SecretsProvider#find} already treats blank as absent,
-     * so there is no silent empty value. The token is never logged.
-     */
-    private String requireToken(SecretsProvider secrets, TrackerConfig config) {
-        String credential = GithubCredential.nameOr(config.subsection(), TOKEN_ENV_VAR);
-        return secrets.find(credential)
-                .orElseThrow(() -> new GithubTrackerConfigException(
-                        credential + " is required to use the GitHub tracker adapter, but is missing or blank"));
     }
 }

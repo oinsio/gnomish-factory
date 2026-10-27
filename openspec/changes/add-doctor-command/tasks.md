@@ -77,7 +77,7 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       `FactoryHome.legacyFolders`), plus the hooks-path check of FR8 over
       `HooksPathLeftover` (2.4); project checks skipped with a reason when no
       project resolves (FR1, FR2, FR8). Verify one spec per check for ok/warn/fail.
-- [ ] 3.3a `GithubLabelProvisioner.assess(owner, repo, labelDefs)` in
+- [x] 3.3a `GithubLabelProvisioner.assess(owner, repo, labelDefs)` in
       `:adapters:github` (D1 applied, D7): the listing request and its status
       classification move out of `provision` into `assess`, returning a verdict
       (readable with the missing label names; or refused with the HTTP class,
@@ -87,7 +87,7 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       refuse on a failed verdict, with its current exception and message. Verify
       `GithubLabelProvisionerSpec`: `provision` refuses exactly when `assess`
       fails, over one data table of statuses, and `assess` sends no `POST`.
-- [ ] 3.3b `TrackerAdapterFactory.probeRead(SecretsProvider, TrackerConfig)` in
+- [x] 3.3b `TrackerAdapterFactory.probeRead(SecretsProvider, TrackerConfig)` in
       `:gnomish-plugin-api` (D7), a default method returning a probe verdict
       type of the api; the default makes no call and reports not applicable
       (the in-memory adapter keeps it), the GitHub override builds its client
@@ -95,42 +95,42 @@ Starts after `add-project-registry`, `add-release-pipeline` and
       regenerated in the same task. Verify the in-memory factory's default makes
       no call, the GitHub override's spec on WireMock, and the compatibility
       gate green on the regenerated baseline.
-- [ ] 3.3c `TrackerReadProbe` behind `--online` over `TrackerWiring.probeRead`
+- [x] 3.3c `TrackerReadProbe` behind `--online` over `TrackerWiring.probeRead`
       (a relay, like `refuseForeignRef`), never `create` or the read-only
       tracker resolution; the line reports reading confirmed, the labels startup
       will create, and that write access is not verified; without `--online` no
       network call (FR3, NG5). Verify with WireMock on a repository without the
       labels: exactly one `GET` and no `POST` with `--online`, no request
       without; and the refused scenario (404 and 403 lines).
-- [ ] 3.4 `DoctorReport` text and `--json` renderings through `ConsoleIO`
+- [x] 3.4 `DoctorReport` text and `--json` renderings through `ConsoleIO`
       `print`/`printMachine`; exit 0 without `fail`, 1 with (FR5, FR6, NFR-O1,
       NFR-S1, UX1, UX2). Verify specs for both renderings, the exit codes, and
       that a present secret's value never appears in either output.
 
 ## 4. Enforcement and identity (single-owner rows 5–10)
 
-- [ ] 4.1 `DoctorBoundarySpec` in `:bootstrap`: no `ProcessBuilder`,
+- [x] 4.1 `DoctorBoundarySpec` in `:bootstrap`: no `ProcessBuilder`,
       `Runtime.exec`, `System.getenv`, `System.getProperty`, YAML/JSON parser
       or `Files.read*` in the doctor package; asserts every doctor source was
       scanned (M2). Verify red with a planted `System.getenv`.
-- [ ] 4.2 Identity table (M1): for each of the fourteen checks, one fixture run
+- [x] 4.2 Identity table (M1): for each of the fourteen checks, one fixture run
       through the startup path (`take` or the owner's refusing form) and through
       `doctor`, asserting the same verdict. Verify the table has fourteen rows and
       passes.
-- [ ] 4.3 E2E: packaged jar, temporary `GNOMISH_HOME`, a registered clone with a
+- [x] 4.3 E2E: packaged jar, temporary `GNOMISH_HOME`, a registered clone with a
       missing token and a missing sandbox image → one run, two `fail` lines,
       exit 1, no worktree created and no container started — neither a box nor
       the box git floor helper (NFR-R1, NG1, M3). Verify the spec.
 
 ## 5. Docs and wrap-up
 
-- [ ] 5.1 README install section ends with `gnomish doctor`; operator guides
+- [x] 5.1 README install section ends with `gnomish doctor`; operator guides
       point to it from their troubleshooting sections; `docs/glossary.md` entry
       for doctor. Verify the README step exists.
-- [ ] 5.2 Traceability: every FR/NFR/UX named by a spec or javadoc, and UX2 of
+- [x] 5.2 Traceability: every FR/NFR/UX named by a spec or javadoc, and UX2 of
       `own-git-invocation-policy` named by the hooks-path check's spec. Verify
       `git grep -n "of add-doctor-command"` against the proposal's IDs.
-- [ ] 5.3 Root `./gradlew check` green. Verify the exit code.
+- [x] 5.3 Root `./gradlew check` green. Verify the exit code.
 - [ ] 5.4 Operator-stand acceptance (M3, human step): break three things
       (old image, missing token, unregistered clone), run `gnomish doctor` once.
       Verify three `fail` lines with fixes.

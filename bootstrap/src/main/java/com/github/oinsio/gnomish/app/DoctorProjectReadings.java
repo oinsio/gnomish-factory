@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.app.port.tracker.TrackerReadVerdict;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome;
@@ -23,12 +24,13 @@ import org.springframework.stereotype.Component;
  * What {@code doctor} reads about one registered clone, each answer from the owner the run path
  * asks (FR1, FR4 of add-doctor-command): the pipeline law through the pipeline source, the stage
  * bindings through {@link BindingResolver}, the declared secrets through the tracker wiring and the
- * check equipment, and the agent round's child environment as the run assembly composes it. A
+ * check equipment, the agent round's child environment as the run assembly composes it, and the
+ * tracker adapter's read-only probe through the tracker wiring's relay. A
  * facade (ADR 0010) over owners the doctor package cannot reach — they are this package's own —
  * whose answers the doctor checks read together: (a) every read starts from the clone's loaded
  * definition; (b) it composes, never holds, a credential seam; (c) "doctor" is the glossary's term.
  *
- * <p>Implements FR1, FR4, NFR-S1 of add-doctor-command.
+ * <p>Implements FR1, FR3, FR4, NFR-S1 of add-doctor-command.
  */
 @NullMarked
 @Component
@@ -123,6 +125,18 @@ public final class DoctorProjectReadings {
      */
     public @Nullable String childPath(PipelineDefinition definition) {
         return HostTaskExecutionEnvironment.childPath(roundChildEnv(definition));
+    }
+
+    /**
+     * The tracker adapter's own read-only probe of {@code tracker}, relayed by the tracker wiring
+     * with its own secrets (FR3, design D7 of add-doctor-command) — never the adapter's {@code
+     * create}, so nothing is provisioned. Called only for {@code doctor --online}.
+     *
+     * @return the adapter's verdict; a failure to obtain any answer propagates as the adapter throws
+     * @throws UsageException if {@code tracker} names an unregistered adapter type
+     */
+    public TrackerReadVerdict probeTracker(TrackerConfig tracker) {
+        return trackerWiring.probeRead(tracker);
     }
 
     /** The tracker adapter's declared credential names; none without a {@code tracker} section. */

@@ -21,7 +21,7 @@ import org.slf4j.Logger;
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3 of add-manual-run; FR5 of
  * harden-untrusted-text-sinks; NFR-O1, FR16 of fix-operator-blockers; FR7 of add-project-registry;
  * FR4, NFR-O1 of make-run-headless; FR9 of supervise-daemon-loops-and-embed-dashboard; FR5, FR14 of
- * add-sandbox-base-image.
+ * add-sandbox-base-image; FR6 of add-doctor-command.
  */
 final class RunExceptionReporting {
 
@@ -47,7 +47,8 @@ final class RunExceptionReporting {
             ServeExitCodeException.class, // already reported by the command itself
             RunParkedException.class, // FR1, FR2 of make-run-headless: the stop render is on stdout
             DecisionRequiredException.class, // FR4 of make-run-headless: the question is restated on stdout
-            DashboardDisabledException.class); // FR9 of supervise-daemon-loops-and-embed-dashboard: loop's ERROR
+            DashboardDisabledException.class, // FR9 of supervise-daemon-loops-and-embed-dashboard: loop's ERROR
+            DoctorFailedException.class); // FR6 of add-doctor-command: the report is on stdout
 
     private RunExceptionReporting() {}
 

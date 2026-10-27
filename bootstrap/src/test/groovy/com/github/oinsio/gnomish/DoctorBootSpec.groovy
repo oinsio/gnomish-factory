@@ -2,8 +2,10 @@ package com.github.oinsio.gnomish
 
 import com.github.oinsio.gnomish.adapter.git.HooksPathLeftover
 import com.github.oinsio.gnomish.adapter.git.HooksPathVerdict
+import com.github.oinsio.gnomish.app.DoctorFailedException
 import com.github.oinsio.gnomish.app.OperatorHomeFixture
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
+import com.github.oinsio.gnomish.app.RunExitCodeMapper
 import com.github.oinsio.gnomish.app.SecretLocator
 import com.github.oinsio.gnomish.app.ServePreconditions
 import com.github.oinsio.gnomish.app.doctor.DoctorCheckId
@@ -47,9 +49,12 @@ class DoctorBootSpec extends Specification {
         when:
         FactoryBoot.boot([:], 'doctor').close()
 
-        then: 'every check has its line'
+        then: 'every check has its line, but the online probe, which --online adds (FR3)'
         def lines = out.toString('UTF-8').readLines()
-        DoctorCheckId.values().every { id ->
+        !lines.any {
+            it.contains("  ${DoctorCheckId.TRACKER_PROBE.displayName()}: ")
+        }
+        DoctorCheckId.values().findAll { !it.online() }.every { id ->
             lines.any {
                 it.contains("  ${id.displayName()}: ")
             }
@@ -93,12 +98,17 @@ class DoctorBootSpec extends Specification {
         when:
         FactoryBoot.boot([:], 'doctor').close()
 
-        then:
+        then: 'the run reports every check, then ends with the failed-checks carrier: exit code 1 (FR6)'
+        def failed = thrown(DoctorFailedException)
+        new RunExitCodeMapper().getExitCode(failed) == 1
+
+        and:
         def lines = out.toString('UTF-8').readLines()
         lines.any {
             it.startsWith('fail  operator configuration: factory.git-netwrok-timeout is not a known key')
         }
         lines.any { it.contains('  pre-registry layout: ') }
+        lines.last().startsWith('summary: ')
     }
 
     def "FR1: a leftover of the pre-registry layout only warns"() {

@@ -71,6 +71,11 @@ story) is:
 | 1    | startup failure — an operator precondition refused the daemon (`[GF173]`, see "Lifecycle"), or the label-provisioning smoke test could not reach the configured tracker binding                   |
 | 2    | usage error — malformed flags (including `--dashboard-out` with the dashboard off), an unregistered `--dir`, or a configuration violation (every problem listed at once, before any tracker call) |
 
+For an exit 1 or 2, `gnomish doctor --dir=<clone>` lists every startup problem in one run,
+each `fail` line with its fix; `--online` adds the read-only tracker probe that tests the
+credential the label-provisioning smoke test uses — see
+[*Checking a setup*](operator-guide.md#checking-a-setup-gnomish-doctor).
+
 Batch `take` reuses the single-`take` exit-code table (see "`take` CLI
 Reference" in `operator-guide.md`) per ref, then aggregates: exit 0 only if
 every ref exited 0, otherwise the **smallest non-zero** per-ref code wins —

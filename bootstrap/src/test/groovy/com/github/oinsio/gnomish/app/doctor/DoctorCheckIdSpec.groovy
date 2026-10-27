@@ -3,8 +3,8 @@ package com.github.oinsio.gnomish.app.doctor
 import spock.lang.Specification
 
 /**
- * FR1, FR5, FR8 of add-doctor-command: the check list is the fourteen checks of FR1 followed by
- * FR8's hooks-path check, in report order, each with a stable id the JSON document will carry and
+ * FR1, FR3, FR5, FR8 of add-doctor-command: the check list is the fourteen checks of FR1 followed by
+ * FR8's hooks-path check and FR3's online tracker probe, in report order, each with a stable id the JSON document will carry and
  * the name its line shows. Pinned whole, so a renamed id fails here rather than in a consumer.
  */
 class DoctorCheckIdSpec extends Specification {
@@ -60,12 +60,24 @@ class DoctorCheckIdSpec extends Specification {
                 'hooks-path',
                 'clone hooks path'
             ],
+            [
+                'tracker-probe',
+                'tracker read probe'
+            ],
         ]
     }
 
-    def "FR1, FR8: fourteen checks of FR1 come first, the hooks-path check of FR8 last"() {
+    def "FR1, FR3, FR8: fourteen checks of FR1 come first, then the hooks-path check of FR8, then FR3's probe"() {
         expect:
-        DoctorCheckId.values().size() == 15
-        DoctorCheckId.values().last() == DoctorCheckId.HOOKS_PATH
+        DoctorCheckId.values().size() == 16
+        DoctorCheckId.values()[14] == DoctorCheckId.HOOKS_PATH
+        DoctorCheckId.values().last() == DoctorCheckId.TRACKER_PROBE
+    }
+
+    def "FR3: the tracker read probe is the one online check"() {
+        expect:
+        DoctorCheckId.values().findAll {
+            it.online()
+        } == [DoctorCheckId.TRACKER_PROBE]
     }
 }

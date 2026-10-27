@@ -10,15 +10,25 @@ import spock.lang.Specification
  */
 class ConfigurationDoctorCheckSpec extends Specification {
 
-    def "FR7: every collected violation is its own failed line, in the order found"() {
+    def "FR7, UX1: every collected violation is its own failed line, in the order found, with its fix"() {
         expect:
         check(new ConfigurationViolations([
             'a: unknown key x',
             'b: FACTORY_Y is set'
         ])).run(DoctorSpecSupport.withoutProject()) == [
-            new DoctorVerdict(DoctorCheckId.CONFIGURATION, DoctorStatus.FAIL, 'a: unknown key x', null),
-            new DoctorVerdict(DoctorCheckId.CONFIGURATION, DoctorStatus.FAIL, 'b: FACTORY_Y is set', null),
+            new DoctorVerdict(DoctorCheckId.CONFIGURATION, DoctorStatus.FAIL, 'a: unknown key x', DoctorText.AS_THE_LINE_NAMES),
+            new DoctorVerdict(DoctorCheckId.CONFIGURATION, DoctorStatus.FAIL, 'b: FACTORY_Y is set', DoctorText.AS_THE_LINE_NAMES),
         ]
+    }
+
+    def "NFR-O1: a violation quoting a hostile key is rendered for the console"() {
+        when:
+        def verdicts = check(new ConfigurationViolations(['a: unknown key \u001b[31mx'])).run(DoctorSpecSupport.withoutProject())
+
+        then:
+        verdicts*.status() == [DoctorStatus.FAIL]
+        !verdicts[0].detail().contains('\u001b')
+        verdicts[0].detail().contains('[31mx')
     }
 
     def "FR1: a clean configuration is one ok line"() {

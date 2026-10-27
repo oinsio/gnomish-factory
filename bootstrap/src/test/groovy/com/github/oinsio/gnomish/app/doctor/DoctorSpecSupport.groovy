@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
 import com.github.oinsio.gnomish.app.TrackerWiring
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.project.ProjectResolution
 import com.github.oinsio.gnomish.app.project.RegisteredClone
@@ -43,6 +44,9 @@ final class DoctorSpecSupport {
     /** The tracker type whose adapter declares {@link #TRACKER_TOKEN}. */
     static final String TRACKER_TYPE = 'doctor-test'
 
+    /** The fix every unloaded reading of these fixtures carries. */
+    static final String LAW_FIX = DoctorSurvey.LAW_FIX
+
     private DoctorSpecSupport() {}
 
     /** A one-stage definition, with a {@code tracker} section of {@link #TRACKER_TYPE} when asked. */
@@ -65,7 +69,7 @@ final class DoctorSpecSupport {
     /** A registered clone whose law did not load. */
     static DoctorContext unloaded(List<String> reasons = ['config.yaml:3: bad']) {
         DoctorContext.of(new ProjectResolution.Registered(CLONE), {
-            new PipelineReading.Unloaded(reasons)
+            new PipelineReading.Unloaded(reasons, LAW_FIX)
         })
     }
 
@@ -77,17 +81,20 @@ final class DoctorSpecSupport {
     }
 
     /**
-     * The real readings, over a secrets port holding {@code secrets}, the operator's {@code
-     * passthrough} names and bindings, and a pipeline source answering {@code source}'s load.
+     * The real readings, over a secrets port holding {@code secrets} (or the spec's own {@code
+     * secretsPort}), the operator's {@code passthrough} names and bindings, a pipeline source
+     * answering {@code source}'s load, and the tracker adapter {@code registry} when the spec plants
+     * its own.
      */
     static DoctorProjectReadings readings(Map<String, String> secrets = [:], Map options = [:]) {
         def time = VirtualTimeEquipment.create()
-        def secretsPort = new MapSecretsProvider(secrets)
+        def secretsPort = (options.secretsPort ?: new MapSecretsProvider(secrets)) as SecretsProvider
         def factory = [credentialEnvVars: { TrackerConfig config ->
                 [TRACKER_TOKEN]
             }] as TrackerAdapterFactory
-        def wiring = new TrackerWiring([(TRACKER_TYPE): factory], secretsPort,
-        (options.source ?: TrackerValidatorStub.plainSource()) as PipelineSource, time)
+        def registry = (options.registry ?: [(TRACKER_TYPE): factory]) as Map<String, TrackerAdapterFactory>
+        def wiring = new TrackerWiring(registry, secretsPort,
+                (options.source ?: TrackerValidatorStub.plainSource()) as PipelineSource, time)
         def checks = new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(time.clock()), [:],
         secretsPort, new FactoryProperties(null, null, null, null), time)
         def sandbox = new SandboxProperties(null, null, null, null, [], (options.passthrough ?: []) as List<String>,

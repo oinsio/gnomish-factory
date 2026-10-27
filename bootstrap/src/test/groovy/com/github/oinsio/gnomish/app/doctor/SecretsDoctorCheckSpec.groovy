@@ -48,19 +48,25 @@ class SecretsDoctorCheckSpec extends Specification {
         ]
     }
 
-    def "FR1: a place the adapter refuses fails with the adapter's own refusal"() {
+    def "FR1, NFR-O1, UX1: a place the adapter refuses fails with the adapter's own refusal (#label), its fix pointing at it"() {
         given:
         locator.locate(TRACKER_TOKEN) >> {
-            throw new UsageException('secret file x is readable by others: run chmod 600 x')
+            throw new UsageException(message)
         }
 
         expect:
         new SecretsDoctorCheck(readings(), locator).run(DoctorSpecSupport.bound(false, true, DoctorSpecSupport.definition(true))) == [
-            new DoctorVerdict(DoctorCheckId.SECRETS, DoctorStatus.FAIL, 'secret file x is readable by others: run chmod 600 x', null)
+            new DoctorVerdict(DoctorCheckId.SECRETS, DoctorStatus.FAIL, detail, DoctorText.AS_THE_LINE_NAMES)
         ]
+
+        where:
+        label | message || detail
+        'its words' | 'secret file x is readable by others: run chmod 600 x' || 'secret file x is readable by others: run chmod 600 x'
+        'no words' | null || UsageException.name
+        'hostile words' | 'secret file \u001b[2Jx is readable' || 'secret file ^[[2Jx is readable'
     }
 
-    def "FR1: a tracker type no adapter serves fails with the tracker wiring's refusal"() {
+    def "FR1, UX1: a tracker type no adapter serves fails with the tracker wiring's refusal and its fix"() {
         given:
         def definition = DoctorSpecSupport.definition(true)
         def unknown = new com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition(definition.schemaVersion(),
@@ -73,6 +79,7 @@ class SecretsDoctorCheckSpec extends Specification {
         0 * locator._
         verdicts*.status() == [DoctorStatus.FAIL]
         verdicts[0].detail().startsWith("unknown tracker type 'nowhere'")
+        verdicts[0].fix() == DoctorText.TRACKER_TYPE_FIX
     }
 
     def "FR1: a pipeline that declares no secret is one ok line"() {

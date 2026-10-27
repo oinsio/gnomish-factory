@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.tracker.inmemory
 
 import com.github.oinsio.gnomish.app.FixedTrackerAdapterContext
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
+import com.github.oinsio.gnomish.app.port.tracker.TrackerReadVerdict
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import spock.lang.Specification
 
@@ -70,5 +71,19 @@ class InMemoryTrackerAdapterFactorySpec extends Specification {
     def "subsectionValidator is absent, inheriting the interface default"() {
         expect:
         new InMemoryTrackerAdapterFactory().subsectionValidator().isEmpty()
+    }
+
+    // FR3 of add-doctor-command (design D7): the reference adapter keeps the SPI default — it has
+    //     no remote binding, so `doctor --online` reads no credential and probes nothing for it
+    def "probeRead keeps the interface default: no call, not applicable"() {
+        given:
+        def secrets = Mock(SecretsProvider)
+
+        when:
+        def verdict = new InMemoryTrackerAdapterFactory().probeRead(secrets, new TrackerConfig('inmemory', 3))
+
+        then:
+        verdict == new TrackerReadVerdict.NotApplicable()
+        0 * secrets._
     }
 }

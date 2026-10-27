@@ -100,7 +100,7 @@ class DoctorContextSpec extends Specification {
             RAN
         }) == skipped('the pipeline law did not load')
         context.onPipeline(ID, {
-            it == new PipelineReading.Unloaded(['bad']) ? RAN : []
+            it == new PipelineReading.Unloaded(['bad'], DoctorSpecSupport.LAW_FIX) ? RAN : []
         }) == RAN
         context.onClone(ID, { RAN }) == RAN
     }

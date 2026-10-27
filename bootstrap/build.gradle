@@ -100,11 +100,10 @@ dependencies {
     testImplementation project(':operatorevent')
     // `ConfigLevels` derives the key → level table from the annotation (D4 of add-project-registry).
     implementation project(':operatorconfig')
-    // Test scope, declared rather than inherited: the process-spawn boundary gate and the
-    // subprocess-backed harnesses name `:subprocess`'s types; `GitVersionFloorSpec` names
-    // `:gittransfer`'s `GitInvocation` (design D1 of own-git-invocation-policy).
-    testImplementation project(':subprocess')
-    testImplementation project(':gittransfer')
+    // Production scope since add-doctor-command: the doctor's checks read the launch owner's
+    // verdicts (`ProcessLaunch`, D4) and the git floor (`GitVersion`, D1) by their own types.
+    implementation project(':subprocess')
+    implementation project(':gittransfer')
     // Spring-family versions are managed by the Boot BOM (design D3).
     implementation platform(libs.spring.boot.dependencies)
 

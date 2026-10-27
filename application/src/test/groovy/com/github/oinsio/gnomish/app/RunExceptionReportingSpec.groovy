@@ -185,7 +185,9 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
             new TakeExitCodeException(0),
             new ServeExitCodeException(1),
             // FR9 of supervise-daemon-loops-and-embed-dashboard: the loop logged its give-up ERROR
-            new DashboardDisabledException()
+            new DashboardDisabledException(),
+            // FR6 of add-doctor-command: the doctor report is already on stdout
+            new DoctorFailedException(1)
         ]
     }
 

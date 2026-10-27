@@ -24,6 +24,8 @@ class ReportedFailureExceptionReporterSpec extends Specification {
             new ServeExitCodeException(1),
             // FR9 of supervise-daemon-loops-and-embed-dashboard: the loop's give-up ERROR is the report
             new DashboardDisabledException(),
+            // FR6 of add-doctor-command: the doctor report is already on stdout
+            new DoctorFailedException(1),
             // FR7 of add-project-registry: the loader printed the report before the context existed
             new ConfigurationViolationsException([
                 'factory.x is not a known key'

@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerReadVerdict
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
@@ -234,6 +235,31 @@ class TrackerWiringSpec extends Specification {
         then:
         1 * factory.refuseForeignRef(SECRETS, GITHUB, ref) >> Optional.of('ref names another repository')
         refusal == Optional.of('ref names another repository')
+    }
+
+    // FR3, design D7 of add-doctor-command; NFR-S1: the read probe is relayed with the wiring's own
+    //     secrets to the factory of the configured type, and no adapter is built (create never runs).
+    def "FR3: probeRead asks the configured type's factory with the wiring's own secrets and builds no adapter"() {
+        given:
+        def factory = Mock(TrackerAdapterFactory)
+        def verdict = new TrackerReadVerdict.ReadConfirmed(['gnomish:ready'])
+
+        when:
+        def answer = wiring([github: factory]).probeRead(GITHUB)
+
+        then:
+        1 * factory.probeRead(SECRETS, GITHUB) >> verdict
+        0 * factory.create(_)
+        answer == verdict
+    }
+
+    def "FR3: probeRead of an unregistered type is refused with the shared unknown-type wording"() {
+        when:
+        wiring([:]).probeRead(GITHUB)
+
+        then:
+        def e = thrown(UsageException)
+        e.message == "unknown tracker type 'github' — supported: "
     }
 
     // FR13 of add-base-ref-resolution: the startup law is bound through the wiring's OWN

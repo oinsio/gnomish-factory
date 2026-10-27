@@ -111,6 +111,56 @@ install -m 600 /dev/null ~/.gnomish/projects/widgets/secrets/GNOMISH_GITHUB_TOKE
 $EDITOR ~/.gnomish/projects/widgets/secrets/GNOMISH_GITHUB_TOKEN
 ```
 
+## Checking a setup: `gnomish doctor`
+
+<!-- implements FR1, FR2, FR3, FR5, FR6, UX1, UX2 of add-doctor-command -->
+
+When a command refuses to start, or before the first `take` or `serve` on a
+new machine, run:
+
+```bash
+gnomish doctor --dir=/path/to/target-repo
+```
+
+`doctor` runs every readiness check the startup path makes, in one run, and
+never stops at the first failure: the factory version and Java runtime, the git
+version floor, the operator configuration (one line per violation), the
+registration of `--dir`, the clone's ref backend, the pipeline law, every
+secret the tracker and the configured checks declare, and — depending on where
+the pipeline's stages run — the agent credential, Docker, the sandbox and guard
+images, the agent CLI binary and the host process-group launcher. It also names
+leftovers of the pre-registry folder layout and the `core.hooksPath` line
+earlier factory versions wrote into the clone. Each verdict comes from the same
+component the startup path asks, so `doctor` and `take` cannot disagree.
+
+Each result is one line — status, check, detail and, for `warn` and `fail`, the
+fix — and a summary line closes the list:
+
+```text
+ok  git version floor: git 2.56.0 meets the floor 2.56.0
+fail  declared secret: GNOMISH_GITHUB_TOKEN not found; searched …; fix: provide GNOMISH_GITHUB_TOKEN in one of the places searched
+summary: 12 ok, 0 warn, 1 fail, 2 skipped; fix each fail line, then run gnomish doctor again
+```
+
+| Status    | Meaning                                                                                   |
+|-----------|-------------------------------------------------------------------------------------------|
+| `ok`      | the check passed                                                                          |
+| `warn`    | worth a look, never fails the run (an absent guard image, old layout leftovers)           |
+| `fail`    | the startup path would refuse on it; the line names the fix                               |
+| `skipped` | the check does not apply here, with the reason (no registered clone, pipeline not loaded) |
+
+| Flag           | Meaning                                                                                                                                               |
+|----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--dir=<path>` | the clone to check; defaults to `.`. A directory no project registers gets the host checks only, and the output names the `project add` line          |
+| `--online`     | adds one read-only tracker probe with the configured credential (for GitHub, the label listing startup makes first); it confirms reading, not writing |
+| `--json`       | prints the same results as one JSON document on stdout, each check with a stable `id`, `status`, `detail` and `fix`                                   |
+
+Exit code 0 when no check failed, 1 when any did; a `warn` or `skipped` never
+fails the run. `doctor` changes nothing: it makes no claim, branch, worktree or
+box, pulls no image, writes nothing but its log, and opens no network
+connection without `--online`. A secret is named with where it was looked for,
+never shown.
+
 ## Quick Start
 
 Three places carry configuration, each with a different owner and a different
@@ -842,6 +892,11 @@ queue is a clean no-op — the expected steady state of a cron-driven factory.
 | 14   | revoked — claim lost mid-run (issue closed or reassigned under a working gnome)                                                                                                                                     |
 | 15   | refused or skipped (held by another instance, already delivered, closed/nonexistent, foreign repo)                                                                                                                  |
 | 16   | infrastructure unavailable — claim released because a base-ref remote could not be reached; see [`operator-guide-serve.md`](operator-guide-serve.md#base-ref-resolution-task-branchbase-and-the-remote-outage-gate) |
+
+For an exit 1, 2, 3 or 8, `gnomish doctor --dir=<clone>` lists every startup problem in one
+run, each `fail` line with its fix; `gnomish doctor --online` also tests the tracker
+credential with one read-only request — see
+[*Checking a setup*](#checking-a-setup-gnomish-doctor).
 
 Codes shared with `gnomish run` (0/1/2/3/8/10/11/12) keep the same meaning. An
 uncaught exception during a take run always runs the abort protocol first and

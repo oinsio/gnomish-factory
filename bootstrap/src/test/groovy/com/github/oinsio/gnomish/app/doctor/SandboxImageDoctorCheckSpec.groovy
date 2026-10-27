@@ -14,6 +14,9 @@ import spock.lang.Specification
  */
 class SandboxImageDoctorCheckSpec extends Specification {
 
+    static final String PULL = "docker pull ${IMAGE}, or build it from docs/examples/sandbox-image/, then run gnomish doctor again"
+    .toString()
+
     TaskBranchGit branches = Stub()
     SandboxImageReadiness readiness = Mock()
 
@@ -35,7 +38,7 @@ class SandboxImageDoctorCheckSpec extends Specification {
         ]
     }
 
-    def "FR4, NG1: #label fails with the inspection's own message, the floor named as not probed"() {
+    def "FR4, NG1, UX1: #label fails with the inspection's own message and its fix, the floor named as not probed"() {
         given:
         readiness.inspectContract(IMAGE) >> { throw failure }
 
@@ -44,13 +47,29 @@ class SandboxImageDoctorCheckSpec extends Specification {
 
         then:
         verdicts == [
-            new DoctorVerdict(DoctorCheckId.SANDBOX_IMAGE, DoctorStatus.FAIL, detail + SandboxImageDoctorCheck.FLOOR_NOT_PROBED, null)
+            new DoctorVerdict(DoctorCheckId.SANDBOX_IMAGE, DoctorStatus.FAIL, detail + SandboxImageDoctorCheck.FLOOR_NOT_PROBED, fix)
         ]
 
         where:
-        label | failure || detail
-        'another contract' | refusal() || refusal().message
-        'an image the runtime does not hold' | new IllegalStateException('No such image') || 'the check could not judge: No such image'
+        label | failure || detail | fix
+        'another contract' | refusal() || refusal().message | DoctorText.AS_THE_LINE_NAMES
+        'an image the runtime does not hold' | new IllegalStateException('No such image') || 'the check could not judge: No such image' | PULL
+        'a fault with no words' | new IllegalStateException() || 'the check could not judge: java.lang.IllegalStateException' | PULL
+        'a runtime answer with a control sequence' | new IllegalStateException('No such \u001b[2Jimage') || 'the check could not judge: No such ^[[2Jimage' | PULL
+    }
+
+    def "UX1: with no image configured the fix names the setting"() {
+        given:
+        def check = new SandboxImageDoctorCheck(PreconditionsFixture.preconditions(branches, readiness, true, 'container', null),
+                PreconditionsFixture.sandbox(null))
+
+        when:
+        def verdicts = check.run(DoctorSpecSupport.bound(true, false))
+
+        then:
+        0 * readiness._
+        verdicts*.status() == [DoctorStatus.FAIL]
+        verdicts[0].fix() == 'set factory.sandbox.image in the operator configuration, then run gnomish doctor again'
     }
 
     def "D3: no container-bound stage skips the check without inspecting"() {

@@ -19,14 +19,14 @@ class PipelineDoctorCheckSpec extends Specification {
         ]
     }
 
-    def "FR1: every located error of a law that did not load is its own failed line"() {
+    def "FR1, UX1: every located error of a law that did not load is its own failed line, with the reading's fix"() {
         expect:
         check.run(DoctorSpecSupport.unloaded([
             'config.yaml:3: bad',
             'stages/x.yaml:1: worse'
         ])) == [
-            new DoctorVerdict(DoctorCheckId.PIPELINE, DoctorStatus.FAIL, 'config.yaml:3: bad', null),
-            new DoctorVerdict(DoctorCheckId.PIPELINE, DoctorStatus.FAIL, 'stages/x.yaml:1: worse', null),
+            new DoctorVerdict(DoctorCheckId.PIPELINE, DoctorStatus.FAIL, 'config.yaml:3: bad', DoctorSpecSupport.LAW_FIX),
+            new DoctorVerdict(DoctorCheckId.PIPELINE, DoctorStatus.FAIL, 'stages/x.yaml:1: worse', DoctorSpecSupport.LAW_FIX),
         ]
     }
 

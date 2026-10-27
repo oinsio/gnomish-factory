@@ -47,27 +47,33 @@ class DoctorSurveySpec extends Specification {
                 readings([:], [source: source, bindings: bindings]))
 
         expect:
-        survey.read(CLONE) == new PipelineReading.Unloaded(reasons)
+        survey.read(CLONE) == new PipelineReading.Unloaded(reasons, fix)
 
         where:
-        label | outcome | bindings || reasons
+        label | outcome | bindings || reasons | fix
         'a law with located errors' | invalid() | new BindingProperties('host', [:]) || [
             new ConfigError('config.yaml', 'line 3', 'bad').render().forConsole()
-        ]
+        ] | DoctorSurvey.LAW_FIX
         'a binding no adapter serves' | new LoadOutcome.Loaded(definition()) | new BindingProperties('nowhere', [:]) || [
             'the stage bindings do not resolve: ' + bindingRefusal()
-        ]
+        ] | DoctorSurvey.BINDINGS_FIX
     }
 
-    def "FR1: a law that cannot be read at all is an unloaded reading naming the fault"() {
+    def "FR1, NFR-O1, UX1: a law that cannot be read at all is an unloaded reading naming the fault (#label)"() {
         given:
-        source.load(_) >> { throw new IOException('disk gone') }
+        source.load(_) >> { throw new IOException((String) message) }
         def survey = new DoctorSurvey(published(new ProjectResolution.Registered(CLONE)), readings([:], [source: source]))
 
         expect:
         survey.read(CLONE) == new PipelineReading.Unloaded([
-            'the pipeline law could not be read: disk gone'
-        ])
+            'the pipeline law could not be read: ' + detail
+        ], "make the pipeline law of ${CLONE.clonePath()} readable, then run gnomish doctor again".toString())
+
+        where:
+        label | message || detail
+        'its words' | 'disk gone' || 'java.io.IOException: disk gone'
+        'no words' | null || 'java.io.IOException'
+        'hostile words' | 'gone \u001b[2J' || 'java.io.IOException: gone ^[[2J'
     }
 
     def "FR2: outside a registered clone nothing is read"() {

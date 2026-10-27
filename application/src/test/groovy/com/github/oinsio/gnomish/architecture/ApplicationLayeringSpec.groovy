@@ -59,6 +59,9 @@ class ApplicationLayeringSpec extends Specification {
         'com.github.oinsio.gnomish.board',
         'com.github.oinsio.gnomish.board.json',
         'com.github.oinsio.gnomish.dashboard',
+        // `..doctor` itself holds no class here — the command lives in `:bootstrap`; only the
+        // writer of its `--json` document does (design D5 of add-doctor-command).
+        'com.github.oinsio.gnomish.doctor.json',
         'com.github.oinsio.gnomish.serveobservability',
         'com.github.oinsio.gnomish.serveobservability.json',
         'com.github.oinsio.gnomish.serveobservability.writer',

@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.PropertyResolver;
 
 /**
  * The log file of this process, decided before Logback starts (FR11, design D1, D6): a command
@@ -27,7 +28,7 @@ import org.springframework.core.env.MapPropertySource;
  * Every other {@code factory.*} key is left to the context's own binding, which reports a bad value
  * of it — this step must not fail on a key it does not read.
  *
- * <p>Implements FR11, UX3 of add-project-registry; FR7 of add-doctor-command.
+ * <p>Implements FR11, UX3 of add-project-registry; FR7, UX1 of add-doctor-command.
  */
 public final class OperatorLogFile {
 
@@ -80,6 +81,18 @@ public final class OperatorLogFile {
     public static Map<String, Object> properties(Path file) {
         String path = file.toString();
         return Map.of(PROPERTY, path, ARCHIVE_BASE_PROPERTY, path.replaceFirst("\\.log$", ""));
+    }
+
+    /**
+     * The log file {@link #publish} put into {@code environment}: the file this process logs to,
+     * for a line that sends the operator to it (UX1 of add-doctor-command).
+     *
+     * @param environment the environment {@link #publish} wrote to
+     * @return the published log file
+     * @throws IllegalStateException if nothing was published
+     */
+    public static Path published(PropertyResolver environment) {
+        return Path.of(environment.getRequiredProperty(PROPERTY));
     }
 
     /** The instance name as the context will bind it; throws when it cannot name a file. */

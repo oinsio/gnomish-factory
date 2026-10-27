@@ -3,16 +3,11 @@ package com.github.oinsio.gnomish.adapter.tracker.github
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson
 import static com.github.tomakehurst.wiremock.client.WireMock.get
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.post
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
-import com.github.tomakehurst.wiremock.WireMockServer
-import io.github.resilience4j.core.IntervalFunction
-import io.github.resilience4j.retry.RetryConfig
-import java.net.http.HttpResponse
-import spock.lang.Specification
 
 /**
  * GithubLabelProvisioner (FR5, NFR-R4 of add-tracker-port): verifies the
@@ -21,46 +16,9 @@ import spock.lang.Specification
  * existing one, and failing loud with the repo name when the token cannot
  * write to the configured repo.
  *
- * Implements FR5, NFR-R4 of add-tracker-port.
+ * Implements FR5, NFR-R4 of add-tracker-port; FR3 of add-doctor-command.
  */
-class GithubLabelProvisionerSpec extends Specification {
-
-    WireMockServer wireMock
-
-    def setup() {
-        wireMock = new WireMockServer(0)
-        wireMock.start()
-    }
-
-    def cleanup() {
-        wireMock.stop()
-    }
-
-    private static RetryConfig fastRetryConfig() {
-        RetryConfig.custom()
-                .maxAttempts(2)
-                .intervalFunction(IntervalFunction.of(10))
-                // Matches everything rather than naming the adapter's package-private
-                // GithubHttpUncheckedIOException (illegal cross-package access from this spec's
-                // package, see FeedAutomatonOutageIntegrationSpec) -- harmless here since the only
-                // exception this predicate ever actually sees is a real transport failure.
-                .retryOnException({ true })
-                .retryOnResult({ HttpResponse<?> r -> r.statusCode() >= 500 })
-                .build()
-    }
-
-    private GithubLabelProvisioner newProvisioner() {
-        new GithubLabelProvisioner(new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig()))
-    }
-
-    private static List<GithubLabelDef> defaultDefs() {
-        [
-            new GithubLabelDef('gnomish:ready', '2ea44f', 'Gnomish factory: task ready to be claimed'),
-            new GithubLabelDef('gnomish:working', '1f6feb', 'Gnomish factory: task claimed and in progress'),
-            new GithubLabelDef('gnomish:needs-human', 'd73a4a', 'Gnomish factory: task escalated, waiting on a human'),
-            new GithubLabelDef('gnomish:delivered', '8250df', 'Gnomish factory: task delivered'),
-        ]
-    }
+class GithubLabelProvisionerSpec extends GithubLabelRepoSpecification {
 
     def "creates every missing configured label with its color and description"() {
         given:
@@ -194,5 +152,48 @@ class GithubLabelProvisionerSpec extends Specification {
         then:
         def ex = thrown(GithubLabelProvisioningException)
         ex.message.contains('acme/widgets')
+    }
+
+    // FR3 of add-doctor-command (design D7): provision is built on assess, so the two classify one
+    // listing with one code — provision refuses exactly when assess fails, with its message.
+    def "provision refuses exactly when assess fails, for listing status #status"() {
+        given:
+        listingAnswers(status, body)
+        wireMock.stubFor(post(urlEqualTo(CREATION)).willReturn(aResponse().withStatus(201).withBody('{}')))
+        def provisioner = newProvisioner()
+
+        when:
+        def verdict = provisioner.assess('acme', 'widgets', defaultDefs())
+
+        then: 'assess lists once and writes nothing'
+        verdict.class == expected
+        wireMock.verify(1, getRequestedFor(urlEqualTo(LISTING)))
+        wireMock.verify(0, postRequestedFor(urlEqualTo(CREATION)))
+
+        when:
+        Exception refusal = null
+        try {
+            provisioner.provision('acme', 'widgets', defaultDefs())
+        } catch (GithubLabelProvisioningException e) {
+            refusal = e
+        }
+
+        then:
+        (refusal != null) == (expected != GithubLabelAssessment.Listed)
+        refusal?.message == verdict.failureMessage('acme/widgets').orElse(null)
+        wireMock.verify(refusal == null ? 4 : 0, postRequestedFor(urlEqualTo(CREATION)))
+
+        where:
+        status | body || expected
+        200 | '[]' || GithubLabelAssessment.Listed
+        201 | '[]' || GithubLabelAssessment.Listed
+        299 | '[]' || GithubLabelAssessment.Listed
+        200 | 'not json {' || GithubLabelAssessment.Malformed
+        300 | '[]' || GithubLabelAssessment.Refused
+        401 | '{}' || GithubLabelAssessment.Refused
+        403 | '{}' || GithubLabelAssessment.Refused
+        404 | '{}' || GithubLabelAssessment.Refused
+        418 | '{}' || GithubLabelAssessment.Refused
+        422 | '{}' || GithubLabelAssessment.Refused
     }
 }

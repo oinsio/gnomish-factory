@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
+import com.github.oinsio.gnomish.app.port.tracker.TrackerReadVerdict
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import java.lang.reflect.Modifier
 import java.time.Duration
@@ -84,5 +86,20 @@ class TrackerAdapterFactorySpec extends Specification {
 
         expect:
         factory.configuredDesignatorKinds(config()).isEmpty()
+    }
+
+    // FR3 of add-doctor-command (design D7): an adapter that does not override the read probe has
+    //     nothing to probe, so the default reads no credential and reports the probe not applicable
+    def "FR3: the default read probe makes no call and reports not applicable"() {
+        given:
+        def factory = new MinimalFactory(Stub(Tracker))
+        def secrets = Mock(SecretsProvider)
+
+        when:
+        def verdict = factory.probeRead(secrets, config())
+
+        then:
+        verdict == new TrackerReadVerdict.NotApplicable()
+        0 * secrets._
     }
 }

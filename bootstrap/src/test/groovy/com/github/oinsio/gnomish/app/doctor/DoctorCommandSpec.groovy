@@ -1,22 +1,24 @@
 package com.github.oinsio.gnomish.app.doctor
 
-import static com.github.oinsio.gnomish.app.doctor.DoctorSpecSupport.readings
+import static com.github.oinsio.gnomish.app.doctor.DoctorCommandFixture.check
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.project.ProjectResolution
-import com.github.oinsio.gnomish.app.project.RegisteredClone
-import java.nio.file.Path
-import org.springframework.beans.factory.ObjectProvider
-import org.springframework.beans.factory.support.DefaultListableBeanFactory
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
 
 /**
- * FR1, FR7 of add-doctor-command (design D3): the command runs every check in the order of {@link
- * DoctorCheckId}, whatever order the beans arrive in, over one context; a check that throws is one
- * failed result and the next check still runs; each result is printed with its fix below it.
+ * FR1, FR3, FR7 of add-doctor-command (design D3): the command runs every check in the order of
+ * {@link DoctorCheckId}, whatever order the beans arrive in, over one context; a check that throws
+ * is one failed result and the next check still runs; the online check runs only under {@code
+ * --online}. The rendering and the exit code are {@code DoctorCommandOutputSpec}'s.
  */
 class DoctorCommandSpec extends Specification {
+
+    static final String LOG_FILE_FIX = "the full error is in ${DoctorCommandFixture.LOG_FILE}; " +
+    'fix what it names, then run gnomish doctor again'
 
     ConsoleIO console = Mock()
 
@@ -35,14 +37,48 @@ class DoctorCommandSpec extends Specification {
                 new DoctorVerdict(DoctorCheckId.GIT_FLOOR, DoctorStatus.FAIL, 'old', 'upgrade')
             ]
         }
-        def command = command([legacy, pipeline, git])
+        def command = DoctorCommandFixture.command([legacy, pipeline, git], console)
 
         expect:
-        command.verdicts() == [
+        command.verdicts(false) == [
             new DoctorVerdict(DoctorCheckId.GIT_FLOOR, DoctorStatus.FAIL, 'old', 'upgrade'),
-            new DoctorVerdict(DoctorCheckId.PIPELINE, DoctorStatus.FAIL, 'the check could not run: boom', null),
+            new DoctorVerdict(DoctorCheckId.PIPELINE, DoctorStatus.FAIL,
+            'the check could not run: java.lang.IllegalStateException: boom', LOG_FILE_FIX),
             new DoctorVerdict(DoctorCheckId.LEGACY_LAYOUT, DoctorStatus.OK, 'clean', null),
         ]
+    }
+
+    // UX1, NFR-O1: the line names the fault and sends the operator to the log file holding it whole
+    def "UX1: a throwing check's fail line renders its message safely and names the log file (#fault)"() {
+        given:
+        def thrower = check(DoctorCheckId.PIPELINE) {
+            throw failure
+        }
+        def logs = LogCaptureSupport.attach(DoctorCommand, Level.DEBUG)
+
+        when:
+        def verdicts = DoctorCommandFixture.command([thrower], console).verdicts(false)
+
+        then: 'one fail line with a fix, the message rendered for the console'
+        verdicts == [
+            new DoctorVerdict(DoctorCheckId.PIPELINE, DoctorStatus.FAIL, detail, LOG_FILE_FIX)
+        ]
+
+        and: 'the throwable is recorded once, whole, at INFO: WARN would reach stdout (D5)'
+        logs.list.size() == 1
+        logs.list[0].level == Level.INFO
+        logs.list[0].formattedMessage == 'doctor check pipeline could not run'
+        logs.list[0].throwableProxy.className == failure.class.name
+        logs.list[0].throwableProxy.cause.message == 'root'
+
+        cleanup:
+        logs.detach()
+
+        where:
+        fault | failure || detail
+        'a message' | new IllegalStateException('boom', new IOException('root')) || 'the check could not run: java.lang.IllegalStateException: boom'
+        'no message' | new IllegalStateException(null, new IOException('root')) || 'the check could not run: java.lang.IllegalStateException'
+        'a hostile one' | new IllegalArgumentException('x\u001b[2Jy', new IOException('root')) || 'the check could not run: java.lang.IllegalArgumentException: x^[[2Jy'
     }
 
     def "FR1: each check is handed the one context the survey read"() {
@@ -56,7 +92,7 @@ class DoctorCommandSpec extends Specification {
         }
 
         when:
-        command([second, first]).verdicts()
+        DoctorCommandFixture.command([second, first], console).verdicts(false)
 
         then:
         seen.size() == 2
@@ -64,51 +100,37 @@ class DoctorCommandSpec extends Specification {
         seen[0].project() instanceof ProjectResolution.Unregistered
     }
 
-    def "FR5: a result is its status, name and detail, with the fix on the line below when there is one"() {
+    // FR3, NG5: the online check is not run without --online, so it reaches nothing and has no line
+    def "FR3: the tracker read probe runs only under --online (#arguments)"() {
         given:
-        def command = command([
-            check(DoctorCheckId.GUARD_IMAGE) {
-                [
-                    new DoctorVerdict(DoctorCheckId.GUARD_IMAGE, DoctorStatus.WARN, 'absent', 'docker pull g'),
-                    new DoctorVerdict(DoctorCheckId.GUARD_IMAGE, DoctorStatus.SKIPPED, 'no box', null),
-                ]
-            }
-        ])
+        def runs = 0
+        def probe = check(DoctorCheckId.TRACKER_PROBE) {
+            runs++
+            [
+                new DoctorVerdict(DoctorCheckId.TRACKER_PROBE, DoctorStatus.OK, 'read', null)
+            ]
+        }
+        def git = check(DoctorCheckId.GIT_FLOOR) {
+            [
+                new DoctorVerdict(DoctorCheckId.GIT_FLOOR, DoctorStatus.OK, 'fine', null)
+            ]
+        }
+        def out = new StringBuilder()
+        console.print(_ as String) >> { String text -> out << text }
+        console.printMachine(_ as String) >> { String text -> out << text }
 
         when:
-        command.run(new DefaultApplicationArguments('doctor'))
+        DoctorCommandFixture.command([probe, git], console).run(new DefaultApplicationArguments(arguments as String[]))
 
         then:
-        1 * console.print('warn  guard image: absent' + ConsoleIO.LINE_END + '      fix: docker pull g' + ConsoleIO.LINE_END)
+        runs == expectedRuns
+        out.toString().contains('fine')
+        out.toString().contains('read') == (expectedRuns == 1)
 
-        then:
-        1 * console.print('skipped  guard image: no box' + ConsoleIO.LINE_END)
-        0 * console._
-    }
-
-    private DoctorCommand command(List<DoctorCheck> checks) {
-        def resolution = new ProjectResolution.Unregistered(Path.of('/tmp/x'), false, 'r')
-        def survey = new DoctorSurvey(provider(ProjectResolution, resolution), readings())
-        new DoctorCommand(checks, survey, new DefaultListableBeanFactory().getBeanProvider(RegisteredClone), console)
-    }
-
-    private static DoctorCheck check(DoctorCheckId id, Closure<List<DoctorVerdict>> body) {
-        new DoctorCheck() {
-                    @Override
-                    DoctorCheckId id() {
-                        id
-                    }
-
-                    @Override
-                    List<DoctorVerdict> run(DoctorContext context) {
-                        body.call(context)
-                    }
-                }
-    }
-
-    private static <T> ObjectProvider<T> provider(Class<T> type, T value) {
-        def beans = new DefaultListableBeanFactory()
-        beans.registerSingleton('value', value)
-        beans.getBeanProvider(type)
+        where:
+        arguments || expectedRuns
+        ['doctor'] || 0
+        ['doctor', '--online'] || 1
+        ['doctor', '--json'] || 0
     }
 }

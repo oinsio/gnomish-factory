@@ -43,7 +43,7 @@ class LegacyLayoutDoctorCheckSpec extends Specification {
         home.legacyFolders().size() == 2
     }
 
-    def "FR1: a home the owner cannot list warns that it could not be inspected"() {
+    def "FR1, UX1: a home the owner cannot list warns that it could not be inspected, naming the folder to make listable"() {
         given: 'a secrets folder no one may list'
         def secrets = Files.createDirectories(root.resolve('secrets'))
         Files.setPosixFilePermissions(secrets, PosixFilePermissions.fromString('---------'))
@@ -54,6 +54,7 @@ class LegacyLayoutDoctorCheckSpec extends Specification {
         then:
         verdicts*.status() == [DoctorStatus.WARN]
         verdicts[0].detail().startsWith('the factory home could not be inspected: cannot list ')
+        verdicts[0].fix() == "make ${root} and its folders listable by the factory's user (ls -la ${root}), then run gnomish doctor again".toString()
 
         cleanup:
         Files.setPosixFilePermissions(secrets, PosixFilePermissions.fromString('rwx------'))

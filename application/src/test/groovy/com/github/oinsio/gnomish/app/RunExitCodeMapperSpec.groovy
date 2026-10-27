@@ -46,6 +46,8 @@ class RunExitCodeMapperSpec extends Specification {
         new InternalErrorException('mismatch') | 1
         // FR9 of supervise-daemon-loops-and-embed-dashboard: a disabled standalone watch exits 1
         new DashboardDisabledException() | 1
+        // FR6 of add-doctor-command: a doctor run with a fail result exits 1
+        new DoctorFailedException(2) | 1
     }
 
     // FR5, FR8 of remove-interactive-console: code 4 is retired — no type maps to it, so the

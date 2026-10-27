@@ -1128,6 +1128,16 @@ ADR 0013.
   collaborator the host adds later is a new accessor on the context, never a
   second `create`. Introduced by `supervise-daemon-loops-and-embed-dashboard`
   (design D21).
+- **Tracker read verdict** — `TrackerReadVerdict`, the answer of
+  `TrackerAdapterFactory.probeRead`: the adapter's own read-only probe of the
+  configured tracker binding, which is the first request its startup makes,
+  classified by the code startup refuses with. One of four: not applicable (no
+  remote binding — the in-memory reference adapter, the SPI default), read confirmed
+  (with the names startup will create), refused (status, cause, and the
+  permissions the tracker reports it would accept), or malformed. Reading is all
+  it confirms — write access is not verified. A failure to obtain an answer is
+  not a verdict: the probe throws. *Not:* a health check or a whoami probe.
+  Introduced by `add-doctor-command` (design D7).
 
 ## Operator configuration
 
@@ -1167,6 +1177,18 @@ Introduced by `add-project-registry`; the levels and the check are ADR 0011.
   `factory.sandbox.egress-allowlist`, `factory.sandbox.env-passthrough`. Read
   from the resolved project's own project file and nowhere else, the command
   line included.
+- **Doctor** — the `gnomish doctor [--dir=<clone>] [--online] [--json]`
+  command: every readiness check of the machine and a registered clone in one
+  run, each verdict taken from the component the startup path asks for the same
+  decision, reported one line per check (or as one JSON document) with a
+  summary line. Each result is `ok`, `warn` (worth a look, never fails the
+  run), `fail` (startup would refuse; the line names the fix) or `skipped` (the
+  check does not apply here, with the reason); the exit code is 1 when any
+  check failed, 0 otherwise. It changes nothing — no claim, branch, worktree,
+  box, image pull or file write beyond its log — and opens no network
+  connection unless `--online` adds the tracker read verdict. Operator guide:
+  *Checking a setup*. *Not:* a repair tool — it names fixes and applies none.
+  Introduced by `add-doctor-command`.
 
 ## Build verification
 

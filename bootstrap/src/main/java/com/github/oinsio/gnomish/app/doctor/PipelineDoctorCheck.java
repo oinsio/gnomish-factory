@@ -31,7 +31,7 @@ final class PipelineDoctorCheck implements DoctorCheck {
                         null));
             case PipelineReading.Unloaded unloaded ->
                 unloaded.reasons().stream()
-                        .map(reason -> new DoctorVerdict(id(), DoctorStatus.FAIL, reason, null))
+                        .map(reason -> new DoctorVerdict(id(), DoctorStatus.FAIL, reason, unloaded.fix()))
                         .toList();
         });
     }

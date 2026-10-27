@@ -35,18 +35,18 @@ class AgentCredentialDoctorCheckSpec extends Specification {
         ]
     }
 
-    def "FR1: an allowlist the configuration refuses fails with its refusal"() {
+    def "FR1, UX1: an allowlist the configuration refuses is thrown on to the command"() {
         given: 'a passthrough name that is a declared credential'
         def check = new AgentCredentialDoctorCheck(readings([:], [passthrough: [
                 DoctorSpecSupport.TRACKER_TOKEN
             ]]))
 
         when:
-        def verdicts = check.run(DoctorSpecSupport.bound(true, false, DoctorSpecSupport.definition(true)))
+        check.run(DoctorSpecSupport.bound(true, false, DoctorSpecSupport.definition(true)))
 
-        then:
-        verdicts*.status() == [DoctorStatus.FAIL]
-        verdicts[0].detail().contains('factory.sandbox.env-passthrough must not name declared credential variables')
+        then: 'DoctorCommand, the one owner of a check that could not run, renders it with the log-file fix'
+        def refusal = thrown(IllegalArgumentException)
+        refusal.message.contains('factory.sandbox.env-passthrough must not name declared credential variables')
     }
 
     def "D3: no container-bound stage skips the check"() {

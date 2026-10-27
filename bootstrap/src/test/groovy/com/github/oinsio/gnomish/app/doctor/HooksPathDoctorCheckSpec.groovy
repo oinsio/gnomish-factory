@@ -73,7 +73,7 @@ class HooksPathDoctorCheckSpec extends Specification implements BareGitRepoFixtu
         "an operator's own path" | '/srv/my-hooks'
     }
 
-    def "FR8: a read git refuses warns, naming what git said, never ok"() {
+    def "FR8, UX1: a read git refuses warns, naming what git said, never ok, with the git line to run"() {
         given: 'a registered directory that is no git working tree'
         Path notAClone = Files.createDirectories(tempDir.resolve('plain'))
 
@@ -83,7 +83,7 @@ class HooksPathDoctorCheckSpec extends Specification implements BareGitRepoFixtu
         then:
         verdicts*.status() == [DoctorStatus.WARN]
         verdicts[0].detail().startsWith("the clone's local hooks path could not be read: ")
-        verdicts[0].fix() == null
+        verdicts[0].fix() == "run git -C ${notAClone} config --local --get core.hooksPath to see what git answers, fix what it names, then run gnomish doctor again".toString()
     }
 
     def "FR2: outside a project the check is skipped"() {
@@ -94,7 +94,7 @@ class HooksPathDoctorCheckSpec extends Specification implements BareGitRepoFixtu
     private DoctorContext on(Path clone) {
         def registered = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), clone)
         DoctorContext.of(new ProjectResolution.Registered(registered), {
-            new PipelineReading.Unloaded(['not read'])
+            new PipelineReading.Unloaded(['not read'], DoctorSpecSupport.LAW_FIX)
         })
     }
 }

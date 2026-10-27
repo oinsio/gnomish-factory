@@ -8,6 +8,7 @@ import java.util.function.Consumer;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.Banner;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.bootstrap.BootstrapRegistry.InstanceSupplier;
@@ -45,8 +46,15 @@ import org.springframework.context.ConfigurableApplicationContext;
  * <p>Before the run, the command line is registered in the bootstrap registry for the
  * configuration loader ({@link #registerArguments}).
  *
+ * <p>Spring Boot's startup banner is switched off for every command: a command's stdout carries
+ * its output, and for {@code --json} that output is one machine-readable document ({@code doctor},
+ * {@code status}, {@code board}, {@code usage}) that a banner printed ahead of it would break. No
+ * command promises the banner; an operator may still ask for it with {@code
+ * --spring.main.banner-mode=console}, which Spring binds over this default.
+ *
  * <p>Implements FR9, NFR-R1 of harden-logging-observability; FR3, FR5 of add-project-registry; FR21
- * of fix-terminal-receipt-convergence (D19, fourth amendment).
+ * of fix-terminal-receipt-convergence (D19, fourth amendment); FR5 of add-doctor-command (stdout
+ * is one JSON document under {@code --json}).
  */
 @NullMarked
 final class CommandExit {
@@ -101,6 +109,7 @@ final class CommandExit {
             Consumer<Thread> hookRegistrar) {
         AtomicReference<ConfigurableApplicationContext> contextRef = new AtomicReference<>();
         registerArguments(application, args);
+        application.setBannerMode(Banner.Mode.OFF);
         application.setRegisterShutdownHook(false);
         application.addInitializers(contextRef::set);
         OrderedExit.install(() -> close(contextRef.get()), stopLogging, shutdownStep);

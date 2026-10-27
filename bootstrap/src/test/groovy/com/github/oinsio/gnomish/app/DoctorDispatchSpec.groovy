@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitVersionCheck
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
@@ -29,8 +30,13 @@ import spock.lang.TempDir
  */
 class DoctorDispatchSpec extends Specification implements AppAssemblyFixture {
 
-    /** The checks {@code doctor} reports, by the name its line carries: every one (task 3.2). */
-    private static final List<String> REPORTED = DoctorCheckId.values()*.displayName()
+    /**
+     * The checks {@code doctor} reports without {@code --online}, by the name its line carries:
+     * every one but the online tracker probe (task 3.2; FR3).
+     */
+    private static final List<String> REPORTED = DoctorCheckId.values().findAll {
+        !it.online()
+    }*.displayName()
 
     @TempDir
     Path clonePath
@@ -62,8 +68,11 @@ class DoctorDispatchSpec extends Specification implements AppAssemblyFixture {
         when:
         runner.run(new DefaultApplicationArguments('doctor', "--dir=${clonePath}".toString()))
 
-        then: 'the process does not end on the floor, and the refusal\'s ERROR line is never logged'
-        noExceptionThrown()
+        then: 'the floor is one failed check, not the end of the process: exit code 1 after the report'
+        def failed = thrown(DoctorFailedException)
+        new RunExitCodeMapper().getExitCode(failed) == 1
+
+        and: "the refusal's ERROR line is never logged"
         logs.list.isEmpty()
 
         and: 'every check has its line'
@@ -72,7 +81,11 @@ class DoctorDispatchSpec extends Specification implements AppAssemblyFixture {
         REPORTED.every { name -> lines.any { it.contains("  ${name}: ") } }
 
         and: 'the floor is reported as failed, with the floor and its reason'
-        lines.contains("fail  git version floor: git 2.55.2 is below the floor ${GitVersion.FLOOR}: ${GitVersion.FLOOR_REASON}".toString())
+        lines.contains(("fail  git version floor: git 2.55.2 is below the floor ${GitVersion.FLOOR}: ${GitVersion.FLOOR_REASON}" +
+                "; fix: install git ${GitVersion.FLOOR} or later on the factory's PATH").toString())
+
+        and: 'the summary closes the report'
+        lines.last().startsWith('summary: ')
     }
 
     // FR4, FR7, D1: the doctor line is the verdict of the owner the refusal is built on
@@ -81,17 +94,50 @@ class DoctorDispatchSpec extends Specification implements AppAssemblyFixture {
         def runner = runnerOver(StandIn.link(homeDir.resolve('git'), preset))
 
         when:
-        runner.run(new DefaultApplicationArguments('doctor', '--online', '--json'))
+        DoctorFailedException failure = null
+        try {
+            runner.run(new DefaultApplicationArguments('doctor', '--online'))
+        } catch (DoctorFailedException e) {
+            failure = e
+        }
 
-        then:
-        noExceptionThrown()
+        then: 'the floor line'
         printed().any { it.startsWith(expected) }
+
+        and: 'FR6: the run ends with exit code 1 exactly when a line is fail'
+        (failure != null) == printed().any { it.startsWith('fail  ') }
+        expected.startsWith('ok') || failure != null
 
         where:
         preset || expected
         'version-2-56-0' || "ok  git version floor: git 2.56.0 meets the floor ${GitVersion.FLOOR}".toString()
         'version-2-55' || 'fail  git version floor: git 2.55.2 is below the floor '
         'version-broken' || 'fail  git version floor: git reported no version (it printed: '
+    }
+
+    // Scenario: cli/operator-doctor / JSON for automation
+    def "FR5: doctor --json prints one document on stdout, listing every check with its id, status, detail and fix"() {
+        given:
+        def runner = runnerOver(StandIn.link(homeDir.resolve('git'), 'version-2-55'))
+
+        when:
+        runner.run(new DefaultApplicationArguments('doctor', '--json', "--dir=${clonePath}".toString()))
+
+        then:
+        thrown(DoctorFailedException)
+        def tree = new ObjectMapper().readTree(out.toString('UTF-8'))
+        tree.get('version').intValue() == 1
+        tree.get('checks')*.get('id')*.textValue().unique() == DoctorCheckId.values().findAll {
+            !it.online()
+        }*.id()
+        tree.get('checks').every {
+            it.has('status') && it.has('detail') && it.has('fix')
+        }
+        def floor = tree.get('checks').find {
+            it.get('id').textValue() == 'git-floor'
+        }
+        floor.get('status').textValue() == 'fail'
+        floor.get('fix').textValue() == "install git ${GitVersion.FLOOR} or later on the factory's PATH".toString()
     }
 
     // FR7, FR8 of fix-operator-blockers: an option doctor does not accept is refused before any check

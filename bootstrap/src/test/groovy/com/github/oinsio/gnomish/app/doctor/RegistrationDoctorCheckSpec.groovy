@@ -25,7 +25,7 @@ class RegistrationDoctorCheckSpec extends Specification {
         ]
     }
 
-    def "FR1, FR2: an unregistered directory is #status when --dir named it is #named, with the project add line"() {
+    def "FR1, FR2, UX1: an unregistered directory is #status when --dir named it is #named, with the project add line"() {
         given:
         def context = DoctorContext.of(new ProjectResolution.Unregistered(DIR, named, REFUSAL), {
             throw new AssertionError()
@@ -33,13 +33,25 @@ class RegistrationDoctorCheckSpec extends Specification {
 
         expect:
         check.run(context) == [
-            new DoctorVerdict(DoctorCheckId.REGISTRATION, status, REFUSAL, null)
+            new DoctorVerdict(DoctorCheckId.REGISTRATION, status, REFUSAL, fix)
         ]
 
         where:
-        named || status
-        true || DoctorStatus.FAIL
-        false || DoctorStatus.SKIPPED
+        named || status | fix
+        true || DoctorStatus.FAIL | DoctorText.AS_THE_LINE_NAMES
+        false || DoctorStatus.SKIPPED | null
+    }
+
+    def "NFR-O1: a refusal quoting a hostile directory name is rendered for the console"() {
+        given:
+        def context = DoctorContext.of(new ProjectResolution.Unregistered(DIR, true, '/src/\u001b[2Jx is not a registered clone'), {
+            throw new AssertionError()
+        })
+
+        expect:
+        check.run(context)*.detail() == [
+            '/src/^[[2Jx is not a registered clone'
+        ]
     }
 
     def "FR1, FR2: an unread registry is #status when --dir named it is #named, pointing at the configuration"() {

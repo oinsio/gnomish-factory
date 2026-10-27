@@ -27,11 +27,11 @@ plugins {
 // where it is first consumed from outside and where the japicmp gate starts
 // failing on an incompatible move.
 //
-// FR5 of close-plugin-api-compilability-gap: `compat-baseline/` was deliberately
-// regenerated (`updateApiCompatibilityBaseline`) for the grown surface — the
-// `AttemptCommitWorkspace` interface and the `FindingsSanitizer` utility. The
-// growth is additive for every pre-existing type, so no pre-1.0 version bump is
-// owed and `japicmpApiGate` stays green against the committed jars.
+// FR5 of close-plugin-api-compilability-gap, then FR3 of add-doctor-command (design D7):
+// `compat-baseline/` was deliberately regenerated (`updateApiCompatibilityBaseline`) for additive
+// growth — the `AttemptCommitWorkspace` interface and the `FindingsSanitizer` utility; then the
+// `TrackerAdapterFactory.probeRead` default method and its `TrackerReadVerdict`. No pre-existing
+// type changed, so no pre-1.0 version bump is owed and `japicmpApiGate` stays green.
 //
 // D19 of add-sandbox-base-image: 0.12.0 -> 0.13.0, the eleventh BREAKING move — two retired
 // `OperatorEvent` constants removed (README, "Versioning"); `compat-baseline/` regenerated.

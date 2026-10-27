@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -38,6 +39,8 @@ record ImageFacts(String image, List<String> declaredVolumes, Map<String, Untrus
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    private static final Pattern TRAILING_LINE_ENDS = Pattern.compile("[\\r\\n]+\\z");
+
     ImageFacts {
         declaredVolumes = List.copyOf(declaredVolumes);
         labels = Collections.unmodifiableMap(new LinkedHashMap<>(labels));
@@ -55,9 +58,23 @@ record ImageFacts(String image, List<String> declaredVolumes, Map<String, Untrus
     static ImageFacts read(DockerCli docker, String image) {
         DockerResult result = docker.run(DockerCommands.inspectImageConfig(image));
         if (!result.ok()) {
-            throw new DockerCommandFailedException("image inspect", image, null, result.stderr());
+            throw new DockerCommandFailedException(
+                    "image inspect", image, null, withoutTrailingLineEnds(result.stderr()));
         }
         return parse(image, result.stdout());
+    }
+
+    /**
+     * The runtime's refusal without the line end its stderr closes with: the end of the stream, not
+     * part of what docker said, which every rendering of the message would otherwise show as a
+     * trailing {@code \n} (task 4.3 of add-doctor-command). A line break inside the answer stays,
+     * as do the words; the carrier is re-minted in the family it was captured in.
+     */
+    private static UntrustedText withoutTrailingLineEnds(UntrustedText stderr) {
+        // @UntrustedParser warrant: the text is handed straight back as a carrier of the same
+        //     family, shortened by the trailing line ends only; nothing leaves it here.
+        return UntrustedText.subprocess(
+                TRAILING_LINE_ENDS.matcher(stderr.forParsing()).replaceFirst(""));
     }
 
     /**

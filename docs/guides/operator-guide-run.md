@@ -186,6 +186,10 @@ The process exit code reports the outcome — anything `>= 10` means the engine 
 | 11   | paused at a manual checkpoint, awaiting approval; parked on the branch in git mode                                                                                                  |
 | 12   | aborted                                                                                                                                                                             |
 
+For an exit 2, 3 or 8, `gnomish doctor --dir=<clone>` lists every such problem of the
+machine and the clone in one run, each `fail` line with its fix, and changes nothing — see
+[*Checking a setup*](operator-guide.md#checking-a-setup-gnomish-doctor).
+
 `take` and `serve` carry their own exit-code tables — see
 [`operator-guide.md`](operator-guide.md) and
 [`operator-guide-serve.md`](operator-guide-serve.md).

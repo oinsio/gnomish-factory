@@ -19,6 +19,10 @@ import org.springframework.stereotype.Component;
 @Component
 final class DockerDoctorCheck implements DoctorCheck {
 
+    /** The fix of a runtime check that could not judge. */
+    static final String FAILED_FIX = "start Docker, or set DOCKER_HOST to a runtime that answers, and correct the"
+            + " factory.sandbox setting the line names, then run gnomish doctor again";
+
     private final ServePreconditions preconditions;
 
     /** @param preconditions the startup owner of the operator preconditions */
@@ -38,6 +42,7 @@ final class DockerDoctorCheck implements DoctorCheck {
                 (clone, definition) -> PreconditionLines.of(
                         id(),
                         preconditions.verdict(DaemonConditionKind.CONTAINER_RUNTIME, clone, definition),
-                        "the Docker runtime answers"));
+                        "the Docker runtime answers",
+                        FAILED_FIX));
     }
 }

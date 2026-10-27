@@ -124,19 +124,30 @@ gnomish --version                              # prints 0.1.0
 
 `bin/gnomish` refuses a Java older than 25 and names the binary it found; point `JAVA_HOME` at a Java 25 installation to fix it. Extra JVM options go in `GNOMISH_JAVA_OPTS`. The archive also carries example configuration (`share/examples/`) and the reference sandbox-image recipe (`share/sandbox-image/`). A `.zip` of the same content is published beside the `.tar.gz`.
 
+<!-- implements UX1 of add-doctor-command -->
+
+The last step checks the machine and, once a clone is registered ([*Setting up a project*](docs/guides/operator-guide.md#setting-up-a-project)), the clone:
+
+```bash
+gnomish doctor --dir=/path/to/target-repo      # add --online to try the tracker credential
+```
+
+`doctor` reports every readiness check the factory makes at startup — git, configuration, registration, pipeline, secrets, Docker and the sandbox image, the agent CLI — one line each, `ok`, `warn`, `fail` or `skipped`, and ends with a one-line summary. Every `fail` line names its fix; the exit code is 1 when any check failed and 0 otherwise. It changes nothing: no claim, branch, worktree, box or image pull.
+
 ## Using the factory
 
-The CLI is the `gnomish` command ([Install](#install)) with eight subcommands; `run` is the implicit default when only flags are given. Each has its own reference guide:
+The CLI is the `gnomish` command ([Install](#install)) with nine subcommands; `run` is the implicit default when only flags are given. Each has its own reference guide:
 
-| Command                    | What it does                                                                         | Reference                                                                             |
-|----------------------------|--------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------|
-| `gnomish run`              | drive one ad-hoc task through the pipeline, no tracker                               | [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)              |
-| `gnomish take`             | claim the head of the tracker's ready queue (or act on one issue by ref) and work it | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                      |
-| `gnomish serve`            | autonomous daemon: feed from the ready queue under a WIP-bounded scheduler           | [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)          |
-| `gnomish status` / `usage` | read-only task state and resource/cost usage, straight from the task branch          | [`docs/guides/operator-guide-inspect.md`](docs/guides/operator-guide-inspect.md)      |
-| `gnomish board`            | Kanban view over the tracker's task states                                           | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                      |
-| `gnomish dashboard`        | self-contained HTML page over the daemon snapshot, ledger, and board                 | [`docs/guides/operator-guide-dashboard.md`](docs/guides/operator-guide-dashboard.md)  |
-| `gnomish project`          | register a clone (`add`), list projects (`list`), show paths and settings (`show`)   | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md#setting-up-a-project) |
+| Command                    | What it does                                                                         | Reference                                                                                        |
+|----------------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
+| `gnomish run`              | drive one ad-hoc task through the pipeline, no tracker                               | [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)                         |
+| `gnomish take`             | claim the head of the tracker's ready queue (or act on one issue by ref) and work it | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                                 |
+| `gnomish serve`            | autonomous daemon: feed from the ready queue under a WIP-bounded scheduler           | [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)                     |
+| `gnomish status` / `usage` | read-only task state and resource/cost usage, straight from the task branch          | [`docs/guides/operator-guide-inspect.md`](docs/guides/operator-guide-inspect.md)                 |
+| `gnomish board`            | Kanban view over the tracker's task states                                           | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                                 |
+| `gnomish dashboard`        | self-contained HTML page over the daemon snapshot, ledger, and board                 | [`docs/guides/operator-guide-dashboard.md`](docs/guides/operator-guide-dashboard.md)             |
+| `gnomish project`          | register a clone (`add`), list projects (`list`), show paths and settings (`show`)   | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md#setting-up-a-project)            |
+| `gnomish doctor`           | read-only readiness checklist of the machine and a clone, each `fail` with its fix   | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md#checking-a-setup-gnomish-doctor) |
 
 ```bash
 # once per clone: register it as a clone of a project (~/.gnomish/projects/widgets/)

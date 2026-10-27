@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app.doctor;
 
 import com.github.oinsio.gnomish.app.project.ProjectResolution;
+import com.github.oinsio.gnomish.logtext.LogText;
 import java.util.List;
 import org.jspecify.annotations.NullMarked;
 import org.springframework.stereotype.Component;
@@ -11,9 +12,10 @@ import org.springframework.stereotype.Component;
  * for the process. A directory {@code --dir} named that no project registers fails with the
  * registry's own refusal, which names the {@code project add} line; the working directory outside
  * any clone is no failure — the project checks are skipped, and this line says why, with the same
- * {@code project add} line (FR2).
+ * {@code project add} line (FR2). The refusal names the operator's directory, so it is rendered for
+ * the console (NFR-O1); a failed line's fix points at the {@code project add} line it names (UX1).
  *
- * <p>Implements FR1, FR2, FR4 of add-doctor-command.
+ * <p>Implements FR1, FR2, FR4, NFR-O1, UX1 of add-doctor-command.
  */
 @NullMarked
 @Component
@@ -40,8 +42,8 @@ final class RegistrationDoctorCheck implements DoctorCheck {
                         new DoctorVerdict(
                                 id(),
                                 unregistered.named() ? DoctorStatus.FAIL : DoctorStatus.SKIPPED,
-                                unregistered.refusal(),
-                                null);
+                                LogText.forConsole(unregistered.refusal()),
+                                unregistered.named() ? DoctorText.AS_THE_LINE_NAMES : null);
                     case ProjectResolution.Unread unread ->
                         new DoctorVerdict(
                                 id(),

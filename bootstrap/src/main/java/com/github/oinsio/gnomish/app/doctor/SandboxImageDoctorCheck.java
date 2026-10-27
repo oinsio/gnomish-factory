@@ -49,10 +49,23 @@ final class SandboxImageDoctorCheck implements DoctorCheck {
                 (clone, definition) -> PreconditionLines.of(
                                 id(),
                                 preconditions.verdict(DaemonConditionKind.IMAGE_CONTRACT, clone, definition),
-                                sandbox.image() + " is present locally with the factory's image contract")
+                                sandbox.image() + " is present locally with the factory's image contract",
+                                failedFix())
                         .stream()
                         .map(line -> new DoctorVerdict(
                                 line.check(), line.status(), line.detail() + FLOOR_NOT_PROBED, line.fix()))
                         .toList());
+    }
+
+    /**
+     * The fix of an inspection that could not judge — an image the runtime does not hold, or none
+     * configured.
+     */
+    private String failedFix() {
+        String image = sandbox.image();
+        return image == null
+                ? "set factory.sandbox.image in the operator configuration, then run gnomish doctor again"
+                : "docker pull " + image
+                        + ", or build it from docs/examples/sandbox-image/, then run gnomish doctor again";
     }
 }

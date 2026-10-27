@@ -54,7 +54,9 @@ final class HooksPathDoctorCheck implements DoctorCheck {
                                         DoctorStatus.WARN,
                                         "the clone's local hooks path could not be read: "
                                                 + unread.reason().forConsole(),
-                                        null);
+                                        "run git -C " + clone.clonePath() + " config --local --get core.hooksPath to"
+                                                + " see what git answers, fix what it names, then run gnomish"
+                                                + " doctor again");
                         }));
     }
 }

@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
+import com.github.oinsio.gnomish.app.port.tracker.TrackerReadVerdict;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
@@ -190,9 +191,17 @@ final class TrackerWiring implements RefResolution, BoardReaders {
     }
 
     /**
-     * The registered {@code tracker.type} keys as a stable, comma-separated list for the "unknown
-     * tracker type" operator message — sorted so the hint reads the same on every run regardless
-     * of registry iteration order (e.g. {@code "github, inmemory"}).
+     * The adapter's own read-only probe with the wiring's secrets — a relay, as {@link
+     * #refuseForeignRef} is; no adapter is built, so {@code create} is never reached (FR3, D7 of
+     * add-doctor-command).
+     */
+    TrackerReadVerdict probeRead(TrackerConfig trackerConfig) {
+        return resolveFactory(trackerConfig).probeRead(secrets, trackerConfig);
+    }
+
+    /**
+     * The registered {@code tracker.type} keys, sorted and comma-separated ({@code "github, inmemory"}),
+     * for the "unknown tracker type" hint, so it reads the same whatever the registry's order.
      */
     String supportedTypes() {
         return registry.keySet().stream().sorted().collect(Collectors.joining(", "));

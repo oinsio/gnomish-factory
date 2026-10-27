@@ -65,6 +65,7 @@ class DeliveredBranchPassSpec extends DeliveredBranchPassWorld {
         0 * store._
         0 * disposal._
     }
+
     // FR4: a task held by a slot of this instance is finishing there; the pass leaves it alone
     def "FR4: a task occupying a slot of this instance is left to its slot"() {
         when:

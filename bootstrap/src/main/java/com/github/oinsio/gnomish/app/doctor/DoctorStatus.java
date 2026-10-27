@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.doctor;
 
+import java.util.Locale;
 import org.jspecify.annotations.NullMarked;
 
 /**
@@ -20,5 +21,13 @@ public enum DoctorStatus {
     /** The check found what would stop the factory. */
     FAIL,
     /** The check did not run; its detail says why. */
-    SKIPPED
+    SKIPPED;
+
+    /**
+     * The status as both renderings spell it — the head of a text line and the {@code status}
+     * field of the {@code --json} document (FR5): the constant's name in lower case.
+     */
+    public String token() {
+        return name().toLowerCase(Locale.ROOT);
+    }
 }
