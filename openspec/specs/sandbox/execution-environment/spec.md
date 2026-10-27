@@ -210,9 +210,9 @@ The container adapter SHALL apply operator-configured CPU, memory, and PID-count
 - **THEN** the container is created with `--storage-opt size=` at the configured working-volume size; left at its default, no disk cap is applied and container creation does not depend on a quota-capable driver
 
 ### Requirement: Runtime outage is an infrastructure failure
-When the container runtime dies mid-task, the affected operation SHALL classify as an infrastructure failure: it is not retried, no stage attempt is burned, and the task escalates at once with a "cannot execute" report, consistent with the existing failure classes. When the runtime is unavailable at materialize, before any round of the claimed task, the run SHALL end with the typed precondition result instead: the claim is released, nothing is escalated, and under `serve` the container-runtime condition opens.
-**Implements**: NFR-R1 of add-sandbox-core; FR14, FR15, NFR-R2 of add-sandbox-base-image
-**Notes**: Work in progress is the task's and is escalated; a box that never started is the operator's precondition and is a daemon condition (design D19).
+When the container runtime dies mid-task, the affected operation SHALL classify as an infrastructure failure: it is not retried, no stage attempt is burned, and the task escalates at once with a "cannot execute" report. When the runtime is unavailable at materialize, before any round of the claimed task, the run SHALL end with the typed precondition result instead: the claim is released, nothing is escalated, and under `serve` the container-runtime condition opens.
+**Implements**: NFR-R1 of add-sandbox-core; FR14, FR15, NFR-R2 of add-sandbox-base-image; FR1, FR2 of split-long-spec-requirements
+**Notes**: The mid-task class is the existing infrastructure-failure class, consistent with the other failure classes. Work in progress is the task's and is escalated; a box that never started is the operator's precondition and is a daemon condition (design D19).
 
 #### Scenario: Docker daemon dies mid-task
 - **WHEN** the daemon becomes unreachable between rounds
@@ -536,9 +536,10 @@ Container round environments SHALL be built by a factory constructed once per ow
 - **THEN** no constructor or static factory takes the installation's equipment and a task's inputs in one parameter list, and the run-support factory holds the installation's settings as fixed state
 
 ### Requirement: The box's git meets the floor before the seed clone
-The container adapter SHALL, before every seed clone of a box (a fresh materialize, and a reattach that applies a commit pin), run the image's own `git --version` in a one-shot, network-less helper carrying the environment's ownership labels, and SHALL refuse the image when the reported version is below the factory's git floor or no version is reported. A claimed task whose box image is refused SHALL be released, not aborted. A helper the runtime could not start SHALL be reported as the runtime's failure, never as a version refusal.
-**Implements**: NFR-S2 of tighten-spec-contract; FR10 of own-git-invocation-policy; FR11, FR14, NFR-R2 of add-sandbox-base-image
+The container adapter SHALL, before every seed clone of a box, run the image's own `git --version` in a one-shot, network-less helper carrying the environment's ownership labels, and SHALL refuse the image when the reported version is below the factory's git floor or no version is reported. A claimed task whose box image is refused SHALL be released, not aborted. A helper the runtime could not start SHALL be reported as the runtime's failure, never as a version refusal.
+**Implements**: NFR-S2 of tighten-spec-contract; FR10 of own-git-invocation-policy; FR11, FR14, NFR-R2 of add-sandbox-base-image; FR1, FR2 of split-long-spec-requirements
 **Notes**: The seed clone reads the factory clone, on the reftable ref backend, with the image's git; the factory has one git floor (`GitVersion.FLOOR`), judged by one parser for the factory's own git and the box's, and the base image carries a git at or above it, so an image built `FROM` the base passes.
+**Notes**: A seed clone happens at a fresh materialize and at a reattach that applies a commit pin.
 
 #### Scenario: An image whose git is below the floor is refused before the seed clone
 - **WHEN** a box is materialized on an image whose `git --version` reports 2.43.0

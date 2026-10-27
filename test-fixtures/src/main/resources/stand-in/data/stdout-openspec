@@ -1,0 +1,35 @@
+# What the OpenSpec CLI 1.14.1 prints on stdout for the merged-spec preview
+# (scripts/check-merged-specs.sh), as printed on 2026-10-27 (task 2.1 of
+# split-long-spec-requirements): `openspec archive <change> --yes` and `openspec validate --specs
+# --strict --no-interactive`. Shortened to a few specs; the lines are OpenSpec's own.
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[archived]
+Task status: ✓ Complete
+Specs to update:
+  tracker/github-tracker: update
+Applying changes to openspec/specs/tracker/github-tracker/spec.md:
+  + 1 added
+  ~ 1 modified
+Totals: + 1, ~ 1, - 0, → 0
+Specs updated successfully.
+Change 'demo-change' archived as '2026-10-27-demo-change'.
+
+[all-pass]
+✓ spec/cli/manual-run
+✓ spec/tracker/github-tracker
+✓ spec/tracker/tracker-take
+Totals: 3 passed, 0 failed (3 items)
+
+[long-totals]
+✓ spec/cli/manual-run
+✓ spec/tracker/tracker-take
+Totals: 2 passed, 1 failed (3 items)
+Details: openspec validate tracker/github-tracker --type spec
+
+[modified-not-found]
+Task status: No tasks
+Specs to update:
+  tracker/github-tracker: update
+tracker/github-tracker MODIFIED failed for header "### Requirement: Doctor probes the labels read-only" - not found
+Aborted. No files were changed.

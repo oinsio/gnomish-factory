@@ -133,6 +133,10 @@ Some scenario whose test comes later => pending-test: <change-name>
 
 The mechanism after `=>` names the verifier precisely; "hard to test" is not one. `pending-test: <change-name>` is allowed only for a scenario sorted, at a decision point, to a named later change that will write its test. The list is checked in both directions: a line that names no scenario of its capability is stale and fails the gate, and so does a file whose name does not match its `spec:` line. The bar for an exemption is in `testing.md`.
 
+<!-- implements FR4, FR6 of split-long-spec-requirements -->
+
+**Previewing the archive.** The gate does not measure requirement length; OpenSpec does, and `openspec validate <change> --strict` measures only the `ADDED` blocks of a delta, so a `MODIFIED` requirement grown past OpenSpec's 500-character limit is otherwise first seen by the archive. `scripts/check-merged-specs.sh <change>` shows the archive stage's verdict before it: it copies `openspec/` to a temporary directory, runs `openspec archive <change> --yes` there, then `openspec validate --specs --strict --no-interactive` over the merged main specs, prints the failing specs with OpenSpec's own lines, and exits 0 only when both pass. The repository is never written, and the copy is removed on every exit. Run it before `/opsx:archive`; the fix-artifacts stage and `/review-artifacts` run it too. It needs the OpenSpec CLI on the `PATH` (or named by `OPENSPEC`) and fails closed without it. A failure in a spec the change does not touch is pre-existing: it is not split in this change's delta, it is escalated.
+
 ## Dependency locking and verification
 
 <!-- implements FR1-FR5, NFR-R1, NFR-O1, NFR-S1, UX1, UX2 of add-dependency-verification -->

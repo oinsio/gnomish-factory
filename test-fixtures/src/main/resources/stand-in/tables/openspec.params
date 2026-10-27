@@ -1,0 +1,25 @@
+# Stand-ins for the OpenSpec CLI the merged-spec preview runs (scripts/check-merged-specs.sh;
+# MergedSpecsPreviewScriptSpec; FR4 of split-long-spec-requirements, design D5): an `archive` of the
+# change in the scratch copy, then `validate --specs --strict`. Each records its runs with the
+# working directory, so the spec reads where each command ran. The answers are what OpenSpec
+# 1.14.1 printed on 2026-10-27 (data/stdout-openspec, data/stderr-openspec).
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
+
+[openspec-preview-pass]
+# The archive merges, and every merged main spec validates strictly.
+* record PWD
+archive,* answer data/stdout-openspec#archived 0
+validate,* answer data/stdout-openspec#all-pass 0
+
+[openspec-preview-long]
+# The archive merges, and one merged requirement measures over 500 characters.
+* record PWD
+archive,* answer data/stdout-openspec#archived 0
+validate,* stderr data/stderr-openspec#long-requirement
+validate,* answer data/stdout-openspec#long-totals 1
+
+[openspec-preview-archive-refused]
+# The archive refuses: a MODIFIED header the main spec no longer holds. OpenSpec prints the
+# refusal on stdout, not stderr.
+* record PWD
+archive,* answer data/stdout-openspec#modified-not-found 1

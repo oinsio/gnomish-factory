@@ -7,7 +7,7 @@ Define the contract every task branch obeys between factory transitions: a total
 ## Requirements
 
 ### Requirement: Total branch-shape classification
-A classifier SHALL map any task branch — its registered commit's envelope, file set, versions and position, and the tip's relation to it — to exactly one shape of a closed set of twelve: `Bare`, `Created`, `InProgress`, `AwaitingApproval`, `Parked`, `Answered`, `CompletedUncleaned`, `Delivered`, `Unregistered`, `UnsupportedVersion`, `Corrupt(reason)` and `Unknown`. The set SHALL be a sealed hierarchy so readers switch without a default branch.
+A classifier SHALL map any task branch to exactly one shape of a closed set of twelve: `Bare`, `Created`, `InProgress`, `AwaitingApproval`, `Parked`, `Answered`, `CompletedUncleaned`, `Delivered`, `Unregistered`, `UnsupportedVersion`, `Corrupt(reason)` and `Unknown`. The set SHALL be a sealed hierarchy so readers switch without a default branch.
 
 The happy path and the group quarantined on first classification:
 
@@ -37,10 +37,11 @@ stateDiagram-v2
     U --> InProgress: touchpoint fetch lands the register (any shape, by its content)
     note right of U: still no register after the read: quarantined on a claimed take
 ```
-**Implements**: FR10 of fix-terminal-receipt-convergence; FR11 of make-checkpoint-gate-durable; FR1, FR3, FR15, NFR-R2 of harden-task-branch-contract; FR1, FR2 of fix-claim-epoch-fence; FR14, NFR-R4 of fix-operator-blockers
+**Implements**: FR10 of fix-terminal-receipt-convergence; FR11 of make-checkpoint-gate-durable; FR1, FR3, FR15, NFR-R2 of harden-task-branch-contract; FR1, FR2 of fix-claim-epoch-fence; FR14, NFR-R4 of fix-operator-blockers; FR1, FR2 of split-long-spec-requirements
 **Notes**: Where the registered commit comes from is the requirement "Classification reads the factory register".
 **Notes**: The twelve names are the canonical vocabulary every other artifact of this contract refers to rather than restates.
 **Notes**: The distinct `UnsupportedVersion` shape is what lets a version diagnosis name the version rather than a parse failure.
+**Notes**: The classifier reads the registered commit's envelope, file set, versions and position, and the tip's relation to it.
 
 #### Scenario: Every generated tip classifies to exactly one shape
 - **WHEN** property-generated branch tips (arbitrary file subsets, envelope versions and positions) are classified

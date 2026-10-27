@@ -72,6 +72,12 @@ the stable spec no longer holds the requirement the delta modifies — either it
 or another active change adds it (then that is a sequencing fact, not staleness). Each one
 is a freshness finding until explained.
 
+Then run `scripts/check-merged-specs.sh <name>`: it archives the change in a scratch copy and
+validates every merged main spec strictly there, the archive stage's verdict before the archive
+(`openspec validate <name> --strict` leaves MODIFIED blocks unmeasured). The repository is not
+touched. A non-zero exit is a freshness finding quoting OpenSpec's own lines; a failing spec the
+change does not touch is reported as a pre-existing failure, not as a defect of the change.
+
 Then, for every concrete claim the artifacts make about the existing project, verify it against
 reality (grep/read; cite file:line):
 

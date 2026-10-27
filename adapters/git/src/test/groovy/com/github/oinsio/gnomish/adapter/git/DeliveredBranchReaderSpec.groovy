@@ -157,6 +157,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     // still reports the state it delivered — the reader locates the cleanup commit in history and
     // reads its parent, rather than assuming the tip's parent is the Completed commit.
     // Scenario: tracker/tracker-take / Delivered state survives commits after cleanup
+    // Scenario: tracker/tracker-take / The delivered state never comes from a commit after the cleanup
     def "reads the delivered state from the Completed commit when the branch gained commits after cleanup"() {
         given: 'a delivered branch whose cleanup commit is no longer the tip'
         repository.createTask(context('PROJ-3'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))

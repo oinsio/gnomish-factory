@@ -120,6 +120,7 @@ class SpecContractScenarioLinkFunctionalSpec extends Specification {
     }
 
     // Scenario: build-system/quality-gates / An exempt scenario passes with its reason
+    // Scenario: build-system/quality-gates / An exemption entry names its mechanism
     def "FR5: a scenario its capability's exemption file names with its verifying workflow passes"() {
         given:
         project.test('DemoSpec', '// verified by CI')
@@ -141,6 +142,7 @@ class SpecContractScenarioLinkFunctionalSpec extends Specification {
     }
 
     // Scenario: build-system/quality-gates / A stale exemption fails the gate
+    // Scenario: build-system/quality-gates / An entry naming no scenario fails the gate
     def "FR5: an exemption line naming no scenario of its capability fails, naming the line to remove"() {
         given:
         project.exemptions('demo.txt', 'spec: demo', 'Retired => .github/workflows/ci.yml')

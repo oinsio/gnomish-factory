@@ -79,3 +79,16 @@ tasks.named('functionalTest') {
     inputs.file(releasePreflightScript).withPropertyName('releasePreflightScript').withPathSensitivity(PathSensitivity.NONE)
     systemProperty 'gnomish.releasePreflightScript', releasePreflightScript.asFile.absolutePath
 }
+
+// Design D6 of split-long-spec-requirements: `StageMergedSpecsPreviewCommandSpec` reads the REAL
+// fix-artifacts manifest (above) for the one check that runs `scripts/check-merged-specs.sh`, and
+// scans the REAL stage and command trees so that no other file runs `openspec archive` as a
+// preview of its own. Both trees are inputs by content.
+def gnomishDir = layout.projectDirectory.dir('../.gnomish')
+def claudeCommandsDir = layout.projectDirectory.dir('../.claude/commands')
+tasks.named('functionalTest') {
+    inputs.files(fileTree(gnomishDir)).withPropertyName('gnomishDir').withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(fileTree(claudeCommandsDir)).withPropertyName('claudeCommandsDir').withPathSensitivity(PathSensitivity.RELATIVE)
+    systemProperty 'gnomish.gnomishDir', gnomishDir.asFile.absolutePath
+    systemProperty 'gnomish.claudeCommandsDir', claudeCommandsDir.asFile.absolutePath
+}

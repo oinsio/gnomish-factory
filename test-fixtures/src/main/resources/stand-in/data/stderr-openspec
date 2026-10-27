@@ -1,0 +1,7 @@
+# What `openspec validate --specs --strict --no-interactive` (OpenSpec CLI 1.14.1) prints on stderr
+# for a failing spec, as printed on 2026-10-27 (task 2.1 of split-long-spec-requirements).
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[long-requirement]
+✗ spec/tracker/github-tracker
+  ⚠ [WARNING] requirements[9]: Requirement text is very long (>500 characters). Move examples and edge cases into scenarios, or split it into separate requirements that each state one behavior.

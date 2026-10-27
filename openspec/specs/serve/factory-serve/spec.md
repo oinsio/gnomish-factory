@@ -420,9 +420,10 @@ the K-fuse accounting.
   released-for-infrastructure kind, never as a free-text skip
 
 ### Requirement: Remote outage gate holds the feed off the tracker
-`serve` SHALL keep one set of daemon conditions with one owner, one condition per precondition that can change while the daemon runs: the remote (per remote target), the container runtime, the clone's ref format, the image contract and the box's git floor. A slot's base-refresh infrastructure failure SHALL open the remote condition; a typed precondition refusal from a slot or the janitor SHALL open its condition. The feed SHALL read one gate over all conditions before every claim and SHALL claim nothing while any is open. While a condition is open the daemon SHALL probe it by repeating the check that opened it, on the growing, jittered, capped cadence, and only a passing probe closes it. Slots already working SHALL continue under an open condition.
-**Implements**: FR14, NFR-R3, M4 of add-base-ref-resolution; FR2, FR3, NFR-O1, UX1 of signal-outage-gate-on-origin-contact; FR15, FR16 of add-sandbox-base-image
+`serve` SHALL keep one set of daemon conditions with one owner, one condition per precondition that can change while the daemon runs: the remote (per remote target), the container runtime, the clone's ref format, the image contract and the box's git floor. The feed SHALL read one gate over all conditions before every claim and SHALL claim nothing while any is open.
+**Implements**: FR14, NFR-R3, M4 of add-base-ref-resolution; FR2, FR3, NFR-O1, UX1 of signal-outage-gate-on-origin-contact; FR15, FR16 of add-sandbox-base-image; FR1, FR2 of split-long-spec-requirements
 **Notes**: The remote outage gate's state machine, schedule and three-phase probe are unchanged; it is the first condition of the set (design D19).
+**Notes**: What opens a condition is the requirement "A condition opens on the refusal that met it"; how it is probed and closed, "An open condition is probed by its own check".
 
 #### Scenario: At most one claim per slot for the whole outage
 - **WHEN** the remote is unreachable for an hour under a three-slot serve
@@ -497,8 +498,9 @@ the K-fuse accounting.
 - **THEN** every probe is one one-shot container running the image's `git --version`, the intervals grow to the cap, and no box, volume or network is created
 
 ### Requirement: Gate transitions are the outage's log and snapshot signal
-Opening a condition SHALL log one WARN with an operator-event code naming the condition, the cause and the fix; closing SHALL log one INFO recovery line with the duration and probe count; failures and probes in between SHALL be DEBUG with a periodic roll-up. A condition open for at least a configured duration SHALL log ERROR once with its own event code. The serve snapshot SHALL carry a `conditions` section (one entry per condition: state, open since, last error, next probe time, consecutive failures) beside `tracker`; the remote's entry is the former `remote` section.
-**Implements**: NFR-O1, NFR-O3, UX6 of add-base-ref-resolution; NFR-O2, UX4 of add-sandbox-base-image
+Opening a condition SHALL log one WARN with an operator-event code naming the condition, the cause and the fix; closing SHALL log one INFO recovery line with the duration and probe count; failures and probes in between SHALL be DEBUG with a periodic roll-up. A condition open for at least a configured duration SHALL log ERROR once with its own event code.
+**Implements**: NFR-O1, NFR-O3, UX6 of add-base-ref-resolution; NFR-O2, UX4 of add-sandbox-base-image; FR1, FR2 of split-long-spec-requirements
+**Notes**: The snapshot side of the signal is the requirement "Open conditions are a snapshot section".
 
 #### Scenario: One WARN, one recovery line, roll-ups between
 - **WHEN** the remote is unreachable for an hour and then returns
@@ -703,3 +705,27 @@ A typed operator-precondition refusal met after a claim SHALL end the claimed ru
 #### Scenario: An unclassified failure opens no condition
 - **WHEN** a slot's run dies with a runtime exception no arm classifies
 - **THEN** no condition opens, the crash arm runs the abort protocol, and the feed keeps claiming
+
+### Requirement: A condition opens on the refusal that met it
+A slot's base-refresh infrastructure failure SHALL open the remote condition; a typed precondition refusal reported by a slot or the janitor SHALL open the condition of its kind and no other.
+**Implements**: FR14, NFR-R3, M4 of add-base-ref-resolution; FR2, FR3, NFR-O1, UX1 of signal-outage-gate-on-origin-contact; FR15, FR16 of add-sandbox-base-image; FR2 of split-long-spec-requirements
+
+#### Scenario: A reported refusal opens the condition of its kind
+- **WHEN** a slot or the janitor reports a typed precondition refusal of one kind
+- **THEN** that kind's condition opens, with the refusal's cause and fix, and no other condition changes
+
+### Requirement: An open condition is probed by its own check
+While a condition is open the daemon SHALL probe it by repeating the check that opened it, on the growing, jittered, capped cadence; only a passing probe SHALL close it, and slots already working SHALL continue under an open condition.
+**Implements**: FR14, NFR-R3, M4 of add-base-ref-resolution; FR2, FR3, NFR-O1, UX1 of signal-outage-gate-on-origin-contact; FR15, FR16 of add-sandbox-base-image; FR2 of split-long-spec-requirements
+
+#### Scenario: Probes repeat the condition's own check on the capped cadence
+- **WHEN** the box-git-floor condition stays open for an hour
+- **THEN** every probe is the floor check itself, the intervals between them grow with jitter to the cap, and the condition closes only on a probe that passes
+
+### Requirement: Open conditions are a snapshot section
+The serve snapshot SHALL carry a `conditions` section, one entry per condition — state, open since, last error, next probe time, consecutive failures — beside `tracker`; the remote's entry SHALL be the former `remote` section.
+**Implements**: NFR-O1, NFR-O3, UX6 of add-base-ref-resolution; NFR-O2, UX4 of add-sandbox-base-image; FR2 of split-long-spec-requirements
+
+#### Scenario: The conditions section carries every condition's entry
+- **WHEN** the snapshot is written while one condition is open
+- **THEN** `conditions` holds an entry per condition, the open one with its state, open since, last error and next probe time, and the remote's entry is among them

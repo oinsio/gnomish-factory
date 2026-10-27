@@ -13,6 +13,7 @@ import spock.lang.Specification
  */
 class ConditionHealthAssemblerSpec extends Specification {
 
+    // Scenario: serve/factory-serve / The conditions section carries every condition's entry
     def "one entry per condition, the remote's first, each with its token and state"() {
         given:
         def conditions = DaemonConditionsFixture.closed()

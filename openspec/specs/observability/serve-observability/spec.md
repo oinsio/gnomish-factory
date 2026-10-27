@@ -201,13 +201,14 @@ factory version).
 ### Requirement: taskOutcome lines for terminal results carrying a final state
 A `taskOutcome` line SHALL be appended for each terminal slot result with a
 final state — `outcome` ∈ `delivered | awaitingHuman | aborted | revoked`,
-`parkReason` only with `awaitingHuman` — with `taskId`, `stage` (null at
-pipeline end), `attemptsUsed`, `startedAt`, `finishedAt`, `wallMillis`,
-`tokensByModel`. A slot whose run ends by an unclassified throwable SHALL
-append its line with `outcome: aborted` from the slot boundary itself.
-`EmptyQueue`, `Skipped` and precondition-released results SHALL NOT produce lines.
-**Implements**: FR11 of add-serve-observability; FR18 of add-sandbox-base-image
+`parkReason` only with `awaitingHuman` — with `taskId`, `stage`, `attemptsUsed`,
+`startedAt`, `finishedAt`, `wallMillis`, `tokensByModel`. A slot ended by an
+unclassified throwable SHALL append its line with `outcome: aborted` at the slot
+boundary. `EmptyQueue`, `Skipped` and precondition-released results SHALL
+NOT produce lines.
+**Implements**: FR11 of add-serve-observability; FR18 of add-sandbox-base-image; FR1, FR2 of split-long-spec-requirements
 **Notes**: A released task writes no line for the reason a `Skipped` one writes none: no engine ran and nothing was spent; its episode is the `daemonCondition` line's (design D20).
+**Notes**: `stage` is null at the pipeline end.
 
 #### Scenario: Delivered task leaves one line
 - **WHEN** a slot delivers a task

@@ -47,9 +47,12 @@ The parts, in order:
 requirement whose text is longer than 500 characters. The text is every non-blank line between
 `### Requirement:` and the first `####` heading, fenced blocks and metadata lines
 (`**Implements**:`, `**Notes**:`) excluded. The limit is OpenSpec's rule, checked by OpenSpec
-(`/opsx:archive`, the archive stage); the project does not re-check it. A requirement that does
-not fit is two behaviors, or a behavior with cases the text is trying to list — split it, or
-move the cases into scenarios.
+only: `openspec validate <change> --strict` measures `ADDED` blocks and leaves `MODIFIED` ones
+alone, so the merge is previewed with OpenSpec itself, MODIFIED blocks included, by
+`scripts/check-merged-specs.sh <change>` — the fix-artifacts stage and `/review-artifacts` run
+it, and so does a developer before `/opsx:archive`. A requirement that does not fit is two
+behaviors, or a behavior with cases the text is trying to list — split it, or move the cases
+into scenarios.
 
 **Normative text is a scenario or a requirement.** Every sentence that binds behavior —
 `SHALL`, `MUST`, or an equivalent (`never`, `only`, `at most`, `at least`, `exactly`) — is

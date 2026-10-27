@@ -453,15 +453,13 @@ Resume of a returned task SHALL require nothing instance-local: claim, decisions
 ### Requirement: Exit codes by take result
 `gnomish take` SHALL exit with: 0 — Delivered, or a clean bare-mode no-op;
 1 — failure outside a claimed run; 2 — usage error; 3 — pipeline load
-failure; 8 — an operator precondition refused after the claim (the clone's ref
-format, the container runtime, the box's git floor, the image contract), the
-claim released; 10 —
-parked as escalation; 11 — parked as checkpoint; 12 — infrastructure abort
-below the fuse; 13 — parked as infra; 14 — revoked; 15 — refused or skipped;
-16 — claim released on a base-refresh infrastructure failure before any work
-started.
-**Implements**: FR9 of add-tracker-port; FR10 of add-tracker-port; FR15 of add-tracker-port; FR9 of add-base-ref-resolution; FR14 of add-sandbox-base-image
-**Notes**: 8 is the below-10 family's configuration code, in the spirit of `sysexits` `EX_CONFIG`: the operator fixes it, a retry will not (design D18).
+failure; 8 — an operator precondition refused after the claim, the claim
+released; 10 — parked as escalation; 11 — parked as checkpoint; 12 —
+infrastructure abort below the fuse; 13 — parked as infra; 14 — revoked;
+15 — refused or skipped; 16 — claim released on a base-refresh infrastructure
+failure before any work started.
+**Implements**: FR9 of add-tracker-port; FR10 of add-tracker-port; FR15 of add-tracker-port; FR9 of add-base-ref-resolution; FR14 of add-sandbox-base-image; FR1, FR2 of split-long-spec-requirements
+**Notes**: 8 is the below-10 family's configuration code, in the spirit of `sysexits` `EX_CONFIG`: the operator fixes it, a retry will not (design D18); the preconditions are the clone's ref format, the container runtime, the box's git floor and the image contract, named in "Operator precondition refused after the claim exits 8".
 
 #### Scenario: Empty queue exits clean
 - **WHEN** bare `take` finds no eligible ready task
@@ -751,10 +749,10 @@ absent, the factory SHALL finish the delivery — deliver the tracker finish whe
 it is still owed, then commit the cleanup and push it — and SHALL NOT re-enter
 the engine: zero rounds, no executor or judge invocation. Once the tracker
 reports the task finished, the cleanup SHALL converge without a claim, from any
-clone of origin, whether or not it holds the branch locally. The
-delivered state a recovery reports SHALL be read from the `Completed` commit itself.
-**Implements**: FR3, FR4, FR8, NFR-R1 of fix-terminal-receipt-convergence; FR9 of harden-task-branch-contract; FR6 of fix-envelope-medium
+clone of origin, whether or not it holds the branch locally.
+**Implements**: FR3, FR4, FR8, NFR-R1 of fix-terminal-receipt-convergence; FR9 of harden-task-branch-contract; FR6 of fix-envelope-medium; FR1, FR2 of split-long-spec-requirements
 **Notes**: The order is FR10's: the cleanup is the destructive step, so it runs behind the confirmed finish.
+**Notes**: Where the delivered state of the finish comes from is the requirement "Delivered state is read from the Completed commit".
 
 #### Scenario: Kill between Completed and cleanup costs no re-run
 - **WHEN** a previous run died after committing `Completed` but before its
@@ -962,3 +960,11 @@ boundary is `PARK`; a finish has landed when it is `FINISH` or the `finished` fa
   another instance claimed the task
 - **THEN** the pickup finds the latest boundary `STALE_CLAIM_REMOVED`, re-drives the park, and
   exits without running a stage
+
+### Requirement: Delivered state is read from the Completed commit
+The delivered state a recovery reports SHALL be read from the `Completed` commit itself: at the tip while its envelope is still there, otherwise at the parent of the cleanup commit found in the branch's history.
+**Implements**: FR3, FR4, FR8, NFR-R1 of fix-terminal-receipt-convergence; FR9 of harden-task-branch-contract; FR6 of fix-envelope-medium; FR2 of split-long-spec-requirements
+
+#### Scenario: The delivered state never comes from a commit after the cleanup
+- **WHEN** a delivered branch gained commits after its cleanup commit
+- **THEN** the recovery reads the `Completed` envelope at the cleanup commit's parent and reports that state, whatever the later commits hold

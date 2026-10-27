@@ -112,6 +112,24 @@ verify:
         echo "openspec validate $change --strict must pass before the round ends - fix the errors above in the change's own artifacts; if one needs a decision rather than a faithful restatement, escalate through \$GNOMISH_DECISION_FILE"
         exit 1
       fi
+  # The archive stage's verdict before the archive: `openspec validate <change>` leaves a
+  # MODIFIED block unmeasured, so the change is archived in a scratch copy and every merged main
+  # spec validated strictly there (design D3, D6 of split-long-spec-requirements). The script
+  # owns the preview; this check only names the change and runs it. Its shape is pinned by
+  # StageMergedSpecsPreviewCommandSpec (build-logic).
+  - type: command
+    command: |
+      # Reports live under temporary-docs/gnomish/<task>/: the task branch's name without its
+      # gnomish/ prefix (the factory's own sanitized taskId), 'local' off a task branch.
+      branch=$(git branch --show-current)
+      case "$branch" in gnomish/*) task=${branch#gnomish/} ;; *) task=local ;; esac
+      dir=temporary-docs/gnomish/$task
+      change=$(sed -n 's/^Change:[[:space:]]*//p' $dir/change.md | head -1)
+      if ! out=$(scripts/check-merged-specs.sh "$change" 2>&1); then
+        printf '%s\n' "$out" | tail -40
+        echo "scripts/check-merged-specs.sh: the merged main specs would not validate strictly - split the requirement in this change's delta, one behavior per requirement (.claude/rules/delta-specs.md); a failure in a spec this change does not touch is not this round's to fix - escalate through \$GNOMISH_DECISION_FILE naming it"
+        exit 1
+      fi
   # The project's own spec-contract rules (traceability line, notes, scenario-to-test link) over
   # the main specs and this task's change's deltas - never another change's, whose defect this
   # round cannot fix. One Gradle task owns every rule (SpecContractCheck, design D5 of

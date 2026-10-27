@@ -101,6 +101,7 @@ class DaemonConditionsSpec extends Specification {
         } as Set
     }
 
+    // Scenario: serve/factory-serve / A reported refusal opens the condition of its kind
     def "FR15: a reported refusal opens the condition of its kind and no other: #kind"() {
         given:
         def logs = LogCaptureSupport.attach(DaemonCondition)
@@ -206,6 +207,7 @@ class DaemonConditionsSpec extends Specification {
     }
 
     // Scenario: serve/factory-serve / A container start is the box git floor's probe cadence
+    // Scenario: serve/factory-serve / Probes repeat the condition's own check on the capped cadence
     def "FR15: an hour of an open box-git-floor condition is its own check on the growing, capped cadence"() {
         given: 'the floor recheck is the readiness assessment, one helper container per call'
         def set = conditions()
