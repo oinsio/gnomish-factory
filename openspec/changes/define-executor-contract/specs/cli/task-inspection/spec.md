@@ -2,8 +2,8 @@
 
 ## MODIFIED Requirements
 
-Layered on `Usage report` as modified by `tighten-spec-contract` (sequenced before this
-change): that delta cut the body and added the scenarios "Text usage is a stage and round table
+Layered on `Usage report` as modified by `tighten-spec-contract` (archived; its text is the
+stable text): that delta cut the body and added the scenarios "Text usage is a stage and round table
 with totals" and "JSON usage carries full granularity under its own version"; this text bounds
 the walk by `baseCommit` and the first-parent line, takes each row's identity from its record,
 checks the fold against the tip, adds `--markdown`, and adds the scenarios "A first-round pass

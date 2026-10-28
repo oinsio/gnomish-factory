@@ -2,8 +2,8 @@
 
 ## MODIFIED Requirements
 
-Layered on `JSON contract v1, state-derived` as modified by `tighten-spec-contract` (sequenced
-before this change): that delta cut the body to the section list, moved the withdrawal into notes
+Layered on `JSON contract v1, state-derived` as modified by `tighten-spec-contract` (archived; its
+text is the stable text): that delta cut the body to the section list, moved the withdrawal into notes
 and added the scenarios "The task and position sections" through "Findings are carried in full";
 this text replaces the attempt usage, `judgeUsage` and totals wording with the attempt identity,
 the participant entries and the usage snapshot (in the canonical example and in the scenarios
@@ -111,7 +111,7 @@ The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 U
 
 #### Scenario: The last escalation and the last decision
 - **WHEN** `status` reads a tip that recorded an escalation and a decision
-- **THEN** `lastEscalation` is one of the five report kinds, carrying the question and options for `decisionNeeded` and `denials` for `cannotExecute`, and `lastDecision` carries text, author, stage and time; each is null when none was recorded
+- **THEN** `lastEscalation` is one of the six report kinds (`attemptsExhausted`, `decisionNeeded`, `cannotVerify`, `pipelineMismatch`, `cannotExecute`, `budgetExhausted`), carrying the question and options for `decisionNeeded`, `denials` for `cannotExecute` and the bound for `budgetExhausted`, and `lastDecision` carries text, author, stage and time; each is null when none was recorded
 
 #### Scenario: A usage object carries wall time, tools and tokens by model
 - **WHEN** a participant entry is rendered
@@ -141,3 +141,40 @@ Cost and tool-aggregate fields SHALL be optional everywhere in the contract: a p
 #### Scenario: Unpriced entry validates
 - **WHEN** a judge vote reports tokens without `costUsd`
 - **THEN** the document is contract-valid, the entry carries no `costUsd` key and the snapshot's `complete` is false
+
+Layered on `Reference anchor and versioning policy` as it stands in the stable text: this text
+adds the sixth escalation kind, `budgetExhausted`, to the corpus count and keeps every other
+scenario verbatim.
+
+### Requirement: Reference anchor and versioning policy
+The contract SHALL be anchored by two reference documents in test resources, and serializing the deterministic samples (built with an injected clock) SHALL be byte-identical to each: `status-report-v1.reference.json`, one whole canonical document that pins the envelope and every section of a mid-run report; and `status-report-v1.escalations.reference.jsonl`, one compact line per `lastEscalation` kind that pins each sealed variant's own serialized form.
+**Implements**: FR11 of add-manual-run; FR5 of add-agent-executor; FR2 of fix-denial-attribution-durability; FR7 of define-executor-contract
+**Notes**: Two documents rather than one because the canonical document's `lastEscalation` slot holds exactly one kind: a variant absent from it has nowhere else to be pinned byte-exactly, and replacing that kind would move the pin rather than add one.
+
+#### Scenario: Contract drift caught
+- **WHEN** a field is renamed in the serializer
+- **THEN** the reference comparison fails showing the exact JSON diff
+
+#### Scenario: Pre-release amendment stays v1
+- **WHEN** this change reshapes usage fields and regenerates the reference file
+- **THEN** the document still carries `"version": 1` and the reference test passes against the regenerated file
+
+#### Scenario: Every escalation kind is pinned byte-exactly
+- **WHEN** the escalation corpus is serialized
+- **THEN** each of the six `EscalationReport` kinds has its own committed line, the `cannotExecute` line carries a populated `denials` array and the `budgetExhausted` line carries the bound
+
+#### Scenario: A new escalation kind cannot ship unpinned
+- **WHEN** a seventh `EscalationReport` variant is added without a corpus line
+- **THEN** the completeness check fails, naming the count mismatch
+
+#### Scenario: An additive field keeps the version
+- **WHEN** a field is added to the contract
+- **THEN** the document's `version` is unchanged
+
+#### Scenario: A breaking change to a released contract bumps the version
+- **WHEN** a field of a released contract version is renamed, removed, or changes meaning
+- **THEN** the document's `version` is bumped; only a contract whose only consumer ships in this repository and which no archived change has published may instead be amended in place, with its reference file regenerated
+
+#### Scenario: Future consumers verify against the same reference files
+- **WHEN** a future consumer of the contract — the external `gnomish status` of the git-workflow change — is built
+- **THEN** it verifies against the same reference files

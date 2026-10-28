@@ -4,8 +4,9 @@
 
 ### Requirement: Round commit subject is rendered from the record
 The subject of a round commit (`gnomish: round <stage>#<round>`) SHALL be rendered from the
-recorded round — its `stage` and `round` — by the one service-message owner; no writer SHALL
-spell the stage into the subject from a second source.
+recorded round — its `stage` and its `round` as recorded, the attempt key's non-negative number —
+by the one service-message owner; no writer SHALL spell the stage or the round into the subject
+from a second source.
 **Implements**: FR14 of define-executor-contract
 
 #### Scenario: Subject and record agree by construction
@@ -47,8 +48,45 @@ complete}`, `rounds`, `through`).
 
 ## MODIFIED Requirements
 
-Layered on `State-file JSON contract v1` as modified by `tighten-spec-contract` (sequenced
-before this change): that delta cut the body and added the notes and the scenarios "An attempt
+Layered on `State directory with one writer per file` as modified by `tighten-spec-contract`
+(archived; its text is the stable text): every scenario is copied, and the field list of
+"state.json carries the position and the current attempts" names the identity, the `usage` list and
+the snapshot in place of `executorUsage` and `judgeUsage` (F66 of tighten-spec-contract).
+
+### Requirement: State directory with one writer per file
+`.gnomish-task/` at the working-copy root SHALL hold exactly `task.json`, `state.json`, the round traces `attempts/<stage>/<round>/trace.jsonl` and — in git modes — the decision requests `decisions/<stage>-a<attempt>-<token>.json`. `task.json` SHALL be written only by `TaskRepository` and `state.json` only by factory-side components; a decision request, named by the round token per the decision-file protocol, is the single gnome-writable path. The gnome writes `state.json` never.
+**Implements**: FR13 of make-checkpoint-gate-durable; FR3 of add-git-workflow; FR23 of add-sandbox-core; FR4 of fix-denial-report-attachment; FR3 of harden-task-branch-contract; FR2 of fix-denial-attribution-durability; FR15, FR17 of define-executor-contract
+
+#### Scenario: History of past stages lives in git
+- **WHEN** the task advances to the next stage
+- **THEN** `state.json` contains only the current stage's attempts; earlier rounds remain in the file's git history
+
+#### Scenario: Decision file keeps the one-writer rule
+- **WHEN** a round leaves a decision request in `.gnomish-task/decisions/`
+- **THEN** the gnome is that file's only writer and every other `.gnomish-task/` path keeps its single factory-side writer
+
+#### Scenario: The request is named by its round
+- **WHEN** two rounds of the same stage and attempt number run in one task — an answered question restarts the stage, or a killed round is retried
+- **THEN** their decision paths differ by the round token, and the later round's path is not present on the tip it opens on
+
+#### Scenario: task.json carries the task context and the outcome
+- **WHEN** `TaskRepository` writes `task.json`
+- **THEN** the file carries version, taskId, title, body, createdAt, baseCommit, decisions[] {text, author?, stage?, at?}, outcome — null | completed | paused{passedStage} | escalated{report} | aborted{failedAt, cause} — and lastEscalation, whose `cannotExecute` kind additionally carries the denials of the round that could not execute
+
+#### Scenario: state.json has two writers in disjoint windows
+- **WHEN** `state.json` is written after the STARTED commit
+- **THEN** the writer is either the git `AttemptPersistence`, for a round write, or `TaskRepository`, for a lifecycle transition (the decision commit replacing the state with the reset one beside the appended decision, the approval write moving the position past the gate, the resumed write replacing the state with the reset one) in its own commit outside any round
+
+#### Scenario: state.json carries the position and the current attempts
+- **WHEN** `state.json` is written
+- **THEN** it carries version, position, attemptsUsed, attempts[] {taskId, stage, roundToken, round, result, startedAt, stop, checks[], denials[], usage[]} and totals as the usage snapshot, the inner forms as in status-report v1
+
+#### Scenario: A repeated stage visit overwrites the round trace at the tip
+- **WHEN** a stage is visited again and a round of the new visit writes `attempts/<stage>/<round>/trace.jsonl`
+- **THEN** the file holds one JSON line per tool call of that round, the tip carries the latest visit's version, and git history keeps every earlier version
+
+Layered on `State-file JSON contract v1` as modified by `tighten-spec-contract` (archived; its
+text is the stable text): that delta cut the body and added the notes and the scenarios "An attempt
 without a stop reads as none" and "Unknown version refuses the inspection commands"; this text
 adds the participant-usage round-trips (the record's fields are the ADDED requirement "Attempt
 records carry identity and participant usage"), and both must survive the later sync.

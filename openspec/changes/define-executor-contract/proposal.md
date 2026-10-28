@@ -57,7 +57,7 @@ function and checked against a recorded snapshot.
 - **MODIFIED**: cost figures are no longer scrubbed from reference dumps (supersedes the money
   rule of `harden-reference-dump-scrubber`; tokens and model ids already reveal the figure).
 - **ADDED**: host-mode rounds mint a round token like container-mode rounds.
-- **ADDED**: ADR 0012 and glossary terms. **BREAKING** (deferred to the follow-up):
+- **ADDED**: ADR 0020 and glossary terms. **BREAKING** (deferred to the follow-up):
   `CheckClientFactory` retires; no third-party implementation exists today.
 
 ## Goals
@@ -82,7 +82,7 @@ function and checked against a recorded snapshot.
   `harden-verification-integrity`.
 - NG4: implementing the `effect` role; this change reserves the vocabulary only.
 - NG5: mid-round permission questions as a `decision-request` answer: the executor answers
-  tool prompts itself from the abstract policy (ADR 0012 records when to revisit).
+  tool prompts itself from the abstract policy (ADR 0020 records when to revisit).
 - NG6: an ACP adapter; the raw-CLI dialect stays the reference, ACP is a later adapter.
 - NG7: `pending + key` handling for the `transform` role in the engine (a transform
   executor returning `pending` is an infrastructure failure in this change; NG1 wires it).
@@ -92,6 +92,10 @@ function and checked against a recorded snapshot.
   operator process matter, not this change.
 - NG10: pricing tokens the executor did not price — cost is recorded only as reported; the
   factory holds no price table.
+- NG11: running `describe` from `gnomish doctor`. The doctor has no task, so it has neither a
+  law nor an execution environment to run a declared program in; the describe preflight is
+  reached only through a claimed run (ADR 0019, decision 2). Pickup condition: the change that
+  gives the doctor a law source and an execution environment of its own.
 
 ## Users & Scenarios
 
@@ -123,11 +127,12 @@ function and checked against a recorded snapshot.
 - FR4: `describe` returns protocol version (integer), roles, capabilities, settings schema,
   credential names, egress hosts, config-directory variable, policy-disabling flags, and
   enforcement level; unknown fields are ignored on both sides; version mismatch is a located
-  load error.
+  error of the law, reported by the preflight before the executor's first round.
 - FR5: External executors are spawned only through `TaskExecutionEnvironment.exec`; the request
-  travels on stdin; results are written to factory-named paths handed over as `GNOMISH_*`
-  variables; stdout and stderr are captured as capped logs and never parsed, except NDJSON
-  progress on stdout when `streams_progress` is declared.
+  is the child's standard input, handed to the launch owner as a file (never a pipe the factory
+  writes into); results are written to factory-named paths handed over as `GNOMISH_*`
+  variables; stdout and stderr are drained through the factory's one bounded child-output reader,
+  capped and never parsed, except NDJSON progress on stdout when `streams_progress` is declared.
 - FR6: One result-file reader owns every read of a factory-named result path: size cap,
   truncation marker, inert bytes, `UntrustedText` wrapping of every text field; parse failure
   of an answer is `failed/infrastructure` for `transform` and cannot-verify for `verdict`,
@@ -138,8 +143,10 @@ function and checked against a recorded snapshot.
 - FR8: Built-ins implement the Java mirror of the JSON contract and pass the same conformance
   kit; no built-in has a result type of its own.
 - FR9: The law declares executors by name (`executors:` section: type, program or built-in id,
-  settings, credentials, egress); a stage names its executor; settings are validated against
-  the executor's declared schema at law load, before any spawn.
+  settings, credentials, egress); a stage names its executor; the section is validated
+  structurally at law load, and settings are validated against the executor's declared schema
+  before the executor's first round, once the task's execution environment is live and before
+  the engine runs.
 - FR10: A `program` executor type runs a stage in role `transform` end to end through the
   contract (stdin request, file result, environment denials, recorded usage).
 - FR11: Policy in the request is abstract (`readOnly`, `writeExactly(path)`, `workspaceWrite`);
@@ -148,8 +155,13 @@ function and checked against a recorded snapshot.
 - FR12: A conformance kit drives a candidate through `describe`, settings schema, each declared
   role, `cancel`, oversized output, stderr noise, non-JSON stdout, `pending` then `poll`,
   unknown fields; a reference executor passes it and a misbehaving fake fails each case.
-- FR13: Preflight before an executor's first run (present, version in range, `describe` valid,
-  credentials resolvable); executor name, version and model are pinned at first claim.
+- FR13: Preflight before an executor's first round, on the live execution environment: a
+  program that is absent or cannot answer `describe` is an operator precondition (ADR 0019,
+  exit 8); a `describe` whose version, roles, schema, credentials or egress disagree with the
+  law is a located law error that parks the task without burning an attempt. Executor name and
+  model are law content, pinned with the law at creation; the describe version is recorded by
+  the first round that ran the executor, and a later `describe` reporting a different version
+  escalates `PipelineMismatch`.
 - FR14: Every round record carries the identity the orchestrator minted for it — `taskId`,
   `stage` and `roundToken` (the tip the round opened on) — written by the round's writer; no
   reader derives a round's stage or task from the position, the list shape or neighbouring
@@ -200,7 +212,7 @@ function and checked against a recorded snapshot.
 
 - NFR-S1: No credential travels in argv or inherited environment; declared credential names are
   resolved through `SecretsProvider` and delivered only to the declaring executor's process
-  (depends on `fix-docker-exec-env-argv`).
+  (`fix-docker-exec-env-argv`, archived 2026-10-26; ADR 0017).
 - NFR-S2: Everything an executor writes is untrusted: result files are inert and capped, text
   fields are `UntrustedText`, findings pass the sanitizer at every sink, and nothing from a
   result reaches an LLM prompt unlabeled.
@@ -220,8 +232,9 @@ function and checked against a recorded snapshot.
 
 ## Operator Experience Criteria
 
-- UX1: An executor load error names the executor, the settings path and the schema rule, in
-  the located format of other `.gnomish/` errors.
+- UX1: An executor declaration error — at law load or at the describe preflight — names the
+  executor, the settings path and the schema rule, in the located format of other `.gnomish/`
+  errors.
 - UX2: `gnomish executor verify <program>` prints one line per case: pass/fail, first detail.
 - UX3: A round's ledger line shows `executor=<name>@<version> role=<role> status=<status>[/<class>]`.
 - UX4: `gnomish status` prints the snapshot's `rounds`, `complete` and unpriced token count
@@ -246,7 +259,11 @@ function and checked against a recorded snapshot.
 ## Open Questions
 
 - Q1: Shape and cap of the `pending` key in the state file — `migrate-verify-to-executor-contract`.
-- Q2: Pinning an external program: by path like `pinPaths`, or by image digest.
+- Q2: Pinning an external program's binary: by path like `pinPaths`, or by image digest. Open.
+  This change pins the executor's name and model with the law and records the describe version
+  (FR13); the binary is reached only through the sandbox image (ADR 0019). Pickup condition: the
+  change that lets a law name a program outside the image, or that versions the image contract
+  independently of the law.
 - Q3: Whether `judge` becomes a built-in `llm-api` executor before or with
   `extract-agent-round-runner`.
 
@@ -285,15 +302,16 @@ function and checked against a recorded snapshot.
 - `.gnomish/stages/usage-report/report.sh`: posts `gnomish usage --markdown`, aggregates nothing.
 - `adapters`: `program` executor; `FindingsFileReader` and `DecisionFileReader` removed.
 - `bootstrap`: name-keyed executor registry and dispatch (replaces the unconditional Claude
-  pick); reader-owner architecture spec; conformance CLI. `test-fixtures`: reference, fake.
-- `docs/adr/0012-executor-contract.md`, `docs/glossary.md`.
-- Sequencing: after `fix-docker-exec-env-argv`; before `add-command-executor` (its `command`
+  pick); reader-owner architecture spec; conformance CLI. `test-fixtures`: reference executor
+  and misbehaving fake as stand-in presets (ADR 0015).
+- `docs/adr/0020-executor-contract.md`, `docs/glossary.md`.
+- Sequencing: after `fix-docker-exec-env-argv` (archived 2026-10-26); before `add-command-executor` (its `command`
   executor becomes the first built-in of the contract), `migrate-verify-to-executor-contract`,
   `extract-agent-round-runner`, `harden-verification-integrity`; `add-decision-arbiter` rebases
   and takes its usage shape from here (its own usage accounting is withdrawn).
-  `supervise-daemon-loops-and-embed-dashboard` is sequenced before this change (its
-  `stage-engine` delta is the base the telemetry requirement here is layered on).
-- Sequenced after `tighten-spec-contract`: every MODIFIED block (`pipeline-config`,
-  `git-task-persistence`, `stage-engine`, `status-report`, `task-inspection`) is layered on that
-  change's text, which must sync first; `add-command-executor`'s `pipeline-config` block is
-  layered on this change's.
+  `supervise-daemon-loops-and-embed-dashboard` (archived) landed before this change; its
+  `stage-engine` wording is in the stable text the telemetry requirement here is layered on.
+- `tighten-spec-contract` (archived 2026-10-14) is synced: every MODIFIED block (`pipeline-config`,
+  `git-task-persistence`, `stage-engine`, `status-report`, `task-inspection`) is layered on the
+  stable text it left; `add-command-executor`'s `pipeline-config` block is layered on this
+  change's.

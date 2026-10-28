@@ -13,8 +13,9 @@ factory's own specs use.
 print one line per case with pass or fail and the first offending detail, exiting non-zero on
 any failure. Cases SHALL cover: describe validity, settings-schema rejection, each declared
 role, cancel, oversized output, stderr noise, non-JSON stdout, pending then poll, unknown
-request fields, malformed answer handling.
-**Implements**: FR12, UX2 of define-executor-contract
+request fields, malformed answer handling. The kit's core SHALL drive the Java mirror
+interface.
+**Implements**: FR8, FR12, UX2 of define-executor-contract
 
 #### Scenario: Reference executor passes every case
 - **WHEN** the kit runs against the reference executor
@@ -28,10 +29,15 @@ request fields, malformed answer handling.
 - **WHEN** the candidate's describe lists `verdict` only
 - **THEN** the kit runs the `verdict` case and reports the other roles as not applicable
 
+#### Scenario: A built-in executor is driven through the same cases in process
+- **WHEN** the kit's core runs against an in-process implementation of the mirror interface
+- **THEN** every case the command runs against a program runs against it, with the same verdict per case, and no process is spawned
+
 ### Requirement: Reference executor and misbehaving fake ship with the factory
-A reference executor (a script with no factory dependency) SHALL pass the kit and SHALL be the
-executor the factory's own end-to-end specs run; a fake with scripted misbehaviours SHALL exist
-for negative specs. Both SHALL live outside production modules.
+A reference executor (a committed stand-in preset with no factory dependency) SHALL pass the kit
+and SHALL be the executor the factory's own end-to-end specs run; a fake whose presets each break
+one named case SHALL exist for negative specs. Both SHALL live outside production modules, in the
+stand-in library, and no spec SHALL generate an executor program of its own.
 **Implements**: FR12, M1 of define-executor-contract
 
 #### Scenario: Factory end-to-end uses the reference executor

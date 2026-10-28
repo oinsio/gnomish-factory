@@ -22,8 +22,8 @@ continuation; role inputs differ, everything else is common.
   inputs (criteria for `verdict`, instructions for `transform`)
 
 #### Scenario: Effect role is refused by the engine in this version
-- **WHEN** a law declares a stage or check in role `effect`
-- **THEN** loading reports a located error naming the role as reserved
+- **WHEN** a stage or check names an executor whose describe lists only `effect` for the role the use site needs (`transform` for a stage, `verdict` for a check)
+- **THEN** the describe preflight reports a located error naming the executor, the use site and `effect` as reserved; the law itself has no role field
 
 ### Requirement: Closed status taxonomy
 Every result SHALL carry one status: `completed`; `failed` with class `quality`,
@@ -72,17 +72,17 @@ variable, the flags that disable repo-local policy sources, and its policy enfor
 (`OS_SANDBOX`, `TOOL_GATE`, `AGENT_ASKS`, `PROMPT_ONLY`).
 **Implements**: FR4, FR13 of define-executor-contract
 
-#### Scenario: Version mismatch is a load error
+#### Scenario: Version mismatch is refused before the first round
 - **WHEN** an executor describes `protocolVersion: 2` and the factory speaks only `1`
-- **THEN** law loading reports a located error naming the executor and both versions
+- **THEN** the describe preflight reports a located error naming the executor and both versions, the task parks as it does for an invalid law, and no round runs
 
-#### Scenario: Undeclared role is refused at load
+#### Scenario: Undeclared role is refused before the first round
 - **WHEN** a stage names an executor in role `verdict` and its describe lists only `transform`
-- **THEN** loading reports a located error naming the executor, the stage and the role
+- **THEN** the describe preflight reports a located error naming the executor, the stage and the role, and no round runs
 
 #### Scenario: Describe output is untrusted
 - **WHEN** describe output exceeds the read cap or contains control characters in a text field
-- **THEN** the executor is rejected at load with a located error; no field reaches a log unsanitized
+- **THEN** the preflight ends the run as an operator precondition (the program cannot be described) and no field reaches a log unsanitized
 
 ### Requirement: Additive evolution
 Both sides SHALL ignore unknown fields; a field SHALL never be renamed, retyped or removed
@@ -120,7 +120,7 @@ enforces time bounds itself and the ledger enforces budget after the round.
 
 #### Scenario: Absent usage under a money bound
 - **WHEN** a stage with a money bound names an executor whose describe reports no usage
-- **THEN** loading reports a located error naming the executor and the bound
+- **THEN** the describe preflight reports a located error naming the executor and the bound, before the first round
 
 #### Scenario: Silence bound expires
 - **WHEN** an executor declaring `streams_progress` emits nothing for longer than the silence bound

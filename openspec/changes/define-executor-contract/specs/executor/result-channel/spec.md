@@ -2,23 +2,30 @@
 
 ## Purpose
 
-How an executor's result reaches the factory: the request on stdin, results in factory-named
-files read by one capped reader, logs on stdout and stderr, and the posture that treats every
-byte an executor writes as untrusted.
+How an executor's result reaches the factory: the request as the child's standard input (a file
+the launch owner hands it), results in factory-named files read by one capped reader, logs on
+stdout and stderr read through the factory's one bounded child-output reader, and the posture
+that treats every byte an executor writes as untrusted.
 
 ## ADDED Requirements
 
 ### Requirement: Request on stdin, results in factory-named files
-An external executor SHALL receive its request as one JSON document on stdin and SHALL write
-its result, and any answer payload, to paths the factory chose and handed over as `GNOMISH_*`
-environment variables. The factory SHALL spawn the executor only through the task execution
-environment seam, inside the box when the stage runs in one.
+An external executor SHALL receive its request as one JSON document on its standard input,
+handed to the launch owner as a file the child inherits — never a pipe a factory thread writes
+into — and SHALL write its result and any answer payload to paths the factory chose and handed
+over as `GNOMISH_*` environment variables. The factory SHALL spawn the executor only through the
+task execution environment seam, inside the box when the stage runs in one.
 **Implements**: FR5, NFR-S3 of define-executor-contract
 
 #### Scenario: Result path is factory-chosen
 - **WHEN** an executor run starts
 - **THEN** `GNOMISH_RESULT_FILE` names a path under the environment's scratch area that did not
-  exist before the run, and the executor's stdin carries the full request
+  exist before the run, and the request file the launch owner handed the child as its standard
+  input carries the full request
+
+#### Scenario: The request carries no credential
+- **WHEN** a request is rendered for an executor that declares credential names
+- **THEN** the request document holds no credential value; the names reach the process by the environment channel only
 
 #### Scenario: Executor runs through the environment seam
 - **WHEN** a `program` stage runs in container mode
@@ -26,8 +33,10 @@ environment seam, inside the box when the stage runs in one.
   the egress guard, and no factory-side process is spawned for it
 
 ### Requirement: Stdout and stderr are logs, never protocol
-Stdout and stderr SHALL be drained concurrently from launch, capped in bytes and lines, tagged
-with the run's correlation id, and never parsed for a result. The one exception is NDJSON
+Stdout SHALL be read through the factory's one bounded child-output reader and stderr through the
+environment's stderr file policy, from launch, capped in bytes and lines, tagged with the run's
+correlation id, and never parsed for a result; the executor adapter SHALL own no reader, pump or
+close of a child's pipe. The one exception is NDJSON
 progress on stdout from an executor whose describe declared `streams_progress`; a non-JSON
 line there SHALL be logged as a contract violation and skipped.
 **Implements**: FR5, NFR-O2 of define-executor-contract
@@ -82,4 +91,4 @@ appear in no argv, no log line, and no other process's environment.
 
 #### Scenario: Undeclared credential is refused
 - **WHEN** a law declares a credential for an executor whose describe does not list it
-- **THEN** loading reports a located error naming the executor and the variable
+- **THEN** the describe preflight reports a located error naming the executor and the variable, before the first round

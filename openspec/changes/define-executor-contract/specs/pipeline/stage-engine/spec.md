@@ -55,15 +55,17 @@ SHALL be recorded in the same commit as the round and its snapshot.
 - **THEN** the round ends `limit` with reason "cost unknown", and the commit that records the
   round carries the snapshot with `complete = false` and the `BudgetExhausted` outcome together
 
-### Requirement: Executor identity is pinned at first claim
-At first claim the engine SHALL record in the task state the resolved executor name, version
-from describe, and model for every stage and check of the pipeline; a resume SHALL use the
-pinned identity and SHALL escalate `PipelineMismatch` if the law now names a different one.
+### Requirement: Executor identity is pinned at first use
+An executor's name and model are law content, pinned with the law at creation. The round record
+SHALL carry the describe version the preflight obtained for the executor that ran it, in the
+round's own commit; the describe preflight of a later run SHALL compare its describe with the
+version the task's recorded rounds carry and SHALL escalate `PipelineMismatch` naming both when
+they differ. No durable step is added for the pin.
 **Implements**: FR13 of define-executor-contract
 
-#### Scenario: Resume uses the pinned executor
-- **WHEN** a task is resumed after the law changed a stage's executor version
-- **THEN** the resume escalates `PipelineMismatch` naming the pinned and the current identity
+#### Scenario: Resume uses the recorded executor version
+- **WHEN** a task whose rounds recorded executor version `1` is resumed on an instance whose image answers describe with version `2`
+- **THEN** the resume escalates `PipelineMismatch` naming the recorded and the current version, and no round runs
 
 ### Requirement: Runs are observable by executor
 Every executor run SHALL log, under the task's MDC, the executor name, protocol version, role,
@@ -106,7 +108,7 @@ to no change; lifecycle rewrites carry the snapshot unchanged.
 
 Layered on `Two-level attempt telemetry` as modified by `supervise-daemon-loops-and-embed-dashboard`
 (archived; its instant-source wording is in the stable text) and then by `tighten-spec-contract`
-(sequenced before this change): tighten-spec-contract cut the body and added the scenarios "Round
+(archived; its text is the stable text): tighten-spec-contract cut the body and added the scenarios "Round
 metrics carry wall time, tool aggregates and per-model tokens", "No display total is stored",
 "Cumulative totals survive resume" and "The raw tool trace stays out of the state"; this text
 replaces the usage and totals wording with the round identity, the participant `usage` list and

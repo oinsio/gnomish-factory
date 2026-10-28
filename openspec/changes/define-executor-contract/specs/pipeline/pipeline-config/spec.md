@@ -17,35 +17,45 @@ unknown name SHALL be a located error. Declarations SHALL come from the law comm
 - **WHEN** operator configuration carries an `executors` key
 - **THEN** loading reports an unknown-key error; executors come from `.gnomish/` only
 
+#### Scenario: Structural errors are caught at law load
+- **WHEN** `executors.acme` has an unknown `type`, or a `program` declaration has no argv
+- **THEN** loading reports a located error naming the declaration and the field, and no process is spawned
+
 ### Requirement: Settings validated against the executor's declared schema
-At law load the loader SHALL obtain each declared executor's describe output and validate its
+Before an executor's first round — once the task's execution environment is live and before the
+engine runs — the factory SHALL obtain each declared executor's describe output and validate its
 `settings` against the declared JSON Schema; each violation SHALL be a located error naming the
-executor, the settings path and the schema rule. Describe failures SHALL be located errors, not
-mid-stage failures.
-**Implements**: FR9, FR4, UX1 of define-executor-contract
+executor, the settings path and the schema rule, parking the task as an invalid law does. A
+program that is absent or cannot answer describe SHALL be an operator precondition refusal, never
+a mid-stage failure.
+**Implements**: FR9, FR4, FR13, UX1 of define-executor-contract
 
-#### Scenario: Settings typo is caught at load
+#### Scenario: Settings typo is caught before the first round
 - **WHEN** `executors.acme.settings.maxTurn` is declared and the schema knows `maxTurns`
-- **THEN** loading reports a located error at that path naming the unknown property
+- **THEN** the describe preflight reports a located error at that path naming the unknown property, and no round runs
 
-#### Scenario: Describe that cannot run is a load error
+#### Scenario: Describe that cannot run is an operator precondition
 - **WHEN** a declared program is absent from the image or exits non-zero on describe
-- **THEN** loading reports a located error naming the executor and the describe failure
+- **THEN** the run ends on the operator-precondition result naming the executor and the describe failure (exit 8), no round runs and no attempt is burned
+
+#### Scenario: Describe runs in the task's own environment
+- **WHEN** a `program` stage's task is claimed in container mode
+- **THEN** describe runs inside the task's box after it is live and before the engine starts, through the execution environment seam
 
 ### Requirement: Credentials and egress are checked against describe
-A declared `credentials` or `egress` entry absent from the executor's describe SHALL be a
-located error; a describe-declared credential the law does not grant SHALL be a located error
-naming the missing grant, so no executor runs without its declared inputs.
+In the describe preflight, a declared `credentials` or `egress` entry absent from the executor's
+describe SHALL be a located error; a describe-declared credential the law does not grant SHALL be
+a located error naming the missing grant, so no executor runs without its declared inputs.
 **Implements**: FR4, NFR-S1 of define-executor-contract
 
 #### Scenario: Missing credential grant
 - **WHEN** describe declares `ACME_API_KEY` and `executors.acme.credentials` omits it
-- **THEN** loading reports a located error naming the executor and the variable
+- **THEN** the describe preflight reports a located error naming the executor and the variable, before the first round
 
 ## MODIFIED Requirements
 
 Layered on `Local sanity validation of mechanism and check configs` as modified by
-`tighten-spec-contract` (sequenced before this change): that delta cut the body and added the
+`tighten-spec-contract` (archived; its text is the stable text): that delta cut the body and added the
 scenarios "Agent settings are checked against the executor's schema", "Settings that are not a
 mapping are rejected" and "External check without an identifier is rejected"; this text adds the
 `program` type, the model rule's agent-type scope and the scenarios "Program stage names a
