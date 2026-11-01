@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.MismatchCause
 import com.github.oinsio.gnomish.status.ReportPlane
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -27,8 +28,12 @@ class TerminalOutcomeRenderSpec extends Specification {
             ]),
             new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
             UntrustedText.subprocess('timeout'), UntrustedText.subprocess('trace')),
-            new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage')),
+            new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument('stale-stage'))),
             new EscalationReport.CannotExecute(UntrustedText.subprocess('agent crashed'), []),
+            new EscalationReport.BudgetExhausted(UntrustedText.agent('token bound 1000')),
+            // FR13 of define-executor-contract: the executor version cause names the executor and both versions
+            new EscalationReport.PipelineMismatch(new MismatchCause.ExecutorVersion(
+                    UntrustedText.manifest('acme'), UntrustedText.branchDocument('1.4.0'), UntrustedText.subprocess('2.0.0'))),
         ]
     }
 
@@ -134,13 +139,15 @@ class TerminalOutcomeRenderSpec extends Specification {
         allReports()[2] | 'command:./gradlew test'
         allReports()[3] | 'stale-stage'
         allReports()[4] | 'agent crashed'
+        allReports()[5] | 'token bound 1000'
+        allReports()[6] | 'Recorded version:\n1.4.0\nCurrent version:\n2.0.0'
     }
 
-    def "the five report kinds render distinct text on both planes"() {
+    def "the six report kinds and both mismatch causes render distinct text on both planes"() {
         expect:
         allReports().collect {
             TerminalOutcomeRender.renderEscalation(it, plane)
-        }.toSet().size() == 5
+        }.toSet().size() == allReports().size()
 
         where:
         plane << [

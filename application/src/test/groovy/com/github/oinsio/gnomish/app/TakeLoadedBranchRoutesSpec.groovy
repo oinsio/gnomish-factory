@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -61,7 +62,7 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
 
     private static TaskState exhaustedAt(String stage) {
         def gated = CheckpointMechanicsFixtures.gatedAt(stage)
-        new TaskState(new Position.AtStage(stage), 1, gated.attempts(), gated.totals())
+        new TaskState(new Position.AtStage(stage), 1, gated.attempts(), gated.totals(), ExecutorVersions.none())
     }
 
     private static RecordedOutcome escalated() {
@@ -115,6 +116,7 @@ class TakeLoadedBranchRoutesSpec extends Specification implements RunChainFakes 
             UntrustedText.agent('a'),
             UntrustedText.agent('b')
         ]) || true
+        'Escalated + BudgetExhausted' | escalated() | new EscalationReport.BudgetExhausted(UntrustedText.agent('bound')) || true
         'Escalated + INFRA CannotExecute' | escalated() | new EscalationReport.CannotExecute(UntrustedText.subprocess('adapter crashed'), []) || false
         'Escalated + no report' | escalated() | null || false
         'Paused + stale AttemptsExhausted' | paused() | new EscalationReport.AttemptsExhausted(3) || false

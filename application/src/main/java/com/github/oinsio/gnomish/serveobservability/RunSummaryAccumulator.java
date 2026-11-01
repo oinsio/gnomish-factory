@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.serveobservability;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
+import com.github.oinsio.gnomish.domain.engine.UsageFold;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -18,11 +19,13 @@ import java.util.Map;
  * (design D6): only the four variants carrying a {@code finalState} — {@code Delivered}, {@code
  * AwaitingHuman}, {@code Aborted}, {@code Revoked} — contribute; {@code EmptyQueue}/{@code
  * Skipped}/{@code InfrastructureUnavailable} are no-ops, matching "engine run happened iff spend
- * happened". {@link #counts()} and
+ * happened". The tokens are each task's usage snapshot per model, added across the tasks by the
+ * one {@link UsageFold} (design D15 of define-executor-contract), never by a sum of this class's
+ * own. {@link #counts()} and
  * {@link #tokensByModel()} are read once, at the {@code runSummary} write point, when the drain
  * run completes — the ledger is never read back to build them (design D5).
  *
- * <p>Implements FR13, D6 of add-serve-observability.
+ * <p>Implements FR13, D6 of add-serve-observability; FR17 of define-executor-contract.
  */
 public final class RunSummaryAccumulator {
 
@@ -30,7 +33,7 @@ public final class RunSummaryAccumulator {
     private int awaitingHuman;
     private int aborted;
     private int revoked;
-    private final Map<String, LedgerTokenUsage> tokensByModel = new LinkedHashMap<>();
+    private Map<String, TokenUsage> tokensByModel = Map.of();
 
     /**
      * Records {@code result}'s contribution to the run's totals, or does nothing for {@link
@@ -67,20 +70,7 @@ public final class RunSummaryAccumulator {
         if (finalState == null) {
             return;
         }
-        addTokens(finalState.totals().tokensByModel());
-    }
-
-    private void addTokens(Map<String, TokenUsage> delta) {
-        delta.forEach(
-                (model, usage) -> tokensByModel.merge(model, LedgerTokenUsage.of(usage), RunSummaryAccumulator::sum));
-    }
-
-    private static LedgerTokenUsage sum(LedgerTokenUsage a, LedgerTokenUsage b) {
-        return new LedgerTokenUsage(
-                a.input() + b.input(),
-                a.output() + b.output(),
-                a.cacheCreation() + b.cacheCreation(),
-                a.cacheRead() + b.cacheRead());
+        tokensByModel = UsageFold.addByModel(tokensByModel, UsageFold.byModel(finalState.totals()));
     }
 
     /** A snapshot of the outcome counters accumulated so far; never null. */
@@ -90,6 +80,8 @@ public final class RunSummaryAccumulator {
 
     /** A snapshot of the token sums accumulated so far, keyed by model id; never null. */
     public synchronized Map<String, LedgerTokenUsage> tokensByModel() {
-        return Map.copyOf(tokensByModel);
+        var ledger = new LinkedHashMap<String, LedgerTokenUsage>();
+        tokensByModel.forEach((model, usage) -> ledger.put(model, LedgerTokenUsage.of(usage)));
+        return Map.copyOf(ledger);
     }
 }

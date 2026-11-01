@@ -10,11 +10,9 @@ import java.io.Serial;
  * attempt burned (FR13, NFR-R1, D7). Unchecked, following this codebase's
  * established idiom for infrastructure-failure signaling (see {@link
  * MissingResultEventException}, {@link
- * com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException}): {@code
- * CliStageExecutor} lets this propagate uncaught from its {@code execute()}
- * call, and {@code RoundExecution#execute} catches any {@link
- * RuntimeException} the {@code StageExecutor} port throws and shapes it into
- * {@code RoundOutcome.CannotExecute}.
+ * com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException}): the executor round
+ * turns it into its {@code failed/infrastructure} result ({@link AgentRoundFailure}), which
+ * the engine classifies as {@code CannotExecute} (FR7 of define-executor-contract).
  *
  * <p>Implements FR13, NFR-R1, D7 of add-agent-executor.
  */

@@ -27,7 +27,7 @@ class StatusReportAdditiveFieldSpec extends Specification {
         expect: 'the additive fields are part of the shape both carry'
         [reference, serialized].every { doc ->
             def attempt = doc.currentStage.attempts.first()
-            attempt.containsKey('denials') && attempt.containsKey('stop') && attempt.containsKey('judgeUsage')
+            attempt.containsKey('denials') && attempt.containsKey('stop') && attempt.containsKey('usage')
         }
 
         and: 'and neither document moved off version 1 to carry them'

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.status.StatusTextRenderer
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
@@ -46,7 +47,7 @@ class StatusRenderAgreementSpec extends Specification implements SeededCloneFixt
     // Scenario: observability/status-report / Text and JSON agree
     def "FR11: the text and the JSON of one tip are both renders of the report built from it"() {
         given: 'a tip carrying a failed round, so both renders have something to say beyond the header'
-        persistRound(TASK, TaskState.atStageStart('implement').recordQualityFailure(round(0, AttemptRecord.Result.QUALITY_FAILURE, 900, 40)))
+        persistRound(TASK, TaskState.atStageStart('implement').recordQualityFailure(round(0, AttemptRecord.Result.QUALITY_FAILURE, 900, 40), ExecutorVersions.none()))
 
         and: 'the one report the branch reader builds from that tip'
         def report = (TaskGitFixture.realClaimless().branches().readState(cloneDir, TASK) as BranchStateResult.Found).report()

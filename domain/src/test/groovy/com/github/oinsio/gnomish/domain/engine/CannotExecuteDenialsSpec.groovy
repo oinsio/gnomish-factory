@@ -12,27 +12,28 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
  * The failure channel of fix-denial-attribution-durability, end to end at the engine level: a
- * round whose executor throws an {@code ExecutorFailure} escalates as {@code CannotExecute}
- * carrying the denials the dead round's environment recorded — the round left no
- * {@code AttemptRecord} to hold them, so the escalation report is their only place to land
- * (FR1, NFR-O1, design D1).
+ * round whose executor reports {@code failed/infrastructure} (FR7 of define-executor-contract —
+ * the agent round's timeout kill, task 7.4) escalates as {@code CannotExecute} carrying the
+ * denials the dead round's environment recorded — the round left no {@code AttemptRecord} to hold
+ * them, so the escalation report is their only place to land (FR1, NFR-O1, design D1).
  *
  * <p>The complementary "carrying them changes nothing" half is asserted here too: the attempt
  * count and history are those of the same failure without denials, and so is the escalation
- * text — the engine renders the wrapper's CAUSE, never the wrapper.
+ * text.
  *
  * <p>The classification, event and persistence guarantees of the path itself
  * ({@code CannotExecute} is still an infrastructure failure) live in {@code CannotExecuteSpec}
@@ -57,7 +58,7 @@ class CannotExecuteDenialsSpec extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
-                listener, persistence, VirtualTimeEquipment.on(clock, sleeper))
+                listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static StageDefinition stage() {
@@ -77,21 +78,28 @@ class CannotExecuteDenialsSpec extends Specification {
         Denial.unidentified(new Finding(message, 'paste.example', null))
     }
 
-    private TaskOutcome runWith(RuntimeException thrown) {
-        executor.toThrow = thrown
+    /** The result an agent round killed on its timeout reports: failed/infrastructure with its denials. */
+    static ExecutionResult killed(String reason, List<Denial> denials) {
+        new ExecutionResult(
+                new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, UntrustedText.subprocess(reason), []),
+                null, ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), denials)
+    }
+
+    private TaskOutcome runWith(ExecutionResult reported) {
+        executor.scripted << reported
         new Engine().run(pipeline(), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports()) as TaskOutcome
     }
 
-    // FR1: a round killed before its close hands its drained denials out on the ExecutorFailure,
-    //     and the engine copies them onto the escalation report the reviewer reads.
+    // FR1: a round killed before its close hands its drained denials out on its failed result,
+    //     and the engine's classifier copies them onto the escalation report the reviewer reads.
     // Scenario: pipeline/stage-engine / A round killed before its close reports its denials
     def "an executor failure carrying denials escalates CannotExecute with those denials"() {
         given: 'a round the guard blocked twice before the executor gave up'
         def blockedPost = denial('egress denied: POST paste.example/api')
         def blockedGet = denial('egress denied: GET paste.example/raw')
 
-        when: 'the executor throws the failure wrapping both denials'
-        def outcome = runWith(new ExecutorFailure(new RuntimeException('provider 503'), [blockedPost, blockedGet]))
+        when: 'the executor reports the failure carrying both denials'
+        def outcome = runWith(killed('round exceeded roundTimeout', [blockedPost, blockedGet]))
 
         then: 'the escalation is CannotExecute carrying both denials in read order'
         outcome instanceof TaskOutcome.Escalated
@@ -104,8 +112,8 @@ class CannotExecuteDenialsSpec extends Specification {
     // Scenario: git/git-task-persistence / A parked task keeps the hung round's denial
     // Scenario: pipeline/stage-engine / A round killed before its close reports its denials
     def "denials on the escalation burn no attempt and record no round"() {
-        when: 'the executor throws a failure carrying a denial'
-        def outcome = runWith(new ExecutorFailure(new RuntimeException('provider 503'), [denial('egress denied')]))
+        when: 'the executor reports a failure carrying a denial'
+        def outcome = runWith(killed('round exceeded roundTimeout', [denial('egress denied')]))
 
         then: 'the attempt count and the attempt history are untouched'
         def finalState = outcome.finalState()
@@ -116,45 +124,44 @@ class CannotExecuteDenialsSpec extends Specification {
         persistence.entries.isEmpty()
     }
 
-    // FR1, design D1: the wrapper adds attribution, not a failure mode — the engine renders the
-    //     CAUSE, so the escalation text is byte-identical to that of the bare failure.
+    // FR1, design D1: the denials add attribution, not a failure mode — the escalation text is
+    //     byte-identical to that of the same failure reported without them.
     // Scenario: pipeline/stage-engine / Denials of a failed round gate nothing
-    def "the escalation text is identical to the same failure thrown without denials"() {
-        given: 'one and the same infrastructure failure, thrown bare and thrown wrapped'
-        def original = new RuntimeException('provider 503')
+    def "the escalation text is identical to the same failure reported without denials"() {
+        when: 'the failure is escalated without denials'
+        def bare = (runWith(killed('provider 503', [])).report() as EscalationReport.CannotExecute)
 
-        when: 'the bare failure is escalated'
-        def bare = (runWith(original).report() as EscalationReport.CannotExecute)
-
-        and: 'a fresh run escalates the same failure wrapped with a denial'
+        and: 'a fresh run escalates the same failure with a denial'
         executor = new ScriptedExecutor()
         persistence = new InMemoryAttemptPersistence()
-        def wrapped = (runWith(new ExecutorFailure(original, [denial('egress denied')]))
+        def attributed = (runWith(killed('provider 503', [denial('egress denied')]))
         .report() as EscalationReport.CannotExecute)
 
-        then: 'the rendered cause is the same text — the wrapper never reaches the report'
-        wrapped.cause() == bare.cause()
+        then: 'the cause is the same text'
+        attributed.cause() == bare.cause()
 
         and: 'only the denials tell the two escalations apart'
         bare.denials().isEmpty()
-        !wrapped.denials().isEmpty()
+        !attributed.denials().isEmpty()
     }
 
-    // NFR-O1: the ERROR line at the point of capture names the cause, not the wrapper — an
-    //     operator reading the log sees the failure that ended the round.
-    def "logs the wrapped cause, not the wrapper, at the point of capture"() {
+    // NFR-O1: a reported failure is one WARN at the point of decision, naming the round and the
+    //     reason; no ERROR, since nothing was thrown.
+    def "a reported failure carrying denials is one WARN naming the round, and no ERROR"() {
         given: 'a capture on the round mechanics'
-        def logs = LogCaptureSupport.attach(RoundExecution, Level.ERROR)
+        def logs = LogCaptureSupport.attach(RoundFailures, Level.DEBUG)
 
-        when: 'the executor throws a failure carrying a denial'
-        runWith(new ExecutorFailure(new RuntimeException('provider 503'), [denial('egress denied')]))
+        when: 'the executor reports a failure carrying a denial'
+        runWith(killed('provider 503', [denial('egress denied')]))
 
-        then: 'exactly one ERROR was logged, and its throwable is the cause'
-        def errors = logs.list.findAll { it.level == Level.ERROR }
-        errors.size() == 1
-        errors[0].formattedMessage.contains('executor threw')
-        errors[0].throwableProxy.className == RuntimeException.name
-        errors[0].throwableProxy.message == 'provider 503'
+        then: 'exactly one operator line, the reported-failure WARN'
+        def operator = logs.list.findAll {
+            it.level.isGreaterOrEqual(Level.WARN)
+        }
+        operator.size() == 1
+        operator[0].level == Level.WARN
+        operator[0].formattedMessage.startsWith(OperatorEvent.EXECUTOR_REPORTED_FAILURE.head())
+        operator[0].formattedMessage.contains('provider 503')
 
         cleanup:
         logs.detach()

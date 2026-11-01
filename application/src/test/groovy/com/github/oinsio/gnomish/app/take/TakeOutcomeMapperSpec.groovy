@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.MismatchCause
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.status.ReportPlane
@@ -82,7 +83,9 @@ class TakeOutcomeMapperSpec extends Specification {
         ]) || ParkReason.ESCALATION
         new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('tests')), UntrustedText.subprocess('timeout'), UntrustedText.subprocess('')) || ParkReason.INFRA
         new EscalationReport.CannotExecute(UntrustedText.subprocess('executor crashed'), []) || ParkReason.INFRA
-        new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage')) || ParkReason.INFRA
+        new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument('stale-stage'))) || ParkReason.INFRA
+        // FR7 of define-executor-contract: a reached bound is resumed by the human's return
+        new EscalationReport.BudgetExhausted(UntrustedText.agent('token bound 1000')) || ParkReason.ESCALATION
     }
 
     // FR18, D3: Aborted is refused outright rather than mapped — the abort path owns recordAbort
@@ -131,6 +134,7 @@ class TakeOutcomeMapperSpec extends Specification {
         ])
         'CannotVerify' | new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('tests')), UntrustedText.subprocess('timeout'), UntrustedText.subprocess('raw output'))
         'CannotExecute' | new EscalationReport.CannotExecute(UntrustedText.subprocess('executor crashed'), [])
-        'PipelineMismatch' | new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage'))
+        'PipelineMismatch' | new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument('stale-stage')))
+        'BudgetExhausted' | new EscalationReport.BudgetExhausted(UntrustedText.agent('token bound 1000'))
     }
 }

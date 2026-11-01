@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -201,7 +202,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture, R
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ])
-        persistence.persist('PROJ-1', TaskState.atStageStart('implement'), trace)
+        persistence.persist('PROJ-1', RoundStates.recorded(trace.key()), trace)
         registerTip(cloneDir, 'PROJ-1')
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         registerTip(cloneDir, 'PROJ-1')

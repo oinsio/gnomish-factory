@@ -5,42 +5,45 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The immutable per-round state of a task: its sealed {@link Position}, the
- * {@code attemptsUsed} count of quality-failure attempts burned in the current stage,
- * and the {@code attempts} history of every round executed within the current stage
- * (design D4). The persisted history is per-round; a fresh {@code TaskState} is produced
- * for every round, and the git history of persisted states is the long-term archive
- * (FR14).
+ * The immutable per-round state of a task: its sealed {@link Position}, the {@code attemptsUsed}
+ * quality failures burned in the current stage, and the {@code attempts} history of every round of
+ * the current stage, of which {@code attemptsUsed} counts only the quality failures (design D4,
+ * FR13). A fresh state is produced for every round; git history keeps the archive (FR14).
  *
- * <p>{@code attemptsUsed} deliberately diverges from {@code attempts.size()}:
- * {@code attemptsUsed} counts only quality failures, while {@code attempts} records
- * <em>all</em> executed rounds — including {@code CannotVerify} and {@code DecisionNeeded}
- * rounds that burned tokens but no attempt — so cost analytics can see every round
- * (design D4, FR13).
+ * <p>Transitions build a fresh state and never mutate {@code this}; they append rounds mechanically
+ * and neither interpret nor renumber them ({@link #approveGate} asks {@link Advancement}).
  *
- * <p>Transition factories build a fresh state and never mutate {@code this}: each appends
- * to a copy of {@code attempts} and returns a new record. The engine assigns each
- * {@link AttemptRecord#round()} (0-based, matching {@link AttemptKey#attempt()}); these
- * factories append mechanically and neither interpret nor renumber rounds, so {@code TaskState}
- * holds no knowledge of stage order ({@link #approveGate} asks {@link Advancement}).
+ * <p>{@code totals} is the whole task's {@link UsageSnapshot}: every recorded round's participant
+ * entries folded through {@link UsageFold}, the one fold, by the round writers, and carried unchanged
+ * by every lifecycle rewrite across advancement, decision reset and resume — a carried field, because
+ * a fold over {@code attempts} would break when the history resets (FR13, NFR-C1, design D5; FR17 of
+ * define-executor-contract, design D15). A round with no participant entry is refused by the fold.
  *
- * <p>Unlike {@code attempts} — which covers only the current stage and resets on
- * advancement — {@code totals} is a cumulative executor-usage aggregate for the whole
- * task: it is folded forward on every recorded round and carried across stage
- * advancement and resume, so it is the seam for future token budgets (FR13,
- * NFR-C1, design D5). It is a carried field, not derived from {@code attempts}, precisely
- * because a fold over the history would break the moment the history resets on advancement.
+ * <p>{@code executorVersions} is the task's executor version pin, carried the same way: per executor
+ * name, the describe version of the first round that ran it, written by the round writers in that
+ * round's own commit and carried unchanged by every lifecycle rewrite (design D11 of
+ * define-executor-contract). The carry is structural: every rewrite goes through {@link #rewrite},
+ * every round writer through {@link #recorded}, so no transition can drop either carried field.
  *
- * <p>Implements FR8, FR13, FR14, NFR-C1 of add-stage-engine.
+ * <p>Implements FR8, FR13, FR14, NFR-C1 of add-stage-engine; FR13, FR17 of define-executor-contract.
  *
  * @param position     where the task sits in its pipeline; never null
  * @param attemptsUsed quality failures burned in the current stage; never negative
  * @param attempts     every executed round of the current stage, in order; defensively
  *                     copied, unmodifiable, possibly empty
- * @param totals       cumulative executor usage over the whole task, folded forward on every
- *                     recorded round and surviving advancement and resume; never null (FR13, NFR-C1, D5)
+ * @param totals       the usage snapshot of the whole task, folded forward on every recorded round
+ *                     and surviving advancement and resume; never null (FR13, NFR-C1, D5; FR17 of
+ *                     define-executor-contract)
+ * @param executorVersions the executor version pin: the first recorded describe version per executor
+ *                     name, surviving advancement, decision reset and resume; never null (FR13 of
+ *                     define-executor-contract)
  */
-public record TaskState(Position position, int attemptsUsed, List<AttemptRecord> attempts, ExecutorUsage totals) {
+public record TaskState(
+        Position position,
+        int attemptsUsed,
+        List<AttemptRecord> attempts,
+        UsageSnapshot totals,
+        ExecutorVersions executorVersions) {
 
     public TaskState {
         attemptsUsed = requireNonNegative(attemptsUsed, "attemptsUsed");
@@ -48,55 +51,47 @@ public record TaskState(Position position, int attemptsUsed, List<AttemptRecord>
     }
 
     /**
-     * The starting state for a stage: positioned at {@code stageName} with no attempts
-     * burned and an empty history. A convenient entry point for the engine and tests
-     * (FR8, FR14).
+     * The starting state of a new task at {@code stageName}: nothing burned, recorded or pinned (FR8, FR14).
      *
      * @param stageName the stage to start at; never blank
      */
     public static TaskState atStageStart(String stageName) {
-        return new TaskState(new Position.AtStage(stageName), 0, List.of(), ExecutorUsage.none());
+        return new TaskState(
+                new Position.AtStage(stageName), 0, List.of(), UsageSnapshot.EMPTY, ExecutorVersions.none());
     }
 
     /**
-     * Returns a new state that appends {@code round} to the history without burning an
-     * attempt and holds the current {@code position}. Used for rounds that record but do
-     * not count against the limit: {@code CannotVerify} rounds, {@code DecisionNeeded}
-     * rounds, and a passing round recorded before advancement (FR13).
+     * Appends {@code round} without burning an attempt, at the current {@code position}: a
+     * {@code CannotVerify}, {@code DecisionNeeded} or {@code BudgetExhausted} round, or a pass at a
+     * gate (FR13).
      *
      * @param round the executed round to record; never null
+     * @param ran the describe versions of the executors that ran the round, pinned on first use; never null
      */
-    public TaskState recordUnburnedRound(AttemptRecord round) {
-        return new TaskState(position, attemptsUsed, append(round), totals.plus(round.executorUsage()));
+    public TaskState recordUnburnedRound(AttemptRecord round, ExecutorVersions ran) {
+        return recorded(position, attemptsUsed, round, ran);
     }
 
     /**
-     * Returns a new state that appends {@code round} to the history and burns one attempt
-     * ({@code attemptsUsed + 1}), holding the current {@code position}. Used for a quality
-     * {@code Fail} round (FR13).
+     * Appends a quality {@code Fail} round and burns one attempt, at the current {@code position} (FR13).
      *
      * @param round the failed round to record; never null
+     * @param ran the describe versions of the executors that ran the round, pinned on first use; never null
      */
-    public TaskState recordQualityFailure(AttemptRecord round) {
-        return new TaskState(position, attemptsUsed + 1, append(round), totals.plus(round.executorUsage()));
+    public TaskState recordQualityFailure(AttemptRecord round, ExecutorVersions ran) {
+        return recorded(position, attemptsUsed + 1, round, ran);
     }
 
     /**
-     * Returns a new state at {@code next} with the history reset to empty and
-     * {@code attemptsUsed} reset to zero, because the attempt history covers only the
-     * current stage (FR14). The engine (task 5.8) decides the target using the pipeline —
-     * {@code new Position.AtStage(nextName)} for a normal advance, or
-     * {@code new Position.PipelineEnd()} when the last stage advances — so this factory
-     * accepts any {@link Position} and holds no knowledge of stage order (design D4).
-     *
-     * <p>The cumulative {@code totals} are PRESERVED across the advance while the
-     * current-stage history resets — the whole-task usage aggregate spans every stage
-     * (FR13, NFR-C1, design D5).
+     * Returns a new state at {@code next} with the history emptied and {@code attemptsUsed} zero,
+     * because the attempt history covers only the current stage (FR14); the engine picks the target,
+     * so this accepts any {@link Position} (design D4). {@code totals} and the version pin are
+     * carried (FR13, NFR-C1, design D5).
      *
      * @param next the position to advance to; never null
      */
     public TaskState advanceTo(Position next) {
-        return new TaskState(next, 0, List.of(), totals);
+        return rewrite(next, 0, List.of());
     }
 
     /**
@@ -107,16 +102,15 @@ public record TaskState(Position position, int attemptsUsed, List<AttemptRecord>
      * it can never freeze "the stage passed but the position says re-run it" and pay for the green
      * stage twice.
      *
-     * <p>The round stays in {@code attempts} rather than being dropped by the advance: that commit
-     * is the only place the passing round is ever recorded, and the audit trail (and the usage
-     * walk over it) reads it there. The next stage's first round replaces the list, exactly as
-     * {@link #advanceTo} would have.
+     * <p>The round stays in {@code attempts}: that commit is the only place the passing round is
+     * recorded, and the usage walk reads it there; the next stage's first round replaces the list.
      *
      * @param round the passing round to record; never null
      * @param next  the position the pass advances to; never null
+     * @param ran the describe versions of the executors that ran the round, pinned on first use; never null
      */
-    public TaskState recordPassAndAdvance(AttemptRecord round, Position next) {
-        return new TaskState(next, 0, append(round), totals.plus(round.executorUsage()));
+    public TaskState recordPassAndAdvance(AttemptRecord round, Position next, ExecutorVersions ran) {
+        return recorded(next, 0, round, ran);
     }
 
     /**
@@ -126,16 +120,12 @@ public record TaskState(Position position, int attemptsUsed, List<AttemptRecord>
      * to run: the resumed stage starts with an empty attempt list, and its first round is round
      * zero rather than a continuation of the finished stage's numbering.
      *
-     * <p>Only a resume needs this. Within a live run the engine's own advance already emptied the
-     * list before the next stage began; this is the same normalization applied to a state that
-     * arrives from the branch instead of from memory, which is why it is idempotent and a no-op for
-     * every state whose last recorded round did not pass.
+     * <p>Only a resume needs this: the same normalization the live advance applies, for a state read
+     * off the branch — idempotent, and a no-op unless the last recorded round passed.
      *
      * <p>A state at a gate, {@link Position.AwaitingApproval}, is returned unchanged: its passing
-     * round belongs to the very stage the position names — the pass did not move the position past
-     * it — so the history is the gate's own, and a pickup that pauses again carries it, as {@code
-     * status} renders it (FR1, FR12 of make-checkpoint-gate-durable). The approval moves the
-     * position past the gate, after which this drops the round as for any advance.
+     * round belongs to the gate's own stage, and a pickup that pauses again carries it (FR1, FR12 of
+     * make-checkpoint-gate-durable).
      *
      * <p>Implements FR4, NFR-C1 of harden-task-branch-contract; FR1 of make-checkpoint-gate-durable.
      *
@@ -163,7 +153,7 @@ public record TaskState(Position position, int attemptsUsed, List<AttemptRecord>
      * @return the reset state to resume from; never null
      */
     public TaskState resetAttempts() {
-        return new TaskState(position, 0, List.of(), totals);
+        return rewrite(position, 0, List.of());
     }
 
     /**
@@ -183,21 +173,27 @@ public record TaskState(Position position, int attemptsUsed, List<AttemptRecord>
         if (stage == null) {
             throw new IllegalStateException("TaskState.approveGate: the gate's stage is not declared");
         }
-        return new TaskState(Advancement.afterGate(definition, stage), attemptsUsed, attempts, totals);
+        return rewrite(Advancement.afterGate(definition, stage), attemptsUsed, attempts);
     }
 
-    private List<AttemptRecord> append(AttemptRecord round) {
-        var next = new ArrayList<>(attempts);
-        next.add(round);
-        return next;
+    /** A lifecycle rewrite: both carried fields, {@code totals} and the version pin, pass unchanged. */
+    private TaskState rewrite(Position next, int used, List<AttemptRecord> history) {
+        return new TaskState(next, used, history, totals, executorVersions);
     }
 
     /**
-     * Fails fast on a negative {@code attemptsUsed}: a burn count cannot be negative
-     * (FR13). Kept as an explicit static method rather than inline in the compact
-     * constructor: PIT's record filter suppresses all mutations inside a record's
-     * canonical constructor, which would silently exempt this validation from the 100%
-     * mutation gate.
+     * A round writer: appends {@code round}, folds its usage through {@link UsageFold} and pins the
+     * first version per executor.
+     */
+    private TaskState recorded(Position next, int used, AttemptRecord round, ExecutorVersions ran) {
+        var history = new ArrayList<>(attempts);
+        history.add(round);
+        return new TaskState(next, used, history, UsageFold.fold(totals, round), executorVersions.pinFirstUse(ran));
+    }
+
+    /**
+     * Fails fast on a negative {@code attemptsUsed} (FR13); a static method, not inline, because PIT's
+     * record filter would exempt a guard in the canonical constructor from the mutation gate.
      */
     private static int requireNonNegative(int value, String component) {
         if (value < 0) {

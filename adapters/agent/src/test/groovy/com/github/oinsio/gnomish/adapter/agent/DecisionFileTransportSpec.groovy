@@ -9,9 +9,12 @@ import spock.lang.TempDir
 /**
  * FR3, NFR-R3, NFR-S2, D1: {@link DecisionFileTransport} owns the per-round
  * decision-file temp-directory lifecycle — create outside the workspace,
- * expose the env-var fragment, read raw content after process exit, delete.
- * Tolerant parsing of the raw content (garbage / empty-file fallback text) is
- * task 6.3's job — these specs only prove presence/absence and cleanup.
+ * expose the env-var fragment, read the request after process exit, delete.
+ * The read itself is the shared {@code DecisionRequestRead} over the executor
+ * contract's result reader (FR6 of define-executor-contract), whose own spec
+ * covers every fallback; these specs prove presence/absence and cleanup, and
+ * {@code DecisionFileTransportResultReadSpec} what the host medium gained by the
+ * move.
  */
 class DecisionFileTransportSpec extends Specification {
 
@@ -60,7 +63,7 @@ class DecisionFileTransportSpec extends Specification {
         content.isEmpty()
     }
 
-    def "readAndClose returns the raw content when the decision file was written"() {
+    def "readAndClose returns the request when the decision file was written"() {
         given:
         def transport = new DecisionFileTransport()
         def handle = transport.open()
@@ -70,8 +73,8 @@ class DecisionFileTransportSpec extends Specification {
         def content = handle.readAndClose()
 
         then:
-        content.isPresent()
-        content.get().contains('Refactor or patch?')
+        content.get().question().forLog() == 'Refactor or patch?'
+        content.get().options()*.forLog() == ['refactor', 'patch']
     }
 
     // Scenario: executor/agent-executor / In-place mode uses a temp file outside the workspace
@@ -178,7 +181,6 @@ class DecisionFileTransportSpec extends Specification {
 
         then:
         result.exitCode() == 0
-        content.isPresent()
-        content.get().contains('"question": "Refactor or patch?"')
+        content.get().question().forLog() == 'Refactor or patch?'
     }
 }

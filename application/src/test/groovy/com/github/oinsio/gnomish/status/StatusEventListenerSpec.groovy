@@ -6,14 +6,18 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
+import com.github.oinsio.gnomish.domain.engine.Participants
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -45,9 +49,9 @@ class StatusEventListenerSpec extends Specification {
         given: 'a listener wrapping a fresh holder'
         def holder = new StatusSnapshotHolder(TaskState.atStageStart('implement'))
         def listener = new StatusEventListener(holder)
-        def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [passingCheck()],
-        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
-        def newState = TaskState.atStageStart('implement').recordUnburnedRound(round)
+        def round = AttemptRecords.of(0, AttemptRecord.Result.PASSED, STARTED, [passingCheck()],
+        ExecutorUsage.none(), [], Stop.none())
+        def newState = TaskState.atStageStart('implement').recordUnburnedRound(round, ExecutorVersions.none())
 
         when: 'an AttemptFinished event arrives'
         listener.onEvent(new EngineEvent.AttemptFinished(key(), newState, new ToolTrace(key(), [])))
@@ -74,7 +78,7 @@ class StatusEventListenerSpec extends Specification {
         event << [
             new EngineEvent.RunStarted(TASK_ID, new Position.AtStage('implement'), 0),
             new EngineEvent.AttemptStarted(key()),
-            new EngineEvent.ExecutionFinished(key(), ExecutorUsage.none()),
+            new EngineEvent.ExecutionFinished(key(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()),
             new EngineEvent.CheckStarted(key(), new CheckRef(0, UntrustedText.manifest('builtin:files_exist'))),
             new EngineEvent.CheckFinished(key(), passingCheck()),
             new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('review'))),

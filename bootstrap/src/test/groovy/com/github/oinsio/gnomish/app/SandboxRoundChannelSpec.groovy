@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.adapter.agent.DecisionFileReader
 import com.github.oinsio.gnomish.adapter.agent.FreshJudgeEnvironments
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource
+import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -57,7 +57,7 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
         }
 
         when:
-        def logs = LogCaptureSupport.attach(DecisionFileReader)
+        def logs = LogCaptureSupport.attach(DecisionRequestRead)
         def outcome = run(pipeline(3), box, 'plain-round', new ScriptedCommandCheckRunner())
         def lines = List.copyOf(logs.list)
         logs.detach()

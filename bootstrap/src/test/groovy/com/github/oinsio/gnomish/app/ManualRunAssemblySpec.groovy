@@ -4,7 +4,6 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.CliJudgeVoter
-import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.agent.LoggingAgentProgressListener
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
@@ -87,10 +86,12 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         when:
         def run = assembly.assemble(
                 new RunOrder(workspaceDir, null, definition(), false), context('task-1'),
-                initialState(), new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
+                initialState(), new InMemoryAttemptPersistence(), [], new DescribedLaw(LawBinding.workingTree(workspaceDir), [:]))
 
+        // The stage executor is the name-keyed dispatch (task 7.3 of define-executor-contract), whose
+        // agent arm the next feature shows to be the CLI executor by the rounds that reach the renderer.
         then:
-        run.ports().executor().class == CliStageExecutor
+        run.ports().executor().class == ExecutorDispatch
         run.ports().judgeVoter().class == CliJudgeVoter
     }
 
@@ -103,7 +104,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         def assembly = newAssembly(fakeAgentProperties('plain-round'))
         def run = assembly.assemble(new RunOrder(workspaceDir, null, definition(), false),
                 context('task-1'), initialState(),
-                new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
+                new InMemoryAttemptPersistence(), [], new DescribedLaw(LawBinding.workingTree(workspaceDir), [:]))
 
         def stage = new StageDefinition(
                 'build', 'purpose', [], [],
@@ -116,7 +117,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         when:
         def loggedEvents = capture {
             def result = run.ports().executor().execute(request)
-            assert result instanceof ExecutionResult.Completed
+            assert (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         }
 
         then: 'the renderer saw the whole round'
@@ -137,7 +138,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         def assembly = newAssembly(fakeAgentProperties('judge-verdict-pass'))
         def run = assembly.assemble(new RunOrder(workspaceDir, null, definition(), false),
                 context('task-1'), initialState(),
-                new InMemoryAttemptPersistence(), [], LawBinding.workingTree(workspaceDir))
+                new InMemoryAttemptPersistence(), [], new DescribedLaw(LawBinding.workingTree(workspaceDir), [:]))
 
         def check = new VerifyCheck.Judge(
                 'criteria.md', 'claude-fake-judge-1', [:], 1)

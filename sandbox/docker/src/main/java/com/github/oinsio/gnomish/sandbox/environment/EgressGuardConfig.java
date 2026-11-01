@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.buildchecks.atomicwrite.NonAtomicWrite;
+import com.github.oinsio.gnomish.sandbox.EgressEntries;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -8,8 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -46,9 +45,6 @@ final class EgressGuardConfig {
 
     /** The stdout prefix marking one structured denial event; kept in sync with {@link GuardDenialLog}. */
     static final String DENY_MARKER = "GNOMISH-EGRESS-DENY ";
-
-    /** Host names, IP literals (v6 included), and {@code *.suffix} wildcards; nothing JSON-active. */
-    private static final Pattern ENTRY = Pattern.compile("(\\*\\.)?[A-Za-z0-9._:-]+");
 
     private static final String SCRIPT = """
             \"\"\"Gnomish egress guard: default-deny allowlist, SNI/CONNECT mode, no TLS opening.\"\"\"
@@ -143,11 +139,10 @@ final class EgressGuardConfig {
     }
 
     private static String validated(String entry) {
-        String cleaned = entry.strip().toLowerCase(Locale.ROOT);
-        if (!ENTRY.matcher(cleaned).matches()) {
+        if (!EgressEntries.isEntry(entry)) {
             throw new IllegalArgumentException(
                     "factory.sandbox.egress-allowlist entry is not a host, IP, or *.suffix wildcard: '" + entry + "'");
         }
-        return cleaned;
+        return EgressEntries.normalized(entry);
     }
 }

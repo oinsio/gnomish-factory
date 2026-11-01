@@ -122,6 +122,11 @@ include 'gittransfer'
 // dependency-free, the allowlist still constructively guarantees the policy can know
 // nothing of trackers, git remotes, or configuration formats (NFR-S3).
 include 'baseref'
+// The executor-contract module (FR1, design D2 of define-executor-contract; ADR 0020): the JSON
+// Schema files of the one request/result contract every executor speaks — built-in or external,
+// in any role — and the Java DTOs that mirror them one to one. JDK and Jackson only: the engine,
+// the adapters and the conformance kit all reach it, so an edge added here would land in each.
+include 'executor-contract'
 include 'gnomish-plugin-api'
 // Not a layer of the factory: a stand-in third-party adapter that keeps the
 // api's "one declared dependency" promise honest by compiling against it and

@@ -247,9 +247,16 @@ public final class ManualRunAssembly implements RunAssembly {
             TaskState initialState,
             AttemptPersistence attemptPersistence,
             List<String> credentialEnvVarsToScrub,
-            LawBinding lawBinding) {
+            DescribedLaw law) {
         return RunAssembler.assemble(
-                this, order, context, initialState, attemptPersistence, credentialEnvVarsToScrub, lawBinding);
+                this, order, context, initialState, attemptPersistence, credentialEnvVarsToScrub, law);
+    }
+
+    /** The describe preflight of one run; delegated to {@link RunDescribe}, its one owner. */
+    @Override
+    public LawDescription describe(
+            RunOrder order, DescribeMedium medium, List<String> credentialEnvVarsToScrub, LawBinding lawBinding) {
+        return RunDescribe.describe(this, order, medium, credentialEnvVarsToScrub, lawBinding);
     }
 
     /**

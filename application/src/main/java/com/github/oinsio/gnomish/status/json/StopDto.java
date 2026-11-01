@@ -6,12 +6,12 @@ import java.util.List;
 
 /**
  * The JSON contract's per-attempt {@code stop}: {@code none}, {@code decisionNeeded(question,
- * options)} or {@code cannotVerify(check, reason, details)}, mirroring the domain's {@code Stop}
+ * options)}, {@code cannotVerify(check, reason, details)} or {@code budgetExhausted(bound)}, mirroring the domain's {@code Stop}
  * sealed type with a lowerCamel {@code type} discriminator (spec.md). Always present on an
  * attempt — {@code none} for a round that raised no stop — and a pre-release amendment of contract
  * v1: the version stays 1.
  *
- * <p>Implements FR10, FR12 of make-checkpoint-gate-durable.
+ * <p>Implements FR10, FR12 of make-checkpoint-gate-durable; FR7 of define-executor-contract.
  */
 @JsonTypeInfo(
         use = JsonTypeInfo.Id.NAME,
@@ -21,7 +21,8 @@ import java.util.List;
 @JsonSubTypes({
     @JsonSubTypes.Type(value = StopDto.None.class, name = "none"),
     @JsonSubTypes.Type(value = StopDto.DecisionNeeded.class, name = "decisionNeeded"),
-    @JsonSubTypes.Type(value = StopDto.CannotVerify.class, name = "cannotVerify")
+    @JsonSubTypes.Type(value = StopDto.CannotVerify.class, name = "cannotVerify"),
+    @JsonSubTypes.Type(value = StopDto.BudgetExhausted.class, name = "budgetExhausted")
 })
 public sealed interface StopDto {
 
@@ -50,4 +51,13 @@ public sealed interface StopDto {
      * @param details the check's supporting detail
      */
     record CannotVerify(String type, String check, String reason, String details) implements StopDto {}
+
+    /**
+     * The round ended {@code failed/limit}: a bound of the stage was reached (FR7 of
+     * define-executor-contract).
+     *
+     * @param type the discriminator, always {@code "budgetExhausted"}
+     * @param bound the text naming the bound the round reached
+     */
+    record BudgetExhausted(String type, String bound) implements StopDto {}
 }

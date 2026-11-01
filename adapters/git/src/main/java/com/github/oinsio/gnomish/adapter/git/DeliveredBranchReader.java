@@ -13,7 +13,6 @@ import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
-import java.util.Optional;
 
 /**
  * Recovers a delivered task's pre-cleanup {@code .gnomish-task/} state from branch history, for the
@@ -36,7 +35,7 @@ import java.util.Optional;
  * still carries the envelope — a {@code CompletedUncleaned} branch — and otherwise, when the
  * registered commit is the cleanup commit, the {@code Completed} commit the cleanup was written on.
  * A {@code Completed} envelope the gnome committed above the register, or a cleanup subject it
- * wrote, is never read. See {@link #deliveredRevision}.
+ * wrote, is never read. See {@link FactoryRegisterRead#envelopeRevision}.
  *
  * <p>Every revision-scoped read below passes {@link GitReadGate#answered}, so this reader can tell
  * "the delivered commit does not carry the files" from "the question was not answered": an
@@ -113,33 +112,7 @@ public final class DeliveredBranchReader {
         RegisteredCommit registered = register.registered(cloneDir, taskId)
                 .orElseThrow(() -> new BranchStateFileMissingException(
                         tip, TASK_JSON_PATH, UntrustedText.factory("no factory register names a commit of this task")));
-        return deliveredRevision(cloneDir, registered);
-    }
-
-    /**
-     * The commit whose tree carries the delivered envelope (design D5 of fix-envelope-medium,
-     * design D13 of tighten-spec-contract): the registered commit itself when it still carries
-     * {@code task.json} — a {@code CompletedUncleaned} branch, whose {@code Completed} envelope has
-     * not been removed yet — and otherwise, when the registered commit is the cleanup commit, the
-     * commit it was written on, which is the {@code Completed} commit by construction. That is the
-     * same commit the branch classifier calls a delivery, so the reader and the classifier cannot
-     * disagree about which one it is.
-     *
-     * @throws BranchStateFileMissingException when neither holds — a registered commit with no
-     *     envelope that is not the cleanup commit was never delivered, so there is no state to
-     *     recover
-     */
-    private RegisteredCommit deliveredRevision(Path cloneDir, RegisteredCommit registered) {
-        GitShowTip reader = new GitShowTip(runner, cloneDir, registered);
-        if (reader.readAtRegister(TASK_JSON_PATH).isPresent()) {
-            return registered;
-        }
-        Optional<RegisteredCommit> completed =
-                reader.isCleanupCommit() ? register.completedBefore(cloneDir, registered) : Optional.empty();
-        return completed.orElseThrow(() -> new BranchStateFileMissingException(
-                registered.id(),
-                TASK_JSON_PATH,
-                UntrustedText.factory("the registered commit carries no envelope and is not the cleanup commit")));
+        return register.envelopeRevision(cloneDir, registered);
     }
 
     private UntrustedText show(Path cloneDir, RegisteredCommit commit, String filePath) {

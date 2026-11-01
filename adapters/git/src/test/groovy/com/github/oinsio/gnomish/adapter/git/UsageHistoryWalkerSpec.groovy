@@ -1,14 +1,15 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
-import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
+import com.github.oinsio.gnomish.domain.engine.ExecutorRole
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.UsageFold
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
@@ -16,11 +17,11 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR14, NFR-C1 of add-git-workflow: {@code gnomish usage} reconstructs per-round usage by
- * chronologically walking {@code state.json} git history (design D14) — a row per new
- * {@link com.github.oinsio.gnomish.adapter.git.state.StateAttemptDto}, never by parsing commit
- * messages, so salvage/cleanup/task.json-only commits naturally yield no rows. Core round-detection
- * scenarios; edge cases live in {@link UsageHistoryWalkerEdgeCasesSpec}.
+ * FR14, NFR-C1 of add-git-workflow; FR14, FR19 of define-executor-contract: {@code gnomish usage}
+ * reconstructs per-round usage by chronologically walking {@code state.json} git history — a row per
+ * round record met for the first time, its stage and task read from the record, never from commit
+ * messages or the position. Core round-detection scenarios; edge cases live in {@link
+ * UsageHistoryWalkerEdgeCasesSpec}, the walk's range in {@link UsageHistoryRangeSpec}.
  */
 class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixture {
 
@@ -36,12 +37,12 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
         given:
         taskRepository().createTask(new TaskContext('PROJ-1', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
 
-        def failedRound = round(0, AttemptRecord.Result.QUALITY_FAILURE, 1000, 100)
-        def stateAfterFail = TaskState.atStageStart('implement').recordQualityFailure(failedRound)
+        def failedRound = round('PROJ-1', 'implement', 0, AttemptRecord.Result.QUALITY_FAILURE, 1000, 100)
+        def stateAfterFail = TaskState.atStageStart('implement').recordQualityFailure(failedRound, ExecutorVersions.none())
         persistRound('PROJ-1', stateAfterFail, 'implement', 0)
 
-        def passedRound = round(1, AttemptRecord.Result.PASSED, 2000, 200)
-        def stateAfterPass = stateAfterFail.recordUnburnedRound(passedRound)
+        def passedRound = round('PROJ-1', 'implement', 1, AttemptRecord.Result.PASSED, 2000, 200)
+        def stateAfterPass = stateAfterFail.recordUnburnedRound(passedRound, ExecutorVersions.none())
         persistRound('PROJ-1', stateAfterPass, 'implement', 1)
 
         when:
@@ -53,46 +54,50 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
         found.rows().size() == 2
 
         and: 'round 0 is the quality failure, round 1 is the pass — both visible as cost'
-        found.rows()[0].stage() == 'implement'
+        found.rows()[0].attempt().stage() == 'implement'
         found.rows()[0].attempt().round() == 0
         found.rows()[0].attempt().result() == AttemptRecord.Result.QUALITY_FAILURE
         found.rows()[1].attempt().round() == 1
         found.rows()[1].attempt().result() == AttemptRecord.Result.PASSED
 
-        and: 'both rounds are included in the totals'
-        found.totals().wallMillis() == 3000L
-        found.totals().tokensByModel()['claude-x'].input() == 300L
+        and: 'both rounds are folded into the snapshot'
+        found.recordedTotals() == UsageFold.foldAll(found.rows()*.attempt())
+        found.recordedTotals().rounds() == 2
+        found.recordedTotals().byRole()[ExecutorRole.TRANSFORM]['claude-x'].input() == 300L
     }
 
-    // FR4, FR14 of harden-task-branch-contract: the passing round's commit already carries the
-    // ADVANCED position, so a walk that read the stage off that commit's position would bill the
-    // round to the stage that follows it. The round is attributed by where it ran, not by where
-    // its commit left the task.
-    def "FR14: a passing round whose commit already advanced the position is billed to the stage that ran it"() {
-        given: 'a task whose implement stage passes, advancing to verify in that same commit'
-        taskRepository().createTask(new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-
-        def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
-        def afterPass = TaskState.atStageStart('implement')
-                .recordPassAndAdvance(implementRound, new Position.AtStage('verify'))
-        persistRound('PROJ-9', afterPass, 'implement', 0)
-
-        and: 'the verify stage then records its own first round'
-        def verifyRound = round(0, AttemptRecord.Result.PASSED, 700, 70)
-        persistRound('PROJ-9', afterPass.advanceTo(new Position.AtStage('verify')).recordUnburnedRound(verifyRound),
-                'verify', 0)
+    // M5, FR14, FR19 of define-executor-contract: each passing commit already carries the ADVANCED
+    // position, and every stage's first round replaces the attempt list — the shape the old walk read
+    // as "the next stage's first round" and billed to the stage after the one that ran it. The row's
+    // stage is the record's own.
+    // Scenario: cli/task-inspection / A first-round pass is billed to its own stage
+    // Scenario: pipeline/stage-engine / Round identity is written, never inferred
+    def "FR19: three consecutive stages passing on their first round are billed to the three stages that ran"() {
+        given: 'a task whose stages a, b and c each pass on their first round, advancing in the same commit'
+        taskRepository().createTask(new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('a'))
+        def state = TaskState.atStageStart('a')
+        [
+            ['a', 'b', 500L],
+            ['b', 'c', 600L],
+            ['c', null, 700L]
+        ].each { String stage, String next, long wall ->
+            def advanced = next == null ? new Position.PipelineEnd() : new Position.AtStage(next)
+            state = state.recordPassAndAdvance(round('PROJ-9', stage, 0, AttemptRecord.Result.PASSED, wall, 10), advanced, ExecutorVersions.none())
+            persistRound('PROJ-9', state, stage, 0)
+            state = state.advanceTo(advanced)
+        }
 
         when:
         def found = walker.walk(cloneDir, 'PROJ-9') as UsageHistoryResult.Found
 
-        then: 'two rows, each billed to the stage that actually paid for it'
-        found.rows().size() == 2
-        found.rows()[0].stage() == 'implement'
-        found.rows()[1].stage() == 'verify'
+        then: 'three rows, each billed to the stage its record names, in order'
+        found.rows()*.attempt()*.stage() == ['a', 'b', 'c']
+        found.rows()*.attempt()*.taskId() == ['PROJ-9', 'PROJ-9', 'PROJ-9']
 
-        and: 'their usage is unchanged by the attribution'
-        found.rows()[0].executorUsage().wallTime() == Duration.ofMillis(500)
-        found.rows()[1].executorUsage().wallTime() == Duration.ofMillis(700)
+        and: 'their usage is the usage each stage paid'
+        found.rows()*.attempt()*.usage()*.getAt(0)*.wallTime() == [500, 600, 700].collect {
+            Duration.ofMillis(it)
+        }
     }
 
     // FR1 of make-checkpoint-gate-durable: a manual stage's first round passes into the gate, so its
@@ -102,19 +107,19 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
         given: 'implement passes into release'
         taskRepository().createTask(new TaskContext('PROJ-7', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def afterImplement = TaskState.atStageStart('implement')
-                .recordPassAndAdvance(round(0, AttemptRecord.Result.PASSED, 500, 50), new Position.AtStage('release'))
+                .recordPassAndAdvance(round('PROJ-7', 'implement', 0, AttemptRecord.Result.PASSED, 500, 50), new Position.AtStage('release'), ExecutorVersions.none())
         persistRound('PROJ-7', afterImplement, 'implement', 0)
 
         and: 'release, a manual stage, passes its first round and holds the task at its gate'
         def atGate = afterImplement.advanceTo(new Position.AtStage('release'))
-                .recordPassAndAdvance(round(0, AttemptRecord.Result.PASSED, 700, 70), new Position.AwaitingApproval('release'))
+                .recordPassAndAdvance(round('PROJ-7', 'release', 0, AttemptRecord.Result.PASSED, 700, 70), new Position.AwaitingApproval('release'), ExecutorVersions.none())
         persistRound('PROJ-7', atGate, 'release', 0)
 
         when:
         def found = walker.walk(cloneDir, 'PROJ-7') as UsageHistoryResult.Found
 
         then:
-        found.rows()*.stage() == ['implement', 'release']
+        found.rows()*.attempt()*.stage() == ['implement', 'release']
     }
 
     // Scenario: git/git-task-persistence / History of past stages lives in git
@@ -122,12 +127,12 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
         given:
         taskRepository().createTask(new TaskContext('PROJ-2', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
 
-        def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
-        def stateAtImplement = TaskState.atStageStart('implement').recordUnburnedRound(implementRound)
+        def implementRound = round('PROJ-2', 'implement', 0, AttemptRecord.Result.PASSED, 500, 50)
+        def stateAtImplement = TaskState.atStageStart('implement').recordUnburnedRound(implementRound, ExecutorVersions.none())
         persistRound('PROJ-2', stateAtImplement, 'implement', 0)
 
-        def verifyRound = round(0, AttemptRecord.Result.PASSED, 700, 70)
-        def stateAtVerify = stateAtImplement.advanceTo(new Position.AtStage('verify')).recordUnburnedRound(verifyRound)
+        def verifyRound = round('PROJ-2', 'verify', 0, AttemptRecord.Result.PASSED, 700, 70)
+        def stateAtVerify = stateAtImplement.advanceTo(new Position.AtStage('verify')).recordUnburnedRound(verifyRound, ExecutorVersions.none())
         persistRound('PROJ-2', stateAtVerify, 'verify', 0)
 
         when:
@@ -135,8 +140,7 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
 
         then:
         result.rows().size() == 2
-        result.rows()[0].stage() == 'implement'
-        result.rows()[1].stage() == 'verify'
+        result.rows()*.attempt()*.stage() == ['implement', 'verify']
         result.rows()[1].attempt().round() == 0
     }
 
@@ -158,14 +162,14 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
 
         then:
         result.rows().isEmpty()
-        result.totals().wallMillis() == null
+        result.recordedTotals() == UsageSnapshot.EMPTY
     }
 
     // FR13 of tighten-spec-contract: the walk starts at the registered commit, so a branch the
     //     factory never registered records no round — even one whose tip carries round commits.
     def "FR13: a task branch with no factory register yields an empty history"() {
         given:
-        persistRound('PROJ-8', TaskState.atStageStart('implement').recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 50)))
+        persistRound('PROJ-8', TaskState.atStageStart('implement').recordUnburnedRound(round('PROJ-8', 'implement', 0, AttemptRecord.Result.PASSED, 500, 50), ExecutorVersions.none()))
         assert runner.run(cloneDir, 'update-ref', '-d', 'refs/gnomish-factory/PROJ-8').exitCode() == 0
 
         when:
@@ -174,26 +178,5 @@ class UsageHistoryWalkerSpec extends Specification implements UsageHistoryFixtur
         then:
         result instanceof UsageHistoryResult.Found
         (result as UsageHistoryResult.Found).rows().isEmpty()
-    }
-
-    // FR13 of tighten-spec-contract: a round the gnome wrote into state.json above the register
-    //     is not a round of the report.
-    def "FR13: a state.json round committed above the register is not reported"() {
-        given:
-        def first = TaskState.atStageStart('implement').recordQualityFailure(round(0, AttemptRecord.Result.QUALITY_FAILURE, 500, 50))
-        persistRound('PROJ-9', first)
-        def worktree = worktreeFor('PROJ-9')
-        def forged = new GitAttemptPersistence(runner, worktree, 'PROJ-9', ClaimEpochSource.NONE)
-        def registered = registeredId(cloneDir, 'PROJ-9')
-        forged.persist('PROJ-9', first.recordUnburnedRound(round(1, AttemptRecord.Result.PASSED, 900, 90)),
-                new ToolTrace(new AttemptKey('PROJ-9', 'implement', 1), []))
-        assert runner.run(cloneDir, 'update-ref', 'refs/gnomish-factory/PROJ-9', registered).exitCode() == 0
-
-        when:
-        def result = walker.walk(cloneDir, 'PROJ-9') as UsageHistoryResult.Found
-
-        then: 'the round above the register is not billed'
-        result.rows().size() == 1
-        result.rows()[0].attempt().round() == 0
     }
 }

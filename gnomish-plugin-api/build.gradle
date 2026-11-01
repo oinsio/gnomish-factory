@@ -33,6 +33,9 @@ plugins {
 // `TrackerAdapterFactory.probeRead` default method and its `TrackerReadVerdict`. No pre-existing
 // type changed, so no pre-1.0 version bump is owed and `japicmpApiGate` stays green.
 //
+// D4, D11, D13, D14 of define-executor-contract: 0.13.0 -> 0.14.0, the twelfth BREAKING move — the
+// engine's result, usage and state shapes (README, "Versioning"); `compat-baseline/` regenerated.
+//
 // D19 of add-sandbox-base-image: 0.12.0 -> 0.13.0, the eleventh BREAKING move — two retired
 // `OperatorEvent` constants removed (README, "Versioning"); `compat-baseline/` regenerated.
 //
@@ -116,16 +119,8 @@ plugins {
 // MINOR bump; `compat-baseline/` was regenerated in the same commit so a reviewer sees the
 // break and the bump that accepts it in one diff.
 //
-// FR19 of harden-task-branch-contract: 0.3.0 -> 0.4.0, the third BREAKING move. The tracker
-// medium joined the branch medium in classifying totally, which the port surface had to carry:
-// `Tracker` gained `repairIndex` and its `removeStaleClaim` now takes the observed `ClaimFacts`
-// footprint rather than a live `ClaimVersion` (a dead footprint is an eligible input, and a
-// version cannot express one); `OpenTask` and `ReadyTask` gained the raw `TrackerFacts` /
-// `ClaimFacts` the core classifier reads, so both lose their old canonical constructors — each
-// keeps a delegating constructor of the previous shape, so a reader that carries no observation
-// of its own still compiles. Pre-1.0, a breaking change is a MINOR bump; `compat-baseline/` was
-// regenerated in the same commit so a reviewer sees the break and the bump that accepts it in
-// one diff.
+// FR19 of harden-task-branch-contract: 0.3.0 -> 0.4.0, the third BREAKING move — the tracker
+// port classifies totally (README, "Versioning"); `compat-baseline/` regenerated.
 //
 // FR13 of harden-task-branch-contract: 0.2.0 -> 0.3.0, the second BREAKING move.
 // `ClaimResult.Acquired` gained the claim epoch the tracker issues with a claim and
@@ -140,7 +135,7 @@ plugins {
 // which removes their old canonical constructors. Pre-1.0, a breaking change is
 // a MINOR bump; `compat-baseline/` was regenerated in the same commit so a
 // reviewer sees the break and the bump that accepts it in one diff.
-version = '0.13.0'
+version = '0.14.0'
 
 description = 'Third-party contract surface: tracker/secrets ports, the tracker and check SPI factories with their validators, the attempt-commit workspace capability and the findings sanitizer.'
 

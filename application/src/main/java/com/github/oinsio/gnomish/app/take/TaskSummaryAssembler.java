@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.take;
 
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.domain.engine.UsageFold;
 import com.github.oinsio.gnomish.status.TaskSummary;
 import java.time.Duration;
 import org.jspecify.annotations.Nullable;
@@ -72,7 +73,7 @@ public final class TaskSummaryAssembler {
                 stageOf(finalState.position()),
                 finalState.attemptsUsed(),
                 wall,
-                finalState.totals().tokensByModel());
+                UsageFold.byModel(finalState.totals()));
     }
 
     private static @Nullable String stageOf(Position position) {

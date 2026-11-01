@@ -124,6 +124,12 @@ the same `instance` block as the snapshot.
 | `runSummary`  | drain-run completion only                                                       | `counts` per outcome, summed `tokensByModel`, `wallMillis`                                                                                               |
 | `sweepAction` | the sandbox-lifecycle sweep stops or disposes one object                        | `objectName`, `role`, `mode` (`tracked\|manual`), `taskKey`, `category` (`stoppedOrphan\|disposedAged\|disposedReconstructible`), `reason`, `ageSeconds` |
 | `sweepTick`   | every completed sweep tick                                                      | `counts` per verdict category, including the untouched ones                                                                                              |
+| `roundOutcome` | every executor round a slot ran, recorded or not                               | `taskId`, `stage`, `attempt`, `executor` (`<name>@<version>`, or the executor type alone when it answered no describe), `role`, `status` (`<status>[/<class>]`) |
+
+A `roundOutcome` line carries no tokens: usage stays on the `taskOutcome` line,
+so summing `taskOutcome` lines (as the dashboard's day view does) never counts a
+round twice. The same round's log line adds the protocol version, the failure
+class and the bound a `failed/limit` round reached.
 
 Objects the sweep left untouched are never itemized — they are counted on the
 tick's `sweepTick` line only, so a day of quiet ticks costs one line per tick

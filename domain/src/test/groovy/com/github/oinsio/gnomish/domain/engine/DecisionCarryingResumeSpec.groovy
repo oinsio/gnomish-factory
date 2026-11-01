@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -58,7 +59,7 @@ class DecisionCarryingResumeSpec extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
-                listener, persistence, VirtualTimeEquipment.on(clock, sleeper))
+                listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static VerifyCheck.Builtin builtin(String name) {
@@ -75,8 +76,8 @@ class DecisionCarryingResumeSpec extends Specification {
         new PipelineDefinition('1', new AutonomyLimits(5), stages.toList())
     }
 
-    static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
+    static ExecutionResult completed() {
+        ExecutionResult.completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
     // FR7: a TaskContext whose decisions list carries several decisions — including one the
@@ -133,9 +134,9 @@ class DecisionCarryingResumeSpec extends Specification {
         def exhaustedExecutor = new ScriptedExecutor()
         def exhaustedPorts = new EnginePorts(exhaustedExecutor, new ScriptedBuiltinCheckRunner(),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(),
-                new RecordingEventListener(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock, sleeper))
+                new RecordingEventListener(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
         def exhausted = new Engine().run(pipeline(stageDef), context,
-                new TaskState(new Position.AtStage('build'), 2, [], ExecutorUsage.none()), WORKSPACE, exhaustedPorts)
+                new TaskState(new Position.AtStage('build'), 2, [], UsageSnapshot.EMPTY, ExecutorVersions.none()), WORKSPACE, exhaustedPorts)
 
         then: 'without the reset the engine escalates AttemptsExhausted and never executes'
         exhausted instanceof TaskOutcome.Escalated

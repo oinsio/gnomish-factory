@@ -26,6 +26,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.gitobjects.GitObjects
@@ -95,7 +96,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
         push(clone)
 
         then: 'the open tip, the snapshot subject and the request\'s file name are one value'
-        result instanceof ExecutionResult.DecisionNeeded
+        result.answer() instanceof ExecutionResult.DecisionRequest
         gitOutput(clone, 'rev-parse', snapshot + '^') == openedOn
         subjectOf(origin, snapshot) == "gnomish: snapshot build#0 ${openedOn}".toString()
         requestsIn(origin, snapshot) == [requestPath(openedOn)]
@@ -103,7 +104,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
         when: 'the operator answers — the stage restarts at attempt 0, the asking round\'s key'
         def repository = repositoryOver(clone)
         repository.recordOutcome(TASK, new TaskOutcome.Escalated(TaskState.atStageStart('build'),
-                new EscalationReport.DecisionNeeded(result.question(), result.options())), TrackerWrite.OWED)
+                new EscalationReport.DecisionNeeded(result.answer().question(), result.answer().options())), TrackerWrite.OWED)
         repository.appendDecision(TASK, new Decision('refactor', null, null, null), TaskState.atStageStart('build'))
         push(clone)
         String answered = tip(origin)
@@ -149,7 +150,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
         persistRound(pickupBox, pickupClone, rounds)
 
         then: 'the request is re-raised from the snapshot, and the state commit landed on the snapshot itself'
-        result instanceof ExecutionResult.DecisionNeeded
+        result.answer() instanceof ExecutionResult.DecisionRequest
         String stateCommit = tip(pickupClone)
         subjectOf(pickupClone, stateCommit) == 'gnomish: round build#0'
         gitOutput(pickupClone, 'rev-parse', stateCommit + '^') == snapshot
@@ -179,7 +180,7 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
 
     private void persistRound(LocalBoxEnvironment box, Path factoryClone, CurrentRound rounds) {
         new EnvironmentAttemptPersistence(box, runner, factoryClone, objectsOf(factoryClone), rounds, ClaimEpochSource.NONE)
-                .persist(TASK, TaskState.atStageStart('build'), new ToolTrace(new AttemptKey(TASK, 'build', 0), []))
+                .persist(TASK, RoundStates.recorded(new ToolTrace(new AttemptKey(TASK, 'build', 0), []).key()), new ToolTrace(new AttemptKey(TASK, 'build', 0), []))
     }
 
     private GitObjectsTaskRepository repositoryOver(Path factoryClone) {

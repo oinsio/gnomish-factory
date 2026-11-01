@@ -9,13 +9,16 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -32,6 +35,9 @@ import java.time.Instant
  * <p>Implementers provide {@code tempDir}, typically via Spock's {@code @TempDir}.
  */
 trait SeededCloneFixture implements BareGitRepoFixture, RegisteredBranchFixture {
+
+    /** The round tokens {@link #round} has minted so far. */
+    int roundsMinted = 0
 
     abstract Path getTempDir()
 
@@ -64,17 +70,36 @@ trait SeededCloneFixture implements BareGitRepoFixture, RegisteredBranchFixture 
         def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
-        persistence.persist(taskId, state, trace)
+        persistence.persist(taskId, RoundStates.withRound(state, trace.key()), trace)
     }
 
-    AttemptRecord round(int round, AttemptRecord.Result result, long wallMillis, long inputTokens) {
-        new AttemptRecord(
+    /**
+     * A round whose executor reported {@code inputTokens}, opened on a round token of its own: each
+     * call mints the next token, as each round of a branch opens on the tip its predecessor left, so
+     * the usage fold counts every round it is handed (FR17 of define-executor-contract).
+     */
+    AttemptRecord round(int roundNumber, AttemptRecord.Result result, long wallMillis, long inputTokens) {
+        this.round(AttemptRecords.TASK_ID, AttemptRecords.STAGE, roundNumber, result, wallMillis, inputTokens)
+    }
+
+    /**
+     * The round {@link #round(int, AttemptRecord.Result, long, long)} builds, recorded under {@code
+     * taskId} and {@code stage} — the identity a usage walk reads its row's task and stage from
+     * (FR14, FR19 of define-executor-contract).
+     */
+    AttemptRecord round(String taskId, String stage, int round, AttemptRecord.Result result, long wallMillis,
+            long inputTokens) {
+        roundsMinted = roundsMinted + 1
+        AttemptRecords.identified(
+                taskId,
+                stage,
+                RoundToken.of(String.format('%040x', roundsMinted)),
                 round,
                 result,
                 Instant.parse('2026-07-18T09:00:00Z').plusSeconds(round * 60),
                 [] as List<CheckResult>,
                 new ExecutorUsage(Duration.ofMillis(wallMillis), [],
-                ['claude-x': new TokenUsage(inputTokens, 10, 0, 0)]),
-                JudgeUsage.none(), [], Stop.none())
+                Unpriced.of(['claude-x': new TokenUsage(inputTokens, 10, 0, 0)])),
+                [], Stop.none())
     }
 }

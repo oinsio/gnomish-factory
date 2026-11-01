@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import java.nio.file.Files
 import java.nio.file.Path
@@ -83,8 +84,8 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
         def persistence = new EnvironmentAttemptPersistence(box, blindToTips(), cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
 
         when:
-        persistence.persist(TASK, TaskState.atStageStart('implement'),
-                new ToolTrace(new AttemptKey(TASK, 'implement', 1), []))
+        persistence.persist(TASK, RoundStates.recorded(new ToolTrace(new AttemptKey(TASK, 'implement', 1), []).key()),
+        new ToolTrace(new AttemptKey(TASK, 'implement', 1), []))
 
         then: 'the admission cannot judge the round on refs that do not resolve: infrastructure, carrying git\'s words'
         def failure = thrown(GitPersistFailedException)

@@ -21,7 +21,7 @@ class DashboardTokensBlockSpec extends Specification {
     // FR7: the token bar carries the same promise as the outcome bar.
     def "a marginal token class stays visible and the model bar fills exactly"() {
         given: 'one input token against 299 read from cache'
-        def history = new LedgerHistoryView([], ['sonnet': new LedgerTokenUsage(1L, 0L, 0L, 299L)])
+        def history = new LedgerHistoryView([], ['sonnet': new LedgerTokenUsage(1L, 0L, 0L, 299L)], 300L)
 
         when:
         def html = render(history)
@@ -41,7 +41,7 @@ class DashboardTokensBlockSpec extends Specification {
                 [
                     new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0), 0, Duration.ZERO)
                 ],
-                [claude: new LedgerTokenUsage(3700, 28_800, 25_600, 4_764_400)])
+                [claude: new LedgerTokenUsage(3700, 28_800, 25_600, 4_764_400)], 4_822_500L)
 
         when:
         def html = render(history)
@@ -61,7 +61,7 @@ class DashboardTokensBlockSpec extends Specification {
     // Scenario: observability/dashboard-page / Token bars lead with the cache share
     def "every bar segment comes from the spend palette"() {
         given: 'a mix where all four segments clear one percent and so all four are drawn'
-        def history = new LedgerHistoryView([], [claude: new LedgerTokenUsage(100_000, 200_000, 300_000, 400_000)])
+        def history = new LedgerHistoryView([], [claude: new LedgerTokenUsage(100_000, 200_000, 300_000, 400_000)], 1_000_000L)
 
         when:
         def html = render(history)
@@ -81,7 +81,7 @@ class DashboardTokensBlockSpec extends Specification {
     // Scenario: observability/dashboard-page / Model without cache
     def "a model with no cache traffic says the cache is not in use"() {
         given:
-        def history = new LedgerHistoryView([], [claude: new LedgerTokenUsage(10, 5, 0, 0)])
+        def history = new LedgerHistoryView([], [claude: new LedgerTokenUsage(10, 5, 0, 0)], 15L)
 
         when:
         def html = render(history)
@@ -97,7 +97,7 @@ class DashboardTokensBlockSpec extends Specification {
         def history = new LedgerHistoryView([], [
             zeta: new LedgerTokenUsage(1, 1, 0, 0),
             alpha: new LedgerTokenUsage(1, 1, 0, 0)
-        ])
+        ], 4L)
 
         when:
         def html = render(history)
@@ -112,7 +112,7 @@ class DashboardTokensBlockSpec extends Specification {
     // window with no finished task renders the grand total alone, with no period.
     def "token usage with no finished tasks renders the grand total without a period"() {
         given:
-        def history = new LedgerHistoryView([], [claude: new LedgerTokenUsage(10, 5, 0, 0)])
+        def history = new LedgerHistoryView([], [claude: new LedgerTokenUsage(10, 5, 0, 0)], 15L)
 
         when:
         def html = render(history)
@@ -127,14 +127,24 @@ class DashboardTokensBlockSpec extends Specification {
         def history = new LedgerHistoryView([], [
             a: new LedgerTokenUsage(1000, 0, 0, 0),
             b: new LedgerTokenUsage(500, 0, 0, 0)
-        ])
+        ], 1500L)
 
         expect:
         render(history).contains('<span class="num" title="1500">1.5K</span>')
 
         and: 'with no models there is no total to state, so the heading carries no meta slot at all'
-        def empty = render(new LedgerHistoryView([], [:]))
+        def empty = render(new LedgerHistoryView([], [:], 0L))
         empty.contains('No token usage recorded yet')
         empty.contains('<h2 class="card__title">Tokens</h2></div>')
+    }
+
+    // FR17 of define-executor-contract: the grand total is the aggregator's figure; the renderer
+    //     shows the value it is handed and adds nothing across models itself
+    def "the heading shows the view's grand total as given, never a sum of its own"() {
+        given: 'a total the per-model figures do not add up to, so only a displayed value matches'
+        def history = new LedgerHistoryView([], [a: new LedgerTokenUsage(1, 0, 0, 0)], 2500L)
+
+        expect:
+        render(history).contains('<span class="num" title="2500">2.5K</span>')
     }
 }

@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.Finding
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
 import com.github.oinsio.gnomish.sandbox.DenialRead
@@ -50,6 +52,11 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
         this.delegate = delegate
         this.answers = new ArrayList<>(answers)
         this.launchFails = launchFails
+    }
+
+    @Override
+    RoundIdentity identity() {
+        delegate.identity()
     }
 
     /** The number of denial reads so far, across every round opened from this source. */
@@ -121,7 +128,7 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        Optional<String> readDecision() {
+        Optional<RoundDecisionRequest> readDecision() {
             delegate.readDecision()
         }
 

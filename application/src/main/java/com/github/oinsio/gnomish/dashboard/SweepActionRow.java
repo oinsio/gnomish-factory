@@ -46,8 +46,8 @@ public record SweepActionRow(
      * incident alert.
      *
      * <p>{@code @DoNotMutate}: PIT's Gregor engine crashes its minion JVM (RUN_ERROR, not a real
-     * coverage gap) on some mutations of this record's own methods via JVMTI RedefineClasses (see
-     * {@link com.github.oinsio.gnomish.app.port.git.UsageTotals}'s identical exemption). Fully
+     * coverage gap) on some mutations of this record's own methods via JVMTI RedefineClasses (hcoles/pitest#1285,
+     * the exemption {@code ExecutorUsage} carries too). Fully
      * covered by {@code SweepActionRowSpec}'s "only a tracked stopped-orphan is a dead-instance
      * symptom" scenario.
      *

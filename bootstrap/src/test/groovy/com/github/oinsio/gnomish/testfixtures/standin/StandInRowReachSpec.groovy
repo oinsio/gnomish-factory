@@ -95,7 +95,10 @@ class StandInRowReachSpec extends Specification {
         .directory(link.parent.toFile())
         .redirectOutput(ProcessBuilder.Redirect.DISCARD)
         .redirectError(ProcessBuilder.Redirect.DISCARD)
-        TestChildEnvironment.cleared(builder).put('STAND_IN_REACHED', reachedFile().toString())
+        def environment = TestChildEnvironment.cleared(builder)
+        environment.put('STAND_IN_REACHED', reachedFile().toString())
+        // An executor preset's result row writes where the factory points it; a probe points it beside the link.
+        environment.put('GNOMISH_RESULT_FILE', link.resolveSibling('result.json').toString())
         Process process = builder.start()
         try {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)

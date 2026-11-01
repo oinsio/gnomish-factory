@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -22,15 +23,15 @@ abstract class JudgeVotingSpecBase extends Specification {
     }
 
     static JudgeVoter.Vote pass(Map<String, TokenUsage> tokensByModel = [:]) {
-        new JudgeVoter.Vote(new Verdict.Pass(), tokensByModel)
+        new JudgeVoter.Vote(new Verdict.Pass(), Unpriced.of(tokensByModel))
     }
 
     static JudgeVoter.Vote fail(List<Finding> findings, Map<String, TokenUsage> tokensByModel = [:]) {
-        new JudgeVoter.Vote(new Verdict.Fail(findings), tokensByModel)
+        new JudgeVoter.Vote(new Verdict.Fail(findings), Unpriced.of(tokensByModel))
     }
 
     static JudgeVoter.Vote cannotVerify(String reason, String details, Map<String, TokenUsage> tokensByModel = [:]) {
-        new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess(reason), UntrustedText.subprocess(details)), tokensByModel)
+        new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess(reason), UntrustedText.subprocess(details)), Unpriced.of(tokensByModel))
     }
 
     JudgeVoting voting(ScriptedJudgeVoter voter) {

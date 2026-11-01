@@ -35,6 +35,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity
 import com.github.oinsio.gnomish.gitobjects.CommitMetadata
@@ -129,7 +130,7 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
         def clock = new VirtualClock()
         def ports = new EnginePorts(executor, new FilesExistCheckRunner(), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
-                VirtualTimeEquipment.on(clock))
+                VirtualTimeEquipment.on(clock), source.identity())
         def outcome = new Engine().run(definition, context(taskId), first,
                 new DirectoryWorkspace(Files.createTempDirectory(root, 'workspace')), ports)
         assert outcome instanceof TaskOutcome.Paused || outcome instanceof TaskOutcome.Escalated: "the run of ${taskId} did not park: ${outcome}"

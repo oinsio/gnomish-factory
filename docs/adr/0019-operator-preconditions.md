@@ -2,7 +2,8 @@
 
 Status: accepted (2026-10-25, introduced by `add-sandbox-base-image`; its design D17–D22 took
 these decisions, recorded here because a change's `design.md` archives with the change and
-governs nothing afterwards)
+governs nothing afterwards); amended 2026-10-31 by `define-executor-contract` (design D5 as
+revised): decision 5, the level of a precondition
 
 ## Context
 
@@ -36,6 +37,21 @@ precondition from a slot's log (the 2026-10-23 incident).
    failure nothing classifies stays the task's crash, with its abort accounting.
 4. **One failure, one log.** The checks throw without logging; the layer that decides writes the
    one line — the startup, the command, or the condition's opening WARN with its own code.
+5. **The level of a precondition is decided by the owner of its truth.** A precondition whose
+   truth is the same for every task — the daemon's setup: its clone, the container runtime, the
+   configured image, an installed binary — is the daemon's: a startup check and, under `serve`,
+   a daemon condition (decisions 1–3). A precondition whose truth depends on the task's own law
+   — a program the law declares, a `describe` the law must agree with — is the task's: a located
+   configuration error that parks that task as an invalid law does, no attempt burned, no abort
+   accounting, and never a daemon condition. "The operator fixes it" does not decide the level:
+   an image lacking a program one task's law names is fixed by the operator, yet holding every
+   other task off the tracker for it would be a stall of the daemon for one task's
+   configuration. Within the task's level, a deterministic defect (absent, wrong, malformed) is
+   a configuration error and a refused start or a timeout is an external failure, named so in
+   the message, after GitLab Runner's split of its failure reasons. The same split is what every
+   comparable system makes: Kubernetes taints a node for node conditions and backs off a pod
+   for its own image; Nomad marks a node ineligible for the driver that failed, not for every
+   job; Jenkins queues on an offline agent but fails a build whose tool is missing.
 
 ## Consequences
 
@@ -53,3 +69,9 @@ precondition from a slot's log (the 2026-10-23 incident).
   no abort recorded; only a positive, typed signal is an operator precondition.
 - **A second gate class beside the remote outage gate** — two state machines, two schedules and
   two log vocabularies for one behaviour.
+- **A daemon condition for a program the task's law names** (2026-10-31, option C′ of the
+  `define-executor-contract` task 6.2 review: a kind recording the refusing task's law commit,
+  probed by rerunning `describe` for that law in a helper container) — one task on a stale law
+  holds the whole feed until the operator rebuilds an image for a law nobody current needs, with
+  no precedent among comparable systems; probing with the daemon's own law instead closes the
+  condition at once and churns the claim. Decision 5 is the rule that rejects both.

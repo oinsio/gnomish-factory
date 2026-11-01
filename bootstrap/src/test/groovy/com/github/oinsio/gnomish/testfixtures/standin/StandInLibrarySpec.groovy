@@ -19,13 +19,13 @@ class StandInLibrarySpec extends Specification {
 
     /** The actions a table row may name, with how many arguments each takes at least. */
     static final Map<String, Integer> ACTIONS = [
-        record: 0, stdout: 1, stderr: 1, delay: 1, run: 1, write: 2, export: 2, 'export-name': 1, 'close-stdout': 0,
+        record: 0, stdout: 1, stderr: 1, result: 1, delay: 1, run: 1, write: 2, export: 2, 'export-name': 1, 'close-stdout': 0,
         exit: 1, answer: 2, refuse: 2, stall: 1, delegate: 1, 'exec-sh': 1,
     ]
 
     /** The action arguments that name a file of the library (by action, argument positions). */
     static final Map<String, List<Integer>> FILE_ARGUMENTS = [
-        stdout: [0], stderr: [0], run: [0], write: [0], answer: [0], refuse: [1], 'exec-sh': [0],
+        stdout: [0], stderr: [0], result: [0], run: [0], write: [0], answer: [0], refuse: [1], 'exec-sh': [0],
     ]
 
     @TempDir
@@ -381,6 +381,21 @@ class StandInLibrarySpec extends Specification {
 
         and: 'what the push wrote is what a later invocation reads'
         answer(git, 'status') == [exit: 0, stdout: StandIn.data('stdout-git#landed')]
+    }
+
+    def "FR12: a result row writes its answer over the file GNOMISH_RESULT_FILE names, and is refused without it"() {
+        given:
+        Path resultFile = tempDir.resolve('describe.json')
+
+        when:
+        def written = run(StandIn.executor('reference'), [GNOMISH_RESULT_FILE: resultFile.toString()], 'describe')
+        def unnamed = run(StandIn.executor('reference'), 'describe')
+
+        then:
+        written == [exit: 0, stdout: '', stderr: '']
+        resultFile.toFile().text == StandIn.data('executor-describe#reference')
+        unnamed.exit == 97
+        unnamed.stderr.contains('result needs GNOMISH_RESULT_FILE')
     }
 
     def "FR24: an exported variable reaches the script exec-sh becomes"() {

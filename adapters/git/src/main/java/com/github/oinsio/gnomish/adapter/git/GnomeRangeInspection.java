@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import com.github.oinsio.gnomish.subprocess.Termination;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;

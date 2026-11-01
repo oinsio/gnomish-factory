@@ -79,8 +79,9 @@ public final class TakeOutcomeMapper {
 
     /**
      * Maps an {@link EscalationReport} kind to the park reason it implies (design D3):
-     * {@code AttemptsExhausted}/{@code DecisionNeeded} need a human decision →
-     * {@link ParkReason#ESCALATION}; {@code CannotVerify}/{@code CannotExecute}/{@code
+     * {@code AttemptsExhausted}/{@code DecisionNeeded}/{@code BudgetExhausted} need a human
+     * decision → {@link ParkReason#ESCALATION} (a reached bound, like a spent attempt limit, is
+     * resumed by the human's return, FR7 of define-executor-contract); {@code CannotVerify}/{@code CannotExecute}/{@code
      * PipelineMismatch} need a fix followed by a bare retry → {@link ParkReason#INFRA}.
      * Exhaustive switch, no {@code default} arm.
      *
@@ -101,6 +102,7 @@ public final class TakeOutcomeMapper {
             case EscalationReport.CannotVerify ignored -> ParkReason.INFRA;
             case EscalationReport.CannotExecute ignored -> ParkReason.INFRA;
             case EscalationReport.PipelineMismatch ignored -> ParkReason.INFRA;
+            case EscalationReport.BudgetExhausted ignored -> ParkReason.ESCALATION;
         };
     }
 

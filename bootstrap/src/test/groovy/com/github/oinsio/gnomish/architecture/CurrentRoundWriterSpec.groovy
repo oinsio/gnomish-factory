@@ -5,12 +5,16 @@ import java.util.regex.Pattern
 import spock.lang.Specification
 
 /**
- * Design D7/D10 of make-checkpoint-gate-durable: a round's identity has one parse and one cell.
- * {@code RoundToken.of} is called by exactly two producers — {@code SandboxRoundEnvironmentSource}
- * mints a fresh round's token over the open tip, {@code SnapshotTipCheck} reuses a resumed round's
- * token from its snapshot subject (never mints) — and the per-run {@code CurrentRound} cell has
- * exactly three writers, each in one file: {@code open} at round open, {@code snapshotted} at the
- * snapshot, {@code restore} on the resume path. The types make a consumer of a closed round unable
+ * Design D7/D10 of make-checkpoint-gate-durable; D13, D14 of define-executor-contract: a round's
+ * identity has one parse and one cell. {@code RoundToken.of} is called by exactly three producers —
+ * {@code SandboxRoundEnvironmentSource} mints a fresh container round's token over the open tip,
+ * {@code MidRoundPushRounds} mints a fresh git-mode host round's token over the worktree tip (task
+ * 5.1 of define-executor-contract), {@code SnapshotTipCheck} reuses a resumed round's token from its
+ * snapshot subject (never mints) — plus one reader of the durable record, {@code StateJsonMapper},
+ * which rebuilds a recorded round's token from {@code state.json} through the same parse
+ * ({@code crash-consistency.md} item 14) and opens no round. The per-run {@code CurrentRound} cell
+ * has exactly three writers: {@code open} at round open (the two minting sources), {@code
+ * snapshotted} at the snapshot, {@code restore} on the resume path. The types make a consumer of a closed round unable
  * to compile against an open one; what they cannot stop is a fourth writer — a second minting of
  * the token from some other tip read, or a component recording a round it did not open — and that
  * is the two-recovery-owners shape {@code crash-consistency.md} item 3 forbids. This scan stops it.
@@ -30,7 +34,7 @@ import spock.lang.Specification
  * of anything. Allowlisting it would pin a fixture to keep calling the writers; scanning it would
  * fail on the one legitimate test stand-in. Every other production source is scanned.
  *
- * <p>FR13, FR15 of make-checkpoint-gate-durable.
+ * <p>FR13, FR15 of make-checkpoint-gate-durable; FR14, FR21 of define-executor-contract.
  */
 class CurrentRoundWriterSpec extends Specification {
 
@@ -39,6 +43,19 @@ class CurrentRoundWriterSpec extends Specification {
     private static final String SOURCE = GIT + 'SandboxRoundEnvironmentSource.java'
 
     private static final String SNAPSHOT_CHECK = GIT + 'SnapshotTipCheck.java'
+
+    private static final String HOST_GIT = GIT + 'MidRoundPushRounds.java'
+
+    /** The durable record's reader: rebuilds the recorded token, mints no round's identity. */
+    private static final String STATE_READER = GIT + 'state/StateJsonMapper.java'
+
+    /**
+     * The usage snapshot's wire reader (task 5.4 of define-executor-contract): rebuilds the
+     * snapshot's {@code through} — a token a recorded round already carried — through the same
+     * parse, and mints no round's identity.
+     */
+    private static final String SNAPSHOT_READER =
+    'application/src/main/java/com/github/oinsio/gnomish/usage/wire/UsageSnapshotWire.java'
 
     private static final String SNAPSHOT = GIT + 'EnvironmentRoundSnapshot.java'
 
@@ -49,8 +66,9 @@ class CurrentRoundWriterSpec extends Specification {
 
     private static final Pattern DECLARED = ~/\bCurrentRound\s+(\w+)\b|\b(\w+)\s*=\s*new\s+CurrentRound\s*\(/
 
-    // FR13, FR15: one parse, two producers — a fresh round mints, a resumed one reuses its record
-    def "FR13, FR15: RoundToken.of is called in production only by the round source and the snapshot check"() {
+    // FR13, FR15; FR21 of define-executor-contract: one parse, three producers — a fresh round mints
+    // in either branch mode, a resumed one reuses its record — and the record's reader
+    def "FR13, FR15, FR21: RoundToken.of is called in production only by the two round sources, the snapshot check and the two record readers"() {
         given:
         def sources = scanned()
 
@@ -62,12 +80,18 @@ class CurrentRoundWriterSpec extends Specification {
         .collect { RepoSourceTree.relative(it) }
         .sort()
 
-        then: 'both producers reached, nothing else'
-        minters == [SNAPSHOT_CHECK, SOURCE].sort()
+        then: 'every producer reached, nothing else'
+        minters == [
+            SNAPSHOT_CHECK,
+            SOURCE,
+            HOST_GIT,
+            STATE_READER,
+            SNAPSHOT_READER
+        ].sort()
     }
 
     // FR13, FR15: each of the cell's three writers is called from its one owner and nowhere else
-    def "FR13, FR15: CurrentRound.#writer is called in production only by #owner"() {
+    def "FR13, FR15: CurrentRound.#writer is called in production only by #owners"() {
         given:
         def sources = scanned()
         def receivers = receiverNames(sources)
@@ -83,13 +107,13 @@ class CurrentRoundWriterSpec extends Specification {
         .sort()
 
         then: 'the owner is reached and is the only caller'
-        callers == [owner]
+        callers == owners.sort()
 
         where:
-        writer | owner
-        'open' | SOURCE
-        'snapshotted' | SNAPSHOT
-        'restore' | RESUME
+        writer | owners
+        'open' | [SOURCE, HOST_GIT]
+        'snapshotted' | [SNAPSHOT]
+        'restore' | [RESUME]
     }
 
     // The detectors are the gate — seeded calls must be found, comments and other receivers must not
@@ -115,7 +139,7 @@ class CurrentRoundWriterSpec extends Specification {
         where:
         shape | line || detected
         'a parse' | 'RoundToken token = RoundToken.of(subject.group(3));' || true
-        'a static import' | 'import static com.github.oinsio.gnomish.app.port.git.RoundToken.of;' || true
+        'a static import' | 'import static com.github.oinsio.gnomish.domain.engine.RoundToken.of;' || true
         'a javadoc mention' | ' * parsed through {@link RoundToken#of}' || false
         'a reader' | 'String c = token.commit();' || false
     }

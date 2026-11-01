@@ -14,9 +14,9 @@ import java.io.Serial;
  * bound-subprocess-commands): both are infrastructure failures that burn no
  * stage attempt, but telling an operator that a round "exceeded its
  * roundTimeout" when the factory itself was shutting down sends them to raise a
- * budget that was never the problem. Unchecked, following the same idiom: {@code
- * RoundExecution#execute} shapes any {@link RuntimeException} the {@code
- * StageExecutor} port throws into {@code RoundOutcome.CannotExecute}.
+ * budget that was never the problem. Unchecked, following the same idiom: the executor round
+ * turns it into its {@code failed/infrastructure} result ({@link AgentRoundFailure}) and leaves
+ * the interrupt flag set (FR7 of define-executor-contract).
  *
  * <p>Implements FR6, FR11 of bound-subprocess-commands.
  */

@@ -3,11 +3,13 @@ package com.github.oinsio.gnomish.status.json
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.status.StatusReport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
@@ -41,6 +43,7 @@ class StatusReportVariantWireSpec extends Specification {
         new CheckRef(1, UntrustedText.manifest('external:ci')),
         UntrustedText.subprocess('timeout'),
         UntrustedText.subprocess('poll exceeded 5m')),
+        (Stop.BudgetExhausted): new Stop.BudgetExhausted(UntrustedText.agent('token bound 200000 reached')),
     ]
 
     def json = StatusJson.mapper()
@@ -92,7 +95,8 @@ class StatusReportVariantWireSpec extends Specification {
     }
 
     // Scenario: observability/status-report / A decision round carries its stop
-    def "FR10: the stop tokens are none, decisionNeeded(question, options) and cannotVerify(check, reason, details)"() {
+    // FR7 of define-executor-contract: budgetExhausted(bound) is the fourth stop token
+    def "FR10: the stop tokens are none, decisionNeeded(question, options), cannotVerify(check, reason, details) and budgetExhausted(bound)"() {
         expect:
         json.writeValueAsString(stopOf(STOPS[variant])) == expected
 
@@ -101,22 +105,47 @@ class StatusReportVariantWireSpec extends Specification {
         Stop.None | '{"type":"none"}'
         Stop.DecisionNeeded | '{"type":"decisionNeeded","question":"Refactor or patch?","options":["refactor","patch"]}'
         Stop.CannotVerify | '{"type":"cannotVerify","check":"external:ci","reason":"timeout","details":"poll exceeded 5m"}'
+        Stop.BudgetExhausted | '{"type":"budgetExhausted","bound":"token bound 200000 reached"}'
     }
 
     // Scenario: observability/status-report / An attempt carries its round record
-    def "FR10: the attempt carries its stop between result and startedAt"() {
+    // FR14 of define-executor-contract: the attempt opens with its identity, the record's own
+    def "FR10, FR14: the attempt carries its identity, then its stop between result and startedAt"() {
         given:
         def attempt = json.readTree(mapper.serialize(reportWith(STOPS[Stop.DecisionNeeded])))
                 .get('currentStage').get('attempts').get(0)
 
         expect:
-        attempt.fieldNames().toList().take(4) == [
+        attempt.fieldNames().toList().take(7) == [
+            'taskId',
+            'stage',
+            'roundToken',
             'round',
             'result',
             'stop',
             'startedAt'
         ]
         attempt.get('stop').get('type').asText() == 'decisionNeeded'
+        attempt.get('taskId').asText() == AttemptRecords.TASK_ID
+        attempt.get('stage').asText() == AttemptRecords.STAGE
+        attempt.get('roundToken').asText() == AttemptRecords.TOKEN.commit()
+    }
+
+    // FR14 of define-executor-contract: a round with no token — the in-place run's — carries none
+    def "FR14: an attempt without a round token omits the field"() {
+        given:
+        def tokenless = AttemptRecords.identified('task-1', 'implement', null, 0, AttemptRecord.Result.PASSED,
+                Instant.parse('2026-07-16T14:35:10Z'), [], ExecutorUsage.none(), [], Stop.none())
+        def report = build(new TaskState(new Position.AtStage('implement'), 0, [tokenless], UsageSnapshot.EMPTY,
+        ExecutorVersions.none()))
+
+        when:
+        def attempt = json.readTree(mapper.serialize(report)).get('currentStage').get('attempts').get(0)
+
+        then:
+        !attempt.has('roundToken')
+        attempt.get('taskId').asText() == 'task-1'
+        attempt.get('stage').asText() == 'implement'
     }
 
     private StopDto stopOf(Stop stop) {
@@ -124,18 +153,19 @@ class StatusReportVariantWireSpec extends Specification {
     }
 
     private static StatusReport reportAt(Position position) {
-        build(new TaskState(position, 0, [], ExecutorUsage.none()))
+        build(new TaskState(position, 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none()))
     }
 
     private static StatusReport reportWith(Stop stop) {
         def result = switch (stop) {
                     case Stop.DecisionNeeded -> AttemptRecord.Result.DECISION_NEEDED
                     case Stop.CannotVerify -> AttemptRecord.Result.CANNOT_VERIFY
+                    case Stop.BudgetExhausted -> AttemptRecord.Result.BUDGET_EXHAUSTED
                     default -> AttemptRecord.Result.QUALITY_FAILURE
                 }
-        def attempt = new AttemptRecord(
-                0, result, Instant.parse('2026-07-16T14:35:10Z'), [], ExecutorUsage.none(), JudgeUsage.none(), [], stop)
-        build(new TaskState(new Position.AtStage('implement'), 1, [attempt], ExecutorUsage.none()))
+        def attempt = AttemptRecords.of(
+                0, result, Instant.parse('2026-07-16T14:35:10Z'), [], ExecutorUsage.none(), [], stop)
+        build(new TaskState(new Position.AtStage('implement'), 1, [attempt], UsageSnapshot.EMPTY, ExecutorVersions.none()))
     }
 
     private static StatusReport build(TaskState state) {

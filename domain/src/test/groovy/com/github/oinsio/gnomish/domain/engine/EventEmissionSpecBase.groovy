@@ -8,9 +8,11 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -45,7 +47,7 @@ abstract class EventEmissionSpecBase extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
-                listener, persistence, VirtualTimeEquipment.on(clock, sleeper))
+                listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static VerifyCheck.Builtin builtin(String name) {
@@ -62,12 +64,12 @@ abstract class EventEmissionSpecBase extends Specification {
         new PipelineDefinition('1', new AutonomyLimits(5), stages.toList())
     }
 
-    static ExecutionResult.Completed completed(int round = 0, ExecutorUsage usage = ExecutorUsage.none()) {
-        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', round), []), [])
+    static ExecutionResult completed(int round = 0, ExecutorUsage usage = ExecutorUsage.none()) {
+        ExecutionResult.completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', round), []), [])
     }
 
     static ExecutorUsage usage(long inTokens, long outTokens) {
-        new ExecutorUsage(Duration.ofSeconds(1), [], ['model-a': new TokenUsage(inTokens, outTokens, 0, 0)])
+        new ExecutorUsage(Duration.ofSeconds(1), [], Unpriced.of(['model-a': new TokenUsage(inTokens, outTokens, 0, 0)]))
     }
 
     static Verdict.Fail fail(String message) {

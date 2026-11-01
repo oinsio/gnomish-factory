@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -64,8 +65,8 @@ class ReentrancySpec extends Specification {
         ])
     }
 
-    static ExecutionResult.Completed completed(String taskId) {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
+    static ExecutionResult completed(String taskId) {
+        ExecutionResult.completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
     }
 
     /** One run's independent set of fakes plus its recorded outcome. */
@@ -96,7 +97,7 @@ class ReentrancySpec extends Specification {
         def clock = new VirtualClock()
         new EnginePorts(run.executor, run.builtinRunner, new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), run.listener,
-                run.persistence, VirtualTimeEquipment.on(clock))
+                run.persistence, VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 
     void assertIsolatedSuccess(Run run) {

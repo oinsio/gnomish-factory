@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException;
 import com.github.oinsio.gnomish.baseref.BaseRule;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
-import com.github.oinsio.gnomish.domain.engine.CheckRef;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -112,7 +111,7 @@ public final class TaskJsonMapper {
                 baseCommit,
                 toDecisions(context.decisions()),
                 outcome == null ? null : toOutcome(outcome),
-                lastEscalation == null ? null : toEscalation(lastEscalation),
+                lastEscalation == null ? null : TaskEscalationMapper.toDto(lastEscalation),
                 trackerWritePending ? Boolean.TRUE : null,
                 null,
                 basePin.ref(),
@@ -143,7 +142,8 @@ public final class TaskJsonMapper {
                 UntrustedText.branchDocument(dto.title()),
                 UntrustedText.branchDocument(dto.body()),
                 fromDecisions(dto.decisions()));
-        EscalationReport lastEscalation = dto.lastEscalation() == null ? null : fromEscalation(dto.lastEscalation());
+        EscalationReport lastEscalation =
+                dto.lastEscalation() == null ? null : TaskEscalationMapper.fromDto(dto.lastEscalation());
         // A legacy baseCommit-only document carries no pin field at all: it reads as unpinned
         // rather than guessing a rule (FR7 of add-base-ref-resolution). The kind is separately
         // optional — a pin written before it existed, or by the manual tier which classifies
@@ -182,7 +182,7 @@ public final class TaskJsonMapper {
             case TaskOutcome.Completed ignored -> new TaskOutcomeDto.Completed("completed");
             case TaskOutcome.Paused paused -> new TaskOutcomeDto.Paused("paused", paused.passedStage());
             case TaskOutcome.Escalated escalated ->
-                new TaskOutcomeDto.Escalated("escalated", toEscalation(escalated.report()));
+                new TaskOutcomeDto.Escalated("escalated", TaskEscalationMapper.toDto(escalated.report()));
             case TaskOutcome.Aborted aborted ->
                 new TaskOutcomeDto.Aborted(
                         "aborted",
@@ -201,68 +201,11 @@ public final class TaskJsonMapper {
             case TaskOutcomeDto.Completed ignored -> new RecordedOutcome.Completed();
             case TaskOutcomeDto.Paused paused -> new RecordedOutcome.Paused(paused.passedStage());
             case TaskOutcomeDto.Escalated escalated ->
-                new RecordedOutcome.Escalated(fromEscalation(escalated.report()));
+                new RecordedOutcome.Escalated(TaskEscalationMapper.fromDto(escalated.report()));
             case TaskOutcomeDto.Aborted aborted ->
                 // The branch-document re-mint (design D3): the cause comes back as the branch's
                 // text, whatever medium first produced the trace it renders.
                 new RecordedOutcome.Aborted(aborted.failedAt(), UntrustedText.branchDocument(aborted.cause()));
-        };
-    }
-
-    private static EscalationReportDto toEscalation(EscalationReport report) {
-        return switch (report) {
-            case EscalationReport.AttemptsExhausted exhausted ->
-                new EscalationReportDto.AttemptsExhausted("attemptsExhausted", exhausted.limit());
-            case EscalationReport.DecisionNeeded decisionNeeded ->
-                new EscalationReportDto.DecisionNeeded(
-                        "decisionNeeded",
-                        decisionNeeded.question().raw(),
-                        decisionNeeded.options().stream()
-                                .map(UntrustedText::raw)
-                                .toList());
-            case EscalationReport.CannotVerify cannotVerify ->
-                new EscalationReportDto.CannotVerify(
-                        "cannotVerify",
-                        cannotVerify.check().label().raw(),
-                        cannotVerify.reason().raw(),
-                        cannotVerify.details().raw());
-            case EscalationReport.PipelineMismatch pipelineMismatch ->
-                new EscalationReportDto.PipelineMismatch(
-                        "pipelineMismatch", pipelineMismatch.staleStage().raw());
-            case EscalationReport.CannotExecute cannotExecute ->
-                new EscalationReportDto.CannotExecute(
-                        "cannotExecute",
-                        cannotExecute.cause().raw(),
-                        StateDenialMapper.toDtos(cannotExecute.denials()));
-        };
-    }
-
-    private static EscalationReport fromEscalation(EscalationReportDto dto) {
-        return switch (dto) {
-            case EscalationReportDto.AttemptsExhausted exhausted ->
-                new EscalationReport.AttemptsExhausted(exhausted.limit());
-            case EscalationReportDto.DecisionNeeded decisionNeeded ->
-                // The branch-document re-mint (design D3): the question and its options come
-                // back as the branch's text, whatever medium first produced them.
-                new EscalationReport.DecisionNeeded(
-                        UntrustedText.branchDocument(decisionNeeded.question()),
-                        decisionNeeded.options().stream()
-                                .map(UntrustedText::branchDocument)
-                                .toList());
-            case EscalationReportDto.CannotVerify cannotVerify ->
-                new EscalationReport.CannotVerify(
-                        // The label alone cannot rebuild a full CheckRef (index is not
-                        // carried in the wire format); index 0 is a placeholder — no
-                        // caller reconstructs a CheckRef's index from task.json today.
-                        new CheckRef(0, UntrustedText.branchDocument(cannotVerify.check())),
-                        UntrustedText.branchDocument(cannotVerify.reason()),
-                        UntrustedText.branchDocument(cannotVerify.details()));
-            case EscalationReportDto.PipelineMismatch pipelineMismatch ->
-                new EscalationReport.PipelineMismatch(UntrustedText.branchDocument(pipelineMismatch.staleStage()));
-            case EscalationReportDto.CannotExecute cannotExecute ->
-                new EscalationReport.CannotExecute(
-                        UntrustedText.branchDocument(cannotExecute.cause()),
-                        StateDenialMapper.fromDtos(cannotExecute.denials()));
         };
     }
 }

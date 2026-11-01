@@ -270,7 +270,7 @@ exit 0''')
 
         when:
         Verdict verdict = null
-        def events = capture(FindingsFileReader) {
+        def events = capture(CheckFindings) {
             verdict = runner.run(check, workspace())
         }
 
@@ -295,7 +295,7 @@ exit 0''')
 
         when:
         Verdict verdict = null
-        def events = capture(FindingsFileReader) {
+        def events = capture(CheckFindings) {
             verdict = runner.run(check, workspace())
         }
 

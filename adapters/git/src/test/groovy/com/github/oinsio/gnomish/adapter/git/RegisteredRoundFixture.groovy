@@ -9,11 +9,12 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -47,10 +48,10 @@ trait RegisteredRoundFixture implements BareGitRepoFixture, RegisteredBranchFixt
                 new TaskContext(TASK, UntrustedText.tracker('Fix it'), UntrustedText.tracker('Body'), []),
                 TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
                 TaskState.atStageStart('implement'))
-        def round = new AttemptRecord(0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
-        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
+        def round = AttemptRecords.of(0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
+        ExecutorUsage.none(), [], Stop.none())
         store.attemptPersistence(worktree(), TASK).persist(TASK,
-                TaskState.atStageStart('implement').recordQualityFailure(round),
+                TaskState.atStageStart('implement').recordQualityFailure(round, ExecutorVersions.none()),
                 new ToolTrace(new AttemptKey(TASK, 'implement', 0), []))
     }
 

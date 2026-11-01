@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -26,7 +27,7 @@ class ScriptedJudgeVoterContractSpec extends JudgeVoterContract {
     private static JudgeVoter.Vote scriptedVote(VoteShape shape) {
         return switch (shape) {
                     case VoteShape.PASS_WITH_TOKENS ->
-                    new JudgeVoter.Vote(new Verdict.Pass(), ['model-a': new TokenUsage(100, 50, 0, 0)])
+                    new JudgeVoter.Vote(new Verdict.Pass(), Unpriced.of(['model-a': new TokenUsage(100, 50, 0, 0)]))
                     case VoteShape.PASS_WITHOUT_TOKENS ->
                     new JudgeVoter.Vote(new Verdict.Pass(), [:])
                     case VoteShape.FAIL ->

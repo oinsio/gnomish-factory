@@ -48,6 +48,8 @@ import org.springframework.stereotype.Component;
  *   <tr><td>{@link InternalErrorException}</td><td>1</td><td>unreachable-in-process internal error</td></tr>
  *   <tr><td>{@link DashboardDisabledException}</td><td>1</td><td>{@code dashboard --watch}: the render
  *       loop kept dying and was disabled (FR9 of supervise-daemon-loops-and-embed-dashboard)</td></tr>
+ *   <tr><td>{@link UsageTotalsMismatchException}</td><td>1</td><td>{@code usage}: the fold of the
+ *       walked rounds differs from the tip's recorded totals (FR18 of define-executor-contract)</td></tr>
  *   <tr><td>anything else</td><td>1</td><td>generic internal-error fallback</td></tr>
  * </table>
  *
@@ -81,6 +83,7 @@ public final class RunExitCodeMapper implements ExitCodeExceptionMapper {
             case InternalErrorException ignored -> 1;
             case DashboardDisabledException ignored -> 1;
             case DoctorFailedException ignored -> 1;
+            case ExecutorVerifyFailedException ignored -> 1;
             default -> 1;
         };
     }

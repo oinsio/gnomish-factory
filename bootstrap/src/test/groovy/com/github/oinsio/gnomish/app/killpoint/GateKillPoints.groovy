@@ -8,11 +8,12 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
@@ -169,7 +170,7 @@ final class GateKillPoints {
     /** The round commit of a {@code manual} pass: the pass recorded, the position at the gate. */
     static TaskState gated() {
         TaskState.atStageStart(GATE).recordPassAndAdvance(round(AttemptRecord.Result.PASSED, Stop.none()),
-                new Position.AwaitingApproval(GATE))
+                new Position.AwaitingApproval(GATE), ExecutorVersions.none())
     }
 
     private static TaskState asked() {
@@ -177,10 +178,10 @@ final class GateKillPoints {
             UntrustedText.agent('pg'),
             UntrustedText.agent('sqlite')
         ])
-        TaskState.atStageStart(GATE).recordUnburnedRound(round(AttemptRecord.Result.DECISION_NEEDED, stop))
+        TaskState.atStageStart(GATE).recordUnburnedRound(round(AttemptRecord.Result.DECISION_NEEDED, stop), ExecutorVersions.none())
     }
 
     private static AttemptRecord round(AttemptRecord.Result result, Stop stop) {
-        new AttemptRecord(0, result, Instant.parse('2026-10-08T09:00:00Z'), [], ExecutorUsage.none(), JudgeUsage.none(), [], stop)
+        AttemptRecords.of(0, result, Instant.parse('2026-10-08T09:00:00Z'), [], ExecutorUsage.none(), [], stop)
     }
 }

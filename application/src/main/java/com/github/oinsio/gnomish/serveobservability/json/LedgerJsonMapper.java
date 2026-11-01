@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.serveobservability.LedgerTokenUsage;
 import com.github.oinsio.gnomish.serveobservability.LifecycleLine;
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts;
 import com.github.oinsio.gnomish.serveobservability.RemoteOutageLine;
+import com.github.oinsio.gnomish.serveobservability.RoundOutcomeLine;
 import com.github.oinsio.gnomish.serveobservability.RunSummaryLine;
 import com.github.oinsio.gnomish.serveobservability.SweepActionLine;
 import com.github.oinsio.gnomish.serveobservability.SweepTickLine;
@@ -35,7 +36,10 @@ import org.jspecify.annotations.Nullable;
  * ledger line is a {@code String}, a number or a wire token minted by this module, so nothing
  * here reads {@code UntrustedText.raw()} and the marker would widen the allowlist for nothing —
  * D2's membership rule is the {@code raw()} call, not the family. A ledger line that later carries the
- * carrier adds the marker in the same change that adds the field.
+ * carrier adds the marker in the same change that adds the field — or, as the {@code roundOutcome}
+ * line does, maps through a marked class of its own ({@link RoundOutcomeLineMapper}), so this
+ * mapper still reads no raw text.
+ *
  */
 public final class LedgerJsonMapper {
 
@@ -63,6 +67,7 @@ public final class LedgerJsonMapper {
                     case SweepActionLine sweepAction -> toDto(sweepAction);
                     case SweepTickLine sweepTick -> toDto(sweepTick);
                     case RemoteOutageLine remoteOutage -> toDto(remoteOutage);
+                    case RoundOutcomeLine roundOutcome -> RoundOutcomeLineMapper.toDto(roundOutcome);
                 };
         try {
             return mapper.writeValueAsString(dto);

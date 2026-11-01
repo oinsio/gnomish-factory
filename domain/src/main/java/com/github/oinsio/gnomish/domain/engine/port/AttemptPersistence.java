@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine.port;
 
+import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 
@@ -31,8 +32,24 @@ public interface AttemptPersistence {
      * <p>Implements FR11 of add-stage-engine.
      *
      * @param taskId the task whose round is being persisted; never blank
-     * @param state the task state produced by the round; never null
+     * @param state the task state produced by the round, its last attempt the round itself (every
+     *     round writer appends the round it records, see {@link #roundOf}); never null
      * @param trace the round's raw tool trace; never null
      */
     void persist(String taskId, TaskState state, ToolTrace trace);
+
+    /**
+     * The round a {@link #persist} call records: the last attempt of the state it was handed, since
+     * every round writer of {@link TaskState} appends the round it records — a pass that advances the
+     * position keeps it there too (FR14 of define-executor-contract). The one spelling of that read,
+     * so an implementation renders its commit subject from the record rather than from the trace's
+     * key or the position.
+     *
+     * @param state the state a {@code persist} call was handed; never null
+     * @return the recorded round; never null
+     * @throws java.util.NoSuchElementException if the state records no round — not a round write
+     */
+    static AttemptRecord roundOf(TaskState state) {
+        return state.attempts().getLast();
+    }
 }

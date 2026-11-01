@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.agent
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.RefusingLaunch
@@ -45,7 +44,7 @@ class HostRoundStderrSpec extends Specification {
                 workspaceDir, clock, TestChildEnvironment.hostAllowlist(), launch)
         def equipment = new AgentRoundEquipment(FakeAgentSupport.propertiesFor(scenario), clock, { event -> },
         new AgentRoundResultExtractor(), ChildEnvAllowlist.none(), scratchParent)
-        ExecutorRoundExecution.run(equipment, new DecisionFileReader(),
+        ExecutorRoundExecution.run(equipment,
                 FakeAgentSupport.requestFor(workspaceDir, ['roundTimeout': '60s']), prompt,
                 new StandInRound(environment, workspaceDir.resolve('decision.json')))
     }
@@ -62,7 +61,7 @@ class HostRoundStderrSpec extends Specification {
         long elapsedMillis = (System.nanoTime() - startedAt).intdiv(1_000_000)
 
         then: 'the round completed on the exit, nowhere near its budget'
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         elapsedMillis < 30_000
 
         and: 'the tail of the stderr is the one DEBUG line of the successful round'
@@ -78,13 +77,13 @@ class HostRoundStderrSpec extends Specification {
     // Scenario: executor/agent-executor / A failed round carries its stderr tail
     def "FR20: a CLI that exits without a result event fails the round with its stderr tail, and leaves no file"() {
         when:
-        run('chatty-stderr-no-result')
+        def result = run('chatty-stderr-no-result')
 
-        then:
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof MissingResultEventException
-        failure.stderrTail().contains(ERROR_LINE)
-        failure.stderrTail().length() == RoundScratchDirectory.STDERR_TAIL_BYTES
+        then: 'FR7 of define-executor-contract: reported, the tail after the failure in its reason'
+        InfrastructureResults.endedBy(result, MissingResultEventException)
+        def reason = InfrastructureResults.of(result).reason()
+        reason.contains(AgentRoundFailure.STDERR_TAIL_LABEL)
+        reason.contains(ERROR_LINE)
 
         and:
         Files.list(scratchParent).count() == 0
@@ -95,12 +94,11 @@ class HostRoundStderrSpec extends Specification {
     // Scenario: lifecycle/subprocess-supervision / A launcher's refusal reaches a streaming waiter in its diagnostics
     def "FR21: a CLI the launcher could not exec fails the round as a missing result, its refusal line in the stderr tail"() {
         when:
-        run('chatty-stderr', 'prompt', new RefusingLaunch())
+        def result = run('chatty-stderr', 'prompt', new RefusingLaunch())
 
         then:
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof MissingResultEventException
-        failure.stderrTail().contains('gnomish-launch: cannot exec ')
+        InfrastructureResults.endedBy(result, MissingResultEventException)
+        InfrastructureResults.of(result).reason().contains('gnomish-launch: cannot exec ')
 
         and:
         Files.list(scratchParent).count() == 0
@@ -116,7 +114,7 @@ class HostRoundStderrSpec extends Specification {
         long elapsedMillis = (System.nanoTime() - startedAt).intdiv(1_000_000)
 
         then: 'the round returned at the exit, not after the 60 s the holder keeps the stdin'
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         elapsedMillis < 30_000
     }
 }

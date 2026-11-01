@@ -123,6 +123,10 @@ layering {
         // add-base-ref-resolution); no source in this module names it.
         ':baseref',
         ':domain',
+        // The executor contract (FR6, design D10 of define-executor-contract): transitive through
+        // `:application`, whose decision-request read takes the contract's `ResultSource` on its
+        // api; no source in this module names it.
+        ':executor-contract',
         ':gitobjects',
         // The git-transfer owner leaf (FR2, design D1 of own-git-transfer-argv): the seed
         // helper's clone line is the owner's `SeedPath` value, rendered.

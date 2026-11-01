@@ -16,8 +16,10 @@ import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
@@ -181,7 +183,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     def "approves a tip at a gate in one commit after disposing the kept box when its outcome is #label"() {
         given:
         record = recorded == null ? freshRecord() : recordWith(recorded, report)
-        recordedState = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+        recordedState = new TaskState(new Position.AwaitingApproval('build'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when:
         resume()
@@ -310,7 +312,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
         record = recordWith(new RecordedOutcome.Escalated(report), report)
-        recordedState = new TaskState(new Position.AtStage('build'), 2, [], ExecutorUsage.none())
+        recordedState = new TaskState(new Position.AtStage('build'), 2, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when:
         resume()
@@ -400,7 +402,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
         given:
         record = recorded == null ? freshRecord() : recordWith(recorded, recorded instanceof RecordedOutcome.Escalated ? recorded.report() : null)
         if (gate) {
-            recordedState = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+            recordedState = new TaskState(new Position.AwaitingApproval('build'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         }
 
         when:

@@ -58,6 +58,12 @@ dependencies {
     // package.
     api project(':gittransfer')
 
+    // The executor contract (FR6, design D10 of define-executor-contract): the in-branch decision
+    // file and the request a snapshot's tree recovers are handed to the shared decision-request
+    // read as a `ResultSource`, the result reader's byte seam; and the state file's `totals` and
+    // usage entries are the contract's usage wire DTOs (`UsageSnapshotDto`, `ParticipantUsageDto`,
+    // design D14), which the public `StateJsonDto` / `StateAttemptDto` records expose — so `api`.
+    api project(':executor-contract')
     implementation libs.slf4j.api
     // The shared subprocess wait/kill/drain discipline (FR9, design D9/D10 of
     // bound-subprocess-commands): `GitProcessRunner` bounds its network
@@ -125,6 +131,9 @@ layering {
         // it directly on this module's own public API (task 6.3 of add-base-ref-resolution).
         ':baseref',
         ':domain',
+        // The executor contract's result-reader seam, for the decision file (task 3.2 of
+        // define-executor-contract).
+        ':executor-contract',
         ':gitobjects',
         // The git-transfer owner leaf (FR2, design D1 of own-git-transfer-argv): the
         // runner executes its values, the refusal parser grades its failures.

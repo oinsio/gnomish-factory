@@ -13,7 +13,7 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -21,6 +21,9 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
@@ -77,20 +80,21 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, 
     private void createLocalTask(String taskId, String stage = 'implement', int attemptsUsed = 0) {
         createTaskAtHead(registeredClone, taskId)
         def worktree = worktreeFor(registeredClone, taskId)
-        def state = new TaskState(new Position.AtStage(stage), attemptsUsed, [], ExecutorUsage.none())
+        def state = new TaskState(new Position.AtStage(stage), attemptsUsed, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         def trace = new ToolTrace(new AttemptKey(taskId, stage, 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
-        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
+        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
+                .persist(taskId, RoundStates.withRound(state, trace.key()), trace)
         registerTip(registeredClone.clonePath(), taskId)
     }
 
     /** Records one completed round on an existing task branch, so its tip classifies as in-flight. */
     private void recordRound(String taskId, String stage = 'implement') {
         def worktree = worktreeFor(registeredClone, taskId)
-        def state = TaskState.atStageStart(stage).recordQualityFailure(new AttemptRecord(
+        def state = TaskState.atStageStart(stage).recordQualityFailure(AttemptRecords.of(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
-                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()))
+                        ExecutorUsage.none(), [], Stop.none()), ExecutorVersions.none())
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state,
                 new ToolTrace(new AttemptKey(taskId, stage, 0), []))
         registerTip(registeredClone.clonePath(), taskId)
@@ -118,9 +122,10 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, 
     def "FR13: a task held at a gate is listed with the stage that passed"() {
         given:
         createTaskAtHead(registeredClone, 'PROJ-1')
-        def state = new TaskState(new Position.AwaitingApproval('release'), 0, [], ExecutorUsage.none())
+        def state = new TaskState(new Position.AwaitingApproval('release'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         new GitAttemptPersistence(runner, worktreeFor(registeredClone, 'PROJ-1'), 'PROJ-1', ClaimEpochSource.NONE)
-                .persist('PROJ-1', state, new ToolTrace(new AttemptKey('PROJ-1', 'release', 0), []))
+                .persist('PROJ-1', RoundStates.withRound(state, new AttemptKey('PROJ-1', 'release', 0)),
+                new ToolTrace(new AttemptKey('PROJ-1', 'release', 0), []))
 
         when:
         def rows = lister.list(cloneDir)
@@ -147,7 +152,9 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, 
         // Task REMOTE-ONLY: created and pushed from the seed clone, never checked out locally by the observer.
         createTaskAtHead(seed, 'REMOTE-ONLY')
         new GitAttemptPersistence(runner, worktreeFor(seed, 'REMOTE-ONLY'), 'REMOTE-ONLY', ClaimEpochSource.NONE)
-                .persist('REMOTE-ONLY', TaskState.atStageStart('implement'),
+                .persist('REMOTE-ONLY', RoundStates.recorded(new ToolTrace(new AttemptKey('REMOTE-ONLY', 'implement', 0), [
+                    new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
+                ]).key()),
                 new ToolTrace(new AttemptKey('REMOTE-ONLY', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))
@@ -157,7 +164,9 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, 
         // Task BOTH: pushed from the seed clone too, so origin carries it.
         createTaskAtHead(seed, 'BOTH')
         new GitAttemptPersistence(runner, worktreeFor(seed, 'BOTH'), 'BOTH', ClaimEpochSource.NONE)
-                .persist('BOTH', TaskState.atStageStart('implement'),
+                .persist('BOTH', RoundStates.recorded(new ToolTrace(new AttemptKey('BOTH', 'implement', 0), [
+                    new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
+                ]).key()),
                 new ToolTrace(new AttemptKey('BOTH', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))
@@ -175,9 +184,9 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, 
         def observer = register(observerClone)
         // BOTH also gets a local branch in the observer clone, at a further-along stage than origin.
         createTaskAtHead(observer, 'BOTH')
-        def state = new TaskState(new Position.AtStage('verify'), 0, [], ExecutorUsage.none())
+        def state = new TaskState(new Position.AtStage('verify'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         new GitAttemptPersistence(runner, worktreeFor(observer, 'BOTH'), 'BOTH', ClaimEpochSource.NONE)
-                .persist('BOTH', state,
+                .persist('BOTH', RoundStates.withRound(state, new AttemptKey('BOTH', 'verify', 0)),
                 new ToolTrace(new AttemptKey('BOTH', 'verify', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:05:00Z'), Duration.ofMillis(50))
                 ]))

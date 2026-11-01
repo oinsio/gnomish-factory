@@ -75,7 +75,7 @@ class CliJudgeVoterSpec extends Specification {
         then:
         vote.verdict() instanceof Verdict.Fail
         !(vote.verdict() as Verdict.Fail).findings().isEmpty()
-        !vote.tokensByModel().isEmpty()
+        !vote.byModel().isEmpty()
     }
 
     // FR8, NFR-R1: an unparseable final message yields CannotVerify, not a thrown exception.
@@ -104,7 +104,7 @@ class CliJudgeVoterSpec extends Specification {
 
         then:
         vote.verdict() instanceof Verdict.CannotVerify
-        vote.tokensByModel().isEmpty()
+        vote.byModel().isEmpty()
     }
 
     // FR13, NFR-R1: roundTimeout expiry kills the process and returns CannotVerify,
@@ -119,7 +119,7 @@ class CliJudgeVoterSpec extends Specification {
 
         then:
         vote.verdict() instanceof Verdict.CannotVerify
-        vote.tokensByModel().isEmpty()
+        vote.byModel().isEmpty()
     }
 
     // FR4, NFR-R1: a stream with no result event yields CannotVerify, never a thrown exception.
@@ -133,7 +133,7 @@ class CliJudgeVoterSpec extends Specification {
 
         then:
         vote.verdict() instanceof Verdict.CannotVerify
-        vote.tokensByModel().isEmpty()
+        vote.byModel().isEmpty()
 
         and: 'the CannotVerify details carry the exception\'s own message (session id), not its class name'
         def cannotVerify = vote.verdict() as Verdict.CannotVerify
@@ -154,7 +154,7 @@ class CliJudgeVoterSpec extends Specification {
 
         then:
         vote.verdict() instanceof Verdict.CannotVerify
-        vote.tokensByModel().isEmpty()
+        vote.byModel().isEmpty()
 
         and: 'the failure reason and details describe the process failing to start, not a round outcome'
         def cannotVerify = vote.verdict() as Verdict.CannotVerify
@@ -199,7 +199,7 @@ class CliJudgeVoterSpec extends Specification {
         def vote = voter.vote(checkFor(), context(), new DirectoryWorkspace(workspaceDir))
 
         then: 'the round completes as plain-round and the vote passes as judge-verdict-pass'
-        round instanceof ExecutionResult.Completed
+        (round.status() instanceof ExecutionResult.Completed && round.answer() == null)
         vote.verdict() instanceof Verdict.Pass
     }
 }

@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
  * <p>Why a syntax gate rather than a carrier (design D11 of type-untrusted-text). The id arrives
  * as agent output — {@code AgentEvent.InitEvent.model} is untrusted text, and the {@code
  * modelUsage} keys are whatever the CLI wrote — but it is used as the key of {@code
- * Map<String, TokenUsage>}, a map that flows into the domain's {@code ExecutorUsage}, into {@code
+ * Map<String, ModelUsage>}, a map that flows into the domain's {@code ExecutorUsage}, into {@code
  * state.json} and onto the dashboard, where it is displayed. Typing the key would carry a
  * rendering decision into a wire format and an aggregation; leaving it a bare {@code String}
  * would launder agent output onto a screen. So the id is <em>made</em> parsed: what passes this

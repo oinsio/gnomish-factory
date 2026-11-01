@@ -126,8 +126,17 @@ record TakeContainerEngineExecution(
         PipelineDefinition definition = order.run().definition();
         var persistence = new RevocationCheckingAttemptPersistence(
                 support.persistence(), order.tracker(), order.ref(), order.instanceId(), claimLossFlag);
+        // D5 of define-executor-contract: the describe preflight in the task's box, live since the
+        // first-box step (fresh) or the reattach (resume), before the engine; every failure parks
+        // the task as an invalid law does, the box kept stopped as every park keeps it.
+        var described = assembly.describe(
+                order.run(), DescribeMedium.box(support, state.position()), credentialEnvVarsToScrub, lawBinding);
+        if (described instanceof LawDescription.Refused(var errors)) {
+            support.keepStopped();
+            return TaskTierLaw.parkUndescribed(lawBinding, errors, order, state);
+        }
         var assembled = assembly.withSandbox(support.pieces(pending))
-                .assemble(order.run(), context, state, persistence, credentialEnvVarsToScrub, lawBinding);
+                .assemble(order.run(), context, state, persistence, credentialEnvVarsToScrub, (DescribedLaw) described);
 
         TaskOutcome outcome = new Engine().run(definition, context, state, support.workspace(), assembled.ports());
 

@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.exc.InvalidTypeIdException
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
@@ -44,11 +46,15 @@ class StateStopWireSpec extends Specification {
             new Stop.CannotVerify(new CheckRef(0, UntrustedText.branchDocument('ci')),
             UntrustedText.branchDocument('CI unreachable'), UntrustedText.branchDocument('503 x3'))
         ],
+        (Stop.BudgetExhausted) : [
+            AttemptRecord.Result.BUDGET_EXHAUSTED,
+            new Stop.BudgetExhausted(UntrustedText.branchDocument('token bound 1000'))
+        ],
     ]
 
     private static TaskState stateWith(AttemptRecord.Result result, Stop stop) {
-        def record = new AttemptRecord(0, result, STARTED_AT, [], ExecutorUsage.none(), JudgeUsage.none(), [], stop)
-        new TaskState(new Position.AtStage('implement'), 1, [record], ExecutorUsage.none())
+        def record = AttemptRecords.of(0, result, STARTED_AT, [], ExecutorUsage.none(), [], stop)
+        new TaskState(new Position.AtStage('implement'), 1, [record], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     private static String write(TaskState state) {
@@ -66,14 +72,16 @@ class StateStopWireSpec extends Specification {
           "position": {"type": "atStage", "stage": "implement"},
           "attemptsUsed": 1,
           "attempts": [{
+            "taskId": "T-1",
+            "stage": "implement",
+            "roundToken": "0123456789abcdef0123456789abcdef01234567",
             "round": 0,
             "result": "decisionNeeded",
             "startedAt": "2026-10-07T09:00:00Z",
             "checks": [],
-            "executorUsage": {"wallMillis": null, "tokensByModel": {}, "byTool": []},
-            "judgeUsage": {"perVote": []}${stopField}
+            "usage": [{"role": "transform", "executor": "agent-cli", "provenance": "absent", "byTool": [], "byModel": {}}]${stopField}
           }],
-          "totals": {"wallMillis": null, "tokensByModel": {}, "byTool": []}
+          "totals": {"byRole": {}, "cost": {"priced": 0, "unpricedTokens": {}, "complete": true}, "rounds": 0}
         }
         """
     }

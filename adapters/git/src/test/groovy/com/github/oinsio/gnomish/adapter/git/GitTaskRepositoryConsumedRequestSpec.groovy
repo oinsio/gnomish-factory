@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.*
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -45,14 +46,14 @@ class GitTaskRepositoryConsumedRequestSpec extends Specification implements Bare
     /** At the gate, its passing round recorded — the state a passing {@code manual} round leaves. */
     private static TaskState gated() {
         new TaskState(GATE, 0, [
-            new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [],
-            ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
-        ], ExecutorUsage.none())
+            AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [],
+            ExecutorUsage.none(), [], Stop.none())
+        ], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     private static TaskState pastGate() {
         def gate = gated()
-        new TaskState(new Position.AtStage('verify'), gate.attemptsUsed(), gate.attempts(), gate.totals())
+        new TaskState(new Position.AtStage('verify'), gate.attemptsUsed(), gate.attempts(), gate.totals(), ExecutorVersions.none())
     }
 
     /** A task parked at the gate — a tip every one of the three writes admits. */

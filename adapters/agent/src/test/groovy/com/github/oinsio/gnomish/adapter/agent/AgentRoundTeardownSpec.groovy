@@ -2,8 +2,8 @@ package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
+import com.github.oinsio.gnomish.domain.engine.ModelUsages
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
@@ -54,7 +54,6 @@ class AgentRoundTeardownSpec extends Specification {
         ExecutorRoundExecution.run(
                 new AgentRoundEquipment(new FactoryProperties('factory-01', 'claude', null, null),
                 new VirtualClock(), { event -> }, new AgentRoundResultExtractor(), ChildEnvAllowlist.none(), RoundScratchDirectory.HOST_TEMP),
-                new DecisionFileReader(),
                 StageExecutorRequests.request(workspaceDir),
                 'prompt',
                 new StandInRound(environment, workspaceDir.resolve('decision.json')))
@@ -68,8 +67,8 @@ class AgentRoundTeardownSpec extends Specification {
         def result = runRound(new ScriptedHandle(stream(UNREADABLE_TELEMETRY), new ExecHandle.Wait.Exited(Duration.ofSeconds(7))))
 
         then:
-        result instanceof ExecutionResult.Completed
-        result.usage().tokensByModel().isEmpty()
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
+        ModelUsages.tokensOf(result.usage().byModel()).isEmpty()
         result.usage().tools().isEmpty()
         result.usage().wallTime() == Duration.ofSeconds(7)
         result.trace().calls().isEmpty()
@@ -105,12 +104,8 @@ class AgentRoundTeardownSpec extends Specification {
         def handle = new ScriptedHandle(ChildOutput.stdout(child), wait, Duration.ofMillis(200),
                 { reading.await(5, TimeUnit.SECONDS) })
 
-        when:
-        try {
-            runRound(handle)
-        } catch (ExecutorFailure ignored) {
-            // the timeout and the adapter failure end the round by an exception; its teardown is the subject
-        }
+        when: 'the timeout and the adapter failure end the round as its failed result; its teardown is the subject'
+        runRound(handle)
 
         then: 'the thread that read the stdout has ended'
         reader.get().join(Duration.ofSeconds(5))

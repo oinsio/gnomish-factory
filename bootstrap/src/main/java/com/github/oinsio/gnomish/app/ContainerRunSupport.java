@@ -205,6 +205,11 @@ final class ContainerRunSupport implements SandboxRunSupport {
         lease.environmentFor(stage);
     }
 
+    @Override
+    public TaskExecutionEnvironment liveEnvironment(String stage) {
+        return lease.environmentFor(stage);
+    }
+
     /** The sandboxed salvage over the leased environment (FR6). */
     @Override
     public void salvageLeftovers(String taskId) {

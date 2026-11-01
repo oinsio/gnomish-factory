@@ -17,10 +17,12 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
@@ -45,7 +47,7 @@ class TakeFinishReportSpec extends Specification {
     static final TaskRef REF = new TaskRef('PROJ-1')
     static final InstanceId INSTANCE = new InstanceId('gnomish', 'ab12cd')
     static final TaskContext CONTEXT = new TaskContext('PROJ-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('body'), List.<Decision> of())
-    static final TaskState STATE = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
+    static final TaskState STATE = new TaskState(new Position.PipelineEnd(), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
     static final String BRANCH = 'gnomish/PROJ-1'
 
     Tracker tracker = Mock()

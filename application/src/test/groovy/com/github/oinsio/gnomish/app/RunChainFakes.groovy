@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.*
 import com.github.oinsio.gnomish.domain.engine.fake.*
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.*
 import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -183,7 +184,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
-                persistence, time)
+                persistence, time, RoundIdentity.inPlace())
                 new Run(null, ports)
             },
             dialogConsole: {
@@ -213,6 +214,11 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             // assembly before creating a branch, so a chain that reaches a manual fresh run needs
             // this answered with the same fixed commit its law reads report.
             lawCommitOf: { binding -> LAW_COMMIT },
+            // FR13 of define-executor-contract: the chains' pipelines declare no program executor,
+            // so the describe preflight describes their law with no environment.
+            describe: { order, medium, credentials, binding ->
+                new DescribedLaw(binding, [:])
+            },
             // F119 of tighten-spec-contract: the host run paths open their worktree through the
             // assembly; this fake answers as the root's realization does.
             workspaceAt: { Path root -> new DirectoryWorkspace(root) },
@@ -234,11 +240,11 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         def self = null
         self = [
             assemble: { RunOrder order, context, state, AttemptPersistence persistence, credentials, lawBinding ->
-                lawBindings << lawBinding
+                lawBindings << lawBinding.binding()
                 def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
                 new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), new RecordingEventListener(),
-                persistence, time)
+                persistence, time, RoundIdentity.inPlace())
                 new Run(new RunnerOutcomeLoop(new Engine(), console, LiveConsoleIO.onStderr()), ports)
             },
             dialogConsole: { -> console },
@@ -254,6 +260,11 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
                 new BoundTaskTier(new LoadOutcome.Loaded(completingPipeline()), LAW_COMMIT)
             },
             lawCommitOf: { binding -> LAW_COMMIT },
+            // FR13 of define-executor-contract: the chains' pipelines declare no program executor,
+            // so the describe preflight describes their law with no environment.
+            describe: { order, medium, credentials, binding ->
+                new DescribedLaw(binding, [:])
+            },
             workspaceAt: { Path root -> new DirectoryWorkspace(root) },
         ] as RunAssembly
         return self
@@ -299,8 +310,8 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
     }
 
     /** One round the executor reports as completed. */
-    ExecutionResult.Completed completedRound(String taskId = 'PROJ-1') {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
+    ExecutionResult completedRound(String taskId = 'PROJ-1') {
+        ExecutionResult.completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
     }
 
     /** The task as the tracker reports it mid-run: {@code Working}, held by THIS instance — not revoked. */

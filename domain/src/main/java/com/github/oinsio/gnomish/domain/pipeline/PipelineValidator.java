@@ -28,6 +28,8 @@ import java.util.Set;
  *       (FR11, FR7);</li>
  *   <li>{@link ApiExecutorRule} — per-stage {@code api} executor rejection,
  *       fail-fast before any dialog (FR10, UX2, D6 of add-agent-executor);</li>
+ *   <li>{@link ExecutorReferenceRule} — per-stage {@code executor.name} against the
+ *       {@code executors:} declarations (FR9, FR10 of define-executor-contract);</li>
  *   <li>{@link UnconfiguredCheckProviderRule} — per-check rejection of an
  *       {@code external} check whose provider this factory has no
  *       {@code factory.check} section for (FR3, D3 of remove-interactive-console).</li>
@@ -45,7 +47,8 @@ import java.util.Set;
  * additionally implements FR17 of add-tracker-port; the {@code ApiExecutorRule}
  * tier additionally implements FR10, UX2, D6 of add-agent-executor; the
  * {@code UnconfiguredCheckProviderRule} tier implements FR3, D3 of
- * remove-interactive-console.
+ * remove-interactive-console; the {@code ExecutorReferenceRule} tier implements FR9, FR10 of
+ * define-executor-contract.
  */
 public final class PipelineValidator {
 
@@ -73,6 +76,7 @@ public final class PipelineValidator {
         errors.addAll(ArtifactGraphRule.validate(model.stages()));
         errors.addAll(StageSanityRule.validate(model.stages()));
         errors.addAll(ApiExecutorRule.validate(model.stages()));
+        errors.addAll(ExecutorReferenceRule.validate(model));
         errors.addAll(UnconfiguredCheckProviderRule.validate(model.stages(), configuredCheckProviders));
         return List.copyOf(errors);
     }

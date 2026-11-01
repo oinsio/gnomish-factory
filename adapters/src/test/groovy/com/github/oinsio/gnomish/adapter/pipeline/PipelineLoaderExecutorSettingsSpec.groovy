@@ -44,7 +44,7 @@ advancement: auto
         outcome instanceof LoadOutcome.Invalid
         (outcome as LoadOutcome.Invalid).errors() == [
             new ConfigError('stages/plan/stage.yaml', 'executor.type',
-            "api executor is not yet supported; 'agent-cli' is the only supported executor type currently")
+            "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'")
         ]
     }
 
@@ -107,7 +107,7 @@ advancement: auto
         outcome instanceof LoadOutcome.Invalid
         (outcome as LoadOutcome.Invalid).errors() == [
             new ConfigError('stages/plan/stage.yaml', 'executor.type',
-            "api executor is not yet supported; 'agent-cli' is the only supported executor type currently"),
+            "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'"),
             new ConfigError('stages/plan/stage.yaml', 'verify[0].settings.maxTurns',
             "malformed 'maxTurns': expected a number")
         ]

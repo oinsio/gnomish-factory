@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import java.time.Instant
 
 /**
@@ -56,7 +57,7 @@ class PassAdvanceOneCommitSpec extends PersistenceOrderingSpecBase {
         builtinRunner.scripted << new Verdict.Pass()
         executor.scripted << completed()
         def recorded = TaskState.atStageStart('build')
-                .recordPassAndAdvance(passedRound(), new Position.AtStage('test'))
+                .recordPassAndAdvance(passedRound(), new Position.AtStage('test'), ExecutorVersions.none())
 
         when: 'a fresh instance resumes from exactly that state'
         def outcome = new Engine().run(pipeline(build, test), CONTEXT, recorded, WORKSPACE, ports())
@@ -70,7 +71,7 @@ class PassAdvanceOneCommitSpec extends PersistenceOrderingSpecBase {
     }
 
     private static AttemptRecord passedRound() {
-        new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [],
-        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
+        AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [],
+        ExecutorUsage.none(), [], Stop.none())
     }
 }

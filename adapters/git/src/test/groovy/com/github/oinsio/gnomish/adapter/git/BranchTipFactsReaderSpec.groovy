@@ -53,8 +53,7 @@ class BranchTipFactsReaderSpec extends Specification {
     private static String stateJson(Map fields = [:]) {
         def base = [version: 1, position: [type: 'atStage', stage: 'implement'],
             attemptsUsed: 0, attempts: [],
-            totals: [executor: [inputTokens: 0, outputTokens: 0, costUsd: 0.0, byTool: []],
-                judge: [votes: 0, inputTokens: 0, outputTokens: 0, costUsd: 0.0]]] + fields
+            totals: [byRole: [:], cost: [priced: 0, unpricedTokens: [:], complete: true], rounds: 0]] + fields
         toJson(base)
     }
 

@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.*
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.Provenance
@@ -137,9 +138,9 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         given: 'a task whose stage burned an attempt before parking, recorded on the branch'
         repository.createTask(sampleContext(), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         def worktree = worktreeFor('PROJ-1')
-        def burned = TaskState.atStageStart('implement').recordQualityFailure(new AttemptRecord(
+        def burned = TaskState.atStageStart('implement').recordQualityFailure(AttemptRecords.of(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
-                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()))
+                        ExecutorUsage.none(), [], Stop.none()), ExecutorVersions.none())
         new GitAttemptPersistence(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE).persist('PROJ-1', burned,
                 new ToolTrace(new AttemptKey('PROJ-1', 'implement', 0), []))
         def before = runner.run(worktree, 'rev-list', '--count', 'HEAD').stdout().forParsing().trim() as Integer
@@ -576,7 +577,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         def onDisk = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
         Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(new StateJsonDto(
                         onDisk.version(), onDisk.position(), onDisk.attemptsUsed(), onDisk.attempts(), onDisk.totals(),
-                        new EgressCursorDto('sha256:from-disk', '2026-09-21T00:00:00Z'))))
+                        new EgressCursorDto('sha256:from-disk', '2026-09-21T00:00:00Z'), null)))
 
         when: 'a lifecycle rewrite regenerates state.json'
         repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', null),
@@ -638,7 +639,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         Path taskJson = worktree.resolve('.gnomish-task').resolve('task.json')
         def state = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
         Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(new StateJsonDto(
-                        state.version(), state.position(), state.attemptsUsed(), state.attempts(), state.totals(), attempt)))
+                        state.version(), state.position(), state.attemptsUsed(), state.attempts(), state.totals(), attempt, null)))
         Files.writeString(taskJson, TaskStateJson.mapper()
                 .writeValueAsString(TaskJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(taskJson))).withEgressCursor(escalation)))
         runner.run(worktree, 'add', '-A')

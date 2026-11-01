@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
@@ -17,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
@@ -51,14 +53,14 @@ class EnginePreflightRecordedStopSpec extends Specification {
 
     EnginePorts livePorts() {
         new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
-                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock))
+                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 
     /** Ports whose every call throws, so any call the re-escalation makes surfaces at once. */
     EnginePorts throwingPorts(RecordingEventListener listener) {
         new EnginePorts(throwing(StageExecutor), throwing(BuiltinCheckRunner), throwing(CommandCheckRunner),
                 throwing(ExternalCheckClient), throwing(JudgeVoter), listener, throwing(AttemptPersistence),
-                new TimeEquipment(throwing(InstantSource), throwing(Sleeper)), throwing(AttemptDelivery))
+                new TimeEquipment(throwing(InstantSource), throwing(Sleeper)), throwing(AttemptDelivery), DescribedExecutors.none(), RoundIdentity.inPlace())
     }
 
     def throwing(Class<?> type) {
@@ -80,17 +82,22 @@ class EnginePreflightRecordedStopSpec extends Specification {
         ])
     }
 
-    static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), TRACE, [])
+    static ExecutionResult completed() {
+        ExecutionResult.completed(ExecutorUsage.none(), TRACE, [])
     }
 
-    static ExecutionResult.DecisionNeeded decision() {
+    static ExecutionResult decision() {
         def options = ['postgres', 'mysql'].collect { UntrustedText.agent(it) }
-        new ExecutionResult.DecisionNeeded(UntrustedText.agent('which db?'), options, ExecutorUsage.none(), TRACE, [])
+        ExecutionResult.decisionNeeded(UntrustedText.agent('which db?'), options, ExecutorUsage.none(), TRACE, [])
+    }
+
+    static ExecutionResult limit() {
+        new ExecutionResult(new ExecutionResult.Failed(ExecutionResult.FailureClass.LIMIT, UntrustedText.agent('token bound 1000'), []),
+        null, ExecutorUsage.none(), TRACE, [])
     }
 
     static AttemptRecord round(int number, AttemptRecord.Result result, Stop stop) {
-        new AttemptRecord(number, result, Instant.EPOCH, [], ExecutorUsage.none(), JudgeUsage.none(), [], stop)
+        AttemptRecords.of(number, result, Instant.EPOCH, [], ExecutorUsage.none(), [], stop)
     }
 
     static final def DECISION_STOP = new Stop.DecisionNeeded(UntrustedText.agent('which db?'), [UntrustedText.agent('pg')])
@@ -137,6 +144,11 @@ class EnginePreflightRecordedStopSpec extends Specification {
         'CannotVerify' | EscalationReport.CannotVerify | { s ->
             s.executor.scripted << completed(); s.builtinRunner.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         }
+        // FR7 of define-executor-contract (design D11, D17; crash-consistency item 12): the budget
+        //     verdict rides the round's own commit, so a pickup after a lost park runs no paid round
+        'BudgetExhausted' | EscalationReport.BudgetExhausted | { s ->
+            s.executor.scripted << limit()
+        }
     }
 
     // FR6: a consumed stop — the history emptied by resetAttempts(), or a later round without a
@@ -162,7 +174,7 @@ class EnginePreflightRecordedStopSpec extends Specification {
         'a later round without stop' | new TaskState(new Position.AtStage('build'), 1, [
             round(0, AttemptRecord.Result.DECISION_NEEDED, DECISION_STOP),
             round(1, AttemptRecord.Result.QUALITY_FAILURE, Stop.none())
-        ], ExecutorUsage.none())
+        ], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     // FR6: the recorded stop precedes the attempt limit — a spent counter does not mask the
@@ -172,7 +184,7 @@ class EnginePreflightRecordedStopSpec extends Specification {
         def state = new TaskState(new Position.AtStage('build'), 1, [
             round(0, AttemptRecord.Result.QUALITY_FAILURE, Stop.none()),
             round(1, AttemptRecord.Result.DECISION_NEEDED, DECISION_STOP)
-        ], ExecutorUsage.none())
+        ], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when:
         def outcome = new Engine().run(pipeline(1), CONTEXT, state, new FakeWorkspace(), throwingPorts(new RecordingEventListener()))
@@ -187,7 +199,7 @@ class EnginePreflightRecordedStopSpec extends Specification {
         given:
         def state = new TaskState(new Position.AtStage('gone'), 0, [
             round(0, AttemptRecord.Result.DECISION_NEEDED, DECISION_STOP)
-        ], ExecutorUsage.none())
+        ], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when:
         def outcome = new Engine().run(pipeline(3), CONTEXT, state, new FakeWorkspace(), throwingPorts(new RecordingEventListener()))
@@ -200,6 +212,6 @@ class EnginePreflightRecordedStopSpec extends Specification {
     static TaskState stopped(Stop stop) {
         new TaskState(new Position.AtStage('build'), 0, [
             round(0, AttemptRecord.Result.DECISION_NEEDED, stop)
-        ], ExecutorUsage.none())
+        ], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 }

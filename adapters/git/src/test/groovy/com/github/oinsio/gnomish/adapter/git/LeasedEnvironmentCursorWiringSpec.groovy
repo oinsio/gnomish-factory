@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
@@ -68,7 +69,11 @@ class LeasedEnvironmentCursorWiringSpec extends Specification implements BareGit
     private void closeRound(int round) {
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work ' + round
         snapshotStep.snapshot(TASK, 'implement', round)
-        persistence.persist(TASK, TaskState.atStageStart('implement'), new ToolTrace(
+        persistence.persist(TASK, RoundStates.recorded(new ToolTrace(
+                        new AttemptKey(TASK, 'implement', round),
+                        [
+                            new ToolCall(0, 'bash', Instant.parse('2026-08-28T09:00:00Z'), Duration.ofMillis(100))
+                        ]).key()), new ToolTrace(
                         new AttemptKey(TASK, 'implement', round),
                         [
                             new ToolCall(0, 'bash', Instant.parse('2026-08-28T09:00:00Z'), Duration.ofMillis(100))

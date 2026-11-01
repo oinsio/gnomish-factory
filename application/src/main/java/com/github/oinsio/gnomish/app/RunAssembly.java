@@ -64,14 +64,14 @@ public interface RunAssembly {
      * @param credentialEnvVarsToScrub the active tracker adapter's declared credential env-var
      *     names (D17, NFR-S1 of add-tracker-port), combined with the operator's configured
      *     passthrough into the run's child-environment allowlist; empty for a plain {@code run}
-     * @param lawBinding which tree the pipeline law is frozen from at invocation start (D14, FR19
-     *     of add-sandbox-core; D12 of add-base-ref-resolution) — the law commit wherever a ref was
-     *     resolved, the working tree in the in-place mode and a manual {@code run} without
-     *     {@code --base}; never the gnome's per-task worktree, so a running task cannot rewrite
-     *     its own instructions or acceptance criteria. The binding also names the repository the
-     *     external-check pin guard reads its repository-relative pin paths from: in the in-place
-     *     mode that root may not be a repository at all, in which case a check that declares pin
-     *     paths degrades fail-closed
+     * @param law the law the run is frozen from, described by {@link #describe}: its binding — the
+     *     law commit wherever a ref was resolved, the working tree in the in-place mode and a manual
+     *     {@code run} without {@code --base}; never the gnome's per-task worktree, so a running task
+     *     cannot rewrite its own instructions or acceptance criteria (D14, FR19 of add-sandbox-core;
+     *     D12 of add-base-ref-resolution); the binding also names the repository the external-check
+     *     pin guard reads its repository-relative pin paths from, which in the in-place mode may not
+     *     be a repository at all, so a check that declares pin paths degrades fail-closed — and the
+     *     describe versions the engine pins and compares (FR13 of define-executor-contract)
      * @return the outcome loop and the ports it drives; never null
      */
     Run assemble(
@@ -80,7 +80,28 @@ public interface RunAssembly {
             TaskState initialState,
             AttemptPersistence attemptPersistence,
             List<String> credentialEnvVarsToScrub,
-            LawBinding lawBinding);
+            DescribedLaw law);
+
+    /**
+     * The describe preflight of one run (design D5 of define-executor-contract, as revised
+     * 2026-10-31): once the task's execution environment is live and before the engine, {@code
+     * describe} runs for every {@code program} executor the order's definition declares, in {@code
+     * medium}, and the answers are checked against the law. A law declaring no executor is
+     * described without an environment. Every failure is the task's — the caller parks the task as
+     * it does for an invalid law ({@link TaskTierLaw}), or fails a manual run as an invalid law
+     * fails it. Writes nothing durable and logs nothing; the caller's park is the one line.
+     *
+     * <p>Implements FR4, FR13, UX1 of define-executor-contract.
+     *
+     * @param order the run order whose definition declares the executors; never null
+     * @param medium the task's live execution environment; never null
+     * @param credentialEnvVarsToScrub as for {@link #assemble}: the names the child environment
+     *     withholds; never null
+     * @param lawBinding which tree the law was read from — its commit is the cache key; never null
+     * @return the described law, or every located error; never null
+     */
+    LawDescription describe(
+            RunOrder order, DescribeMedium medium, List<String> credentialEnvVarsToScrub, LawBinding lawBinding);
 
     /**
      * The run's output console for the resume paths that print before any {@link #assemble} call

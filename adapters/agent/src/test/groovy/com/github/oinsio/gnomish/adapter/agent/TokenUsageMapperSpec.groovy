@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentScenarioReader
+import com.github.oinsio.gnomish.domain.engine.ModelUsages
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -36,7 +37,7 @@ class TokenUsageMapperSpec extends Specification {
         } as AgentEvent.InitEvent
 
         when: 'tokens are mapped'
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then: 'modelUsage is authoritative, keyed by the resolved model id'
         tokensByModel == ['claude-fake-main-1': new TokenUsage(120, 45, 10, 5)]
@@ -59,7 +60,7 @@ class TokenUsageMapperSpec extends Specification {
         } as AgentEvent.InitEvent
 
         when: 'tokens are mapped'
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then: 'every modelUsage key becomes an entry with its own values, not the summed flat usage'
         tokensByModel == [
@@ -85,7 +86,7 @@ class TokenUsageMapperSpec extends Specification {
         } as AgentEvent.InitEvent
 
         when: 'tokens are mapped'
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then: 'the single modelUsage entry is mapped'
         tokensByModel == ['claude-fake-judge-1': new TokenUsage(150, 25, 0, 0)]
@@ -99,7 +100,7 @@ class TokenUsageMapperSpec extends Specification {
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-fallback-1'), UntrustedText.agent('claude-fake-legacy-1'))
 
         when: 'tokens are mapped'
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then: 'the flat usage is keyed by the init event\'s main model'
         tokensByModel == ['claude-fake-legacy-1': new TokenUsage(120, 45, 10, 5)]
@@ -112,7 +113,7 @@ class TokenUsageMapperSpec extends Specification {
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-empty-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then: 'the map degrades to empty, no exception'
         tokensByModel == [:]
@@ -129,7 +130,7 @@ class TokenUsageMapperSpec extends Specification {
         def logs = LogCaptureSupport.attach(TokenUsageMapper, Level.DEBUG)
 
         when:
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
         def events = List.copyOf(logs.list)
         logs.detach()
 
@@ -151,7 +152,7 @@ class TokenUsageMapperSpec extends Specification {
         def logs = LogCaptureSupport.attach(TokenUsageMapper, Level.DEBUG)
 
         when:
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
         def events = List.copyOf(logs.list)
         logs.detach()
 
@@ -166,7 +167,7 @@ class TokenUsageMapperSpec extends Specification {
         def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-no-init-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
 
         when: 'tokens are mapped with a null init event'
-        def tokensByModel = mapper.toTokensByModel(resultEvent, null)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, null))
 
         then: 'the map degrades to empty rather than guessing a key, no exception'
         tokensByModel == [:]
@@ -182,7 +183,7 @@ class TokenUsageMapperSpec extends Specification {
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-partial-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then: 'the well-formed entry maps, the malformed one is skipped, no exception'
         tokensByModel == ['claude-fake-good-1': new TokenUsage(100, 20, 0, 0)]
@@ -198,7 +199,7 @@ class TokenUsageMapperSpec extends Specification {
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-notmap-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then: 'only the well-formed entry maps'
         tokensByModel == ['claude-fake-good-1': new TokenUsage(5, 5, 0, 0)]
@@ -211,7 +212,7 @@ class TokenUsageMapperSpec extends Specification {
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-partial-usage-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then: 'the fallback degrades to empty rather than a partially-filled TokenUsage, no exception'
         tokensByModel == [:]
@@ -228,7 +229,7 @@ class TokenUsageMapperSpec extends Specification {
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-hostile-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when:
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then: 'the tokens are still reported, under the placeholder rather than under the escape'
         tokensByModel == [(ModelIdSyntax.UNUSABLE): new TokenUsage(7, 3, 0, 0)]
@@ -243,7 +244,7 @@ class TokenUsageMapperSpec extends Specification {
                 UntrustedText.agent("claude-x\n2026-01-01 ERROR forged"))
 
         when:
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then:
         tokensByModel == [(ModelIdSyntax.UNUSABLE): new TokenUsage(120, 20, 10, 5)]
@@ -262,7 +263,7 @@ class TokenUsageMapperSpec extends Specification {
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-collide'), UntrustedText.agent('claude-fake-main-1'))
 
         when:
-        def tokensByModel = mapper.toTokensByModel(resultEvent, initEvent)
+        def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then: 'the two refused entries are one key carrying the sum of both, and neither is lost'
         tokensByModel[ModelIdSyntax.UNUSABLE] == new TokenUsage(17, 8, 1, 6)
@@ -288,7 +289,7 @@ class TokenUsageMapperSpec extends Specification {
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-hostile-3'), UntrustedText.agent('claude-fake-main-1'))
 
         when:
-        mapper.toTokensByModel(resultEvent, initEvent)
+        ModelUsages.tokensOf(mapper.toByModel(resultEvent, initEvent))
 
         then: 'one DEBUG line names the placeholder the tokens are keyed on and the refused length'
         def event = logs.list.find {

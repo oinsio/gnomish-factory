@@ -27,10 +27,12 @@ import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
@@ -395,10 +397,10 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
     }
 
     // FR9, D12: an AttemptsExhausted park may resume "on the return alone" — a human returning the
-    // task IS the authorization, so with no reply the run proceeds and appends NO decision.
-    def "resumes an AttemptsExhausted escalation on the return alone, appending no decision"() {
+    // task IS the authorization, so with no reply the run proceeds and appends NO decision. FR7 of
+    // define-executor-contract: a BudgetExhausted park resumes the same way.
+    def "resumes a #report.class.simpleName escalation on the return alone, appending no decision"() {
         given:
-        def report = new EscalationReport.AttemptsExhausted(3)
         store.readTaskRecord(_, _) >> Optional.of(recordWith(new RecordedOutcome.Escalated(report), report, false))
         tracker.fetchTask(_) >> heldByUs()
 
@@ -413,6 +415,12 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
 
         and: 'FR7 of make-checkpoint-gate-durable: the reset lands through the resumed write first'
         1 * lifecycleStore.resumeFrom('PROJ-1', recordedState.resetAttempts())
+
+        where:
+        report << [
+            new EscalationReport.AttemptsExhausted(3),
+            new EscalationReport.BudgetExhausted(UntrustedText.agent('token bound 1000'))
+        ]
     }
 
     // FR7 of make-checkpoint-gate-durable: an INFRA-kind return continues without a reply, so the
@@ -509,7 +517,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         where:
         finalState || expectedStage
         TaskState.atStageStart('build') || 'build'
-        new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none()) || null
+        new TaskState(new Position.PipelineEnd(), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none()) || null
     }
 
     // FR9, FR13: a run whose claim is lost mid-flight does not finish the task — the engine stops at

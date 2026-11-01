@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
@@ -155,7 +156,7 @@ class FactoryRegisterIdentitySpec extends Specification implements LifecyclePush
 
         when: 'a round closes over gnome work'
         Files.writeString(worktree.resolve('work.txt'), 'gnome work')
-        persistence.persist(TASK_ID, TaskState.atStageStart('implement'), new ToolTrace(new AttemptKey(TASK_ID, 'implement', 0), []))
+        persistence.persist(TASK_ID, RoundStates.recorded(new ToolTrace(new AttemptKey(TASK_ID, 'implement', 0), []).key()), new ToolTrace(new AttemptKey(TASK_ID, 'implement', 0), []))
         def afterRound = registeredEverywhere()
 
         and: 'an interrupted round is salvaged and pushed, as revocation does'
@@ -187,7 +188,7 @@ class FactoryRegisterIdentitySpec extends Specification implements LifecyclePush
         def originAtSnapshot = at(origin, REGISTER)
 
         and: 'the state commit closes the round with its closing push'
-        persistence.persist(TASK_ID, TaskState.atStageStart('implement'), new ToolTrace(new AttemptKey(TASK_ID, 'implement', 0), []))
+        persistence.persist(TASK_ID, RoundStates.recorded(new ToolTrace(new AttemptKey(TASK_ID, 'implement', 0), []).key()), new ToolTrace(new AttemptKey(TASK_ID, 'implement', 0), []))
         def afterState = registeredEverywhere()
 
         and: 'an interrupted round is salvaged in-box and pushed, as the container revocation does'

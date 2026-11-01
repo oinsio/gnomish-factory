@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -50,7 +51,7 @@ class RunCheckRunContextSpec extends Specification {
     def "supplies no stage name past the end of the pipeline"() {
         given:
         def holder = holderAt('implement')
-        holder.updateState(new TaskState(new Position.PipelineEnd(), 0, [], TaskState.atStageStart('x').totals()))
+        holder.updateState(new TaskState(new Position.PipelineEnd(), 0, [], TaskState.atStageStart('x').totals(), ExecutorVersions.none()))
 
         expect:
         RunCheckRunContext.of(TASK, holder).value(CheckRunContext.STAGE_NAME).isEmpty()
@@ -61,7 +62,7 @@ class RunCheckRunContextSpec extends Specification {
     def "supplies no stage name while the task is held at a gate"() {
         given:
         def holder = holderAt('implement')
-        holder.updateState(new TaskState(new Position.AwaitingApproval('release'), 0, [], TaskState.atStageStart('x').totals()))
+        holder.updateState(new TaskState(new Position.AwaitingApproval('release'), 0, [], TaskState.atStageStart('x').totals(), ExecutorVersions.none()))
 
         expect:
         RunCheckRunContext.of(TASK, holder).value(CheckRunContext.STAGE_NAME).isEmpty()

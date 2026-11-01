@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -48,7 +49,7 @@ class AttemptsExhaustedSpec extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
-                listener, persistence, VirtualTimeEquipment.on(clock, sleeper))
+                listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static VerifyCheck.Builtin builtin(String name) {
@@ -65,8 +66,8 @@ class AttemptsExhaustedSpec extends Specification {
         new PipelineDefinition('1', new AutonomyLimits(5), stages.toList())
     }
 
-    static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
+    static ExecutionResult completed() {
+        ExecutionResult.completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
     static Verdict.Fail fail(String message) {

@@ -6,10 +6,11 @@ import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Path
 import java.time.Instant
@@ -46,9 +47,9 @@ class StatusInterruptedHonestySpec extends Specification implements SeededCloneF
      * {@link SeededCloneFixture#persistRound} for the shared clone/attempt-persistence plumbing;
      * only the "unburned round" state shape is specific to this spec's crash scenario. */
     private void recordInterruptedRound(String taskId, String stage = 'implement', int round = 0) {
-        def attempt = new AttemptRecord(round, AttemptRecord.Result.PASSED,
-                Instant.parse('2026-07-18T09:00:00Z'), [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
-        persistRound(taskId, TaskState.atStageStart(stage).recordUnburnedRound(attempt), stage, round)
+        def attempt = AttemptRecords.of(round, AttemptRecord.Result.PASSED,
+                Instant.parse('2026-07-18T09:00:00Z'), [], ExecutorUsage.none(), [], Stop.none())
+        persistRound(taskId, TaskState.atStageStart(stage).recordUnburnedRound(attempt, ExecutorVersions.none()), stage, round)
     }
 
     def "NFR-R2: text status of an interrupted task shows the recorded round and no completion claim"() {

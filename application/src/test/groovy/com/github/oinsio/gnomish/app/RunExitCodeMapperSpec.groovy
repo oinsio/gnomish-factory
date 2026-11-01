@@ -48,6 +48,8 @@ class RunExitCodeMapperSpec extends Specification {
         new DashboardDisabledException() | 1
         // FR6 of add-doctor-command: a doctor run with a fail result exits 1
         new DoctorFailedException(2) | 1
+        // FR12, UX2 of define-executor-contract: a conformance run with a failed case exits 1
+        new ExecutorVerifyFailedException(1) | 1
     }
 
     // FR5, FR8 of remove-interactive-console: code 4 is retired — no type maps to it, so the

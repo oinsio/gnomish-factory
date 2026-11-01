@@ -8,9 +8,11 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -46,7 +48,7 @@ class AdvancementSpec extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(clock, sleeper))
+                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static VerifyCheck.Builtin builtin(String name) {
@@ -63,19 +65,19 @@ class AdvancementSpec extends Specification {
         new PipelineDefinition('1', new AutonomyLimits(3), stages.toList())
     }
 
-    static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
+    static ExecutionResult completed() {
+        ExecutionResult.completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
-    static ExecutionResult.Completed completed(ExecutorUsage usage) {
-        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
+    static ExecutionResult completed(ExecutorUsage usage) {
+        ExecutionResult.completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
     static ExecutorUsage usage(long wallSecs, long tokensIn, long tokensOut) {
         new ExecutorUsage(Duration.ofSeconds(wallSecs),
                 [
                     new ToolUsage('read', 1, Duration.ofMillis(10))
-                ], ['model-a': new TokenUsage(tokensIn, tokensOut, 0, 0)])
+                ], Unpriced.of(['model-a': new TokenUsage(tokensIn, tokensOut, 0, 0)]))
     }
 
     // FR8: a one-stage auto pipeline that passes verification completes with the position
@@ -135,15 +137,13 @@ class AdvancementSpec extends Specification {
         persistence.entries[0].state.attempts()[0].result() == AttemptRecord.Result.PASSED
         persistence.entries[1].state.attempts()[0].result() == AttemptRecord.Result.PASSED
 
-        and: 'the task totals survive advancement, summing every stage\'s executor usage (FR13, NFR-C1, D5)'
-        // Cumulative totals survive advancement: stage 1's persisted totals hold only its own
-        // usage, then stage 2 carries it forward and folds its own usage into the final total.
-        persistence.entries[0].state.totals() == usage(5, 100, 20)
-        outcome.finalState().totals().wallTime() == Duration.ofSeconds(8)
-        outcome.finalState().totals().tokensByModel() == ['model-a': new TokenUsage(140L, 30L, 0L, 0L)]
-        outcome.finalState().totals().tools() == [
-            new ToolUsage('read', 2, Duration.ofMillis(20))
-        ]
+        and: 'the task totals survive advancement, folding every stage\'s usage (FR13, NFR-C1, D5; FR17 of define-executor-contract)'
+        // Cumulative totals survive advancement: stage 1's persisted snapshot holds only its own
+        // round, then stage 2 carries it forward and folds its own round into the final snapshot.
+        persistence.entries[0].state.totals().byRole() == [(ExecutorRole.TRANSFORM): ['model-a': new TokenUsage(100L, 20L, 0L, 0L)]]
+        persistence.entries[0].state.totals().rounds() == 1
+        outcome.finalState().totals().byRole() == [(ExecutorRole.TRANSFORM): ['model-a': new TokenUsage(140L, 30L, 0L, 0L)]]
+        outcome.finalState().totals().rounds() == 2
     }
 
     // FR1, FR2 of make-checkpoint-gate-durable: a manual first stage that passes returns Paused
@@ -222,6 +222,6 @@ class AdvancementSpec extends Specification {
             InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()) {
         new EnginePorts(executor, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
-                persistence, VirtualTimeEquipment.on(new VirtualClock()))
+                persistence, VirtualTimeEquipment.on(new VirtualClock()), RoundIdentity.inPlace())
     }
 }

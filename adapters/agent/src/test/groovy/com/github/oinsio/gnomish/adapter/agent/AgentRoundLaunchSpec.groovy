@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -66,9 +67,9 @@ class AgentRoundLaunchSpec extends Specification {
     }
 
     private ExecutionResult executorRound(StageExecutor.Request request) {
-        RoundEnvironmentSource rounds = { req ->
-            new StandInRound(box('plain-round'), workspaceDir.resolve('decision.json'))
-        }
+        RoundEnvironmentSource rounds = [openRound: { req ->
+                new StandInRound(box('plain-round'), workspaceDir.resolve('decision.json'))
+            }, identity: { RoundIdentity.inPlace() }] as RoundEnvironmentSource
         new CliStageExecutor(PROPERTIES, new VirtualClock(), { e -> } as AgentProgressListener, childEnv, LAW, rounds).execute(request)
     }
 
@@ -105,7 +106,7 @@ class AgentRoundLaunchSpec extends Specification {
         def result = executorRound(retry('tests are red in BuildSpec'))
 
         then: 'a new process was started through the round environment'
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         launched.size() == 1
         def argv = launched.first().command()
         [

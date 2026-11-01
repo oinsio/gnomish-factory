@@ -2,9 +2,9 @@ package com.github.oinsio.gnomish.adapter.agent
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
@@ -23,7 +23,7 @@ import spock.lang.TempDir
 
 /**
  * A round that does not succeed carries the tail of its CLI's stderr in its failure's detail —
- * the executor's {@code ExecutorFailure}, the judge's cannot-verify details and its one WARN —
+ * the executor's {@code failed/infrastructure} reason, the judge's cannot-verify details and its one WARN —
  * on every path that ends it; a successful round leaves the tail as one DEBUG line and nowhere
  * else (design D18 of fix-terminal-receipt-convergence, as amended 2026-10-17).
  *
@@ -72,22 +72,18 @@ class RoundStderrTailSpec extends Specification {
         def equipment = new AgentRoundEquipment(new FactoryProperties('factory-01', 'claude', null, null),
                 new VirtualClock(), { event -> }, new AgentRoundResultExtractor(), ChildEnvAllowlist.none(), scratchParent)
         if (role == 'executor') {
-            try {
-                return ExecutorRoundExecution.run(equipment, new DecisionFileReader(),
-                        StageExecutorRequests.request(workspaceDir), 'prompt',
-                        new StandInRound(environment, workspaceDir.resolve('decision.json')))
-            } catch (ExecutorFailure failure) {
-                return failure
-            }
+            return ExecutorRoundExecution.run(equipment,
+                    StageExecutorRequests.request(workspaceDir), 'prompt',
+                    new StandInRound(environment, workspaceDir.resolve('decision.json')))
         }
         JudgeRoundExecution.run(equipment, new JudgeVerdictExtractor(),
                 new VerifyCheck.Judge('criteria.md', 'claude-fake-judge-1', [:], 1), environment, 'prompt')
     }
 
-    /** What the failure carries as its detail: the executor's tail, the judge's details. */
+    /** What the failure carries as its detail: the executor's reason, the judge's details. */
     private static String detailOf(Object outcome) {
-        outcome instanceof ExecutorFailure
-                ? outcome.stderrTail().forLog()
+        outcome instanceof ExecutionResult
+                ? InfrastructureResults.of(outcome).reason().forLog()
                 : (outcome.verdict() as Verdict.CannotVerify).details().forLog()
     }
 
@@ -104,7 +100,7 @@ class RoundStderrTailSpec extends Specification {
         def outcome = execute(role, launch.curry(this))
 
         then: 'the failure carries the tail, as untrusted text'
-        outcome instanceof ExecutorFailure || outcome.verdict() instanceof Verdict.CannotVerify
+        outcome instanceof ExecutionResult || outcome.verdict() instanceof Verdict.CannotVerify
         detailOf(outcome).contains(STDERR)
 
         and: 'the judge says so in its one WARN, and nothing logs the tail at DEBUG beside it'
@@ -168,7 +164,7 @@ class RoundStderrTailSpec extends Specification {
         }
 
         then:
-        role == 'executor' ? outcome.stderrTail().isBlank() : !detailOf(outcome).contains('stderr')
+        !detailOf(outcome).contains('stderr')
 
         where:
         role << ['executor', 'judge']
@@ -183,8 +179,7 @@ class RoundStderrTailSpec extends Specification {
         }
 
         then:
-        !(outcome instanceof ExecutorFailure)
-        role == 'executor' || outcome.verdict() instanceof Verdict.Pass
+        role == 'executor' ? outcome.status() instanceof ExecutionResult.Completed : outcome.verdict() instanceof Verdict.Pass
         roundLogs.list.size() == 1
         roundLogs.list[0].level == Level.DEBUG
         roundLogs.list[0].formattedMessage.contains(STDERR)

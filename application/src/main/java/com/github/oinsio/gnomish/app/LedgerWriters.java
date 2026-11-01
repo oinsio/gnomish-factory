@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.serveobservability.InstanceInfo;
 import com.github.oinsio.gnomish.serveobservability.writer.LifecycleLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.RemoteOutageLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.RotatingLedgerAppender;
+import com.github.oinsio.gnomish.serveobservability.writer.RoundOutcomeLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.RunSummaryLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.TaskOutcomeLedgerWriter;
@@ -13,12 +14,13 @@ import java.time.InstantSource;
 /**
  * Every ledger write point one {@code serve} instance owns, built over its one {@link
  * RotatingLedgerAppender} (design D2 of collapse-composition-roots): the {@code lifecycle}, {@code
- * taskOutcome}, {@code sweep} and {@code remoteOutage} writers for the daemon's lifetime, and a
+ * taskOutcome}, {@code sweep}, {@code remoteOutage} and {@code roundOutcome} writers for the daemon's lifetime, and a
  * fresh {@code runSummary} writer per drain run. Building them all here is what keeps every line
  * of the instance's ledger on the same appender, so each rotates and is retained exactly like the
  * others (NFR-O2 of add-serve-sandbox-lifecycle; NFR-O1, NFR-O3 of add-base-ref-resolution).
  *
- * <p>Implements FR1, FR4 of collapse-composition-roots; FR11, FR12, FR13 of add-serve-observability.
+ * <p>Implements FR1, FR4 of collapse-composition-roots; FR11, FR12, FR13 of add-serve-observability;
+ * NFR-O2, UX3 of define-executor-contract.
  */
 final class LedgerWriters {
 
@@ -29,6 +31,7 @@ final class LedgerWriters {
     private final TaskOutcomeLedgerWriter taskOutcome;
     private final SweepLedgerWriter sweep;
     private final RemoteOutageLedgerWriter remoteOutage;
+    private final RoundOutcomeLedgerWriter roundOutcome;
 
     /**
      * @param appender the instance's one ledger appender every write point shares; never null
@@ -45,6 +48,7 @@ final class LedgerWriters {
         this.taskOutcome = new TaskOutcomeLedgerWriter(slotLedger, appender, instance, clock);
         this.sweep = new SweepLedgerWriter(appender, instance, clock);
         this.remoteOutage = new RemoteOutageLedgerWriter(appender, instance);
+        this.roundOutcome = new RoundOutcomeLedgerWriter(appender, instance, clock);
     }
 
     /** The {@code started} / {@code stopped} write point (FR12); never null. */
@@ -65,6 +69,11 @@ final class LedgerWriters {
     /** The {@code remoteOutage} write point (NFR-O1, NFR-O3 of add-base-ref-resolution); never null. */
     RemoteOutageLedgerWriter remoteOutage() {
         return remoteOutage;
+    }
+
+    /** The {@code roundOutcome} write point every slot's engine fans into (NFR-O2, UX3 of define-executor-contract). */
+    RoundOutcomeLedgerWriter roundOutcome() {
+        return roundOutcome;
     }
 
     /** A fresh drain-run {@code runSummary} writer over the shared appender (FR13); never null. */

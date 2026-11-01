@@ -8,12 +8,13 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
@@ -158,9 +159,9 @@ class TaskRepositorySpec extends Specification {
         def repository = new FakeTaskRepository()
         def context = new TaskContext('TASK-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('Body text'), [])
         repository.createTask(context, START_POINT, PIN, TaskState.atStageStart('build'))
-        def exhausted = TaskState.atStageStart('build').recordQualityFailure(new AttemptRecord(
+        def exhausted = TaskState.atStageStart('build').recordQualityFailure(AttemptRecords.of(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
-                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()))
+                        ExecutorUsage.none(), [], Stop.none()), ExecutorVersions.none())
 
         when: 'the human answer is appended'
         repository.appendDecision('TASK-1', new Decision('proceed', 'build', 'operator', null),

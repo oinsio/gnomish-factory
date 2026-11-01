@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -25,6 +26,14 @@ import org.jspecify.annotations.Nullable;
  *     default: main
  *     allowed:
  *       - pattern: main
+ * executors:
+ *   acme:
+ *     type: program
+ *     program: [acme-executor, --json]
+ *     settings:
+ *       maxTurns: 20
+ *     credentials: [ACME_API_KEY]
+ *     egress: [api.acme.example]
  * }</pre>
  *
  * <p>All four fields are nullable at the wire level so that a missing
@@ -39,7 +48,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR1, FR9 (DTO shape), D2 of load-pipeline-config; FR17 of
  * add-tracker-port (the {@code tracker} field); FR1, D16 of
- * add-base-ref-resolution (the {@code task-branch} field).
+ * add-base-ref-resolution (the {@code task-branch} field); FR9, NFR-S3 of
+ * define-executor-contract (the {@code executors} field: law content, read from the law commit only).
  *
  * @param schemaVersion the tree-wide schema version, or {@code null} when absent
  * @param autonomy the pipeline-wide autonomy defaults, or {@code null} when the
@@ -48,20 +58,32 @@ import org.jspecify.annotations.Nullable;
  *     section is absent (FR17 of add-tracker-port)
  * @param taskBranch the {@code task-branch} section, or {@code null} when the
  *     whole section is absent (FR1 of add-base-ref-resolution)
+ * @param executors the {@code executors:} declarations keyed by name in declaration order, or
+ *     {@code null} when the section is absent (FR9 of define-executor-contract)
  */
 public record ConfigDto(
         @Nullable String schemaVersion,
         @Nullable AutonomyDto autonomy,
         @Nullable TrackerDto tracker,
-        @Nullable @JsonProperty("task-branch") TaskBranchDto taskBranch) {
+        @Nullable @JsonProperty("task-branch") TaskBranchDto taskBranch,
+        @Nullable Map<String, ExecutorDeclarationDto> executors) {
 
     /** Convenience for call sites predating add-tracker-port: no tracker section. */
     public ConfigDto(@Nullable String schemaVersion, @Nullable AutonomyDto autonomy) {
-        this(schemaVersion, autonomy, null, null);
+        this(schemaVersion, autonomy, null, null, null);
+    }
+
+    /** Convenience for call sites predating define-executor-contract: no executors section. */
+    public ConfigDto(
+            @Nullable String schemaVersion,
+            @Nullable AutonomyDto autonomy,
+            @Nullable TrackerDto tracker,
+            @Nullable TaskBranchDto taskBranch) {
+        this(schemaVersion, autonomy, tracker, taskBranch, null);
     }
 
     /** Convenience for call sites predating add-base-ref-resolution: no task-branch section. */
     public ConfigDto(@Nullable String schemaVersion, @Nullable AutonomyDto autonomy, @Nullable TrackerDto tracker) {
-        this(schemaVersion, autonomy, tracker, null);
+        this(schemaVersion, autonomy, tracker, null, null);
     }
 }

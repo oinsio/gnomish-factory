@@ -82,7 +82,42 @@ variable, the flags that disable repo-local policy sources, and its policy enfor
 
 #### Scenario: Describe output is untrusted
 - **WHEN** describe output exceeds the read cap or contains control characters in a text field
-- **THEN** the preflight ends the run as an operator precondition (the program cannot be described) and no field reaches a log unsanitized
+- **THEN** the preflight parks the task as a located configuration error (the program cannot be described) and no field reaches a log unsanitized
+
+### Requirement: Poll of a program executor
+A `program` executor whose describe declares `poll` SHALL be polled as it is started: the
+declared argv with the word `poll` appended, the same request on standard input, the pending key
+in `GNOMISH_PENDING_KEY`, the result in `GNOMISH_RESULT_FILE` read under the result reader's
+rules, under the same bounds.
+**Implements**: FR23 of define-executor-contract
+
+#### Scenario: Poll is addressed like start
+- **WHEN** a program that declared `poll` returned `pending` with a key and the factory polls it
+- **THEN** the program is spawned with its declared argv and `poll` as the last argument, the same request on standard input and `GNOMISH_PENDING_KEY` carrying the key, and its result is read from the file `GNOMISH_RESULT_FILE` names
+
+### Requirement: Poll of a program is refused without its preconditions
+A poll of a program whose describe does not declare `poll`, or with a key the polling run did
+not receive from its own `start`, SHALL be `failed/infrastructure` naming the reason, with no
+process spawned.
+**Implements**: FR23 of define-executor-contract
+
+#### Scenario: Poll of a program without the capability
+- **WHEN** a poll is asked of a program whose describe lists no `poll` capability
+- **THEN** the result is `failed/infrastructure` naming the undeclared capability and no process is spawned
+
+#### Scenario: Poll with a key this run did not issue
+- **WHEN** a poll carries a key the executor instance did not receive from a `start` of its own
+- **THEN** the result is `failed/infrastructure` naming the key as unknown and no process is spawned
+
+### Requirement: A pending judge is judged when it ends
+The working-copy check of a `verdict` or `decision` run SHALL be judged at the poll that ends a
+pending run, against the view taken before its `start`; a `pending` answer itself SHALL not be
+judged.
+**Implements**: FR23, FR11 of define-executor-contract
+
+#### Scenario: Pending judge is judged when it ends
+- **WHEN** a `verdict` run returned `pending`, a file of the working copy changed after its `start`, and its poll returns `completed`
+- **THEN** the verdict is discarded and the check resolves as cannot-verify naming the path
 
 ### Requirement: Additive evolution
 Both sides SHALL ignore unknown fields; a field SHALL never be renamed, retyped or removed
@@ -115,12 +150,8 @@ SHALL verify the working copy is unchanged; a change SHALL resolve the run as
 ### Requirement: Usage provenance and bounds as hints
 Usage SHALL carry provenance `REPORTED` or `ABSENT`; absent SHALL never render as zero. Bounds
 (turns, tokens, money, three time bounds) SHALL be passed in the request as hints; the factory
-enforces time bounds itself and the ledger enforces budget after the round.
+enforces the time bounds itself; the law declares no budget bound in this version (proposal NG12).
 **Implements**: NFR-O1, NFR-R2, NFR-C1 of define-executor-contract
-
-#### Scenario: Absent usage under a money bound
-- **WHEN** a stage with a money bound names an executor whose describe reports no usage
-- **THEN** the describe preflight reports a located error naming the executor and the bound, before the first round
 
 #### Scenario: Silence bound expires
 - **WHEN** an executor declaring `streams_progress` emits nothing for longer than the silence bound

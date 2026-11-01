@@ -38,7 +38,7 @@ class ReportCommandsSpec extends Specification implements SeededCloneFixture {
         def scope = RegisteredCloneFixture.scope(registeredClone)
         new ReportCommands(
                 new StatusCommand(TaskGitFixture.realClaimless(), scope, console),
-                new UsageCommand(TaskGitFixture.realClaimless(), scope, console),
+                new UsageCommand(TaskGitFixture.realClaimless(), scope, console, new VirtualClock()),
                 new BoardCommand(new VirtualClock(), properties, scope, wiringFailingOn('board'), console),
                 new DashboardCommand(VirtualTimeEquipment.create(), scope, properties,
                 wiringFailingOn('dashboard')))

@@ -6,7 +6,8 @@ import java.util.List;
 
 /**
  * The {@code state.json} contract's per-attempt {@code stop} object: {@code none}, {@code
- * decisionNeeded(question, options)} or {@code cannotVerify(check, reason, details)}, mirroring the
+ * decisionNeeded(question, options)}, {@code cannotVerify(check, reason, details)} or {@code
+ * budgetExhausted(bound)}, mirroring the
  * domain's {@link com.github.oinsio.gnomish.domain.engine.Stop} sealed type. The {@code check} of
  * {@code cannotVerify} is the check's label — the same wire form a {@code StateCheckDto}'s {@code
  * ref} and {@code task.json}'s {@code lastEscalation} use for a {@code CheckRef}.
@@ -15,13 +16,15 @@ import java.util.List;
  * {@code stop.type} this build does not know fails the bind, so the document is unreadable rather
  * than read as a round that raised no stop.
  *
- * <p>Implements FR5, FR10 of make-checkpoint-gate-durable (design D3, D5).
+ * <p>Implements FR5, FR10 of make-checkpoint-gate-durable (design D3, D5); FR7 of
+ * define-executor-contract.
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 @JsonSubTypes({
     @JsonSubTypes.Type(value = StateStopDto.None.class, name = "none"),
     @JsonSubTypes.Type(value = StateStopDto.DecisionNeeded.class, name = "decisionNeeded"),
-    @JsonSubTypes.Type(value = StateStopDto.CannotVerify.class, name = "cannotVerify")
+    @JsonSubTypes.Type(value = StateStopDto.CannotVerify.class, name = "cannotVerify"),
+    @JsonSubTypes.Type(value = StateStopDto.BudgetExhausted.class, name = "budgetExhausted")
 })
 public sealed interface StateStopDto {
 
@@ -50,4 +53,13 @@ public sealed interface StateStopDto {
      * @param details the check's supporting detail
      */
     record CannotVerify(String type, String check, String reason, String details) implements StateStopDto {}
+
+    /**
+     * The round ended {@code failed/limit}: a bound of the stage was reached (FR7 of
+     * define-executor-contract).
+     *
+     * @param type the discriminator, always {@code "budgetExhausted"}
+     * @param bound the text naming the bound the round reached
+     */
+    record BudgetExhausted(String type, String bound) implements StateStopDto {}
 }

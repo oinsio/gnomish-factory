@@ -64,7 +64,7 @@ final class ContainerResumePreparation {
      * recorded (FR1 of make-checkpoint-gate-durable). Past the pipeline's end there is no stage and
      * nothing to reattach.
      */
-    private static @Nullable String stageToReattach(Position position) {
+    static @Nullable String stageToReattach(Position position) {
         return switch (position) {
             case Position.AtStage(String stage) -> stage;
             case Position.AwaitingApproval(String gate) -> gate;

@@ -19,10 +19,13 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
+import com.github.oinsio.gnomish.domain.engine.MismatchCause
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -87,7 +90,7 @@ class TakeOutcomeTransitionMapSpec extends Specification {
         new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('tests')),
                 UntrustedText.subprocess('timeout'), UntrustedText.subprocess('')) || ParkReason.INFRA
         new EscalationReport.CannotExecute(UntrustedText.subprocess('executor crashed'), []) || ParkReason.INFRA
-        new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage')) || ParkReason.INFRA
+        new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument('stale-stage'))) || ParkReason.INFRA
         kind = report.getClass().simpleName
     }
 
@@ -95,7 +98,7 @@ class TakeOutcomeTransitionMapSpec extends Specification {
     // Scenario: tracker/tracker-port / Outcome-to-transition mapping
     def "Completed is finished and Paused is parked at its checkpoint"() {
         when:
-        dispatch(new TaskOutcome.Completed(new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())))
+        dispatch(new TaskOutcome.Completed(new TaskState(new Position.PipelineEnd(), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())))
 
         then:
         1 * tracker.finish(REF, _ as String)

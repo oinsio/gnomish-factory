@@ -55,14 +55,12 @@ class UntrustedTextSinkGateSpec extends Specification {
 
     /**
      * Production throwables {@link CarrierSinkScan#THROWABLE} cannot match, each listed with the reason its
-     * construction is not a text sink at all. {@code ExecutorFailure} wraps a cause, a denial
-     * list and a stderr tail it takes as the carrier itself (FR20 of
-     * fix-terminal-receipt-convergence) — the D5 exit contract, derived by
-     * {@code CarrierConstructors} and pinned by {@code TypedExceptionMessageSpec} — and no
-     * {@code String} detail, so there is nothing for a carrier to be laundered through. A throwable that carries text must wear one of the three suffixes instead of
+     * construction is not a text sink at all. Empty since {@code ExecutorFailure}, its one entry,
+     * was deleted (task 7.4 of define-executor-contract: the agent round reports its failure as a
+     * result). A throwable that carries text must wear one of the three suffixes instead of
      * joining this list, which is what the feature below enforces.
      */
-    private static final Set<String> TEXTLESS_THROWABLES = ['ExecutorFailure'] as Set
+    private static final Set<String> TEXTLESS_THROWABLES = [] as Set
 
     @Shared
     JavaClasses productionClasses = new ClassFileImporter()
@@ -295,7 +293,17 @@ class UntrustedTextSinkGateSpec extends Specification {
         // was deleted with the console's input side, so no carrier answers to it any more.
         // `currentTool` left with it in task 3.7: `Activity` and its JSON twin `ActivityDto` were
         // deleted together, so the name has neither a carrier nor a String twin left.
+        // Task 3.1 of define-executor-contract added `content`, `location`, `message` and `tool`:
+        // carriers on the executor contract's result-channel types (`ReadResult.Malformed`,
+        // `Denial`, `SarifResult`, `SarifRun`), plain Strings on the factory's own findings, git
+        // results and SARIF-free records until the adapters route their reads through the owner.
         // Each re-enters the scan by itself once its last String twin is typed.
+        // Task 4.2 of define-executor-contract added `bound`: a carrier on `EscalationReport` and
+        // `Stop.BudgetExhausted` (the executor's own words), a plain String on their wire DTOs.
+        // Task 4.4 of define-executor-contract moved the mismatch's text onto `MismatchCause`:
+        // `staleStage` left (no carrier answers to it, only the wire DTOs' String), and `stage`,
+        // `executor`, `recorded` and `current` joined — carriers on the two causes, plain Strings
+        // on the `task.json` / `status.json` records and on every stage or executor name elsewhere.
         // What this list no longer means is "rule (c) is silent here": since the qualified
         // vocabulary landed, a name on it is still decided wherever the receiver's type is
         // declared in the same source (`CarrierAccessors.qualifiedNamesIn`, the three features
@@ -304,23 +312,31 @@ class UntrustedTextSinkGateSpec extends Specification {
         expect:
         CarrierAccessors.ambiguousNamesIn(productionClasses).sort() == [
             'body',
+            'bound',
             'cause',
+            'content',
+            'current',
             'details',
+            'executor',
             'humanText',
             'label',
+            'location',
+            'message',
             'model',
             'name',
             'note',
             'question',
             'reason',
+            'recorded',
             'render',
             'report',
             'result',
-            'staleStage',
+            'stage',
             'stderr',
             'stdout',
             'summary',
             'title',
+            'tool',
             'value'
         ]
     }

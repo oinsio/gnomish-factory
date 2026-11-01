@@ -7,11 +7,12 @@ import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter;
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 
 /**
- * The bundle of nine collaborators the engine drives instead of touching the outside
+ * The bundle of collaborators the engine drives instead of touching the outside
  * world — the {@code ports} argument of {@link Engine#run} (design D1). Grouping the
  * ports into one value keeps the entry-point signature small and lets a caller wire a
  * factory once and reuse it across runs; the engine reads each field but never stores
@@ -24,8 +25,9 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  * event stream (D7), {@link AttemptPersistence} durably records each round (D7), the
  * environment ports — the {@link TimeEquipment}, the current instant and waiting as one value
  * (design D20 of supervise-daemon-loops-and-embed-dashboard) — make the poll loop's timing
- * deterministic (D8), and {@link AttemptDelivery} verifies the external-check push
- * precondition before the poll loop starts (FR21 of add-sandbox-core).
+ * deterministic (D8), {@link AttemptDelivery} verifies the external-check push
+ * precondition before the poll loop starts (FR21 of add-sandbox-core), and {@link RoundIdentity}
+ * yields the token of each round the engine records (FR14, FR21 of define-executor-contract).
  *
  * <p>An inert record: it holds the collaborators and enforces no rule beyond the
  * non-null-by-default contract of the {@code @NullMarked} package. Compared by content.
@@ -44,6 +46,13 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  * @param time the environment ports: the instant source for timestamps and poll deadlines and the
  *     sleep seam the poll loop waits on, as one value; never null
  * @param attemptDelivery the external-check push-precondition seam; never null
+ * @param describedExecutors what the describe preflight obtained for this run — the run-held value
+ *     the engine pre-flight compares with the task's executor version pin and the round writers pin
+ *     from (FR13 of define-executor-contract, design D11); {@link DescribedExecutors#none()} until the
+ *     preflight fills it; never null
+ * @param roundIdentity where the engine takes each recorded round's token: the run's current-round
+ *     cell in a branch mode, {@link RoundIdentity#inPlace()} in the in-place run; no constructor
+ *     defaults it (D13 of define-executor-contract); never null
  */
 public record EnginePorts(
         StageExecutor executor,
@@ -54,14 +63,17 @@ public record EnginePorts(
         EngineEventListener listener,
         AttemptPersistence persistence,
         TimeEquipment time,
-        AttemptDelivery attemptDelivery) {
+        AttemptDelivery attemptDelivery,
+        DescribedExecutors describedExecutors,
+        RoundIdentity roundIdentity) {
 
     /**
-     * The dominant eight-port construction: assemblies and specs whose external checks have no
+     * The dominant construction: assemblies and specs whose external checks have no
      * push precondition to verify (the in-place shape) default {@code
      * attemptDelivery} to {@link AttemptDelivery#assumedDelivered()}; sandboxed git assemblies
      * use the canonical constructor with a real push-verifying implementation (FR21 of
-     * add-sandbox-core).
+     * add-sandbox-core). Such a run describes no executor: {@link DescribedExecutors#none()}. The
+     * round identity is never defaulted: each caller names its own.
      */
     public EnginePorts(
             StageExecutor executor,
@@ -71,7 +83,8 @@ public record EnginePorts(
             JudgeVoter judgeVoter,
             EngineEventListener listener,
             AttemptPersistence persistence,
-            TimeEquipment time) {
+            TimeEquipment time,
+            RoundIdentity roundIdentity) {
         this(
                 executor,
                 builtinRunner,
@@ -81,6 +94,8 @@ public record EnginePorts(
                 listener,
                 persistence,
                 time,
-                AttemptDelivery.assumedDelivered());
+                AttemptDelivery.assumedDelivered(),
+                DescribedExecutors.none(),
+                roundIdentity);
     }
 }

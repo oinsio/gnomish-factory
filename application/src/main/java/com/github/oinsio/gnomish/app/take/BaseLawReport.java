@@ -50,4 +50,26 @@ public final class BaseLawReport {
                 + located + "\n"
                 + ParkedBaseTrailer.withRemedy("Fix .gnomish/ on the base and return the task to work.");
     }
+
+    /**
+     * Renders the report of a task whose law could not be described (design D5 of
+     * define-executor-contract, as revised 2026-10-31): the describe preflight found every error
+     * after the task's environment was live, so each names an executor and whether its failure is a
+     * configuration error or an external one.
+     *
+     * @param taskId the parked task; never null
+     * @param law the law's revision — its commit, or the tree a working-tree law is read from; never null
+     * @param errors every located error the preflight found; never empty
+     * @return the operator-facing report; never blank
+     */
+    public static String undescribed(String taskId, String law, List<ConfigError> errors) {
+        String located =
+                errors.stream().map(error -> error.render().forCommentInline()).collect(Collectors.joining("\n"));
+        return "Task " + taskId + " is parked: an executor its pipeline law declares could not be described.\n"
+                + "Law: " + law + "\n"
+                + "Located errors (" + errors.size() + "):\n"
+                + located + "\n"
+                + ParkedBaseTrailer.withRemedy(
+                        "Fix the executor's program or its declaration in .gnomish/ and return the task to work.");
+    }
 }

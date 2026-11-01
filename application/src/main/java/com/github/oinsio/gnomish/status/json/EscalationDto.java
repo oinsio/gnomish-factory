@@ -1,12 +1,13 @@
 package com.github.oinsio.gnomish.status.json;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The JSON contract's {@code lastEscalation} section: one of the five {@code
+ * The JSON contract's {@code lastEscalation} section: one of the six {@code
  * EscalationReport} kinds (spec.md). Every variant carries {@code stage}/{@code at}
  * per the canonical example's {@code decisionNeeded} envelope; the domain's {@code
  * EscalationReport} itself carries neither field, and no plumbing reachable from
@@ -14,7 +15,7 @@ import org.jspecify.annotations.Nullable;
  * escalation, so both render as JSON {@code null} for every variant — a known
  * gap in the mapper (see {@link StatusReportJsonMapper}), not fabricated data.
  *
- * <p>Implements FR11, M3 of add-manual-run.
+ * <p>Implements FR11, M3 of add-manual-run; FR7 of define-executor-contract.
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type")
 @JsonSubTypes({
@@ -22,7 +23,8 @@ import org.jspecify.annotations.Nullable;
     @JsonSubTypes.Type(value = EscalationDto.DecisionNeeded.class, name = "decisionNeeded"),
     @JsonSubTypes.Type(value = EscalationDto.CannotVerify.class, name = "cannotVerify"),
     @JsonSubTypes.Type(value = EscalationDto.PipelineMismatch.class, name = "pipelineMismatch"),
-    @JsonSubTypes.Type(value = EscalationDto.CannotExecute.class, name = "cannotExecute")
+    @JsonSubTypes.Type(value = EscalationDto.CannotExecute.class, name = "cannotExecute"),
+    @JsonSubTypes.Type(value = EscalationDto.BudgetExhausted.class, name = "budgetExhausted")
 })
 public sealed interface EscalationDto {
 
@@ -71,17 +73,38 @@ public sealed interface EscalationDto {
             implements EscalationDto {}
 
     /**
-     * The recorded position named a stage absent from the current pipeline.
+     * The recorded task no longer matches the run: exactly one cause is present, the other omitted
+     * (so a stale-stage line written before the executor cause existed keeps its bytes).
      *
      * @param type the discriminator, always {@code "pipelineMismatch"}
      * @param stage the stage the escalation pertains to; {@code null} — not
      *     available from the reachable domain data (see type-level note)
      * @param at ISO-8601 UTC instant of the escalation; {@code null} — not
      *     available from the reachable domain data (see type-level note)
-     * @param staleStage the recorded stage name absent from the pipeline
+     * @param staleStage the recorded stage name absent from the pipeline, or null
+     * @param executorVersion the executor whose describe version changed since the task pinned it, or
+     *     null (FR13 of define-executor-contract)
      */
     record PipelineMismatch(
-            String type, @Nullable String stage, @Nullable String at, String staleStage) implements EscalationDto {}
+            String type,
+            @Nullable String stage,
+            @Nullable String at,
+
+            @JsonInclude(JsonInclude.Include.NON_NULL) @Nullable
+            String staleStage,
+
+            @JsonInclude(JsonInclude.Include.NON_NULL) @Nullable
+            ExecutorVersion executorVersion)
+            implements EscalationDto {}
+
+    /**
+     * The {@code executorVersion} cause of {@link PipelineMismatch} (FR13 of define-executor-contract).
+     *
+     * @param executor the executor's law name
+     * @param recorded the version the task's pin carries
+     * @param current the version the run's describe preflight obtained
+     */
+    record ExecutorVersion(String executor, String recorded, String current) {}
 
     /**
      * An executor infrastructure failure prevented running the stage.
@@ -106,4 +129,18 @@ public sealed interface EscalationDto {
     record CannotExecute(
             String type, @Nullable String stage, @Nullable String at, String cause, List<FindingDto> denials)
             implements EscalationDto {}
+
+    /**
+     * A round ended {@code failed/limit}: a bound of the stage was reached (FR7 of
+     * define-executor-contract). The round itself is in the attempt history with its usage.
+     *
+     * @param type the discriminator, always {@code "budgetExhausted"}
+     * @param stage the stage the escalation pertains to; {@code null} — not
+     *     available from the reachable domain data (see type-level note)
+     * @param at ISO-8601 UTC instant of the escalation; {@code null} — not
+     *     available from the reachable domain data (see type-level note)
+     * @param bound the text naming the bound that was reached
+     */
+    record BudgetExhausted(
+            String type, @Nullable String stage, @Nullable String at, String bound) implements EscalationDto {}
 }

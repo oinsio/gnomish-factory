@@ -244,9 +244,10 @@ accept on purpose:
 
 Recorded so they are decisions rather than drift:
 
-1. **Domain classes log.** Four `:domain` classes (`RoundExecution`,
+1. **Domain classes log.** Four `:domain` classes (`RoundFailures`,
    `VerifyOrchestrator`, `Events`, `AttemptJournal`) hold an SLF4J logger for
-   port-failure paths. The framework-free alternative — an
+   port-failure paths (`RoundFailures` took over `RoundExecution`'s logger when the
+   executor outcome classifier arrived, `define-executor-contract` task 4.2). The framework-free alternative — an
    `EngineEvent.PortFailed` variant carrying them out to a listener — has no
    consumer today and was deferred as scope creep. An ArchUnit rule pins the
    list at exactly these four, so a fifth is a deliberate decision, not an

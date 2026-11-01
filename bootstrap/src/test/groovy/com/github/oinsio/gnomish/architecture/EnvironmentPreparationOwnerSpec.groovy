@@ -49,7 +49,11 @@ class EnvironmentPreparationOwnerSpec extends Specification {
         ('adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/HostCheckEnvironmentSource.java') : 'the host check environment over the adopted workspace',
         (ENV + 'EnvironmentLease.java') : 'the round box — and the box a --discard-work resume rebuilds after its disposal',
         (ENV + 'SelfCheckedEnvironment.java') : 'decorator: delegates, then self-checks',
+        ('bootstrap/src/main/java/com/github/oinsio/gnomish/app/conformance/WireObservation.java'): 'decorator: the conformance kit\'s wire observation delegates (D19 of define-executor-contract)',
+        ('bootstrap/src/main/java/com/github/oinsio/gnomish/app/conformance/ProgramCandidate.java'): 'the host environment over a conformance case\'s own scratch working copy (D19 of define-executor-contract), adopted as the host describe environment adopts its directory',
         ('sandbox/core/src/main/java/com/github/oinsio/gnomish/sandbox/LiveBox.java') : 'the live-box mechanism hands each build to its role\'s materializer',
+        ('bootstrap/src/main/java/com/github/oinsio/gnomish/app/RunDescribe.java') : 'the host describe environment over the run\'s own directory (design D5 of define-executor-contract), adopted as the host check environment adopts it',
+        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/HostRoundEnvironmentSource.java') : 'the host round environment over the adopted workspace: its scratch area, where a program executor names its result files (task 7.1 of define-executor-contract), as the host check environment adopts it',
     ]
 
     private static Map<String, String> productionCode() {

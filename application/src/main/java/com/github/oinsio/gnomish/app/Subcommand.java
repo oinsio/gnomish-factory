@@ -6,7 +6,7 @@ import org.springframework.boot.ApplicationArguments;
 /**
  * The entrypoint's top-level dispatch: {@code gnomish run} | {@code status} | {@code usage} |
  * {@code take} | {@code serve} | {@code board} | {@code dashboard} | {@code project} | {@code doctor}
- * (FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2 of add-factory-serve; FR1 of
+ * | {@code executor} (FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2 of add-factory-serve; FR1 of
  * add-board-command; FR1 of add-dashboard-page; FR7 of add-doctor-command). The subcommand is the
  * first raw source argument that is not a Spring Boot option (does not start with {@code --}) —
  * {@link ApplicationArguments} has no built-in concept of a leading positional subcommand, so this
@@ -19,14 +19,14 @@ import org.springframework.boot.ApplicationArguments;
  * RunExitCodeMapper} to exit code 2 like every other {@link UsageException}.
  *
  * <p>Implements FR13, FR14 of add-git-workflow; FR9 of add-tracker-port; FR2, FR4 of
- * add-project-registry; FR7 of add-doctor-command.
+ * add-project-registry; FR7 of add-doctor-command; FR12 of define-executor-contract.
  */
 enum Subcommand {
     /** {@code gnomish run ...} or no subcommand at all — the pre-existing manual-run flow. */
     RUN,
     /** {@code gnomish status --dir <dir> [<task>] [--json]} — read-only task inspection. */
     STATUS,
-    /** {@code gnomish usage --dir <dir> <task> [--json]} — read-only per-round usage report. */
+    /** {@code gnomish usage --dir <dir> <task> [--json | --markdown]} — read-only per-round usage report. */
     USAGE,
     /** {@code gnomish take [<ref>]} — single-task tracker mode, its own flag set entirely. */
     TAKE,
@@ -42,7 +42,12 @@ enum Subcommand {
      * {@code gnomish doctor [--dir] [--online] [--json]} — every readiness check in one run,
      * dispatched before the git floor refusal (FR1, FR7, design D2 of add-doctor-command).
      */
-    DOCTOR;
+    DOCTOR,
+    /**
+     * {@code gnomish executor verify <program> [--pending-settings=<json>]} — the conformance kit
+     * against a candidate program (FR12, UX2 of define-executor-contract).
+     */
+    EXECUTOR;
 
     private static final String RUN_TOKEN = "run";
     private static final String STATUS_TOKEN = "status";
@@ -53,13 +58,14 @@ enum Subcommand {
     private static final String DASHBOARD_TOKEN = "dashboard";
     private static final String PROJECT_TOKEN = "project";
     private static final String DOCTOR_TOKEN = "doctor";
+    private static final String EXECUTOR_TOKEN = "executor";
 
     /**
      * @param args the raw application arguments, as Spring Boot parsed them
      * @return the requested subcommand, or {@link #RUN} when no positional token is present
      * @throws UsageException if the first positional token is present but names none of {@code
      *     run}, {@code status}, {@code usage}, {@code take}, {@code serve}, {@code board}, {@code
-     *     dashboard}, {@code project}, {@code doctor}
+     *     dashboard}, {@code project}, {@code doctor}, {@code executor}
      */
     static Subcommand parse(ApplicationArguments args) {
         String token = firstPositionalToken(args);
@@ -76,10 +82,12 @@ enum Subcommand {
             case DASHBOARD_TOKEN -> DASHBOARD;
             case PROJECT_TOKEN -> PROJECT;
             case DOCTOR_TOKEN -> DOCTOR;
+            case EXECUTOR_TOKEN -> EXECUTOR;
             default ->
                 throw new UsageException("'" + token + "' is not a gnomish subcommand: accepted forms are"
                         + " 'gnomish run', 'gnomish status', 'gnomish usage', 'gnomish take', 'gnomish serve',"
-                        + " 'gnomish board', 'gnomish dashboard', 'gnomish project', or 'gnomish doctor'");
+                        + " 'gnomish board', 'gnomish dashboard', 'gnomish project', 'gnomish doctor', or"
+                        + " 'gnomish executor'");
         };
     }
 

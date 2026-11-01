@@ -68,9 +68,10 @@ class ProgressListenerWiringSpec extends Specification {
         when:
         def sites = constructions()
 
-        then: 'the scan reached the composition root: two executor sites and the judge site'
+        // Task 7.3 of define-executor-contract: one round source per run, so one agent arm.
+        then: 'the scan reached the composition root: the one executor site and the judge site'
         sites*.file.unique() == [SELECTOR]
-        sites.size() == 3
+        sites.size() == 2
 
         and: 'each passes the renderer as its listener, and no other listener is built at the site'
         sites.every { site -> site.args[2] == RENDERER }

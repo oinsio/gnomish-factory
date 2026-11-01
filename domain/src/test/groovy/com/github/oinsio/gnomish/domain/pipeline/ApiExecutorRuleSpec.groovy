@@ -36,7 +36,7 @@ class ApiExecutorRuleSpec extends Specification {
         then:
         errors == [
             new ConfigError('stages/plan/stage.yaml', 'executor.type',
-            "api executor is not yet supported; 'agent-cli' is the only supported executor type currently")
+            "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'")
         ]
     }
 
@@ -48,6 +48,14 @@ class ApiExecutorRuleSpec extends Specification {
 
         expect:
         ApiExecutorRule.validate(stages) == []
+    }
+
+    // FR10 of define-executor-contract: program is a supported executor type
+    def "a program-executor stage yields no error"() {
+        expect:
+        ApiExecutorRule.validate([
+            stage('lint', ExecutorType.PROGRAM)
+        ]) == []
     }
 
     def "a mixed pipeline reports the error only for the api stage, in pipeline order"() {
@@ -64,9 +72,9 @@ class ApiExecutorRuleSpec extends Specification {
         then:
         errors == [
             new ConfigError('stages/plan/stage.yaml', 'executor.type',
-            "api executor is not yet supported; 'agent-cli' is the only supported executor type currently"),
+            "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'"),
             new ConfigError('stages/review/stage.yaml', 'executor.type',
-            "api executor is not yet supported; 'agent-cli' is the only supported executor type currently")
+            "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'")
         ]
     }
 

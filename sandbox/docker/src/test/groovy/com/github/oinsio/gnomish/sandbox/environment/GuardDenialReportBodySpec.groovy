@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
@@ -45,9 +47,9 @@ class GuardDenialReportBodySpec extends Specification {
     // Scenario: observability/status-report / An attempt denial carries no request body
     def "NFR-S1: an attempt's denial entry is the finding's metadata, never the request body"() {
         given: 'a passing round that recorded the hostile denial'
-        def attempt = new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(),
-        JudgeUsage.none(), denials(), Stop.none())
-        def state = new TaskState(new Position.AtStage('implement'), 1, [attempt], ExecutorUsage.none())
+        def attempt = AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(),
+        denials(), Stop.none())
+        def state = new TaskState(new Position.AtStage('implement'), 1, [attempt], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when:
         def document = rendered(StatusReport.build(CONTEXT, state, null, null))

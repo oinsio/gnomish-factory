@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.*
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -64,9 +65,9 @@ class GitObjectsTaskRepositoryResumeFromSpec extends Specification implements Ba
 
     /** The state an exhausted stage parks with: one burned quality failure on record. */
     private static TaskState exhausted() {
-        TaskState.atStageStart('implement').recordQualityFailure(new AttemptRecord(
+        TaskState.atStageStart('implement').recordQualityFailure(AttemptRecords.of(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
-                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()))
+                        ExecutorUsage.none(), [], Stop.none()), ExecutorVersions.none())
     }
 
     private void started() {
@@ -193,7 +194,7 @@ class GitObjectsTaskRepositoryResumeFromSpec extends Specification implements Ba
             Path stateJson = dir.resolve('state.json')
             def dto = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
             Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(
-                            new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor)))
+                            new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor, null)))
         }
 
         when:

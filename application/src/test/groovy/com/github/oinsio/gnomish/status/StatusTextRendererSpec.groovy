@@ -6,14 +6,20 @@ import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutorRole
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Finding
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.MismatchCause
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.domain.engine.UsageCost
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -34,14 +40,14 @@ class StatusTextRendererSpec extends Specification {
 
     private static AttemptRecord passedRound(int round = 0) {
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
-        new AttemptRecord(round, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
+        AttemptRecords.of(round, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), [], Stop.none())
     }
 
     private static AttemptRecord failedRound(int round = 0) {
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
                 new Verdict.Fail([]), Duration.ofSeconds(5))
-        new AttemptRecord(round, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [check],
-        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none(), [], Stop.none())
+        AttemptRecords.of(round, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [check],
+        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), [], Stop.none())
     }
 
     // FR10, UX2: renderAttemptSummary is genuinely one line and mentions the round and result
@@ -76,7 +82,7 @@ class StatusTextRendererSpec extends Specification {
     def "renderFull includes stage, attempts, decisions, totals, escalation and last decision"() {
         given:
         def renderer = new StatusTextRenderer()
-        def state = TaskState.atStageStart('implement').recordQualityFailure(failedRound(0))
+        def state = TaskState.atStageStart('implement').recordQualityFailure(failedRound(0), ExecutorVersions.none())
         def decision = new Decision('patch in place', 'plan', 'operator', STARTED)
         def ctx = context([decision])
         def escalation = new EscalationReport.DecisionNeeded(UntrustedText.agent('Refactor or patch?'), [
@@ -95,7 +101,7 @@ class StatusTextRendererSpec extends Specification {
         text.contains('Round 0')
         text.contains('Decisions:')
         text.contains('patch in place')
-        text.contains('wallMillis=5000')
+        text.contains('Totals: tokensByModel=unknown\n')
         text.contains('decision needed: Refactor or patch?')
         text.contains('Last decision:')
         text.contains('patch in place')
@@ -120,7 +126,7 @@ class StatusTextRendererSpec extends Specification {
     def "renderFull renders a gate as awaiting approval after the stage that passed"() {
         given:
         def renderer = new StatusTextRenderer()
-        def state = new TaskState(new Position.AwaitingApproval('release'), 0, [], ExecutorUsage.none())
+        def state = new TaskState(new Position.AwaitingApproval('release'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         def report = StatusReport.build(context(), state, null, null)
 
         when:
@@ -157,8 +163,60 @@ class StatusTextRendererSpec extends Specification {
         def text = renderer.renderFull(report)
 
         then:
-        text.contains('wallMillis=unknown')
-        text.contains('tokensByModel=unknown')
+        text.contains('Totals: tokensByModel=unknown\n')
+    }
+
+    // FR17 of define-executor-contract: the totals line takes the snapshot's per-model tokens from the
+    //     one usage fold, summed over the roles, in model-id order
+    def "renderFull renders the snapshot's tokens per model, summed over the roles"() {
+        given:
+        def renderer = new StatusTextRenderer()
+        def tokens = new TokenUsage(1, 2, 3, 4)
+        def snapshot = new UsageSnapshot([(ExecutorRole.TRANSFORM): ['z': tokens, 'a': tokens], (ExecutorRole.VERDICT): ['a': tokens]],
+        new UsageCost(BigDecimal.ZERO, [:], false), 2, null)
+        def state = new TaskState(new Position.AtStage('implement'), 0, [], snapshot, ExecutorVersions.none())
+
+        when:
+        def text = renderer.renderFull(StatusReport.build(context(), state, null, null))
+
+        then:
+        text.contains('Totals: tokensByModel={a=TokenUsage[input=2, output=4, cacheCreation=6, cacheRead=8], z=TokenUsage[input=1, output=2, cacheCreation=3, cacheRead=4]}\n')
+    }
+
+    // Scenario: observability/status-report / Text render names the snapshot's position
+    // UX4 of define-executor-contract: beside the totals, the rounds folded and the cost as a stated
+    //     lower bound naming the unpriced tokens, in the words gnomish usage --markdown uses
+    def "UX4: an incomplete snapshot renders its rounds and 'cost incomplete: N tokens unpriced' beside the totals"() {
+        given:
+        def renderer = new StatusTextRenderer()
+        def tokens = new TokenUsage(1, 2, 3, 4)
+        def snapshot = new UsageSnapshot([(ExecutorRole.TRANSFORM): ['m': tokens], (ExecutorRole.VERDICT): ['j': tokens]],
+        new UsageCost(new BigDecimal('0.25'), [(ExecutorRole.VERDICT): ['j': tokens]], false), 3, null)
+        def state = new TaskState(new Position.AtStage('implement'), 0, [], snapshot, ExecutorVersions.none())
+
+        when:
+        def text = renderer.renderFull(StatusReport.build(context(), state, null, null))
+
+        then:
+        text.contains('Totals: tokensByModel={j=TokenUsage[input=1, output=2, cacheCreation=3, cacheRead=4], '
+                + 'm=TokenUsage[input=1, output=2, cacheCreation=3, cacheRead=4]}\n'
+                + '  rounds folded: 3; cost at least $0.2500; cost incomplete: 10 tokens unpriced\n')
+    }
+
+    // UX4 of define-executor-contract: a complete snapshot names its rounds and its priced sum, no qualifier
+    def "UX4: a complete snapshot renders its rounds and the priced sum beside the totals"() {
+        given:
+        def renderer = new StatusTextRenderer()
+        def snapshot = new UsageSnapshot([(ExecutorRole.TRANSFORM): ['m': new TokenUsage(1, 0, 0, 0)]],
+        new UsageCost(new BigDecimal('1.5'), [:], true), 1, null)
+        def state = new TaskState(new Position.AtStage('implement'), 0, [], snapshot, ExecutorVersions.none())
+
+        when:
+        def text = renderer.renderFull(StatusReport.build(context(), state, null, null))
+
+        then:
+        text.contains('  rounds folded: 1; cost $1.50\n')
+        !text.contains('incomplete')
     }
 
     // FR11, D7: renderFull renders every EscalationReport kind without throwing
@@ -178,15 +236,20 @@ class StatusTextRendererSpec extends Specification {
             UntrustedText.agent('b')
         ]) | 'decision needed'
         new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('command:x')), UntrustedText.subprocess('network error'), UntrustedText.subprocess('')) | 'cannot verify'
-        new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage')) | 'pipeline mismatch'
+        new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument('stale-stage'))) | 'pipeline mismatch'
         new EscalationReport.CannotExecute(UntrustedText.subprocess('agent crashed'), []) | 'cannot execute'
+        // FR7 of define-executor-contract: the sixth kind names the bound it reached
+        new EscalationReport.BudgetExhausted(UntrustedText.agent('token bound 1000')) | 'budget exhausted: token bound 1000'
+        // FR13 of define-executor-contract: an executor version mismatch names the executor and both versions
+        new EscalationReport.PipelineMismatch(new MismatchCause.ExecutorVersion(UntrustedText.manifest('acme'),
+                UntrustedText.branchDocument('1'), UntrustedText.subprocess('2'))) | 'pipeline mismatch: executor "acme" version 1 recorded, 2 described'
     }
 
     // FR6 of make-run-headless: the report carries no attempt limit, so the stage line names the
     //     stage alone, with no "(attempt n/m)" fraction
     def "renderFull renders the stage line without an attempt fraction"() {
         given:
-        def state = TaskState.atStageStart('implement').recordQualityFailure(failedRound(0))
+        def state = TaskState.atStageStart('implement').recordQualityFailure(failedRound(0), ExecutorVersions.none())
 
         when:
         def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, null, null))
@@ -204,9 +267,9 @@ class StatusTextRendererSpec extends Specification {
         def denial = new Finding(
                 'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
-        def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
-        ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)], Stop.none())
-        def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
+        def round = AttemptRecords.of(0, AttemptRecord.Result.PASSED, STARTED, [check],
+        ExecutorUsage.none(), [Denial.unidentified(denial)], Stop.none())
+        def state = new TaskState(new Position.AtStage('implement'), 1, [round], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when:
         def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, null, null))
@@ -230,9 +293,9 @@ class StatusTextRendererSpec extends Specification {
                 "evil.example.com:443/x${esc}[2K\nRound 9:\tpassed\rHIDDEN",
                 'kind=http method=POST')
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
-        def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
-        ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)], Stop.none())
-        def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
+        def round = AttemptRecords.of(0, AttemptRecord.Result.PASSED, STARTED, [check],
+        ExecutorUsage.none(), [Denial.unidentified(denial)], Stop.none())
+        def state = new TaskState(new Position.AtStage('implement'), 1, [round], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when:
         def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, null, null))
@@ -312,7 +375,7 @@ class StatusTextRendererSpec extends Specification {
     // Scenario: sandbox/sandbox-egress / A quiet task shows nothing
     def "renderFull renders nothing for a round with no denials"() {
         given:
-        def state = new TaskState(new Position.AtStage('implement'), 1, [passedRound(0)], ExecutorUsage.none())
+        def state = new TaskState(new Position.AtStage('implement'), 1, [passedRound(0)], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when:
         def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, null, null))
@@ -336,9 +399,9 @@ class StatusTextRendererSpec extends Specification {
                         'gnomish-PROJ-9',
                         'loss window: after the guard container\'s start'))
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
-        def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check],
-        ExecutorUsage.none(), JudgeUsage.none(), [denial, marker], Stop.none())
-        def state = new TaskState(new Position.AtStage('implement'), 1, [round], ExecutorUsage.none())
+        def round = AttemptRecords.of(0, AttemptRecord.Result.PASSED, STARTED, [check],
+        ExecutorUsage.none(), [denial, marker], Stop.none())
+        def state = new TaskState(new Position.AtStage('implement'), 1, [round], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when:
         def text = new StatusTextRenderer().renderFull(StatusReport.build(context(), state, null, null))

@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.*
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -70,15 +71,15 @@ class GitObjectsTaskRepositoryApproveCheckpointSpec extends Specification implem
     /** The state a passing {@code manual} round leaves: at the gate, its passing round recorded. */
     private static TaskState gated(Position position = GATE) {
         new TaskState(position, 0, [
-            new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [],
-            ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
-        ], ExecutorUsage.none())
+            AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [],
+            ExecutorUsage.none(), [], Stop.none())
+        ], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     /** What {@code TaskState.approveGate} yields for {@link #gated}: past the gate, history kept. */
     private static TaskState approved(Position next = new Position.AtStage('verify')) {
         def gate = gated()
-        new TaskState(next, gate.attemptsUsed(), gate.attempts(), gate.totals())
+        new TaskState(next, gate.attemptsUsed(), gate.attempts(), gate.totals(), ExecutorVersions.none())
     }
 
     /** A task branch whose tip records {@code state} and a {@code paused} park owing a tracker write. */
@@ -226,7 +227,7 @@ class GitObjectsTaskRepositoryApproveCheckpointSpec extends Specification implem
             Path stateJson = dir.resolve('state.json')
             def dto = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
             Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(
-                            new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor)))
+                            new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor, null)))
         }
 
         when:

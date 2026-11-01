@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -71,7 +72,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ])
         new GitAttemptPersistence(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE)
-                .persist('PROJ-1', TaskState.atStageStart('implement'), trace)
+                .persist('PROJ-1', RoundStates.recorded(trace.key()), trace)
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-1')
         def merge = runner.run(cloneDir, '-c', 'user.email=a@b.c', '-c', 'user.name=a',

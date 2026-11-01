@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git.state;
 
+import com.github.oinsio.gnomish.executorcontract.usagewire.UsageSnapshotDto;
 import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -25,22 +27,26 @@ import org.jspecify.annotations.Nullable;
  * environment had no denial source (host mode) or had not read one yet.
  *
  * <p>Implements FR3, FR4 of add-git-workflow; FR5 of
- * fix-denial-report-attachment.
+ * fix-denial-report-attachment; FR13 of define-executor-contract.
  *
  * @param version the state-file contract version, {@code 1}
  * @param position where the task sits in its pipeline
  * @param attemptsUsed quality failures burned in the current stage
  * @param attempts every executed round of the current stage, in order;
  *     possibly empty
- * @param totals cumulative executor usage over the whole task, surviving stage
- *     advancement and resume
+ * @param totals the usage snapshot of the whole task, surviving stage advancement and resume
+ *     (FR17 of define-executor-contract)
  * @param egressCursor the environment's denial read position at commit time, or
  *     {@code null} when there is none
+ * @param executorVersions the task's executor version pin, executor name to describe version (FR13
+ *     of define-executor-contract); always written, {@code null} only when read from a document
+ *     written before the field existed, which reads as no pin
  */
 public record StateJsonDto(
         int version,
         StatePositionDto position,
         int attemptsUsed,
         List<StateAttemptDto> attempts,
-        StateUsageDto totals,
-        @Nullable EgressCursorDto egressCursor) {}
+        UsageSnapshotDto totals,
+        @Nullable EgressCursorDto egressCursor,
+        @Nullable Map<String, String> executorVersions) {}

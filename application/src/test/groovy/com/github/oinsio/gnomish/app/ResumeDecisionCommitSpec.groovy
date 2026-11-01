@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
@@ -24,7 +26,7 @@ class ResumeDecisionCommitSpec extends Specification {
     //     past the pipeline's end to no stage
     def "a reply at #position is stamped with stage #stage and the tracker author"() {
         when:
-        def decision = ResumeDecisionCommit.decisionFor(new TaskState(position, 0, [], ExecutorUsage.none()), 'go on', AT)
+        def decision = ResumeDecisionCommit.decisionFor(new TaskState(position, 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none()), 'go on', AT)
 
         then:
         decision.body() == 'go on'

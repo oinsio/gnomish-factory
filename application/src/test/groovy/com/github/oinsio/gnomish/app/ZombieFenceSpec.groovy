@@ -20,6 +20,7 @@ import com.github.oinsio.gnomish.app.take.RevocationDetectedException
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -129,7 +130,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
 
         when: 'the new holder persists a round: local commit plus a fast-forward push that lands on origin'
         new File(holderWork.toFile(), 'holder.txt').text = 'holder round'
-        persistenceFor(holderWork, HOLDER, tracker).persist('PROJ-1', TaskState.atStageStart('implement'), trace(0))
+        persistenceFor(holderWork, HOLDER, tracker).persist('PROJ-1', RoundStates.recorded(trace(0).key()), trace(0))
 
         then: 'exactly the holder\'s commit is now the origin task-branch tip — the first push landed by fast-forward'
         originTip() != base
@@ -140,7 +141,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
         RevocationDetectedException revocation = null
         def warns = capturePushWarns {
             try {
-                persistenceFor(zombieWork, ZOMBIE, tracker).persist('PROJ-1', TaskState.atStageStart('implement'), trace(0))
+                persistenceFor(zombieWork, ZOMBIE, tracker).persist('PROJ-1', RoundStates.recorded(trace(0).key()), trace(0))
             } catch (RevocationDetectedException e) {
                 revocation = e
             }

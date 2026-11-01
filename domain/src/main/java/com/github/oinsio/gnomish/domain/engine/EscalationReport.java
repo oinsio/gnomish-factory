@@ -4,9 +4,9 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 
 /**
- * The data-only reason a task was escalated, one of five kinds:
+ * The data-only reason a task was escalated, one of six kinds:
  * {@link AttemptsExhausted}, {@link DecisionNeeded}, {@link CannotVerify},
- * {@link PipelineMismatch}, {@link CannotExecute}. Carried inside
+ * {@link PipelineMismatch}, {@link CannotExecute}, {@link BudgetExhausted}. Carried inside
  * {@link TaskOutcome.Escalated}; a caller switches exhaustively over the sealed
  * variants to render the escalation.
  *
@@ -18,14 +18,15 @@ import java.util.List;
  * final state alone describe the escalation (UX1). Inert value data compared by
  * content.
  *
- * <p>Implements FR10 of add-stage-engine.
+ * <p>Implements FR10 of add-stage-engine; FR7 of define-executor-contract.
  */
 public sealed interface EscalationReport
         permits EscalationReport.AttemptsExhausted,
                 EscalationReport.DecisionNeeded,
                 EscalationReport.CannotVerify,
                 EscalationReport.PipelineMismatch,
-                EscalationReport.CannotExecute {
+                EscalationReport.CannotExecute,
+                EscalationReport.BudgetExhausted {
 
     /**
      * The resolved attempt {@code limit} was hit (FR5): every allowed stage attempt
@@ -61,7 +62,7 @@ public sealed interface EscalationReport
 
     /**
      * The gnome asked a human (FR6, design D6): a {@code question} and free-text
-     * {@code options}, mirroring the executor's {@link ExecutionResult.DecisionNeeded}
+     * {@code options}, mirroring the executor's {@link ExecutionResult.DecisionRequest}
      * data (minus usage and trace). {@code question} is required non-blank — a
      * decision that asks nothing cannot be answered. {@code options} are carried
      * verbatim, defensively copied and unmodifiable, and may be empty (an open-ended
@@ -76,21 +77,8 @@ public sealed interface EscalationReport
     record DecisionNeeded(UntrustedText question, List<UntrustedText> options) implements EscalationReport {
 
         public DecisionNeeded {
-            question = requireNonBlank(question, "question");
+            question = requireNonBlank(question, "EscalationReport.DecisionNeeded.question");
             options = List.copyOf(options);
-        }
-
-        /**
-         * Fails fast on a blank {@code question}: a decision that asks the human
-         * nothing cannot be answered (FR6). Explicit static method for the same PIT
-         * mutation-gate reason as {@link AttemptsExhausted#requireAtLeastOne}.
-         */
-        private static UntrustedText requireNonBlank(UntrustedText value, String component) {
-            if (value.isBlank()) {
-                throw new IllegalArgumentException(
-                        "EscalationReport.DecisionNeeded." + component + " must not be blank");
-            }
-            return value;
         }
     }
 
@@ -110,52 +98,22 @@ public sealed interface EscalationReport
     record CannotVerify(CheckRef check, UntrustedText reason, UntrustedText details) implements EscalationReport {
 
         public CannotVerify {
-            reason = requireNonBlank(reason, "reason");
-        }
-
-        /**
-         * Fails fast on a blank {@code reason}: a cannot-verify report must state why
-         * the verdict could not be obtained (FR4). Explicit static method for the
-         * same PIT mutation-gate reason as {@link AttemptsExhausted#requireAtLeastOne}.
-         */
-        private static UntrustedText requireNonBlank(UntrustedText value, String component) {
-            if (value.isBlank()) {
-                throw new IllegalArgumentException("EscalationReport.CannotVerify." + component + " must not be blank");
-            }
-            return value;
+            reason = requireNonBlank(reason, "EscalationReport.CannotVerify.reason");
         }
     }
 
     /**
-     * The recorded position named a stage absent from the current pipeline (FR9):
-     * {@code staleStage} is that stale name. Required non-blank — a mismatch report
-     * that does not name the missing stage is useless to the operator.
+     * The recorded task no longer matches what this run would execute (FR9): its {@link MismatchCause} is
+     * a recorded position naming a stage the pipeline no longer declares, or an executor whose current
+     * describe version differs from the version pinned by the task's first round that ran it (FR13 of define-executor-contract, design D11). Both
+     * are found by the engine pre-flight before any round, and both need a fix of the law or the image
+     * followed by a bare retry.
      *
-     * <p>Implements FR10 of add-stage-engine.
+     * <p>Implements FR10 of add-stage-engine; FR13 of define-executor-contract.
      *
-     * @param staleStage the recorded stage name absent from the pipeline — read back off a task
-     *     branch some instance wrote, which is why it is carried where a live pipeline's stage
-     *     names are validated {@code String}s (design D3, NG4 of type-untrusted-text); never blank
+     * @param cause what no longer matches; never null
      */
-    record PipelineMismatch(UntrustedText staleStage) implements EscalationReport {
-
-        public PipelineMismatch {
-            staleStage = requireNonBlank(staleStage, "staleStage");
-        }
-
-        /**
-         * Fails fast on a blank {@code staleStage}: the report exists to name the
-         * missing stage (FR9). Explicit static method for the same PIT mutation-gate
-         * reason as {@link AttemptsExhausted#requireAtLeastOne}.
-         */
-        private static UntrustedText requireNonBlank(UntrustedText value, String component) {
-            if (value.isBlank()) {
-                throw new IllegalArgumentException(
-                        "EscalationReport.PipelineMismatch." + component + " must not be blank");
-            }
-            return value;
-        }
-    }
+    record PipelineMismatch(MismatchCause cause) implements EscalationReport {}
 
     /**
      * An executor infrastructure failure prevented running the stage (FR10): no
@@ -181,21 +139,41 @@ public sealed interface EscalationReport
     record CannotExecute(UntrustedText cause, List<Denial> denials) implements EscalationReport {
 
         public CannotExecute {
-            cause = requireNonBlank(cause, "cause");
+            cause = requireNonBlank(cause, "EscalationReport.CannotExecute.cause");
             denials = List.copyOf(denials);
         }
+    }
 
-        /**
-         * Fails fast on a blank {@code cause}: a cannot-execute report must describe
-         * the executor infrastructure failure (NFR-O1). Explicit static method for
-         * the same PIT mutation-gate reason as {@link AttemptsExhausted#requireAtLeastOne}.
-         */
-        private static UntrustedText requireNonBlank(UntrustedText value, String component) {
-            if (value.isBlank()) {
-                throw new IllegalArgumentException(
-                        "EscalationReport.CannotExecute." + component + " must not be blank");
-            }
-            return value;
+    /**
+     * A round ended {@code failed/limit} (FR7 of define-executor-contract): a bound of the stage —
+     * turns, tokens, money — was reached. No attempt was burned; the round itself is recorded with
+     * its usage, and its record carries the matching {@link Stop.BudgetExhausted}, so a pickup that
+     * sees the round re-raises this report instead of running another paid round (design D11, D17;
+     * item 12 of crash-consistency.md). {@code bound} names the bound that was hit — the
+     * executor's own reason when the executor reported the stop — and is required non-blank, since
+     * a budget report that names no bound tells the operator nothing to weigh.
+     *
+     * <p>Implements FR7 of define-executor-contract.
+     *
+     * @param bound the text naming the bound that was reached; never blank
+     */
+    record BudgetExhausted(UntrustedText bound) implements EscalationReport {
+
+        public BudgetExhausted {
+            bound = requireNonBlank(bound, "EscalationReport.BudgetExhausted.bound");
         }
+    }
+
+    /**
+     * Fails fast on a blank text a report exists to carry. Kept as an explicit static method
+     * rather than inline in the compact constructors: PIT's record filter suppresses all mutations
+     * inside a record's canonical constructor, which would silently exempt this validation from the
+     * 100% mutation gate.
+     */
+    private static UntrustedText requireNonBlank(UntrustedText value, String component) {
+        if (value.isBlank()) {
+            throw new IllegalArgumentException(component + " must not be blank");
+        }
+        return value;
     }
 }

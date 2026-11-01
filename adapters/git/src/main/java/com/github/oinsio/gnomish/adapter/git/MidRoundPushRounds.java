@@ -2,8 +2,12 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
+import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.nio.file.Path;
@@ -12,9 +16,13 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Decorates the host {@link RoundEnvironmentSource} so every git-mode host round carries a
- * fresh {@link MidRoundPushListener} (FR1, FR2, design D1 of wire-host-mid-round-push): {@code
- * openRound} delegates to the host source and wraps the returned {@code Round} so {@code
+ * Decorates the host {@link RoundEnvironmentSource} for a git-mode host run: every round opens on
+ * a round token minted over the task worktree's tip (FR21 of define-executor-contract, design
+ * D13), and carries a fresh {@link MidRoundPushListener} (FR1, FR2, design D1 of
+ * wire-host-mid-round-push). {@code openRound} first reads the worktree's {@code HEAD} — the tip the
+ * round opens on — through {@link HostBranchProbe#currentHead()}, mints it through {@link RoundToken#of} and opens it
+ * in this run's own {@link CurrentRound}, which is what {@link #identity()} names to the engine;
+ * then it delegates to the host source and wraps the returned {@code Round} so {@code
  * roundListener()} returns the push listener built from the request's own facts — worktree root
  * from the {@link DirectoryWorkspace}, taskId from the {@code TaskContext}, stage name, the
  * attempt number as the round, the branch via {@link TaskIdSanitizer#branchName}. {@code
@@ -27,12 +35,27 @@ import java.util.Optional;
  * a {@link DirectoryWorkspace} by construction, and any future workspace generalization has to
  * visit both files (design, Risks).
  *
- * <p>Implements FR1, FR2, NFR-O1, NFR-P1 of wire-host-mid-round-push.
+ * <p>The minting sits here, not in {@code HostRoundEnvironmentSource}, because this decoration is
+ * the one piece of the host wiring that holds git and is applied only on the git-mode paths: the
+ * bare host source, in {@code adapters/agent}, has no git edge and also serves the in-place run,
+ * which needs no git. One instance per run (one {@code apply} of the operator per assembly), so its
+ * cell is the run's.
+ *
+ * <p>Kept in sync with {@link SandboxRoundEnvironmentSource}: both mint the round token once per
+ * opened round from a {@link VerifiedTip}-checked read of the tip the round opens on, through {@link
+ * RoundToken#of}, and open it in the run's {@link CurrentRound} before the round runs (FR21 of
+ * define-executor-contract).
+ *
+ * <p>Implements FR1, FR2, NFR-O1, NFR-P1 of wire-host-mid-round-push; FR21 of
+ * define-executor-contract.
  */
 public final class MidRoundPushRounds implements RoundEnvironmentSource {
 
     private final RoundEnvironmentSource host;
     private final GitRunner runner;
+
+    /** This run's round cell: each round is opened here over the worktree tip it opens on. */
+    private final CurrentRound rounds = new CurrentRound();
 
     /**
      * Shared by every round of this task (FR4 of harden-logging-observability, design D4): the
@@ -59,16 +82,29 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
 
     @Override
     public Round openRound(StageExecutor.Request request) {
-        Round round = host.openRound(request);
         var workspace = (DirectoryWorkspace) request.workspace();
         String taskId = request.context().taskId();
+        String branch = TaskIdSanitizer.branchName(taskId);
+        // The one minting of a git-mode host round's identity (FR21 of define-executor-contract): the
+        // worktree's HEAD as the round opens, verified before use — a failed resolution fails the
+        // round's open rather than recording a round under nothing.
+        rounds.open(RoundToken.of(new HostBranchProbe(runner, workspace.root(), branch).currentHead()));
+        RoundToken openedOn = rounds.opened();
+        Round round = host.openRound(request);
         var listener = new MidRoundPushListener(
                 runner,
                 workspace.root(),
                 request.stage().name(),
                 request.attempt(),
-                new MidRoundPollContext(taskId, TaskIdSanitizer.branchName(taskId), pushSuppressor));
+                openedOn,
+                new MidRoundPollContext(taskId, branch, pushSuppressor));
         return new PushRound(round, listener);
+    }
+
+    /** The run's round cell, filled by every {@link #openRound}: the engine stamps its token. */
+    @Override
+    public RoundIdentity identity() {
+        return rounds;
     }
 
     /** The host round with only {@code roundListener()} overridden; everything else delegates. */
@@ -100,7 +136,7 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        public Optional<String> readDecision() {
+        public Optional<RoundDecisionRequest> readDecision() {
             return host.readDecision();
         }
 

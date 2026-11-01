@@ -1,0 +1,53 @@
+// Build script for the `:executor-contract` module (FR1, design D2 of define-executor-contract;
+// ADR 0020, decisions 1–4): the one request/result contract every executor of the factory speaks.
+// The JSON Schema files under `src/main/resources/schemas/` — request, result, answer, describe —
+// are the contract's single source of truth; the Java DTOs that mirror them one to one, the
+// `Executor` interface built-ins implement, and the one result-file reader land here beside them.
+//
+// The module reaches the JDK, Jackson and the JDK-only `:untrustedtext` leaf, and nothing else: no Spring, no logging API, no factory
+// layer. The DTOs are a wire image, so they need a JSON binding and must not need anything that
+// would pull a layer behind them — the engine in `:domain`, the adapters and the conformance kit
+// all reach this module, and an edge added here would land in each of them. Jackson is `api`: the
+// DTOs carry its annotations and expose its tree nodes (`ObjectNode` settings, the `JsonNode`
+// answer slot), so every consumer compiles against it.
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and the PIT mutation
+// gate all come from the convention plugins.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach — no internal project yet —
+    // is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Executor contract: the JSON Schema files of the executor wire contract and their Java mirror.'
+
+dependencies {
+    // The jackson-bom pinned to the CVE fix (see gradle/libs.versions.toml, [versions].jackson).
+    api platform(libs.jackson.bom)
+    api libs.jackson.annotations
+    api libs.jackson.databind
+    // The answer's Jackson binding (AnswerJson) writes and reads through the streaming API; it is
+    // internal, so the edge is implementation.
+    implementation libs.jackson.core
+    // Every text field a result file carries leaves ResultFileReader as an UntrustedText (FR6,
+    // NFR-S2), and the carrier is on the reader's surface (ReadResult), so the edge is api.
+    api project(':untrustedtext')
+
+    // The one JSON Schema validator of the factory (FR9 of define-executor-contract, task 6.3):
+    // `SettingsSchema` judges a law's settings against the schema an executor's describe declares,
+    // for the describe preflight and the conformance kit alike; `WireSchemas` loads the contract's
+    // own four schema files and judges a raw document against one (FR24, design D19), for the kit
+    // and for WireSchemaRoundTripSpec. Internal: neither judgement's types carry a validator type,
+    // so the edge is implementation. Apache-2.0, as its transitive
+    // `itu` (com.ethlo.time); both are accepted by config/allowed-licenses.json.
+    implementation libs.json.schema.validator
+}
+
+// `:executor-contract` reaches exactly one project: the JDK-only `:untrustedtext` leaf, whose
+// carrier every text field the result-file reader returns travels in (task 3.1). The leaf has no
+// internal edge of its own and may never acquire one, so this edge lands nothing else in the
+// engine, the adapters or the conformance kit that reach this module.
+layering {
+    allowedProjects = [':untrustedtext']
+}

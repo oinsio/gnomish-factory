@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine.port;
 
+import com.github.oinsio.gnomish.domain.engine.ModelUsage;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
-import com.github.oinsio.gnomish.domain.engine.TokenUsage;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import java.util.Map;
@@ -42,27 +42,27 @@ public interface JudgeVoter {
 
     /**
      * The outcome of one judge vote: the graded {@link Verdict} and the per-model
-     * {@link TokenUsage} map the vote consumed. The engine tallies these into a
-     * majority verdict and aggregates the per-vote token maps for cost telemetry
-     * (NFR-C1). Inert value data compared by content.
+     * {@link ModelUsage} map the vote consumed — tokens and the cost reported beside them. The
+     * engine tallies these into a majority verdict and records each vote's map as its {@code
+     * verdict} usage entry (NFR-C1). Inert value data compared by content.
      *
-     * <p>{@code tokensByModel} is map-only, following {@link
-     * com.github.oinsio.gnomish.domain.engine.ExecutorUsage#tokensByModel()}'s
-     * shape (design D4): an empty map means the adapter did not report token
-     * counts for this vote — and the engine simply omits an
-     * unreported vote from its cost aggregation rather than treating a missing
-     * count as zero.
+     * <p>{@code byModel} is map-only, following {@link
+     * com.github.oinsio.gnomish.domain.engine.ExecutorUsage#byModel()}'s
+     * shape (design D4): an empty map means the adapter did not report usage
+     * for this vote, never a count of zero; a model's cost is absent when the vote priced
+     * nothing for it.
      *
-     * <p>Implements FR3, D2 of add-stage-engine; FR9, NFR-C1, D4 of add-agent-executor.
+     * <p>Implements FR3, D2 of add-stage-engine; FR9, NFR-C1, D4 of add-agent-executor; FR22 of
+     * define-executor-contract.
      *
      * @param verdict this vote's graded verdict; never null
-     * @param tokensByModel the tokens this vote consumed, keyed by resolved model
+     * @param byModel the usage this vote consumed, keyed by resolved model
      *     id; defensively copied, unmodifiable, empty when unreported
      */
-    record Vote(Verdict verdict, Map<String, TokenUsage> tokensByModel) {
+    record Vote(Verdict verdict, Map<String, ModelUsage> byModel) {
 
         public Vote {
-            tokensByModel = Map.copyOf(tokensByModel);
+            byModel = Map.copyOf(byModel);
         }
     }
 }

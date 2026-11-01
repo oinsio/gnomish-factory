@@ -13,8 +13,8 @@ import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Finding
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -22,7 +22,10 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
@@ -93,7 +96,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 1), [
             new ToolCall(0, 'Edit', Instant.parse('2026-07-16T14:35:10Z'), Duration.ofMillis(2100))
         ])
-        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
+        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, RoundStates.withRound(state, trace.key()), trace)
 
         when: 'both are rendered through the same JSON mapper'
         def memoryJson = mapper.serialize(memoryReport)
@@ -121,10 +124,10 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
                         'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST'))
         def check = new CheckResult(
                 new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
-        def attempt = new AttemptRecord(
+        def attempt = AttemptRecords.of(
                 0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-16T14:35:10Z'),
-                [check], ExecutorUsage.none(), JudgeUsage.none(), [denial], Stop.none())
-        def state = new TaskState(new Position.AtStage('implement'), 1, [attempt], ExecutorUsage.none())
+                [check], ExecutorUsage.none(), [denial], Stop.none())
+        def state = new TaskState(new Position.AtStage('implement'), 1, [attempt], UsageSnapshot.EMPTY, ExecutorVersions.none())
         def context = new TaskContext(taskId, UntrustedText.tracker('Fix flaky OrderServiceSpec'), UntrustedText.tracker('body'), [])
         def memoryReport = StatusReport.build(context, state, null, null)
 
@@ -133,7 +136,8 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         taskRepository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def worktree = registeredClone.worktrees().resolve(taskId)
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
-                .persist(taskId, state, new ToolTrace(new AttemptKey(taskId, 'implement', 0), []))
+                .persist(taskId, RoundStates.withRound(state, new AttemptKey(taskId, 'implement', 0)),
+                new ToolTrace(new AttemptKey(taskId, 'implement', 0), []))
 
         when: 'the branch is read back and both renderings go through the same mapper'
         registerTip(cloneDir, taskId)

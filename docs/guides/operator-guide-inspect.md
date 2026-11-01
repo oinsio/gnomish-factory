@@ -41,6 +41,8 @@ gnomish status --dir=<clone-dir> [<task>] [--json]
   diagnostic row naming its shape; it never fails the listing of the others.
 
 - **Single-task mode** (`<task>` given): reads `.gnomish-task/` straight off `gnomish/<task>` via `git show` — no worktree is materialized, no checkout happens, no local branch is created. If no local branch exists, `status` fetches exactly `gnomish/<task>` and its register together (`git clone` does not copy the register); a remote-tracking ref is used only when that fetch does not deliver, and a branch read that way without its register reports `Unregistered` with the same diagnosis as in list mode, naming `gnomish status <task>` as the step that fetches the register, and exits with code 7, as every shape that refuses inspection does (below). A branch still `Unregistered` after that fetch means origin delivered no register for the task or could not be reached — `status` cannot tell which: inspect it before you return the task to the ready state. A local branch is read as it is, with no fetch. Text and `--json` output are two renders of one StatusReport (`"version": 1`), built from the state recorded at the commit the task's factory register (`refs/gnomish-factory/<task>`) names — the factory's latest commit of the task, never a commit the gnome added on top — so a running task shows its last recorded round, not what it is doing right now — plus the task's worktree path if one currently exists. This is the only status path: `gnomish run` reads no input and has no in-process status command (see [`operator-guide-run.md`](operator-guide-run.md)).
+- **Totals in the text render**: after the `Totals: tokensByModel=…` line, the text names the snapshot's rounds folded and its cost in the same words `gnomish usage --markdown` uses — `rounds folded: <N>; cost $<priced>` when the cost is complete, `cost at least $<priced>; cost incomplete: <N> tokens unpriced` (or `usage not reported`) when it is a lower bound. `--json` carries the same figures as `totals.rounds`, `totals.cost.complete` and `totals.cost.unpricedTokens`.
+
 - **Every shape renders**: the branch's shape is classified before anything is read from it, so `status` reports a delivered branch as delivered and a freshly created one as pending instead of failing on state files that shape does not have. For those branches the output is the shape itself:
 
   ```
@@ -63,14 +65,16 @@ gnomish status --dir=<clone-dir> [<task>] [--json]
 ## `gnomish usage`
 
 ```bash
-gnomish usage --dir=<clone-dir> <task> [--json]
+gnomish usage --dir=<clone-dir> <task> [--json | --markdown]
 ```
 
 Unlike `status`, `<task>` is mandatory here — there is no list mode.
 
 `usage` reconstructs per-stage/per-round resource usage by walking the git history of `.gnomish-task/state.json` on the task branch, chronologically from oldest to newest, up to the commit the task's factory register names (a `state.json` the gnome committed above it is not a round, and a branch with no register reports no rounds) — not by parsing commit messages. A commit counts as a "round record" when its `state.json` shows a new attempt (the attempts list grew, or the pipeline position advanced to a new stage visit); salvage, `task.json`, and cleanup commits are naturally skipped since they don't add a new attempt record. `usage` only makes sense in git mode — a `--mode=in-place` run has no branch or history to reconstruct from.
 
-**Text output** (default) is a stage/round table plus totals (wall time, tokens).
+**Text output** (default) is a stage/round table — each round's tokens summed over its participants and models, and the executor's wall time — followed by the usage snapshot of the walked rounds (tokens, rounds folded, the priced cost and whether it is complete).
+
+**Markdown output** (`--markdown`) is the report the usage-report stage posts on the task's pull request, verbatim: the time elapsed since the first round started (time parked for a human included) with the summed agent and checks times, a per-stage table (rounds, agent time, checks time, tokens, cost) with a total row, a per-role table (`transform (gnome)`, `verdict (judge)`, `decision (arbiter)` — the labels are only how the report shows the roles) and a per-model table, each with input, output, cache write, cache read and their total. Every token and cost figure comes from the same usage fold as `totals`, so the stage rows, the role rows and the model rows each add up to the snapshot. A cost that is not complete is printed as a lower bound: `at least $<priced>; cost incomplete: <N> tokens unpriced`, or `at least $<priced>; cost incomplete: usage not reported` when a round reported no usage at all. `--json` and `--markdown` are mutually exclusive.
 
 **JSON output** (`--json`) exposes full granularity under its own `"version": 1` mini-contract — a separate schema from the `status` StatusReport, not reused:
 
@@ -85,27 +89,35 @@ Unlike `status`, `<task>` is mandatory here — there is no list mode.
       "result": "<string>",
       "startedAt": "<ISO-8601 UTC>",
       "checks": [ "..." ],
-      "executorUsage": {
-        "wallMillis": 0,
-        "tokensByModel": {
-          "<model>": { "input": 0, "output": 0, "cacheCreation": 0, "cacheRead": 0 }
+      "usage": [
+        {
+          "role": "transform",
+          "executor": "<name>",
+          "provenance": "reported",
+          "wallMillis": 0,
+          "byTool": [ "..." ],
+          "byModel": {
+            "<model>": { "input": 0, "output": 0, "cacheCreation": 0, "cacheRead": 0, "costUsd": 0.0 }
+          }
         },
-        "byTool": [ "..." ]
-      },
-      "judgeUsage": { "perVote": [ "..." ] }
+        { "role": "verdict", "executor": "<name>", "vote": 0, "provenance": "absent", "byTool": [], "byModel": {} }
+      ]
     }
   ],
   "totals": {
-    "wallMillis": 0,
-    "tokensByModel": {
-      "<model>": { "input": 0, "output": 0, "cacheCreation": 0, "cacheRead": 0 }
+    "byRole": {
+      "<role>": { "<model>": { "input": 0, "output": 0, "cacheCreation": 0, "cacheRead": 0 } }
     },
-    "byTool": []
+    "cost": { "priced": 0.0, "unpricedTokens": {}, "complete": true },
+    "rounds": 1,
+    "through": "<round token>"
   }
 }
 ```
 
-`totals.byTool` is always empty — totals aggregate executor usage only, not a per-tool breakdown.
+Each row's `usage` lists one participant entry per executor invocation of the round: the stage's executor as a `transform` entry, then each judge vote as its own `verdict` entry with its `vote` index. `vote` appears on a `verdict` entry only and `wallMillis` only when known; an entry with provenance `absent` reported nothing and carries an empty `byModel` — unknown, never zero; `costUsd` appears only where the executor priced the model. `state.json` and `status --json` spell the entries the same way.
+
+`totals` is the usage snapshot — the one usage fold over every walked round, every participant included: tokens by role and model (never priced there), the cost as a lower bound (`priced` sums the costs the executors reported, `unpricedTokens` names per role and model the tokens reported without a cost, and `complete` is false whenever a token went unpriced or an entry reported nothing), `rounds` folded and `through`, the token of the last folded round (omitted when none had one). `state.json` and `status --json` carry the task's recorded snapshot in the same shape.
 
 **Unreadable history**: a historical commit whose `state.json` cannot be read — an unsupported envelope version, a half-written or hand-edited document — is skipped with a WARN naming the commit, and the walk continues. The table and totals render from the readable commits; only the rounds that broken commit itself would have contributed are missing.
 

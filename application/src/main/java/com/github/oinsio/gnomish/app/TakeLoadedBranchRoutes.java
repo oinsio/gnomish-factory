@@ -186,15 +186,15 @@ record TakeLoadedBranchRoutes<B extends ResumedBranch>(
 
     /**
      * A recorded outcome is routed through the decision dialog only when it is a genuine
-     * ESCALATION-kind park: an {@code Escalated} outcome whose report is {@link
-     * EscalationReport.AttemptsExhausted} or {@link EscalationReport.DecisionNeeded} (design D3).
+     * ESCALATION-kind park: an {@code Escalated} outcome whose report is AttemptsExhausted,
+     * DecisionNeeded or BudgetExhausted (design D3; FR7 of define-executor-contract).
      *
-     * <p>Package-private (not private) so the routing predicate is unit-testable directly over the
-     * full outcome/report matrix, without standing up the resume collaborators.
+     * <p>Package-private so the predicate is unit-testable over the full outcome/report matrix.
      */
     static boolean isEscalationDecision(@Nullable RecordedOutcome outcome, @Nullable EscalationReport lastEscalation) {
         return outcome instanceof RecordedOutcome.Escalated
                 && (lastEscalation instanceof EscalationReport.AttemptsExhausted
-                        || lastEscalation instanceof EscalationReport.DecisionNeeded);
+                        || lastEscalation instanceof EscalationReport.DecisionNeeded
+                        || lastEscalation instanceof EscalationReport.BudgetExhausted);
     }
 }

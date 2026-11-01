@@ -58,6 +58,11 @@ dependencies {
     // `api`: the resolver's own input and decision values appear on the use cases'
     // signatures, so the composition root compiles against them too.
     api project(':baseref')
+    // The executor contract (FR6, design D10 of define-executor-contract): the agent's decision
+    // file is a result file, read through the contract's one result reader by the decision-request
+    // read both round sources share (`DecisionRequestRead`), whose `ResultSource` parameter sits on
+    // this module's own surface — so the edge is `api`.
+    api project(':executor-contract')
 
     // The two dependency-free leaves, both `implementation` because neither appears
     // on this module's api surface: the shared subprocess wait/kill/drain discipline
@@ -126,6 +131,9 @@ dependencies {
     // …and the git seam pass 2 cut out of it (task 10.2): the status, usage and
     // resume specs read what the git adapter wrote. Test scope only, as above.
     testImplementation project(':adapters:git')
+    // …and the host execution environment the describe preflight specs run the executor stand-ins
+    // in (define-executor-contract, tasks 6.2 and 6.3). Test scope only, as above.
+    testImplementation project(':sandbox:docker')
     // The logging specs assert through Logback's ListAppender (the SLF4J backend
     // is the composition root's choice, so this is a test-only declaration).
     testImplementation libs.logback.classic
@@ -144,6 +152,9 @@ layering {
         // its own input value here, because that leaf may import nothing (design D2).
         ':baseref',
         ':domain',
+        // The executor contract's result reader, for the decision file (define-executor-contract,
+        // task 3.2); a JDK + Jackson + `:untrustedtext` module, so this edge lands nothing else.
+        ':executor-contract',
         ':gitobjects',
         // The git invocation policy's leaf (design D1 of own-git-invocation-policy): no source
         // in this module names it; it arrives through `:gitobjects`, whose `GitExec` builds its

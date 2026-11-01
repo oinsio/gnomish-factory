@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.OriginRemote;
+import com.github.oinsio.gnomish.app.describe.ExecutorEgress;
 import com.github.oinsio.gnomish.app.git.ProjectIdentity;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
@@ -117,7 +118,10 @@ record ContainerRunSupportFactory(
      * RunAssembly#assemble}'s own composition — operator passthrough plus the declared credential
      * names: the tracker's, the configured check providers', and those the pipeline's own checks
      * name (FR11, FR17, design D11 of add-plugin-architecture), its values from the secrets port —
-     * because the environments compose exec children before the assembly exists.
+     * because the environments compose exec children before the assembly exists. A {@code program}
+     * executor's credentials are deliberately not declared here: declared names are what every child
+     * is denied, and the program's child takes them as its own resolved layer through the allowlist's
+     * {@code programGrant} (NFR-S1, design D10 of define-executor-contract).
      */
     @Override
     public ContainerRunSupport create(
@@ -143,7 +147,10 @@ record ContainerRunSupportFactory(
                 new BoxGitLink(cloneDir, new ContainerHarvestFetch(runner, cloneDir)),
                 allowlist,
                 projectId,
-                ContainerTipReader.restorations(runner, cloneDir, taskId));
+                ContainerTipReader.restorations(runner, cloneDir, taskId),
+                // The hosts the law grants its program executors, which describe then confirms
+                // before the first round (design D10 of define-executor-contract).
+                ExecutorEgress.union(definition));
         return new ContainerRunSupport(
                 runner, cloneDir, taskId, taskEnvironments, segments, sandboxLifecyclePass, epochs);
     }

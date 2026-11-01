@@ -4,13 +4,14 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
  * VerifyOrchestrator judge dispatch, task 4.4 — a Judge check dispatches to the JudgeVoting
  * majority loop and its verdict is what the CheckResult carries; every cast vote's per-model
- * token map surfaces in the run's JudgeUsage in vote order, including empty maps for votes
+ * token map surfaces as the run's verdict entries in vote order, including empty maps for votes
  * that reported nothing; the TaskContext reaches the voter unmodified (FR3, FR7, NFR-C1 of
  * add-stage-engine; FR9, NFR-C1, D4 of add-agent-executor).
  */
@@ -34,15 +35,15 @@ class VerifyJudgeDispatchSpec extends VerifyOrchestratorSpecBase {
         judgeVoter.voteCount == 2
     }
 
-    // NFR-C1, D4: every cast judge vote's token map surfaces in the run's JudgeUsage, in
-    //             vote order, including an empty map for a vote that reported nothing
-    def "aggregates per-vote judge token maps into the run's JudgeUsage, in vote order"() {
+    // NFR-C1, D4: every cast judge vote's token map surfaces as a verdict entry, in vote order,
+    //             an unreported vote as an absent entry (FR15 of define-executor-contract)
+    def "each cast judge vote becomes a verdict entry carrying its vote index, in vote order"() {
         given: 'a 3-vote check: a token-reporting Fail, an unreported Fail, then a Pass'
         def first = ['model-a': new TokenUsage(10, 20, 0, 0)]
         def judgeVoter = new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.Fail([]), first),
+            new JudgeVoter.Vote(new Verdict.Fail([]), Unpriced.of(first)),
             new JudgeVoter.Vote(new Verdict.Fail([]), [:]),
-            new JudgeVoter.Vote(new Verdict.Pass(), ['model-a': new TokenUsage(1, 2, 0, 0)])
+            new JudgeVoter.Vote(new Verdict.Pass(), Unpriced.of(['model-a': new TokenUsage(1, 2, 0, 0)]))
         ])
 
         when: 'the judge check is verified to its Fail majority'
@@ -52,7 +53,14 @@ class VerifyJudgeDispatchSpec extends VerifyOrchestratorSpecBase {
         then: 'two Fails reach the majority, so only the two cast votes maps are accounted'
         result.results[0].verdict instanceof Verdict.Fail
         judgeVoter.voteCount == 2
-        result.judgeUsage.perVote() == [first, [:]]
+        result.votes == [
+            Participants.verdict(Participants.JUDGE_EXECUTOR, 0, Unpriced.of(first)),
+            Participants.verdict(Participants.JUDGE_EXECUTOR, 1, [:])
+        ]
+        result.votes*.provenance() == [
+            UsageProvenance.REPORTED,
+            UsageProvenance.ABSENT
+        ]
     }
 
     // FR7: the TaskContext (with its decisions) reaches the judge voter unmodified

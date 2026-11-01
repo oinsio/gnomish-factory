@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.executorcontract.ReadResult;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
@@ -16,7 +17,6 @@ import java.time.Duration;
 import java.time.InstantSource;
 import java.util.List;
 import java.util.UUID;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * "not executable" / "not found") is {@link Verdict.CannotVerify} — an infrastructure failure,
  * honoring the same classification a missing binary would get, and the findings channel plays no
  * role; any other non-zero exit is {@link Verdict.Fail} carrying either the findings {@link
- * FindingsFileReader} parsed from the channel (if present and well-formed) or one synthetic {@link
+ * CheckFindings} read from the channel (if present and well-formed) or one synthetic {@link
  * Finding} built from the output tail (if the content is absent, empty, or malformed — NFR-R2: the
  * exit-code verdict always stands). A process start failure (a null {@link
  * CommandProcessRunner#run} result) is also {@link Verdict.CannotVerify}.
@@ -38,8 +38,9 @@ import org.slf4j.LoggerFactory;
  * <p>The findings channel follows FR1/NFR-S3 of add-sandbox-core: the path is allocated in the
  * environment's scratch area (outside the working copy, inside the environment boundary), handed
  * to the command as {@code GNOMISH_FINDINGS_FILE}, and — only for a run that chose its own exit
- * code — read back through the environment's size-capped {@code readFile} — bytes in memory, never
- * a factory-side file; {@code dispose()} removes the scratch area whatever the outcome. The child
+ * code — read back through the environment's size-capped {@code readFile} by the executor
+ * contract's one result reader (FR6 of define-executor-contract), bytes in memory, never a
+ * factory-side file; {@code dispose()} removes the scratch area whatever the outcome. The child
  * environment is the layered allowlist carried by {@link #childEnv} (D6, FR9); {@link
  * #withChildEnv} threads the run's allowlist — passthrough plus the active tracker adapter's
  * declared credential names — per run.
@@ -50,7 +51,7 @@ import org.slf4j.LoggerFactory;
  * from the escalation report alone, exactly like an endpoint that was merely slow.
  *
  * <p>Implements FR7, FR8, NFR-R2, NFR-S1, D6 of add-manual-run; FR1, FR4, FR9, NFR-S3 of
- * add-sandbox-core; FR5 of harden-logging-observability.
+ * add-sandbox-core; FR5 of harden-logging-observability; FR6 of define-executor-contract.
  */
 public record ShellCommandCheckRunner(
         CommandProcessRunner processRunner,
@@ -68,13 +69,6 @@ public record ShellCommandCheckRunner(
      * did not come from this process.
      */
     private static final int IDENTITY_CAP_CHARS = 200;
-
-    /**
-     * The read cap applied when the findings channel is read back through the environment
-     * (NFR-S3, NFR-C1 of add-sandbox-core): far above any sane findings report, far below
-     * resource abuse; truncated JSON parses as malformed and degrades to the synthetic finding.
-     */
-    static final long FINDINGS_READ_CAP_BYTES = 256 * 1024;
 
     /**
      * The {@code sh}-backed runner with an empty child-environment allowlist.
@@ -186,9 +180,7 @@ public record ShellCommandCheckRunner(
             if (!(outcome.termination() instanceof ExecHandle.Wait.Exited)) {
                 return unfinished(outcome);
             }
-            byte[] findings =
-                    environment.readFile(findingsPath, FINDINGS_READ_CAP_BYTES).orElse(null);
-            return classify(identityOf(check), outcome, findings);
+            return classify(identityOf(check), outcome, CheckFindings.read(environment, findingsPath));
         }
     }
 
@@ -226,10 +218,12 @@ public record ShellCommandCheckRunner(
      * NFR-R2).
      */
     private static Verdict classify(
-            String checkIdentity, CommandProcessRunner.CommandOutcome outcome, byte @Nullable [] findingsContent) {
+            String checkIdentity,
+            CommandProcessRunner.CommandOutcome outcome,
+            ReadResult<CheckFindings.FindingsFile> findingsRead) {
         int exitCode = outcome.exitCode();
         if (exitCode == 0) {
-            FindingsFileReader.noteIgnoredOnPass(checkIdentity, findingsContent);
+            CheckFindings.noteIgnoredOnPass(checkIdentity, findingsRead);
             return new Verdict.Pass();
         }
         if (exitCode == 126 || exitCode == 127) {
@@ -241,7 +235,7 @@ public record ShellCommandCheckRunner(
                     UntrustedText.factory(reason), UntrustedText.subprocess(outcome.outputTail()));
         }
         Finding syntheticFinding = new Finding("command exited with status " + exitCode, null, outcome.outputTail());
-        List<Finding> parsed = FindingsFileReader.read(checkIdentity, findingsContent);
+        List<Finding> parsed = CheckFindings.findings(checkIdentity, findingsRead);
         return new Verdict.Fail(parsed != null ? parsed : List.of(syntheticFinding));
     }
 }

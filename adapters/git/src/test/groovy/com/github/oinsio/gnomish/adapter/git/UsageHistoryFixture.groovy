@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.Duration
 import java.time.Instant
@@ -44,6 +45,6 @@ trait UsageHistoryFixture implements SeededCloneFixture {
         def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
         ])
-        persistenceFor(taskId).persist(taskId, state, trace)
+        persistenceFor(taskId).persist(taskId, RoundStates.withRound(state, trace.key()), trace)
     }
 }

@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -339,7 +340,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         def report = new EscalationReport.AttemptsExhausted(3)
         record = recordWith(new RecordedOutcome.Escalated(report), report)
         stateRead = {
-            Optional.of(new TaskState(new Position.AtStage('build'), 2, [], TaskState.atStageStart('build').totals()))
+            Optional.of(new TaskState(new Position.AtStage('build'), 2, [], TaskState.atStageStart('build').totals(), ExecutorVersions.none()))
         }
 
         when:
@@ -426,7 +427,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         given:
         record = recorded == null ? freshRecord() : recordWith(recorded, report)
         stateRead = {
-            Optional.of(new TaskState(new Position.AwaitingApproval('build'), 0, [], TaskState.atStageStart('build').totals()))
+            Optional.of(new TaskState(new Position.AwaitingApproval('build'), 0, [], TaskState.atStageStart('build').totals(), ExecutorVersions.none()))
         }
 
         when:
@@ -479,7 +480,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         record = recorded == null ? freshRecord() : recordWith(recorded, recorded instanceof RecordedOutcome.Escalated ? recorded.report() : null)
         if (gate) {
             stateRead = {
-                Optional.of(new TaskState(new Position.AwaitingApproval('build'), 0, [], TaskState.atStageStart('build').totals()))
+                Optional.of(new TaskState(new Position.AwaitingApproval('build'), 0, [], TaskState.atStageStart('build').totals(), ExecutorVersions.none()))
             }
         }
 

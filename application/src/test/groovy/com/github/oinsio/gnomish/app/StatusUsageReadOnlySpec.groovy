@@ -10,10 +10,12 @@ import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -65,9 +67,9 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
-        def passed = round(0, AttemptRecord.Result.PASSED, 500, 100)
-        def state = TaskState.atStageStart('implement').recordUnburnedRound(passed)
-        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
+        def passed = round(taskId, 'implement', 0, AttemptRecord.Result.PASSED, 500, 100)
+        def state = TaskState.atStageStart('implement').recordUnburnedRound(passed, ExecutorVersions.none())
+        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, RoundStates.withRound(state, trace.key()), trace)
     }
 
     private Map snapshot() {
@@ -121,7 +123,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
 
         when:
         def output = captureStdout {
-            new UsageCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(registeredClone), liveConsole()).run(args)
+            new UsageCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(registeredClone), liveConsole(), new VirtualClock()).run(args)
         }
 
         then:

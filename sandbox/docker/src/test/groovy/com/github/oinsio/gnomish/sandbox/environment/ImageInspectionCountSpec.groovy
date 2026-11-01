@@ -52,7 +52,7 @@ class ImageInspectionCountSpec extends Specification implements ContainerEnviron
         new ContainerEnvironments(
                 new BoxEquipment(docker, sandbox, timing, guardRoot, OwnershipMode.TRACKED, ImageContractCheck.current()),
                 key, new BoxGitLink(Path.of('/factory/clone'), harvester), ChildEnvAllowlist.none(), 'proj-1',
-                { -> DenialRestoration.none() })
+                { -> DenialRestoration.none() }, [])
     }
 
     private int inspections(String image) {

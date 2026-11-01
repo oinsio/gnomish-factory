@@ -16,12 +16,9 @@ import org.jspecify.annotations.Nullable;
  * list — and this single exception covers both.
  *
  * <p>Unchecked, following this codebase's established idiom for
- * infrastructure-failure signaling: {@code RoundExecution.execute} catches any
- * {@link RuntimeException} the {@link
- * com.github.oinsio.gnomish.domain.engine.port.StageExecutor} port throws and
- * shapes it into {@code RoundOutcome.CannotExecute}, burning no stage attempt
- * (NFR-R1). The eventual {@code CliStageExecutor} (task 6.5) is expected to let
- * this propagate uncaught from its {@code execute()} call.
+ * infrastructure-failure signaling: the executor round turns it into its {@code
+ * failed/infrastructure} result ({@link AgentRoundFailure}), which the engine classifies as
+ * {@code CannotExecute}, burning no stage attempt (NFR-R1; FR7 of define-executor-contract).
  *
  * <p>The message carries the round's read volume — raw bytes and parsed events
  * — whenever the caller knows it (FR5, UX2, D5 of fix-round-stdout-drain), and

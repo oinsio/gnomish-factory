@@ -51,7 +51,7 @@ class ManualRunAssemblyWiringSpec extends Specification implements AppAssemblyFi
                 new InMemoryAttemptPersistence(),
                 [],
                 // No round runs in this spec, so the law source is never read; any binding suffices.
-                LawBinding.workingTree(Path.of('').toAbsolutePath()))
+                new DescribedLaw(LawBinding.workingTree(Path.of('').toAbsolutePath()), [:]))
     }
 
     // FR11 of add-claim-heartbeat: a supplied extra listener (the take run's HeartbeatProgress) is

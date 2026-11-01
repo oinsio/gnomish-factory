@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Finding
+import com.github.oinsio.gnomish.domain.engine.ModelUsages
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
@@ -58,8 +59,8 @@ class LargeStreamRoundSpec extends Specification {
         def result = executor.execute(FakeAgentSupport.requestFor(workspaceDir))
 
         then:
-        result instanceof ExecutionResult.Completed
-        !result.usage().tokensByModel().isEmpty()
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
+        !ModelUsages.tokensOf(result.usage().byModel()).isEmpty()
     }
 
     // M1, FR1: the judge half — a verbose vote is graded, not degraded to CannotVerify.
@@ -88,7 +89,7 @@ class LargeStreamRoundSpec extends Specification {
         long elapsedMillis = (System.nanoTime() - startedAt).intdiv(1_000_000)
 
         then:
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
 
         and: 'nowhere near the round budget it would have burned waiting on a full pipe'
         elapsedMillis < 15_000
@@ -147,7 +148,7 @@ class LargeStreamRoundSpec extends Specification {
         def result = new CliStageExecutor(properties, clock, EXECUTOR_LAW).execute(request)
 
         then: 'the process started and read the whole prompt, nothing cut'
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         Files.readString(capture) == prompt + '\n---\n'
     }
 

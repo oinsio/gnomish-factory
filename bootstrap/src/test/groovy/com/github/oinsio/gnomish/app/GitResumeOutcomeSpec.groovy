@@ -4,10 +4,11 @@ import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import java.nio.file.Files
 /**
  * FR5, FR8, FR10, UX2 of add-git-workflow (task 4.7): {@code run()}'s outcome-driven
@@ -113,7 +114,7 @@ class GitResumeOutcomeSpec extends GitResumeSpecBase {
         given: 'a task paused after "build" passed — its recorded position the gate of "build"'
         def taskId = 'PROJ-12'
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        def gateState = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+        def gateState = new TaskState(new Position.AwaitingApproval('build'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         persistOneRound(taskId, gateState)
         repository().recordOutcome(taskId, new TaskOutcome.Paused(gateState, 'build'), TrackerWrite.OWED)
 

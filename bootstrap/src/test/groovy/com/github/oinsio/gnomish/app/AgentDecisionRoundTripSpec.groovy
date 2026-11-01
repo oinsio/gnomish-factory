@@ -90,7 +90,7 @@ class AgentDecisionRoundTripSpec extends Specification implements AppAssemblyFix
         def initialState = TaskState.atStageStart('build')
         def persistence = new InMemoryAttemptPersistence()
         def run = assembly.assemble(new RunOrder(workspaceDir, null, pipeline(), false),
-                context, initialState, persistence, [], LawBinding.workingTree(workspaceDir))
+                context, initialState, persistence, [], new DescribedLaw(LawBinding.workingTree(workspaceDir), [:]))
 
         when: 'the first run stops at the question'
         def stop = run.loop().run(pipeline(), context, initialState, new DirectoryWorkspace(workspaceDir), run.ports(), null)
@@ -114,7 +114,7 @@ class AgentDecisionRoundTripSpec extends Specification implements AppAssemblyFix
                 ])
         def resetState = stop.finalState().resetAttempts()
         def resumed = assembly.assemble(new RunOrder(workspaceDir, null, pipeline(), false),
-                answered, resetState, persistence, [], LawBinding.workingTree(workspaceDir))
+                answered, resetState, persistence, [], new DescribedLaw(LawBinding.workingTree(workspaceDir), [:]))
         def finished = resumed.loop().run(pipeline(), answered, resetState, new DirectoryWorkspace(workspaceDir), resumed.ports(), null)
 
         then: '3. the resumed round ran the same stage to a clean finish'

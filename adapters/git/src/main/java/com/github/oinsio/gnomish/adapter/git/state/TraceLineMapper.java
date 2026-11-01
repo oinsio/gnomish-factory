@@ -18,8 +18,7 @@ final class TraceLineMapper {
      * {@code Instant.toString()} for the wire timestamp and {@code
      * Duration.toMillis()} for the wire duration — this project has no
      * {@code jackson-datatype-jsr310}, so neither type is ever bound
-     * directly (same idiom as {@link StateJsonMapper}/{@link
-     * StateUsageMapper}).
+     * directly (same idiom as {@link StateJsonMapper}).
      *
      * @param call the tool call to render; never null
      * @return the equivalent {@code trace.jsonl} line DTO

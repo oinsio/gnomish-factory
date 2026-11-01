@@ -79,7 +79,7 @@ the snapshot in place of `executorUsage` and `judgeUsage` (F66 of tighten-spec-c
 
 #### Scenario: state.json carries the position and the current attempts
 - **WHEN** `state.json` is written
-- **THEN** it carries version, position, attemptsUsed, attempts[] {taskId, stage, roundToken, round, result, startedAt, stop, checks[], denials[], usage[]} and totals as the usage snapshot, the inner forms as in status-report v1
+- **THEN** it carries version, position, attemptsUsed, attempts[] {taskId, stage, roundToken, round, result, startedAt, stop, checks[], denials[], usage[]}, totals as the usage snapshot, and executorVersions {executor name → describe version}, the inner forms as in status-report v1
 
 #### Scenario: A repeated stage visit overwrites the round trace at the tip
 - **WHEN** a stage is visited again and a round of the new visit writes `attempts/<stage>/<round>/trace.jsonl`

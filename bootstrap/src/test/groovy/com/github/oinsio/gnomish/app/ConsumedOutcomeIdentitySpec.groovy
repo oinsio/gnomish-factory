@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -176,8 +177,8 @@ class ConsumedOutcomeIdentitySpec extends Specification implements BareGitRepoFi
     private static TaskState continuationState(String continuation, TaskState parked, PipelineDefinition definition) {
         if (continuation == 'approveCheckpoint') {
             def gate = parked.position() as Position.AwaitingApproval
-            return new TaskState(BranchHistory.following(definition, gate.stage()), parked.attemptsUsed(), parked.attempts(), parked.totals())
+            return new TaskState(BranchHistory.following(definition, gate.stage()), parked.attemptsUsed(), parked.attempts(), parked.totals(), ExecutorVersions.none())
         }
-        new TaskState(parked.position(), 0, [], parked.totals())
+        new TaskState(parked.position(), 0, [], parked.totals(), ExecutorVersions.none())
     }
 }

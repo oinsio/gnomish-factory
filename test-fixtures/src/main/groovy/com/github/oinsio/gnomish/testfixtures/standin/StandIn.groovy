@@ -88,7 +88,25 @@ final class StandIn {
     }
 
     /**
-     * A process-shaped fake the supervisor specs run as it is: a section of the {@code process}
+     * An executor preset (design D18 of define-executor-contract), run through its JVM link: the
+     * reference executor, or {@code break-<case>} — the fake {@code break} under a JVM link named
+     * after the one conformance case it breaks, which it reads from that name. Another preset that
+     * takes its case from its link's name ({@code describe-as}) is taken through {@link #link}.
+     */
+    static Path executor(String id) {
+        if (!id.startsWith('break-') || id in tables().sections().values().flatten()) {
+            return selected(id, 'executor')
+        }
+        Path fake = preset('break')
+        LINKS.computeIfAbsent(id) {
+            Path link = Files.createSymbolicLink(Holder.DIR.resolve(id), fake)
+            link.toFile().deleteOnExit()
+            link
+        }
+    }
+
+    /**
+     * A process-shaped fake the supervisor specs run as it is:a section of the {@code process}
      * table when a row states its behaviour (an exit code, a delay, a stall), and otherwise a
      * committed script under the library's {@code process/} directory — a child that ignores a
      * signal, forks or keeps a pipe open, behaviour that is the subject of those specs and that no

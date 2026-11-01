@@ -412,16 +412,28 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   outcome. Method: `TaskRepository.resumeFrom`. Together with `appendDecision`
   and the **approval** it is one of the only three writes that clear a
   recorded outcome (introduced by `make-checkpoint-gate-durable`).
-- **Round token** — the identity of one container-mode **round**: the commit
-  the task branch's tip pointed to when the round opened. No later round of the
-  task repeats it, because every round lands at least its snapshot commit and
-  every reset rides a commit of its own. It names the round's decision request
+- **Round token** — the identity of one **round** in a branch mode, host git
+  or container (an in-place run has no task branch and records none): the commit the task branch's tip pointed to when the
+  round opened. No later round of the task repeats it, because every round
+  lands at least its record commit and every reset rides a commit of its own.
+  It names the round's decision request
   (`decisions/<stage>-a<attempt>-<token>.json`, the only path read for that
-  round) and rides its snapshot commit's subject. A fresh round mints it from
-  the tip it opens on; a resumed round never mints — it reuses the token its
-  snapshot recorded. Type: `RoundToken`, parsed only by `RoundToken.of`
-  (introduced by `make-checkpoint-gate-durable`, D10). *Never:* "attempt" for
-  it — the attempt is the counted try, and its number repeats.
+  round), rides the snapshot commit's subject in container mode, and is stamped
+  on the round's record
+  (`roundToken`, beside `taskId` and `stage`); the **usage snapshot** names the
+  last round it folded by it (`through`). A fresh round mints it from the tip it
+  opens on; a resumed round never mints — it reuses the token its record
+  carries. Three producers, every one through the one parse `RoundToken.of`:
+  `SandboxRoundEnvironmentSource` mints it in container mode,
+  `MidRoundPushRounds` — the git-mode decoration of the host round source, the
+  one piece of the host wiring that holds git — mints it in host git mode over
+  the task worktree's tip, and `SnapshotTipCheck` reuses the recorded one on the
+  resume path; the engine takes it through the domain port `RoundIdentity` and
+  stamps it on the round's record. `RoundToken` lives in `domain/engine`.
+  Type: `RoundToken` (introduced by `make-checkpoint-gate-durable`, D10; host
+  mode by `define-executor-contract`, design D14; ADR 0020, decision 8).
+  *Never:* "attempt" for it — the attempt is the counted try, and its number
+  repeats.
 - **Current round** — the per-run cell that holds the identity of the round in
   flight, whole: open (its **round token**), then closed by its snapshot (the
   token and the snapshot commit together). Filled either by the live round
@@ -431,6 +443,13 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   `CurrentRound`; a closed round is `ClosedRound` (introduced by
   `make-checkpoint-gate-durable`, D10). *Never:* "ref" or "holder" for it in
   docs.
+- **Round commit** — the commit that records one round in `state.json` (its
+  record commit). Its subject, `gnomish: round <stage>#<round>`, is rendered
+  from the recorded round by `ServiceCommitMessages`, the one owner of the
+  factory's service commit messages, so the subject and the record cannot name
+  different stages (introduced by `add-git-workflow`; rendered from the record
+  by `define-executor-contract`, design D13). *Not:* a parsing contract —
+  readers take a round's identity from its record, never from the subject.
 
 ## Pipeline execution
 
@@ -440,8 +459,15 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   (see `.claude/rules/stage-description.md`).
 - **The law** — the `.gnomish/` pipeline definition and rules, taken from the
   factory's trusted clone; the gnome cannot edit its own acceptance criteria.
-- **Executor** — the mechanism that runs a stage: `api` (direct model calls)
-  or `agent-cli` (an agent CLI as a subprocess).
+- **Executor** — any mechanism that does one unit of work for the engine in one
+  **executor role**, and speaks the **executor contract**: the agent CLI that
+  changes the working copy, a command check, an external CI poll, an LLM judge.
+  A stage names its executor by type — `api` (direct model calls), `agent-cli`
+  (an agent CLI as a subprocess), `program` (an **external executor** named by
+  an **executor declaration**) — or by a **built-in executor**'s id. Every
+  executor implements one Java interface, `Executor` (`describe`, `start`,
+  `poll`). ADR 0020. *Not:* a tracker — trackers keep their in-process plugin
+  interface and are not executors.
 - **Attempt** — one counted try of a stage; only quality failures burn
   attempts, and every attempt is committed to the task branch. Its number
   counts within one visit of a stage and restarts at zero on every reset (an
@@ -453,7 +479,9 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
 - **Verify check** — one entry of a stage's ordered verification list:
   built-in declarative, `command`, `external`, or `judge`.
 - **Judge** — LLM-as-judge verification via the `JudgeVoter` port: acceptance
-  criteria in, structured verdict (`passed`, `findings[]`) out.
+  criteria in, structured verdict (`passed`, `findings[]`) out. In a usage
+  record each judge vote is a `verdict` **participant usage** entry with its
+  vote index; "judge" is the render label for that role, not record vocabulary.
 - **Findings** — structured, machine-readable observations reported to the
   tracker: message, optional location, optional details. Most come from a
   failed or noteworthy check and are fed back to the gnome on retry; a
@@ -462,6 +490,15 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
 - **Quality failure** — an explicit non-pass verdict (red tests, judge
   findings); burns an attempt. **Infrastructure failure** — a verdict could
   not be obtained (network, 5xx); never burns an attempt.
+- **Limit failure** — the third failure class: an executor stopped on a bound
+  (turns, tokens, money, time), or the **usage snapshot** after a round exceeds
+  the stage's bound — a money bound over an incomplete cost included, with the
+  reason "cost unknown". It burns no attempt and ends the stage with the
+  `BudgetExhausted` escalation naming the bound, recorded in the round's own
+  commit beside the snapshot. Wire form: status `failed` with class `limit`.
+  Introduced by `define-executor-contract` (design D4, D17); ADR 0020,
+  decision 4. *Not:* a quality failure — the work was not judged; nor an
+  infrastructure failure — a verdict was not sought.
 - **Advancement** — what happens after a stage verifies: `auto` (proceed) or
   `manual` (park at a checkpoint until a human returns the task).
 - **Reference pipeline** — a public repository whose `.gnomish/` tree is a
@@ -474,6 +511,219 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   nothing in the factory's build compares against it.
 - **Reference file** — an approved sample committed for equivalence tests
   (e.g. `status-report-v1.reference.json`). *Never:* golden.
+- **Executor role** — the kind of work one executor run is requested for, one
+  of four: `transform` (change the working copy), `verdict` (judge the working
+  copy), `decision` (choose among options) and `effect` (act outside the
+  branch; vocabulary reserved, not executed yet). The role selects the request's
+  role inputs, never its shape, and keys every **participant usage** entry. A
+  stage needs `transform`, a check needs `verdict`; the law carries no role
+  field. Type: `Role`. Introduced by `define-executor-contract` (design D14);
+  ADR 0020, decisions 4 and 9. *Never:* "gnome", "judge" or "arbiter" as a role
+  token, a record field or a usage key — those are render labels a report may
+  print for `transform`, `verdict` and `decision`, not record vocabulary.
+- **Participant usage** — the usage of one executor invocation within a round:
+  its **executor role**, the executor's name, the vote index for a `verdict`,
+  its **usage provenance**, optional wall time and per-tool aggregates, and per
+  resolved model id the four token counts (input, output, cache creation,
+  cache read) with an optional cost in USD — absent when the executor reported
+  none, never zero. A round's record holds one `usage` list of them; each judge
+  vote is its own entry. One usage wire vocabulary spells them in the state
+  file, the status report and the usage report. Type: `ParticipantUsage`.
+  Introduced by `define-executor-contract` (design D14); ADR 0020, decision 9.
+  *Never:* executor usage, judge usage — the role-named slots the list replaced.
+- **Usage provenance** — whether an executor reported its usage: `REPORTED` or
+  `ABSENT`. An absent entry carries an empty model map and never renders as
+  zero. Type: `UsageProvenance` (introduced by `define-executor-contract`; ADR
+  0020, decision 9). *Not:* the **provenance** of untrusted text, which names
+  where a piece of text came from.
+- **Usage fold** — the one pure function that sums usage: it folds every
+  **participant usage** entry of every round into a **usage snapshot**, and
+  folding a round whose round token equals the snapshot's `through` changes
+  nothing, so a round persisted again after a kill is never counted twice. The
+  round writers of `TaskState`, the budget judgement, `gnomish usage`'s re-fold
+  check and every renderer's sums go through it; no script, renderer or
+  aggregator sums tokens or cost of its own (the dashboard's day view over
+  already-folded ledger lines is the one named exception). Type: `UsageFold`
+  in `domain/engine`. Introduced by `define-executor-contract` (design D15);
+  ADR 0020, decision 10.
+- **Usage snapshot** — the task's recorded `totals`: the **usage fold**'s
+  result over every recorded round, by executor role × model × token kind, the
+  cost as a lower bound (`priced`, `unpricedTokens` per role and model,
+  `complete` — false while any folded token went unpriced or any entry was
+  `ABSENT`, since an unreported cost is unknown, never zero), and its position — `rounds` folded and `through`, the last
+  folded round token. Stored at the tip on every round and carried unchanged by
+  lifecycle rewrites, because `status`, a resume on another instance and the
+  budget check read only the tip; `gnomish usage` re-folds the rounds it walks
+  and refuses a mismatch with it, naming both figures. Type: `UsageSnapshot`.
+  Introduced by `define-executor-contract` (design D15); ADR 0020, decision 10.
+  *Not:* a display total — the snapshot is a fold's output, never a sum a
+  writer computed on its own.
+
+## Executor contract
+
+The one request and result contract every executor speaks, built-in or
+external; the decisions are ADR 0020.
+
+- **Executor contract** — the versioned JSON contract between the engine and an
+  executor: a request (executor role, workspace, **abstract policy**, role
+  inputs, settings, bounds, prior feedback, an optional continuation) and a
+  result (**status**, an optional answer in the **answer slot**, usage,
+  denials). The schema files in the repository are its single source of truth;
+  one set of Java types mirrors them. Introduced by `define-executor-contract`;
+  ADR 0020. *Not:* the plugin contract of trackers, which is a Java interface.
+- **Built-in executor** — an executor compiled into the factory, a member of a
+  closed set, run in process through the **mirror interface**. Introduced by
+  `define-executor-contract` (design D1, D2); ADR 0020, decisions 1 and 2.
+- **External executor** — an executor that is a program in any language,
+  spawned only through `TaskExecutionEnvironment.exec` (inside the box when the
+  stage runs in one) and spoken to over the executor contract's JSON; a stage
+  reaches it as type `program`. The factory's external adapter implements the
+  **mirror interface** by spawning it. A new external executor changes no
+  factory source file. Introduced by `define-executor-contract` (design D1);
+  ADR 0020, decision 1.
+- **Mirror interface** — the Java image of the executor contract: the
+  interface `Executor` (`describe`, `start`, `poll`) over the one DTO set
+  (`ExecutorRequest`, `ExecutorResult`, `Describe`). Built-ins implement it
+  directly and the external adapter implements it by spawning, so no built-in
+  has a result type of its own and the **conformance kit** covers both kinds.
+  Introduced by `define-executor-contract` (design D2); ADR 0020, decision 2.
+- **Executor declaration** — one entry of the law's `executors:` section (in
+  `.gnomish/config.yaml`): a name mapped to its `type` (`program` or a built-in
+  id), the argv of a `program`, its `settings`, the credential names it is
+  granted and the egress hosts it may reach. A stage references it by `executor.name`; declarations
+  come from the law commit only, never from operator configuration. Type of the
+  name: `ExecutorName`. Introduced by `define-executor-contract` (design D5, D8).
+- **Describe** — an executor's self-description, the handshake answered before
+  first use: an integer protocol version (bumped only on a breaking change), its
+  executor roles, its capabilities (`poll`, `cancel`, `streams_progress`,
+  `resumable`), a JSON Schema for its settings, its credential variable names,
+  egress hosts, config-directory variable, the flags that disable repo-local
+  policy sources, and its **policy enforcement level**. Unknown fields are
+  ignored on both sides. Type: `Describe`. Introduced by
+  `define-executor-contract` (design D5); ADR 0020, decision 5.
+- **Describe preflight** — the step that runs `describe` once per declared
+  `program` executor, through the execution environment, after the task's
+  environment is live and before the engine starts, and checks the answer
+  against the law: protocol version, the role each use site needs, the settings
+  against the declared schema, credentials, egress, and a money bound over an
+  executor that reports no usage. Invoked as the declared argv plus `describe`,
+  the answer in the file `GNOMISH_RESULT_FILE` names. Every failure is the
+  task's: a program that is absent, cannot answer, or disagrees with the law
+  is a located configuration error, and a program that cannot be started or
+  does not answer within the bound is an external failure; both park the task
+  as an invalid law does, no attempt burned. The engine never sees a describe
+  failure as a round, and no daemon condition opens (ADR 0019, decision 5).
+  Introduced by `define-executor-contract` (design D5); ADR 0020, decision 5.
+  *Not:* law load, where the `executors:` section is checked structurally and
+  no process runs. *Not:* an **operator precondition** — the law names the
+  program, so the failure belongs to the task.
+- **Executor version pin** — the task state's record, per executor name, of the
+  describe version of the first round that ran that executor: written by the
+  round writer in that round's own commit (first version wins), carried
+  unchanged by every lifecycle rewrite — advancement, decision reset, resume —
+  as `totals` is, and kept in `state.json` as `executorVersions`. The engine
+  pre-flight compares it, before any round, with what the **describe
+  preflight** obtained for the run, and a difference escalates
+  `PipelineMismatch` naming the executor and both versions. The executor's
+  name and model need no pin of their own: they are law content, fixed by the
+  law pin. The program binary is not pinned (proposal Q2). Types:
+  `ExecutorVersions` (the pin), `DescribedExecutors` (what the run obtained),
+  `ExecutorVersionCheck` (the comparison). Introduced by
+  `define-executor-contract` (design D11).
+- **Status** — the closed outcome of one executor run: `completed`; `failed`
+  with class `quality`, `infrastructure` or `limit` (a **quality failure**, an
+  **infrastructure failure**, a **limit failure**); or `pending` with a
+  **pending key**. An unknown status token reads as `failed/infrastructure`
+  naming the token. One engine component, `ExecutorOutcomeClassifier`, maps it
+  to attempt accounting and escalation; no adapter decides a class. Type:
+  `Status`, its class `FailureClass`. Introduced by `define-executor-contract`
+  (design D4); ADR 0020, decision 4. *Not:* the round result the engine
+  records (passed, quality failure, cannot verify, decision needed), which it
+  derives from the status, the answer and the checks. *Never:* a vendor exit
+  code as an outcome — it carries no meaning to the engine.
+- **Answer slot** — the optional structured answer of an executor result,
+  beside its **status**: `verdict` (SARIF 2.1.0 findings; pass or fail is
+  derived by the engine from the result levels against the check's threshold,
+  never declared), `select` (the chosen option, an optional ranking, a
+  rationale) or `decision-request` (a question, at least two options, an
+  optional **continuation key**). A malformed answer is never read as a pass.
+  Type: `Answer`. Introduced by `define-executor-contract` (design D4); ADR
+  0020, decision 4. *Not:* a status — a decision request is `completed` with a
+  `decision-request` answer, never a status of its own.
+- **Pending key** — the opaque key an executor returns with status `pending`,
+  for a run it has not finished; the factory hands it back to `poll` and never
+  interprets it. A `program` executor is polled the way it is started: the
+  declared argv with the word `poll` appended, the same request on standard
+  input, the key in the variable `GNOMISH_PENDING_KEY`, the result in the file
+  `GNOMISH_RESULT_FILE` names. A poll of a program whose describe declares no
+  `poll`, or with a key this executor did not receive from its own `start`, is
+  an infrastructure failure and spawns no process; keys are not persisted, so a
+  poll across factory instances has nothing to resume. In this version a
+  `pending` from a role whose caller cannot poll is an infrastructure failure
+  naming the limitation. Type: `PendingKey`; the keys a run issued are held by
+  `PendingRuns`. Introduced by `define-executor-contract` (design D2, D3, D4,
+  D6); ADR 0020, decisions 2 and 4. *Not:* a **continuation key**, which
+  resumes after an answer rather than waiting on an unfinished run.
+- **Continuation key** — the optional key a `decision-request` answer carries,
+  returned to the executor in the next request's `continuation` once the
+  decision is answered, so the executor can pick up where it asked. Opaque to
+  the factory. Introduced by `define-executor-contract` (design D4); ADR 0020,
+  decision 4. *Not:* a **pending key**; nor the **round token**, which the
+  orchestrator mints and the executor never sees as a key.
+- **Abstract policy** — what a request allows the executor to change, stated
+  without any vendor's vocabulary: `readOnly`, `writeExactly(path)` or
+  `workspaceWrite`. The executor compiles it into its own mechanism; after a
+  `verdict` or `decision` run the factory checks through the execution
+  environment that the working copy is unchanged and refuses the answer on a
+  change. Type: `Policy`. Introduced by `define-executor-contract` (design D6);
+  ADR 0020, decision 6. *Never:* a vendor tool name (`Read`, `Grep`,
+  `allowedTools`) as a policy.
+- **Policy enforcement level** — how strongly an executor enforces the
+  **abstract policy**, declared in its **describe**: `OS_SANDBOX`, `TOOL_GATE`,
+  `AGENT_ASKS` or `PROMPT_ONLY`. A declaration, never trusted alone — the
+  factory's own working-copy check verifies it. Type: `EnforcementLevel`.
+  Introduced by `define-executor-contract` (design D6, D7); ADR 0020,
+  decisions 6 and 7.
+- **Result reader** — the one reader of every factory-named result path: the
+  result and answer files (`GNOMISH_RESULT_FILE`, `GNOMISH_ANSWER_FILE`), the
+  agent's decision file, a command check's findings file and a program's
+  describe output. It caps the size with a truncation marker, treats the bytes
+  as inert data, wraps every text field as **untrusted text** and reports a
+  parse failure as a typed outcome; no other component reads such a path, and
+  an executor's stdout and stderr are logs, never a result. Type:
+  `ResultFileReader`. Introduced by `define-executor-contract` (design D3,
+  D10); ADR 0020, decision 3.
+- **Conformance kit** — the executable definition of "speaks the executor
+  contract": `gnomish executor verify <program>` runs a candidate through every
+  conformance case — `describe`, `settings-schema`, `transform`, `verdict`,
+  `decision` (each declared role; an undeclared one is not applicable),
+  `unknown-role`, `oversized-output`, `stderr-noise`, `non-json-stdout`,
+  `pending-poll`, `unknown-request-fields`, `malformed-answer` — one line per
+  case. The `pending-poll` case runs only against a candidate whose describe
+  declares `poll`, under the settings the command's `--pending-settings` option
+  carries (a JSON object; the reference executor's is `{"defer":true}`), and is
+  not applicable otherwise. There is no `cancel` case: `cancel` is a declared
+  capability without an operation (ADR 0020, decision 5). Its core drives the
+  **mirror interface**, so a built-in executor runs the same cases in process.
+  Type of the case list: `KitCase`. Introduced by `define-executor-contract`
+  (design D2, D18, D19); ADR 0020, decisions 2 and 5.
+- **Reference executor / misbehaving fake** — the two executors the factory's
+  own specs run, both committed **stand-in** presets of the `executor` table
+  (`StandIn.executor('reference')`, `StandIn.executor('break-<case>')`) with no
+  factory dependency. The reference executor passes every case of the
+  **conformance kit** and is the executor of the end-to-end suite: it answers
+  `describe`, `start` for the three live roles, and `pending` then `poll` under
+  the settings `{"defer":true}`; it answers no `cancel` and declares no
+  `cancel` capability, and refuses a role it does not list. Each preset of the
+  misbehaving fake breaks exactly one of the kit's twelve named cases; there is
+  no `break-cancel`. Introduced by `define-executor-contract` (design D18). *Not:* a shipped artefact — executor
+  authors run the kit against their own program.
+- **SCM-status reader** — forward reference: the planned built-in executor in
+  the `verdict` role that reads the status checks the SCM reports for the task
+  branch (the work of today's `external` check), added by the follow-up
+  `migrate-verify-to-executor-contract`, which also retires
+  `CheckClientFactory` and wires the **pending key** into the poll loop (NG1 of
+  `define-executor-contract`). Not built yet.
 
 ## Base ref resolution
 
@@ -565,7 +815,9 @@ trusted/task tier split, and the law-root rule.
   an image with this factory's contract and git floor). Assessed by `serve`
   before its first claim; met after a claim, it is
   `TakeResult.OperatorPreconditionUnmet` (exit 8) and, under `serve`, a daemon
-  condition. ADR 0019.
+  condition. Its truth is the same for every task; a precondition whose truth
+  depends on the task's own law (a program the law declares) is the task's and
+  parks that task instead (ADR 0019, decision 5). ADR 0019.
 - **Remote outage gate** — the first daemon condition: the one daemon-level state per remote target that
   a slot's base-refresh (or default-branch-discovery) reachability failure
   opens: while open, the feed claims nothing and the daemon probes the

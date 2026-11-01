@@ -9,18 +9,15 @@ import java.util.List;
  * TimestampedEvent} list {@link StreamJsonParser#parse} produced, applying
  * design D3's two failure classes (FR4): the round's {@link
  * AgentEvent.ResultEvent} is essential — none present in the list throws
- * {@link MissingResultEventException}, an infrastructure failure the caller
- * (the eventual {@code CliStageExecutor}, task 6.5) is expected to let
- * propagate uncaught, mirroring how {@code
- * com.github.oinsio.gnomish.domain.engine.RoundExecution#execute} treats a
- * {@link com.github.oinsio.gnomish.domain.engine.port.StageExecutor} throw (NFR-R1). Telemetry is best-effort: {@code
- * tokensByModel} is derived from the result event's {@code modelUsage} (or
+ * {@link MissingResultEventException}, an infrastructure failure the executor round
+ * reports as its {@code failed/infrastructure} result (NFR-R1). Telemetry is best-effort: {@code
+ * byModel} (tokens and the reported cost per model) is derived from the result event's {@code modelUsage} (or
  * the flat {@code usage} fallback keyed by the init event's model) via {@link
  * TokenUsageMapper} (task 3.3); {@code tools} is derived from the top-level
  * tool trace {@link ToolTraceBuilder} builds and {@link ToolUsageAggregator}
  * summarizes (task 3.4); {@code wallTime} stays unset here, filled in by task
  * 4.4. Any telemetry derivation trouble degrades to an empty {@code
- * tokensByModel}/{@code tools} — the round stands regardless (NFR-R2). See
+ * byModel}/{@code tools} — the round stands regardless (NFR-R2). See
  * {@link AgentRoundResult}'s javadoc for the extension seam.
  *
  * <p>"Unparseable" never reaches this class as a distinct case: a malformed
@@ -84,10 +81,10 @@ public final class AgentRoundResultExtractor {
             throw new MissingResultEventException(
                     initEvent == null ? null : initEvent.sessionId(), bytesRead, events.size());
         }
-        var tokensByModel = tokenUsageMapper.toTokensByModel(resultEvent, initEvent);
+        var byModel = tokenUsageMapper.toByModel(resultEvent, initEvent);
         var trace = toolTraceBuilder.buildTrace(events, roundEnd);
         var tools = toolUsageAggregator.aggregate(trace);
-        var usage = new ExecutorUsage(null, tools, tokensByModel);
+        var usage = new ExecutorUsage(null, tools, byModel);
         return new AgentRoundResult(resultEvent.sessionId(), resultEvent.result(), usage);
     }
 }

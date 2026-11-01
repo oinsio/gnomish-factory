@@ -4,10 +4,12 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.CheckResult;
 import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import com.github.oinsio.gnomish.domain.engine.Stop;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import com.github.oinsio.gnomish.usage.wire.ParticipantUsageWire;
 import java.util.List;
 
 /**
@@ -19,7 +21,8 @@ import java.util.List;
  * canonical example (see {@link CheckDto}'s type-level note). Exhaustive switches
  * with no {@code default} arm, mirroring the domain's own idiom.
  *
- * <p>Implements FR11, M3 of add-manual-run; FR10, FR12 of make-checkpoint-gate-durable.
+ * <p>Implements FR11, M3 of add-manual-run; FR10, FR12 of make-checkpoint-gate-durable; FR14 of
+ * define-executor-contract (the attempt's identity).
  *
  * <p>Annotated {@link UntrustedExit} (design D2 of type-untrusted-text): the {@code --json}
  * document is a parser's input, written byte for byte, so a check's own words go in as they
@@ -32,15 +35,18 @@ final class AttemptMapper {
     private AttemptMapper() {}
 
     static AttemptDto toDto(AttemptRecord record) {
+        RoundToken token = record.roundToken();
         return new AttemptDto(
+                record.taskId(),
+                record.stage(),
+                token == null ? null : token.commit(),
                 record.round(),
                 toResult(record.result()),
                 toStop(record.stop()),
                 record.startedAt().toString(),
                 toChecks(record.checkResults()),
                 toFindings(Denial.findings(record.denials())),
-                UsageMapper.toUsage(record.executorUsage()),
-                UsageMapper.toJudgeUsage(record.judgeUsage()));
+                ParticipantUsageWire.toDtos(record.usage()));
     }
 
     private static String toResult(AttemptRecord.Result result) {
@@ -49,6 +55,7 @@ final class AttemptMapper {
             case QUALITY_FAILURE -> "qualityFailure";
             case CANNOT_VERIFY -> "cannotVerify";
             case DECISION_NEEDED -> "decisionNeeded";
+            case BUDGET_EXHAUSTED -> "budgetExhausted";
         };
     }
 
@@ -73,6 +80,9 @@ final class AttemptMapper {
                         cannotVerify.check().label().raw(),
                         cannotVerify.reason().raw(),
                         cannotVerify.details().raw());
+            case Stop.BudgetExhausted budgetExhausted ->
+                new StopDto.BudgetExhausted(
+                        "budgetExhausted", budgetExhausted.bound().raw());
         };
     }
 

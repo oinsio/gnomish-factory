@@ -45,7 +45,7 @@ instructions: stages/plan/instructions.md
 
         then:
         errors == [
-            new ConfigError('stages/plan/stage.yaml', 'executor.model', 'missing required executor model; the model must be pinned in the manifest for every executor type')
+            new ConfigError('stages/plan/stage.yaml', 'executor.model', 'missing required executor model; the model must be pinned in the manifest for every agent executor type (api, agent-cli)')
         ]
     }
 

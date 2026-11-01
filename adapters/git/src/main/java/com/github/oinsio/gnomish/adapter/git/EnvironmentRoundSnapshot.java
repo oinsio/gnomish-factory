@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
-import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.nio.file.Path;
 import java.util.List;

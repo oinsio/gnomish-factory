@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.serve.DaemonLoops;
 import com.github.oinsio.gnomish.app.serve.FeedAutomaton;
 import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier;
 import com.github.oinsio.gnomish.app.serve.ForwardingRemoteOutageLedgerSink;
+import com.github.oinsio.gnomish.app.serve.ForwardingRoundLedgerListener;
 import com.github.oinsio.gnomish.app.serve.PreconditionRecheck;
 import com.github.oinsio.gnomish.app.serve.RemoteOutageGates;
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
@@ -114,7 +115,11 @@ final class ServeRuntimeAssembly {
         // built once per daemon, as soon as the heartbeat and the gate exist, and shared by every
         // slot through the one slot runner. Its git is the gate-signaling one (D6): the decoration
         // is this root's decision, not the slot's.
-        var wiring = slotWiringFactory.slotWiring(served, RemoteOutageGates.signaling(git, conditions), heartbeat);
+        // NFR-O2, UX3 of define-executor-contract: every slot's engine fans into the roundOutcome
+        // ledger writer, which ObservabilityAssembly builds later — the same cycle, the same stand-in.
+        ForwardingRoundLedgerListener roundLedger = new ForwardingRoundLedgerListener();
+        var wiring = slotWiringFactory.slotWiring(
+                served, RemoteOutageGates.signaling(git, conditions), heartbeat, roundLedger);
         // FR13: the one slot runner every slot shares, over the daemon's one wiring — so the
         // heartbeat's ClaimBeat/ClaimLossFlag in its tenure are shared by every slot.
         // D19 of add-sandbox-base-image: the slot reports a typed precondition refusal to the same set.
@@ -158,6 +163,7 @@ final class ServeRuntimeAssembly {
         // NFR-O1, NFR-O3 of add-base-ref-resolution: only now, with the ledger appender built, can
         // the gate's stand-in ledger sink be rebound to the real remoteOutage write point.
         remoteOutageLedgerSink.bind(observability.remoteOutageLedgerWriter());
+        roundLedger.bind(observability.roundOutcomeLedgerWriter());
         SandboxLifecycleTick sandboxLifecycleTick = builders.sandboxLifecycleTick(
                 serveArguments,
                 sandboxLifecyclePass,

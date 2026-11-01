@@ -36,6 +36,8 @@ class GitRunnerBoundarySpec extends Specification {
     private static final List<String> COMPOSITION = [
         'bootstrap/src/main/java/com/github/oinsio/gnomish/app/ContainerRunSupport.java',
         'bootstrap/src/main/java/com/github/oinsio/gnomish/app/ContainerTipReader.java',
+        // FR12 of define-executor-contract: the conformance kit's command builds its RepositoryInit
+        'bootstrap/src/main/java/com/github/oinsio/gnomish/app/conformance/ExecutorVerifyCommand.java',
         'bootstrap/src/main/java/com/github/oinsio/gnomish/app/ManualRunConfiguration.java',
         'bootstrap/src/main/java/com/github/oinsio/gnomish/app/SandboxLifecyclePassFactory.java',
     ]

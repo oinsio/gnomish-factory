@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
+import com.github.oinsio.gnomish.domain.engine.MismatchCause;
 import com.github.oinsio.gnomish.status.ReportPlane;
 import java.nio.file.Path;
 import java.util.regex.Pattern;
@@ -117,10 +118,21 @@ public final class TerminalOutcomeRender {
                         + plane.render(cannotVerify.reason()) + "\nDetails:\n"
                         + plane.render(cannotVerify.details());
             case EscalationReport.PipelineMismatch pipelineMismatch ->
-                "A stage this task recorded is no longer defined in the pipeline:\n"
-                        + plane.block(pipelineMismatch.staleStage());
+                switch (pipelineMismatch.cause()) {
+                    case MismatchCause.StaleStage stale ->
+                        "A stage this task recorded is no longer defined in the pipeline:\n"
+                                + plane.block(stale.stage());
+                    case MismatchCause.ExecutorVersion changed ->
+                        "An executor's describe version changed since this task pinned it. Executor:\n"
+                                + plane.render(changed.executor()) + "\nRecorded version:\n"
+                                + plane.render(changed.recorded()) + "\nCurrent version:\n"
+                                + plane.render(changed.current());
+                };
             case EscalationReport.CannotExecute cannotExecute ->
                 "Executor infrastructure failure:\n" + plane.block(cannotExecute.cause());
+            case EscalationReport.BudgetExhausted budgetExhausted ->
+                "A bound of the stage was reached — the executor stopped at its budget:\n"
+                        + plane.block(budgetExhausted.bound());
         };
     }
 

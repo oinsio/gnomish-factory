@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -60,7 +61,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ])
-        persistence.persist(taskId, state, trace)
+        persistence.persist(taskId, RoundStates.withRound(state, trace.key()), trace)
     }
 
     // FR10: a Completed branch's cleanup commit strips .gnomish-task/ from the tip, but the reader
@@ -68,7 +69,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     def "reads the delivered context and final state from the pre-cleanup commit"() {
         given: 'a branch delivered via recordOutcome(Completed), whose tip no longer carries the files'
         repository.createTask(context('PROJ-1'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def finalState = TaskState.atStageStart('implement')
+        def finalState = RoundStates.recorded('PROJ-1', 'implement', 0)
         persistOneRound('PROJ-1', finalState)
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(finalState), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-1')
@@ -93,7 +94,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
         FixtureGitConfig.addRemote(cloneDir, 'origin', bare.toString())
         runner.run(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
         repository.createTask(context('PROJ-6'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def finalState = TaskState.atStageStart('implement')
+        def finalState = RoundStates.recorded('PROJ-6', 'implement', 0)
         persistOneRound('PROJ-6', finalState)
         repository.recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-6')
@@ -161,7 +162,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     def "reads the delivered state from the Completed commit when the branch gained commits after cleanup"() {
         given: 'a delivered branch whose cleanup commit is no longer the tip'
         repository.createTask(context('PROJ-3'), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def finalState = TaskState.atStageStart('implement')
+        def finalState = RoundStates.recorded('PROJ-3', 'implement', 0)
         persistOneRound('PROJ-3', finalState)
         repository.recordOutcome('PROJ-3', new TaskOutcome.Completed(finalState), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-3')

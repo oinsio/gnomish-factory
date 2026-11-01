@@ -4,8 +4,11 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
+import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.Participants
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
@@ -53,7 +56,7 @@ class MdcEventListenerSpec extends Specification {
         def listener = new MdcEventListener()
 
         when:
-        listener.onEvent(new EngineEvent.ExecutionFinished(key(1, 'implement'), ExecutorUsage.none()))
+        listener.onEvent(new EngineEvent.ExecutionFinished(key(1, 'implement'), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()))
 
         then:
         MDC.get('stage') == 'implement'

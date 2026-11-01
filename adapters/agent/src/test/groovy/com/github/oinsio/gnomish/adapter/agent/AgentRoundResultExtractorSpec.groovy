@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentScenarioReader
+import com.github.oinsio.gnomish.domain.engine.ModelUsages
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolUsage
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -39,7 +40,7 @@ class AgentRoundResultExtractorSpec extends Specification {
         result.result().forLog()== 'Stage complete: output.txt written.'
 
         and: 'tokensByModel is derived from the modelUsage wire data (NFR-R2 degrade path not hit here)'
-        result.usage().tokensByModel() == ['claude-fake-main-1': new TokenUsage(120, 45, 10, 5)]
+        ModelUsages.tokensOf(result.usage().byModel()) == ['claude-fake-main-1': new TokenUsage(120, 45, 10, 5)]
 
         and: 'tools is derived from the single top-level Write tool call'
         result.usage().tools().size() == 1

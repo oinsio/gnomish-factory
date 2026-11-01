@@ -8,8 +8,10 @@ import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.take.DaemonConditionKind
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
@@ -58,7 +60,7 @@ class TaskOutcomeLedgerWriterSpec extends Specification implements RotatingLedge
     }
 
     private static TaskState finalState(Position position) {
-        new TaskState(position, 1, [], ExecutorUsage.none())
+        new TaskState(position, 1, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     // Scenario: observability/serve-observability / Delivered task leaves one line

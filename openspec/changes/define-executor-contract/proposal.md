@@ -96,6 +96,41 @@ function and checked against a recorded snapshot.
   law nor an execution environment to run a declared program in; the describe preflight is
   reached only through a claimed run (ADR 0019, decision 2). Pickup condition: the change that
   gives the doctor a law source and an execution environment of its own.
+- NG12: budget bounds declared in the law and enforced by the factory — a token or money bound
+  judged on the folded usage snapshot, a money bound failing closed on incomplete cost, the
+  verdict riding the round's own commit, a money bound refused on an executor whose describe
+  reports no usage. The law declares no budget today (`AutonomyLimits` carries the attempt
+  limit only) and `pipeline/pipeline-config` keeps monetary budgets out of the project's scope;
+  an executor that stops itself at a bound still reports `failed/limit` and escalates
+  `BudgetExhausted` (FR7). Pickup condition: the change that declares a budget in the law
+  (`add-usage-budgets`), which revisits that scope decision and settles whether turns are
+  counted. Cut during task 5.8.
+- NG13: the `CONTAINER_RUNTIME` daemon condition's probe, which reruns the mode plan on the
+  daemon's startup definition while the slot that opened it judged by the task's own law
+  (`ServePreconditions.check`): a second instance of the class task 6.2 found (a precondition
+  judged by one law and probed by another), left as it is. A daemon whose startup law is
+  host-bound, serving a task whose pinned law is container-bound, would open the condition,
+  have the probe pass at once, and reclaim the task. Pickup condition: the first observed
+  open-close churn of that condition, or the change that lets a task's law bind a mode its
+  daemon's law does not.
+- NG14: a startup or `doctor` check for the host agent CLI binary (`factory.agent-cli-binary`),
+  an installation-level setting the daemon owns and today meets only inside a round
+  (`ExecutorRoundExecution.launch`: a `ProcessStartException` escalates that task). Pickup
+  condition: the first host task parked for an absent agent binary, or the change that adds
+  the next host-mode startup check.
+- NG15: automatic return of a task parked on a describe failure — a janitor pass that reruns
+  `describe` for the parked task's law and returns it when the answer holds, or a retry of an
+  external describe failure before the park. The park with a located message is the bounded
+  end this change delivers; the human's return is the retry. Pickup condition: an operator
+  returning such tasks by hand after one image fix for the second time.
+- NG16: `cancel` as an operation of the contract. The describe capability `cancel` stays in
+  the vocabulary, but this version defines no request or result shape for it, no program
+  operation word and no kit case: no factory path sends a cancel (an expired bound kills the
+  process tree, NFR-R2) and the mirror interface declares none, so a cancel case could be
+  driven neither through `Executor` nor in process. Pickup condition: the first change whose
+  engine path prefers a cooperative stop to a kill (a stage abort on a claim loss, a bound of a
+  `verdict` run whose executor declares `cancel`). Decided 2026-11-01 before task 8.2, when the
+  kit's artifacts (FR12, D18) were found to promise a case the contract (D2) could not carry.
 
 ## Users & Scenarios
 
@@ -153,14 +188,23 @@ function and checked against a recorded snapshot.
   the executor compiles it; the factory verifies after `verdict` and `decision` roles that the
   working copy is unchanged.
 - FR12: A conformance kit drives a candidate through `describe`, settings schema, each declared
-  role, `cancel`, oversized output, stderr noise, non-JSON stdout, `pending` then `poll`,
-  unknown fields; a reference executor passes it and a misbehaving fake fails each case.
+  role, an undeclared role, oversized output, stderr noise, non-JSON stdout, `pending` then
+  `poll`, unknown fields, malformed answers; a reference executor passes it and a misbehaving
+  fake fails each case. The `pending` case runs only against a candidate whose describe declares
+  `poll`, driven by the settings the command's `--pending-settings` option carries (the
+  reference's `{"defer":true}`); a candidate without `poll` sees it reported as not applicable
+  (revised 2026-11-01 before task 8.2: `cancel` left the list, NG16).
 - FR13: Preflight before an executor's first round, on the live execution environment: a
-  program that is absent or cannot answer `describe` is an operator precondition (ADR 0019,
-  exit 8); a `describe` whose version, roles, schema, credentials or egress disagree with the
-  law is a located law error that parks the task without burning an attempt. Executor name and
+  program that is absent, cannot answer `describe`, or whose `describe` disagrees with the law
+  (version, roles, schema, credentials, egress) is a located configuration error of the task
+  that parks it without burning an attempt, as an invalid law does; a program the environment
+  cannot start, or that does not answer within the bound, parks it the same way with the
+  failure named as external. Neither is an operator precondition and neither opens a daemon
+  condition (ADR 0019, decision 5: the level of a precondition follows the owner of its
+  truth, and the law that names the program is the task's). Executor name and
   model are law content, pinned with the law at creation; the describe version is recorded by
-  the first round that ran the executor, and a later `describe` reporting a different version
+  the first round that ran the executor and carried in the task state across lifecycle rewrites,
+  and a later `describe` reporting a different version
   escalates `PipelineMismatch`.
 - FR14: Every round record carries the identity the orchestrator minted for it — `taskId`,
   `stage` and `roundToken` (the tip the round opened on) — written by the round's writer; no
@@ -191,6 +235,21 @@ function and checked against a recorded snapshot.
   container-mode rounds; the run's `CurrentRound` holds it; the record takes it from there.
 - FR22: The agent adapter maps per-model `costUSD` beside the token counts for rounds and judge
   votes; absent cost stays absent. Reference dumps keep cost figures.
+- FR23: A `program` executor whose describe declares `poll` is polled the way it is started:
+  the declared argv with the word `poll` appended, the same request on standard input, the
+  pending key in `GNOMISH_PENDING_KEY`, the result in `GNOMISH_RESULT_FILE`; a poll of a program
+  that declares no `poll`, or with a key this run did not receive, is `failed/infrastructure`
+  with no process spawned. The working-copy check of a `verdict` or `decision` run (FR11) is
+  judged at the poll that ends a pending run, against the view taken before its `start`. Added
+  2026-11-01 before task 8.2, when the kit's `pending` then `poll` case (FR12) was found to have
+  no wire form to pass through.
+- FR24: The conformance kit judges every document the candidate writes (describe, result,
+  answer) against the schema files on the raw bytes the factory read, independently of the
+  readers' lenient unknown-token arms (FR4), and sends the candidate a request carrying one field
+  the contract does not define; it observes and shapes the wire at the execution-environment
+  port only, with the production readers and the DTOs unchanged. Added 2026-11-01 before task
+  8.2, when the kit was found unable to fail a describe outside the schema (read as
+  `PROMPT_ONLY`) or to send an unknown request field (a fixed record).
 
 ### Non-Functional Reliability
 
@@ -223,12 +282,9 @@ function and checked against a recorded snapshot.
 
 ### Non-Functional Cost
 
-- NFR-C1: Bounds (turns, tokens, money) are hints to the executor; the ledger enforces after
-  each round; a money bound on an executor with `ABSENT` usage is a load error.
-- NFR-C2: Budget enforcement reads the tip `totals` after the fold; a money bound fails closed
-  (`limit`, reason "cost unknown") when the snapshot's cost is incomplete; token and turn
-  bounds are unaffected.
-- NFR-C3: The budget verdict rides the same commit as the round that crossed the bound.
+- NFR-C1: Bounds (turns, tokens, money, three time bounds) travel in the request as hints to
+  the executor; the factory enforces the time bounds itself. Budget enforcement by the factory
+  is NG12.
 
 ## Operator Experience Criteria
 

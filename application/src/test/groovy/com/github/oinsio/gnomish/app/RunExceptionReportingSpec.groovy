@@ -10,6 +10,8 @@ import com.github.oinsio.gnomish.app.port.run.ImageContractRefusedException
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageCost
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -103,7 +105,10 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
             // FR7 of add-project-registry: the configuration report is its message
             new ConfigurationViolationsException([
                 'factory.x is not a known key'
-            ])
+            ]),
+            // FR18 of define-executor-contract: the two figures are the operator's line
+            new UsageTotalsMismatchException('PROJ-1', UsageSnapshot.EMPTY,
+            new UsageSnapshot([:], UsageCost.NONE, 1, null))
         ]
     }
 
@@ -187,7 +192,9 @@ class RunExceptionReportingSpec extends Specification implements StdoutCaptureFi
             // FR9 of supervise-daemon-loops-and-embed-dashboard: the loop logged its give-up ERROR
             new DashboardDisabledException(),
             // FR6 of add-doctor-command: the doctor report is already on stdout
-            new DoctorFailedException(1)
+            new DoctorFailedException(1),
+            // FR12, UX2 of define-executor-contract: the kit's report is already on stdout
+            new ExecutorVerifyFailedException(3)
         ]
     }
 

@@ -111,7 +111,8 @@ class ClaimlessGitBoundarySpec extends Specification {
      *       nothing, so the container and git-mode runner specs, the run-mode resume specs, and the
      *       sandbox lifecycle E2E specs drive writers that hold no tenure — the same shape the
      *       production {@code run} wiring has; {@code SandboxTransientFilesE2ESpec} brings up a
-     *       {@code manual}-owned task environment the way {@code run} does. {@code RoundTokenIdentitySpec} belongs here too: it
+     *       {@code manual}-owned task environment the way {@code run} does, and so does
+     *       {@code ProgramCredentialDeliverySpec}, whose subject is a box's child environments. {@code RoundTokenIdentitySpec} belongs here too: it
      *       drives the container-mode round adapters (round source, snapshot, persistence, resume
      *       re-verification) as a {@code run} wires them, and asserts the round's identity, not a
      *       claim's. {@code ContainerContinuationMedium} too: the container medium of the identity
@@ -146,6 +147,7 @@ class ClaimlessGitBoundarySpec extends Specification {
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleRemnantReapE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleZombieE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxTransientFilesE2ESpec.groovy',
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ProgramCredentialDeliverySpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusCommandSpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusInterruptedHonestySpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusUsageReadOnlySpec.groovy',

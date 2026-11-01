@@ -79,7 +79,7 @@ abstract class StageExecutorContract extends Specification implements PortContra
         def result = adapter.get().execute(sampleRequest())
 
         then: 'it is a Completed carrying the shared telemetry the engine records'
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         result.usage() != null
         result.trace() != null
     }
@@ -95,9 +95,9 @@ abstract class StageExecutorContract extends Specification implements PortContra
         def result = adapter.get().execute(sampleRequest())
 
         then: 'it is a DecisionNeeded the engine can escalate verbatim'
-        result instanceof ExecutionResult.DecisionNeeded
-        !result.question().isBlank()
-        result.options() != null
+        result.answer() instanceof ExecutionResult.DecisionRequest
+        !result.answer().question().isBlank()
+        result.answer().options() != null
         result.usage() != null
         result.trace() != null
     }
@@ -113,7 +113,7 @@ abstract class StageExecutorContract extends Specification implements PortContra
         def result = adapter.get().execute(sampleRequest())
 
         when: 'a caller tries to mutate the options'
-        result.options().add('sneaked')
+        result.answer().options().add('sneaked')
 
         then: 'the modification is rejected'
         thrown(UnsupportedOperationException)

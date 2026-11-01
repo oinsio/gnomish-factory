@@ -54,7 +54,7 @@ class TipRecordedDenialsSpec extends Specification {
           "version": ${version},
           "position": { "type": "atStage", "stage": "build" },
           "attemptsUsed": 0, "attempts": [],
-          "totals": { "inputTokens": 0, "outputTokens": 0, "costUsd": null, "byTool": [] }
+          "totals": { "byRole": {}, "cost": { "priced": 0, "unpricedTokens": {}, "complete": true }, "rounds": 0 }
           ${cursor == null ? '' : ', "egressCursor": ' + cursor}
         }
         """

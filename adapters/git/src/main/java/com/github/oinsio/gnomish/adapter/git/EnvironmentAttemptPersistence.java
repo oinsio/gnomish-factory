@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
+import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
@@ -143,14 +144,20 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         environment.putFile(STATE_PATH, stateBytes);
         environment.putFile(tracePath, traceBytes);
 
-        commitInBox(taskId, key, tracePath);
+        commitInBox(taskId, key, AttemptPersistence.roundOf(state), tracePath);
         environment.harvest();
 
         // A fresh observation of the harvest, judged against the record before the branch moves: the
         // state commit must sit on the round's own snapshot and carry exactly what was written.
         String stateCommit = admission.quarantined(taskId);
         stateCommitCheck.verify(taskId, stateCommit, snapshot, tracePath, stateBytes, traceBytes);
-        judged(taskId, key, admission.admit(taskId, stateCommit, AdmissionRule.state(key, round.token(), tracePath)));
+        judged(
+                taskId,
+                key,
+                admission.admit(
+                        taskId,
+                        stateCommit,
+                        AdmissionRule.state(key, AttemptPersistence.roundOf(state), round.token(), tracePath)));
     }
 
     /** The admission's verdict as this port's outcome: a violation, or the infrastructure path. */
@@ -164,12 +171,11 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         }
     }
 
-    private void commitInBox(String taskId, AttemptKey key, String tracePath) {
+    private void commitInBox(String taskId, AttemptKey key, AttemptRecord recorded, String tracePath) {
         // Only the two factory files are staged: gnome residue outside .gnomish-task/ belongs to
         // the next round (or salvage), never to the state commit (D15).
         String message = ClaimEpochTrailer.stamp(
-                ServiceCommitMessages.round(key.stage(), key.attempt()),
-                epochs.epochFor(taskId).orElse(null));
+                ServiceCommitMessages.round(recorded), epochs.epochFor(taskId).orElse(null));
         // Run through the medium's one outcome seam (D14): the wait is drained concurrently, so a
         // hung in-box command never holds this thread on an uninterruptible pipe read (FR2, FR11
         // of bound-subprocess-commands), and an interrupted wait comes back named.

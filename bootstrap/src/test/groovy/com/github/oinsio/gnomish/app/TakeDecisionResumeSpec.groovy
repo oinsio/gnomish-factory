@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -47,7 +48,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
             UntrustedText.agent('yes'),
             UntrustedText.agent('no')
         ])
-        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
+        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals(), ExecutorVersions.none())
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
@@ -85,7 +86,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
             UntrustedText.agent('yes'),
             UntrustedText.agent('no')
         ])
-        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
+        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals(), ExecutorVersions.none())
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
@@ -130,7 +131,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
             UntrustedText.agent('yes'),
             UntrustedText.agent('no')
         ])
-        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
+        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals(), ExecutorVersions.none())
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
 
         def runner = newTakeResumeRunner()
@@ -159,7 +160,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
-        def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
+        def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals(), ExecutorVersions.none())
         def report = new EscalationReport.AttemptsExhausted(1)
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(exhaustedState, report), TrackerWrite.OWED)
 
@@ -199,7 +200,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
-        def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
+        def exhaustedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals(), ExecutorVersions.none())
         def report = new EscalationReport.AttemptsExhausted(1)
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(exhaustedState, report), TrackerWrite.OWED)
 
@@ -239,7 +240,7 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, resumableBaseRef()), TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
-        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
+        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals(), ExecutorVersions.none())
         def report = new EscalationReport.CannotVerify(
                 new CheckRef(0, UntrustedText.manifest('tests')), UntrustedText.subprocess('boom'), UntrustedText.subprocess(''))
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)

@@ -37,7 +37,7 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
         result.results[1].verdict instanceof Verdict.Pass
 
         and: 'no judge ran, so judge usage is empty'
-        result.judgeUsage.perVote().isEmpty()
+        result.votes.isEmpty()
     }
 
     // FR2: the first non-Pass check stops the chain — later checks are never invoked
@@ -99,7 +99,7 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
 
         then: 'no results, no judge usage, and no events'
         result.results.isEmpty()
-        result.judgeUsage.perVote().isEmpty()
+        result.votes.isEmpty()
         listener.events.isEmpty()
     }
 }

@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/oinsio/gnomish-factory/schemas/executor-contract/1/executor-describe.schema.json",
+  "title": "Executor describe",
+  "description": "The executor's answer to describe, read by the describe preflight once the task's execution environment is live and before the first round, under the result-reader rules. Readers ignore unknown properties; a property is never renamed, retyped or removed within a protocol version. Implements FR4, FR13 of define-executor-contract.",
+  "type": "object",
+  "required": [
+    "protocolVersion",
+    "version",
+    "roles",
+    "capabilities",
+    "settingsSchema",
+    "credentials",
+    "egress",
+    "policyDisablingFlags",
+    "enforcementLevel",
+    "reportsUsage"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "description": "The contract version the executor speaks, bumped only on a breaking change. A version the factory does not speak is a located law error before the first round.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "version": {
+      "description": "The executor's own version, recorded by the round that ran it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "roles": {
+      "description": "The roles the executor serves. Unknown-token arm: a role outside the set is ignored, so a use site needing it is refused as undeclared.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["transform", "verdict", "decision", "effect"] }
+    },
+    "capabilities": {
+      "description": "Optional behaviours beyond start. Unknown-token arm: an unknown capability is ignored.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["poll", "cancel", "streams_progress", "resumable"] }
+    },
+    "settingsSchema": {
+      "description": "A JSON Schema the law's settings for this executor are validated against before the first round.",
+      "type": "object"
+    },
+    "credentials": {
+      "description": "The environment variable names of the credentials the executor needs; values reach its process by the environment channel only.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/variableName" }
+    },
+    "egress": {
+      "description": "The hosts the executor must reach.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "configDirVariable": {
+      "description": "The environment variable naming the executor's configuration directory, when it has one.",
+      "$ref": "#/$defs/variableName"
+    },
+    "policyDisablingFlags": {
+      "description": "The flags that disable the executor's repo-local policy sources.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "enforcementLevel": {
+      "description": "How strongly the executor enforces the abstract policy, strongest first. Unknown-token arm: read as PROMPT_ONLY, the weakest level.",
+      "enum": ["OS_SANDBOX", "TOOL_GATE", "AGENT_ASKS", "PROMPT_ONLY"]
+    },
+    "reportsUsage": {
+      "description": "Whether results carry REPORTED usage. An executor that reports none cannot serve a stage with a money bound.",
+      "type": "boolean"
+    }
+  },
+  "$defs": {
+    "variableName": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" }
+  },
+  "examples": [
+    {
+      "protocolVersion": 1,
+      "version": "0.4.2",
+      "roles": ["transform"],
+      "capabilities": ["cancel", "streams_progress"],
+      "settingsSchema": {
+        "type": "object",
+        "properties": { "model": { "type": "string" } },
+        "required": ["model"]
+      },
+      "credentials": ["ACME_API_KEY"],
+      "egress": ["api.acme.example"],
+      "configDirVariable": "ACME_CONFIG_DIR",
+      "policyDisablingFlags": ["--no-project-config"],
+      "enforcementLevel": "TOOL_GATE",
+      "reportsUsage": true
+    },
+    {
+      "protocolVersion": 1,
+      "version": "1.0.0",
+      "roles": ["verdict", "decision"],
+      "capabilities": [],
+      "settingsSchema": {},
+      "credentials": [],
+      "egress": [],
+      "policyDisablingFlags": [],
+      "enforcementLevel": "OS_SANDBOX",
+      "reportsUsage": false
+    }
+  ]
+}

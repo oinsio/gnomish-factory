@@ -10,8 +10,8 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * events so far. Sits one layer below {@link
  * com.github.oinsio.gnomish.domain.engine.ExecutionResult}, which task 6.5
  * assembles once the decision-file protocol (task 6.2/6.3) is folded in
- * alongside this type's data — this record carries no {@code
- * DecisionNeeded}/{@code Completed} distinction of its own.
+ * alongside this type's data — this record carries no status or answer
+ * of its own.
  *
  * <p>This is task 3.2's seam for tasks 3.3 (token mapping) and 3.4 (tool
  * trace): today {@code usage} is always {@link ExecutorUsage#none()} — no

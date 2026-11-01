@@ -84,7 +84,7 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
                 TaskState.atStageStart('build'),
                 new InMemoryAttemptPersistence(),
                 [],
-                LawBinding.workingTree(Path.of('').toAbsolutePath())).ports().externalClient()
+                new DescribedLaw(LawBinding.workingTree(Path.of('').toAbsolutePath()), [:])).ports().externalClient()
 
         then:
         client instanceof PinCheckedExternalCheckClient
@@ -140,7 +140,7 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
                 TaskState.atStageStart('build'),
                 new InMemoryAttemptPersistence(),
                 [],
-                LawBinding.workingTree(Path.of('').toAbsolutePath()))
+                new DescribedLaw(LawBinding.workingTree(Path.of('').toAbsolutePath()), [:]))
 
         then:
         resolved.isEmpty()
@@ -182,7 +182,7 @@ class ManualRunAssemblyCheckClientWiringSpec extends Specification implements Ap
                 TaskState.atStageStart('build'),
                 new InMemoryAttemptPersistence(),
                 [],
-                LawBinding.workingTree(Path.of('').toAbsolutePath()))
+                new DescribedLaw(LawBinding.workingTree(Path.of('').toAbsolutePath()), [:]))
 
         then:
         def e = thrown(IllegalArgumentException)

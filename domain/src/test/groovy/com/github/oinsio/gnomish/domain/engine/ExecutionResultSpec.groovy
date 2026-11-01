@@ -6,12 +6,11 @@ import java.time.Instant
 import spock.lang.Specification
 
 /**
- * ExecutionResult: what a StageExecutor returns for one round — either
- * {@code Completed} (proceed to verify) or {@code DecisionNeeded(question, options)}
- * (gnome-initiated escalation, no attempt burned; design D6). Both variants carry
- * the round's {@code ExecutorUsage} and raw {@code ToolTrace}, exposed through the
- * shared interface accessors so the engine reads telemetry without switching
- * (design D5). Implements FR6, FR13 of add-stage-engine.
+ * ExecutionResult: what a StageExecutor returns for one round, in the executor contract's shape —
+ * a status ({@code Completed}, {@code Failed(class)}, {@code Pending(key)}), an optional answer, the
+ * round's usage, trace and denials (FR7 of define-executor-contract, design D4). The former
+ * {@code DecisionNeeded} is {@code completed} with a {@code DecisionRequest} answer. Implements
+ * FR6, FR13 of add-stage-engine; FR7 of define-executor-contract.
  */
 class ExecutionResultSpec extends Specification {
 
@@ -25,198 +24,160 @@ class ExecutionResultSpec extends Specification {
         ])
     }
 
-    // FR13: Completed exposes the round's usage and trace as constructed
-    def "Completed exposes usage and trace as constructed"() {
-        given: 'a round usage and its raw trace'
+    // FR7: the former Completed is status completed with no answer, its telemetry as constructed
+    def "completed is status completed with no answer and the telemetry as constructed"() {
+        given:
         def usage = ExecutorUsage.none()
         def trace = sampleTrace()
 
-        when: 'a Completed result is created'
-        def result = new ExecutionResult.Completed(usage, trace, [])
+        when:
+        def result = ExecutionResult.completed(usage, trace, [denial()])
 
-        then: 'both telemetry components are exposed exactly as constructed'
+        then:
+        result.status() == new ExecutionResult.Completed()
+        result.answer() == null
         result.usage() == usage
         result.trace() == trace
+        result.denials() == [denial()]
     }
 
-    // FR13: Completed telemetry is reachable through the ExecutionResult interface accessors
-    def "Completed usage and trace are reachable via the ExecutionResult interface"() {
-        given: 'a Completed result typed as the sealed interface'
-        def usage = ExecutorUsage.none()
-        def trace = sampleTrace()
-        ExecutionResult result = new ExecutionResult.Completed(usage, trace, [])
-
-        expect: 'the interface accessors return the same telemetry'
-        result.usage() == usage
-        result.trace() == trace
-    }
-
-    // FR6: DecisionNeeded exposes its question, options, usage and trace as constructed
-    def "DecisionNeeded exposes question, options, usage and trace as constructed"() {
-        given: 'a question, its options and the round telemetry'
+    // FR7: the former DecisionNeeded is status completed carrying a decision-request answer
+    def "decisionNeeded is status completed carrying the decision request"() {
+        given:
         def usage = ExecutorUsage.none()
         def trace = sampleTrace()
 
-        when: 'a DecisionNeeded result is created'
-        def result = new ExecutionResult.DecisionNeeded(
+        when:
+        def result = ExecutionResult.decisionNeeded(
                 UntrustedText.agent('Which database?'), [
                     UntrustedText.agent('postgres'),
                     UntrustedText.agent('sqlite')
-                ], usage, trace, [])
+                ], usage, trace, [denial()])
 
-        then: 'each component is exposed exactly as constructed'
-        result.question().forLog() == 'Which database?'
-        result.options()*.forLog() == ['postgres', 'sqlite']
+        then:
+        result.status() == new ExecutionResult.Completed()
+        result.answer() == new ExecutionResult.DecisionRequest(UntrustedText.agent('Which database?'), [
+            UntrustedText.agent('postgres'),
+            UntrustedText.agent('sqlite')
+        ])
         result.usage() == usage
         result.trace() == trace
-    }
-
-    // FR13: DecisionNeeded telemetry is reachable through the interface accessors
-    def "DecisionNeeded usage and trace are reachable via the ExecutionResult interface"() {
-        given: 'a DecisionNeeded result typed as the sealed interface'
-        def usage = ExecutorUsage.none()
-        def trace = sampleTrace()
-        ExecutionResult result = new ExecutionResult.DecisionNeeded(
-                UntrustedText.agent('Proceed?'), [], usage, trace, [])
-
-        expect: 'the interface accessors return the same telemetry'
-        result.usage() == usage
-        result.trace() == trace
+        result.denials() == [denial()]
     }
 
     // FR6: the question is required — a blank question asks the human nothing
-    def "DecisionNeeded rejects a blank question with the component named"() {
-        when: 'a DecisionNeeded is created with a blank question'
-        new ExecutionResult.DecisionNeeded(UntrustedText.agent(question), [], ExecutorUsage.none(), sampleTrace(), [])
+    def "a decision request rejects a blank question with the component named"() {
+        when:
+        new ExecutionResult.DecisionRequest(UntrustedText.agent(question), [])
 
-        then: 'construction fails and the message names the blank component'
+        then:
         def failure = thrown(IllegalArgumentException)
-        failure.message.contains('DecisionNeeded.question')
+        failure.message.contains('DecisionRequest.question')
 
         where:
         question << ['', '   ', '\t', ' \n']
     }
 
-    // FR6: an open-ended question carries no options — an empty options list is valid
-    def "DecisionNeeded accepts an empty options list"() {
-        when: 'a DecisionNeeded is created with no options'
-        def result = new ExecutionResult.DecisionNeeded(
-                UntrustedText.agent('Open question?'), [], ExecutorUsage.none(), sampleTrace(), [])
-
-        then: 'the options list is empty'
-        result.options().isEmpty()
-    }
-
-    // FR6: options are copied on construction — later source mutation cannot leak in
-    def "the options list is defensively copied from the source"() {
-        given: 'a mutable source list'
+    // FR6: an open-ended question carries no options; the list is copied and unmodifiable
+    def "a decision request copies its options and exposes them unmodifiable"() {
+        given:
         def source = [UntrustedText.agent('a')]
 
-        when: 'a DecisionNeeded is created and the source is then mutated'
-        def result = new ExecutionResult.DecisionNeeded(
-                UntrustedText.agent('Pick one?'), source, ExecutorUsage.none(), sampleTrace(), [])
+        when:
+        def request = new ExecutionResult.DecisionRequest(UntrustedText.agent('Pick one?'), source)
         source.add(UntrustedText.agent('sneaked in'))
 
-        then: 'the result keeps its original single option'
-        result.options()*.forLog() == ['a']
-    }
+        then:
+        request.options()*.forLog() == ['a']
+        new ExecutionResult.DecisionRequest(UntrustedText.agent('Open?'), []).options().isEmpty()
 
-    // FR6: the exposed options list is unmodifiable — the engine carries it verbatim
-    def "the exposed options list is unmodifiable"() {
-        given: 'a DecisionNeeded result'
-        def result = new ExecutionResult.DecisionNeeded(
-                UntrustedText.agent('Pick one?'), [UntrustedText.agent('a')], ExecutorUsage.none(), sampleTrace(), [])
+        when:
+        request.options().add(UntrustedText.agent('b'))
 
-        when: 'a caller tries to add an option'
-        result.options().add('b')
-
-        then: 'the modification is rejected'
+        then:
         thrown(UnsupportedOperationException)
     }
 
-    // FR3 of fix-denial-report-attachment: both variants copy their denials defensively — the
-    //     list comes from the environment's guard read, and a later mutation of it must not
-    //     rewrite the round's reported denials. PIT's record filter emits no mutant for a compact
-    //     constructor, so this invariant is only held by a spec.
-    def "the denials list is defensively copied from the source"() {
-        given: 'a mutable source list'
+    // FR7: a failure carries its class, its reason and the findings a quality failure feeds forward
+    def "a failed status carries its class, reason and copied, unmodifiable findings"() {
+        given:
+        def finding = new Finding('the build is red', 'Foo.java:3', null)
+        def source = [finding]
+
+        when:
+        def failed = new ExecutionResult.Failed(
+                ExecutionResult.FailureClass.QUALITY, UntrustedText.agent('tests fail'), source)
+        source.add(new Finding('sneaked in', null, null))
+
+        then:
+        failed.failureClass() == ExecutionResult.FailureClass.QUALITY
+        failed.reason() == UntrustedText.agent('tests fail')
+        failed.findings() == [finding]
+
+        when:
+        failed.findings().add(finding)
+
+        then:
+        thrown(UnsupportedOperationException)
+    }
+
+    // FR7: a failure that names nothing gives the operator nothing to act on
+    def "a failed status rejects a blank reason with the component named"() {
+        when:
+        new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, UntrustedText.agent(reason), [])
+
+        then:
+        def failure = thrown(IllegalArgumentException)
+        failure.message.contains('Failed.reason')
+
+        where:
+        reason << ['', '  ', '\n']
+    }
+
+    // FR7: the class vocabulary is the contract's closed set, one constant per class
+    def "the failure classes are exactly quality, infrastructure and limit"() {
+        expect:
+        ExecutionResult.FailureClass.values()*.name() == [
+            'QUALITY',
+            'INFRASTRUCTURE',
+            'LIMIT'
+        ]
+    }
+
+    // FR7: a pending status carries the executor's key
+    def "a pending status carries its key"() {
+        expect:
+        new ExecutionResult.Pending('k-1').key() == 'k-1'
+    }
+
+    // FR3 of fix-denial-report-attachment: the denials are copied — a later mutation of the
+    //     guard's list must not rewrite the round's reported denials — and exposed unmodifiable
+    def "the denials list is defensively copied and unmodifiable"() {
+        given:
         def source = [denial()]
 
-        when: 'a result is created and the source is then mutated'
-        def result = build(source)
+        when:
+        def result = new ExecutionResult(new ExecutionResult.Pending('k'), null, ExecutorUsage.none(), sampleTrace(), source)
         source.add(denial())
 
-        then: 'the result keeps its original single denial'
+        then:
         result.denials().size() == 1
 
-        where:
-        build << [
-            { List<Finding> d ->
-                new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace(), d)
-            },
-            { List<Finding> d ->
-                new ExecutionResult.DecisionNeeded(UntrustedText.agent('Q?'), [], ExecutorUsage.none(), sampleTrace(), d)
-            }
-        ]
-    }
-
-    // FR3 of fix-denial-report-attachment: the exposed denials list is unmodifiable
-    def "the exposed denials list is unmodifiable"() {
-        given: 'a result carrying one denial'
-        def result = build([denial()])
-
-        when: 'a caller tries to add a denial'
+        when:
         result.denials().add(denial())
 
-        then: 'the modification is rejected'
+        then:
         thrown(UnsupportedOperationException)
-
-        where:
-        build << [
-            { List<Finding> d ->
-                new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace(), d)
-            },
-            { List<Finding> d ->
-                new ExecutionResult.DecisionNeeded(UntrustedText.agent('Q?'), [], ExecutorUsage.none(), sampleTrace(), d)
-            }
-        ]
     }
 
-    // FR6: ExecutionResult is sealed — an exhaustive switch handles both variants
-    def "an exhaustive switch over ExecutionResult handles both variants"() {
-        expect: 'each variant is matched to its own arm'
-        describe(result) == expected
-
-        where:
-        result | expected
-        new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace(), []) | 'completed'
-        new ExecutionResult.DecisionNeeded(UntrustedText.agent('Q?'), [], ExecutorUsage.none(), sampleTrace(), []) | 'decision: Q?'
-    }
-
-    // FR6: Completed results are values — equal content means equal results
-    def "Completed results with the same components are equal values"() {
-        expect: 'two independently constructed Completed results with equal content are equal'
-        new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace(), []) ==
-        new ExecutionResult.Completed(ExecutorUsage.none(), sampleTrace(), [])
-    }
-
-    // FR6: DecisionNeeded results are values — equal content means equal results
-    def "DecisionNeeded results with the same components are equal values"() {
-        expect: 'two independently constructed DecisionNeeded results with equal content are equal'
-        new ExecutionResult.DecisionNeeded(UntrustedText.agent('Q?'), [UntrustedText.agent('a')], ExecutorUsage.none(), sampleTrace(), []) ==
-        new ExecutionResult.DecisionNeeded(UntrustedText.agent('Q?'), [UntrustedText.agent('a')], ExecutorUsage.none(), sampleTrace(), [])
-
-        and: 'a differing question makes them unequal'
-        new ExecutionResult.DecisionNeeded(UntrustedText.agent('Q1?'), [], ExecutorUsage.none(), sampleTrace(), []) !=
-        new ExecutionResult.DecisionNeeded(UntrustedText.agent('Q2?'), [], ExecutorUsage.none(), sampleTrace(), [])
-    }
-
-    private static String describe(ExecutionResult result) {
-        switch (result) {
-            case ExecutionResult.Completed: return 'completed'
-            case ExecutionResult.DecisionNeeded:
-                return 'decision: ' + ((ExecutionResult.DecisionNeeded) result).question()
-            default: throw new IllegalStateException('unreachable')
-        }
+    // FR6: results are values — equal content means equal results
+    def "results with the same components are equal values"() {
+        expect:
+        ExecutionResult.decisionNeeded(UntrustedText.agent('Q?'), [UntrustedText.agent('a')], ExecutorUsage.none(), sampleTrace(), []) ==
+        ExecutionResult.decisionNeeded(UntrustedText.agent('Q?'), [UntrustedText.agent('a')], ExecutorUsage.none(), sampleTrace(), [])
+        ExecutionResult.decisionNeeded(UntrustedText.agent('Q1?'), [], ExecutorUsage.none(), sampleTrace(), []) !=
+        ExecutionResult.decisionNeeded(UntrustedText.agent('Q2?'), [], ExecutorUsage.none(), sampleTrace(), [])
+        ExecutionResult.completed(ExecutorUsage.none(), sampleTrace(), []) ==
+        ExecutionResult.completed(ExecutorUsage.none(), sampleTrace(), [])
     }
 }

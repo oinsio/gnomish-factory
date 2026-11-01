@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.port.agent;
 
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.nio.file.Path;
@@ -28,6 +29,18 @@ public interface RoundEnvironmentSource {
      * @return the round's handle; never null
      */
     Round openRound(StageExecutor.Request request);
+
+    /**
+     * Where the engine takes the token of each round this source opened (FR14, FR21 of
+     * define-executor-contract, design D13): the run's current-round cell the source fills as it
+     * opens a round in a branch mode (the container source, the git-mode host decoration), or {@link
+     * RoundIdentity#inPlace()} for the bare host source, which serves the in-place run only and mints
+     * nothing. No default: each source names its own, and the composition root hands it to the
+     * engine beside the executor the source serves.
+     *
+     * @return the identity of this source's rounds; never null
+     */
+    RoundIdentity identity();
 
     /** One round's environment, decision transport, and boundary hooks. */
     interface Round {
@@ -59,10 +72,12 @@ public interface RoundEnvironmentSource {
         void closeRound();
 
         /**
-         * The raw decision content the agent wrote this round, if any — read
-         * after {@link #closeRound()}.
+         * The decision request the agent wrote this round, if any — read after {@link
+         * #closeRound()} through the one tolerant {@link DecisionRequestRead}, so no
+         * implementation hands raw decision content on for a second parse (FR6 of
+         * define-executor-contract).
          */
-        Optional<String> readDecision();
+        Optional<RoundDecisionRequest> readDecision();
 
         /** Infrastructure-failure cleanup (NFR-R3): discards round-scoped transport state. */
         void discard();

@@ -81,6 +81,7 @@ dependencies {
     // root's own job.
     implementation project(':adapters:git')
     implementation project(':adapters:agent')
+    implementation project(':executor-contract') // ExecutorRegistry keys by ExecutorName (task 7.3)
     // The execution-environment backends (task 6.1): `ContainerRunSupport` and
     // the run assemblies construct `ContainerEnvironments` and drive the
     // lease/self-check chain directly — composition, by D3's by-role rule.
@@ -178,6 +179,7 @@ layering {
         ':atomicfile',
         ':baseref',
         ':domain',
+        ':executor-contract',
         ':gitobjects',
         // The git-transfer owner leaf (design D1 of own-git-transfer-argv): transitive via
         // `:adapters:git` (every fetch) and `:sandbox:docker` (the seed clone). The

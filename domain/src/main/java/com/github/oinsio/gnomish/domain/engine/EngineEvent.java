@@ -14,8 +14,7 @@ package com.github.oinsio.gnomish.domain.engine;
  * <p>Every variant exposes {@link #taskId()} so a consumer can filter the whole
  * stream by task; key-carrying variants delegate to {@code key.taskId()} (UX2, the
  * key logs and telemetry share). The stream suffices to reconstruct a status view —
- * position, attempt, per-check results, aggregate metrics (NFR-O2). Inert value
- * data compared by content.
+ * position, attempt, per-check results, aggregate metrics (NFR-O2). Inert values.
  *
  * <p>Implements FR12 of add-stage-engine.
  */
@@ -101,15 +100,20 @@ public sealed interface EngineEvent
     }
 
     /**
-     * The executor round finished, carrying its {@link ExecutorUsage} telemetry so a
-     * status view can accumulate aggregate metrics (NFR-O2).
-     *
-     * <p>Implements FR12 of add-stage-engine.
+     * An executor round finished — every executed round, recorded or not — carrying its usage, the
+     * executor that ran it and the status it reached, which the round's log and ledger lines name.
+     * The usage is the executor's {@code transform} participant entry, the same entry a recorded
+     * round carries first in its usage list (FR15 of define-executor-contract).
+     * Implements FR12 of add-stage-engine; NFR-O2, UX3, FR15 of define-executor-contract.
      *
      * @param key the {@code (taskId, stage, attempt)} correlation key; never null
-     * @param usage the round's executor usage; never null
+     * @param usage the executor's participant entry for the round; never null
+     * @param executor the executor that ran the round; never null
+     * @param status the round's status; a thrown failure is {@code failed/infrastructure}; never null
      */
-    record ExecutionFinished(AttemptKey key, ExecutorUsage usage) implements EngineEvent {
+    record ExecutionFinished(
+            AttemptKey key, ParticipantUsage usage, RoundExecutor executor, ExecutionResult.Status status)
+            implements EngineEvent {
         @Override
         public String taskId() {
             return key.taskId();

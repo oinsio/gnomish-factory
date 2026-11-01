@@ -25,22 +25,32 @@ unknown name SHALL be a located error. Declarations SHALL come from the law comm
 Before an executor's first round — once the task's execution environment is live and before the
 engine runs — the factory SHALL obtain each declared executor's describe output and validate its
 `settings` against the declared JSON Schema; each violation SHALL be a located error naming the
-executor, the settings path and the schema rule, parking the task as an invalid law does. A
-program that is absent or cannot answer describe SHALL be an operator precondition refusal, never
-a mid-stage failure.
+executor, the settings path and the schema rule, parking the task as an invalid law does.
 **Implements**: FR9, FR4, FR13, UX1 of define-executor-contract
 
 #### Scenario: Settings typo is caught before the first round
 - **WHEN** `executors.acme.settings.maxTurn` is declared and the schema knows `maxTurns`
 - **THEN** the describe preflight reports a located error at that path naming the unknown property, and no round runs
 
-#### Scenario: Describe that cannot run is an operator precondition
-- **WHEN** a declared program is absent from the image or exits non-zero on describe
-- **THEN** the run ends on the operator-precondition result naming the executor and the describe failure (exit 8), no round runs and no attempt is burned
-
 #### Scenario: Describe runs in the task's own environment
 - **WHEN** a `program` stage's task is claimed in container mode
 - **THEN** describe runs inside the task's box after it is live and before the engine starts, through the execution environment seam
+
+### Requirement: A program that cannot be described parks its task
+A declared program that is absent from the environment, cannot be started, exits non-zero on
+describe, does not answer within the bound, or writes a malformed, oversized or missing answer
+SHALL park the task as an invalid law does, with a located error naming the executor and the
+failure; it SHALL never be a mid-stage failure, an operator precondition or a daemon condition.
+**Implements**: FR4, FR13, UX1 of define-executor-contract
+**Notes**: The law names the program, so the failure is the task's (ADR 0019, decision 5); an image lacking what the image contract guarantees stays the operator's.
+
+#### Scenario: Describe that cannot run parks the task as a configuration error
+- **WHEN** a declared program is absent from the image or exits non-zero on describe
+- **THEN** the task parks as an invalid law does, with a located error naming the executor and the describe failure, no round runs, no attempt is burned and no daemon condition opens
+
+#### Scenario: Describe that cannot start parks the task as an external failure
+- **WHEN** the environment refuses to start the declared program, or describe does not exit within the bound
+- **THEN** the task parks the same way, with a located error naming the executor and the failure as external, no round runs, no attempt is burned and no daemon condition opens
 
 ### Requirement: Credentials and egress are checked against describe
 In the describe preflight, a declared `credentials` or `egress` entry absent from the executor's

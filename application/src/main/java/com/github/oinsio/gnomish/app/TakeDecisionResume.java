@@ -22,6 +22,9 @@ import java.util.List;
  * design D12), or commits the freshest pending reply to the branch and acknowledges it — in that
  * order (FR12 of harden-task-branch-contract) — before running the engine.
  *
+ * <p>{@code BudgetExhausted} (FR7 of define-executor-contract) resumes exactly as {@code
+ * AttemptsExhausted}: a reached bound, like a spent attempt limit, asks no question.
+ *
  * <p>{@code AttemptsExhausted} never re-parks here: the human returning the task to work is itself
  * the confirmation (design D12), matching {@link EscalationResume#decide}'s
  * decision-less retry — a pending reply is still passed through when present, since it is meaningful
@@ -76,6 +79,9 @@ public record TakeDecisionResume<B extends ResumedBranch>(ResumeMechanics<B> mec
             case EscalationReport.AttemptsExhausted _
             when latest == null -> resumeOnReturnAlone(order, branch, finalState.resetAttempts());
             case EscalationReport.AttemptsExhausted _ -> ackAndResume(order, branch, finalState, latest);
+            case EscalationReport.BudgetExhausted _
+            when latest == null -> resumeOnReturnAlone(order, branch, finalState.resetAttempts());
+            case EscalationReport.BudgetExhausted _ -> ackAndResume(order, branch, finalState, latest);
             case null, default ->
                 throw new IllegalStateException(
                         "TakeDecisionResume.resume called for a non-ESCALATION-kind escalation: "

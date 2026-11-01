@@ -10,7 +10,7 @@ import java.util.Optional;
  * report from the same record through the same mapping, the re-raised escalation is identical to
  * the live one by construction — never re-derived from the verdict or the executor's result.
  *
- * <p>Implements FR5, FR6 of make-checkpoint-gate-durable.
+ * <p>Implements FR5, FR6 of make-checkpoint-gate-durable; FR7 of define-executor-contract.
  */
 final class StopEscalation {
 
@@ -34,7 +34,7 @@ final class StopEscalation {
     /**
      * The escalation {@code stop} raises: {@link EscalationReport.DecisionNeeded} for a {@link
      * Stop.DecisionNeeded}, {@link EscalationReport.CannotVerify} for a {@link Stop.CannotVerify},
-     * empty for {@link Stop.None}. Exhaustive switch, no {@code default}, so a new stop variant is a
+     * {@link EscalationReport.BudgetExhausted} for a {@link Stop.BudgetExhausted}, empty for {@link Stop.None}. Exhaustive switch, no {@code default}, so a new stop variant is a
      * compile error here.
      *
      * @param stop the stop a recorded round carries; never null
@@ -47,6 +47,7 @@ final class StopEscalation {
                 Optional.of(new EscalationReport.DecisionNeeded(question, options));
             case Stop.CannotVerify(var check, var reason, var details) ->
                 Optional.of(new EscalationReport.CannotVerify(check, reason, details));
+            case Stop.BudgetExhausted(var bound) -> Optional.of(new EscalationReport.BudgetExhausted(bound));
         };
     }
 }

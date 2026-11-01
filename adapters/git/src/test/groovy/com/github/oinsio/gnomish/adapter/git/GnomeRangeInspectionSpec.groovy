@@ -1,7 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.RoundToken
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -186,10 +187,10 @@ class GnomeRangeInspectionSpec extends Specification implements BareGitRepoFixtu
             parentFile.mkdirs()
             text = '{}'
         }
-        def top = gnomeCommits('.gnomish-task/state.json', '{"round":0}', ServiceCommitMessages.round('implement', 0))
+        def top = gnomeCommits('.gnomish-task/state.json', '{"round":0}', ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey('T-1', 'implement', 0))))
 
         expect:
-        inspect(top, AdmissionRule.state(KEY, token, trace)) instanceof RangeVerdict.Clean
+        inspect(top, AdmissionRule.state(KEY, RoundStates.roundOf(KEY), token, trace)) instanceof RangeVerdict.Clean
     }
 
     def "FR13: a closing top that is not the factory's commit, or writes beyond its files, is refused — #shape"() {
@@ -197,7 +198,7 @@ class GnomeRangeInspectionSpec extends Specification implements BareGitRepoFixtu
         def top = gnomeCommits(path, '{"round":0}', subject)
 
         when:
-        def verdict = inspect(top, AdmissionRule.state(KEY, RoundToken.of(base), '.gnomish-task/attempts/implement/0/trace.jsonl'))
+        def verdict = inspect(top, AdmissionRule.state(KEY, RoundStates.roundOf(KEY), RoundToken.of(base), '.gnomish-task/attempts/implement/0/trace.jsonl'))
 
         then:
         verdict instanceof RangeVerdict.Violated
@@ -206,7 +207,7 @@ class GnomeRangeInspectionSpec extends Specification implements BareGitRepoFixtu
         where:
         shape | path | subject
         'another subject' | '.gnomish-task/state.json' | 'gnome round'
-        'a path beyond the two' | '.gnomish-task/task.json' | ServiceCommitMessages.round('implement', 0)
+        'a path beyond the two' | '.gnomish-task/task.json' | ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey('T-1', 'implement', 0)))
     }
 
     // Scenario: git/git-task-persistence / A failed boundary probe never passes as clean

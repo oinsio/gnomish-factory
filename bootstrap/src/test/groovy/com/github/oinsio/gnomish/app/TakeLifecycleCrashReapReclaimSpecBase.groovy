@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.*
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -177,9 +178,9 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
         // it would leave this scenario resuming a branch that records no round at all.
         new GitAttemptPersistence(gitRunner, worktree, TASK_ID, book).persist(
                 TASK_ID,
-                TaskState.atStageStart('build').recordUnburnedRound(new AttemptRecord(
+                TaskState.atStageStart('build').recordUnburnedRound(AttemptRecords.of(
                         0, AttemptRecord.Result.CANNOT_VERIFY, Instant.parse('2026-07-18T09:00:00Z'), [],
-                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())),
+                        ExecutorUsage.none(), [], Stop.none()), ExecutorVersions.none()),
                 new ToolTrace(
                         new AttemptKey(TASK_ID, 'build', 0),
                         [

@@ -4,9 +4,12 @@ import ch.qos.logback.classic.Level
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.domain.engine.fake.Snapshots
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.RunSummaryAccumulator
@@ -50,7 +53,7 @@ class RunSummaryLedgerWriterSpec extends Specification implements RotatingLedger
     }
 
     private static TaskState delivered(Map<String, TokenUsage> tokensByModel) {
-        return new TaskState(new Position.AtStage('build'), 0, [], new ExecutorUsage(null, [], tokensByModel))
+        return new TaskState(new Position.AtStage('build'), 0, [], Snapshots.executed(tokensByModel), ExecutorVersions.none())
     }
 
     // Scenario: observability/serve-observability / Drain boundary gets a summary

@@ -20,7 +20,8 @@ import spock.lang.Specification
  * task), so it runs under {@code check}; fixtures resolve from the {@code
  * referenceDumpDir} system property (on-disk resources, not the build copy).
  *
- * <p>Implements FR6, M1, M2, M3, M4, G3, NFR-S1, NFR-R1, D2 of harden-reference-dump-scrubber.
+ * <p>Implements FR6, M1, M2, M3, M4, G3, NFR-S1, NFR-R1, D2 of harden-reference-dump-scrubber;
+ * FR22 of define-executor-contract.
  */
 class ReferenceDumpHygieneSpec extends Specification {
 
@@ -71,10 +72,12 @@ class ReferenceDumpHygieneSpec extends Specification {
         }
     }
 
-    /** Sensitive tokens that must never appear in any committed fixture (M2 grep targets). */
+    /**
+     * Sensitive tokens that must never appear in any committed fixture (M2 grep targets). Cost
+     * figures are not among them: the fixtures keep {@code total_cost_usd} and {@code costUSD}
+     * (FR22 of define-executor-contract).
+     */
     static final List<String> FORBIDDEN_TOKENS = List.of(
-    'total_cost_usd',
-    'costUSD',
     'permission_denials',
     '"uuid"',
     '"request_id"')
@@ -139,6 +142,24 @@ class ReferenceDumpHygieneSpec extends Specification {
             !entry.key.isBlank() &&
                     m.has('inputTokens') && m.has('outputTokens') &&
                     m.has('cacheReadInputTokens') && m.has('cacheCreationInputTokens')
+        }
+
+        where: 'each of the three refreshed recordings is checked'
+        fixtureName << REFRESHED_FIXTURE_NAMES
+    }
+
+    // FR22 of define-executor-contract: the scrub keeps cost, so each real recording carries the
+    // CLI's top-level total and a non-negative costUSD beside every model's counts.
+    // Scenario: executor/agent-executor / Money is kept
+    def "refreshed fixture #fixtureName keeps total_cost_usd and a costUSD for every model"() {
+        given: 'the parsed result event of the fixture as committed on disk'
+        JsonNode result = resultEvent(fixtureName)
+
+        expect: 'the total and every per-model cost survive as non-negative numbers'
+        result.path('total_cost_usd').isNumber()
+        result.path('total_cost_usd').decimalValue().signum() >= 0
+        result.path('modelUsage').properties().every { entry ->
+            entry.value.path('costUSD').isNumber() && entry.value.path('costUSD').decimalValue().signum() >= 0
         }
 
         where: 'each of the three refreshed recordings is checked'

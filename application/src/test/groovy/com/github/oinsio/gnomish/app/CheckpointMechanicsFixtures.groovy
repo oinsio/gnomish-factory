@@ -2,11 +2,13 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -34,9 +36,9 @@ final class CheckpointMechanicsFixtures {
 
     /** A state held at the gate of {@code stage}, its passing round recorded. */
     static TaskState gatedAt(String stage) {
-        def passed = new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(),
-        JudgeUsage.none(), [], Stop.none())
-        new TaskState(new Position.AwaitingApproval(stage), 1, [passed], ExecutorUsage.none())
+        def passed = AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(),
+        [], Stop.none())
+        new TaskState(new Position.AwaitingApproval(stage), 1, [passed], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     static TaskContext context() {

@@ -65,7 +65,7 @@ class StageSanityRuleSpec extends Specification {
 
     private static ConfigError missingModel(String stage) {
         new ConfigError("stages/$stage/stage.yaml", 'executor.model',
-                'missing required executor model; the model must be pinned in the manifest for every executor type')
+                'missing required executor model; the model must be pinned in the manifest for every agent executor type (api, agent-cli)')
     }
 
     private static ConfigError nonPositiveAttempts(String stage, int limit) {
@@ -117,6 +117,19 @@ class StageSanityRuleSpec extends Specification {
         type | model | limit
         ExecutorType.API | 'claude-sonnet-4-5' | 1
         ExecutorType.AGENT_CLI | 'no-such-model-anywhere' | 3
+    }
+
+    // FR10 of define-executor-contract: a program stage may omit the model; a present one is carried
+    //     to the executor as a setting, never judged here
+    // Scenario: pipeline/pipeline-config / Program stage may omit the model
+    def "a program stage with model '#model' produces no errors"() {
+        expect:
+        StageSanityRule.validate([
+            stage('lint', ExecutorType.PROGRAM, model, [:], 1)
+        ]) == []
+
+        where:
+        model << ['', '   ', 'acme-large']
     }
 
     // FR11 delta-spec scenario: model absent (blank, per the mapper contract)

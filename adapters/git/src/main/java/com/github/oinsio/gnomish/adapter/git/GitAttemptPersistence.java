@@ -138,7 +138,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
         }
 
         String message = ClaimEpochTrailer.stamp(
-                ServiceCommitMessages.round(key.stage(), key.attempt()),
+                ServiceCommitMessages.round(AttemptPersistence.roundOf(state)),
                 epochs.epochFor(taskId).orElse(null));
         previousTip = switch (closingCommit.commit(worktreeRoot, taskId, message)) {
             case WorktreeClosingCommit.Outcome.Landed landed -> landed.commit();

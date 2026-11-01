@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
  * trouble (→ {@code CannotVerify}) rather than engineered around.
  *
  * <p>Every degradation path logs the raw final message at WARN (NFR-O2),
- * mirroring {@link DecisionFileReader}'s precedent so protocol
+ * mirroring the decision file's tolerant read ({@code DecisionRequestRead}) so protocol
  * non-compliance is diagnosable from logs alone.
  *
  * <p>Implements FR8, NFR-R1, NFR-O2, D5 of add-agent-executor; FR15 of

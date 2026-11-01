@@ -25,21 +25,15 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 public final class Engine {
 
     /**
-     * Runs the task described by {@code context} from its recorded {@code state} through
-     * the pipeline {@code definition}, returning the terminal {@link TaskOutcome}. Emits
-     * {@link EngineEvent.RunStarted} first, then resolves the pre-flight terminals that
-     * reach no execution or persistence port: a {@link Position.PipelineEnd} completes
-     * immediately (FR8); an {@link Position.AtStage} or {@link Position.AwaitingApproval}
-     * name absent from the pipeline escalates as {@link EscalationReport.PipelineMismatch}
-     * (FR9); a {@link Position.AwaitingApproval} gate pauses again as {@link
-     * TaskOutcome.Paused} (FR2 of make-checkpoint-gate-durable); a last recorded round carrying
-     * a {@link Stop} re-escalates from the record (FR6 of make-checkpoint-gate-durable); an
-     * {@code attemptsUsed} at the stage's attempt limit escalates as {@link
-     * EscalationReport.AttemptsExhausted} (FR5). Otherwise the stage attempt loop runs. Every path emits {@link EngineEvent.TaskFinished} with the outcome (FR12).
+     * Runs the task described by {@code context} from its recorded {@code state} through the
+     * pipeline {@code definition}, returning the terminal {@link TaskOutcome}. Emits {@link
+     * EngineEvent.RunStarted} first, then resolves the pre-flight terminals that reach no execution
+     * or persistence port ({@link #preflight}, {@link #atStage}: FR5, FR8, FR9; FR2, FR6 of
+     * make-checkpoint-gate-durable; FR13 of define-executor-contract); otherwise the stage attempt
+     * loop runs. Every path emits {@link EngineEvent.TaskFinished} with the outcome (FR12).
      *
-     * <p>Holds no state across the call, so concurrent runs stay isolated (NFR-R1).
-     *
-     * <p>Implements FR1, FR5, FR8, FR9, FR12 of add-stage-engine; FR6 of make-checkpoint-gate-durable.
+     * <p>Implements FR1, FR5, FR8, FR9, FR12 of add-stage-engine; FR6 of make-checkpoint-gate-durable;
+     * FR13 of define-executor-contract.
      *
      * @param definition the pipeline whose stages the run advances through; never null
      * @param context the task's identity and human decisions; never null
@@ -98,10 +92,11 @@ public final class Engine {
 
     /**
      * Resolves an {@link Position.AtStage} run: a stage name absent from the pipeline is a
-     * {@link EscalationReport.PipelineMismatch} (FR9), a recorded stop re-escalates through the
-     * live loop's own {@link StopEscalation} mapping (FR6 of make-checkpoint-gate-durable), an
-     * {@code attemptsUsed} at the attempt limit is {@link EscalationReport.AttemptsExhausted}
-     * (FR5) — all before any port — otherwise the stage runs through {@link #runStages}.
+     * {@link EscalationReport.PipelineMismatch} (FR9), a recorded stop re-escalates through {@link
+     * StopEscalation} (FR6 of make-checkpoint-gate-durable), an {@code attemptsUsed} at the limit is
+     * {@link EscalationReport.AttemptsExhausted} (FR5), an executor version that differs from the
+     * task's pin is a {@code PipelineMismatch} naming both (FR13 of define-executor-contract) — all
+     * before any port — otherwise the stage runs through {@link #runStages}.
      */
     private TaskOutcome atStage(
             PipelineDefinition definition,
@@ -123,6 +118,12 @@ public final class Engine {
         if (state.attemptsUsed() >= limit) {
             return new TaskOutcome.Escalated(state, new EscalationReport.AttemptsExhausted(limit));
         }
+        // FR13 of define-executor-contract: an executor whose describe changed since the pin escalates first.
+        var changed = ExecutorVersionCheck.compare(
+                state.executorVersions(), ports.describedExecutors().all());
+        if (changed.isPresent()) {
+            return new TaskOutcome.Escalated(state, changed.get());
+        }
         return runStages(definition, context, state, workspace, ports, stage);
     }
 
@@ -134,7 +135,9 @@ public final class Engine {
      */
     private static TaskOutcome mismatch(TaskState state, String stageName) {
         return new TaskOutcome.Escalated(
-                state, new EscalationReport.PipelineMismatch(UntrustedText.branchDocument(stageName)));
+                state,
+                new EscalationReport.PipelineMismatch(
+                        new MismatchCause.StaleStage(UntrustedText.branchDocument(stageName))));
     }
 
     /**
@@ -143,15 +146,12 @@ public final class Engine {
      * its {@link VerifyOrchestrator} are built once per run from the ports, so the engine holds no
      * shared mutable state and concurrent runs stay isolated (NFR-R1).
      *
-     * <p>Each iteration runs the current stage: a {@link StageResult.Terminal} ends the run with
-     * its outcome; a {@link StageResult.Passed} applies the stage's {@link AdvancementMode}
-     * exhaustively (no {@code default}). {@code AUTO} advances to the next stage — resetting the
-     * attempt history (FR14) — or, past the last stage, completes at {@link Position.PipelineEnd}
-     * (design D4); the advance below only resets the in-memory attempt history for the stage about
-     * to run, its position already recorded by the round commit (FR4 of harden-task-branch-contract).
-     * {@code MANUAL} pauses, naming the stage that just passed (FR8), with exactly the state the
-     * round persisted — the position at the gate, {@link Position.AwaitingApproval} — and no
-     * further persist or advance (FR1 of make-checkpoint-gate-durable, design D1).
+     * <p>Each iteration runs the current stage: a {@link StageResult.Terminal} ends the run; a {@link
+     * StageResult.Passed} applies the stage's {@link AdvancementMode} exhaustively. {@code AUTO}
+     * advances — resetting the in-memory attempt history (FR14), the position already recorded by
+     * the round commit (FR4 of harden-task-branch-contract) — or completes at {@link
+     * Position.PipelineEnd} past the last stage (design D4). {@code MANUAL} pauses with exactly the
+     * state the round persisted, the position at the gate (FR1 of make-checkpoint-gate-durable, D1).
      *
      * <p>Implements FR8, FR14 of add-stage-engine; FR1 of make-checkpoint-gate-durable.
      */

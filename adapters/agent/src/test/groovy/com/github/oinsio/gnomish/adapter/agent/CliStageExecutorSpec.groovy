@@ -3,10 +3,11 @@ package com.github.oinsio.gnomish.adapter.agent
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -59,7 +60,7 @@ class CliStageExecutorSpec extends Specification {
         def result = executor.execute(requestFor())
 
         then:
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         result.usage() != null
         result.trace() != null
     }
@@ -75,9 +76,9 @@ class CliStageExecutorSpec extends Specification {
         def result = executor.execute(requestFor())
 
         then:
-        result instanceof ExecutionResult.DecisionNeeded
-        result.question().forLog() == 'Refactor or patch?'
-        result.options()*.forLog() == ['refactor', 'patch']
+        result.answer() instanceof ExecutionResult.DecisionRequest
+        result.answer().question().forLog() == 'Refactor or patch?'
+        result.answer().options()*.forLog() == ['refactor', 'patch']
         result.usage() != null
         result.trace() != null
     }
@@ -92,25 +93,25 @@ class CliStageExecutorSpec extends Specification {
         def result = executor.execute(requestFor())
 
         then:
-        result instanceof ExecutionResult.DecisionNeeded
-        result.question().contains('not json at all')
-        result.options() == []
+        result.answer() instanceof ExecutionResult.DecisionRequest
+        result.answer().question().contains('not json at all')
+        result.answer().options() == []
     }
 
-    // FR13, NFR-R1, D7: roundTimeout expiry kills the process and throws — RoundExecution
-    // shapes any RuntimeException the port throws into CannotExecute, no attempt burned.
+    // FR13, NFR-R1, D7: roundTimeout expiry kills the process; FR7 of define-executor-contract:
+    // the round reports failed/infrastructure, which the engine classifies as CannotExecute.
     // Scenario: executor/agent-executor / Timeout kill still classifies as infrastructure
     // Scenario: executor/agent-executor / Hung CLI cannot hang the engine
-    def "hung process past roundTimeout is killed and throws"() {
+    def "hung process past roundTimeout is killed and reported as failed/infrastructure"() {
         given:
         def executor = executorFor('hangs-forever')
 
         when:
-        executor.execute(requestFor([roundTimeout: 1]))
+        def result = executor.execute(requestFor([roundTimeout: 1]))
 
-        then: 'FR1 of fix-denial-attribution-durability: wrapped, with the timeout as its cause'
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof RoundTimeoutException
+        then: 'the timeout is the reported failure, with the time the round spent'
+        InfrastructureResults.endedBy(result, RoundTimeoutException)
+        result.usage().wallTime() != null
     }
 
     // FR3, NFR-R3, D1: an infrastructure failure mid-round still cleans up the round's
@@ -126,28 +127,26 @@ class CliStageExecutorSpec extends Specification {
                 new CliStageExecutor(properties, clock, { AgentProgressEvent e -> } as AgentProgressListener, transport, LAW)
 
         when:
-        executor.execute(requestFor([roundTimeout: 1]))
+        def result = executor.execute(requestFor([roundTimeout: 1]))
 
         then:
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof RoundTimeoutException
+        InfrastructureResults.endedBy(result, RoundTimeoutException)
 
         and: 'NFR-R3, D1: no round directory survives under the injected root'
         Files.list(decisionRoot).withCloseable { it.count() == 0L }
     }
 
-    // FR4, NFR-R1: a stream with no result event throws, uncaught infrastructure failure.
+    // FR4, NFR-R1: a stream with no result event is an infrastructure failure, reported.
     // Scenario: executor/agent-executor / Missing result event is infrastructure
-    def "missing result event throws"() {
+    def "missing result event is reported as failed/infrastructure"() {
         given:
         def executor = executorFor('missing-result-event')
 
         when:
-        executor.execute(requestFor())
+        def result = executor.execute(requestFor())
 
-        then: 'FR1 of fix-denial-attribution-durability: wrapped, with the missing event as its cause'
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof MissingResultEventException
+        then:
+        InfrastructureResults.endedBy(result, MissingResultEventException)
     }
 
     // FR7, D10, task 9.4: a supplied AgentProgressListener receives the round's live progress.
@@ -184,7 +183,7 @@ class CliStageExecutorSpec extends Specification {
         def result = executor.execute(requestFor())
 
         then:
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         countingSource.round.closeRoundCalls == 1
         countingSource.round.closeRoundCalledBeforeReadDecision
     }
@@ -202,6 +201,11 @@ class CliStageExecutorSpec extends Specification {
         Round openRound(StageExecutor.Request request) {
             round = new CountingRound(delegate.openRound(request))
             round
+        }
+
+        @Override
+        RoundIdentity identity() {
+            delegate.identity()
         }
     }
 
@@ -241,7 +245,7 @@ class CliStageExecutorSpec extends Specification {
         }
 
         @Override
-        Optional<String> readDecision() {
+        Optional<RoundDecisionRequest> readDecision() {
             closeRoundCalledBeforeReadDecision = closeRoundCalls == 1
             delegate.readDecision()
         }

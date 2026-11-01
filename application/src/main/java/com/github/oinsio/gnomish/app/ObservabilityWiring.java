@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.serve.DaemonLifecycleState;
 import com.github.oinsio.gnomish.app.serve.LifecycleStateTracker;
 import com.github.oinsio.gnomish.app.serve.ServeShutdown;
 import com.github.oinsio.gnomish.serveobservability.writer.RemoteOutageLedgerWriter;
+import com.github.oinsio.gnomish.serveobservability.writer.RoundOutcomeLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.RunSummaryLedgerWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.SnapshotWriter;
 import com.github.oinsio.gnomish.serveobservability.writer.SweepLedgerWriter;
@@ -50,6 +51,11 @@ final class ObservabilityWiring {
     /** The {@code taskOutcome} write point every slot attaches to (FR11); never null. */
     TaskOutcomeLedgerWriter taskOutcomeLedgerWriter() {
         return ledgerWriters.taskOutcome();
+    }
+
+    /** The {@code roundOutcome} write point the slots' engines fan into (NFR-O2 of define-executor-contract). */
+    RoundOutcomeLedgerWriter roundOutcomeLedgerWriter() {
+        return ledgerWriters.roundOutcome();
     }
 
     /** The sweep's ledger write point, both its verdict and its tick sink (NFR-O2); never null. */

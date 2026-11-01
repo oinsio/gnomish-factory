@@ -8,10 +8,12 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -50,7 +52,7 @@ class StageAttemptLoopSpec extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
-                listener, persistence, VirtualTimeEquipment.on(clock, sleeper))
+                listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static VerifyCheck.Builtin builtin(String name) {
@@ -71,8 +73,8 @@ class StageAttemptLoopSpec extends Specification {
         new PipelineDefinition('1', new AutonomyLimits(3), stages.toList())
     }
 
-    static ExecutionResult.Completed completed(ExecutorUsage usage) {
-        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
+    static ExecutionResult completed(ExecutorUsage usage) {
+        ExecutionResult.completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
     // FR4, FR13: a check that CannotVerify escalates without burning an attempt, and the
@@ -118,26 +120,33 @@ class StageAttemptLoopSpec extends Specification {
                 UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
     }
 
-    // FR13: the recorded round carries the executor's ExecutorUsage and the verification's
-    //     JudgeUsage — the metrics of the round land in attempts()[0]
+    // FR13: the recorded round carries the executor's usage and each judge vote as participant
+    //     entries — the metrics of the round land in attempts()[0] (FR15 of define-executor-contract)
     // Scenario: pipeline/stage-engine / Round metrics carry wall time, tool aggregates and per-model tokens
     def "records the executor and judge usage of the round"() {
         given: 'a stage with a judge check that cannot verify, and a Completed executor reporting usage'
         def stageDef = stage('build', 3, [judge(1)])
-        def executorUsage = new ExecutorUsage(Duration.ofSeconds(4), [], ['model-a': new TokenUsage(100, 40, 0, 0)])
+        def executorUsage = new ExecutorUsage(Duration.ofSeconds(4), [], Unpriced.of(['model-a': new TokenUsage(100, 40, 0, 0)]))
         executor.scripted << completed(executorUsage)
         def voteTokens = ['model-a': new TokenUsage(7, 3, 0, 0)]
-        judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess('model unparseable'), UntrustedText.subprocess('gibberish')), voteTokens)
+        judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.CannotVerify(UntrustedText.subprocess('model unparseable'), UntrustedText.subprocess('gibberish')), Unpriced.of(voteTokens))
 
         when: 'the run is driven'
         def outcome = new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
-        then: 'the round records the executor usage verbatim'
+        then: 'the round records the executor as its transform entry, verbatim'
         def record = outcome.finalState().attempts()[0]
-        record.executorUsage().is(executorUsage)
+        record.usage()[0] == Participants.transform('api', executorUsage)
+        record.usage()[0].wallTime() == Duration.ofSeconds(4)
+        record.usage()[0].byModel() == ['model-a': new ModelUsage(new TokenUsage(100, 40, 0, 0), null)]
 
-        and: 'and the judge usage gathered during verification'
-        record.judgeUsage().perVote() == [voteTokens]
+        and: 'and the judge vote gathered during verification as its own verdict entry, vote 0'
+        record.usage()[1] == Participants.verdict(Participants.JUDGE_EXECUTOR, 0, Unpriced.of(voteTokens))
+        record.usage()*.role() == [
+            ExecutorRole.TRANSFORM,
+            ExecutorRole.VERDICT
+        ]
+        record.usage()*.vote() == [null, 0]
     }
 
     // FR13: the executor is invoked exactly once with attempt 0 and the run's stage and context
@@ -204,7 +213,7 @@ class StageAttemptLoopSpec extends Specification {
         def begin = Instant.parse('2026-07-16T09:30:00Z')
         clock.advance(Duration.between(clock.instant(), begin))
         def stageDef = stage('build', 3, [builtin('files_exist')])
-        executor.scripted << new ExecutionResult.DecisionNeeded(UntrustedText.agent('which db?'), [
+        executor.scripted << ExecutionResult.decisionNeeded(UntrustedText.agent('which db?'), [
             UntrustedText.agent('pg'),
             UntrustedText.agent('mysql')
         ],

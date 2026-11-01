@@ -111,7 +111,7 @@ The JSON document SHALL carry `"version": 1` and use camelCase names, ISO-8601 U
 
 #### Scenario: The last escalation and the last decision
 - **WHEN** `status` reads a tip that recorded an escalation and a decision
-- **THEN** `lastEscalation` is one of the six report kinds (`attemptsExhausted`, `decisionNeeded`, `cannotVerify`, `pipelineMismatch`, `cannotExecute`, `budgetExhausted`), carrying the question and options for `decisionNeeded`, `denials` for `cannotExecute` and the bound for `budgetExhausted`, and `lastDecision` carries text, author, stage and time; each is null when none was recorded
+- **THEN** `lastEscalation` is one of the six report kinds (`attemptsExhausted`, `decisionNeeded`, `cannotVerify`, `pipelineMismatch`, `cannotExecute`, `budgetExhausted`), carrying the question and options for `decisionNeeded`, `denials` for `cannotExecute` and the bound for `budgetExhausted`, and for `pipelineMismatch` the stale stage or, for an executor version mismatch, `executorVersion {executor, recorded, current}`, and `lastDecision` carries text, author, stage and time; each is null when none was recorded
 
 #### Scenario: A usage object carries wall time, tools and tokens by model
 - **WHEN** a participant entry is rendered

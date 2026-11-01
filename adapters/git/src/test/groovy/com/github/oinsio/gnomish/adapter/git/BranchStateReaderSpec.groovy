@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -60,7 +61,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture,
         def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
-        persistence.persist(taskId, state, trace)
+        persistence.persist(taskId, RoundStates.withRound(state, trace.key()), trace)
     }
 
     def "FR13: a task with only task.json (no rounds yet) reads back into a StatusReport with no outcome"() {
@@ -170,7 +171,9 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture,
                 new TaskContext('PROJ-6', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-6'), 'PROJ-6', ClaimEpochSource.NONE)
-                .persist('PROJ-6', TaskState.atStageStart('implement'),
+                .persist('PROJ-6', RoundStates.recorded(new ToolTrace(new AttemptKey('PROJ-6', 'implement', 0), [
+                    new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
+                ]).key()),
                 new ToolTrace(new AttemptKey('PROJ-6', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))
@@ -330,7 +333,9 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture,
                 new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-9'), 'PROJ-9', ClaimEpochSource.NONE)
-                .persist('PROJ-9', TaskState.atStageStart('implement'),
+                .persist('PROJ-9', RoundStates.recorded(new ToolTrace(new AttemptKey('PROJ-9', 'implement', 0), [
+                    new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
+                ]).key()),
                 new ToolTrace(new AttemptKey('PROJ-9', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))

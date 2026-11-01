@@ -12,12 +12,14 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Instant
@@ -52,9 +54,9 @@ class StatusConsumedParkSpec extends Specification implements SeededCloneFixture
     /** The state a passing {@code manual} round leaves: at the gate, its passing round recorded. */
     private static TaskState gated() {
         new TaskState(GATE, 0, [
-            new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(),
-            JudgeUsage.none(), [], Stop.none())
-        ], ExecutorUsage.none())
+            AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(),
+            [], Stop.none())
+        ], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     private void create(TaskState state) {
@@ -78,7 +80,7 @@ class StatusConsumedParkSpec extends Specification implements SeededCloneFixture
             case 'approval':
                 create(gated())
                 repository.recordOutcome(TASK, new TaskOutcome.Paused(gated(), 'implement'), TrackerWrite.OWED)
-                def approved = new TaskState(new Position.AtStage('verify'), 0, gated().attempts(), ExecutorUsage.none())
+                def approved = new TaskState(new Position.AtStage('verify'), 0, gated().attempts(), UsageSnapshot.EMPTY, ExecutorVersions.none())
                 repository.approveCheckpoint(TASK, GATE, approved)
                 break
             case 'resumed write':

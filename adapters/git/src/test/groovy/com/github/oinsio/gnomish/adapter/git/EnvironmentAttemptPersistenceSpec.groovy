@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import java.nio.file.Files
 import java.nio.file.Path
@@ -74,7 +75,7 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
     }
 
     private void persistRound(EnvironmentAttemptPersistence persistence, int round) {
-        persistence.persist(TASK, TaskState.atStageStart('implement'), trace(round))
+        persistence.persist(TASK, RoundStates.recorded(trace(round).key()), trace(round))
     }
 
     def "FR13: the diff base is the round's token, not the tip the persistence saw when it was built"() {

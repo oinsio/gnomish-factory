@@ -2,36 +2,42 @@ package com.github.oinsio.gnomish.domain.engine;
 
 import java.time.Instant;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
- * The recorded metrics of one executed round within the current stage: its
- * {@code round} sequence number, the {@code startedAt} instant the round began, the
- * {@code checkResults} the round produced, the round's aggregate {@code executorUsage},
- * and its per-vote {@code judgeUsage} (design D4). FR13 records <em>every</em> executed
+ * The recorded metrics of one executed round within the current stage: its identity — the
+ * {@code taskId}, the {@code stage} that ran it and, in a branch mode, the {@code roundToken} it
+ * opened on — its {@code round} sequence number, the {@code startedAt} instant the round began, the
+ * {@code checkResults} the round produced, and its {@code usage} — one {@link ParticipantUsage}
+ * entry per executor invocation of the round (design D14 of define-executor-contract). FR13 records <em>every</em> executed
  * round here — including rounds that ended in {@code CannotVerify} (recorded, not
  * counted against the attempt limit) and {@code DecisionNeeded} rounds (which record no
  * checks).
  *
- * <p>The raw {@link ToolTrace} is deliberately kept OUT of this record (design D5):
- * a record holds only the aggregate metrics, while the heavyweight per-call trace
- * lives outside {@code TaskState} and is correlated back to its round by
- * {@link AttemptKey}. So there is intentionally no trace field here.
+ * <p>The raw {@link ToolTrace} is deliberately kept OUT (design D5): it lives outside {@code
+ * TaskState}, correlated to its round by {@link AttemptKey}.
  *
- * <p>{@code round} is non-negative — it is the round's position within the current
- * visit of the stage, the same 0-based numbering the engine assigns (it restarts on a
- * repeated visit; see {@link AttemptKey}); its ordering within a visit is the engine's
- * concern and is not enforced here. {@code checkResults} is defensively
+ * <p>The identity is written by the round's writer and never inferred by a reader (FR14 of
+ * define-executor-contract, design D13): the engine stamps {@code taskId}, {@code stage} and
+ * {@code round} from the round's {@link AttemptKey} and the {@code roundToken} from the run's
+ * {@link com.github.oinsio.gnomish.domain.engine.port.RoundIdentity}, so a round that passed and
+ * advanced the position in the same commit still names the stage that ran it. {@code taskId} and
+ * {@code stage} are never blank; {@code roundToken} is the tip the round opened on in a branch mode
+ * (host git, container) and {@code null} in the in-place run, which has no task branch.
+ *
+ * <p>{@code round} is the attempt key's number as recorded: non-negative, the round's 0-based
+ * position within the current visit of the stage (it restarts on a repeated visit; see {@link
+ * AttemptKey}), and the number the round commit's subject renders; its ordering within a visit is
+ * the engine's concern and is not enforced here. {@code checkResults} is defensively
  * copied, unmodifiable, and MAY be empty: a {@code DecisionNeeded} round records
- * no checks, and a verdict-less execution records none either. {@code executorUsage}
- * and {@code judgeUsage} are required non-null; callers with nothing to report pass
- * {@link ExecutorUsage#none()} / {@link JudgeUsage#none()}. Inert value data
- * compared by content.
+ * no checks, and a verdict-less execution records none either. {@code usage} is defensively
+ * copied and unmodifiable: the stage's executor as a {@code transform} entry, then each judge vote
+ * as a {@code verdict} entry in vote order (FR15 of define-executor-contract); an executor that
+ * reported nothing is an {@code ABSENT} entry, never a missing one. Inert value data compared by
+ * content.
  *
- * <p>The engine sets an explicit {@code result} classification when it records the
- * round (FR13, design D5) rather than leaving consumers to infer it from the check
- * list — an empty {@code checkResults} is ambiguous on its own (a {@code DecisionNeeded}
- * round records none, but so does a verdict-less execution), so the manual-run status
- * contract reads {@code result} directly.
+ * <p>The engine sets an explicit {@code result} (FR13, design D5): an empty {@code checkResults}
+ * is ambiguous on its own, so consumers read {@code result} directly.
  *
  * <p>{@code startedAt} is the engine's {@link java.time.InstantSource}
  * reading taken when the round began — the same instant conceptually as the round's {@link
@@ -52,36 +58,49 @@ import java.util.List;
  * <p>{@code stop} is the escalation content the round raised, carried on the record so it is
  * durable in the same round commit as the result (design D3 of make-checkpoint-gate-durable): a
  * {@link Stop.DecisionNeeded} only on a {@code DECISION_NEEDED} round, a {@link Stop.CannotVerify}
- * only on a {@code CANNOT_VERIFY} round, refused on any other result. {@link Stop.None} is valid
+ * only on a {@code CANNOT_VERIFY} round, a {@link Stop.BudgetExhausted} only on a {@code
+ * BUDGET_EXHAUSTED} round, refused on any other result. {@link Stop.None} is valid
  * for every result — a pass and a quality failure raise no stop, and a record read from a tip
  * that predates the stop carries none (the wire field absent reads as {@code none}, FR10).
  * Required non-null.
  *
- * <p>Implements FR13 of add-stage-engine; FR15 of add-manual-run; FR2 of
- * fix-denial-report-attachment; FR5 of make-checkpoint-gate-durable.
+ * <p>The component checks live in {@link AttemptRecordChecks}, outside the record: PIT's record
+ * filter suppresses every mutation inside a canonical constructor, and since the identity component
+ * (task 5.1 of define-executor-contract) its Gregor engine crashes its minion on mutations of the
+ * record's own static methods (hcoles/pitest#1285, the JVMTI Record-attribute restriction), so a
+ * check kept in the record would leave the 100% gate.
  *
- * @param round the round's sequence number within the current stage; never negative
+ * <p>Implements FR13 of add-stage-engine; FR15 of add-manual-run; FR2 of
+ * fix-denial-report-attachment; FR5 of make-checkpoint-gate-durable; FR7 of
+ * define-executor-contract; FR14, FR21 of define-executor-contract (the identity); FR15 of
+ * define-executor-contract (the participant list).
+ *
+ * @param taskId the task the round belongs to; never blank
+ * @param stage the stage that ran the round; never blank
+ * @param roundToken the tip the round opened on, in a branch mode; {@code null} in the in-place run
+ * @param round the attempt key's number: the round's 0-based sequence number within the current
+ *     stage visit; never negative
  * @param result the engine's explicit classification of how the round ended; never
  *     null (FR13, design D5)
  * @param startedAt the Clock reading taken when the round began; never null (FR15, design D11)
  * @param checkResults the verify results produced this round; defensively copied,
  *     unmodifiable, possibly empty
- * @param executorUsage the executor's aggregate metrics for the round; never null,
- *     {@link ExecutorUsage#none()} when nothing to report
- * @param judgeUsage the per-vote judge token usage for the round; never null,
- *     {@link JudgeUsage#none()} when no judge check ran
+ * @param usage the round's participant entries, one per executor invocation; defensively copied,
+ *     unmodifiable (FR15 of define-executor-contract)
  * @param denials the egress denials the round's environment recorded; defensively copied,
  *     unmodifiable, possibly empty; never an input to any verdict
  * @param stop the stop the round raised; never null, {@link Stop.None} when it raised none, and
  *     otherwise of the kind its {@code result} names (FR5 of make-checkpoint-gate-durable)
  */
 public record AttemptRecord(
+        String taskId,
+        String stage,
+        @Nullable RoundToken roundToken,
         int round,
         Result result,
         Instant startedAt,
         List<CheckResult> checkResults,
-        ExecutorUsage executorUsage,
-        JudgeUsage judgeUsage,
+        List<ParticipantUsage> usage,
         List<Denial> denials,
         Stop stop) {
 
@@ -90,7 +109,9 @@ public record AttemptRecord(
      * round (FR13, design D5): {@link #PASSED} — verification passed; {@link
      * #QUALITY_FAILURE} — an explicit non-pass verdict (burns an attempt); {@link
      * #CANNOT_VERIFY} — a verdict could not be reached (recorded, not counted); {@link
-     * #DECISION_NEEDED} — the executor asked a human before any check ran. Carried on the
+     * #DECISION_NEEDED} — the executor asked a human before any check ran; {@link
+     * #BUDGET_EXHAUSTED} — the executor reported {@code failed/limit}, a bound of the stage was
+     * reached (recorded with its usage, not counted; FR7 of define-executor-contract). Carried on the
      * record so consumers read the classification directly rather than inferring it from
      * an (ambiguous) empty check list.
      */
@@ -98,63 +119,18 @@ public record AttemptRecord(
         PASSED,
         QUALITY_FAILURE,
         CANNOT_VERIFY,
-        DECISION_NEEDED
+        DECISION_NEEDED,
+        BUDGET_EXHAUSTED
     }
 
     public AttemptRecord {
-        round = requireNonNegative(round, "round");
-        startedAt = requireNonNull(startedAt, "startedAt");
+        taskId = AttemptRecordChecks.requireNonBlank(taskId, "taskId");
+        stage = AttemptRecordChecks.requireNonBlank(stage, "stage");
+        round = AttemptRecordChecks.requireNonNegative(round, "round");
+        startedAt = AttemptRecordChecks.requireNonNull(startedAt, "startedAt");
         checkResults = List.copyOf(checkResults);
+        usage = List.copyOf(usage);
         denials = List.copyOf(denials);
-        stop = requireStopOfResult(result, stop);
-    }
-
-    /**
-     * Fails fast on a stop whose kind contradicts the round's {@code result} (FR5 of
-     * make-checkpoint-gate-durable, design D3): a {@link Stop.DecisionNeeded} belongs to a {@code
-     * DECISION_NEEDED} round only, a {@link Stop.CannotVerify} to a {@code CANNOT_VERIFY} round
-     * only; {@link Stop.None} is accepted for any result. Exhaustive switch, no {@code default}, so
-     * a new stop kind is a compile error here. Explicit static method for the same PIT
-     * record-constructor reason as {@link #requireNonNegative}.
-     */
-    private static Stop requireStopOfResult(Result result, Stop stop) {
-        Result owner =
-                switch (stop) {
-                    case Stop.None ignored -> result;
-                    case Stop.DecisionNeeded ignored -> Result.DECISION_NEEDED;
-                    case Stop.CannotVerify ignored -> Result.CANNOT_VERIFY;
-                };
-        if (owner != result) {
-            throw new IllegalArgumentException(
-                    "AttemptRecord.stop " + stop.getClass().getSimpleName() + " does not match result " + result);
-        }
-        return stop;
-    }
-
-    /**
-     * Fails fast on a negative {@code round}: a round sequence number cannot be
-     * negative (FR13). Kept as an explicit static method rather than inline in the
-     * compact constructor: PIT's record filter suppresses all mutations inside a
-     * record's canonical constructor, which would silently exempt this validation
-     * from the 100% mutation gate.
-     */
-    private static int requireNonNegative(int value, String component) {
-        if (value < 0) {
-            throw new IllegalArgumentException("AttemptRecord." + component + " must not be negative");
-        }
-        return value;
-    }
-
-    /**
-     * Fails fast on a null {@code startedAt}: every recorded round carries the Clock reading
-     * taken when it began (FR15, design D11). Kept as an explicit static method, like {@link
-     * #requireNonNegative}, so PIT's record-constructor filter does not exempt this guard from
-     * the mutation gate.
-     */
-    private static Instant requireNonNull(Instant value, String component) {
-        if (value == null) {
-            throw new IllegalArgumentException("AttemptRecord." + component + " must not be null");
-        }
-        return value;
+        stop = AttemptRecordChecks.requireStopOfResult(result, stop);
     }
 }

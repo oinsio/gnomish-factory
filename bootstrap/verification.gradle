@@ -21,6 +21,21 @@ dependencies {
     testImplementation libs.selenium.chromium.driver
 }
 
+// GHSA-ccrj-gw8r-854m: the remote driver drags in OpenTelemetry, which the Boot BOM constrains to a
+// vulnerable 1.62.0. The BOM's own constraints are lifted, as `java-conventions` lifts the Jackson
+// edges: a platform, a `force` or a substitution would each leave 1.62.0 a candidate whose metadata
+// a fresh cache downloads, recorded in the verification metadata OSV-Scanner reads. Only the stable
+// family is lifted; the `-alpha` modules follow another version line.
+def fixedOpentelemetry = libs.versions.opentelemetry.get()
+dependencies.components.withModule('org.springframework.boot:spring-boot-dependencies') {
+    allVariants {
+        withDependencyConstraints { constraints ->
+            constraints.findAll { it.group == 'io.opentelemetry' && !it.versionConstraint.requiredVersion.contains('-') }
+                    .each { it.version { require fixedOpentelemetry } }
+        }
+    }
+}
+
 // Test-task wiring specific to this module's E2E layers; the shared
 // useJUnitPlatform / heap / JaCoCo configuration comes from `test-conventions`.
 tasks.named('test') {

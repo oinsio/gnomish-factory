@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -330,7 +331,7 @@ class TakeDispositionSpec extends TakeResumeSpecBase {
             UntrustedText.agent('yes'),
             UntrustedText.agent('no')
         ])
-        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
+        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals(), ExecutorVersions.none())
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
         tracker.claim(REF, INSTANCE.value()) >> new ClaimResult.Acquired(new ClaimEpoch(1))
         tracker.collectDecisions(REF) >> []

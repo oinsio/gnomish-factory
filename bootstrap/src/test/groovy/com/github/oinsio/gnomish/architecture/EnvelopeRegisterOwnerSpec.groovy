@@ -48,6 +48,8 @@ class EnvelopeRegisterOwnerSpec extends Specification {
         'DeliveredBranchReader.java': 'register reader: the registered commit, or the Completed commit under a registered cleanup',
         'GitTaskStore.java': 'register reader: the registered commit of the worktree\'s own task branch',
         'UsageHistoryWalker.java': 'register reader: walks state.json history down from the registered commit',
+        'TaskHistory.java': 'register reader: baseCommit and taskId from task.json, recorded totals from state.json, at the register\'s envelope revision',
+        'FactoryRegisterRead.java': 'register reader: the envelope revision, the registered commit or the Completed commit under a registered cleanup',
         'GitAttemptPersistence.java': 'writer: the round commit\'s state.json',
         'EnvironmentAttemptPersistence.java': 'writer: the in-box state commit\'s state.json',
         'GitTaskRepository.java': 'writer: the lifecycle commit\'s task.json',
@@ -87,10 +89,11 @@ class EnvelopeRegisterOwnerSpec extends Specification {
         'RegisteredCommit::new' | ['FactoryRegisterRead.java']
         'new RegisteredCommit(' | []
         'new GitShowTip(' | [
-            'DeliveredBranchReader.java',
+            'FactoryRegisterRead.java',
             'GitTaskStore.java',
             'RefTipSource.java',
             'SnapshotTipCheck.java',
+            'TaskHistory.java',
         ]
         'RegisterBase.' | [
             'EnvelopeRestore.java',

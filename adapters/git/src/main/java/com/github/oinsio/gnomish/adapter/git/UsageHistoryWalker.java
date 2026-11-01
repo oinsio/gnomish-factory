@@ -1,17 +1,15 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.DoNotMutate;
-import com.github.oinsio.gnomish.adapter.git.state.StateAttemptDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto;
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
-import com.github.oinsio.gnomish.adapter.git.state.StatePositionDto;
 import com.github.oinsio.gnomish.app.port.git.BranchLocation;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationRefusedException;
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException;
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult;
 import com.github.oinsio.gnomish.app.port.git.UsageRow;
-import com.github.oinsio.gnomish.app.port.git.UsageTotals;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -25,40 +23,36 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Reconstructs {@code gnomish usage}'s per-round history by walking {@code state.json} itself,
- * never commit messages (design D14, FR14, NFR-C1): a chronological ({@code git log --reverse})
- * walk of every commit on the task branch touching {@code .gnomish-task/state.json}, diffing each
- * commit's parsed state against the previous one it read. A commit yields a {@link UsageRow} when
- * its {@code attempts} list carries an {@link StateAttemptDto} the previous state didn't have —
- * either the list simply grew (same stage, one more round appended) or the position changed to a
- * new stage visit, whose {@code attempts} list starts over at a single fresh round ({@link
- * com.github.oinsio.gnomish.domain.engine.TaskState#advanceTo} resets history to empty before the
- * new stage's first round is recorded, so the new state's one-element {@code attempts} list is
- * itself the new round). A salvage commit ({@link WorktreeSalvage}) never touches {@code
- * state.json} at all (it is not routed through {@code AttemptPersistence#persist}), so it is
- * filtered out at the {@code git log} level (the path restriction) before any diffing happens —
- * same as a {@code task.json}-only lifecycle commit (create, resume, outcome), which touches only
- * {@code task.json}. The one exception is the final {@code Completed} cleanup commit ({@code
- * GitTaskRepository}, FR15): it deletes {@code state.json}, so a path-filtered {@code git log}
- * still reports it, but there is nothing to read at that tree — handled explicitly by treating a
- * missing blob as "no state here", never a diff. No commit-message parsing is used anywhere in
- * this class.
+ * never commit messages (design D14 of add-git-workflow; design D13 of define-executor-contract): a
+ * chronological walk of the commits on the task branch's <em>first-parent line</em> between the
+ * task's recorded {@code baseCommit} (exclusive) and its registered commit that touch {@code
+ * .gnomish-task/state.json} — {@code git log --first-parent --reverse <baseCommit>..<register> --
+ * state.json}. Each commit's state hands its round records to {@link UsageRoundRows}, which emits a
+ * row for every record identity it has not met yet and takes the row's stage and task from the
+ * record itself; nothing is inferred from the position or from the shape of the attempt list.
  *
- * <p>Branch lookup is delegated verbatim to {@link TaskBranchLocator} (task 2.6), the same
- * read-only, no-worktree, no-checkout idiom {@link BranchStateReader} and {@link TaskBranchLister}
- * already rely on (design D13).
+ * <p>The range is the task's own history ({@link TaskHistory}), so a base whose tree carried
+ * another task's envelope contributes no commit; the first-parent line drops what a merge of the
+ * base into the task branch brought in. A record whose {@code taskId} is not the task's is
+ * rejected anyway, with a warning naming the commit: the content check is the second defence.
  *
- * <p>A historical commit whose {@code state.json} cannot be read — an unsupported envelope version,
- * a half-written or hand-edited document — is skipped with a warning naming the commit, and the
- * walk continues (FR16 of harden-task-branch-contract): a broken commit in the middle of history
- * costs its own row, never the whole report. The next readable commit is diffed against the last
- * readable one, so the rounds recorded across the gap are still attributed, and only the rounds the
- * unreadable commit itself would have contributed are lost.
+ * <p>The path restriction excludes {@code task.json}-only lifecycle commits and salvage commits
+ * ({@link WorktreeSalvage} never writes {@code state.json}). The {@code Completed} cleanup commit
+ * deletes {@code state.json}, so it is listed but reads as "no state here", never a row.
  *
- * <p>The walk runs from the task's registered commit down (design D13 of tighten-spec-contract), so a
- * round the gnome wrote into {@code state.json} above the register is not reported.
+ * <p>A historical commit whose {@code state.json} cannot be read is skipped with a warning naming
+ * it, and the walk continues (FR16 of harden-task-branch-contract): a round the next readable
+ * commit still lists is still reported, since rows are keyed by record identity.
+ *
+ * <p>The walk ends at the task's registered commit (design D13 of tighten-spec-contract): a round
+ * the gnome wrote above the register is not reported.
+ *
+ * <p>The walk hands back the rows and the {@code totals} the tip records, and folds nothing: the
+ * re-fold of the rows and its comparison with the recorded figure are {@code UsageCommand}'s
+ * (design D15, FR18 of define-executor-contract).
  *
  * <p>Implements FR14, NFR-C1 of add-git-workflow; FR16 of harden-task-branch-contract; FR13 of
- * tighten-spec-contract.
+ * tighten-spec-contract; FR14, FR18, FR19 of define-executor-contract.
  */
 @UntrustedParser
 public final class UsageHistoryWalker {
@@ -88,7 +82,8 @@ public final class UsageHistoryWalker {
      *
      * @param cloneDir the working directory of an existing git clone (the {@code --dir} target)
      * @param taskId the tracker's original taskId
-     * @return {@link UsageHistoryResult.Found} with every detected round and its totals, or
+     * @return {@link UsageHistoryResult.Found} with every detected round and the tip's recorded
+     *     totals, or
      *     {@link UsageHistoryResult.NotFound} when no branch exists anywhere for this task
      */
     public UsageHistoryResult walk(Path cloneDir, String taskId) {
@@ -106,51 +101,44 @@ public final class UsageHistoryWalker {
         if (ref == null) {
             return new UsageHistoryResult.NotFound();
         }
-        // The walk starts at the registered commit, never at the tip (design D13 of
-        // tighten-spec-contract): a state.json the gnome committed above the register is not a round.
         Optional<RegisteredCommit> registered = register.registered(cloneDir, taskId);
         if (registered.isEmpty()) {
             // throwable-not-subject: the absence is the classification; nothing was thrown.
             log.debug("usage: no factory register names a commit of {}, so no round is recorded", ref);
-            return new UsageHistoryResult.Found(List.of(), UsageTotals.of(List.of()));
+            return new UsageHistoryResult.Found(List.of(), UsageSnapshot.EMPTY);
         }
-        List<UsageRow> rows = walkRows(cloneDir, registered.get().id());
-        return new UsageHistoryResult.Found(rows, UsageTotals.of(rows));
+        TaskHistory history = TaskHistory.of(runner, cloneDir, registered.get());
+        List<UsageRow> rows = walkRows(cloneDir, history.revisions(), new UsageRoundRows(history.taskId()));
+        return new UsageHistoryResult.Found(rows, history.recordedTotals());
     }
 
-    private List<UsageRow> walkRows(Path cloneDir, String ref) {
+    private List<UsageRow> walkRows(Path cloneDir, String range, UsageRoundRows rounds) {
         List<UsageRow> rows = new ArrayList<>();
-        StateJsonDto previous = null;
-        for (String commit : stateTouchingCommits(cloneDir, ref)) {
+        for (String commit : stateTouchingCommits(cloneDir, range)) {
             StateJsonDto current = readStateAt(cloneDir, commit);
-            if (current == null) {
-                // Two cases, both contributing no row: the cleanup commit (FR15) removes
-                // .gnomish-task/ entirely, so it is itself a "commit touching state.json" (a
-                // deletion) that git log's pathspec still reports; and an unreadable state file,
-                // already warned about, which the walk steps over rather than failing on (FR16).
-                continue;
+            if (current != null) {
+                // null in two cases, both contributing no row: the cleanup commit (FR15) deletes
+                // .gnomish-task/, and an unreadable state file, already warned about (FR16).
+                rows.addAll(rounds.rowsOf(commit, current));
             }
-            UsageRow row = detectNewRound(previous, current);
-            if (row != null) {
-                rows.add(row);
-            }
-            previous = current;
         }
         return rows;
     }
 
     /**
-     * Every commit reachable from {@code ref} that touches {@code state.json}, oldest first
-     * ({@code --reverse}) — the path restriction alone already excludes {@code task.json}-only
-     * lifecycle commits and any commit that never wrote {@code state.json} (salvage). The final
-     * {@code Completed} cleanup commit (FR15) DOES appear here (git log reports deletions of a
-     * pathspec too), handled by {@link #readStateAt} returning {@code null} for it.
+     * Every commit of {@code range} on its first-parent line that touches {@code state.json},
+     * oldest first ({@code --reverse}). The final {@code Completed} cleanup commit (FR15) appears
+     * here (git log reports deletions of a pathspec too), handled by {@link #readStateAt}
+     * returning {@code null} for it.
      */
-    private List<String> stateTouchingCommits(Path cloneDir, String ref) {
+    private List<String> stateTouchingCommits(Path cloneDir, String range) {
         // GitReadGate.answered: an interrupted `git log` would otherwise hand back a prefix of the
         // commit list — a report silently missing its newest rounds.
         GitCommandResult log = GitReadGate.answered(
-                ref, "log", runner.run(cloneDir, "log", "--reverse", "--format=%H", ref, "--", STATE_JSON_PATH));
+                range,
+                "log",
+                runner.run(
+                        cloneDir, "log", "--first-parent", "--reverse", "--format=%H", range, "--", STATE_JSON_PATH));
         if (log.exitCode() != 0) {
             // The whole branch's usage report silently becomes empty otherwise (FR5).
             // throwable-not-subject: git reported a status, not a thrown fault.
@@ -158,7 +146,7 @@ public final class UsageHistoryWalker {
                     OperatorEvent.USAGE_HISTORY_LISTING_FAILED.head()
                             + "usage: could not list the state-touching commits of {} (git exited {}); the report will be"
                             + " empty: {}",
-                    ref,
+                    range,
                     log.exitCode(),
                     log.stderr().forLog());
             return List.of();
@@ -173,14 +161,9 @@ public final class UsageHistoryWalker {
     }
 
     /**
-     * {@code @DoNotMutate}: a real {@code git log --format=%H} never emits a blank line, so this
-     * defensive filter's own true/false branches are behaviorally unobservable through {@link
-     * #walk} — a blank "commit hash" that slipped past it would still fail {@link #readStateAt}
-     * with a non-zero {@code git show} exit (proven: any blank/malformed revision spec is rejected
-     * by git itself), so it contributes no row either way, mutated or not. Kept as a defense against
-     * a hypothetical future git behavior change, not something a unit test can distinguish from its
-     * own mutant without faking git's output (see {@code UsageHistoryWalkerSpec}'s fake-git-binary
-     * scenario, which documents this same non-observability directly).
+     * {@code @DoNotMutate}, provably equivalent: a blank "commit hash" that slipped past this filter
+     * fails {@link #readStateAt}'s {@code git show} and contributes no row either way
+     * ({@code UsageHistoryWalkerEdgeCasesSpec}'s blank-line feature documents it).
      */
     @DoNotMutate
     private static boolean isNonBlank(String line) {
@@ -188,10 +171,8 @@ public final class UsageHistoryWalker {
     }
 
     /**
-     * Reads {@code state.json} at {@code commit}, or {@code null} when this commit contributes no
-     * state: the file is absent at its tree (the cleanup commit, FR15 — the one case where a
-     * path-filtered {@code git log} entry has nothing to show), or it is present but unreadable, in
-     * which case the commit is named in a warning and skipped rather than failing the walk (FR16 of
+     * Reads {@code state.json} at {@code commit}, or {@code null} when it is absent there (the
+     * cleanup commit, FR15) or unreadable, which is warned about and skipped (FR16 of
      * harden-task-branch-contract).
      */
     private @Nullable StateJsonDto readStateAt(Path cloneDir, String commit) {
@@ -218,63 +199,5 @@ public final class UsageHistoryWalker {
                     failure);
             return null;
         }
-    }
-
-    /**
-     * The heart of D14's algorithm: {@code current}'s new round, if any, relative to {@code
-     * previous} — the previous state read on this walk, or {@code null} for the very first
-     * state.json commit encountered.
-     *
-     * <p>A round is new when {@code current}'s newest recorded attempt is not the one {@code
-     * previous} ended with; the same newest attempt means this commit recorded no round (a
-     * decision's attempt-counter reset, say, which rewrites the file without running anything).
-     *
-     * <p>Which stage the round is billed to is decided by the list, not by the position. A list
-     * that grew by one is another round of the stage {@code previous} was at — and that includes
-     * the PASSING round, whose commit already carries the advanced position (FR4 of
-     * harden-task-branch-contract). A list that reset instead holds the first round of the stage
-     * {@code current} names.
-     */
-    private @Nullable UsageRow detectNewRound(@Nullable StateJsonDto previous, StateJsonDto current) {
-        List<StateAttemptDto> attempts = current.attempts();
-        if (attempts.isEmpty()) {
-            return null;
-        }
-        StateAttemptDto newest = attempts.getLast();
-        if (previous == null) {
-            return new UsageRow(stageName(current.position()), StateJsonMapper.fromAttempt(newest));
-        }
-        if (newest.equals(newestOf(previous))) {
-            return null;
-        }
-        StatePositionDto ranAt = grewFrom(previous, current) ? previous.position() : current.position();
-        return new UsageRow(stageName(ranAt), StateJsonMapper.fromAttempt(newest));
-    }
-
-    /** The last attempt {@code state} records, or {@code null} when it records none. */
-    private static @Nullable StateAttemptDto newestOf(StateJsonDto state) {
-        List<StateAttemptDto> attempts = state.attempts();
-        return attempts.isEmpty() ? null : attempts.getLast();
-    }
-
-    /**
-     * Whether {@code current}'s attempt list is {@code previous}' list with one round appended —
-     * the shape of "another round of the stage {@code previous} was at", including the passing
-     * round whose commit also advanced the position (FR4 of harden-task-branch-contract). A list
-     * that instead RESET — the next stage's first round, recorded after a list of one or more —
-     * does not grow by one, so it fails this test and its round is attributed to the position it
-     * is recorded at.
-     */
-    private static boolean grewFrom(StateJsonDto previous, StateJsonDto current) {
-        return current.attempts().size() == previous.attempts().size() + 1;
-    }
-
-    private static String stageName(StatePositionDto position) {
-        return switch (position) {
-            case StatePositionDto.AtStage atStage -> atStage.stage();
-            // FR1 of make-checkpoint-gate-durable: a round recorded at a gate ran in the gate's stage.
-            case StatePositionDto.AwaitingApproval gate -> gate.stage();
-            case StatePositionDto.PipelineEnd ignored -> "(pipeline end)";
-        };
     }
 }

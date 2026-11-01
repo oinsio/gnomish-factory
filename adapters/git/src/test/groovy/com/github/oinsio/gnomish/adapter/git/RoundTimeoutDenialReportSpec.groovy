@@ -6,14 +6,18 @@ import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.EnginePorts
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutionResult
+import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
@@ -25,7 +29,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -49,10 +53,10 @@ import spock.lang.TempDir
  * round that hung mid-exfiltration were drained and written to the factory's own log only, so
  * the one gnome a reviewer most needs to see reported nothing but the hang.
  *
- * <p>The kill is modelled as the executor throwing an {@link ExecutorFailure} wrapping a
- * round-timeout failure with the drained denials — which is exactly what the agent adapter
- * does on that path; that the real {@code RoundTimeoutException} is wrapped this way is pinned
- * by {@code FailedRoundDenialSpec} in {@code :adapters:agent}, a module this one deliberately
+ * <p>The kill is modelled as the executor reporting a {@code failed/infrastructure} result for
+ * the round-timeout failure, carrying the drained denials — which is exactly what the agent
+ * adapter does on that path (FR7 of define-executor-contract); that the real round reports it
+ * this way is pinned by {@code FailedRoundDenialSpec} in {@code :adapters:agent}, a module this one deliberately
  * takes no edge to. What is asserted here is the rest of the chain: engine escalation → task
  * branch → both rendered documents.
  *
@@ -88,8 +92,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         def context = new TaskContext(TASK_ID, UntrustedText.tracker('Fix flaky OrderServiceSpec'), UntrustedText.tracker('body'), [])
 
         when: 'the engine runs that round and parks the task on the branch'
-        def outcome = runRoundKilledBy(
-                new ExecutorFailure(new RuntimeException('round timed out after PT15M'), [denial]), context)
+        def outcome = runRoundKilledBy(killed('round timed out after PT15M', [denial]), context)
         def repository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         repository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         repository.recordOutcome(TASK_ID, outcome, TrackerWrite.OWED)
@@ -122,14 +125,20 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
     }
 
     /** Runs one stage whose executor dies the way a round-timeout kill leaves it. */
-    private static TaskOutcome runRoundKilledBy(RuntimeException thrown, TaskContext context) {
-        def executor = new ScriptedExecutor()
-        executor.toThrow = thrown
+    /** What the agent adapter reports for a round killed on its timeout: failed/infrastructure with its denials. */
+    private static ExecutionResult killed(String reason, List<Denial> denials) {
+        new ExecutionResult(
+                new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, UntrustedText.subprocess(reason), []),
+                null, ExecutorUsage.none(), new ToolTrace(new AttemptKey(TASK_ID, 'build', 0), []), denials)
+    }
+
+    private static TaskOutcome runRoundKilledBy(ExecutionResult reported, TaskContext context) {
+        def executor = new ScriptedExecutor([reported])
         def clock = new VirtualClock()
         def ports = new EnginePorts(
                 executor, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
-                new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock))
+                new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
         new Engine().run(
                 pipeline(), context, TaskState.atStageStart('build'), new FakeWorkspace(), ports) as TaskOutcome
     }

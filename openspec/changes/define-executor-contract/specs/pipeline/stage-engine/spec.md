@@ -27,7 +27,7 @@ engine component: `quality` burns an attempt; `infrastructure` burns none and es
 `CannotExecute` after the engine's existing retries; `limit` burns none and escalates
 `BudgetExhausted` naming the bound; `pending` for a role the engine cannot poll is
 `infrastructure`. Adapters SHALL NOT decide a class.
-**Implements**: FR7, G4, M2, NFR-C2, NFR-C3 of define-executor-contract
+**Implements**: FR7, G4, M2 of define-executor-contract
 
 #### Scenario: Classification table verified
 - **WHEN** each status and class is produced by a fake executor
@@ -38,34 +38,22 @@ engine component: `quality` burns an attempt; `infrastructure` burns none and es
 - **THEN** the outcome is `Escalated(BudgetExhausted)` carrying the bound, `attemptsUsed` is
   unchanged and the round is recorded with its usage
 
-### Requirement: Bounds are judged on the folded usage snapshot
-After a round the engine SHALL judge the stage's bounds against the task's folded usage
-snapshot. A money bound SHALL be judged only when the snapshot's cost is complete, and an
-incomplete cost under a money bound SHALL be `limit` with the reason "cost unknown". The verdict
-SHALL be recorded in the same commit as the round and its snapshot.
-**Implements**: FR7, G4, NFR-C2, NFR-C3 of define-executor-contract; FR4 of tighten-spec-contract
-
-#### Scenario: A token bound is judged on the snapshot
-- **WHEN** the snapshot folded after a round exceeds the stage's token bound
-- **THEN** the round ends `limit` naming the bound, and the commit that records the round
-  carries the snapshot and the `BudgetExhausted` outcome together
-
-#### Scenario: Money bound on an unpriced snapshot fails closed
-- **WHEN** a stage carries a money bound and the round's judge vote reported tokens without cost
-- **THEN** the round ends `limit` with reason "cost unknown", and the commit that records the
-  round carries the snapshot with `complete = false` and the `BudgetExhausted` outcome together
-
 ### Requirement: Executor identity is pinned at first use
-An executor's name and model are law content, pinned with the law at creation. The round record
-SHALL carry the describe version the preflight obtained for the executor that ran it, in the
-round's own commit; the describe preflight of a later run SHALL compare its describe with the
-version the task's recorded rounds carry and SHALL escalate `PipelineMismatch` naming both when
-they differ. No durable step is added for the pin.
+The task state SHALL carry, per executor name, the describe version of the first round that
+ran it, written in that round's own commit and carried unchanged by every lifecycle rewrite. The
+engine pre-flight SHALL compare it with the version the describe preflight obtained and SHALL
+escalate `PipelineMismatch` naming the executor and both versions before any round runs.
 **Implements**: FR13 of define-executor-contract
+
+**Notes**: Name and model are law content, pinned with the law at creation; the version pin adds no durable step.
 
 #### Scenario: Resume uses the recorded executor version
 - **WHEN** a task whose rounds recorded executor version `1` is resumed on an instance whose image answers describe with version `2`
 - **THEN** the resume escalates `PipelineMismatch` naming the recorded and the current version, and no round runs
+
+#### Scenario: The pin survives a park
+- **WHEN** a task whose round recorded executor version `1` parks on an escalation, a human returns it, and the image now answers describe with version `2`
+- **THEN** the resume escalates `PipelineMismatch` naming the executor and both versions, and no round runs
 
 ### Requirement: Runs are observable by executor
 Every executor run SHALL log, under the task's MDC, the executor name, protocol version, role,
@@ -117,12 +105,13 @@ written, never inferred" and "A missing cost is absent, never zero". All must su
 sync.
 
 ### Requirement: Two-level attempt telemetry
-Every executed round SHALL be recorded in `TaskState.attempts` with its identity (`taskId`, `stage`, the
-round token it opened on), an explicit result classification (Passed, QualityFailure,
-CannotVerify, DecisionNeeded), a `startedAt` timestamp read from the engine's instant source when
-the round begins, and one `usage` list with an entry per executor invocation of the round. The
-history SHALL cover only the current stage, resetting on advancement.
+Every executed round SHALL be recorded in `TaskState.attempts` with its identity (`taskId`,
+`stage` and, in a branch mode, the round token it opened on), a result classification (Passed, QualityFailure,
+CannotVerify, DecisionNeeded, BudgetExhausted), a `startedAt` read from the engine's instant
+source, and one `usage` list with an entry per executor invocation. The history SHALL cover only
+the current stage, resetting on advancement.
 **Implements**: FR13, FR14, NFR-C1 of add-stage-engine; FR15 of add-manual-run; FR5, FR9, NFR-C1 of add-agent-executor; FR17 of supervise-daemon-loops-and-embed-dashboard; FR14, FR15, NFR-O3 of define-executor-contract
+**Notes**: A branch mode is host git or container; an in-place run has no task branch, so it records no round token (design D13).
 **Notes**: `TaskState` carries the usage snapshot of requirement "Totals are one fold, checked"; an `ABSENT` entry keeps the unknown ≠ zero distinction.
 
 #### Scenario: Unburned round is still recorded

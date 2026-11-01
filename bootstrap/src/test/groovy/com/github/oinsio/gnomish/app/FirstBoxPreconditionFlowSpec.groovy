@@ -24,7 +24,7 @@ import com.github.oinsio.gnomish.app.take.TakeExitCodeMapper
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
-import com.github.oinsio.gnomish.domain.engine.RoundExecution
+import com.github.oinsio.gnomish.domain.engine.RoundFailures
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -86,7 +86,7 @@ class FirstBoxPreconditionFlowSpec extends Specification implements BareGitRepoF
         new InMemoryTrackerHarness(tracker).seed(REF,
                 new TaskSnapshot(REF.id(), UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Ready(), AbortFacts.none())
-        def logs = LogCaptureSupport.attach(RoundExecution)
+        def logs = LogCaptureSupport.attach(RoundFailures)
 
         when:
         def result = new TakeClaimAndWorkFactory(wiring(tracker)).forSlot().claimAndWork(
@@ -115,7 +115,7 @@ class FirstBoxPreconditionFlowSpec extends Specification implements BareGitRepoF
     // Scenario: cli/manual-run / A precondition refusal in run exits 8, never 1
     def "a fresh run refused at its first box exits 8 with no executor line"() {
         given:
-        def logs = LogCaptureSupport.attach(RoundExecution)
+        def logs = LogCaptureSupport.attach(RoundFailures)
         def factory = { Path c, String t, List<Segment> s, definition, List<String> creds ->
             new ContainerRunSupport(new GitProcessRunner(), c, t,
             docker.environments(TaskIdSanitizer.sanitize(t), c, sandbox, tempDir.resolve('guard')), s,

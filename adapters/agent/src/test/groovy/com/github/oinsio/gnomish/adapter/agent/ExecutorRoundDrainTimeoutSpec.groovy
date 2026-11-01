@@ -1,9 +1,10 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.ExecHandle
@@ -20,11 +21,11 @@ import spock.lang.TempDir
 /**
  * FR2, NFR-R2 of fix-round-stdout-drain, executor side — the twin of {@code
  * JudgeRoundDrainTimeoutSpec}. Where the judge maps an unfinished drain to a
- * {@code CannotVerify} vote, the executor throws: {@code RoundExecution#execute}
- * shapes any {@link RuntimeException} the port raises into {@code
- * RoundOutcome.CannotExecute} without burning a stage attempt, so the contract
- * this side owns is that the failure leaves as an exception of the right kind —
- * never as a silently partial event list graded as a real round.
+ * {@code CannotVerify} vote, the executor reports its {@code failed/infrastructure} result
+ * (FR7 of define-executor-contract), which the engine's classifier makes a {@code
+ * CannotExecute} escalation without burning a stage attempt — so the contract this side owns
+ * is that the failure leaves as that status naming the right kind — never as a silently
+ * partial event list graded as a real round.
  */
 class ExecutorRoundDrainTimeoutSpec extends Specification {
 
@@ -41,7 +42,7 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
     // FR2; FR19 of fix-terminal-receipt-convergence: the handle's post-exit bound runs out while
     // the drain is still reading — an infrastructure failure, on the handle's bound and no other.
     // Scenario: executor/agent-executor / A drain unfinished after the post-exit bound is infrastructure
-    def "a drain that outlives the handle's post-exit bound throws StreamDrainTimeoutException"() {
+    def "a drain that outlives the handle's post-exit bound fails the round with StreamDrainTimeoutException"() {
         given: 'a process that exited normally but whose stdout never ends, its handle bounding the wait at 100 ms'
         def handle = new ExitedExecHandle(CannedOutputs.nonEnding(stuck), Duration.ofMillis(100))
         def environment = Stub(TaskExecutionEnvironment) {
@@ -49,19 +50,17 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
         }
 
         when:
-        runRound(environment)
+        def result = runRound(environment)
 
         then: 'the round fails on the bound the handle answered, not on an installation default'
-        def failure = thrown(ExecutorFailure)
-        def e = failure.cause()
-        e instanceof StreamDrainTimeoutException
-        e.message.contains('PT0.1S')
+        InfrastructureResults.endedBy(result, StreamDrainTimeoutException)
+        InfrastructureResults.of(result).reason().contains('PT0.1S')
     }
 
     // FR2: an interrupted round thread is the drain's other infrastructure failure, and
     // the executor must not report it as a bound that ran out.
     // Scenario: executor/agent-executor / An interrupted wait is not blamed on the bound
-    def "an interrupted round thread throws StreamDrainInterruptedException, not a timeout"() {
+    def "an interrupted round thread fails the round with StreamDrainInterruptedException, not a timeout"() {
         given:
         def handle = new ExitedExecHandle(CannedOutputs.nonEnding(stuck), Duration.ofSeconds(30))
         def environment = Stub(TaskExecutionEnvironment) {
@@ -72,26 +71,23 @@ class ExecutorRoundDrainTimeoutSpec extends Specification {
         Thread.currentThread().interrupt()
 
         when:
-        runRound(environment)
+        def result = runRound(environment)
 
         then:
-        def failure = thrown(ExecutorFailure)
-        def e = failure.cause()
-        e instanceof StreamDrainInterruptedException
-        !e.message.contains('PT30S')
+        InfrastructureResults.endedBy(result, StreamDrainInterruptedException)
+        !InfrastructureResults.of(result).reason().contains('PT30S')
 
         cleanup:
         Thread.interrupted()
     }
 
-    private void runRound(TaskExecutionEnvironment environment) {
+    private ExecutionResult runRound(TaskExecutionEnvironment environment) {
         ExecutorRoundExecution.run(
                 new AgentRoundEquipment(
                         new FactoryProperties('factory-01', 'claude', null, null),
                         new VirtualClock(),
                         { event -> },
                         new AgentRoundResultExtractor(), ChildEnvAllowlist.none(), RoundScratchDirectory.HOST_TEMP),
-                new DecisionFileReader(),
                 StageExecutorRequests.request(workspaceDir),
                 'prompt',
                 new StandInRound(environment, workspaceDir.resolve('decision.json')))
@@ -170,11 +166,16 @@ class StandInRound implements RoundEnvironmentSource.Round {
     }
 
     @Override
-    Optional<String> readDecision() {
+    Optional<RoundDecisionRequest> readDecision() {
         Optional.empty()
     }
 
+    /** Whether the round was discarded; a failed round is, exactly once. */
+    boolean discarded
+
     @Override
     void discard() {
+        assert !discarded
+        discarded = true
     }
 }

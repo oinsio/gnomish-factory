@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.git.GitVersionCheck;
+import com.github.oinsio.gnomish.app.conformance.ExecutorVerifyCommand;
 import com.github.oinsio.gnomish.app.doctor.DoctorCommand;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.status.MdcEventListener;
@@ -20,7 +21,9 @@ import org.springframework.stereotype.Component;
  * floor refusal, so a git below the floor is one of the checks it reports rather than the end of
  * the process (FR7, design D2 of add-doctor-command); every other subcommand passes through the
  * floor first. {@code gnomish project} goes to {@link ProjectCommand}, which lives
- * in this module beside the project registry it drives (FR2, FR4 of add-project-registry); for
+ * in this module beside the project registry it drives (FR2, FR4 of add-project-registry), and
+ * {@code gnomish executor verify} to {@link ExecutorVerifyCommand}, the conformance kit (FR12 of
+ * define-executor-contract); for
  * every other subcommand {@link SubcommandDispatch} first tries {@code status}/{@code
  * usage}/{@code take} (FR13, FR14 of add-git-workflow; FR9 of add-tracker-port) — a bare {@code
  * gnomish take} is never confused with {@code gnomish run}, since the leading positional token
@@ -38,7 +41,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3, D9, D10 of add-manual-run; FR5-FR8, FR13,
  * FR14, UX1-UX4, design D8, D9 of add-git-workflow; FR7 of collapse-composition-roots; FR8 of
- * fix-operator-blockers; FR2, FR4 of add-project-registry; FR7 of add-doctor-command.
+ * fix-operator-blockers; FR2, FR4 of add-project-registry; FR7 of add-doctor-command; FR12 of
+ * define-executor-contract.
  */
 // Null-marked explicitly (JSpecify): this module carries no package-info, and the application
 // module's one does not reach this source root, so without the class-level marker the
@@ -79,6 +83,8 @@ public final class ManualRunRunner implements ApplicationRunner {
     private final ProjectCommand projectCommand;
     /** {@code gnomish doctor}, routed here before the git floor refusal (design D2 of add-doctor-command). */
     private final DoctorCommand doctorCommand;
+    /** {@code gnomish executor verify}, routed here after the git floor: it initialises git working copies. */
+    private final ExecutorVerifyCommand executorVerifyCommand;
     /**
      * Package-private: {@code ManualRunRunnerSpec} reads {@code drive.assembly.hostGitPush} to
      * assert the in-place assembly carries no mid-round push decoration.
@@ -92,12 +98,14 @@ public final class ManualRunRunner implements ApplicationRunner {
             SubcommandDispatch subcommandDispatch,
             ProjectCommand projectCommand,
             DoctorCommand doctorCommand,
+            ExecutorVerifyCommand executorVerifyCommand,
             ManualRunDrive drive,
             @Qualifier("errorConsoleIO") ConsoleIO errorConsoleIO) {
         this.gitVersionCheck = gitVersionCheck;
         this.subcommandDispatch = subcommandDispatch;
         this.projectCommand = projectCommand;
         this.doctorCommand = doctorCommand;
+        this.executorVerifyCommand = executorVerifyCommand;
         this.drive = drive;
         this.errorConsole = errorConsoleIO;
     }
@@ -120,6 +128,10 @@ public final class ManualRunRunner implements ApplicationRunner {
                         gitVersionCheck.verify();
                         if (Subcommand.parse(args) == Subcommand.PROJECT) {
                             projectCommand.run(args);
+                            return;
+                        }
+                        if (Subcommand.parse(args) == Subcommand.EXECUTOR) {
+                            executorVerifyCommand.run(args);
                             return;
                         }
                         if (subcommandDispatch.dispatchNonRun(args) || args.getSourceArgs().length == 0) {

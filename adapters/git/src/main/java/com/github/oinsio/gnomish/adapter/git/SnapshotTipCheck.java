@@ -1,13 +1,17 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
+import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead;
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
-import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
+import com.github.oinsio.gnomish.executorcontract.ResultSource;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -138,14 +142,25 @@ public final class SnapshotTipCheck {
      * medium (ADR 0003), through the package's one {@code git show} seam, which throws rather than
      * answering "absent" for a read cut off before its own exit.
      *
-     * <p>@UntrustedParser warrant (design D11): the content leaves raw because it is the
-     * decision file itself, handed to the one tolerant reader a live round uses, which mints it as
-     * agent text — the same bytes the live read hands over from the box's working copy.
+     * <p>The blob is handed to the same {@link DecisionRequestRead} a live round reads its file
+     * through, as the bytes of a {@link ResultSource}, so recovery parses the request through the
+     * live path's read, cap and fallbacks included (crash-consistency item 14; FR6 of
+     * define-executor-contract).
+     *
+     * <p>@UntrustedParser warrant (design D11): the content leaves raw because it is the decision
+     * file itself, handed to the one tolerant read, which mints it again as agent text — the same
+     * bytes the live read takes from the box's working copy.
      */
-    private Optional<String> request(RegisteredCommit snapshot, AttemptKey key, RoundToken token) {
-        return new GitShowTip(runner, cloneDir, snapshot)
+    private Optional<RoundDecisionRequest> request(RegisteredCommit snapshot, AttemptKey key, RoundToken token) {
+        Optional<byte[]> blob = new GitShowTip(runner, cloneDir, snapshot)
                 .readAtRegister(GnomeRangeInspection.decisionPath(key, token))
-                .map(UntrustedText::forParsing);
+                .map(text -> text.forParsing().getBytes(StandardCharsets.UTF_8));
+        return DecisionRequestRead.read(limit -> blob.map(bytes -> Arrays.copyOf(bytes, prefixLength(bytes, limit))));
+    }
+
+    /** How much of {@code bytes} a read asking for at most {@code limit} of them returns. */
+    private static int prefixLength(byte[] bytes, long limit) {
+        return (int) Math.min(bytes.length, limit);
     }
 
     /**

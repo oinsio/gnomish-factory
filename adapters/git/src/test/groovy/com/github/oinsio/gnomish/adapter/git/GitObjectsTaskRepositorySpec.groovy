@@ -20,13 +20,14 @@ import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Finding
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.gitobjects.ObjectId
@@ -218,9 +219,9 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         given: 'a task branch and the state a park recorded, with an attempt burned'
         repository.createTask(sampleContext(), baseCommit(), PIN, TaskState.atStageStart('implement'))
         def before = gitOutput(bareDir, 'rev-list', '--count', refFor('PROJ-1')) as Integer
-        def burned = TaskState.atStageStart('implement').recordQualityFailure(new AttemptRecord(
+        def burned = TaskState.atStageStart('implement').recordQualityFailure(AttemptRecords.of(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
-                        ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none()))
+                        ExecutorUsage.none(), [], Stop.none()), ExecutorVersions.none())
 
         when: 'the human answer is appended with the reset it implies'
         repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', Instant.EPOCH),
@@ -444,7 +445,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         Path stateJson = work.resolve('.gnomish-task').resolve('state.json')
         def dto = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
         Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(
-                        new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor)))
+                        new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor, null)))
         commitAll(work, 'round state')
         gitOutput(work, 'push', 'origin', "HEAD:refs/heads/gnomish/${taskId}")
     }

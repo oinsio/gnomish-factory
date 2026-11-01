@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -40,21 +41,26 @@ trait TaskSeedFixture implements RegisteredBranchFixture {
         TaskWorktreePath.resolve(registeredClone, taskId)
     }
 
-    /**
-     * Creates {@code taskId} at stage start on {@code cloneDir} and persists one recorded
-     * {@code implement} attempt in its worktree, returning the state that was persisted.
-     */
-    TaskState seedTask(String taskId, String title = 'T') {
-        TaskState state = TaskState.atStageStart('implement')
+    /** Creates {@code taskId} at stage start on {@code cloneDir}: its STARTED commit, no round yet. */
+    void startTask(String taskId, String title = 'T') {
         new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock()).createTask(
                 new TaskContext(taskId, UntrustedText.tracker(title), UntrustedText.tracker('B'), []),
                 TaskStart.commit(cloneDir, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD),
-                state)
+                TaskState.atStageStart('implement'))
         registerTip(cloneDir, taskId)
+    }
+
+    /**
+     * Creates {@code taskId} at stage start on {@code cloneDir} and persists one recorded
+     * {@code implement} round in its worktree, returning the state that was persisted.
+     */
+    TaskState seedTask(String taskId, String title = 'T') {
+        startTask(taskId, title)
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
+        TaskState state = RoundStates.recorded(trace.key())
         new GitAttemptPersistence(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
         registerTip(cloneDir, taskId)
         state

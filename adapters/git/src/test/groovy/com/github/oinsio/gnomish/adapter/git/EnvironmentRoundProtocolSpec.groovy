@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.sandbox.DenialCursor
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -92,7 +93,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
 
         when: 'the executor tail snapshots and the engine persists after verification'
         def attempt = snapshotStep.snapshot(TASK, 'implement', 1)
-        persistence.persist(TASK, sampleState(), sampleTrace(1))
+        persistence.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then: 'the branch gained snapshot then state, state commit parented on the snapshot'
         def tip = factoryTip()
@@ -119,7 +120,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
 
         when:
         snapshotStep.snapshot(TASK, 'implement', 1)
-        persistence.persist(TASK, sampleState(), sampleTrace(1))
+        persistence.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then: 'state.json records both the position and the source it belongs to'
         def committed = StateJsonMapper.readDto(UntrustedText.branchDocument(
@@ -132,7 +133,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
     def "FR5: a round whose environment has no denial source records no cursor"() {
         when:
         snapshotStep.snapshot(TASK, 'implement', 1)
-        persistence.persist(TASK, sampleState(), sampleTrace(1))
+        persistence.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then:
         StateJsonMapper.readDto(UntrustedText.branchDocument(gitOutput(cloneDir, 'show', factoryTip() + ':.gnomish-task/state.json')))
@@ -181,7 +182,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         gnomeCommit('daemon commit')
 
         when:
-        persistence.persist(TASK, sampleState(), sampleTrace(1))
+        persistence.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then:
         def ex = thrown(RoundBoundaryViolationException)
@@ -228,7 +229,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         snapshot2.snapshot(TASK, 'implement', 1)
 
         when:
-        persistence2.persist(TASK, sampleState(), sampleTrace(1))
+        persistence2.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then:
         def ex = thrown(RoundBoundaryViolationException)
@@ -257,7 +258,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         def snapshot = snapshot2.snapshot(TASK, 'implement', 1)
 
         when:
-        persistence2.persist(TASK, sampleState(), sampleTrace(1))
+        persistence2.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then:
         def ex = thrown(RoundBoundaryViolationException)
@@ -290,7 +291,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         snapshot2.snapshot(TASK, 'implement', 1)
 
         when:
-        persistence2.persist(TASK, sampleState(), sampleTrace(1))
+        persistence2.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then: 'the trace read-back catches the tampering even though the state.json read-back passed'
         def ex = thrown(RoundBoundaryViolationException)
@@ -319,7 +320,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         snapshot2.snapshot(TASK, 'implement', 1)
 
         when:
-        persistence2.persist(TASK, sampleState(), sampleTrace(1))
+        persistence2.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then: 'the round aborts naming the file whose read-back could not be obtained'
         def ex = thrown(RoundBoundaryViolationException)
@@ -339,7 +340,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
 
         when:
         def attempt = snapshotStep.snapshot(TASK, 'implement', 1)
-        persistence.persist(TASK, sampleState(), sampleTrace(1))
+        persistence.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then: 'boundary verification passes and the decision rides the snapshot commit'
         gitOutput(cloneDir, 'show', attempt + ":.gnomish-task/decisions/implement-a1-${token}.json").contains('which db?')
@@ -354,7 +355,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         snapshotStep.snapshot(TASK, 'implement', 1)
 
         when:
-        persistence.persist(TASK, sampleState(), sampleTrace(1))
+        persistence.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then:
         def ex = thrown(RoundBoundaryViolationException)
@@ -373,7 +374,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         snapshotStep.snapshot(TASK, 'implement', 1)
 
         when:
-        persistence.persist(TASK, sampleState(), sampleTrace(1))
+        persistence.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then: 'the factory-side judgment of the quarantined harvest refused it'
         thrown(RoundBoundaryViolationException)
@@ -399,7 +400,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         }
 
         when: 'the state commit lands, registered by its closing push'
-        persistence.persist(TASK, sampleState(), sampleTrace(2))
+        persistence.persist(TASK, RoundStates.recorded(sampleTrace(2).key()), sampleTrace(2))
         registerTip(cloneDir, TASK)
 
         then: 'the tip is no longer an interrupted verification'
@@ -416,7 +417,7 @@ class EnvironmentRoundProtocolSpec extends Specification implements BareGitRepoF
         runner.run(box.workingCopy, 'commit', '--amend', '-m', 'rewritten snapshot')
 
         when:
-        persistence.persist(TASK, sampleState(), sampleTrace(1))
+        persistence.persist(TASK, RoundStates.recorded(sampleTrace(1).key()), sampleTrace(1))
 
         then:
         def ex = thrown(RoundBoundaryViolationException)

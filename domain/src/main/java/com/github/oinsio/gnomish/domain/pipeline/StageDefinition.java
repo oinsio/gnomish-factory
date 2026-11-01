@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.pipeline;
 
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One pipeline stage as declared in {@code stages/<name>/stage.yaml} — the
@@ -61,7 +62,8 @@ public record StageDefinition(
     /**
      * The Mechanism section (§5): the executor kind, the model pinned in the
      * manifest so any instance reproduces the stage identically — required for
-     * every executor type, never left to a CLI default — opaque executor
+     * every agent executor type ({@code api}, {@code agent-cli}), never left to a
+     * CLI default, and optional on a {@code program} stage — opaque executor
      * settings, and the stage's {@link Sandbox} declarations (the "workspace
      * requirements" clause of the Mechanism section — sandbox needs and
      * {@code requires-fresh}, FR12/FR13 of add-sandbox-core). Per Q1/D5a both
@@ -72,7 +74,9 @@ public record StageDefinition(
      * unvalidated.
      *
      * <p>Implements FR2 and carries the FR11 fields of load-pipeline-config;
-     * FR12, FR13 of add-sandbox-core (the {@code sandbox} field).
+     * FR12, FR13 of add-sandbox-core (the {@code sandbox} field); FR9, FR10 of
+     * define-executor-contract (the {@code name} field, and a {@code model} that a
+     * {@code program} stage may leave blank).
      *
      * @param type the executor kind
      * @param model the model pinned for reproducibility (FR11)
@@ -80,11 +84,32 @@ public record StageDefinition(
      * @param sandbox the stage's sandbox declarations (FR12, FR13 of
      *     add-sandbox-core); never {@code null} — {@link Sandbox#none()} when the
      *     manifest declares no {@code sandbox} block
+     * @param name the law name of the executor declaration the stage runs
+     *     ({@code executor.name}, FR9 of define-executor-contract), or {@code null}
+     *     when the manifest names none; that it names a declared executor, and
+     *     that a {@code program} stage names one, is {@code ExecutorReferenceRule}'s
+     *     concern, and its grammar was judged at load
      */
-    public record Executor(ExecutorType type, String model, Map<String, Object> settings, Sandbox sandbox) {
+    public record Executor(
+            ExecutorType type,
+            String model,
+            Map<String, Object> settings,
+            Sandbox sandbox,
+            @Nullable String name) {
 
         public Executor {
             settings = Map.copyOf(settings);
+        }
+
+        /**
+         * Convenience constructor for callers that name no executor declaration —
+         * every call site predating define-executor-contract keeps compiling
+         * unchanged, with {@link #name()} defaulting to {@code null}.
+         *
+         * <p>Implements FR9 of define-executor-contract.
+         */
+        public Executor(ExecutorType type, String model, Map<String, Object> settings, Sandbox sandbox) {
+            this(type, model, settings, sandbox, null);
         }
 
         /**

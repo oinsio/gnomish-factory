@@ -72,6 +72,8 @@ final class ConfigurationTarget {
                     new ConfigurationTarget(
                             ArgumentsParsingSupport.projectDir(args), null, ArgumentsParsingSupport.namesDir(args));
                 case PROJECT -> project(args);
+                // FR12 of define-executor-contract: the conformance kit works in no project.
+                case EXECUTOR -> NONE;
                 case STATUS, USAGE ->
                     dir(ArgumentsParsingSupport.requiredProjectDir(
                             args, subcommand.name().toLowerCase(Locale.ROOT)));

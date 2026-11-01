@@ -85,6 +85,12 @@ class SubcommandSpec extends Specification {
         Subcommand.parse(args) == Subcommand.DOCTOR
     }
 
+    // FR12 of define-executor-contract: an 'executor' token dispatches to EXECUTOR, the conformance kit
+    def "FR12: parse() recognizes an 'executor' token"() {
+        expect:
+        Subcommand.parse(new DefaultApplicationArguments('executor', 'verify', '/bin/candidate')) == Subcommand.EXECUTOR
+    }
+
     // FR7 of add-doctor-command (design D2): namesDoctor and parse read one token, so the loader's
     // collect mode and the runner's dispatch cannot disagree about a command line parse accepts
     def "FR7: namesDoctor() agrees with parse() for #argv"() {
@@ -124,6 +130,7 @@ class SubcommandSpec extends Specification {
         ex.message.contains('usage')
         ex.message.contains("'gnomish project'")
         ex.message.contains("'gnomish doctor'")
+        ex.message.contains("'gnomish executor'")
     }
 
     // FR13, FR14: a flag-only invocation with no subcommand token still defaults to RUN, even

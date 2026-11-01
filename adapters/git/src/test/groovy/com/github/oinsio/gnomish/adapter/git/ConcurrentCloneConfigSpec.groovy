@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -91,7 +92,7 @@ class ConcurrentCloneConfigSpec extends Specification implements BareGitRepoFixt
         tips.size() == CLAIMS
         tips.every { taskId, tip ->
             gitOutput(clone, 'rev-parse', FactoryRegisterRefs.of(taskId).name()) == tip &&
-            gitOutput(clone, 'log', '-1', '--format=%s', tip) == ServiceCommitMessages.round('implement', 1)
+            gitOutput(clone, 'log', '-1', '--format=%s', tip) == ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey('T-1', 'implement', 1)))
         }
 
         and: 'nothing planted ran, and the clone configuration is byte-identical'
@@ -109,7 +110,7 @@ class ConcurrentCloneConfigSpec extends Specification implements BareGitRepoFixt
         Path worktree = registeredClone.worktrees().resolve(taskId)
         new File(worktree.toFile(), 'gnome.txt').text = "work by ${taskId}"
         new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId,
-                TaskState.atStageStart('implement'), new ToolTrace(new AttemptKey(taskId, 'implement', 1), []))
+                RoundStates.recorded(new ToolTrace(new AttemptKey(taskId, 'implement', 1), []).key()), new ToolTrace(new AttemptKey(taskId, 'implement', 1), []))
         runner.run(clone, 'rev-parse', FactoryRegisterRefs.of(taskId).name()).stdout().forParsing().trim()
     }
 

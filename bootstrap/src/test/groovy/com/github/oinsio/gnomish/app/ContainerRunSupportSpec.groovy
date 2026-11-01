@@ -15,7 +15,6 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
-import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
@@ -28,13 +27,15 @@ import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.DenialIdentity
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Finding
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -677,12 +678,12 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
 
         and: 'a tip recording that denial under an attempt, with no position to continue from'
         commitState(StateJsonMapper.toDto(TaskState.atStageStart('build').recordUnburnedRound(
-                        new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.parse('2026-08-19T09:00:00Z'), [],
-                        ExecutorUsage.none(), JudgeUsage.none(), [
+                        AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.parse('2026-08-19T09:00:00Z'), [],
+                        ExecutorUsage.none(), [
                             new Denial(
                                     new Finding('egress denied: paste.example.com:443', null, null),
                                     new DenialIdentity('sha256:guard-container', DENIAL_STAMP))
-                        ], Stop.none()))))
+                        ], Stop.none()), ExecutorVersions.none())))
 
         when:
         def denials = support.lease().environmentFor('build').readDenials().denials()
