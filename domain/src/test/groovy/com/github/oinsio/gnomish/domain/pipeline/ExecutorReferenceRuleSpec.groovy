@@ -36,6 +36,7 @@ class ExecutorReferenceRuleSpec extends Specification {
 
     // FR9, D8 (task 7.3): a declared executor runs only a program stage — the dispatch keys an agent
     // stage by its type, so a name on one would pin and report an executor that never ran
+    // Scenario: pipeline/pipeline-config / Non-program stage naming a declared executor is rejected
     def "a non-program stage naming a declared executor is a located error"() {
         expect:
         ExecutorReferenceRule.validate(pipeline([stage('plan', type, 'acme')], [declared('acme')])) == [

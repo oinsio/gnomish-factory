@@ -68,7 +68,7 @@ class ExecutorOutcomeTableSpec extends Specification {
     }
 
     // FR7, FR2: one row per status and class, through a fake executor and the real engine
-    // Scenario: pipeline/stage-engine / Classification table verified
+    // Scenario: pipeline/stage-engine / Executor outcome table verified
     // Scenario: executor/wire-contract / Pending from a role whose caller cannot poll
     def "#row: attempts burned #burned, rounds recorded #recorded, outcome #outcomeKind"() {
         given: 'the executor produces the row once; a completed round passes its one check'
