@@ -73,17 +73,20 @@ path-matching rule SHALL have exactly one implementation, shared by every adapte
 
 ## MODIFIED Requirements
 
-Layered on `Outcome and report model` as modified by `tighten-spec-contract` (sequenced
-before this change): that delta gives the block its `**Implements**:` line, its note and the
-scenario "An engine-internal error is thrown, not returned"; this text adds the missing
-declared artifact to CannotExecute and the scenarios "Missing artifact is a self-attributing
-factory fault" and "A producer-gate miss keeps the passed round", and both must survive the
-later sync.
+Layered on `Outcome and report model` as modified by `tighten-spec-contract` (archived; its
+`**Implements**:` line, its note and the scenario "An engine-internal error is thrown, not
+returned" are in the stable text) and then by `define-executor-contract` (sequenced before this
+change): that delta adds the sixth report kind, `BudgetExhausted`, and its note; this text adds
+the missing declared artifact to CannotExecute and the scenarios "Missing artifact is a
+self-attributing factory fault" and "A producer-gate miss keeps the passed round", and all must
+survive the later sync.
 
 ### Requirement: Outcome and report model
-`TaskOutcome` SHALL be Completed | Paused(passedStage) | Escalated(report) | Aborted(failedAt, cause), each carrying the final TaskState. Escalation reports SHALL be data-only values of five kinds: AttemptsExhausted, DecisionNeeded, CannotVerify, PipelineMismatch, CannotExecute (a factory fault, no attempt burned: an executor infrastructure failure with no round recorded, or a missing declared artifact caught by an artifact contract gate).
-**Implements**: FR10, UX1 of add-stage-engine; FR1 of fix-denial-attribution-durability; FR5, NFR-O1, UX1 of enforce-artifact-contracts
+`TaskOutcome` SHALL be Completed | Paused(passedStage) | Escalated(report) | Aborted(failedAt, cause), each carrying the final TaskState. Escalation reports SHALL be data-only values of six kinds: AttemptsExhausted, DecisionNeeded, CannotVerify, PipelineMismatch, CannotExecute (a factory fault, no attempt burned), BudgetExhausted (a `failed/limit` result, no attempt burned, the round recorded with its usage and the bound).
+**Implements**: FR10, UX1 of add-stage-engine; FR1 of fix-denial-attribution-durability; FR7 of define-executor-contract; FR5, NFR-O1, UX1 of enforce-artifact-contracts
 **Notes**: CannotExecute carries the denials drained from its round's environment because that round left no attempt record to hold them.
+**Notes**: A CannotExecute is an executor infrastructure failure with no round recorded, or a missing declared artifact caught by an artifact contract gate (its scenarios below).
+**Notes**: The BudgetExhausted accounting is stated by the scenario "Budget exhausted is its own escalation" of requirement "One failure-class mapping".
 
 #### Scenario: Executor infrastructure failure
 - **WHEN** the executor port throws after its own retries

@@ -6,12 +6,17 @@
 The law MAY declare an `executors:` section mapping a name to: `type` (`program` or a
 built-in id), `program` (argv array, `program` type only), `settings`, `credentials` (variable
 names), `egress` (hosts). A stage's `executor.name` SHALL reference a declared executor; an
-unknown name SHALL be a located error. Declarations SHALL come from the law commit only.
+unknown name SHALL be a located error. Only a `program` stage SHALL name an executor: a name on a
+stage of any other type SHALL be a located error. Declarations SHALL come from the law commit only.
 **Implements**: FR9, NFR-S3 of define-executor-contract
 
 #### Scenario: Unknown executor name is a located error
 - **WHEN** a stage names `executor: {name: acme}` and no `executors.acme` exists
 - **THEN** loading reports a located error naming the stage and `acme`
+
+#### Scenario: Non-program stage naming a declared executor is rejected
+- **WHEN** an `agent-cli` or `api` stage declares `executor: {name: acme}` and `executors.acme` exists
+- **THEN** loading reports a located error naming the stage and `executor.name`, since the run's dispatch keys every non-program stage by its type and the name would pin an executor that never ran
 
 #### Scenario: Executor declared in operator config is ignored
 - **WHEN** operator configuration carries an `executors` key

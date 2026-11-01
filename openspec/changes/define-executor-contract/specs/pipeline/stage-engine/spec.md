@@ -29,7 +29,7 @@ engine component: `quality` burns an attempt; `infrastructure` burns none and es
 `infrastructure`. Adapters SHALL NOT decide a class.
 **Implements**: FR7, G4, M2 of define-executor-contract
 
-#### Scenario: Classification table verified
+#### Scenario: Executor outcome table verified
 - **WHEN** each status and class is produced by a fake executor
 - **THEN** the engine's accounting matches the table (data-driven spec, one row per case)
 
@@ -170,3 +170,34 @@ the current stage, resetting on advancement.
 #### Scenario: The raw tool trace stays out of the state
 - **WHEN** a round produces its chronological ToolTrace
 - **THEN** `TaskState` holds only the round's aggregates, and the trace travels beside it, correlated by the (taskId, stage, attempt) key
+
+Layered on `Outcome and report model` as modified by `fix-denial-attribution-durability` and
+`tighten-spec-contract` (both archived; their text is the stable text): this text adds the sixth
+report kind, `BudgetExhausted`, and changes nothing else; every stable scenario is kept verbatim.
+`enforce-artifact-contracts` is layered on this text (sequenced after this change).
+
+### Requirement: Outcome and report model
+`TaskOutcome` SHALL be Completed | Paused(passedStage) | Escalated(report) | Aborted(failedAt, cause), each carrying the final TaskState. Escalation reports SHALL be data-only values of six kinds: AttemptsExhausted, DecisionNeeded, CannotVerify, PipelineMismatch, CannotExecute (executor infrastructure failure — no attempt burned, no round recorded), BudgetExhausted (a `failed/limit` result — no attempt burned, the round recorded with its usage and the bound).
+**Implements**: FR10, UX1 of add-stage-engine; FR1 of fix-denial-attribution-durability; FR7 of define-executor-contract
+**Notes**: CannotExecute carries the denials drained from its round's environment because that round left no attempt record to hold them.
+**Notes**: The BudgetExhausted accounting is stated by the scenario "Budget exhausted is its own escalation" of requirement "One failure-class mapping".
+
+#### Scenario: Executor infrastructure failure
+- **WHEN** the executor port throws after its own retries
+- **THEN** the outcome is Escalated(CannotExecute), `attemptsUsed` is unchanged, and no round is appended
+
+#### Scenario: Report is self-describing
+- **WHEN** an Escalated(AttemptsExhausted) outcome is rendered using only the outcome value and its final state
+- **THEN** the stage, the limit, and every recorded round's check results and findings are available without any other source
+
+#### Scenario: A round killed before its close reports its denials
+- **WHEN** a round is killed on its round timeout after the gnome attempted a denied egress request
+- **THEN** the outcome is Escalated(CannotExecute) carrying that denial, `attemptsUsed` is unchanged, and the attempt history is unchanged
+
+#### Scenario: Denials of a failed round gate nothing
+- **WHEN** a CannotExecute escalation carries denials
+- **THEN** the stage's recorded verdicts and the feedback context of any later retry are identical to those of the same failure with no denials
+
+#### Scenario: An engine-internal error is thrown, not returned
+- **WHEN** an error inside the engine's own logic, not a port failure, occurs during a run
+- **THEN** it propagates to the caller as an exception and no `TaskOutcome` is returned

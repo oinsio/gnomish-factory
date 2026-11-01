@@ -326,6 +326,23 @@
   (routed, deleted, exempt with follow-up name); verify the exemption list equals D10
 - [x] 9.3 Recommend a commit message (no commit) referencing define-executor-contract FR ids
 
+## 10. Artifact review follow-ups (2026-11-01)
+
+Test-side edits that the delta revisions of 2026-11-01 call for; no production code changes.
+
+- [ ] 10.1 Rename the marker `pipeline/stage-engine / Classification table verified` in
+  `ExecutorOutcomeTableSpec` to `Executor outcome table verified` (the ADDED scenario's new
+  title; the main spec's same-titled scenario stays with `VerifyClassificationSpec`) (FR7)
+- [ ] 10.2 Mark the feature "a non-program stage naming a declared executor is a located error"
+  of `ExecutorReferenceRuleSpec` with `pipeline/pipeline-config / Non-program stage naming a
+  declared executor is rejected` (FR9, D8)
+- [ ] 10.3 Add the `BudgetExhausted → ESCALATION` row to the park table of
+  `TakeOutcomeTransitionMapSpec` beside the other escalation kinds (the mapping itself is already
+  covered by `TakeOutcomeMapperSpec`); the scenario marker `tracker/tracker-port /
+  Outcome-to-transition mapping` already sits on that feature (FR7)
+- [ ] 10.4 `./gradlew checkSpecContract` and `scripts/check-merged-specs.sh` for
+  `define-executor-contract` and for `enforce-artifact-contracts` green
+
 ## Follow-ups from tighten-spec-contract
 
 - F66 is task 5.2a (the MODIFIED block is written in the delta).

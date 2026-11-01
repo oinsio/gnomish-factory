@@ -334,9 +334,11 @@ function and checked against a recorded snapshot.
 
 ### Modified Capabilities
 - `stage-engine`: execution result becomes status + answer with the `limit` class and one
-  failure-class mapping; budget-exhausted escalation.
-- `pipeline-config`: named executor declarations, `program` executor type, settings validated
-  against the executor's declared schema.
+  failure-class mapping; budget-exhausted escalation as the sixth report kind of the outcome
+  model (`enforce-artifact-contracts` layers on that text).
+- `tracker-port`: the outcome-to-transition mapping parks `BudgetExhausted` as `ESCALATION`.
+- `pipeline-config`: named executor declarations, `program` executor type (the only stage type
+  that names an executor), settings validated against the executor's declared schema.
 - `agent-executor`: decision file read through the shared result reader; per-model cost
   mapping; reference dumps keep cost.
 - `git-task-persistence`: round record identity and participant usage in `state.json`; `totals`
