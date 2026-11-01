@@ -39,26 +39,18 @@ class ResultPathReadBoundarySpec extends Specification {
 
     /** Every file allowed to read a result path or build the owner's entry points, each with why. */
     private static final Map<String, String> READERS = [
-        ('adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/CheckFindings.java') :
-        'the findings file (GNOMISH_FINDINGS_FILE): its own reader, 256 KiB',
-        ('application/src/main/java/com/github/oinsio/gnomish/app/port/agent/DecisionRequestRead.java') :
-        'the one tolerant decision read both decision media share, 1 MiB',
-        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/DecisionFileTransport.java'):
-        'the host decision file (GNOMISH_DECISION_FILE) through ResultSource.hostFile',
-        ('adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/BranchDecisionFile.java') :
-        'the box decision file, read through the environment channel into DecisionRequestRead',
-        ('adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/SnapshotTipCheck.java') :
-        'the decision blob of a snapshot on resume, through the live path\'s parse',
-        ('application/src/main/java/com/github/oinsio/gnomish/app/describe/ProgramDescribe.java') :
-        'the describe answer (GNOMISH_RESULT_FILE) of a program executor, through the environment channel, 64 KiB',
-        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/program/ProgramResultRead.java') :
-        'the result (GNOMISH_RESULT_FILE, 1 MiB) and answer (GNOMISH_ANSWER_FILE, 4 MiB) files of a program run, through the environment channel (task 7.1)',
+        ('adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/CheckFindings.java'): 'the findings file (GNOMISH_FINDINGS_FILE): its own reader, 256 KiB',
+        ('application/src/main/java/com/github/oinsio/gnomish/app/port/agent/DecisionRequestRead.java'): 'the one tolerant decision read both decision media share, 1 MiB',
+        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/DecisionFileTransport.java'): 'the host decision file (GNOMISH_DECISION_FILE) through ResultSource.hostFile',
+        ('adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/BranchDecisionFile.java'): 'the box decision file, read through the environment channel into DecisionRequestRead',
+        ('adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/SnapshotTipCheck.java'): 'the decision blob of a snapshot on resume, through the live path\'s parse',
+        ('application/src/main/java/com/github/oinsio/gnomish/app/describe/ProgramDescribe.java'): 'the describe answer (GNOMISH_RESULT_FILE) of a program executor, through the environment channel, 64 KiB',
+        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/program/ProgramResultRead.java'): 'the result (GNOMISH_RESULT_FILE, 1 MiB) and answer (GNOMISH_ANSWER_FILE, 4 MiB) files of a program run, through the environment channel (task 7.1)',
     ]
 
     /** Decorating environments (D19): {@code readFile} passed through, no reader row (D10), held so below. */
     private static final Map<String, String> ENVIRONMENTS = [
-        ('bootstrap/src/main/java/com/github/oinsio/gnomish/app/conformance/WireObservation.java'):
-        'the conformance kit\'s decorator: judges the bytes its delegate read against the schema files and hands them back unchanged (design D19, FR24)',
+        ('bootstrap/src/main/java/com/github/oinsio/gnomish/app/conformance/WireObservation.java'): 'the conformance kit\'s decorator: judges the bytes its delegate read against the schema files and hands them back unchanged (design D19, FR24)',
     ]
 
     /** The modules that hold or could hold a result-path read; the scan must reach each. */

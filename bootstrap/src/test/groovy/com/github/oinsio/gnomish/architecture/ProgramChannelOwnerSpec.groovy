@@ -41,12 +41,9 @@ class ProgramChannelOwnerSpec extends Specification {
         (DOCKER + 'DockerCommands.java'): ['"start"': "docker's own `start` subcommand of a stopped box"],
         (DOCKER + 'GuardCommands.java'): ['"start"': "docker's own `start` subcommand of the egress guard"],
         (DOCKER + 'EgressGuard.java'): ['"start"': 'the name of a guard repair step in its log line'],
-        ('executor-contract/src/main/java/com/github/oinsio/gnomish/executorcontract/Capability.java'):
-        ['"poll"': "the describe capability's wire token, a value of the describe schema, not an operation word"],
-        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/program/DescribedProgram.java'):
-        ['"describe"': 'the name of a record component in its null check'],
-        ('bootstrap/src/main/java/com/github/oinsio/gnomish/app/conformance/KitCase.java'):
-        ['"describe"': "the conformance kit's case name, a word of the kit's case vocabulary (kept in sync with steps/executor-run.sh)"],
+        ('executor-contract/src/main/java/com/github/oinsio/gnomish/executorcontract/Capability.java'): ['"poll"': "the describe capability's wire token, a value of the describe schema, not an operation word"],
+        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/program/DescribedProgram.java'): ['"describe"': 'the name of a record component in its null check'],
+        ('bootstrap/src/main/java/com/github/oinsio/gnomish/app/conformance/KitCase.java'): ['"describe"': "the conformance kit's case name, a word of the kit's case vocabulary (kept in sync with steps/executor-run.sh)"],
     ]
 
     // FR5, FR23: each operation word and program variable has exactly one production home, the owner
