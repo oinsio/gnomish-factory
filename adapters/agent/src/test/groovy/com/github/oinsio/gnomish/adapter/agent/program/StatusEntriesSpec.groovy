@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.program
 
+import static com.github.oinsio.gnomish.untrustedtext.UntrustedText.subprocess
+
 import spock.lang.Specification
 
 /**
@@ -23,7 +25,7 @@ class StatusEntriesSpec extends Specification {
         ].join('\u0000')
 
         expect:
-        StatusEntries.of(porcelain) as List == [
+        StatusEntries.of(subprocess(porcelain)) as List == [
             OID,
             '# branch.head main',
             '? notes.txt'
@@ -33,16 +35,16 @@ class StatusEntriesSpec extends Specification {
     // FR11: a record the run added comes first, then one it removed, each path named once
     def "FR11: the changed paths are what the second view gained, then what it lost"() {
         given:
-        def before = StatusEntries.of([
+        def before = StatusEntries.of(subprocess([
             OID,
             '? old.txt',
             '? kept.txt'
-        ].join('\u0000'))
-        def after = StatusEntries.of([
+        ].join('\u0000')))
+        def after = StatusEntries.of(subprocess([
             OID,
             '? kept.txt',
             '? new.txt'
-        ].join('\u0000'))
+        ].join('\u0000')))
 
         expect:
         StatusEntries.changedPaths(before, after) == ['new.txt', 'old.txt']
@@ -52,8 +54,8 @@ class StatusEntriesSpec extends Specification {
     // FR11: a path whose record changed from one shape to another is named once, not twice
     def "FR11: a path whose status line changed is named once"() {
         given:
-        def before = StatusEntries.of('1 .M N... 100644 100644 100644 aaa aaa tracked.txt')
-        def after = StatusEntries.of('1 M. N... 100644 100644 100644 aaa bbb tracked.txt')
+        def before = StatusEntries.of(subprocess('1 .M N... 100644 100644 100644 aaa aaa tracked.txt'))
+        def after = StatusEntries.of(subprocess('1 M. N... 100644 100644 100644 aaa bbb tracked.txt'))
 
         expect:
         StatusEntries.changedPaths(before, after) == ['tracked.txt']

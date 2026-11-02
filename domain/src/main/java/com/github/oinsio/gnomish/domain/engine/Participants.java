@@ -22,7 +22,8 @@ public final class Participants {
     /**
      * The executor a judge vote runs on: the agent CLI, the one {@code JudgeVoter} the factory has,
      * named by its type word like a stage executor the law names no executor for. The judge becomes
-     * a {@code verdict} executor named by the law in {@code migrate-verify-to-executor-contract}.
+     * a {@code verdict} executor named by the law in {@code extract-agent-round-runner} (task 4.3);
+     * {@code migrate-verify-to-executor-contract} leaves the judge in place.
      */
     public static final String JUDGE_EXECUTOR = typeWord(ExecutorType.AGENT_CLI);
 

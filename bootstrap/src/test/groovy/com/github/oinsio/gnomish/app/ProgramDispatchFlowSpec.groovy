@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
+import com.github.oinsio.gnomish.domain.engine.AttemptRecord
+import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -72,6 +74,38 @@ class ProgramDispatchFlowSpec extends TakeResumeSpecBase {
 
         and: 'only the program stage pinned a describe version'
         result.finalState().executorVersions().byName().keySet() == ['acme'] as Set
+    }
+
+    // Scenario: executor/conformance-kit / Fake exercises the limit class
+    // FR7: the stand-in told to answer failed/limit reaches the real engine as a budget stop, burning no attempt
+    def "FR7: a program stage whose stand-in answers failed/limit escalates as budget exhausted with no attempt burned"() {
+        given: 'a task at its program stage, and acme the run-as stand-in answering the limit result'
+        repository().createTask(context('PROJ-1'), TaskStart.commit(cloneDir, resumableBaseRef()),
+                TaskStart.pin(resumableBaseRef(), BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
+        def acme = StandIn.link(Files.createDirectories(tempDir.resolve('executor')).resolve('limit'), 'run-as')
+        def law = new PipelineDefinition('1', new AutonomyLimits(3), [
+            stage('build', ExecutorType.PROGRAM, '', 'acme')
+        ], null, [
+            new ExecutorDeclaration('acme', ExecutorDeclaration.Type.PROGRAM, [acme.toString()], [:], [], [])
+        ])
+        def runner = newTakeResumeRunner()
+
+        when:
+        def result = runner.resumeWithoutDecision(resumeOrder(law), runner.bootstrap(cloneDir, 'PROJ-1'),
+                TaskState.atStageStart('build'))
+
+        then: 'the task waits for a human, its one round recorded as a budget stop naming the bound'
+        result instanceof TakeResult.AwaitingHuman
+        def finalState = (result as TakeResult.AwaitingHuman).finalState()
+        finalState.attemptsUsed() == 0
+        finalState.attempts()*.result() == [
+            AttemptRecord.Result.BUDGET_EXHAUSTED
+        ]
+        finalState.attempts()[0].stop() instanceof Stop.BudgetExhausted
+        (finalState.attempts()[0].stop() as Stop.BudgetExhausted).bound().raw() == 'turn bound of 20 reached'
+
+        and: "the round's own commit records the program as its executor"
+        roundOf('build').get('executor').asText() == 'acme'
     }
 
     /** The one participant entry of {@code stage}'s first round, read from that round's own commit. */

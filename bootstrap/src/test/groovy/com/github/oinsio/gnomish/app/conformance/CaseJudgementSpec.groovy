@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.app.conformance
 
+import com.github.oinsio.gnomish.executorcontract.Answer
+import com.github.oinsio.gnomish.executorcontract.WireViolation
+
 import static com.github.oinsio.gnomish.app.conformance.KitSubjectDouble.*
 
 import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson
@@ -9,6 +12,7 @@ import com.github.oinsio.gnomish.executorcontract.Role
 import com.github.oinsio.gnomish.executorcontract.Status
 import com.github.oinsio.gnomish.executorcontract.WireDocument
 import com.github.oinsio.gnomish.executorcontract.Workspace
+import com.github.oinsio.gnomish.testfixtures.executor.RenderedPolicy
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -52,16 +56,22 @@ class CaseJudgementSpec extends Specification {
             breach()
         ]) == new CaseVerdict.Failed(breach(WireDocument.RESULT).detail())
         breach(WireDocument.RESULT).detail() == 'the result document breaks its schema at enforcementLevel (enum): not in the enum'
-        new WireBreach(WireDocument.ANSWER, new com.github.oinsio.gnomish.executorcontract.WireViolation('', 'json', UntrustedText.subprocess('cut'))).detail() ==
+        new WireBreach(WireDocument.ANSWER, new WireViolation('', 'json', UntrustedText.subprocess('cut'))).detail() ==
                 'the answer document breaks its schema (json): cut'
     }
 
+    // Scenario: executor/wire-contract / Policy is not a vendor tool name
     def "FR12: each role's request carries its own inputs and policy"() {
         expect:
         def request = CaseJudgement.request(role, new Workspace('/w/x'), ExecutorContractJson.settingsTree([:]))
         request.policy().getClass() == policy
         role.accepts(request.roleInputs())
         request.feedback() == [] && request.continuation() == null
+
+        and: 'FR11: the request as written holds the abstract policy token alone and no vendor tool identifier'
+        def written = ExecutorContractJson.writer().writeValueAsString(request)
+        RenderedPolicy.abstractOnly(written)
+        RenderedPolicy.vendorWords(written) == []
 
         where:
         role | policy
@@ -88,7 +98,7 @@ class CaseJudgementSpec extends Specification {
     }
 
     private static String malformed(String answer) {
-        def reading = com.github.oinsio.gnomish.executorcontract.Answer.read(tree(answer), { String t ->
+        def reading = Answer.read(tree(answer), { String t ->
             UntrustedText.subprocess(t)
         })
         reading.reason().excerpt(300)

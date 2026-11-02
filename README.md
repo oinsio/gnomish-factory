@@ -57,11 +57,11 @@ flowchart TB
 
 The factory core is a generic engine built on **ports and adapters**:
 
-| Port        | Purpose                                                    | Adapters                                                                                        |
-|-------------|------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
-| Tracker     | claim tasks, update statuses, post reports                 | GitHub (plus an in-memory reference adapter for tests); Jira and others are future work         |
-| AI provider | call models from different vendors with per-stage settings | Claude, OpenAI, Gemini, Ollama, ...                                                             |
-| Executor    | perform a stage                                            | `api` (direct model call), `agent-cli` (coding agent as subprocess in an isolated working copy) |
+| Port        | Purpose                                                    | Adapters                                                                                                                                                                                |
+|-------------|------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Tracker     | claim tasks, update statuses, post reports                 | GitHub (plus an in-memory reference adapter for tests); Jira and others are future work                                                                                                 |
+| AI provider | call models from different vendors with per-stage settings | Claude, OpenAI, Gemini, Ollama, ...                                                                                                                                                     |
+| Executor    | perform a stage                                            | `api` (direct model call), `agent-cli` (coding agent as subprocess in an isolated working copy), `program` (an external executor in any language, spoken to over the executor contract) |
 
 ## Pipeline stages
 
@@ -69,13 +69,15 @@ A task travels through a pipeline of stages. Stages are **declarative** and live
 
 ```
 .gnomish/
-  config.yaml          # schemaVersion + default autonomy limit (attempt limit) + tracker section (for take/serve)
+  config.yaml          # schemaVersion + default autonomy limit (attempt limit) + tracker section (for take/serve) + executors section (named program executors)
   pipeline.yaml        # stage order — an explicit list of stage names
   stages/<name>/
-    stage.yaml         # manifest: purpose, inputs, outputs, executor (type + model + settings), verify checks, advancement
+    stage.yaml         # manifest: purpose, inputs, outputs, executor (type + model + settings; a `program` stage names a declared executor), verify checks, advancement
     instructions.md    # prompts, rules, best practices (referenced by the manifest)
     acceptance.md      # acceptance criteria for an LLM-judge check, referenced by path per check (when the stage uses them)
 ```
+
+A stage of type `program` runs an **external executor** — a program in any language that speaks the executor contract (a JSON request on its standard input, JSON result files, a `describe` handshake). The stage names it (`executor: {type: program, name: <name>}`), and the `executors:` section of `config.yaml` declares that name: its argv, its settings, the credential names it is granted and the egress hosts it may reach. Declarations come from `.gnomish/` only, never from operator configuration; `gnomish executor verify <program>` runs a candidate program through the conformance kit, one line per case. The contract and its decisions: [ADR 0020](docs/adr/0020-executor-contract.md).
 
 Every stage follows the IDEF0/ICOM model extended with a Quality Control loop (ISO 9001:2015 process approach) — and every element is machine-verifiable:
 
@@ -136,18 +138,19 @@ gnomish doctor --dir=/path/to/target-repo      # add --online to try the tracker
 
 ## Using the factory
 
-The CLI is the `gnomish` command ([Install](#install)) with nine subcommands; `run` is the implicit default when only flags are given. Each has its own reference guide:
+The CLI is the `gnomish` command ([Install](#install)) with ten subcommands; `run` is the implicit default when only flags are given. Each has its own reference guide:
 
-| Command                    | What it does                                                                         | Reference                                                                                        |
-|----------------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
-| `gnomish run`              | drive one ad-hoc task through the pipeline, no tracker                               | [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)                         |
-| `gnomish take`             | claim the head of the tracker's ready queue (or act on one issue by ref) and work it | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                                 |
-| `gnomish serve`            | autonomous daemon: feed from the ready queue under a WIP-bounded scheduler           | [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)                     |
-| `gnomish status` / `usage` | read-only task state and resource/cost usage, straight from the task branch          | [`docs/guides/operator-guide-inspect.md`](docs/guides/operator-guide-inspect.md)                 |
-| `gnomish board`            | Kanban view over the tracker's task states                                           | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                                 |
-| `gnomish dashboard`        | self-contained HTML page over the daemon snapshot, ledger, and board                 | [`docs/guides/operator-guide-dashboard.md`](docs/guides/operator-guide-dashboard.md)             |
-| `gnomish project`          | register a clone (`add`), list projects (`list`), show paths and settings (`show`)   | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md#setting-up-a-project)            |
-| `gnomish doctor`           | read-only readiness checklist of the machine and a clone, each `fail` with its fix   | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md#checking-a-setup-gnomish-doctor) |
+| Command                             | What it does                                                                                     | Reference                                                                                        |
+|-------------------------------------|--------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
+| `gnomish run`                       | drive one ad-hoc task through the pipeline, no tracker                                           | [`docs/guides/operator-guide-run.md`](docs/guides/operator-guide-run.md)                         |
+| `gnomish take`                      | claim the head of the tracker's ready queue (or act on one issue by ref) and work it             | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                                 |
+| `gnomish serve`                     | autonomous daemon: feed from the ready queue under a WIP-bounded scheduler                       | [`docs/guides/operator-guide-serve.md`](docs/guides/operator-guide-serve.md)                     |
+| `gnomish status` / `usage`          | read-only task state and resource/cost usage, straight from the task branch                      | [`docs/guides/operator-guide-inspect.md`](docs/guides/operator-guide-inspect.md)                 |
+| `gnomish board`                     | Kanban view over the tracker's task states                                                       | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md)                                 |
+| `gnomish dashboard`                 | self-contained HTML page over the daemon snapshot, ledger, and board                             | [`docs/guides/operator-guide-dashboard.md`](docs/guides/operator-guide-dashboard.md)             |
+| `gnomish project`                   | register a clone (`add`), list projects (`list`), show paths and settings (`show`)               | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md#setting-up-a-project)            |
+| `gnomish doctor`                    | read-only readiness checklist of the machine and a clone, each `fail` with its fix               | [`docs/guides/operator-guide.md`](docs/guides/operator-guide.md#checking-a-setup-gnomish-doctor) |
+| `gnomish executor verify <program>` | run a candidate program through the conformance kit, one line per case; exit 1 when a case fails | [`docs/adr/0020-executor-contract.md`](docs/adr/0020-executor-contract.md)                       |
 
 ```bash
 # once per clone: register it as a clone of a project (~/.gnomish/projects/widgets/)

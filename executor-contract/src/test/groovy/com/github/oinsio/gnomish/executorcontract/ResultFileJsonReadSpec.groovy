@@ -126,6 +126,7 @@ class ResultFileJsonReadSpec extends Specification {
                 new ReadResult.Parsed(new QuestionWire(UntrustedText.agent('q'), null, null)))
     }
 
+    // Scenario: executor/result-channel / Re-read is idempotent
     // NFR-R1: recovery after a restart decides from the same file exactly as the first pickup did
     def "NFR-R1: reading the same result twice yields the same status, answer and usage"() {
         given:

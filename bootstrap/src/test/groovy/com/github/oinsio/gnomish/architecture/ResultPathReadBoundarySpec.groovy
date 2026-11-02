@@ -128,6 +128,7 @@ class ResultPathReadBoundarySpec extends Specification {
         roots.containsAll(MODULES)
     }
 
+    // Scenario: executor/result-channel / Second reader is a build failure
     // M3: a planted bypass is reported by the same verdict the tree is judged by
     def "M3: a planted source that names GNOMISH_DECISION_FILE and calls Files.readString is reported"() {
         given: 'the real tree with one bypass planted beside the allowlisted readers'

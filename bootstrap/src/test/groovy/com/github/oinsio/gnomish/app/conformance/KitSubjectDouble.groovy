@@ -37,7 +37,7 @@ class KitSubjectDouble implements KitSubject {
     static final String QUESTION = '{"kind":"decision-request","question":"q","options":["a","b"]}'
 
     boolean wire = true
-    KitSubject.Described described = new KitSubject.Described(describeOf(), tree('{"settingsSchema":{}}'), [], [])
+    Described described = new Described(describeOf(), tree('{"settingsSchema":{}}'), [], [])
     Closure<ExecutorResult> answer = { ExecutorRequest r, PendingKey k ->
         conforming(r)
     }
@@ -48,11 +48,11 @@ class KitSubjectDouble implements KitSubject {
         wire
     }
 
-    KitSubject.Described describe() {
+    Described describe() {
         described
     }
 
-    KitSubject.CaseRun open(KitCase kase, Describe describe) {
+    CaseRun open(KitCase kase, Describe describe) {
         def subject = this
         def start = { ExecutorRequest r ->
             subject.asked << [kase: kase, op: 'start', request: r]; subject.answer(r, null)
@@ -70,7 +70,14 @@ class KitSubjectDouble implements KitSubject {
                 workspace
             }, violations: {
                 subject.breaches[kase] ?: []
-            }, close: {}] as KitSubject.CaseRun
+            }, close: {}] as CaseRun
+    }
+
+    /** The keys of every poll the executor was asked, in the order asked. */
+    List<String> polledKeys() {
+        asked.findAll {
+            it.op == 'poll'
+        }*.key*.value()
     }
 
     /** What a conforming executor answers in the request's role. */

@@ -97,7 +97,9 @@ public interface RunAssembly {
      * @param medium the task's live execution environment; never null
      * @param credentialEnvVarsToScrub as for {@link #assemble}: the names the child environment
      *     withholds; never null
-     * @param lawBinding which tree the law was read from — its commit is the cache key; never null
+     * @param lawBinding which tree the law was read from, carried into the described law; the
+     *     describe answers are cached per run by each program's declared argv, not by this binding;
+     *     never null
      * @return the described law, or every located error; never null
      */
     LawDescription describe(

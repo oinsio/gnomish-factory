@@ -59,6 +59,8 @@ class UsageSnapshotIdentitySpec extends Specification implements BareGitRepoFixt
     TaskGit git = TaskGitFixture.realClaimless()
     Path cloneDir
     RegisteredClone registered
+    Path otherClone
+    RegisteredClone other
     int minted = 0
 
     def setup() {
@@ -112,11 +114,7 @@ class UsageSnapshotIdentitySpec extends Specification implements BareGitRepoFixt
         escalatedAfterFailure()
 
         and: 'another instance clones origin, adopts the branch and opens its own worktree'
-        Path otherClone = seedClone(tempDir, tempDir.resolve('origin.git').toString(), tempDir.resolve('other'))
-        RegisteredClone other = RegisteredCloneFixture.registered(tempDir.resolve('other-home'), otherClone)
-        def branch = git.branches().adopt(otherClone, TASK, git.branches().locate(otherClone, TASK)) as LocalTaskBranch
-        Path worktree = git.worktrees().ensureWorktree(other, branch)
-        TaskState pickedUp = git.store().readRecordedState(worktree, TASK).get()
+        TaskState pickedUp = pickedUpByOther()
 
         when: 'it consumes the escalation and passes the stage'
         git.store().taskRepository(other).resumeFrom(TASK, pickedUp.resetAttempts())
@@ -127,9 +125,34 @@ class UsageSnapshotIdentitySpec extends Specification implements BareGitRepoFixt
         identityHolds(otherClone, other, 2)
     }
 
-    private TaskState escalatedAfterFailure() {
-        def failed = TaskState.atStageStart('implement')
-                .recordQualityFailure(round('implement', 0, AttemptRecord.Result.QUALITY_FAILURE), ExecutorVersions.none())
+    // Scenario: pipeline/stage-engine / The walked fold equals the tip
+    def "FR18: one task that passes a stage, fails a round, takes a decision reset and is resumed by a second instance folds onto the tip's totals"() {
+        given: 'the first instance passes implement, fails a review round and escalates'
+        def passed = TaskState.atStageStart('implement')
+                .recordPassAndAdvance(round('implement', 0, AttemptRecord.Result.PASSED), review(), ExecutorVersions.none())
+        persist(registered, passed)
+        escalatedAfterFailure(passed, 'review')
+
+        when: 'a second instance picks it up, records the human decision, resets the stage and passes it'
+        TaskState reset = pickedUpByOther().resetAttempts()
+        git.store().taskRepository(other).appendDecision(TASK, new Decision('go on', null, null, null), reset)
+        persist(other, reset.recordPassAndAdvance(round('review', 0, AttemptRecord.Result.PASSED), new Position.PipelineEnd(), ExecutorVersions.none()))
+
+        then: 'the fold of every round the second instance walks is the totals at its tip'
+        identityHolds(otherClone, other, 3)
+    }
+
+    /** Another instance clones origin, adopts the branch, opens its own worktree and reads the recorded state. */
+    private TaskState pickedUpByOther() {
+        otherClone = seedClone(tempDir, tempDir.resolve('origin.git').toString(), tempDir.resolve('other'))
+        other = RegisteredCloneFixture.registered(tempDir.resolve('other-home'), otherClone)
+        def branch = git.branches().adopt(otherClone, TASK, git.branches().locate(otherClone, TASK)) as LocalTaskBranch
+        git.store().readRecordedState(git.worktrees().ensureWorktree(other, branch), TASK).get()
+    }
+
+    /** A failed round 0 of {@code state}'s stage, recorded and escalated on origin by the first instance. */
+    private TaskState escalatedAfterFailure(TaskState state = TaskState.atStageStart('implement'), String stage = 'implement') {
+        def failed = state.recordQualityFailure(round(stage, 0, AttemptRecord.Result.QUALITY_FAILURE), ExecutorVersions.none())
         persist(registered, failed)
         git.store().taskRepository(registered).recordOutcome(TASK,
                 new TaskOutcome.Escalated(failed, new EscalationReport.AttemptsExhausted(1)), TrackerWrite.NONE)

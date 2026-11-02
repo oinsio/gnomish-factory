@@ -217,6 +217,12 @@ class UntrustedTextGateSpec extends Specification {
         ' timing Instants the sweep decides on',
         'com.github.oinsio.gnomish.adapter.agent.TokenUsageMapper':
         'the round\'s model id into a telemetry key, held to ModelIdSyntax',
+        // FR11, NFR-S4 of define-executor-contract: the working-copy-unchanged check's view, read
+        // once BoundedCapture minted it at capture instead of handing the check a String.
+        'com.github.oinsio.gnomish.adapter.agent.program.StatusEntries':
+        'git status --porcelain=v2 -z output into status entries compared whole, never shown to a' +
+        ' reader; a path a refusal names is re-minted as a subprocess carrier and leaves through the' +
+        ' log exit\'s excerpt',
         'com.github.oinsio.gnomish.baseref.BaseDesignator$Single':
         'a task\'s base designator label into the accepted ref name, held to RefNameSyntax by' +
         ' BasePattern.matches — a value no pattern accepts is converted into nothing, since the' +
@@ -248,6 +254,9 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.sandbox.environment.DockerResult': ['stdout', 'stderr'],
         'com.github.oinsio.gnomish.sandbox.environment.EgressSelfCheckProbes$Probe': ['output'],
         'com.github.oinsio.gnomish.sandbox.CapturedExec': ['output'],
+        // Design D9 of define-executor-contract: the one bounded capture of an exec (a describe, a
+        // non-streaming program run, git's view of a working copy) mints its output at capture.
+        'com.github.oinsio.gnomish.sandbox.BoundedCapture': ['output'],
         'com.github.oinsio.gnomish.adapter.agent.AgentEvent$InitEvent': ['sessionId', 'model'],
         'com.github.oinsio.gnomish.adapter.agent.AgentEvent$AssistantEvent': ['sessionId', 'model'],
         'com.github.oinsio.gnomish.adapter.agent.AgentEvent$UserEvent': ['sessionId'],

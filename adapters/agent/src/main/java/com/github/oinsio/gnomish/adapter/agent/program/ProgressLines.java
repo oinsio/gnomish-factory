@@ -28,7 +28,8 @@ import org.slf4j.MDC;
  *
  * <p>Every chunk read, whole line or not, is a sign of life: {@link #lastActivity()} moves on each.
  * A line is kept to {@link #LINE_CAP_BYTES}; the rest of an overlong line is read and dropped, so no
- * line grows the reader's memory past the cap.
+ * line grows the reader's memory past the cap. A cut line that no longer parses is reported as cut,
+ * not as one that is not JSON: the cause is its length.
  *
  * <p>Like every reader of a child's output it reads only through the owner's non-parking view and
  * closes no pipe (ADR 0018): the drain ends at the exit with nothing pending, or on {@link #close()},
@@ -153,22 +154,26 @@ final class ProgressLines implements AutoCloseable {
     private void readLines(InputStream in) throws IOException {
         byte[] chunk = new byte[8192];
         ByteArrayOutputStream line = new ByteArrayOutputStream();
+        boolean cut = false;
         int read;
         while ((read = in.read(chunk)) != -1) {
             lastActivity = clock.instant();
             for (int index = 0; index < read; index++) {
                 if (chunk[index] == '\n') {
-                    judge(line);
+                    judge(line, cut);
                     line.reset();
+                    cut = false;
                 } else if (line.size() < LINE_CAP_BYTES) {
                     line.write(chunk[index]);
+                } else {
+                    cut = true;
                 }
             }
         }
-        judge(line);
+        judge(line, cut);
     }
 
-    private void judge(ByteArrayOutputStream bytes) {
+    private void judge(ByteArrayOutputStream bytes, boolean cut) {
         UntrustedText line = UntrustedText.subprocess(bytes.toString(StandardCharsets.UTF_8));
         if (line.isBlank()) {
             return;
@@ -181,9 +186,17 @@ final class ProgressLines implements AutoCloseable {
             if (violations == 1) {
                 log.warn(
                         OperatorEvent.PROGRAM_PROGRESS_NOT_JSON.head()
-                                + "program executor '{}' wrote a progress line that is not JSON, a contract"
-                                + " violation; skipped: {}",
+                                + "program executor '{}' wrote a progress line {}; skipped: {}",
                         executor,
+                        cut
+                                ? "over " + LINE_CAP_BYTES / 1024 + " KiB that was cut and no longer parses"
+                                : "that is not JSON, a contract violation",
+                        line.forLog());
+            } else if (cut) {
+                log.debug(
+                        "program executor '{}' wrote another progress line over {} KiB that was cut; skipped: {}",
+                        executor,
+                        LINE_CAP_BYTES / 1024,
                         line.forLog());
             } else {
                 log.debug("program executor '{}' wrote another non-JSON progress line: {}", executor, line.forLog());

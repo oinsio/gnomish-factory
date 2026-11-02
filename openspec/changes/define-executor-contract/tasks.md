@@ -20,7 +20,9 @@
 
 ## 2. Module `executor-contract`: schema and wire types
 
-- [x] 2.1 Create module `executor-contract` (JDK + Jackson only, `java-conventions`, PIT
+- [x] 2.1 Create module `executor-contract` (JDK, Jackson and the JDK-only `:untrustedtext` leaf —
+  the result reader's text carrier, task 3.1 — plus `json-schema-validator` as an implementation
+  edge, task 6.3; each edge justified in `executor-contract/build.gradle`; `java-conventions`, PIT
   scoped) with `schemas/executor-request.schema.json`, `executor-result.schema.json`,
   `executor-answer.schema.json`, `executor-describe.schema.json`; verify `:executor-contract:check`
   passes with the empty module and the dependency-analysis gate is green (FR1)
@@ -77,16 +79,21 @@
   burned, strict persistence ordering, no check port invoked, existing specs green (FR7)
 - [x] 4.2 Add `ExecutorOutcomeClassifier` returning sealed `AttemptAccounting`; add
   `EscalationReport.BudgetExhausted(bound)` as the sixth report kind with its DTO branches
-  (`EscalationReportDto` + `TaskJsonMapper` in adapters/git, `EscalationDto` + `EscalationMapper`
-  in application/status), its `StatusTextRenderer` line, its ledger `taskOutcome` token and its
-  line in `status-report-v1.escalations.reference.jsonl` (`StatusReportJsonMapperSpec`'s corpus
+  (`EscalationReportDto` + `TaskEscalationMapper` in adapters/git — the escalation half of
+  `TaskJsonMapper`, split out in this task — `EscalationDto` + `EscalationMapper` in
+  application/status), its `StatusTextRenderer` line, its park reason (`ESCALATION`, through
+  `TakeOutcomeMapper.parkReason`; the kind has no ledger token of its own: the ledger's
+  `taskOutcome` line records it as `awaitingHuman` with that reason, as for every escalation) and
+  its line in `status-report-v1.escalations.reference.jsonl` (`StatusReportJsonMapperSpec`'s corpus
   completeness check counts six; `StatusReportSpec` names the kinds); move `StageAttemptLoop:137`'s `EscalationReport.CannotExecute` construction into the
   classifier and make `RoundExecution:126`'s `RoundOutcome.CannotExecute` its input; data-driven
   spec: one row per status/class including `pending` for `transform` → infrastructure; the
   `values()`/sealed round-trip specs of every escalation mapper cover the new kind (FR7, FR2)
 - [x] 4.3 Old-way sweep: `grep -rn "new EscalationReport.CannotExecute(" --include=*.java */src/main
   adapters/*/src/main` → the classifier plus the two DTO mappers the D10 row allowlists
-  (`TaskJsonMapper`, `StateJsonMapper`), nothing else — the grep gate in the architecture spec
+  (`TaskEscalationMapper`, the escalation half of `TaskJsonMapper` split out in 4.2;
+  `StateJsonMapper` constructs no `CannotExecute` and is allowlisted for the `Verdict.CannotVerify`
+  read-back below), nothing else — the grep gate in the architecture spec
   carries that allowlist; `grep -rn "new Verdict.CannotVerify(\|new ExecutorFailure("` → every
   hit is on the D10 exemption list naming its follow-up change (today: `ShellCommandCheckRunner`,
   `FilesExistCheckRunner`, `ExternalPolling`, `VerifyOrchestrator`, `JudgeVerdictExtractor`,
@@ -117,11 +124,12 @@
 
 - [x] 5.1 `AttemptRecord` gains `taskId`, `stage`, `roundToken`, stamped by the engine from the
   attempt key and the run's `CurrentRound`; `ServiceCommitMessages.round(AttemptRecord)`
-  replaces `round(String, int)`; `HostRoundEnvironmentSource` mints the token over the worktree
-  tip through `RoundToken.of` (mirrored edit of the declared source pair, both markers and the
-  registry row updated; the `CurrentRoundWriterSpec` allowlist widens from two producers to
-  three — `HostRoundEnvironmentSource` joins `SandboxRoundEnvironmentSource` and
-  `SnapshotTipCheck` — and the glossary's "Round token" entry records it, task 1.2; the archived
+  replaces `round(String, int)`; in host git mode the token is minted over the worktree tip
+  through `RoundToken.of` by `MidRoundPushRounds` (`adapters/git`), the git-mode decoration of
+  `HostRoundEnvironmentSource` — the source itself mints none, see the amendment below (mirrored
+  edit of the declared source pair, both markers and the registry row updated; the
+  `CurrentRoundWriterSpec` allowlist widens from two producers to three — `MidRoundPushRounds`
+  joins `SandboxRoundEnvironmentSource` and `SnapshotTipCheck` — and the glossary's "Round token" entry records it, task 1.2; the archived
   `make-checkpoint-gate-durable` is not edited); the subject's `round` is the record's `round`
   as recorded — the attempt key's number, non-negative, the same value `key.attempt()` passes
   today — and the javadocs of `ServiceCommitMessages.round` ("1-based") and `AttemptRecord.round`
@@ -170,7 +178,8 @@
   `.gnomish/stages/usage-report/report.sh` reduced to running the command and posting its
   output, `stage.yaml` comment updated; spec on canonical rows with a multi-round stage and
   two judge votes asserting the per-stage sum equals the per-role sum equals the snapshot;
-  `grep -c jq .gnomish/stages/usage-report/report.sh` → 0 aggregation (FR20, G5, M6, D16)
+  `grep -n jq .gnomish/stages/usage-report/report.sh` → no aggregation: the remaining hits are
+  the `gh --jq` selectors that find the PR and the comment to post to (FR20, G5, M6, D16)
 - 5.8 Budget enforcement — moved to the follow-up change (proposal NG12, D17): the law declares
   no budget; an executor-reported `failed/limit` already escalates `BudgetExhausted` (4.2)
 - [x] 5.9 `gnomish status` text and JSON carry the snapshot's `rounds`, `complete` and unpriced
@@ -192,8 +201,9 @@
   paths right after `FirstBoxStep.makeLive` (`TakeContainerFreshClaim:111`,
   `ContainerTerminalDrive:61`), on the host paths after `TaskTierLaw.bind` on the host environment
   — `describe` for each declared `program` executor through `TaskExecutionEnvironment.exec` with
-  the startup bound, output read through `ResultFileReader` rules (cap, untrusted), cached for the
-  run by law commit; invoked as the declared argv plus the word `describe`, the answer in the
+  the startup bound, output read through `ResultFileReader` rules (cap, untrusted), cached by the
+  program's declared argv in a per-run `DescribePreflight` (one instance serves one run, whose law
+  is one law commit; `RunDescribe` builds it per run); invoked as the declared argv plus the word `describe`, the answer in the
   file `GNOMISH_RESULT_FILE` names (D5, as revised 2026-10-31). One outcome shape, no new
   classifier and no new `DaemonConditionKind`: every failure of the preflight is a located
   `ConfigError` carried to the parked result `TaskTierLaw.bind` yields for an invalid law —
@@ -203,8 +213,8 @@
   refusal type reaches neither `OperatorPreconditionRefusals` nor `ClaimedRunFailureDispatch`;
   `OperatorPreconditionOwnerSpec` stays green with no new arm. Specs on the stand-in presets of
   D18: each outcome parks with the executor's name and the failure in the located message, no
-  round run, no attempt burned, no daemon condition opened under `serve` (a
-  `DaemonConditions` fake asserting `report` is never called), the cache hit on the second
+  round run, no attempt burned, no daemon condition opened under `serve` (the slot's real
+  `DaemonConditions` asserting `anyOpen()` is false, `SlotConditionReportSpec`), the cache hit on the second
   executor of one law; on a real bare origin: a round recorded with version 1, a resume whose
   stand-in describes version 2 escalates `PipelineMismatch` (moved here from 4.4), and the same
   with a park and a human return between them (FR4, FR13, UX1)
@@ -225,7 +235,9 @@
   preflight refuse a stage or check whose executor's describe lists only `effect` for the role the
   use site needs (a stage needs `transform`, a check `verdict`) with a located error naming the
   role as reserved — the law has no role field, the use site implies the role; specs (NFR-S3,
-  FR1, NG4)
+  FR1, NG4). Built for the stage use site only: no verify check names an executor in this
+  change, so the check half has no use site; it is deferred under NG1 with its pickup condition
+  and carried as task 5.4 of `migrate-verify-to-executor-contract`
 
 ## 7. First consumer: the `program` stage executor
 
@@ -324,6 +336,32 @@
   kit's out-of-process driver per testing.md
 - [x] 9.2 Produce the sweep report: the greps of 3.3, 4.3 and 5.10 with every hit and its disposition
   (routed, deleted, exempt with follow-up name); verify the exemption list equals D10
+
+  Sweep report (greps re-run 2026-11-02 exactly as written in 3.3, 4.3, 5.10, under `bash`;
+  the record is kept current by the gates `ResultPathReadBoundarySpec`,
+  `OutcomeClassifierOwnerSpec`, `UsageFoldOwnerBoundarySpec`):
+  - 3.3 — routed through `ResultFileReader`: `CheckFindings:53`, `ProgramDescribe:104`,
+    `ProgramResultRead:62,91`, `BranchDecisionFile:100` (via `DecisionRequestRead`); the owner's
+    own seam `ResultSource:12` (javadoc). Exempt (D10, not result paths): `EnvFileSecretSearch:100,
+    137,160,163`, `WorkingTreeLawSource:48,90,92`, `OperatorFile:36,39`, `AdHocTaskSynthesizer:103`,
+    `SnapshotReader:62`. Exempt as environment implementations of `readFile`:
+    `TaskExecutionEnvironment:86`, `ContainerFileChannel:99`, `LeasedEnvironment:59-60`,
+    `SelfCheckedEnvironment:117-118`, `HostTaskExecutionEnvironment:155-156`,
+    `HostChannelFiles:41`, `WireObservation:105-106` (the kit's decorator, D19). Deleted:
+    `DecisionFileTransport`'s raw `Files.readString` (now `ResultSource.hostFile`),
+    `FindingsFileReader`, `DecisionFileReader`. No unlisted hit.
+  - 4.3 — `new EscalationReport.CannotExecute(`: the owner `ExecutorOutcomeClassifier:65,71`, and
+    `TaskEscalationMapper:98` (D10 DTO mapper, split out of `TaskJsonMapper` in 4.2).
+    `new Verdict.CannotVerify(`: all exempt until `migrate-verify-to-executor-contract` —
+    `ShellCommandCheckRunner:155,171,206,234`, `FilesExistCheckRunner:79,94,116,128,150`,
+    `ExternalPolling:93,105,138`, `VerifyOrchestrator:153`, `JudgeCriteriaPreflight:76`,
+    `JudgeCannotVerify:131`, `JudgeVerdictExtractor:174` — plus `StateJsonMapper:257` (D10 DTO
+    mapper). `new ExecutorFailure(`: 0 hits, the type is deleted. No unlisted hit.
+  - 5.10 — Java grep: 0 hits (`TaskState.totals.plus`, `ExecutorUsage.plus`, `UsageTotals.of`
+    deleted; the gate's one allowlisted `merge(`, `LedgerAggregator:162`, falls outside this
+    pattern). `jq` in `.gnomish/stages`: `usage-report/report.sh:50,55,57,59`,
+    `usage-report/stage.yaml:56,62`, `deliver/stage.yaml:64,69,70,81`, `deliver/instructions.md:21`
+    — all PR or task-file lookups, none sums `tokensByModel`; `add_tokens` deleted.
 - [x] 9.3 Recommend a commit message (no commit) referencing define-executor-contract FR ids
 
 ## 10. Artifact review follow-ups (2026-11-01)

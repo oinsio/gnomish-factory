@@ -72,6 +72,7 @@ class ProgramAnswerFileSpec extends Specification {
         'result could not be read' | '{"status":' || null
     }
 
+    // Scenario: executor/wire-contract / Malformed verdict is cannot-verify
     // FR6: a malformed answer file is never a pass
     def "FR6: a malformed answer file is failed/infrastructure naming it"() {
         when:

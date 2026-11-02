@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.executorcontract
 
 import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.ObjectNode
 import spock.lang.Specification
 
 /**
@@ -27,6 +28,43 @@ class WireSchemaRoundTripSpec extends Specification {
         ExecutorResult | WireDocument.RESULT | WireSamples.results()
         Answer | WireDocument.ANSWER | WireSamples.answers()
         Describe | WireDocument.DESCRIBE | WireSamples.describes()
+    }
+
+    // Scenario: executor/conformance-kit / Drift between DTO and schema is red
+    def "FR1: every field a #type.simpleName sample writes is one the #kind schema declares"() {
+        expect:
+        samples.every { sample ->
+            def undeclared = SchemaDeclaredFields.undeclared(kind, WireJson.valueToTree(sample))
+            assert undeclared.isEmpty(): "${type.simpleName} writes fields the ${kind} schema does not declare: ${undeclared}"
+            true
+        }
+
+        where:
+        type | kind | samples
+        ExecutorRequest | WireDocument.REQUEST | WireSamples.requests()
+        ExecutorResult | WireDocument.RESULT | WireSamples.results()
+        Answer | WireDocument.ANSWER | WireSamples.answers()
+        Describe | WireDocument.DESCRIBE | WireSamples.describes()
+    }
+
+    // Scenario: executor/conformance-kit / Drift between DTO and schema is red
+    def "FR1: a field the schema does not declare is named by its path, which validation alone would admit"() {
+        given: 'a written result with fields planted where a grown DTO would write them'
+        def written = (ObjectNode) WireJson.valueToTree(WireSamples.results()[0])
+        written.put('priority', 3)
+        ((ObjectNode) written.get('usage')).put('currency', 'USD')
+        ((ObjectNode) written.get('usage').get('models').get('m')).put('reasoning', 7)
+
+        expect: 'the schema accepts it, since additional properties stay open for newer executors'
+        WireSchemas.judge(WireDocument.RESULT, written.toString()).isEmpty()
+
+        and: 'the drift check names each field the schema never declares'
+        SchemaDeclaredFields.undeclared(WireDocument.RESULT, written) as Set ==
+                [
+                    '$.priority',
+                    '$.usage.currency',
+                    '$.usage.models.m.reasoning'
+                ] as Set
     }
 
     def "NFR-R3: every example of the #kind schema reads into #type.simpleName and writes back as itself"() {

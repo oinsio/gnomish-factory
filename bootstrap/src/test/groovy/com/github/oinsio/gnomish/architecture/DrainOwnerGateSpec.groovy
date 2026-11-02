@@ -9,15 +9,17 @@ import spock.lang.Specification
  * through one drain, {@code Drain} of {@code :subprocess}, with the post-exit bound its supervisor
  * derives — and the cut flag of a capture is judged by one owner, never read and dropped by a caller.
  *
- * <p><b>M12.</b> The six readers of a child's output — {@code CaptureRunner}, {@code GitExec},
- * {@code CapturedExec}, {@code BoundedTail}, {@code ContainerFileChannel}, {@code StreamDrain} (the
+ * <p><b>M12.</b> The readers of a child's output — {@code CaptureRunner}, {@code GitExec},
+ * {@code CapturedExec}, {@code BoundedCapture}, {@code BoundedTail}, {@code ContainerFileChannel}, {@code StreamDrain} (the
  * design's Drain row) — spell no unbounded join ({@code .join()} on a thread or a future) and no
  * {@code Duration.of…} literal, since the bound is the supervisor's or the handle's, never a
  * reader's own constant; and {@code ExecPipeDrain}, the second drain implementation task 8.12
  * deleted, appears nowhere. The allowlist of unbounded joins is empty: {@code BoundedTail}'s future
  * join, its last entry, left with task 8.15, which put the tail on the owner's drain joined with the
  * handle's bound, and {@code StreamDrain}'s {@code CLOSE_JOIN} left with task 8.14, so no reader
- * holds a bound of its own.
+ * holds a bound of its own. Only a listed reader starts a {@code Drain} (design D9 of
+ * define-executor-contract), so a bounded read of an exec takes {@code BoundedCapture} rather than a
+ * fresh copy of its sequence.
  *
  * <p><b>M16.</b> {@code Captured.truncated()} is read by no production source: {@code
  * CaptureRunner.await} turns a cut clean exit into {@code CutCaptureException} and every other
@@ -44,12 +46,17 @@ class DrainOwnerGateSpec extends Specification {
         'subprocess/src/main/java/com/github/oinsio/gnomish/subprocess/CaptureRunner.java': 'drains stdout and stderr as ChildOutput on two Drains',
         'gitobjects/src/main/java/com/github/oinsio/gnomish/gitobjects/GitExec.java': 'drains stdout (capped or not) and stderr as ChildOutput on Drains',
         'sandbox/core/src/main/java/com/github/oinsio/gnomish/sandbox/CapturedExec.java': 'drains the ExecHandle\'s ChildOutput on one Drain',
+        // Design D9 of define-executor-contract: the one bounded capture of an exec, which the describe,
+        // a non-streaming program run and the working-copy view take instead of a drain of their own.
+        'sandbox/core/src/main/java/com/github/oinsio/gnomish/sandbox/BoundedCapture.java': 'drains the ExecHandle\'s ChildOutput on one capped Drain under the handle\'s bounded wait',
         'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/BoundedTail.java': 'keeps the tail of the ExecHandle\'s ChildOutput on one Drain',
         'sandbox/docker/src/main/java/com/github/oinsio/gnomish/sandbox/environment/ContainerFileChannel.java': 'drains the exec\'s stdout and stderr as ChildOutput on two Drains',
         'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/StreamDrain.java': 'reads lines from the ChildOutput\'s stream view, the owner\'s pull form',
         // Task 7.1 of define-executor-contract: the live progress reader of a streams_progress program run.
         'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/program/ProgressLines.java': 'reads progress lines from the ChildOutput\'s stream view, the owner\'s pull form',
     ]
+
+    private static final Pattern DRAIN_START = ~/\bDrain\s*\.\s*(start|capped|into)\s*\(/
 
     private static final Pattern UNBOUNDED_JOIN = ~/\.\s*join\s*\(\s*\)/
     private static final Pattern DURATION_LITERAL = ~/\bDuration\s*\.\s*of\w*\s*\(/
@@ -78,6 +85,21 @@ class DrainOwnerGateSpec extends Specification {
         readers().findAll {
             DURATION_LITERAL.matcher(code(it)).find()
         } == []
+    }
+
+    // Design D9 of define-executor-contract: a caller that starts a drain of its own writes the
+    // capture sequence a further time; it takes CapturedExec or BoundedCapture, or joins the readers.
+    def "M12: only a listed reader starts a drain on a child's output"() {
+        given:
+        def production = RepoSourceTree.productionSources()
+        assert production.size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
+        def starters = production.findAll {
+            DRAIN_START.matcher(RepoSourceTree.code(it)).find()
+        }.collect { RepoSourceTree.relative(it) }
+
+        expect: 'every starter is a reader, and the bounded capture the program paths share is one of them'
+        readers().containsAll(starters)
+        starters.contains('sandbox/core/src/main/java/com/github/oinsio/gnomish/sandbox/BoundedCapture.java')
     }
 
     def "M12: the deleted second drain implementation appears in no source"() {
@@ -124,6 +146,10 @@ class DrainOwnerGateSpec extends Specification {
         'a seconds literal' | DURATION_LITERAL | 'Duration.ofSeconds(1)' || true
         'a millis literal' | DURATION_LITERAL | 'Duration . ofMillis (5)' || true
         'a derived bound' | DURATION_LITERAL | 'supervisor.postExitBound()' || false
+        'a capped drain' | DRAIN_START | 'Drain.capped(handle.output(), "x", 4)' || true
+        'a drain into a sink' | DRAIN_START | 'Drain . into (output, "x", sink)' || true
+        'a drain join' | DRAIN_START | 'Drain.joinAll(bound, drain)' || false
+        'a stream drain' | DRAIN_START | 'StreamDrain.start(output, clock, listener)' || false
         'a flag read' | FLAG_READ | 'if (captured.truncated()) {' || true
         'a flag reference' | FLAG_READ | 'map(Captured::truncated)' || true
         'a different accessor' | FLAG_READ | 'captured.stdout()' || false

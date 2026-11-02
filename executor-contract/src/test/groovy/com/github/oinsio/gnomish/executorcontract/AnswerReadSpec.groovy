@@ -65,6 +65,8 @@ class AnswerReadSpec extends Specification {
         }
     }
 
+    // Scenario: executor/wire-contract / Malformed verdict is cannot-verify
+    // Scenario: executor/wire-contract / Decision request with one option is malformed
     def "FR3: a malformed answer #json reads as Malformed with the reason '#reason'"() {
         expect:
         read(json) == new AnswerReading.Malformed(t(reason))

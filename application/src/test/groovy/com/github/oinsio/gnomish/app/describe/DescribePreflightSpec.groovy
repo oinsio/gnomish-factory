@@ -116,6 +116,8 @@ class DescribePreflightSpec extends DescribePreflightSpecBase {
         'control-chars' || 'the describe answer carries a control character in a text field'
     }
 
+    // The PT0.2S describe bound is waited out on the wall clock: the subject is the kill of a real
+    // process at the bound. The 'stall' preset never exits on its own, so the outcome needs no order.
     def "FR4, UX1: a program the environment cannot start, or a describe killed at the bound, is a located external failure"() {
         when:
         def bounds = new ProgramBounds(Duration.ofMillis(200), Duration.ofMinutes(5), Duration.ofMinutes(30))

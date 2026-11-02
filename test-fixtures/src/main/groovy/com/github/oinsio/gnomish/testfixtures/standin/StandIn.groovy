@@ -106,7 +106,7 @@ final class StandIn {
     }
 
     /**
-     * A process-shaped fake the supervisor specs run as it is:a section of the {@code process}
+     * A process-shaped fake the supervisor specs run as it is: a section of the {@code process}
      * table when a row states its behaviour (an exit code, a delay, a stall), and otherwise a
      * committed script under the library's {@code process/} directory — a child that ignores a
      * signal, forks or keeps a pipe open, behaviour that is the subject of those specs and that no

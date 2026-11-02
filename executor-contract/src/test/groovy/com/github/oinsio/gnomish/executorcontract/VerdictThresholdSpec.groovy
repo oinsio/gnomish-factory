@@ -46,6 +46,7 @@ class VerdictThresholdSpec extends Specification {
         verb = passes ? 'passes' : 'fails'
     }
 
+    // Scenario: executor/wire-contract / Verdict pass is derived, not declared
     def "FR3: a warning-only verdict passes an error threshold with its findings kept as advisory"() {
         given:
         def read = WireJson.answer(WireJson.readTree(

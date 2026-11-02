@@ -5,12 +5,12 @@ import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
 import com.github.oinsio.gnomish.executorcontract.Policy;
 import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.gittransfer.GitInvocation;
+import com.github.oinsio.gnomish.sandbox.BoundedCapture;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.StderrPolicy;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
-import com.github.oinsio.gnomish.subprocess.Drain;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 import java.time.InstantSource;
@@ -103,23 +103,19 @@ final class WorkingCopyCheck {
                     + UntrustedText.subprocess(String.valueOf(refused.getMessage()))
                             .excerpt(512));
         }
-        Drain output = Drain.capped(handle.output(), "working-copy-view", VIEW_CAP_BYTES + 1L);
-        ExecHandle.Wait wait = handle.waitForExitOrTimeout(bound, clock);
-        boolean cut = Drain.joinAll(handle.postExitBound(), output);
-        String text = output.captured();
-        return switch (wait) {
+        BoundedCapture output = BoundedCapture.of(handle, "working-copy-view", VIEW_CAP_BYTES + 1L, bound, clock);
+        return switch (output.ended()) {
             case ExecHandle.Wait.TimedOut ignored ->
                 new WorkingCopyView.Unreadable("git status did not finish within " + bound);
             case ExecHandle.Wait.Interrupted ignored ->
                 new WorkingCopyView.Unreadable("the wait for git status was interrupted");
-            case ExecHandle.Wait.Exited ignored -> exited(handle.waitForExit(), text, cut || output.overflowed());
+            case ExecHandle.Wait.Exited ignored -> exited(handle.waitForExit(), output.output(), output.incomplete());
         };
     }
 
-    private static WorkingCopyView exited(int exitCode, String text, boolean incomplete) {
+    private static WorkingCopyView exited(int exitCode, UntrustedText text, boolean incomplete) {
         if (exitCode != 0) {
-            return new WorkingCopyView.Unreadable("git status exited " + exitCode + ": "
-                    + UntrustedText.subprocess(text).excerpt(512));
+            return new WorkingCopyView.Unreadable("git status exited " + exitCode + ": " + text.excerpt(512));
         }
         if (incomplete) {
             return new WorkingCopyView.Unreadable(

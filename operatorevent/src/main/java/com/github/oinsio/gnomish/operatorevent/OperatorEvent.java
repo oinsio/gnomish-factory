@@ -333,8 +333,9 @@ public enum OperatorEvent {
     // invalid law is, one ERROR naming the law and the count of located errors.
     TASK_LAW_UNDESCRIBED("GF186"),
     // program executor (define-executor-contract, FR5, design D3): a run whose describe declares
-    // streams_progress wrote a stdout line that is not JSON, a contract violation; the line is
-    // skipped, the first of a run at WARN and the rest at DEBUG.
+    // streams_progress wrote a stdout line that is not JSON, a contract violation, or one the
+    // 64 KiB line cap cut so it no longer parses (named as cut); the line is skipped, the first of
+    // a run at WARN and the rest at DEBUG.
     PROGRAM_PROGRESS_NOT_JSON("GF187");
 
     private final String code;

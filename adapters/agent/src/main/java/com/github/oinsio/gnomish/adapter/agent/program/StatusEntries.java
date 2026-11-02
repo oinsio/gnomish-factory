@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.program;
 
+import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -13,8 +15,13 @@ import java.util.Set;
  * fetch, not with the working copy. The entries stay strings compared whole: they are never
  * interpreted beyond naming a path, which is what makes them inert.
  *
+ * <p>It is the one reader of the captured view's bytes ({@code @UntrustedParser}): the strings it
+ * yields are compared whole and never shown to a reader as they stand — a path a refusal names is
+ * re-minted as a subprocess carrier and leaves through the log exit's excerpt.
+ *
  * <p>Implements FR11, NFR-S4 of define-executor-contract.
  */
+@UntrustedParser
 final class StatusEntries {
 
     private static final String HEADER = "# ";
@@ -24,12 +31,12 @@ final class StatusEntries {
     /**
      * The entries of one view.
      *
-     * @param porcelain git's NUL-separated output; never null
+     * @param porcelain git's NUL-separated output, as captured; never null
      * @return the entries in git's order; never null
      */
-    static Set<String> of(String porcelain) {
+    static Set<String> of(UntrustedText porcelain) {
         Set<String> entries = new LinkedHashSet<>();
-        for (String record : porcelain.split("\0", -1)) {
+        for (String record : porcelain.forParsing().split("\0", -1)) {
             boolean kept = !record.startsWith(HEADER)
                     || record.startsWith("# branch.oid ")
                     || record.startsWith("# branch.head ");

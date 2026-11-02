@@ -43,6 +43,10 @@ accepted, and an unknown token SHALL be read as `failed/infrastructure` naming t
 - **WHEN** a `transform` executor returns `pending` in this version
 - **THEN** the round is `failed/infrastructure` with a reason naming the unsupported pending
 
+#### Scenario: Pending with an unusable key fails closed
+- **WHEN** a result file carries `status: "pending"` with a `pendingKey` holding a control character (a NUL among them) or longer than 4096 characters
+- **THEN** the result reads as `failed/infrastructure` with a reason naming the unusable key, and no poll is spawned with it
+
 ### Requirement: Optional structured answer
 A result MAY carry one answer: `verdict` (SARIF 2.1.0 `runs[].results[]`; pass/fail derived by
 the engine from result levels against the check's threshold), `select` (`chosen`, optional

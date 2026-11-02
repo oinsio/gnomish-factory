@@ -116,8 +116,14 @@ same stderr file. `ProgramExecutor.poll` refuses, with no process spawned, a pro
 describe lacks `poll` (the `Executor` javadoc's precondition, made a result instead of an
 assumption) and a key this executor instance did not receive from its own `start` — pending keys
 are not persisted in this change (NG7), so a poll across instances has nothing to resume. The
-schemas do not change: the request is the same document and the key travels in the environment,
-as the result paths do. *Alternative rejected:* the key as a request field — it would make the
+request schema does not change: the request is the same document and the key travels in the environment,
+as the result paths do. Because the key travels whole in an environment variable, it is bounded
+where it is read (added 2026-11-02 after the implementation audit): `PendingKey` refuses an ISO control
+character (a NUL makes every process launch throw before the program starts) and more than 4096
+characters (the variable rides every poll's environment), the result schema's `pendingKey` states
+the same bound (`maxLength`, `pattern`), and the result reading turns such a key into
+`failed/infrastructure` naming it (NFR-R3), so no poll is ever spawned with it. *Alternative
+rejected:* the key as a request field — it would make the
 request schema differ by operation, and a schema file is the one source of truth
 (`conformance-kit`); the environment already carries the per-operation facts.
 
@@ -144,7 +150,8 @@ the container paths right after `FirstBoxStep.makeLive`, the point ADR 0019 (dec
 already names; on the host paths on the host environment after the law is bound — `describe`
 runs once per declared `program` executor through `TaskExecutionEnvironment.exec`, bounded by
 the startup read timeout, its output read under the result-reader rules (D10), cached for the
-run by law commit. *How describe is invoked* (added 2026-10-31; no artifact said it): the
+run by the program's declared argv (one preflight instance per run, whose law is one law commit;
+two executors over one program are described by one process). *How describe is invoked* (added 2026-10-31; no artifact said it): the
 program's declared argv with the word `describe` appended as its last argument, no request on
 stdin (stdin is the launch owner's empty source, ADR 0018), the answer written to the file the
 `GNOMISH_RESULT_FILE` variable names under the environment's scratch area, read under the
@@ -273,6 +280,21 @@ resolves `stage.executor()` against an `ExecutorRegistry` (`Map<ExecutorName, Ex
   `usage-wire` package (rule of three). The round commit subject is derived from the record,
   so no subject ↔ record pair arises. `report.sh` stops aggregating, so no script ↔ fold pair
   arises.
+- *Bounded capture (added 2026-11-02, audit of the implementation, recommendation 3):* the
+  short bounded read of an exec — a capped `Drain`, `ExecHandle.waitForExitOrTimeout`, the
+  join with the handle's `postExitBound`, then a switch on the `Wait` — was written by hand in
+  three places (`ProgramDescribe`, the non-streaming arm of `ProgramInvocation`,
+  `WorkingCopyCheck.view`), with no marker. Rule of three: not declared as a triple, extracted
+  into one owner, `BoundedCapture` (`:sandbox:core`, beside `CapturedExec`; the one module both
+  `:application` and `:adapters:agent` reach), returning the wait as it ended, the captured
+  prefix and `incomplete` (cut at the post-exit bound, or over the cap). It judges nothing: each
+  caller maps the `Wait` to its own outcome, and only `WorkingCopyCheck` refuses an incomplete
+  capture (the other two keep a log). Not routed through it, each for a stated difference:
+  `CapturedExec` (unbounded supervised wait, and it judges the cut through
+  `CutCaptureException.refuses`), `CommandProcessRunner` with `BoundedTail` (a line tail, not a
+  capped prefix, and its timing report sits between the wait and the join),
+  `ProgressLines`/`ProgressWait`, `StreamDrain` (live line readers with their own waits). The
+  owner row is in D10.
 
 **D10 — Single-owner mechanisms.**
 
@@ -286,7 +308,8 @@ resolves `stage.executor()` against an `ExecutorRegistry` (`Map<ExecutorName, Ex
 | `Describe` (`executor-contract`)                                              | `Describe` record (credentials, egress, schema, version)                                                                                                                                                                                                                                                                                                                                                  | the `program` child's credential grant — its **own resolved layer** built from `ExecutorCredentialNames` through the allowlist's `ChildEnvValues` (ADR 0017), resolved by `ChildEnvAllowlist.programGrant()` (`ProgramCredentialGrant`, which exposes no value-source accessor; added by task 6.4), never the allowlist's `declaring`/`credentialNames` set, which `compose` and `resolve` strip (`ChildEnvAllowlist:140,161`: that set is the *withheld* names); the describe preflight (D5 phase b); egress allowlist union (`ExecutorEgress.union`, from the law's declarations, checked against describe before the first round; host grammar single-owned by `EgressEntries` in `:sandbox:core`) | `AgentAiSeam` hard-coded names stay for `agent-cli` until `extract-agent-round-runner` (exempt, named); `AgentSettingsValidator` keeps the load-time key check of `agent-cli` stages and judge checks only — `agent-cli` has no describe until `extract-agent-round-runner` (exempt, named); `program` settings are judged by `SettingsSchema` (`executor-contract`) alone; no `System.getenv` and no `ChildEnvAllowlist.of` without a value source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `credentialEnvVars` union takes `Describe`-derived names only for `program` executors; identity spec: the names the law grants equal the names the child environment receives, and a sibling `command` check receives none (`ProgramCredentialDeliverySpec`, real box)                                                                                                                                                                                           |
 | Describe preflight (`RunAssembly.describe`, `application`; added by task 6.2) | `LawDescription` (sealed: `DescribedLaw` carrying `DescribedExecutors`, or `Refused(List<ConfigError>)`)                                                                                                                                                                                                                                                                                                  | every run assembly: take host and container, fresh and resume; `run` git-mode host, container, in-place, resume (serve slots through the take paths); `EnginePorts` and the round record take the obtained versions from `DescribedLaw`                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `RunAssembler`'s `DescribedExecutors.none()` removed; `RunAssembly.assemble` no longer takes a `LawBinding`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `assemble(DescribedLaw, …)` parameter type with a package-private `DescribedLaw` constructor; `DescribedLawOwnerSpec` (`:bootstrap`) pins `new DescribedLaw(` and `DescribedExecutors.none()` in production to the owner; identity spec `ExecutorVersionPinFlowSpec` (bare origin)                                                                                                                                                                               |
 
-| `UsageFold` (`domain/engine`) | `UsageSnapshot` (role × model × kind, cost lower bound, `rounds`, `through`) | `TaskState` round writers (`recordRound`, `recordUnburnedRound`, `recordPassAndAdvance`), `UsageHistoryWalker` / `UsageCommand` (re-fold check), `ExecutorOutcomeClassifier` (budget), `UsageTextRenderer` / `UsageMarkdownRenderer` (display sums), the ledger's `taskOutcome` line and run summary (`TaskSummaryAssembler:75`, `RunSummaryAccumulator:70`, `SummaryAccumulatorListener:104` take the snapshot's per-model map — consumers of the fold, never a second sum) | `TaskState.totals.plus(executorUsage)` and `ExecutorUsage.plus`; `UsageTotals.of` deleted; `report.sh` jq `add_tokens` deleted; `UsageTextRenderer`'s own per-row sums routed through the fold. Exempt, named: `LedgerAggregator.sum` (`dashboard`, `:141-158`) adds the ledger lines' own `tokensByModel` for the dashboard's day view over JSON with no domain types — a display over already-folded snapshots, the one `merge(` the gate allowlists | `UsageFoldOwnerBoundarySpec` in `:bootstrap`: no `TokenUsage::plus`, `TokenUsage.plus(`, cost addition, `tokensByModel().merge(` or `LedgerTokenUsage` summation outside `UsageFold` and the allowlisted `LedgerAggregator`; `.gnomish/stages/**` scripts contain no `jq` `reduce` over `tokensByModel`; scan asserts every allowlisted file reached |
+| `UsageFold` (`domain/engine`) | `UsageSnapshot` (role × model × kind, cost lower bound, `rounds`, `through`) | `TaskState` round writers (`recordUnburnedRound`, `recordQualityFailure`, `recordPassAndAdvance`, each through the one private writer that calls `UsageFold.fold`), `UsageHistoryWalker` / `UsageCommand` (re-fold check), `ExecutorOutcomeClassifier` (budget), `UsageTextRenderer` / `UsageMarkdownRenderer` (display sums), the ledger's `taskOutcome` line and run summary (`TaskSummaryAssembler:75`, `RunSummaryAccumulator:70`, `SummaryAccumulatorListener:104` take the snapshot's per-model map — consumers of the fold, never a second sum) | `TaskState.totals.plus(executorUsage)` and `ExecutorUsage.plus`; `UsageTotals.of` deleted; `report.sh` jq `add_tokens` deleted; `UsageTextRenderer`'s own per-row sums routed through the fold. Exempt, named: `LedgerAggregator.sum` (`dashboard`, `:141-158`) adds the ledger lines' own `tokensByModel` for the dashboard's day view over JSON with no domain types — a display over already-folded snapshots, the one `merge(` the gate allowlists | `UsageFoldOwnerBoundarySpec` in `:bootstrap`: no `TokenUsage::plus`, `TokenUsage.plus(`, cost addition, `tokensByModel().merge(` or `LedgerTokenUsage` summation outside `UsageFold` and the allowlisted `LedgerAggregator`; `.gnomish/stages/**` scripts contain no `jq` `reduce` over `tokensByModel`; scan asserts every allowlisted file reached |
+| `BoundedCapture` (`:sandbox:core`; added 2026-11-02, D9) | `BoundedCapture(Wait ended, String output, boolean incomplete)` — one short bounded read of an exec | `ProgramDescribe` (application, the describe preflight), `ProgramInvocation` (adapters/agent, a run without `streams_progress`), `WorkingCopyCheck.view` (adapters/agent) | the three hand-written `Drain.capped` → `waitForExitOrTimeout` → `Drain.joinAll` sequences; exempt, each with its difference named in D9: `CapturedExec`, `BoundedTail`/`CommandProcessRunner`, `ProgressLines`/`ProgressWait`, `StreamDrain` | `DrainOwnerGateSpec` in `:bootstrap`: `Drain.start(`/`capped(`/`into(` appears in production only in its listed readers, `BoundedCapture` among them (scan asserted to reach the whole production tree) |
 | `AttemptRecord` identity (`CurrentRound` → engine → record) | `RoundToken`, `taskId`, `stage` on `AttemptRecord` | `ServiceCommitMessages.round`, `UsageHistoryWalker`, `TraceLineWriter.relativePath`, `UsageFold` (`through`) | `grewFrom` and the `position` read in `UsageHistoryWalker.detectNewRound`; `ServiceCommitMessages.round(String, int)`; `HostRoundEnvironmentSource` opening a round with no token | parameter type: `round(AttemptRecord)`; `UsageHistoryWalker` has no `position()` call on the attribution path (grep gate); `CurrentRound` holds a token in both branch modes, in-place none (spec on the real host flow) |
 | `usage-wire` DTOs (`executor-contract`) | `ParticipantUsageDto`, `UsageSnapshotDto` | `StateJsonMapper` (adapters/git), `StatusReportJsonMapper` (application/status), `UsageReportJsonMapper` (application/usage), all through the one domain ↔ wire mapper `ParticipantUsageWire` (`application`, `usage.wire`; the contract cannot see the domain); the engine's `ExecutionFinished` event carries the domain `ParticipantUsage` (added during task 5.2) | `StateUsageMapper`, `status/json/UsageMapper`, `usage/json` per-tree copies deleted | one package; `values()` round-trip spec over every wire token; `status-report-v1.reference.json` regenerated from the new shape |
 
@@ -373,8 +396,8 @@ reader that takes it for one.
 
 **D15 — `totals` is a snapshot of one fold, checked, with a position.** (FR17, FR18, NFR-O3.)
 `UsageFold` in `domain/engine` is the one pure fold: `fold(snapshot, round)` and
-`foldAll(rounds)`. `TaskState`'s round writers (`recordRound`, `recordPassAndAdvance`, the
-unburned variant) compute `totals = fold(totals, round)` through it; the lifecycle rewrites
+`foldAll(rounds)`. `TaskState`'s round writers (`recordUnburnedRound`, `recordQualityFailure`,
+`recordPassAndAdvance`) compute `totals = fold(totals, round)` through it; the lifecycle rewrites
 (advance, decision reset, resume) carry the snapshot unchanged. The snapshot is role × model ×
 token kind, `cost = {priced, unpricedTokens (role × model), complete}`, `rounds` (count folded)
 and `through` (the last folded round token). `through` is the fold's idempotency key: folding a
@@ -486,11 +509,54 @@ output, stderr noise, non-JSON stdout — are reported not applicable, since no 
 process exist to break; the describe case judges the double's `Describe` written back through
 the contract's writer against the describe schema, so a double that declares no role fails it.
 
+**D20 — Files above the 200-line cap that this change grew (added 2026-11-02, after
+recommendation 7 of the implementation audit).** `process-invariants.md` allows a file over 200
+lines only where a split would hurt clarity, and a split must move a responsibility. One file
+crossed the cap in this change and is split; the rest are recorded here, each with its count
+before → after this change and why it stays, or the change that must split it first.
+*Split:* `TokenUsageMapper` (162 → 201 → 171): the acceptance rule for the CLI's `costUSD` (absent
+is silent and unpriced; not a finite non-negative number is unpriced with a DEBUG trace; never a
+zero, never derived — FR22, NG10) is its own class, `ReportedCost` (57), which the mapper calls per
+`modelUsage` entry; the mapper keeps the wire-shape choice, the model-key gate and the merge.
+*Accepted, with the change that splits them:*
+- `StandIn.groovy` (199 → 217): the growth is the `executor` selector, whose `break-<case>`
+  alias is a JVM link and so needs the private link registry (`LINKS`, `Holder.DIR`). The proposed
+  `StandInExecutors` would either read that registry from outside or create links itself, a second
+  link creator beside the one owner `StandInOwnerSpec` pins (`OWNER`). The real seam is the
+  per-run link half (`recording`, `link`, `repoint`, `beside`, `log`, about 60 lines, used by over
+  fifty specs and named in `testing.md`), an API move of its own. *Pickup condition:* the next
+  change that adds a selector or a per-run link form to `StandIn` extracts the per-run half first,
+  with `StandInOwnerSpec`'s owner widened to the pair.
+- `RunAssembly.java` (204 → 227, an interface): the growth is the `describe` member (D5) and its
+  javadoc. *Pickup condition:* the next change that adds a member to `RunAssembly` first moves
+  `describe` into a role interface of its own that `ManualRunAssembly` implements.
+- `ManualRunAssembly.java` (290 → 297): the `describe` delegation to `RunDescribe` and the
+  `DescribedLaw` parameter. Same pickup condition as `RunAssembly`, in the same change.
+- `EngineEvent.java` (199 → 203): the sealed set of event records; `ExecutionFinished` gained the
+  executor and the status (FR15, UX3). *Pickup condition:* the next change that adds a variant
+  moves the records out to top-level permitted classes.
+- `StateJsonMapper.java` (240 → 264): the round identity and the required usage entry on the
+  attempt read (FR14, FR17); the version pin already went to `StateExecutorVersionsMapper`.
+  *Pickup condition:* the next change that adds a field to the `state.json` attempt moves the
+  attempt-record mapping out, as the version pin was.
+- `LedgerJsonMapper.java` (255 → 260) and `ContainerRunSupport.java` (308 → 313): one dispatch
+  arm (the `roundOutcome` line, mapped by `RoundOutcomeLineMapper`) and one `liveEnvironment`
+  override; both were over the cap before this change, and a split is not this change's subject.
+  *Pickup condition:* the next change that adds a line type to the ledger, or a member to
+  `ContainerRunSupport`, splits the file by responsibility first.
+- `OperatorEvent.java` (339 → 360): the operator catalog, one constant per WARN/ERROR site,
+  additive only (`logging.md`); its size is the number of sites, and `LogContractGateSpec` reads one
+  catalog. Accepted without a pickup condition.
+`TaskState.java` (208 → 204) shrank in this change and needs no entry. *Alternative rejected:*
+splitting every file under the cap now — for `OperatorEvent` it would split one numbering, and for
+the others the splits named above are API moves outside the executor contract, which
+`process-invariants.md` ("one change = one initiative") keeps out of this change.
+
 - [The contract is defined before its heaviest consumer (Claude) uses it] → the `program`
   executor and the kit exercise every field now; `extract-agent-round-runner` is the next
   change in the sequence, and D9 names its exemptions so they cannot be forgotten.
 - [The describe preflight spawns a process per declared executor per run] → bounded by the
-  startup read timeout; cached for the run by law commit; it runs once per claimed run, in the
+  startup read timeout; cached for the run by declared argv; it runs once per claimed run, in the
   box the run already owns.
 - [JRE or runtime needed in the image for a Java-written executor] → the reference executor
   is a POSIX stand-in preset (D18); image contents belong to the sandbox image contract

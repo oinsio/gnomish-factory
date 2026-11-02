@@ -2,13 +2,12 @@ package com.github.oinsio.gnomish.adapter.agent.program;
 
 import com.github.oinsio.gnomish.app.describe.ProgramBounds;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
+import com.github.oinsio.gnomish.sandbox.BoundedCapture;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
-import com.github.oinsio.gnomish.subprocess.Drain;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,13 +17,15 @@ import org.slf4j.LoggerFactory;
  * its request on standard input as the command's stdin — which the launch owner hands the child as
  * a file, never a pipe a factory thread writes into — its stderr to the file the caller's policy
  * names, its stdout a capped log. Without {@code streams_progress} stdout is read by the one bounded
- * drain ({@link Drain#capped}) and the wait is bounded by the overall bound alone; with it, stdout is
+ * capture ({@link BoundedCapture}) and the wait is bounded by the overall bound alone; with it, stdout is
  * read live by {@link ProgressLines} and {@link ProgressWait} applies the silence bound too. The
  * handle kills the process tree when a bound expires; this class owns no reader, pump or close of a
  * child's pipe, and joins each drain with the handle's post-exit bound only.
  *
- * <p>Stdout is never parsed: what a run printed is one DEBUG line, at most {@link #STDOUT_CAP_BYTES}
- * bytes and {@link #STDOUT_LINE_CAP} lines of it.
+ * <p>Stdout is never parsed: what a run printed is captured as a carrier, at most {@link
+ * #STDOUT_CAP_BYTES} bytes of it, and leaves it only through the log exit — one DEBUG line, flattened
+ * and bounded to the tail by {@link UntrustedText#forLog()}, so the log record is one line however
+ * many lines the run printed.
  *
  * <p>Implements FR5, NFR-O2, NFR-R2 of define-executor-contract.
  */
@@ -32,9 +33,6 @@ final class ProgramInvocation {
 
     /** The most bytes of a non-streaming run's stdout kept for its log line. */
     static final int STDOUT_CAP_BYTES = 64 * 1024;
-
-    /** The most lines of a run's stdout its log line carries. */
-    static final int STDOUT_LINE_CAP = 200;
 
     private static final Logger log = LoggerFactory.getLogger(ProgramInvocation.class);
 
@@ -72,26 +70,23 @@ final class ProgramInvocation {
                 return end;
             }
         }
-        Drain stdout = Drain.capped(handle.output(), "program-stdout", STDOUT_CAP_BYTES);
-        ExecHandle.Wait wait = handle.waitForExitOrTimeout(bounds.overall(), time.clock());
-        Drain.joinAll(handle.postExitBound(), stdout);
-        logStdout(executor, stdout.captured());
-        return switch (wait) {
+        BoundedCapture stdout =
+                BoundedCapture.of(handle, "program-stdout", STDOUT_CAP_BYTES, bounds.overall(), time.clock());
+        logStdout(executor, stdout.output());
+        return switch (stdout.ended()) {
             case ExecHandle.Wait.Exited exited -> new ProgramEnd.Exited(handle.waitForExit(), exited.wallTime());
             case ExecHandle.Wait.TimedOut ignored -> new ProgramEnd.BoundExpired("overall", bounds.overall());
             case ExecHandle.Wait.Interrupted ignored -> new ProgramEnd.Interrupted();
         };
     }
 
-    private static void logStdout(String executor, String captured) {
+    private static void logStdout(String executor, UntrustedText captured) {
         if (captured.isBlank()) {
             return;
         }
-        List<String> lines = captured.lines().limit(STDOUT_LINE_CAP).toList();
         log.debug(
-                "program executor '{}' wrote on stdout (a log, never its result), first {} lines at most: {}",
+                "program executor '{}' wrote on stdout (a log, never its result), its tail: {}",
                 executor,
-                STDOUT_LINE_CAP,
-                UntrustedText.subprocess(String.join("\n", lines)).forLog());
+                captured.forLog());
     }
 }

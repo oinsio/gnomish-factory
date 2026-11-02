@@ -11,8 +11,9 @@ import org.jspecify.annotations.Nullable;
 /**
  * How a written result becomes an {@link ExecutorResult}: the unknown-token arms of the status
  * taxonomy. A status the taxonomy lacks (or none), a {@code failed} with no known class and a
- * {@code pending} with no key each read as {@code failed/infrastructure}, with a reason naming what
- * was wrong ahead of the executor's own reason. A field another status carries is dropped; an absent
+ * {@code pending} with no usable key (blank, or one {@link PendingKey#unusable} names) each read as
+ * {@code failed/infrastructure}, with a reason naming what was wrong ahead of the executor's own
+ * reason. A field another status carries is dropped; an absent
  * usage reads as {@link UsageProvenance#ABSENT}, absent denials as none, and a JSON {@code null}
  * answer as no answer. The answer itself is carried unread.
  *
@@ -46,6 +47,10 @@ final class ResultReading extends StdConverter<WrittenResult, ExecutorResult> {
         String key = written.pendingKey();
         if (key == null || key.isBlank()) {
             return carried.infrastructure("status pending without a pendingKey");
+        }
+        String unusable = PendingKey.unusable(key);
+        if (unusable != null) {
+            return carried.infrastructure("status pending with an unusable pendingKey: " + unusable);
         }
         return carried.as(Status.PENDING, null, new PendingKey(key));
     }

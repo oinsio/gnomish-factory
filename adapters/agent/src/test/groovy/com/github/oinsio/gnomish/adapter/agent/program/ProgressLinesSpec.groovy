@@ -84,6 +84,28 @@ class ProgressLinesSpec extends Specification {
         logs.list.any { it.formattedMessage.contains('progress: {"step":3}') }
     }
 
+    // FR5, NFR-O2: a cut line is reported as cut, not as a line that is not JSON — at WARN first, at DEBUG after
+    def "FR5: a line past the line cap that no longer parses is named as cut, at WARN first and at DEBUG after"() {
+        given:
+        def overlong = '{"a":"' + 'x' * (ProgressLines.LINE_CAP_BYTES + 10) + '"}'
+
+        when:
+        read(overlong + '\n' + overlong + '\nnot json\n')
+
+        then:
+        def warns = logs.list.findAll { it.level == Level.WARN }
+        warns.size() == 1
+        warns[0].formattedMessage.startsWith(OperatorEvent.PROGRAM_PROGRESS_NOT_JSON.head())
+        warns[0].formattedMessage.contains('over 64 KiB that was cut')
+        !warns[0].formattedMessage.contains('not JSON')
+        logs.list.any {
+            it.level == Level.DEBUG && it.formattedMessage.contains('another progress line over 64 KiB that was cut')
+        }
+        logs.list.any {
+            it.level == Level.DEBUG && it.formattedMessage.contains('another non-JSON progress line: not json')
+        }
+    }
+
     // FR5: a single violation is its WARN alone, with no count line; a last line without a line break is still judged
     def "FR5: one non-JSON line is one WARN and no count, and a last line with no line break is judged"() {
         when:

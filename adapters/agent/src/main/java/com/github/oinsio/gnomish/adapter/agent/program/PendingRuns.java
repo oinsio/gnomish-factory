@@ -13,12 +13,15 @@ import org.jspecify.annotations.Nullable;
  * (FR23 of define-executor-contract; design D3, D6): one entry per pending key the instance received
  * from a {@code start} or a {@code poll} of its own, carrying the working-copy view taken before the
  * run's {@code start} when the run is a {@code verdict} or {@code decision} — the view the poll that
- * ends the run is judged against. An entry is moved to the new key when a poll returns {@code
- * pending} again, and removed at the poll that ends the run. Pending keys are not persisted in this
- * change (proposal NG7): a key another instance issued is unknown here, and its poll is refused.
+ * ends the run is judged against. A poll {@linkplain #claim claims} its entry before it spawns, and
+ * the entry comes back under the new key only when the poll returns {@code pending} again; a poll
+ * that ends the run, or that throws, leaves it out. Pending keys are not persisted in this change
+ * (proposal NG7): a key another instance issued is unknown here, and its poll is refused.
  *
- * <p>The map is concurrent and nothing blocks while it is read or written ({@code lock-scope.md}): a
- * spawn runs between the lookup and the settling, with nothing held.
+ * <p>The map is concurrent and nothing blocks while it is read or written ({@code lock-scope.md}, the
+ * three-phase shape): the claim is the first phase, the spawn runs with nothing held, and the
+ * settling is the third. Because the claim removes the entry, a second poll of the same key while
+ * the first is spawning finds nothing and is refused, rather than spawning the program twice.
  *
  * <p>Implements FR23, FR11, NFR-S4 of define-executor-contract.
  */
@@ -35,28 +38,26 @@ final class PendingRuns {
     private final ConcurrentMap<PendingKey, Entry> runs = new ConcurrentHashMap<>();
 
     /**
-     * The pending run a key names.
+     * Takes the pending run a key names out of the map, for the one poll that continues it: from now
+     * on the key names nothing, until {@link #settled} records the poll's own {@code pending} key.
      *
      * @param key the key a poll carries; never null
-     * @return the run, or {@code null} when no operation of this instance returned the key
+     * @return the run, or {@code null} when no operation of this instance returned the key, or another
+     *     poll already claimed it
      */
     @Nullable
-    Entry of(PendingKey key) {
-        return runs.get(key);
+    Entry claim(PendingKey key) {
+        return runs.remove(key);
     }
 
     /**
-     * Records how an operation of a run settled: the key it was polled with, if any, no longer names
-     * the run, and a {@code pending} result's key names it from now on.
+     * Records how an operation of a run settled: a {@code pending} result's key names the run from
+     * now on; any other result leaves the run out, since it has ended.
      *
-     * @param polled the key the operation was a poll of, {@code null} for a start
      * @param entry the run; never null
      * @param result the operation's result; never null
      */
-    void settled(@Nullable PendingKey polled, Entry entry, ExecutorResult result) {
-        if (polled != null) {
-            runs.remove(polled);
-        }
+    void settled(Entry entry, ExecutorResult result) {
         if (result.status() == Status.PENDING) {
             runs.put(Objects.requireNonNull(result.pendingKey(), "pendingKey"), entry);
         }

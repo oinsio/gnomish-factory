@@ -16,8 +16,10 @@ import java.util.Map;
  * preflight did not describe, runs no described executor.
  *
  * <p>A run-held value with one producer, the describe preflight (task 6.2 of define-executor-contract
- * fills {@code all}); until then every run holds {@link #none()}, so nothing is pinned and nothing is
- * compared — the behaviour before the pin existed. Inert value data compared by content.
+ * fills {@code all}). A run whose law declares no {@code program} executor is described as empty,
+ * equal by content to {@link #none()}, so nothing is pinned and nothing is compared; {@link #none()}
+ * itself serves the engine assembled with no preflight ({@code EnginePorts}' in-place constructor).
+ * Inert value data compared by content.
  *
  * <p>Implements FR13, NFR-O2, NFR-S1, UX3 of define-executor-contract.
  *
@@ -35,7 +37,7 @@ public record DescribedExecutors(ExecutorVersions all, ExecutorCredentialNames c
     private static final DescribedExecutors NONE =
             new DescribedExecutors(ExecutorVersions.none(), ExecutorCredentialNames.none());
 
-    /** No executor described: a run with no {@code program} executor, or one before the preflight exists. */
+    /** No executor described: a run with no {@code program} executor, or an engine assembled with no preflight. */
     public static DescribedExecutors none() {
         return NONE;
     }

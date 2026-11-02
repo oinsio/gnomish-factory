@@ -69,6 +69,14 @@
   specs on the real wiring: a mixed pipeline resolves the command stage to the
   built-in, interactive mode still substitutes agent stages while the command stage
   runs its command (FR8, design D6)
+- [ ] 6.2 Reaching the registry entry (carried from D8 of `define-executor-contract`, as built):
+  `ExecutorDispatch` (`:bootstrap`) resolves only a `program` stage through `ExecutorRegistry`,
+  by its `executor.name`, and sends every other stage type to the `agent-cli` arm; and
+  `ExecutorDeclaration.Type` (`domain/pipeline`) holds `PROGRAM` only, its javadoc naming this
+  change as the one where a built-in id joins it. Design D6 states how a `command` stage reaches
+  the `command` entry without a type-keyed arm (the stage type mapped to the built-in name in the
+  dispatch, or a declared built-in id), and the two javadocs are brought to what is built; a spec
+  on the real wiring shows a `command` stage never reaches the agent arm (FR8, D6)
 
 ## 7. Integration, docs, and gates
 

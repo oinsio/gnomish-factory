@@ -4,13 +4,13 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorDeclaration;
 import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.executorcontract.ReadResult;
 import com.github.oinsio.gnomish.executorcontract.ResultFileReader;
+import com.github.oinsio.gnomish.sandbox.BoundedCapture;
 import com.github.oinsio.gnomish.sandbox.EgressEntries;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
 import com.github.oinsio.gnomish.sandbox.StderrPolicy;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
-import com.github.oinsio.gnomish.subprocess.Drain;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.InterruptedIOException;
@@ -27,7 +27,7 @@ import java.util.Map;
  * one process seam with the startup bound, its answer written to the factory-named file {@code
  * GNOMISH_RESULT_FILE} under the environment's scratch area and read through the one result-file
  * reader (cap, untrusted text); its stdout and stderr, merged, are a capped log read through the
- * one bounded child-output reader and never parsed.
+ * one bounded capture ({@link BoundedCapture}) and never parsed.
  *
  * <p>Every way the program fails to answer is one {@link ExecutorDescribeRefusedException}, thrown
  * without a log line and converted by the preflight into the located error the task parks with; an interrupted wait is not one — the run is being shut down, so it is reported
@@ -37,9 +37,6 @@ import java.util.Map;
  */
 @UntrustedParser
 final class ProgramDescribe {
-
-    /** The variable naming the file the program writes its answer to. */
-    static final String RESULT_FILE_VARIABLE = ProgramChannel.RESULT_FILE_VARIABLE;
 
     /** The describe answer's cap: 64 KiB, room for a settings schema. */
     static final int DESCRIBE_FILE_CAP_BYTES = 64 * 1024;
@@ -75,19 +72,17 @@ final class ProgramDescribe {
         List<String> argv = ProgramChannel.argv(declaration, ProgramChannel.DESCRIBE);
         ExecHandle handle;
         try {
-            handle = environment.exec(
-                    new ExecCommand(argv, Map.of(RESULT_FILE_VARIABLE, resultFile), null, StderrPolicy.MERGED));
+            handle = environment.exec(new ExecCommand(
+                    argv, Map.of(ProgramChannel.RESULT_FILE_VARIABLE, resultFile), null, StderrPolicy.MERGED));
         } catch (ProcessStartException absent) {
             throw ExecutorDescribeRefusedException.external(
                     name,
                     "the environment refused to start the program",
                     UntrustedText.subprocess(String.valueOf(absent.getMessage())));
         }
-        Drain log = Drain.capped(handle.output(), "describe-output", LOG_CAP_BYTES);
-        ExecHandle.Wait wait = handle.waitForExitOrTimeout(bound, clock);
-        Drain.joinAll(handle.postExitBound(), log);
-        UntrustedText output = UntrustedText.subprocess(log.captured());
-        return switch (wait) {
+        BoundedCapture log = BoundedCapture.of(handle, "describe-output", LOG_CAP_BYTES, bound, clock);
+        UntrustedText output = log.output();
+        return switch (log.ended()) {
             case ExecHandle.Wait.Interrupted ignored ->
                 throw new UncheckedIOException(new InterruptedIOException(
                         "describe of executor '" + name + "' was interrupted and its process tree killed"));
@@ -107,7 +102,7 @@ final class ProgramDescribe {
             case ReadResult.Parsed<Describe> parsed -> inert(name, parsed.value());
             case ReadResult.Absent<Describe> ignored ->
                 throw ExecutorDescribeRefusedException.configuration(
-                        name, "describe wrote no answer to " + RESULT_FILE_VARIABLE, output);
+                        name, "describe wrote no answer to " + ProgramChannel.RESULT_FILE_VARIABLE, output);
             case ReadResult.Truncated<Describe> ignored ->
                 throw ExecutorDescribeRefusedException.configuration(
                         name, "the describe answer exceeds " + DESCRIBE_FILE_CAP_BYTES + " bytes", null);

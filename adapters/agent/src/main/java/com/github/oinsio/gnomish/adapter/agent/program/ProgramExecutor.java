@@ -100,13 +100,19 @@ public final class ProgramExecutor implements Executor {
      *
      * <p>The poll that ends a {@code verdict} or {@code decision} run judges the working copy against
      * the view taken before its {@code start} (design D6).
+     *
+     * <p>The poll claims its run before it spawns ({@link PendingRuns#claim}): a second poll of the
+     * same key while this one runs is refused as an unknown key, and so is any poll of a key after a
+     * poll of it returned anything but {@code pending} — a {@code failed/infrastructure} included —
+     * or threw at a factory boundary; only the key a {@code pending} answer carries names the run
+     * again.
      */
     @Override
     public ExecutorResult poll(ExecutorRequest request, PendingKey key) {
         if (!describe.capabilities().contains(Capability.POLL)) {
             return refused("its describe declares no poll capability, so it cannot be polled");
         }
-        PendingRuns.Entry entry = pending.of(key);
+        PendingRuns.Entry entry = pending.claim(key);
         if (entry == null) {
             return refused(
                     "the pending key '" + UntrustedText.subprocess(key.value()).excerpt(256)
@@ -118,7 +124,7 @@ public final class ProgramExecutor implements Executor {
     private ExecutorResult settled(
             ExecutorRequest request, @Nullable PendingKey polled, PendingRuns.Entry entry, String operation) {
         ExecutorResult result = spawn.spawn(operation, request, polled);
-        pending.settled(polled, entry, result);
+        pending.settled(entry, result);
         WorkingCopyView.Taken before = entry.before();
         if (before == null || result.pendingKey() != null) {
             return result;

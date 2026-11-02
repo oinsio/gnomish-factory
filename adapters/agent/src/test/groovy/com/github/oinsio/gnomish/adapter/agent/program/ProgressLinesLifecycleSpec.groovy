@@ -27,6 +27,8 @@ class ProgressLinesLifecycleSpec extends Specification {
     }
 
     // NFR-R2: a stream that has not ended is not reported ended, with or without a wait
+    // The 20 ms is a real join on the reader thread, not virtual time; the negative outcome rests on
+    // the live FakeProcess, which never exits, so no wait length or thread order can make it pass.
     def "NFR-R2: a live stream is not ended after no wait and after a short one"() {
         expect:
         !lines.endsWithin(Duration.ZERO)
@@ -45,6 +47,7 @@ class ProgressLinesLifecycleSpec extends Specification {
     }
 
     // NFR-R2: a reader still reading at its post-exit bound is stopped and reported unfinished
+    // A real 20 ms join, as above: the stream cannot end before the bound, whatever the scheduling.
     def "NFR-R2: a reader unfinished at its bound is reported so and stopped"() {
         expect:
         !lines.await(Duration.ofMillis(20))

@@ -98,6 +98,7 @@ class ProgramResultMappingSpec extends Specification {
                 .contains("program executor 'acme' reported failed/quality with no reason")
     }
 
+    // Scenario: executor/wire-contract / Decision request with one option is malformed
     // FR3, FR6: a decision request is a decision; a malformed answer or another kind is failed/infrastructure, never a pass
     def "FR3, FR6: a #what answer of a transform run maps to #expected"() {
         when:
@@ -111,7 +112,7 @@ class ProgramResultMappingSpec extends Specification {
         where:
         what | answer || expected | says
         'decision-request' | [kind: 'decision-request', question: 'Which?', options: ['a', 'b']] || 'decision' | ''
-        'one-option decision' | [kind: 'decision-request', question: 'Which?', options: ['a']] || 'failed/infrastructure' | 'a malformed answer'
+        'one-option decision' | [kind: 'decision-request', question: 'Which?', options: ['a']] || 'failed/infrastructure' | 'a malformed answer: decision-request.options holds 1 items; at least 2 are required, 1 missing'
         'select' | [kind: 'select', chosen: 'a'] || 'failed/infrastructure' | 'a transform run does not take'
     }
 

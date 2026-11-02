@@ -69,4 +69,20 @@ class ValueTypesSpec extends Specification {
         expect:
         new PendingKey('build-8812').toString() == 'build-8812'
     }
+
+    def "FR2, NFR-R3: a pending key that #why is refused, so no unusable key reaches GNOMISH_PENDING_KEY"() {
+        when:
+        new PendingKey(key)
+
+        then:
+        def refusal = thrown(IllegalArgumentException)
+        refusal.message == "pendingKey is unusable: ${why}"
+
+        where:
+        why | key
+        'it holds a control character' | 'a\u0000b'
+        'it holds a control character' | 'a\u001bb'
+        'it holds a control character' | 'a\u007fb'
+        "it is longer than ${PendingKey.MAX_LENGTH} characters" | 'k' * (PendingKey.MAX_LENGTH + 1)
+    }
 }

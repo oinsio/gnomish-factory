@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.domain.engine.TokenUsage;
 import com.github.oinsio.gnomish.domain.engine.UsageFold;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -21,11 +20,9 @@ import org.slf4j.LoggerFactory;
  * instead, keyed by the round's {@link AgentEvent.InitEvent#model()}.
  *
  * <p>Each {@code modelUsage} entry's {@code costUSD} rides beside that model's four counts, for
- * stage rounds and judge votes alike (FR22 of define-executor-contract). The cost is taken only as
- * the CLI reported it: an entry without a usable {@code costUSD} (absent, not a number, negative,
- * not finite) carries no cost — never a zero — and the flat fallback carries none, since the flat
- * {@code usage} object reports no cost. The adapter never prices tokens itself (NG10). A cost the
- * entry carried but in an unusable shape costs only that cost, never the entry's tokens.
+ * stage rounds and judge votes alike (FR22 of define-executor-contract), accepted or refused by
+ * {@link ReportedCost}; the flat fallback carries none, since the flat {@code usage} object reports
+ * no cost.
  *
  * <p>Telemetry is best-effort (FR4, NFR-R2): this class never throws.
  * Numeric coercion or a missing field degrades gracefully, at two
@@ -100,37 +97,11 @@ final class TokenUsageMapper {
                 // which is the whole of what is still knowable about them. UsageFold.sameModel keeps a
                 // cost only when both halves carry one, so the placeholder never claims a price for
                 // tokens nobody priced.
-                byModel.merge(id, new ModelUsage(tokens, costOf((Map<?, ?>) rawEntry, id)), UsageFold::sameModel);
+                byModel.merge(
+                        id, new ModelUsage(tokens, ReportedCost.of((Map<?, ?>) rawEntry, id)), UsageFold::sameModel);
             }
         });
         return byModel;
-    }
-
-    /**
-     * The cost the CLI reported beside one model's counts, or {@code null} when it reported none
-     * in a usable shape. An absent {@code costUSD} is the CLI pricing nothing, and stays silent; a
-     * present one that is not a finite, non-negative number is a degraded value, and leaves a
-     * DEBUG trace like a skipped entry does — the round's tokens are still reported in full.
-     */
-    private @Nullable BigDecimal costOf(Map<?, ?> entry, String id) {
-        Object raw = entry.get("costUSD");
-        if (raw == null) {
-            return null;
-        }
-        BigDecimal cost = toCost(raw);
-        if (cost == null) {
-            // throwable-not-subject: the value was classified by its shape, not thrown.
-            log.debug("stream-json: modelUsage entry for model '{}' has an unusable costUSD; it carries no cost", id);
-        }
-        return cost;
-    }
-
-    private static @Nullable BigDecimal toCost(Object raw) {
-        if (!(raw instanceof Number number) || !Double.isFinite(number.doubleValue())) {
-            return null;
-        }
-        BigDecimal cost = new BigDecimal(number.toString());
-        return cost.signum() < 0 ? null : cost;
     }
 
     private Map<String, ModelUsage> fromFlatUsage(

@@ -22,11 +22,6 @@ class ConformanceKitPendingSpec extends Specification {
         def subject = new KitSubjectDouble(answer: { r, k ->
             r.settings().path('defer').asBoolean() ? queue.poll().call(k) : conforming(r)
         })
-        subject.metaClass.polledKeys = {
-            -> subject.asked.findAll {
-                it.op == 'poll'
-            }*.key*.value()
-        }
         last = subject
         new ConformanceKit([defer: true], { Duration d ->
             slept << d

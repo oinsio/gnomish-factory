@@ -15,9 +15,11 @@
       "enum": ["quality", "infrastructure", "limit"]
     },
     "pendingKey": {
-      "description": "Required when status is pending: the opaque key the factory polls with. A pending result from a role whose caller cannot poll is failed/infrastructure.",
+      "description": "Required when status is pending: the opaque key the factory polls with, handed to the poll in GNOMISH_PENDING_KEY, so at most 4096 characters and no control character; any other key reads as failed/infrastructure. A pending result from a role whose caller cannot poll is failed/infrastructure.",
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$"
     },
     "reason": {
       "description": "Optional free text explaining the status; untrusted text.",

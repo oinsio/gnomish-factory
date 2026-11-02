@@ -63,6 +63,12 @@ class WireSchemasSpec extends Specification {
         WireDocument.ANSWER | 'kind' | 'missing' | 'required' | { ObjectNode d ->
             d.remove('kind')
         }
+        WireDocument.RESULT | 'pendingKey' | 'with a control character' | 'pattern' | { ObjectNode d ->
+            d.put('status', 'pending').put('pendingKey', 'job\u00001')
+        }
+        WireDocument.RESULT | 'pendingKey' | 'over its length cap' | 'maxLength' | { ObjectNode d ->
+            d.put('status', 'pending').put('pendingKey', 'k' * (PendingKey.MAX_LENGTH + 1))
+        }
     }
 
     def "FR24: an answer whose kind is outside the set is refused"() {

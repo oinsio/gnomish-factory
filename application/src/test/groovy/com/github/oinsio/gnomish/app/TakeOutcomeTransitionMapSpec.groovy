@@ -7,9 +7,8 @@ import com.github.oinsio.gnomish.domain.engine.*
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import spock.lang.Specification
-
 import java.time.Instant
+import spock.lang.Specification
 /**
  * The outcome-to-transition mapping as the tracker receives it (FR2, FR9, FR12 of add-tracker-port):
  * each way an engine run can end reaches the port as exactly one write — {@code finish}, {@code

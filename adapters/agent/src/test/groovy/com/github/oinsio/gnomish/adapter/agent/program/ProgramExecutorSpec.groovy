@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.executorcontract.UsageProvenance
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import com.github.oinsio.gnomish.subprocess.ProcessLaunch
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
+import com.github.oinsio.gnomish.testfixtures.executor.RenderedPolicy
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.charset.StandardCharsets
@@ -132,6 +133,7 @@ class ProgramExecutorSpec extends Specification {
 
     // Scenario: executor/result-channel / Result path is factory-chosen
     // Scenario: executor/result-channel / The request carries no credential
+    // Scenario: executor/wire-contract / Policy is not a vendor tool name
     // FR5, NFR-S1: the request is the child's stdin, the result paths are fresh scratch paths, the key travels in the environment only
     def "FR5, NFR-S1: the child reads the whole request on stdin, writes to fresh scratch paths, and receives the key in its environment only"() {
         given:
@@ -156,6 +158,10 @@ class ProgramExecutorSpec extends Specification {
         request.contains('"instructions":"build it\\n"')
         request.contains('"policy":{"kind":"workspaceWrite"}')
         !request.contains(ProgramFixtures.KEY_VALUE)
+
+        and: 'its policy is the abstract token alone, and no vendor tool identifier appears in it'
+        RenderedPolicy.abstractOnly(request)
+        RenderedPolicy.vendorWords(request) == []
     }
 
     // FR5: the stderr tail of a failed run is quoted by its reason, as the agent round keeps it

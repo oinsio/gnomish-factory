@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.program
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
@@ -63,6 +64,7 @@ class ProgramStageExecutorSpec extends Specification {
         List<Denial> denials = []
         int probes
         RuntimeException probeFailure
+        boolean disposed
 
         @Override
         void probeGuard() {
@@ -74,6 +76,9 @@ class ProgramStageExecutorSpec extends Specification {
 
         @Override
         DenialRead readDenials() {
+            if (disposed) {
+                throw new IllegalStateException('environment disposed')
+            }
             new DenialRead(denials, Optional.empty())
         }
     }
@@ -133,7 +138,7 @@ class ProgramStageExecutorSpec extends Specification {
         def request = new String(host.readFile(answerPath + '.request', 1 << 20).get(), StandardCharsets.UTF_8)
 
         then:
-        new com.fasterxml.jackson.databind.ObjectMapper().readValue(request, Map).settings == [maxTurns: 9, style: 'strict', model: 'acme-model-1']
+        new ObjectMapper().readValue(request, Map).settings == [maxTurns: 9, style: 'strict', model: 'acme-model-1']
         request.contains('"feedback":[{"message":"unused import","location":"A.java:3"}]')
         request.contains('"bounds":{"startupReadMillis":30000,"silenceMillis":300000,"overallMillis":1800000}')
     }
@@ -158,6 +163,27 @@ class ProgramStageExecutorSpec extends Specification {
         def failed = result.status() as ExecutionResult.Failed
         failed.failureClass() == ExecutionResult.FailureClass.INFRASTRUCTURE
         failed.reason().contains('egress guard is not running')
+        result.denials() == [EGRESS]
+    }
+
+    // FR10, NFR-R1: the host discard disposes the environment, so the denials are drained before it
+    def "FR10: a failed round's denials are drained before the round is discarded"() {
+        given:
+        def env = new GuardedEnvironment(delegate: host, denials: [EGRESS],
+        probeFailure: new IllegalStateException('egress guard is not running'))
+        def round = Mock(RoundEnvironmentSource.Round) {
+            environment() >> env
+        }
+        def rounds = Stub(RoundEnvironmentSource) {
+            openRound(_) >> round
+        }
+
+        when:
+        def result = executor(StandIn.link(links.resolve('completed'), 'run-as'), rounds)
+                .execute(ProgramFixtures.round(workspace))
+
+        then:
+        1 * round.discard() >> { env.disposed = true }
         result.denials() == [EGRESS]
     }
 

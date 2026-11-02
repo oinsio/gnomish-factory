@@ -79,21 +79,20 @@ public final class ProgramStageExecutor implements StageExecutor {
             round.readDecision();
             return ProgramResultMapping.toEngine(name, key, result, denials);
         } catch (RuntimeException e) {
-            round.discard();
             // throwable-not-subject: the round's failed/infrastructure carries the cause's class and
             //     message; the engine writes the one operator line for it.
             log.debug("the round of program executor '{}' failed before its result was mapped", name, e);
+            // As the agent round does (ExecutorRoundExecution): the round is discarded exactly once,
+            // after the denials were drained from it — the host discard disposes the environment the
+            // read asks.
+            var denials = RoundDenialRead.onFailure(round);
+            round.discard();
             var failed = new ExecutionResult.Failed(
                     ExecutionResult.FailureClass.INFRASTRUCTURE,
                     UntrustedText.subprocess(
                             "program executor '" + name + "': the round failed before its result was read: " + e),
                     List.of());
-            return new ExecutionResult(
-                    failed,
-                    null,
-                    ExecutorUsage.none(),
-                    new ToolTrace(key, List.of()),
-                    RoundDenialRead.onFailure(round));
+            return new ExecutionResult(failed, null, ExecutorUsage.none(), new ToolTrace(key, List.of()), denials);
         }
     }
 }

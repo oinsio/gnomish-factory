@@ -30,7 +30,8 @@ See proposal.md — Why. Constraints:
 close (G1, M2).
 
 **Non-Goals:** `judge` (NG1), severity (NG2), sealed assets (NG3), webhooks (NG4),
-`pending` for `transform` (NG5).
+`pending` for `transform` (NG5, taken up by `extract-agent-round-runner` on this change's
+`PendingPoll`; keep the record's identity extensible to a round subject).
 
 ## Decisions
 
@@ -88,6 +89,15 @@ poll sequence; resolved record = no-op). Mutually-implied fields (key, check ide
 attempt) land in one commit. Ordering admits the sweeper: the record is a field of an
 already-enumerated attempt. Readers read the tip (`EnvelopeMediumBoundarySpec` applies).
 Kill-point specs: kill after (1), after (2), after (3), each resumed by a second instance.
+*Amended 2026-11-02 (human decision; FR10, FR11, NFR-R4):* two more windows inside W2, both
+resting on D11 and D12. W3: a `poll` returned `pending` with a new key, killed before the
+key's commit (D12) — the record holds the previous key; resume polls it, and since the
+contract keeps a superseded key pollable (D11) the executor answers for the same run, no
+`start`. W4: a `poll` returned a terminal status, killed before (3) — the record still holds
+the key; resume polls it again and the contract returns the ended run's terminal result again
+(D11), so the verdict lands with no `start`. An executor that breaks D11 (refuses the key) is
+`failed/infrastructure` naming the key: visible, never a silent re-submission. Kill-point specs:
+also kill after a key-rotating poll and after a terminal poll, each resumed by a second instance.
 
 **D8 — Sync surfaces.** Scout: `grep -rn "Kept in sync with"`, registry, and domain-term
 search for "poll", "verdict", "findings file".
@@ -101,20 +111,57 @@ search for "poll", "verdict", "findings file".
 - *Host vs container:* `HostCheckEnvironmentSource` / `SandboxCheckEnvironmentSource` are
   not a declared pair and stay: they differ by medium, not by rule; both now hand the
   environment to the same `Executor` call.
+- *Touched declared pair (D11):* `KitCase` (`:bootstrap`) ↔ the stand-in
+  `steps/executor-run.sh` (registry "Declared pairs with no shared classpath"): the re-poll case
+  is added at both ends in one task, the script's header and `BROKEN` switch list it, the registry
+  row's case count goes from twelve to thirteen, and `KitCaseScriptIdentitySpec` keeps the two
+  equal. Declared pair kept, not collapsed: still two ends with no classpath between them.
 - *No new pair created.*
 
 **D9 — Single-owner mechanisms.**
 
-| Owner | Value (type) | Consumers | Old way removed | Enforced by |
-|---|---|---|---|---|
-| `PendingPoll` (`domain/engine`) | `PendingPollRecord` (key, check identity, attempt, since) | `VerifyOrchestrator` (all verdict checks), `StageAttemptLoop` resume path, state mappers | `ExternalPolling` deleted; `GithubCheckExternalClient` run-listing loop reduced to one observation per `poll` | parameter type (`PendingKey`, no `String`); kill-point specs D7; grep gate `Thread.sleep\|sleeper.sleep` in `adapters/check` and `adapters/github/check` → zero hits |
-| `VerdictDerivation` (`domain/engine`) | `Verdict` from `Answer.Verdict` + `Threshold` | `VerifyOrchestrator`, `JudgeVoting` (judge votes already SARIF-shaped? no — exempt until `extract-agent-round-runner`, named) | `new Verdict.Fail/Pass/CannotVerify(` in `ShellCommandCheckRunner`, `FilesExistCheckRunner`, `ExternalPolling`, `VerifyOrchestrator:149`, `HttpExternalCheckClient`, `GithubCheckExternalClient` deleted; exempt: `JudgeVerdictExtractor`, `JudgeRoundExecution`, `JudgeCriteriaPreflight`, `StateJsonMapper` (deserialization) | grep gate `new Verdict\.` → derivation + state mapper + judge exemptions only; data-driven threshold spec |
-| `ExecutorRegistry` (from the contract) | `Executor` by `ExecutorName` | `VerifyOrchestrator` for every check (new), stage dispatch (existing) | `CheckClientDiscovery`, `CheckProviderSeam`, `ProviderDispatchingExternalCheckClient`, `CheckClientConfiguration`, `CheckEquipment` registry fields deleted; `META-INF/services/...CheckClientFactory` entries deleted | `CheckClientFactory` type gone (compile); `ArchUnit`/grep: no `ServiceLoader.load(` outside tracker and sandbox-binding discovery |
-| `scm-status` built-in | `ContextVerdicts` on `AttemptSha` | `VerifyOrchestrator` via registry | none (new); identity spec: contexts read equal those the SCM holds for the attempt SHA (`ScmStatusShaPinningSpec`, WireMock) | `AttemptSha` value type on the read; `expected` non-empty at load |
-| Credential delivery for verdict executors (`ChildEnvAllowlist` layer, from the contract) | `ExecutorCredentialNames` | `SandboxCheckEnvironmentSource.freshBox`, `HostCheckEnvironmentSource` | `CheckProviderSeam.credentialEnvVars` union deleted; `CheckEquipment.credentialNames` deleted | `ProgramCredentialDeliverySpec` extended with a verdict check: token in fresh box, absent in round box |
+| Owner                                                                                    | Value (type)                                              | Consumers                                                                                                                                                         | Old way removed                                                                                                                                                                                                                                                                                                                 | Enforced by                                                                                                                                                          |
+|------------------------------------------------------------------------------------------|-----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `PendingPoll` (`domain/engine`)                                                          | `PendingPollRecord` (key, check identity, attempt, since) | `VerifyOrchestrator` (all verdict checks), `StageAttemptLoop` resume path, state mappers; the key-rotation commit (D12) is written by the owner, never by a check | `ExternalPolling` deleted; `GithubCheckExternalClient` run-listing loop reduced to one observation per `poll`                                                                                                                                                                                                                   | parameter type (`PendingKey`, no `String`); kill-point specs D7; grep gate `Thread.sleep\|sleeper.sleep` in `adapters/check` and `adapters/github/check` → zero hits |
+| `VerdictDerivation` (`domain/engine`)                                                    | `Verdict` from `Answer.Verdict` + `Threshold`             | `VerifyOrchestrator`, `JudgeVoting` (judge votes already SARIF-shaped? no — exempt until `extract-agent-round-runner`, named)                                     | `new Verdict.Fail/Pass/CannotVerify(` in `ShellCommandCheckRunner`, `FilesExistCheckRunner`, `ExternalPolling`, `VerifyOrchestrator:149`, `HttpExternalCheckClient`, `GithubCheckExternalClient` deleted; exempt: `JudgeVerdictExtractor`, `JudgeRoundExecution`, `JudgeCriteriaPreflight`, `StateJsonMapper` (deserialization) | grep gate `new Verdict\.` → derivation + state mapper + judge exemptions only; data-driven threshold spec                                                            |
+| `ExecutorRegistry` (from the contract)                                                   | `Executor` by `ExecutorName`                              | `VerifyOrchestrator` for every check (new), stage dispatch (existing)                                                                                             | `CheckClientDiscovery`, `CheckProviderSeam`, `ProviderDispatchingExternalCheckClient`, `CheckClientConfiguration`, `CheckEquipment` registry fields deleted; `META-INF/services/...CheckClientFactory` entries deleted                                                                                                          | `CheckClientFactory` type gone (compile); `ArchUnit`/grep: no `ServiceLoader.load(` outside tracker and sandbox-binding discovery                                    |
+| `scm-status` built-in                                                                    | `ContextVerdicts` on `AttemptSha`                         | `VerifyOrchestrator` via registry                                                                                                                                 | none (new); identity spec: contexts read equal those the SCM holds for the attempt SHA (`ScmStatusShaPinningSpec`, WireMock)                                                                                                                                                                                                    | `AttemptSha` value type on the read; `expected` non-empty at load                                                                                                    |
+| Credential delivery for verdict executors (`ChildEnvAllowlist` layer, from the contract) | `ExecutorCredentialNames`                                 | `SandboxCheckEnvironmentSource.freshBox`, `HostCheckEnvironmentSource`                                                                                            | `CheckProviderSeam.credentialEnvVars` union deleted; `CheckEquipment.credentialNames` deleted                                                                                                                                                                                                                                   | `ProgramCredentialDeliverySpec` extended with a verdict check: token in fresh box, absent in round box                                                               |
 
 **D10 — Lock scope.** No lock added. `PendingPoll` sleeps on the injected `Sleeper` with
 nothing held, as `ExternalPolling` does today.
+
+**D11 — A pending key stays pollable until its run ends; a re-poll is idempotent.** (FR11, FR12,
+NFR-R4; human decision 2026-11-02, closing Q2 of `extract-agent-round-runner`.) The wire
+contract gains an ADDED requirement in `executor/wire-contract`: an executor declaring `poll`
+answers a poll of every key it issued for a run — from `start` or from an earlier poll — until
+the run ends, and a poll of an ended run's key returns its terminal status and answer again.
+The conformance kit gains a thirteenth case, `pending-repoll` (start → pending → poll to a
+terminal → poll the same key again → same result), gated by `poll` like the pending case. The
+reference executor already answers every poll of its key with the run's answer, so it passes
+unchanged; the misbehaving fake gains a `break-pending-repoll` preset. *Where it lives:* here,
+because this change is the first that persists a key across a kill (W3, W4 of D7);
+`define-executor-contract` is implemented and stays as built, and `extract-agent-round-runner`
+reuses the requirement for its K3/K4 windows. ADDED rather than a MODIFIED "Closed status
+taxonomy": the obligation is the poll's, not the status set's, and a MODIFIED here would overlap
+`extract-agent-round-runner`'s MODIFIED of that requirement. *Rationale:* the window between
+an executor's answer and the factory's commit of it cannot be closed by the factory alone; only
+the executor's retention of the run closes it, and without it every kill in that window becomes
+a second submission. *Alternative rejected —
+leave it to each executor:* W3/W4 then resume with a key the executor may refuse, an
+infrastructure failure and a re-drive on every such kill, which defeats G4. *Alternative
+rejected — commit before acting on every poll answer:* the commit follows the answer, so the
+window it leaves is the one this decision exists for.
+
+**D12 — A changed key is persisted before the next poll, by the one owner.** (FR10, NFR-R4;
+human decision 2026-11-02, closing Q3 of `extract-agent-round-runner`.) When a `poll` returns
+`pending` with a key other than the recorded one, `PendingPoll` writes the new key into the
+record in one commit with its register, pushed, before the next poll — the same write as the
+first key's (D2), so no second persistence path exists. The rule is subject-neutral, so
+`extract-agent-round-runner` adds only its `Round` subject. *Alternative rejected — keep polling
+the first key:* an executor that rotates keys (a job requeued under a new id) would be polled by
+a stale handle after every restart. *Alternative rejected — leave it to the transform change:*
+a `verdict` poll has the same window, and two changes ADDing one requirement is a merge conflict.
 
 ## Risks / Trade-offs
 

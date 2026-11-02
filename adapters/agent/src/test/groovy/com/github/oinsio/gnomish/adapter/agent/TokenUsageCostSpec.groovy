@@ -11,7 +11,8 @@ import spock.lang.Specification
 
 /**
  * FR22, NG10 of define-executor-contract: {@link TokenUsageMapper} carries each {@code modelUsage}
- * entry's {@code costUSD} beside that model's four counts, takes it only as the CLI reported it,
+ * entry's {@code costUSD} beside that model's four counts, takes it only as the CLI reported it
+ * (the acceptance rule and its trace are {@link ReportedCost}'s, driven here through the mapper),
  * and never prices tokens itself — an absent or unusable cost stays absent, never zero, and the
  * flat-usage fallback carries none. The token mapping itself is {@code TokenUsageMapperSpec}'s.
  */
@@ -63,7 +64,7 @@ class TokenUsageCostSpec extends Specification {
     //     tokens still map — and the degraded value leaves a DEBUG trace naming the model.
     def "FR22: an unusable costUSD (#raw) carries no cost, keeps the tokens and leaves a trace"() {
         given:
-        def logs = LogCaptureSupport.attach(TokenUsageMapper, Level.DEBUG)
+        def logs = LogCaptureSupport.attach(ReportedCost, Level.DEBUG)
 
         when:
         def byModel = mapper.toByModel(resultWith(['claude-a': counts(MAIN) + [costUSD: raw]]), init)
@@ -89,7 +90,7 @@ class TokenUsageCostSpec extends Specification {
     // FR22: an entry without costUSD is the CLI pricing nothing — no cost, and nothing to say.
     def "FR22: an entry without costUSD carries no cost and logs nothing"() {
         given:
-        def logs = LogCaptureSupport.attach(TokenUsageMapper, Level.DEBUG)
+        def logs = LogCaptureSupport.attach(ReportedCost, Level.DEBUG)
 
         when:
         def byModel = mapper.toByModel(resultWith(['claude-a': counts(MAIN)]), init)

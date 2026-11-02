@@ -48,8 +48,8 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  * @param attemptDelivery the external-check push-precondition seam; never null
  * @param describedExecutors what the describe preflight obtained for this run — the run-held value
  *     the engine pre-flight compares with the task's executor version pin and the round writers pin
- *     from (FR13 of define-executor-contract, design D11); {@link DescribedExecutors#none()} until the
- *     preflight fills it; never null
+ *     from (FR13 of define-executor-contract, design D11); {@link DescribedExecutors#none()} only for an
+ *     engine assembled with no preflight (the in-place constructor below); never null
  * @param roundIdentity where the engine takes each recorded round's token: the run's current-round
  *     cell in a branch mode, {@link RoundIdentity#inPlace()} in the in-place run; no constructor
  *     defaults it (D13 of define-executor-contract); never null

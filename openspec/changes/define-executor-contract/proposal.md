@@ -75,17 +75,34 @@ function and checked against a recorded snapshot.
 
 - NG1: migrating the four verify-check kinds onto the contract — follow-up
   `migrate-verify-to-executor-contract` (retires `CheckClientFactory`, adds the SCM-status
-  built-in, wires `pending + key` into the poll loop).
+  built-in, wires `pending + key` into the poll loop). Until then no verify check names an
+  executor, so the check half of the scenario "Effect role is refused by the engine in this
+  version" (`executor/wire-contract`) has no use site and only the stage half is built.
+  Pickup condition: the first change that lets a verify check name an executor — planned as
+  `migrate-verify-to-executor-contract` — adds the check use site (role `verdict`) to the
+  describe preflight's role agreement, refuses an `effect`-only describe there as reserved, and
+  marks a feature of its own with that scenario.
 - NG2: extracting the Claude dialect out of `adapters/agent` — follow-up
   `extract-agent-round-runner`; this change leaves `CliStageExecutor` in place.
 - NG3: sealing verification assets from the gnome-editable tree — follow-up
   `harden-verification-integrity`.
-- NG4: implementing the `effect` role; this change reserves the vocabulary only.
+- NG4: implementing the `effect` role; this change reserves the vocabulary only. Pickup
+  condition: the first change that gives the `effect` role a use site; it lifts the reserved
+  refusal of the describe preflight (task 6.5, and the check use site that
+  `migrate-verify-to-executor-contract` adds as its task 5.4).
 - NG5: mid-round permission questions as a `decision-request` answer: the executor answers
   tool prompts itself from the abstract policy (ADR 0020 records when to revisit).
-- NG6: an ACP adapter; the raw-CLI dialect stays the reference, ACP is a later adapter.
+- NG6: an ACP adapter; the raw-CLI dialect stays the reference. Pickup condition: the change
+  that adds an agent dialect speaking ACP — planned as `add-acp-executor` (NG2 of
+  `extract-agent-round-runner`).
 - NG7: `pending + key` handling for the `transform` role in the engine (a transform
-  executor returning `pending` is an infrastructure failure in this change; NG1 wires it).
+  executor returning `pending` is an infrastructure failure in this change). NG1's follow-up
+  wires `pending + key` for `verdict` only (its NG5). Owner (human decision 2026-11-02):
+  `extract-agent-round-runner` (FR10–FR12, design D11), which meets the pickup condition — the
+  first change that lets a `transform` executor return `pending` to the engine (a long round
+  resumed across restarts) — on the one pending-poll owner of `migrate-verify-to-executor-contract`,
+  and narrows the scenario "Pending from a role whose caller cannot poll" to executors declaring
+  no `poll`.
 - NG8: re-attributing or refusing branches recorded before the round identity existed — no
   release has shipped and no such branch is supported; the new readers assume the new record.
 - NG9: a server-side or CI barrier against task envelopes reaching the default branch — an
@@ -121,8 +138,11 @@ function and checked against a recorded snapshot.
 - NG15: automatic return of a task parked on a describe failure — a janitor pass that reruns
   `describe` for the parked task's law and returns it when the answer holds, or a retry of an
   external describe failure before the park. The park with a located message is the bounded
-  end this change delivers; the human's return is the retry. Pickup condition: an operator
-  returning such tasks by hand after one image fix for the second time.
+  end this change delivers; the human's return is the retry. Pickup condition: the first
+  change that returns a parked task to work without a human, for any cause (a janitor pass, a
+  retry before the park, a gate that resumes work when its cause clears), takes describe
+  failures into the same mechanism or re-defers them explicitly; or, before any such change,
+  an operator returning such tasks by hand after one image fix for the second time.
 - NG16: `cancel` as an operation of the contract. The describe capability `cancel` stays in
   the vocabulary, but this version defines no request or result shape for it, no program
   operation word and no kit case: no factory path sends a cancel (an expired bound kills the
@@ -321,7 +341,10 @@ function and checked against a recorded snapshot.
   change that lets a law name a program outside the image, or that versions the image contract
   independently of the law.
 - Q3: Whether `judge` becomes a built-in `llm-api` executor before or with
-  `extract-agent-round-runner`.
+  `extract-agent-round-runner`. That change moves the judge onto the agent runner as `verdict`
+  requests and rejects a built-in `llm-api` judge for itself (its design D2). Pickup condition:
+  the change that adds a second LLM mechanism beside the agent dialect — planned as
+  `externalize-claude-executor` (NG1 of `extract-agent-round-runner`).
 
 ## Capabilities
 

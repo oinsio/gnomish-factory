@@ -37,6 +37,33 @@ class ExecutorResultReadSpec extends Specification {
         '{"status":"pending","pendingKey":"  "}' || 'status pending without a pendingKey'
     }
 
+    // Scenario: executor/wire-contract / Pending with an unusable key fails closed
+    def "FR2, NFR-R3: a pending key that #why reads as failed/infrastructure naming the unusable key"() {
+        when:
+        def result = read(WireJson.writeValueAsString([status: 'pending', pendingKey: key, reason: 'r']))
+
+        then:
+        result.status() == Status.FAILED
+        result.failureClass() == FailureClass.INFRASTRUCTURE
+        result.pendingKey() == null
+        result.reason()?.raw() == "status pending with an unusable pendingKey: ${refusal}: r"
+
+        where:
+        why | key || refusal
+        'holds a NUL byte' | 'job\u00001' || 'it holds a control character'
+        'holds a newline' | 'job\n1' || 'it holds a control character'
+        'holds a C1 control' | 'job\u00851' || 'it holds a control character'
+        'is longer than the cap' | 'k' * (PendingKey.MAX_LENGTH + 1) || "it is longer than ${PendingKey.MAX_LENGTH} characters"
+    }
+
+    def "FR2: a pending key of exactly the cap, printable beyond ASCII, reads as itself"() {
+        given:
+        def key = 'ключ-' + 'k' * (PendingKey.MAX_LENGTH - 5)
+
+        expect:
+        read(WireJson.writeValueAsString([status: 'pending', pendingKey: key])).pendingKey() == new PendingKey(key)
+    }
+
     def "FR2: a known status reads as itself, keeping its own reason, and a stray field of another status is dropped"() {
         expect:
         read('{"status":"completed","failureClass":"quality","pendingKey":"k","reason":"ok"}') ==
