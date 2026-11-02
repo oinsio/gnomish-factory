@@ -338,42 +338,6 @@ Both CLI adapters SHALL pass the existing `StageExecutorContract` and `JudgeVote
 - **WHEN** the contract suites run against the CLI adapters with the fake binary
 - **THEN** every suite scenario passes through a real subprocess, pipes, and exit codes
 
-### Requirement: Reference-dump fixtures carry realism without sensitive or per-run data
-The paid-smoke recorder SHALL commit a real CLI stream-json transcript only after scrubbing each captured line so that no committed `*.reference.json` fixture contains machine-identifying data (home- or temp-directory absolute paths, with the usernames they embed), real session ids, cost figures, the `permission_denials` array, or any per-event `uuid` or `request_id`.
-**Implements**: FR1, FR2, FR3, FR4, FR5, FR6, FR7, NFR-R1, NFR-S1, NFR-C1 of harden-reference-dump-scrubber
-**Notes**: The `permission_denials` array carries raw tool inputs; what the scrub keeps is kept so the fixture stays representative of real CLI output.
-
-#### Scenario: Money is stripped
-- **WHEN** a captured result line carries `total_cost_usd` and per-model `costUSD` entries
-- **THEN** the scrubbed line contains neither field
-- **AND** every resolved model id and its four token/cache counts remain
-
-#### Scenario: Machine temp paths are collapsed but opaque per-run tokens survive
-- **WHEN** a captured line embeds a macOS `var/folders` temp hash, a per-uid `/tmp/claude-<uid>` dir, or their dashed project-dir encoding, alongside an `agentId`/`task_id`
-- **THEN** every such path is collapsed to `/workspace-scrubbed`, leaving no `var/folders`, `var-folders`, or `/tmp/claude-<uid>` substring
-- **AND** the opaque `agentId`/`task_id` tokens remain unchanged
-
-#### Scenario: Raw tool inputs and identifiers are stripped
-- **WHEN** a captured line carries a `permission_denials` array, a `uuid`, and a `request_id`
-- **THEN** the scrubbed line contains none of the `permission_denials` array, the `uuid`, or the `request_id`
-
-#### Scenario: Paths and session ids stay scrubbed
-- **WHEN** a captured line embeds the workspace absolute path and the real session id
-- **THEN** the scrubbed line shows `/workspace` and the synthetic `ref-session-<label>-1` in their place
-
-#### Scenario: Deterministic zero-cost refresh
-- **WHEN** the committed fixtures are refreshed from disk
-- **THEN** no `claude` process is launched and no tokens are spent
-- **AND** applying the refresh a second time leaves the files byte-identical
-
-#### Scenario: API message and tool-use ids survive
-- **WHEN** a captured line carries API `msg_` and `toolu_` ids
-- **THEN** the scrubbed line carries them unchanged
-
-#### Scenario: Home-directory paths lose their username
-- **WHEN** a captured line embeds a home-directory path outside the workspace (`/Users/<name>/…`, `/home/<name>/…`)
-- **THEN** the path's prefix is collapsed to `/workspace-scrubbed` and the username does not survive
-
 ### Requirement: CLI processes run through the task environment
 Agent-CLI rounds and CLI judge votes SHALL be spawned via `exec()` of the bound `TaskExecutionEnvironment`, never as direct host subprocesses. The stream-json contract, decision-file semantics, timeouts, and telemetry SHALL be unchanged — the adapter consumes the same stdout stream and exit code regardless of where the process runs.
 **Implements**: FR4 of add-sandbox-core
@@ -486,3 +450,75 @@ Both CLI round executions (executor and judge) SHALL consume and parse the proce
 #### Scenario: A drain unfinished after the post-exit bound is infrastructure
 - **WHEN** the drain has not finished when the post-exit bound of the round's handle runs out
 - **THEN** the round is an infrastructure failure, never a round completed on a partial stream
+
+### Requirement: Decision file is read through the shared result reader
+The adapter SHALL read the decision file through the executor contract's single result reader,
+with its size cap and untrusted-text wrapping, and SHALL surface the request as a
+`decision-request` answer on a `completed` status. The decision-file path, naming and tolerant
+fallbacks of the existing protocol SHALL be unchanged.
+**Implements**: FR6 of define-executor-contract
+
+#### Scenario: Decision file read is capped
+- **WHEN** the gnome writes a decision file larger than the result cap
+- **THEN** at most the cap is read, truncation is recorded, and the round still resolves as a
+  decision request
+
+#### Scenario: Adapter constructs no failure class
+- **WHEN** the agent process is killed on its round timeout
+- **THEN** the adapter reports the run with the contract's status and the engine, not the
+  adapter, classifies it as infrastructure
+
+### Requirement: Per-model cost mapping
+The adapter SHALL map each `modelUsage` entry's `costUSD` beside that model's four token
+counts, for stage rounds and judge votes alike; an entry without `costUSD` SHALL carry no
+cost, never zero, and the flat-usage fallback of older CLIs carries no cost. The adapter SHALL
+NOT price tokens itself.
+**Implements**: FR22, NG10 of define-executor-contract
+
+#### Scenario: Cost rides with its model
+- **WHEN** the result event reports two model ids, one with `costUSD`
+- **THEN** the round's usage carries the cost under that model only and the other model's cost is absent
+
+#### Scenario: Judge vote carries cost
+- **WHEN** a judge vote's result event reports `modelUsage` with `costUSD`
+- **THEN** the vote's `verdict` entry carries that cost per model
+
+### Requirement: Reference-dump fixtures carry realism and cost without sensitive or per-run data
+The paid-smoke recorder SHALL commit a real CLI stream-json transcript only after scrubbing
+each captured line so that no committed `*.reference.json` fixture contains machine-identifying
+data (home- or temp-directory absolute paths, with the usernames they embed), real session ids,
+the `permission_denials` array, or any per-event `uuid` or `request_id`; cost figures
+(`total_cost_usd` and every nested `costUSD`) SHALL be kept.
+**Implements**: FR1, FR2, FR3, FR4, FR5, FR6, FR7, NFR-R1, NFR-S1, NFR-C1 of harden-reference-dump-scrubber; FR22 of define-executor-contract
+**Notes**: The `permission_denials` array carries raw tool inputs; cost figures are a derived view of the token counts already kept, not sensitive data; what the scrub keeps is kept so the fixture stays representative of real CLI output.
+
+#### Scenario: Money is kept
+- **WHEN** a captured result line carries `total_cost_usd` and per-model `costUSD` entries
+- **THEN** the scrubbed line keeps both fields
+- **AND** every resolved model id and its four token/cache counts remain
+
+#### Scenario: Machine temp paths are collapsed but opaque per-run tokens survive
+- **WHEN** a captured line embeds a macOS `var/folders` temp hash, a per-uid `/tmp/claude-<uid>` dir, or their dashed project-dir encoding, alongside an `agentId`/`task_id`
+- **THEN** every such path is collapsed to `/workspace-scrubbed`, leaving no `var/folders`, `var-folders`, or `/tmp/claude-<uid>` substring
+- **AND** the opaque `agentId`/`task_id` tokens remain unchanged
+
+#### Scenario: Raw tool inputs and identifiers are stripped
+- **WHEN** a captured line carries a `permission_denials` array, a `uuid`, and a `request_id`
+- **THEN** the scrubbed line contains none of the `permission_denials` array, the `uuid`, or the `request_id`
+
+#### Scenario: Paths and session ids stay scrubbed
+- **WHEN** a captured line embeds the workspace absolute path and the real session id
+- **THEN** the scrubbed line shows `/workspace` and the synthetic `ref-session-<label>-1` in their place
+
+#### Scenario: Deterministic zero-cost refresh
+- **WHEN** the committed fixtures are refreshed from disk
+- **THEN** no `claude` process is launched and no tokens are spent
+- **AND** applying the refresh a second time leaves the files byte-identical
+
+#### Scenario: API message and tool-use ids survive
+- **WHEN** a captured line carries API `msg_` and `toolu_` ids
+- **THEN** the scrubbed line carries them unchanged
+
+#### Scenario: Home-directory paths lose their username
+- **WHEN** a captured line embeds a home-directory path outside the workspace (`/Users/<name>/…`, `/home/<name>/…`)
+- **THEN** the path's prefix is collapsed to `/workspace-scrubbed` and the username does not survive
