@@ -52,7 +52,7 @@ final class SchemaDeclaredFields {
         if (!declaring && !maps) {
             return
         }
-        value.fields().each { entry ->
+        value.properties().each { entry ->
             def candidates = declaring.findAll {
                 it.node.get('properties').has(entry.key)
             }

@@ -65,7 +65,7 @@ final class RenderedPolicy {
 
     private static void walk(JsonNode node, String path, List<String> found) {
         if (node.isObject()) {
-            node.fields().each { entry ->
+            node.properties().each { entry ->
                 if (VENDOR_WORDS.contains(entry.key)) {
                     found << "${path}.${entry.key}: ${entry.key}".toString()
                 }
