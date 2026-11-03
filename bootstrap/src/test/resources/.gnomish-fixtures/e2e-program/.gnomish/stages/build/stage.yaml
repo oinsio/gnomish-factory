@@ -1,0 +1,12 @@
+purpose: transform the working copy through the reference executor, the program the executor contract's own specs run
+executor:
+  type: program
+  name: reference
+instructions: stages/build/instructions.md
+verify:
+  - type: builtin
+    name: files_exist
+    params:
+      files:
+        - marker.txt
+advancement: auto

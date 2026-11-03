@@ -1,16 +1,15 @@
 package com.github.oinsio.gnomish.app.conformance
 
-import com.github.oinsio.gnomish.executorcontract.Answer
-import com.github.oinsio.gnomish.executorcontract.WireViolation
-
 import static com.github.oinsio.gnomish.app.conformance.KitSubjectDouble.*
 
+import com.github.oinsio.gnomish.executorcontract.Answer
 import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult
 import com.github.oinsio.gnomish.executorcontract.Policy
 import com.github.oinsio.gnomish.executorcontract.Role
 import com.github.oinsio.gnomish.executorcontract.Status
 import com.github.oinsio.gnomish.executorcontract.WireDocument
+import com.github.oinsio.gnomish.executorcontract.WireViolation
 import com.github.oinsio.gnomish.executorcontract.Workspace
 import com.github.oinsio.gnomish.testfixtures.executor.RenderedPolicy
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText

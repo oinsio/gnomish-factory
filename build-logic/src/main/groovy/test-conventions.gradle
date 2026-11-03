@@ -44,7 +44,7 @@ dependencies {
 //
 // The Apache HTTP-components stack arrives only as a WireMock / Testcontainers
 // transitive, i.e. test scope in every module that has one, and the Spring Boot
-// 4.1.0 BOM pins `httpclient5` with `strictly` — which in turn strictly requires
+// BOM pins `httpclient5` with `strictly` — which in turn strictly requires
 // the `httpcore5` pair. A `constraints {}` entry cannot RAISE a `strictly`
 // requirement (it fails resolution instead), so the CVE fixes are applied with
 // `force`: GHSA-hjcp-jmpx-g3qm on httpclient5, GHSA-hf6x-8p5f-cgmf /

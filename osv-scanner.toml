@@ -20,9 +20,9 @@
 # --- Accepted risk: WireMock-transitive Jetty 11 advisories with no Maven
 # Central fix ---
 # WireMock 3.13.2 (the latest stable release; 4.x is still beta at
-# 4.0.0-beta.38, verified on Maven Central 2026-08-16) runs on an embedded
+# 4.0.0-beta.41, verified on Maven Central 2026-11-02) runs on an embedded
 # Jetty 11 stack, pinned consistently at 11.0.26 — still the last Maven Central
-# release of the EOL Jetty 11 line as of 2026-08-16 — via an enforcedPlatform on
+# release of the EOL Jetty 11 line as of 2026-11-02 — via an enforcedPlatform on
 # the test classpaths. The advisories below are fixed only in Jetty 12.x; the
 # 11.0.31 "fix" some list is not published to Maven Central (EOL vendor patches
 # only). Moving to Jetty 12 requires WireMock 4.x — the project pins stable deps
@@ -30,131 +30,61 @@
 # (testCompileClasspath/testRuntimeClasspath): an in-JVM mock HTTP server bound
 # to localhost during the build, never shipped in any factory artifact and never
 # exposed to untrusted input, so the CVEs are not reachable at runtime.
-# Re-review 2026-11-01: drop these once WireMock 4.x (Jetty 12) is stable.
+# Re-reviewed 2026-11-02 (nothing above changed); next re-review 2027-02-01:
+# drop these once WireMock 4.x (Jetty 12) is stable.
 # jetty-http (GHSA-355h fix 12.0.33, GHSA-qh8g fix 12.0.12, GHSA-wjpw fix 12.0.31):
 [[IgnoredVulns]]
 id = "GHSA-355h-qmc2-wpwf"
-ignoreUntil = 2026-11-01
-reason = "Test-scope only (WireMock 3.13.2 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.33 only); WireMock 4.x/Jetty 12 still beta. Re-review 2026-11-01."
+ignoreUntil = 2027-02-01
+reason = "Test-scope only (WireMock 3.13.2 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.33 only); WireMock 4.x/Jetty 12 still beta. Re-reviewed 2026-11-02, next 2027-02-01."
 [[IgnoredVulns]]
 id = "GHSA-qh8g-58pp-2wxh"
-ignoreUntil = 2026-11-01
-reason = "Test-scope only (WireMock 3.13.2 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.12 only); WireMock 4.x/Jetty 12 still beta. Re-review 2026-11-01."
+ignoreUntil = 2027-02-01
+reason = "Test-scope only (WireMock 3.13.2 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.12 only); WireMock 4.x/Jetty 12 still beta. Re-reviewed 2026-11-02, next 2027-02-01."
 [[IgnoredVulns]]
 id = "GHSA-wjpw-4j6x-6rwh"
-ignoreUntil = 2026-11-01
-reason = "Test-scope only (WireMock 3.13.2 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.31 only); WireMock 4.x/Jetty 12 still beta. Re-review 2026-11-01."
+ignoreUntil = 2027-02-01
+reason = "Test-scope only (WireMock 3.13.2 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.31 only); WireMock 4.x/Jetty 12 still beta. Re-reviewed 2026-11-02, next 2027-02-01."
 # jetty-server (GHSA-7p3p fix 12.0.35):
 [[IgnoredVulns]]
 id = "GHSA-7p3p-8qv8-m2vh"
-ignoreUntil = 2026-11-01
-reason = "Test-scope only (WireMock 3.13.2 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.35 only); WireMock 4.x/Jetty 12 still beta. Re-review 2026-11-01."
+ignoreUntil = 2027-02-01
+reason = "Test-scope only (WireMock 3.13.2 embedded Jetty 11, localhost mock server, never shipped). No Maven Central fix for Jetty 11 (12.0.35 only); WireMock 4.x/Jetty 12 still beta. Re-reviewed 2026-11-02, next 2027-02-01."
 # jetty-security (GHSA-2fvj fix 11.0.31 — not published to Maven Central, 12.x only):
 [[IgnoredVulns]]
 id = "GHSA-2fvj-hgj9-j2gr"
-ignoreUntil = 2026-11-01
-reason = "Test-scope only (WireMock 3.13.2 embedded Jetty 11, localhost mock server, never shipped). Advisory lists fix 11.0.31 but that is not on Maven Central (max published 11.0.26); WireMock 4.x/Jetty 12 still beta. Re-review 2026-11-01."
+ignoreUntil = 2027-02-01
+reason = "Test-scope only (WireMock 3.13.2 embedded Jetty 11, localhost mock server, never shipped). Advisory lists fix 11.0.31 but that is not on Maven Central (max published 11.0.26); WireMock 4.x/Jetty 12 still beta. Re-reviewed 2026-11-02, next 2027-02-01."
 
 # --- Accepted risk: WireMock-transitive Handlebars advisory, no compatible fix ---
 # GHSA-r4gv-qr8j-p3pg (com.github.jknack:handlebars, response templating) is
 # fixed only in 4.5.2, which removes handlebars.helper.NumberHelper — a class
 # WireMock 3.13.2 loads at startup, so bumping breaks every WireMock spec
 # (NoClassDefFoundError) — and the line has since moved on to 4.5.4 (Maven
-# Central, 2026-08-16) without changing that. Test-scope only (in-JVM localhost
+# Central, 2026-08-16; 4.5.8 on 2026-11-02) without changing that. Test-scope only (in-JVM localhost
 # mock server, never shipped) and all templates are developer-authored, so the
 # SSTI vector is not reachable. Resolved when WireMock 4.x (which ships a
-# compatible handlebars) goes stable. Re-review 2026-11-01.
+# compatible handlebars) goes stable. Re-reviewed 2026-11-02: the line is at 4.5.8 and
+# NumberHelper is still absent from it. Next re-review 2027-02-01.
 [[IgnoredVulns]]
 id = "GHSA-r4gv-qr8j-p3pg"
-ignoreUntil = 2026-11-01
-reason = "Test-scope only (WireMock 3.13.2 templating, localhost, never shipped, developer-authored templates). Fix 4.5.2 removes NumberHelper and breaks WireMock 3.13.2 at startup; WireMock 4.x still beta. Re-review 2026-11-01."
+ignoreUntil = 2027-02-01
+reason = "Test-scope only (WireMock 3.13.2 templating, localhost, never shipped, developer-authored templates). Fix 4.5.2 removes NumberHelper and breaks WireMock 3.13.2 at startup; WireMock 4.x still beta. Re-reviewed 2026-11-02, next 2027-02-01."
 
-# --- Accepted risk: jackson 2.21.4 superseded conflict candidates,
-# metadata-only ---
-# Spring Boot 4.1.0's jackson-2-bom manages the 2.x line at 2.21.4 (4.1.1, the
-# latest patch on Maven Central 2026-10-01, moves only to the still-affected
-# 2.21.5). The project's jackson-bom override (gradle/libs.versions.toml) wins
-# with 2.22.3 on every classpath, so `gradle/verification-metadata.xml` records
-# only the losing candidates' metadata — `.module` files and the parent `.pom`
-# files they inherit from (jackson-base, jackson-dataformats-text,
-# jackson-modules-java8) — no `.jar`, as described for httpclient5 below. The
-# parent POMs are verified when the configuration cache entry is stored; a
-# local build reusing a stored entry never re-verifies them, so check a
-# metadata edit with `.gradle/configuration-cache` removed, as CI runs. Until 2026-10-01 the jars were real: Spotless resolved
-# palantir-java-format's pinned 2.21.4 Jackson on its formatter tool
-# classpath. A component metadata rule in java-conventions.gradle now lifts
-# those edges onto the catalog version, so no 2.21.4 jar is resolved anywhere
-# (verified: with every 2.21.4 entry removed from the metadata, `spotlessCheck`
-# passes and the metadata needs `.module` and parent `.pom` files only).
-# Re-review 2026-11-01, or drop once a Boot release manages a fixed 2.x line.
-[[IgnoredVulns]]
-id = "GHSA-5gvw-p9qm-jgwh"
-ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-5jmj-h7xm-6q6v"
-ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-mhm7-754m-9p8w"
-ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-gx83-3vf8-gh7j"
-ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-q4xh-88c3-wmh7"
-ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-vvgp-rfg2-7rr6"
-ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-wjgm-6hv5-3cvf"
-ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-cxp5-3px4-pw24"
-ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-wv8q-qhhj-9h54"
-ignoreUntil = 2026-11-01
-reason = "jackson-databind 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-7hhh-6rmp-j9qf"
-ignoreUntil = 2026-11-01
-reason = "jackson-core 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-p6pp-m3f8-5c89"
-ignoreUntil = 2026-11-01
-reason = "jackson-core 2.21.4: metadata-only superseded candidate from Spring Boot 4.1.0 jackson-2-bom; 2.22.3 wins on every classpath, no 2.21.4 jar is resolved. Re-review 2026-11-01."
-
-# --- Accepted risk: httpclient5/httpcore5(-h2) superseded conflict candidates,
+# --- Accepted risk: httpclient5 5.5.1, a superseded conflict candidate,
 # metadata-only ---
 # `gradle/verification-metadata.xml` records the POM (not the JAR) of every
-# version Gradle's conflict resolution considered while picking a winner —
-# fetching a losing candidate's POM is how Gradle learns its dependencies well
-# enough to reject it. The forced fix versions (httpclient5 5.6.3, httpcore5(-h2)
-# 5.4.3 — see gradle/libs.versions.toml) win on every real classpath; these
-# entries carry `.pom` artifacts only, no `.jar`, confirming they were never
-# actually resolved as a dependency. This is inherent to how Gradle dependency
-# verification records a resolution graph, not a fixable version pin.
-# Re-review 2026-11-01.
+# version Gradle's conflict resolution considered while picking a winner.
+# httpclient5 5.5.1 is one: its entries carry `.pom` artifacts only (the
+# artifact and its parent), no lockfile resolves 5.5.1, and the forced 5.6.5
+# (gradle/libs.versions.toml, gradle.properties) wins on every real classpath.
+# The 2026-11-02 re-review removed every other httpcomponents candidate (Boot
+# 4.1.2 manages fixed versions); a cold-cache `check` showed this one is still
+# fetched, so it stays. Next re-review 2027-02-01.
 [[IgnoredVulns]]
 id = "GHSA-hjcp-jmpx-g3qm"
-ignoreUntil = 2026-11-01
-reason = "httpclient5 5.5.1/5.6.1 appear in gradle/verification-metadata.xml as POM-only superseded conflict candidates (no .jar entry) — never actually resolved; the forced 5.6.3 (gradle/libs.versions.toml) wins on every real classpath. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-hf6x-8p5f-cgmf"
-ignoreUntil = 2026-11-01
-reason = "httpcore5 5.4.2 appears in gradle/verification-metadata.xml as a POM-only superseded conflict candidate (no .jar entry) — never actually resolved; the forced 5.4.3 (gradle/libs.versions.toml) wins on every real classpath. Re-review 2026-11-01."
-[[IgnoredVulns]]
-id = "GHSA-v3jc-474w-2wm6"
-ignoreUntil = 2026-11-01
-reason = "httpcore5-h2 5.4.2 appears in gradle/verification-metadata.xml as a POM-only superseded conflict candidate (no .jar entry) — never actually resolved; the forced 5.4.3 (gradle/libs.versions.toml) wins on every real classpath. Re-review 2026-11-01."
+ignoreUntil = 2027-02-01
+reason = "httpclient5 5.5.1 appears in gradle/verification-metadata.xml as a POM-only superseded conflict candidate (no .jar entry); no lockfile resolves it and the forced 5.6.5 wins on every real classpath. Re-reviewed 2026-11-02, next 2027-02-01."
 
 # --- Accepted risk: guava 30.1.1-jre, hardcoded inside the japicmp Gradle
 # plugin's own worker resolution ---
@@ -169,16 +99,17 @@ reason = "httpcore5-h2 5.4.2 appears in gradle/verification-metadata.xml as a PO
 # 0.4.6 is the latest release on the Gradle Plugin Portal (checked 2026-08-20) —
 # no newer version exists to pick up a fix. Build-tool-only: this classpath
 # powers a bytecode-diffing report, never shipped in any factory artifact.
-# Re-review 2026-11-01 (check for a japicmp-plugin release past 0.4.6).
+# Re-reviewed 2026-11-02: 0.4.6 is still the latest release. Next re-review
+# 2027-02-01 (check for a japicmp-plugin release past 0.4.6).
 [[IgnoredVulns]]
 id = "GHSA-5mg8-w23w-74h3"
-ignoreUntil = 2026-11-01
-reason = "guava 30.1.1-jre, hardcoded inside japicmp-plugin 0.4.6's own worker resolution (resolveGuava(), a detached configuration outside our version catalog/forces) for the japicmpApiGate report task. 0.4.6 is the latest release on the Gradle Plugin Portal; build-tool-only, never shipped. Re-review 2026-11-01."
+ignoreUntil = 2027-02-01
+reason = "guava 30.1.1-jre, hardcoded inside japicmp-plugin 0.4.6's own worker resolution (resolveGuava(), a detached configuration outside our version catalog/forces) for the japicmpApiGate report task. 0.4.6 is the latest release on the Gradle Plugin Portal; build-tool-only, never shipped. Re-reviewed 2026-11-02, next 2027-02-01."
 [[IgnoredVulns]]
 id = "GHSA-7g45-4rm6-3mm3"
-ignoreUntil = 2026-11-01
-reason = "guava 30.1.1-jre, hardcoded inside japicmp-plugin 0.4.6's own worker resolution (resolveGuava(), a detached configuration outside our version catalog/forces) for the japicmpApiGate report task. 0.4.6 is the latest release on the Gradle Plugin Portal; build-tool-only, never shipped. Re-review 2026-11-01."
+ignoreUntil = 2027-02-01
+reason = "guava 30.1.1-jre, hardcoded inside japicmp-plugin 0.4.6's own worker resolution (resolveGuava(), a detached configuration outside our version catalog/forces) for the japicmpApiGate report task. 0.4.6 is the latest release on the Gradle Plugin Portal; build-tool-only, never shipped. Re-reviewed 2026-11-02, next 2027-02-01."
 [[IgnoredVulns]]
 id = "GHSA-xxph-c9ww-hj94"
-ignoreUntil = 2026-11-01
-reason = "Build-tool-only guava recorded in gradle/verification-metadata.xml, never shipped, no lockfile resolves either: 30.1.1-jre hardcoded inside japicmp-plugin 0.4.6's own worker resolution (resolveGuava(), a detached configuration outside our version catalog/forces; 0.4.6 is the latest on the Gradle Plugin Portal), and 33.5.0-jre as a metadata-only (.module, no .jar) superseded candidate Error Prone declares on the annotationProcessor path. Every guava on a real classpath is forced to 33.7.2-jre (gradle/libs.versions.toml). Re-review 2026-11-01."
+ignoreUntil = 2027-02-01
+reason = "Build-tool-only guava recorded in gradle/verification-metadata.xml, never shipped, no lockfile resolves either: 30.1.1-jre hardcoded inside japicmp-plugin 0.4.6's own worker resolution (resolveGuava(), a detached configuration outside our version catalog/forces; 0.4.6 is the latest on the Gradle Plugin Portal), and 33.5.0-jre as a metadata-only (.module, no .jar) superseded candidate a cold-cache check still fetches. Every guava on a real classpath is forced to 33.7.2-jre (gradle/libs.versions.toml). Re-reviewed 2026-11-02, next 2027-02-01."

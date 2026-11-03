@@ -78,8 +78,11 @@ class ExecutorResultReadSpec extends Specification {
         when:
         def result = read('{"status":"completed"}')
 
-        then:
-        result.usage() == Usage.absent()
+        then: 'stated field by field: comparing with Usage.absent() itself would pass if absent() were null'
+        result.usage().provenance() == UsageProvenance.ABSENT
+        result.usage().wallMillis() == null
+        result.usage().models().isEmpty()
+        result.usage().tools().isEmpty()
         result.denials() == []
     }
 
