@@ -10,6 +10,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,14 +89,19 @@ final class AgentRoundFailure {
     /** The failure, its causes, then the stderr tail through the log exit when there is one. */
     static UntrustedText reason(RuntimeException failure, UntrustedText stderrTail) {
         var text = new StringBuilder("agent-cli round ended without its result: ").append(failure);
-        @Nullable Throwable cause = failure.getCause();
-        for (int named = 0; cause != null && named < MAX_CAUSES; named++) {
-            text.append("; caused by: ").append(cause);
-            cause = cause.getCause();
-        }
+        // A bounded stream, not a counted loop: a mutated counter on a cyclic chain never ends and
+        //     kills the PIT minion (MEMORY_ERROR) instead of failing a spec.
+        Stream.<@Nullable Throwable>iterate(failure.getCause(), Objects::nonNull, AgentRoundFailure::causeOf)
+                .limit(MAX_CAUSES)
+                .forEach(cause -> text.append("; caused by: ").append(cause));
         if (!stderrTail.isBlank()) {
             text.append("; ").append(STDERR_TAIL_LABEL).append(stderrTail.forLog());
         }
         return UntrustedText.subprocess(text.toString());
+    }
+
+    /** The next link of a cause chain; only called on a link the stream checked is present. */
+    private static @Nullable Throwable causeOf(@Nullable Throwable link) {
+        return Objects.requireNonNull(link).getCause();
     }
 }
