@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.gitobjects.CommitIdentity
 import com.github.oinsio.gnomish.gitobjects.CommitMetadata
@@ -60,7 +61,7 @@ final class InvocationTaskFlow {
         Path worktree = registeredClone.worktrees().resolve(TASK)
         new File(worktree.toFile(), 'gnome.txt').text = 'gnome wrote this'
         new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE)
-                .persist(TASK, TaskState.atStageStart(stage), new ToolTrace(new AttemptKey(TASK, stage, 1), []))
+                .persist(TASK, RoundStates.recorded(new ToolTrace(new AttemptKey(TASK, stage, 1), []).key()), new ToolTrace(new AttemptKey(TASK, stage, 1), []))
     }
 
     /** The commit the task's factory register names. */

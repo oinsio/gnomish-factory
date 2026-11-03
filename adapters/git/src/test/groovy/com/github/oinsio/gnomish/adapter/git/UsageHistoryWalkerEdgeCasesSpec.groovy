@@ -9,7 +9,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -28,8 +28,7 @@ import spock.lang.TempDir
 
 /**
  * FR14, NFR-C1 of add-git-workflow: {@link UsageHistoryWalker} edge cases — service commits
- * (salvage/cleanup), no-op re-commits, position transitions to pipeline end, remote-only branches,
- * and a defensive blank-line filter. Core round-detection scenarios live in
+ * (salvage/cleanup), no-op re-commits, remote-only branches, and a defensive blank-line filter. Core round-detection scenarios live in
  * {@link UsageHistoryWalkerSpec}; split out to keep both files under the 200-line cap
  * (.claude/rules/process-invariants.md).
  */
@@ -47,8 +46,8 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
     def "FR14: service commits are not rounds — a salvage commit and a cleanup commit produce no usage rows"() {
         given:
         taskRepository().createTask(new TaskContext('PROJ-3', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
-        persistRound('PROJ-3', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
+        def implementRound = round('PROJ-3', 'implement', 0, AttemptRecord.Result.PASSED, 500, 50)
+        persistRound('PROJ-3', TaskState.atStageStart('implement').recordUnburnedRound(implementRound, ExecutorVersions.none()), 'implement', 0)
 
         and: 'an uncommitted leftover gets salvaged into a service commit, not a round'
         def worktree = worktreeFor('PROJ-3')
@@ -56,8 +55,11 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         new WorktreeSalvage(runner, worktree, ClaimEpochSource.NONE).salvage('PROJ-3')
 
         and: 'the task then completes, triggering the cleanup commit that removes .gnomish-task/'
-        taskRepository().recordOutcome('PROJ-3',
-                new TaskOutcome.Completed(TaskState.atStageStart('implement').recordUnburnedRound(implementRound)), TrackerWrite.OWED)
+        def repository = taskRepository()
+        repository.recordOutcome('PROJ-3',
+                new TaskOutcome.Completed(TaskState.atStageStart('implement').recordUnburnedRound(implementRound, ExecutorVersions.none())), TrackerWrite.OWED)
+        repository.finishCleanup('PROJ-3')
+        assert runner.run(cloneDir, 'cat-file', '-e', registeredId(cloneDir, 'PROJ-3') + ':.gnomish-task').exitCode() != 0
 
         when:
         def result = (walker.walk(cloneDir, 'PROJ-3') as UsageHistoryResult.Found)
@@ -67,14 +69,13 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         result.rows()[0].attempt().round() == 0
     }
 
-    // PIT ConditionalsBoundaryMutator on detectNewRound's `attempts.size() <= previous.attempts().size()`:
-    // an extra commit at the very same position with an unchanged (same-size) attempts list must
-    // NOT be seen as a new round — proving the boundary is <=, not <.
+    // FR19 of define-executor-contract: a commit that rewrites state.json while listing the same
+    // record identity records no round — the record already met is not met again.
     def "FR14: a same-stage commit whose attempts list did not grow contributes no extra row"() {
         given:
         taskRepository().createTask(new TaskContext('PROJ-6', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
-        persistRound('PROJ-6', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
+        def implementRound = round('PROJ-6', 'implement', 0, AttemptRecord.Result.PASSED, 500, 50)
+        persistRound('PROJ-6', TaskState.atStageStart('implement').recordUnburnedRound(implementRound, ExecutorVersions.none()), 'implement', 0)
 
         and: 'state.json is re-committed unchanged in content (attempts list still has exactly one element)'
         def worktree = worktreeFor('PROJ-6')
@@ -93,29 +94,6 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         result.rows()[0].attempt().round() == 0
     }
 
-    // PIT NegateConditionalsMutator/BooleanFalseReturnValsMutator on samePosition: a transition
-    // from AtStage to PipelineEnd must be treated as a *different* position (not same), producing
-    // a new row rather than being folded away as "no new round".
-    def "FR14: advancing from a stage to pipeline end starts a fresh round and still yields a row for it"() {
-        given:
-        taskRepository().createTask(new TaskContext('PROJ-7', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
-        persistRound('PROJ-7', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
-
-        def endRound = round(0, AttemptRecord.Result.PASSED, 300, 30)
-        def endState = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
-        .recordUnburnedRound(endRound)
-        persistRound('PROJ-7', endState, '(pipeline end)', 0)
-
-        when:
-        def result = (walker.walk(cloneDir, 'PROJ-7') as UsageHistoryResult.Found)
-
-        then:
-        result.rows().size() == 2
-        result.rows()[0].stage() == 'implement'
-        result.rows()[1].stage() == '(pipeline end)'
-    }
-
     def "FR14: a task branch reachable only via origin is walked the same way, no local branch created"() {
         given: 'a bare origin carrying the task branch, and a fresh single-branch clone that lacks it'
         def bare = initBareRepo(tempDir, 'origin.git')
@@ -128,9 +106,9 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
 
         def seedRegistered = RegisteredCloneFixture.registered(tempDir.resolve('seed-worktrees'), seedRepo)
         new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE, new VirtualClock()).createTask(new TaskContext('PROJ-5', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
+        def implementRound = round('PROJ-5', 'implement', 0, AttemptRecord.Result.PASSED, 500, 50)
         new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-5'), 'PROJ-5', ClaimEpochSource.NONE)
-                .persist('PROJ-5', TaskState.atStageStart('implement').recordUnburnedRound(implementRound),
+                .persist('PROJ-5', TaskState.atStageStart('implement').recordUnburnedRound(implementRound, ExecutorVersions.none()),
                 new ToolTrace(new AttemptKey('PROJ-5', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]))
@@ -162,8 +140,8 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
     def "FR14: a blank line in git log's output never crashes the walk nor produces a bogus row"() {
         given:
         taskRepository().createTask(new TaskContext('PROJ-8', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def implementRound = round(0, AttemptRecord.Result.PASSED, 500, 50)
-        persistRound('PROJ-8', TaskState.atStageStart('implement').recordUnburnedRound(implementRound), 'implement', 0)
+        def implementRound = round('PROJ-8', 'implement', 0, AttemptRecord.Result.PASSED, 500, 50)
+        persistRound('PROJ-8', TaskState.atStageStart('implement').recordUnburnedRound(implementRound, ExecutorVersions.none()), 'implement', 0)
         def realCommit = runner.run(cloneDir, 'rev-parse', 'gnomish/PROJ-8').stdout().forParsing().trim()
 
         def fakeGit = StandIn.recording(tempDir, 'log-answer-per-run')
@@ -192,7 +170,7 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
         given:
         taskRepository().createTask(new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
         persistRound('PROJ-9', TaskState.atStageStart('implement')
-                .recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 50)), 'implement', 0)
+                .recordUnburnedRound(round('PROJ-9', 'implement', 0, AttemptRecord.Result.PASSED, 500, 50), ExecutorVersions.none()), 'implement', 0)
         def logs = LogCaptureSupport.attach(UsageHistoryWalker, Level.DEBUG)
 
         when:
@@ -212,25 +190,32 @@ implements UsageHistoryFixture, FailingSubcommandGitFixture {
     }
 
     // FR5: a commit that shows no state.json is the ORDINARY case — the cleanup commit deletes it —
-    // so the classification is DEBUG, below the console, and never an alarm.
-    def "FR5: a commit carrying no state.json is classified at DEBUG, not warned about"() {
+    // so the classification is DEBUG, below the console, and never an alarm. The cleanup commit is
+    // also the register of a delivered task, whose baseCommit is read at the Completed commit.
+    def "FR5: the cleanup commit, carrying no state.json, is classified at DEBUG, not warned about"() {
         given:
         taskRepository().createTask(new TaskContext('PROJ-10', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        persistRound('PROJ-10', TaskState.atStageStart('implement')
-                .recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 50)), 'implement', 0)
+        def passed = TaskState.atStageStart('implement')
+                .recordUnburnedRound(round('PROJ-10', 'implement', 0, AttemptRecord.Result.PASSED, 500, 50), ExecutorVersions.none())
+        persistRound('PROJ-10', passed, 'implement', 0)
+        def repository = taskRepository()
+        repository.recordOutcome('PROJ-10', new TaskOutcome.Completed(passed), TrackerWrite.OWED)
+        repository.finishCleanup('PROJ-10')
+        def cleanup = registeredId(cloneDir, 'PROJ-10')
         def logs = LogCaptureSupport.attach(UsageHistoryWalker, Level.DEBUG)
 
         when:
-        def result = walkerFailing('show').walk(cloneDir, 'PROJ-10') as UsageHistoryResult.Found
+        def result = walker.walk(cloneDir, 'PROJ-10') as UsageHistoryResult.Found
         def events = List.copyOf(logs.list)
         logs.detach()
 
         then:
-        result.rows().isEmpty()
+        result.rows().size() == 1
 
         and:
-        !events.isEmpty()
         events.every { it.level == Level.DEBUG }
-        events[0].formattedMessage.contains('carries no .gnomish-task/state.json')
+        events.any {
+            it.formattedMessage.contains(cleanup) && it.formattedMessage.contains('carries no .gnomish-task/state.json')
+        }
     }
 }

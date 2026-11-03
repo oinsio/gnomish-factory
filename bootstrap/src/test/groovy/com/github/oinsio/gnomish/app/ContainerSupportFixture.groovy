@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
+import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode
@@ -85,5 +86,18 @@ final class ContainerSupportFixture {
                 TestChildEnvironment.hostAllowlist(sandbox.envPassthrough(), checkCredentialEnvVars), [:],
                 ownershipMode, epochs, sandbox, factory, realTime())
                 .create(cloneDir, taskId, segments, new PipelineDefinition('1', new AutonomyLimits(3), []), [])
+    }
+
+    /**
+     * As {@link #direct}, over the installation allowlist {@code installation} and the law {@code
+     * definition} the run's box is built for — for the specs whose subject is what the allowlist and
+     * the law's executor declarations do to a real box (NFR-S1, FR10 of define-executor-contract).
+     * {@code epochs} is the caller's to choose, as for {@link #direct}.
+     */
+    static ContainerRunSupport directFor(Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox,
+            ClaimEpochSource epochs, ChildEnvAllowlist installation, PipelineDefinition definition) {
+        (ContainerRunSupport) new ContainerRunSupportFactory(installation, [:], OwnershipMode.MANUAL,
+        epochs, sandbox, new FactoryProperties(null, null, null, null), realTime())
+        .create(cloneDir, taskId, segments, definition, [])
     }
 }

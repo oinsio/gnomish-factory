@@ -66,6 +66,15 @@ dependencies {
     // the dependency-analysis gate establishes.
     api project(':untrustedtext')
 
+    // The executor contract (FR6, design D10 of define-executor-contract): the host decision
+    // file is read through the result reader's `ResultSource.hostFile`, and the public
+    // `ProgramExecutor` implements its `Executor` interface (task 7.1), so its request, result and
+    // describe types are on this module's own signatures: `api`.
+    api project(':executor-contract')
+    // The factory's git invocation policy (design D1 of own-git-invocation-policy): the
+    // working-copy-unchanged check of a verdict or decision run (FR11, NFR-S4 of
+    // define-executor-contract) runs `git status` in the environment under `GitInvocation`.
+    implementation project(':gittransfer')
     implementation libs.slf4j.api
 
     // The agent CLI's stream-JSON output. The DTOs are internal to this module,
@@ -146,11 +155,13 @@ layering {
         // of add-base-ref-resolution); no source in this module names it.
         ':baseref',
         ':domain',
+        // The executor contract's result reader, for the host decision file (task 3.2 of
+        // define-executor-contract).
+        ':executor-contract',
         ':gitobjects',
-        // The git-transfer owner leaf (design D1 of own-git-transfer-argv): transitive via
-        // `:sandbox:docker`, whose seed helper renders the owner's clone line. No source in
-        // this module names it; the layering gate walks the transitive graph, so the reach is
-        // listed where it arrives.
+        // The git-transfer owner leaf (design D1 of own-git-transfer-argv), declared above: the
+        // working-copy check of a verdict or decision run (FR11 of define-executor-contract)
+        // runs git under its invocation policy, `GitInvocation`.
         ':gittransfer',
         ':gnomish-plugin-api',
         // The dependency-free logging-support leaf (design D5/D10 of

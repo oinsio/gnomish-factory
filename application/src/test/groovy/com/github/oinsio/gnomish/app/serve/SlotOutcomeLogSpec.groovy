@@ -6,8 +6,10 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.take.DaemonConditionKind
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.logtext.ShutdownPhase
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.status.AnchorLog
@@ -229,6 +231,6 @@ class SlotOutcomeLogSpec extends Specification {
     }
 
     private static TaskState state() {
-        new TaskState(new Position.AtStage('build'), 1, [], ExecutorUsage.none())
+        new TaskState(new Position.AtStage('build'), 1, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 }

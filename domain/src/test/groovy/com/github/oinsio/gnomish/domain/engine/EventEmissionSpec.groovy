@@ -74,8 +74,9 @@ class EventEmissionSpec extends EventEmissionSpecBase {
         (finished[1] as EngineEvent.AttemptFinished).trace().key() == new AttemptKey('TASK-1', 'build', 1)
     }
 
-    // FR12: ExecutionFinished carries the executed round's ExecutorUsage — a non-none() usage
-    //       fed to the executor lands on the emitted event unchanged.
+    // FR12: ExecutionFinished carries the executed round's usage — a non-none() usage fed to the
+    //       executor lands on the emitted event as the executor's transform entry (FR15 of
+    //       define-executor-contract), named by the stage's type word.
     def "ExecutionFinished carries the round's executor usage"() {
         given: 'a passing single-check stage whose executor reports a non-none usage'
         def stageDef = stage('build', 5, [builtin('files_exist')])
@@ -91,7 +92,7 @@ class EventEmissionSpec extends EventEmissionSpecBase {
             it instanceof EngineEvent.ExecutionFinished
         }
         exec.size() == 1
-        (exec[0] as EngineEvent.ExecutionFinished).usage() == fed
+        (exec[0] as EngineEvent.ExecutionFinished).usage() == Participants.transform('api', fed)
         (exec[0] as EngineEvent.ExecutionFinished).key() == new AttemptKey('TASK-1', 'build', 0)
     }
 }

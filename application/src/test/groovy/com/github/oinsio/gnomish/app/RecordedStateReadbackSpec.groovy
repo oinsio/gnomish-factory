@@ -2,8 +2,10 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -36,7 +38,7 @@ class RecordedStateReadbackSpec extends Specification implements SeededCloneFixt
 
     def "readRecordedState() reads back the exact state.json content the engine committed"() {
         given: 'a task branch whose last round committed a specific, non-default state'
-        TaskState written = new TaskState(new Position.AtStage('review'), 2, [], ExecutorUsage.none())
+        TaskState written = new TaskState(new Position.AtStage('review'), 2, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         persistRound('PROJ-1', written)
 
         when:

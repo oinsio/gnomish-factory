@@ -69,10 +69,10 @@ class EscalationReportSpec extends Specification {
     // FR10: PipelineMismatch exposes the stale stage name as constructed
     def "PipelineMismatch exposes its staleStage as constructed"() {
         when: 'a PipelineMismatch report is created'
-        def report = new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('legacy-build'))
+        def report = new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument('legacy-build')))
 
         then: 'the stale stage name is exposed exactly as constructed'
-        report.staleStage().forLog() == 'legacy-build'
+        report.cause().stage().forLog() == 'legacy-build'
     }
 
     // FR10: CannotExecute exposes the preserved cause as constructed
@@ -220,17 +220,34 @@ class EscalationReportSpec extends Specification {
         report.details().forLog() == ''
     }
 
-    // FR10: PipelineMismatch.staleStage is required — the report names the missing stage
-    def "PipelineMismatch rejects a blank staleStage with the component named"() {
+    // FR10: the stale stage is required — the report names the missing stage
+    def "PipelineMismatch rejects a blank stale stage with the component named"() {
         when: 'a PipelineMismatch is created with a blank staleStage'
-        new EscalationReport.PipelineMismatch(UntrustedText.branchDocument(staleStage))
+        new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument(staleStage)))
 
         then: 'construction fails and the message names the blank component'
         def failure = thrown(IllegalArgumentException)
-        failure.message.contains('PipelineMismatch.staleStage')
+        failure.message.contains('MismatchCause.StaleStage.stage')
 
         where:
         staleStage << ['', '   ', '\t', ' \n']
+    }
+
+    // FR13 of define-executor-contract: an executor version cause names the executor and both versions
+    def "PipelineMismatch rejects a blank #component of an executor version cause"() {
+        when:
+        new MismatchCause.ExecutorVersion(
+                UntrustedText.manifest(executor), UntrustedText.branchDocument(recorded), UntrustedText.subprocess(current))
+
+        then:
+        def failure = thrown(IllegalArgumentException)
+        failure.message.contains('MismatchCause.ExecutorVersion.' + component)
+
+        where:
+        component | executor | recorded | current
+        'executor' | ' ' | '1' | '2'
+        'recorded' | 'acme' | '' | '2'
+        'current' | 'acme' | '1' | ' \n'
     }
 
     // FR10: CannotExecute.cause is required — the preserved stack trace must be present
@@ -244,5 +261,24 @@ class EscalationReportSpec extends Specification {
 
         where:
         cause << ['', '   ', '\t', ' \n']
+    }
+
+    // FR7 of define-executor-contract: BudgetExhausted carries the bound it was built with
+    def "BudgetExhausted exposes its bound as constructed"() {
+        expect:
+        new EscalationReport.BudgetExhausted(UntrustedText.agent('tokens 1000')).bound() == UntrustedText.agent('tokens 1000')
+    }
+
+    // FR7 of define-executor-contract: a budget report that names no bound is refused, naming it
+    def "BudgetExhausted rejects a blank bound with the component named"() {
+        when:
+        new EscalationReport.BudgetExhausted(UntrustedText.agent(bound))
+
+        then:
+        def failure = thrown(IllegalArgumentException)
+        failure.message == 'EscalationReport.BudgetExhausted.bound must not be blank'
+
+        where:
+        bound << ['', '   ', '\t', ' \n']
     }
 }

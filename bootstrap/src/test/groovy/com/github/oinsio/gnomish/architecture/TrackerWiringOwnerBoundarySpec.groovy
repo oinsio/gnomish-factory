@@ -38,6 +38,8 @@ class TrackerWiringOwnerBoundarySpec extends Specification {
             BOOT + 'app/CheckEquipment.java',
             BOOT + 'app/ManualRunConfiguration.java',
             BOOT + 'adapter/check/ProviderDispatchingExternalCheckClient.java',
+            // FR12 of define-executor-contract: the kit's command uses the seam as the value source of its candidate's base environment
+            BOOT + 'app/conformance/ExecutorVerifyCommand.java',
         ],
         'new EpochRecordingTracker(': [
             APP + 'app/TrackerWiring.java',

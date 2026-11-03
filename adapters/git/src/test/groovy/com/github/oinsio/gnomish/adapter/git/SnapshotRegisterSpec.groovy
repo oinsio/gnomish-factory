@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.app.port.git.RoundToken
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir

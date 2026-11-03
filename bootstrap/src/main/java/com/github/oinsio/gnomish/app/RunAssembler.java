@@ -51,7 +51,8 @@ final class RunAssembler {
      *     CLI executor/judge adapters and the command-check runner all compose their child
      *     environments from the resulting positive allowlist, so a credential reaches neither the
      *     gnome nor a command check by construction; empty for plain {@code gnomish run}
-     * @param lawBinding which repository and tree the pipeline law is frozen from at invocation
+     * @param law the described law: its binding, and the describe versions the engine pins and
+     *     compares (FR13 of define-executor-contract). The binding says which repository and tree the pipeline law is frozen from at invocation
      *     start (D14, FR19 of add-sandbox-core; D12 of add-base-ref-resolution): git objects at
      *     the law commit wherever a ref was resolved, the working tree of the {@code --dir}
      *     workspace in-place and in a manual {@code run} without {@code --base}. Never the gnome's
@@ -68,10 +69,11 @@ final class RunAssembler {
             TaskState initialState,
             AttemptPersistence attemptPersistence,
             List<String> credentialEnvVarsToScrub,
-            LawBinding lawBinding) {
+            DescribedLaw law) {
+        LawBinding lawBinding = law.binding();
         PipelineDefinition definition = order.definition();
         var runLaw = RunLaw.open(lawBinding);
-        var law = runLaw.freeze(definition);
+        var frozen = runLaw.freeze(definition);
         var holder = new StatusSnapshotHolder(initialState);
         var console = new DialogConsole(assembly.systemConsoleIO);
 
@@ -91,17 +93,23 @@ final class RunAssembler {
                 assembly.sandboxProperties.envPassthrough(), definition, credentialEnvVarsToScrub);
         var listener = new CompositeEngineEventListener(listeners);
         var sandbox = assembly.sandbox;
+        var stageRounds = ExecutorAdapterSelector.stageRounds(assembly, childEnv, frozen, law, definition);
         var ports = new EnginePorts(
-                ExecutorAdapterSelector.stageExecutor(assembly, childEnv, law),
+                stageRounds.executor(),
                 assembly.checks.builtinRunner(sandbox),
                 assembly.checks.commandRunner(childEnv, sandbox),
                 assembly.checks.externalCheckClient(runLaw, RunCheckRunContext.of(context, holder)),
                 ExecutorAdapterSelector.judgeVoter(
-                        assembly.factoryProperties, assembly.time.clock(), childEnv, law, sandbox),
+                        assembly.factoryProperties, assembly.time.clock(), childEnv, frozen, sandbox),
                 listener,
                 attemptPersistence,
                 assembly.time,
-                sandbox == null ? AttemptDelivery.assumedDelivered() : sandbox.attemptDelivery());
+                sandbox == null ? AttemptDelivery.assumedDelivered() : sandbox.attemptDelivery(),
+                // FR13 of define-executor-contract: what the describe preflight obtained for this law.
+                law.executors(),
+                // FR14, FR21 of define-executor-contract: the identity of the rounds that executor's
+                // source opens — its cell in a branch mode, the in-place identity otherwise.
+                stageRounds.identity());
 
         var loop = new RunnerOutcomeLoop(new Engine(), console, assembly.errorConsole);
         return new Run(loop, ports);

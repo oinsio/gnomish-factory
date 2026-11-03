@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/oinsio/gnomish-factory/schemas/executor-contract/1/executor-result.schema.json",
+  "title": "Executor result",
+  "description": "The outcome of one executor run, written to the factory-named GNOMISH_RESULT_FILE and read through the one capped result reader; stdout and stderr are logs, never this document. Readers ignore unknown properties (additive evolution, protocol version 1). Implements FR1, FR2, FR6 of define-executor-contract.",
+  "type": "object",
+  "required": ["status", "usage"],
+  "properties": {
+    "status": {
+      "description": "The closed status taxonomy. Unknown-token arm: any other token is read as failed/infrastructure with a reason naming the token.",
+      "enum": ["completed", "failed", "pending"]
+    },
+    "failureClass": {
+      "description": "Required when status is failed. quality burns an attempt; infrastructure burns none and escalates after retries; limit burns none and ends the stage with a budget-exhausted escalation. Unknown-token arm: read as infrastructure, naming the token.",
+      "enum": ["quality", "infrastructure", "limit"]
+    },
+    "pendingKey": {
+      "description": "Required when status is pending: the opaque key the factory polls with, handed to the poll in GNOMISH_PENDING_KEY, so at most 4096 characters and no control character; any other key reads as failed/infrastructure. A pending result from a role whose caller cannot poll is failed/infrastructure.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*$"
+    },
+    "reason": {
+      "description": "Optional free text explaining the status; untrusted text.",
+      "type": "string"
+    },
+    "answer": { "$ref": "executor-answer.schema.json" },
+    "usage": { "$ref": "#/$defs/usage" },
+    "denials": {
+      "description": "The denials the run met (egress and policy refusals); absent means none.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/denial" }
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "status": { "const": "failed" } } }, "then": { "required": ["failureClass"] } },
+    { "if": { "properties": { "status": { "const": "pending" } } }, "then": { "required": ["pendingKey"] } }
+  ],
+  "$defs": {
+    "usage": {
+      "description": "What the run consumed, as the executor reports it. ABSENT never renders as zero: an executor that cannot report usage says so. The factory adds role, executor name and vote index when it records the entry.",
+      "type": "object",
+      "required": ["provenance"],
+      "properties": {
+        "provenance": {
+          "description": "Unknown-token arm: read as ABSENT, never as zero usage.",
+          "enum": ["REPORTED", "ABSENT"]
+        },
+        "wallMillis": { "type": "integer", "minimum": 0 },
+        "models": {
+          "description": "Per resolved model id: the four token counts and an optional cost in USD.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/modelUsage" }
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "calls"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "calls": { "type": "integer", "minimum": 0 },
+              "totalMillis": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "modelUsage": {
+      "type": "object",
+      "required": ["input", "output", "cacheCreation", "cacheRead"],
+      "properties": {
+        "input": { "type": "integer", "minimum": 0 },
+        "output": { "type": "integer", "minimum": 0 },
+        "cacheCreation": { "type": "integer", "minimum": 0 },
+        "cacheRead": { "type": "integer", "minimum": 0 },
+        "costUsd": { "type": "number", "minimum": 0 }
+      }
+    },
+    "denial": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {
+        "message": { "type": "string" },
+        "location": { "type": "string" },
+        "details": { "type": "string" }
+      }
+    }
+  },
+  "examples": [
+    {
+      "status": "completed",
+      "usage": {
+        "provenance": "REPORTED",
+        "wallMillis": 184000,
+        "models": {
+          "example-model": { "input": 1200, "output": 3400, "cacheCreation": 0, "cacheRead": 56000, "costUsd": 0.42 }
+        },
+        "tools": [ { "name": "Edit", "calls": 7, "totalMillis": 950 } ]
+      },
+      "denials": [ { "message": "egress to example.com refused", "location": "example.com:443" } ]
+    },
+    {
+      "status": "completed",
+      "answer": {
+        "kind": "verdict",
+        "sarif": {
+          "version": "2.1.0",
+          "runs": [ { "tool": { "driver": { "name": "example-judge" } }, "results": [] } ]
+        }
+      },
+      "usage": { "provenance": "ABSENT" }
+    },
+    {
+      "status": "failed",
+      "failureClass": "limit",
+      "reason": "turn bound of 40 reached",
+      "usage": { "provenance": "ABSENT" }
+    },
+    {
+      "status": "pending",
+      "pendingKey": "build-8812",
+      "usage": { "provenance": "ABSENT" }
+    }
+  ]
+}

@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -63,7 +64,8 @@ class StateDirectoryWritersSpec extends Specification implements BareGitRepoFixt
             new ToolCall(it, "tool-${it}", Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(10))
         }
         new GitAttemptPersistence(runner, worktree(), TASK, ClaimEpochSource.NONE)
-                .persist(TASK, state, new ToolTrace(new AttemptKey(TASK, 'implement', round), calls))
+                .persist(TASK, RoundStates.withRound(state, new AttemptKey(TASK, 'implement', round)),
+                new ToolTrace(new AttemptKey(TASK, 'implement', round), calls))
     }
 
     private List<String> stateWritesAfterStart() {
@@ -104,9 +106,9 @@ class StateDirectoryWritersSpec extends Specification implements BareGitRepoFixt
 
         then: 'exactly these commits touched state.json, in this order — no outcome commit among them'
         writes.collect { it.substring(41) } == [
-            ServiceCommitMessages.round('implement', 0),
+            ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey('T-1', 'implement', 0))),
             ServiceCommitMessages.taskEvent(TaskLifecycleEvent.RESUMED),
-            ServiceCommitMessages.round('implement', 1),
+            ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey('T-1', 'implement', 1))),
             ServiceCommitMessages.taskEvent(TaskLifecycleEvent.APPROVED),
             ServiceCommitMessages.taskEvent(TaskLifecycleEvent.RESUMED),
         ]

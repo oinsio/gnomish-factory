@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -148,7 +149,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
         createTask(taskId)
         def afterRound = TaskState.atStageStart('build')
         persistOneRound(taskId, afterRound)
-        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals())
+        def escalatedState = new TaskState(afterRound.position(), 1, afterRound.attempts(), afterRound.totals(), ExecutorVersions.none())
         def report = new EscalationReport.CannotVerify(
                 new CheckRef(0, UntrustedText.manifest('tests')), UntrustedText.subprocess('down'), UntrustedText.subprocess(''))
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(escalatedState, report), TrackerWrite.OWED)
@@ -233,7 +234,7 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
     private TaskState gateRound(String taskId) {
         createTask(taskId)
         def passed = TaskState.atStageStart('build')
-        def gated = new TaskState(new Position.AwaitingApproval('build'), 1, passed.attempts(), passed.totals())
+        def gated = new TaskState(new Position.AwaitingApproval('build'), 1, passed.attempts(), passed.totals(), ExecutorVersions.none())
         persistOneRound(taskId, gated)
         gated
     }

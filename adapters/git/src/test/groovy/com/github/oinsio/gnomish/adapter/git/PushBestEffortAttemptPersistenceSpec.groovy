@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -31,7 +32,7 @@ class PushBestEffortAttemptPersistenceSpec extends Specification implements Bare
         def trace = new ToolTrace(new AttemptKey('T-1', 'work', 0), [])
 
         when:
-        persistence.persist('T-1', TaskState.atStageStart('work'), trace)
+        persistence.persist('T-1', RoundStates.recorded(trace.key()), trace)
 
         then: 'the delegate persisted — its admission landed branch and register together — and both reached origin'
         1 * delegate.persist('T-1', _, _) >> {
@@ -53,8 +54,8 @@ class PushBestEffortAttemptPersistenceSpec extends Specification implements Bare
         def persistence = new PushBestEffortAttemptPersistence(delegate, new BestEffortClosingPush(git), tempDir)
 
         when:
-        persistence.persist('T-1', TaskState.atStageStart('work'),
-                new ToolTrace(new AttemptKey('T-1', 'work', 0), []))
+        persistence.persist('T-1', RoundStates.recorded(new ToolTrace(new AttemptKey('T-1', 'work', 0), []).key()),
+        new ToolTrace(new AttemptKey('T-1', 'work', 0), []))
 
         then:
         1 * delegate.persist(_, _, _) >> {

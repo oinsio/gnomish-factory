@@ -149,4 +149,43 @@ class PipelineDefinitionSpec extends Specification {
         then:
         pipeline.tracker() == tracker
     }
+
+    // FR9 of define-executor-contract: the shorter constructors declare no executors
+    def "the shorter constructors default the executors to none"() {
+        expect:
+        pipelineWith([stage('plan')]).executors() == []
+        new PipelineDefinition('1', DEFAULT_LIMITS, [stage('plan')], null).executors() == []
+    }
+
+    // FR9 of define-executor-contract: the declarations ride the model in declaration order,
+    //     copied and unmodifiable, each declaration's own lists and settings likewise
+    def "the executor declarations are carried in order and isolated from later mutation"() {
+        given:
+        def program = ['acme-executor', '--json']
+        def settings = [maxTurns: 20] as Map<String, Object>
+        def credentials = ['ACME_API_KEY']
+        def egress = ['api.acme.example']
+        def acme = new ExecutorDeclaration('acme', ExecutorDeclaration.Type.PROGRAM, program, settings, credentials, egress)
+        def lint = new ExecutorDeclaration('lint', ExecutorDeclaration.Type.PROGRAM, ['lint'], [:], [], [])
+        def declarations = [acme, lint]
+
+        when:
+        def pipeline = new PipelineDefinition('1', DEFAULT_LIMITS, [stage('plan')], null, declarations)
+        declarations.clear()
+        program << 'x'
+        settings.put('y', 1)
+        credentials << 'Z'
+        egress << 'w'
+
+        then:
+        pipeline.executors()*.name() == ['acme', 'lint']
+        pipeline.executors()[0] == new ExecutorDeclaration('acme', ExecutorDeclaration.Type.PROGRAM,
+                ['acme-executor', '--json'], [maxTurns: 20], ['ACME_API_KEY'], ['api.acme.example'])
+
+        when:
+        pipeline.executors().add(lint)
+
+        then:
+        thrown(UnsupportedOperationException)
+    }
 }

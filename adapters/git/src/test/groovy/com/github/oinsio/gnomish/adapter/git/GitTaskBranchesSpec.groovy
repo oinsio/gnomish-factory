@@ -125,7 +125,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
     // classifier, so every take, resume and reconcile path asks one question and gets one name.
     def "FR2: classifyShape names the located tip through the one classifier"() {
         given: 'a started task whose state records no round yet'
-        seedTask('PROJ-9')
+        startTask('PROJ-9')
 
         expect:
         branches.classifyShape(cloneDir, 'PROJ-9') instanceof BranchShape.Created
@@ -173,8 +173,7 @@ class GitTaskBranchesSpec extends Specification implements BareGitRepoFixture, T
 
     def "readDelivered delegates to DeliveredBranchReader and returns the recovered delivery"() {
         given: 'a delivered task branch, whose tip no longer carries the state files'
-        seedTask('PROJ-6')
-        def finalState = TaskState.atStageStart('implement')
+        def finalState = seedTask('PROJ-6')
         new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
                 .recordOutcome('PROJ-6', new TaskOutcome.Completed(finalState), TrackerWrite.OWED)
 

@@ -23,6 +23,9 @@
 #                                in a value `\` stands for a backslash and `\n` for a line break
 #             stdout <file>      copy <file> to stdout
 #             stderr <file>      copy <file> to stderr
+#             result <file>      copy <file> over the path GNOMISH_RESULT_FILE names: the result file
+#                                the factory chose for an executor run (describe, start); refused
+#                                when the variable is unset
 #             delay <seconds>    sleep, then go on
 #             run <file>         run <file> with sh, with the invocation's arguments
 #             write <file> @name copy <file> over the per-run file `$0.name`, so what a later
@@ -275,6 +278,11 @@ EOF
         record) record "$args" "$@" ;;
         stdout) file_of "$args"; emit ;;
         stderr) file_of "$args"; emit >&2 ;;
+        result)
+            [ -n "${GNOMISH_RESULT_FILE:-}" ] || broken "result needs GNOMISH_RESULT_FILE, the path the factory chose"
+            file_of "$args"
+            emit > "$GNOMISH_RESULT_FILE"
+            ;;
         delay) sleep "$args" ;;
         run) file_of "$args"; sh "$resolved" "$@" ;;
         write)

@@ -26,7 +26,7 @@ class BrokenListenerPreflightSpec extends BrokenListenerSpecBase {
         def builtinRunner = new ScriptedBuiltinCheckRunner()
         def persistence = new InMemoryAttemptPersistence()
         def listener = new RecordingEventListener(throwOnEvent: true)
-        def state = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
+        def state = new TaskState(new Position.PipelineEnd(), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when: 'the run is driven'
         def outcome = new Engine().run(pipeline(stage('build', [builtin('files_exist')])), CONTEXT,

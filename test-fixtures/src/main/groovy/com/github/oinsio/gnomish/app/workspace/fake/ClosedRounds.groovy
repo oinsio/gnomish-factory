@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app.workspace.fake
 
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
-import com.github.oinsio.gnomish.app.port.git.RoundToken
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 
 /**
  * Builds the run's round cell in the state verification reads it in: a round opened under a fixed

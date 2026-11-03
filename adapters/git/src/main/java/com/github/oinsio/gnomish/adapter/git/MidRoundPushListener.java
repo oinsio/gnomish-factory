@@ -3,10 +3,10 @@ package com.github.oinsio.gnomish.adapter.git;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.nio.file.Path;
 import java.util.Optional;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,8 +23,10 @@ import org.slf4j.LoggerFactory;
  * constructed right before one {@code CliStageExecutor.execute()} call (one round) and discarded
  * right after — mirroring how {@code com.github.oinsio.gnomish.adapter.agent.StreamJsonParser
  * #parse} itself is invoked once per round (module {@code :adapters:agent}, out of this module's
- * reach). At construction the "last observed tip" baseline is
- * read from {@code HEAD} (i.e. the tip the round started at); every time this listener notices and
+ * reach). The "last observed tip" baseline is the round's token — the worktree tip the round
+ * opened on, which {@link MidRoundPushRounds} minted and hands in, so construction reads nothing
+ * and the round's open costs one {@code rev-parse}, not two (NFR-P1 of wire-host-mid-round-push;
+ * FR21 of define-executor-contract), as the sandboxed twin takes its token; every time this listener notices and
  * acts on a movement, the baseline advances to the new {@code HEAD} so a later event covering the
  * same still-unmoved tip is a no-op. This tracking is deliberately separate from {@link
  * GitAttemptPersistence}'s own {@code previousTip} bookkeeping: the two are different observers of
@@ -73,18 +75,24 @@ public final class MidRoundPushListener implements AgentProgressListener {
     private final String branch;
     private final MidRoundPollLog pollLog;
 
-    private @Nullable String lastObservedTip;
+    private String lastObservedTip;
 
     /**
      * @param runner the git subprocess runner, shared with the round's other git-adapter machinery
      * @param worktreeRoot the task worktree; git commands run with this path as {@code cwd}
      * @param stage the current stage name, for WARN log context
      * @param round the current round number, for WARN log context
+     * @param openedOn the round's token: the worktree tip the round opened on, the first baseline
      * @param context whose round this is — the task id and branch (e.g. {@link
      *     TaskIdSanitizer#branchName}) and the suppressor its failure streaks live in
      */
     public MidRoundPushListener(
-            GitRunner runner, Path worktreeRoot, String stage, int round, MidRoundPollContext context) {
+            GitRunner runner,
+            Path worktreeRoot,
+            String stage,
+            int round,
+            RoundToken openedOn,
+            MidRoundPollContext context) {
         this.push = BestEffortPush.midRound(runner);
         this.probe = new HostBranchProbe(runner, worktreeRoot, context.branch());
         this.worktreeRoot = worktreeRoot;
@@ -93,9 +101,7 @@ public final class MidRoundPushListener implements AgentProgressListener {
         this.round = round;
         this.branch = context.branch();
         this.pollLog = context.logTo(log);
-        // An unresolvable HEAD leaves the baseline unknown rather than blank: the first event that
-        // does resolve it adopts it silently, and only movement away from that adopted tip pushes.
-        this.lastObservedTip = VerifiedTip.read(probe.readHead()).orElse(null);
+        this.lastObservedTip = openedOn.commit();
     }
 
     /**
@@ -103,9 +109,8 @@ public final class MidRoundPushListener implements AgentProgressListener {
      * BestEffortPush#pushBestEffort} using the previously observed tip as the ancestry baseline,
      * then advances the baseline to the new tip. A stationary tip is a no-op beyond the one cheap
      * {@code rev-parse}. Never throws (design D10's listener contract): a resolution that fails is
-     * one suppressed line and no push, and an adopted first baseline is no push either — the
-     * ancestry precondition {@link BestEffortPush} enforces has nothing to rest on until one
-     * observation has been made.
+     * one suppressed line and no push; the ancestry precondition {@link BestEffortPush} enforces
+     * rests on the last observed tip, the round's opened tip until the first movement.
      *
      * @param event the progress event that just occurred; unused beyond triggering the check, since
      *     tip movement — not the event's own content — is what this listener reacts to
@@ -125,7 +130,7 @@ public final class MidRoundPushListener implements AgentProgressListener {
         String currentTip = tip.get();
         String previousTip = lastObservedTip;
         lastObservedTip = currentTip;
-        if (previousTip == null || currentTip.equals(previousTip)) {
+        if (currentTip.equals(previousTip)) {
             return;
         }
         push.pushBestEffort(taskId, stage, round, worktreeRoot, branch, probe, previousTip);

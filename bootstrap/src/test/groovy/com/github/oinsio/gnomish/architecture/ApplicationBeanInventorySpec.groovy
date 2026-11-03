@@ -73,6 +73,8 @@ class ApplicationBeanInventorySpec extends Specification {
         'doctorProjectReadings',
         'doctorSurvey',
         'errorConsoleIO',
+        // FR12, UX2 of define-executor-contract: gnomish executor verify, the conformance kit
+        'executorVerifyCommand',
         'factory-com.github.oinsio.gnomish.FactoryProperties',
         'factory.bindings-com.github.oinsio.gnomish.sandbox.BindingProperties',
         'factory.sandbox-com.github.oinsio.gnomish.sandbox.SandboxProperties',

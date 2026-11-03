@@ -8,9 +8,12 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.Snapshots
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -46,19 +49,19 @@ class EngineRunContractSpec extends Specification {
         def stage = new StageDefinition('build', 'purpose', [], [], new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', verify, new AutonomyLimits(attemptLimit), AdvancementMode.AUTO)
         def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(), externalClient,
-                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock, sleeper))
+                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(attemptLimit), [stage]), CONTEXT, state, new FakeWorkspace(), ports)
     }
 
-    private static ExecutionResult.Completed completed(int attempt, ExecutorUsage usage, List<ToolCall> calls = []) {
-        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', attempt), calls), [])
+    private static ExecutionResult completed(int attempt, ExecutorUsage usage, List<ToolCall> calls = []) {
+        ExecutionResult.completed(usage, new ToolTrace(new AttemptKey('TASK-1', 'build', attempt), calls), [])
     }
 
     private static ExecutorUsage usage(long wallSecs, long tokensIn) {
         new ExecutorUsage(Duration.ofSeconds(wallSecs), [
             new ToolUsage('read', 1, Duration.ofMillis(10))
         ],
-        ['model-a': new TokenUsage(tokensIn, 0, 0, 0)])
+        Unpriced.of(['model-a': new TokenUsage(tokensIn, 0, 0, 0)]))
     }
 
     // FR17 of supervise-daemon-loops-and-embed-dashboard: one InstantSource, read for every instant
@@ -117,7 +120,7 @@ class EngineRunContractSpec extends Specification {
     // Scenario: pipeline/stage-engine / Cumulative totals survive resume
     def "a resumed run starts its totals from the persisted ones and adds every round it records"() {
         given: 'a persisted state that already carries totals from earlier rounds'
-        def persisted = new TaskState(new Position.AtStage('build'), 0, [], usage(7, 1000))
+        def persisted = new TaskState(new Position.AtStage('build'), 0, [], Snapshots.executed(['model-a': new TokenUsage(1000, 0, 0, 0)]), ExecutorVersions.none())
         builtinRunner.scripted << new Verdict.Fail([
             new Finding('red', null, null)
         ]) << new Verdict.Pass()
@@ -128,12 +131,12 @@ class EngineRunContractSpec extends Specification {
             new VerifyCheck.Builtin('lint', [:])
         ], 3, persisted)
 
-        then: 'each recorded round folded into the running totals'
-        persistence.entries*.state*.totals()*.tokensByModel() == [
-            ['model-a': new TokenUsage(1050, 0, 0, 0)],
-            ['model-a': new TokenUsage(1070, 0, 0, 0)]
+        then: 'each recorded round folded into the running snapshot'
+        persistence.entries*.state*.totals()*.byRole() == [
+            [(ExecutorRole.TRANSFORM): ['model-a': new TokenUsage(1050, 0, 0, 0)]],
+            [(ExecutorRole.TRANSFORM): ['model-a': new TokenUsage(1070, 0, 0, 0)]]
         ]
-        outcome.finalState().totals().wallTime() == Duration.ofSeconds(12)
+        persistence.entries*.state*.totals()*.rounds() == [2, 3]
     }
 
     // FR14 of add-stage-engine: aggregates in the state, the chronological trace beside it
@@ -151,7 +154,9 @@ class EngineRunContractSpec extends Specification {
 
         then: 'the persisted round holds the per-tool aggregate, never the calls'
         def entry = persistence.entries[0]
-        entry.state.attempts()[0].executorUsage() == usage(2, 50)
+        entry.state.attempts()[0].usage() == [
+            Participants.transform(entry.state.attempts()[0].usage()[0].executor(), usage(2, 50))
+        ]
         !AttemptRecord.recordComponents*.type.contains(ToolTrace)
         !TaskState.recordComponents*.type.contains(ToolTrace)
 

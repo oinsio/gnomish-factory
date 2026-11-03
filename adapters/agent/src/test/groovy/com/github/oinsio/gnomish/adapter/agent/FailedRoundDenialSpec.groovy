@@ -4,7 +4,6 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Finding
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 
@@ -19,9 +18,9 @@ import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
  * attempt's.
  *
  * <p>FR1 of fix-denial-attribution-durability: the drain no longer ends in the log. Each
- * failure leaves this adapter wrapped in an {@code ExecutorFailure} carrying what was drained,
- * with the original infrastructure failure as its cause, so the engine can copy the denials
- * onto the {@code CannotExecute} escalation the round left no attempt record to hold.
+ * failure leaves this adapter as its {@code failed/infrastructure} result carrying what was
+ * drained (FR7 of define-executor-contract), so the engine's classifier copies the denials onto
+ * the {@code CannotExecute} escalation the round left no attempt record to hold.
  */
 class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
 
@@ -40,12 +39,11 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         def logs = LogCaptureSupport.attach(RoundDenialRead)
 
         when:
-        executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
+        def result = executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
 
-        then: 'FR1: the timeout leaves the adapter wrapped, carrying the drained denial'
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof RoundTimeoutException
-        failure.denials() == [
+        then: 'FR1: the timeout leaves the adapter as its failed result, carrying the drained denial'
+        InfrastructureResults.endedBy(result, RoundTimeoutException)
+        result.denials() == [
             Denial.unidentified(HUNG_ROUND_DENIAL)
         ]
 
@@ -70,12 +68,11 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         def source = scriptedSource([[HUNG_ROUND_DENIAL]])
 
         when:
-        executorFor('missing-result-event', source).execute(requestFor())
+        def result = executorFor('missing-result-event', source).execute(requestFor())
 
-        then: 'FR1: same wrapper, this time over the missing result event'
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof MissingResultEventException
-        failure.denials() == [
+        then: 'FR1: same result, this time over the missing result event'
+        InfrastructureResults.endedBy(result, MissingResultEventException)
+        result.denials() == [
             Denial.unidentified(HUNG_ROUND_DENIAL)
         ]
 
@@ -83,19 +80,18 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         source.reads() == 1
     }
 
-    // FR1: "a process that would not start" is the third failure ExecutorFailure names
-    //      (ExecutorFailure.java:11) — the launch is inside the wrapped region like the rest
+    // FR1: "a process that would not start" is the third failure the round reports with its
+    //      denials — the launch is inside the guarded region like the rest
     def "a round whose process will not start drains its environment's denials"() {
         given:
         def source = new ScriptedDenialRounds(hostSource(), [[HUNG_ROUND_DENIAL]], true)
 
         when:
-        executorFor('plain-round', source).execute(requestFor())
+        def result = executorFor('plain-round', source).execute(requestFor())
 
-        then: 'FR1: the start failure leaves the adapter wrapped, carrying what the box had recorded'
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof IllegalStateException
-        failure.denials() == [
+        then: 'FR1: the start failure leaves the adapter as its failed result, carrying what the box had recorded'
+        InfrastructureResults.endedBy(result, IllegalStateException)
+        result.denials() == [
             Denial.unidentified(HUNG_ROUND_DENIAL)
         ]
 
@@ -113,16 +109,16 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         ])
 
         when: 'the first round hangs and is killed'
-        executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
+        def killed = executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
 
         then:
-        thrown(ExecutorFailure)
+        InfrastructureResults.endedBy(killed, RoundTimeoutException)
 
         when: 'the same environment runs the next round to completion'
         def result = executorFor('plain-round', source).execute(requestFor())
 
         then: 'only its own denial lands on the result'
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         result.denials() == [
             Denial.unidentified(NEXT_ROUND_DENIAL)
         ]
@@ -140,10 +136,10 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         def logs = LogCaptureSupport.attach(RoundDenialRead)
 
         when:
-        executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
+        def result = executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
 
         then:
-        thrown(ExecutorFailure)
+        InfrastructureResults.endedBy(result, RoundTimeoutException)
 
         and: 'the line counts the denials and names every destination'
         def warned = logs.list.find {
@@ -169,12 +165,11 @@ class FailedRoundDenialSpec extends AbstractDenialRoundSpec {
         def logs = LogCaptureSupport.attach(RoundDenialRead)
 
         when:
-        executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
+        def result = executorFor('hangs-forever', source).execute(requestFor([roundTimeout: 1]))
 
         then: 'NFR-R1: the round\'s own failure still comes out, with no denials to report'
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof RoundTimeoutException
-        failure.denials().isEmpty()
+        InfrastructureResults.endedBy(result, RoundTimeoutException)
+        result.denials().isEmpty()
 
         and: 'FR15 of harden-logging-observability: the undrained cursor is a coded WARN of its own'
         def warned = logs.list.find {

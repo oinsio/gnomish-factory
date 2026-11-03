@@ -2,8 +2,8 @@ package com.github.oinsio.gnomish.app.workspace
 
 import com.github.oinsio.gnomish.app.port.check.AttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
-import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import spock.lang.Specification
 

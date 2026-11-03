@@ -1,13 +1,12 @@
 package com.github.oinsio.gnomish.app.port.git;
 
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 
 /**
- * One reconstructed round of {@code gnomish usage} (FR14, NFR-C1 of add-git-workflow): the stage
- * visit it belongs to plus the full {@link AttemptRecord} that appeared for it, carried verbatim
- * rather than re-projected — round number, result, wall time, {@code tokensByModel}, tool
- * aggregates, and per-vote judge usage are all reachable from {@code attempt}, so the text-mode
+ * One reconstructed round of {@code gnomish usage} (FR14, NFR-C1 of add-git-workflow): the full
+ * {@link AttemptRecord} that appeared for it, carried verbatim
+ * rather than re-projected — round number, result and every participant entry of its usage are
+ * reachable from {@code attempt}, so the text-mode
  * summary (task 5.6) and the {@code --json} full-granularity rendering can both be built from the
  * same row without a second git-history walk.
  *
@@ -20,16 +19,13 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
  * <p>Produced by the git-side usage-history walk, one row per detected round in chronological
  * (oldest→newest) order — see that walker's javadoc for exactly when a commit yields a row.
  *
- * <p>Implements FR14, NFR-C1 of add-git-workflow.
+ * <p>The row carries no stage of its own: the stage, like the task and the round token, is the
+ * record's identity, written by the round's writer and read from it ({@code attempt().stage()}),
+ * so no producer can bill a round to a stage its record does not name (design D13, FR14, FR19 of
+ * define-executor-contract).
  *
- * @param stage the stage name this round's attempt was recorded under, i.e. the {@code
- *     state.json} {@code position} at the time this round was appended
+ * <p>Implements FR14, NFR-C1 of add-git-workflow; FR19 of define-executor-contract.
+ *
  * @param attempt the round's full recorded detail as a domain attempt record
  */
-public record UsageRow(String stage, AttemptRecord attempt) {
-
-    /** This row's executor usage, the same field {@link AttemptRecord#executorUsage()} carries. */
-    public ExecutorUsage executorUsage() {
-        return attempt.executorUsage();
-    }
-}
+public record UsageRow(AttemptRecord attempt) {}

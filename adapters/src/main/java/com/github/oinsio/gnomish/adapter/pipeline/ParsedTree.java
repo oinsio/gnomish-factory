@@ -51,14 +51,17 @@ record ParsedTree(Result<ConfigDto> config, Result<PipelineDto> pipeline, Map<St
     }
 
     /**
-     * Structural shape checks on the parsed-OK DTOs (a failed parse short-circuits its own shape).
-     * {@code config.yaml} needs no shape check — its only required field, {@code schemaVersion}, is
-     * the domain {@code SchemaVersionRule}'s concern — so only {@code pipeline.yaml} and each stage
-     * manifest are checked.
+     * Structural shape checks on the parsed-OK DTOs (a failed parse short-circuits its own shape),
+     * coarsest file first: the {@code config.yaml} {@code executors:} section (FR9 of
+     * define-executor-contract; the file's required {@code schemaVersion} is the domain {@code
+     * SchemaVersionRule}'s concern), then {@code pipeline.yaml}, then each stage manifest.
      *
      * @param errors the shared single-pass error list; appended to, never read
      */
     void checkShape(List<ConfigError> errors) {
+        if (config instanceof Ok<ConfigDto>(ConfigDto value)) {
+            errors.addAll(ExecutorDeclarations.check(value.executors()));
+        }
         if (pipeline instanceof Ok<PipelineDto>(PipelineDto value)) {
             errors.addAll(StructuralValidation.checkPipeline(value));
         }

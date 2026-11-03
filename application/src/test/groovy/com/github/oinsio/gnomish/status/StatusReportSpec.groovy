@@ -6,12 +6,14 @@ import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -34,7 +36,7 @@ class StatusReportSpec extends Specification {
 
     private static AttemptRecord passedRound() {
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
-        new AttemptRecord(0, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
+        AttemptRecords.of(0, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), [], Stop.none())
     }
 
     // FR11: a task positioned AtStage produces a non-null currentStage matching the stage name
@@ -68,7 +70,7 @@ class StatusReportSpec extends Specification {
     // Scenario: observability/status-report / A gate renders as awaiting approval
     def "describes the stage that passed for a task held at a gate"() {
         given: 'a state at the gate of release, its passing round recorded'
-        def state = new TaskState(new Position.AwaitingApproval('release'), 0, [passedRound()], ExecutorUsage.none())
+        def state = new TaskState(new Position.AwaitingApproval('release'), 0, [passedRound()], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when: 'a report is built'
         def report = StatusReport.build(context(), state, null, null)
@@ -85,9 +87,9 @@ class StatusReportSpec extends Specification {
         given: 'a state with a recorded quality failure and non-empty totals'
         def failedCheck = new CheckResult(new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
                 new Verdict.Fail([]), Duration.ofSeconds(5))
-        def round = new AttemptRecord(0, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [failedCheck],
-        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), JudgeUsage.none(), [], Stop.none())
-        def state = TaskState.atStageStart('implement').recordQualityFailure(round)
+        def round = AttemptRecords.of(0, AttemptRecord.Result.QUALITY_FAILURE, STARTED, [failedCheck],
+        new ExecutorUsage(Duration.ofSeconds(5), [], [:]), [], Stop.none())
+        def state = TaskState.atStageStart('implement').recordQualityFailure(round, ExecutorVersions.none())
         def decision = new Decision('patch in place', 'plan', 'operator', STARTED)
         def ctx = context([decision])
 
@@ -157,6 +159,27 @@ class StatusReportSpec extends Specification {
         report.outcome() == null
     }
 
+    // FR7 of define-executor-contract: every one of the six report kinds surfaces as recorded — the
+    //     kinds are named, so a seventh fails here until the report and its renders know it
+    // Scenario: observability/status-report / The last escalation and the last decision
+    def "surfaces each of the six escalation kinds: #escalation.class.simpleName"() {
+        expect:
+        StatusReport.build(context(), TaskState.atStageStart('implement'), escalation, null).lastEscalation() == escalation
+
+        and:
+        EscalationReport.permittedSubclasses*.simpleName as Set == [
+            'AttemptsExhausted',
+            'DecisionNeeded',
+            'CannotVerify',
+            'PipelineMismatch',
+            'CannotExecute',
+            'BudgetExhausted'
+        ] as Set
+
+        where:
+        escalation << StatusReportReferenceFixture.referenceEscalations()
+    }
+
     // D7 of add-manual-run; FR6 of make-run-headless: a recorded terminal outcome surfaces on the report
     def "surfaces a recorded outcome on the built StatusReport"() {
         when: 'a report is built with a recorded Completed outcome'
@@ -171,7 +194,7 @@ class StatusReportSpec extends Specification {
     def "exposes attempts as unmodifiable"() {
         given: 'a report'
         def report = new StatusReport('t1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), new Position.AtStage('stage'), 0, [passedRound()], [], null,
-        ExecutorUsage.none(), null, null)
+        UsageSnapshot.EMPTY, null, null)
 
         when: 'a caller tries to mutate the exposed list'
         report.attempts().add(passedRound())
@@ -185,7 +208,7 @@ class StatusReportSpec extends Specification {
         given: 'a report'
         def decision = new Decision('do it', null, null, null)
         def report = new StatusReport('t1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), new Position.AtStage('stage'), 0, [], [decision], decision,
-        ExecutorUsage.none(), null, null)
+        UsageSnapshot.EMPTY, null, null)
 
         when: 'a caller tries to mutate the exposed list'
         report.decisions().add(decision)

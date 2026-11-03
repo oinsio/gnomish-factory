@@ -5,6 +5,9 @@ import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.AbortFuse;
 import com.github.oinsio.gnomish.app.take.AbortHandler;
+import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
+import com.github.oinsio.gnomish.status.CompositeEngineEventListener;
+import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
 
 /**
@@ -66,8 +69,22 @@ final class SlotWiringFactory {
      * both callers.
      */
     SlotWiring slotWiring(BoundTracker bound, TaskGit git, TakeHeartbeat heartbeat) {
-        RunAssembly slotAssembly =
-                assembly.withExtraListener(heartbeat.progress()).withPipelineSource(pipelineSource);
+        return wiring(bound, git, heartbeat, heartbeat.progress());
+    }
+
+    /**
+     * The slot wiring of a command that keeps a ledger ({@code serve}): as {@link #slotWiring(BoundTracker,
+     * TaskGit, TakeHeartbeat)}, with every slot's engine also fanning into {@code roundLedger}, the
+     * {@code roundOutcome} write point (NFR-O2, UX3 of define-executor-contract).
+     */
+    SlotWiring slotWiring(BoundTracker bound, TaskGit git, TakeHeartbeat heartbeat, EngineEventListener roundLedger) {
+        return wiring(
+                bound, git, heartbeat, new CompositeEngineEventListener(List.of(heartbeat.progress(), roundLedger)));
+    }
+
+    private SlotWiring wiring(
+            BoundTracker bound, TaskGit git, TakeHeartbeat heartbeat, EngineEventListener slotListener) {
+        RunAssembly slotAssembly = assembly.withExtraListener(slotListener).withPipelineSource(pipelineSource);
         return new SlotWiring(
                 slotAssembly,
                 git,

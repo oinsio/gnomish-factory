@@ -116,13 +116,16 @@ final class ManualRunDrive {
             AdHocTaskSynthesizer.SynthesizedTask synthesized,
             RunArguments runArguments,
             PipelineLoadOutcome.Loaded loaded) {
-        Run run = assembly.assemble(
-                order(runArguments, definition),
-                synthesized.context(),
-                synthesized.initialState(),
-                inPlacePersistence,
-                List.of(),
+        RunOrder order = order(runArguments, definition);
+        // D5 of define-executor-contract: in place, describe runs on the host over the --dir
+        // workspace, which is the environment the rounds run in.
+        DescribedLaw described = ManualRunDescribe.described(
+                assembly,
+                order,
+                new DescribeMedium.Host(runArguments.dir()),
                 LawBinding.workingTree(runArguments.dir()));
+        Run run = assembly.assemble(
+                order, synthesized.context(), synthesized.initialState(), inPlacePersistence, List.of(), described);
         // No branch, no return path: an in-place stop ends the task for good (design D5 of
         // make-run-headless), and the process still exits 10/11 by the outcome.
         TaskOutcome outcome = run.loop()

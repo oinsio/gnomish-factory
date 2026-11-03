@@ -8,10 +8,13 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
+import com.github.oinsio.gnomish.domain.engine.MismatchCause
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Clock
@@ -32,7 +35,7 @@ class EscalationResumeSpec extends Specification {
     private static final TaskContext CONTEXT =
     new TaskContext('manual-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
     /** Two attempts burned at `build`: the reset has something to undo. */
-    private static final TaskState BURNED = new TaskState(new Position.AtStage('build'), 2, [], ExecutorUsage.none())
+    private static final TaskState BURNED = new TaskState(new Position.AtStage('build'), 2, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
     private static final TerminalOutcomeRender.ReturnPath RETURN_PATH =
     new TerminalOutcomeRender.ReturnPath(Path.of('/work/clone'), 'manual-1')
 
@@ -46,7 +49,7 @@ class EscalationResumeSpec extends Specification {
     new CheckRef(0, UntrustedText.manifest('command:./gradlew test')),
     UntrustedText.subprocess('timeout'), UntrustedText.subprocess('trace'))
     private static final EscalationReport PIPELINE_MISMATCH =
-    new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage'))
+    new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument('stale-stage')))
     private static final EscalationReport CANNOT_EXECUTE =
     new EscalationReport.CannotExecute(UntrustedText.subprocess('agent crashed'), [])
 
@@ -98,7 +101,7 @@ class EscalationResumeSpec extends Specification {
     def "the decision is scoped to the stage #position names"() {
         when:
         def resumption = resume.decide(CONTEXT, new TaskOutcome.Escalated(
-                        new TaskState(position, 0, [], ExecutorUsage.none()), ATTEMPTS_EXHAUSTED), 'go on')
+                        new TaskState(position, 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none()), ATTEMPTS_EXHAUSTED), 'go on')
 
         then:
         resumption.context().decisions() == [

@@ -66,6 +66,10 @@ dependencies {
     // public surface.
     api project(':baseref')
 
+    // The executor contract (FR6, design D10 of define-executor-contract): a command check's
+    // findings file is read through the contract's one result reader. Method bodies and a
+    // package-private signature only.
+    implementation project(':executor-contract')
     implementation libs.slf4j.api
     // The log-line sanitizer (design D5 of harden-logging-observability): the check runners
     // put a manifest command and a remote-chosen redirect target into log lines, and both
@@ -121,6 +125,9 @@ layering {
         // the `.gnomish/` loader compiles the `base:` section into its value types.
         ':baseref',
         ':domain',
+        // The executor contract's result reader, for the findings file (task 3.2 of
+        // define-executor-contract).
+        ':executor-contract',
         ':gitobjects',
         // The git-transfer owner leaf (design D1 of own-git-transfer-argv): transitive via
         // `:sandbox:docker`, whose seed helper renders the owner's clone line, and via

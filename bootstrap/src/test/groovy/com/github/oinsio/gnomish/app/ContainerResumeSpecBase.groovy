@@ -14,15 +14,17 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.BasePin
-import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -91,12 +93,12 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
     }
 
     protected static TaskState pipelineEndState() {
-        new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
+        new TaskState(new Position.PipelineEnd(), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     /** At the gate of the one stage: a manual pass left it there (FR1 of make-checkpoint-gate-durable). */
     protected static TaskState gateState() {
-        new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+        new TaskState(new Position.AwaitingApproval('build'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     protected List<Segment> segments() {

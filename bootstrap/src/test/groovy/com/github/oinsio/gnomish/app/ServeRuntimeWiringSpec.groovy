@@ -27,9 +27,10 @@ import spock.lang.Timeout
  * writes into the claim (the heartbeat is real and its listener sees the engine's events), the
  * {@code taskOutcome} line in the ledger (the ledger writer is attached to the slot runner), and
  * the {@code tracker} section of the snapshot (the feed polls through the health decorator the
- * snapshot reads).
+ * snapshot reads), and the {@code roundOutcome} line (the slots' engines fan into the round writer).
  *
- * <p>Implements FR13 of add-factory-serve. Implements FR8, FR11 of add-serve-observability.
+ * <p>Implements FR13 of add-factory-serve. Implements FR8, FR11 of add-serve-observability. Implements
+ * NFR-O2, UX3 of define-executor-contract.
  */
 @Timeout(120)
 class ServeRuntimeWiringSpec extends Specification
@@ -113,6 +114,27 @@ implements BareGitRepoFixture, AppAssemblyFixture, ApplicationArgumentsFixture, 
         and: 'the slot runner wrote its outcome through the attached ledger writer'
         def ledgerFile = ObservabilityPaths.ledgerFile(serveDir(), LocalDate.now(ZoneOffset.UTC))
         readLedgerLines(ledgerFile)*.get('type')*.asText().count('taskOutcome') == 1
+    }
+
+    // NFR-O2, UX3 of define-executor-contract: the slots' engines fan into the roundOutcome writer
+    //     through the forwarding stand-in the root binds once the ledger appender exists.
+    def "NFR-O2: a delivered task's round leaves its roundOutcome line in the ledger"() {
+        given:
+        seedReadyTask()
+
+        when:
+        drain('plain-round')
+
+        then: 'one line for the one agent-cli round, beside the taskOutcome line'
+        def ledgerFile = ObservabilityPaths.ledgerFile(serveDir(), LocalDate.now(ZoneOffset.UTC))
+        def rounds = readLedgerLines(ledgerFile).findAll {
+            it.get('type').asText() == 'roundOutcome'
+        }
+        rounds.size() == 1
+        rounds[0].get('taskId').asText() == REF.id()
+        rounds[0].get('executor').asText() == 'agent-cli'
+        rounds[0].get('role').asText() == 'transform'
+        rounds[0].get('status').asText() == 'completed'
     }
 
     // Nothing but the feed touches the tracker on an empty drain: no claim means no beat, and the

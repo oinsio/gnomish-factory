@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.LocalBoxEnvironment
+import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
@@ -31,6 +32,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -111,7 +113,7 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
         def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(scenario),
                 new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, source)
         def persistence = new EnvironmentAttemptPersistence(box, runner, clone, objects(), rounds, ClaimEpochSource.NONE)
-        engine(definition, executor, persistence, checks, Files.createDirectories(tempDir.resolve('workspace')))
+        engine(definition, executor, persistence, checks, Files.createDirectories(tempDir.resolve('workspace')), source.identity())
     }
 
     /** A git worktree of the factory clone on the task branch: the host adapter's working copy. */
@@ -125,15 +127,18 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
     TaskOutcome runHost(PipelineDefinition definition, Path worktree, FactoryProperties agent,
             ScriptedCommandCheckRunner checks) {
         def clock = new VirtualClock()
+        // The git-mode host wiring: the host round source under the decoration that mints the tokens.
+        def rounds = new MidRoundPushRounds(CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()), runner, clock)
         def executor = new CliStageExecutor(agent, clock, { e -> } as AgentProgressListener, TestChildEnvironment.hostAllowlist(), LAW,
-        CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()))
-        engine(definition, executor, new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE), checks, worktree)
+        rounds)
+        engine(definition, executor, new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE), checks, worktree,
+                rounds.identity())
     }
 
     private static TaskOutcome engine(PipelineDefinition definition, StageExecutor executor,
-            AttemptPersistence persistence, ScriptedCommandCheckRunner checks, Path workspace) {
+            AttemptPersistence persistence, ScriptedCommandCheckRunner checks, Path workspace, RoundIdentity identity) {
         def ports = new EnginePorts(executor, new FilesExistCheckRunner(), checks, new ScriptedExternalCheckClient(),
-                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(new VirtualClock()))
+                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(new VirtualClock()), identity)
         new Engine().run(definition, FakeAgentSupport.defaultTaskContext(), TaskState.atStageStart('build'),
                 new DirectoryWorkspace(workspace), ports)
     }

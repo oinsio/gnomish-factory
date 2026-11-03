@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -88,8 +89,8 @@ class ReferenceRunSpec extends Specification {
         ])
     }
 
-    static ExecutionResult.Completed completed(String stageName) {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', stageName, 0), []), [])
+    static ExecutionResult completed(String stageName) {
+        ExecutionResult.completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', stageName, 0), []), [])
     }
 
     static Verdict.Fail fail(String message) {
@@ -103,7 +104,7 @@ class ReferenceRunSpec extends Specification {
             ScriptedJudgeVoter judgeVoter) {
         def clock = new VirtualClock()
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
-                new RecordingEventListener(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock))
+                new RecordingEventListener(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 
     // M1: the whole story in two runs — decision escalation, decision-carrying resume,
@@ -117,7 +118,7 @@ class ReferenceRunSpec extends Specification {
 
         and: 'run-1 fakes: the design executor asks a human instead of completing'
         def exec1 = new ScriptedExecutor([
-            new ExecutionResult.DecisionNeeded(UntrustedText.agent('which db?'), [
+            ExecutionResult.decisionNeeded(UntrustedText.agent('which db?'), [
                 UntrustedText.agent('postgres'),
                 UntrustedText.agent('mysql')
             ],
@@ -169,7 +170,7 @@ class ReferenceRunSpec extends Specification {
         def clock2 = new VirtualClock()
         def sleeper2 = new VirtualSleeper(clock2)
         def ports2 = new EnginePorts(exec2, builtin2, command2, external2, judge2,
-                new RecordingEventListener(), persistence2, VirtualTimeEquipment.on(clock2, sleeper2))
+                new RecordingEventListener(), persistence2, VirtualTimeEquipment.on(clock2, sleeper2), RoundIdentity.inPlace())
 
         and: 'run 2 resumes from the recorded design state, its history reset by the decision commit'
         // as every production decision resume does (EscalationResume, TakeDecisionResume): an

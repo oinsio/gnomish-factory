@@ -78,14 +78,4 @@ class TokenUsageSpec extends Specification {
         and: 'a differing count makes them unequal'
         new TokenUsage(10L, 20L, 30L, 40L) != new TokenUsage(10L, 20L, 30L, 41L)
     }
-
-    // FR5, D4: plus sums all four counts field-wise
-    def "plus sums all four counts field-wise"() {
-        given: 'two token usages'
-        def a = new TokenUsage(10L, 20L, 30L, 40L)
-        def b = new TokenUsage(1L, 2L, 3L, 4L)
-
-        expect: 'the merged usage carries the field-wise sums'
-        a.plus(b) == new TokenUsage(11L, 22L, 33L, 44L)
-    }
 }

@@ -3,10 +3,11 @@ package com.github.oinsio.gnomish.domain.engine.port.contract
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import groovy.transform.ImmutableOptions
 import java.time.Instant
 import spock.lang.Specification
@@ -68,12 +69,13 @@ abstract class AttemptPersistenceContract extends Specification implements PortC
     static List<PersistedEntry> threeRounds() {
         def key = { int round -> new AttemptKey('TASK-1', 'build', round) }
         def record = { int round ->
-            new AttemptRecord(round, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH,
-            [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
+            AttemptRecords.identified('TASK-1', 'build', AttemptRecords.TOKEN, round, AttemptRecord.Result.QUALITY_FAILURE,
+            Instant.EPOCH, [], ExecutorUsage.none(), [], Stop.none())
         }
-        def s0 = TaskState.atStageStart('build')
-        def s1 = s0.recordQualityFailure(record(0))
-        def s2 = s1.recordQualityFailure(record(1))
+        // Each state ends with the round its persist records, as every round writer hands it over.
+        def s0 = TaskState.atStageStart('build').recordQualityFailure(record(0), ExecutorVersions.none())
+        def s1 = s0.recordQualityFailure(record(1), ExecutorVersions.none())
+        def s2 = s1.recordQualityFailure(record(2), ExecutorVersions.none())
         [
             new PersistedEntry('TASK-1', s0, new ToolTrace(key(0), [])),
             new PersistedEntry('TASK-1', s1, new ToolTrace(key(1), [])),

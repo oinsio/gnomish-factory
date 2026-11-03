@@ -34,7 +34,7 @@ import java.util.Optional;
  * roundTimeout} with timeout and interrupt classified before the drain's events are consulted,
  * then the handle's {@link ExecHandle#postExitBound()} for the tail, never a bound of its own —
  * and each maps every failure of that launch sequence through one site that carries the stderr
- * tail of the round (here: {@link JudgeCannotVerify}; there: {@code ExecutorFailure}), leaving it
+ * tail of the round (here: {@link JudgeCannotVerify}; there: {@link AgentRoundFailure}), leaving it
  * one DEBUG line on success. Both probe the environment's egress guard before
  * the launch and again once the process has exited, before anything is graded (D14 of
  * tighten-spec-contract).
@@ -127,7 +127,7 @@ final class JudgeRoundExecution {
             AgentRoundResult roundResult = equipment.resultExtractor().extract(events, roundEnd, drain.bytesRead());
             Verdict verdict = verdictExtractor.extract(roundResult.result());
             scratch.logTailOnSuccess();
-            return new Vote(verdict, roundResult.usage().tokensByModel());
+            return new Vote(verdict, roundResult.usage().byModel());
         } catch (MissingResultEventException e) {
             return cannotVerify.byThrowable(
                     "stream-json carried no result event for round", JudgeCannotVerify.messageOf(e), e);

@@ -8,9 +8,11 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -46,7 +48,7 @@ abstract class StatusReconstructionSpecBase extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
-                listener, persistence, VirtualTimeEquipment.on(clock, sleeper))
+                listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static VerifyCheck.Builtin builtin(String name) {
@@ -64,11 +66,11 @@ abstract class StatusReconstructionSpecBase extends Specification {
     }
 
     static ExecutorUsage usage(long inTokens, long outTokens) {
-        new ExecutorUsage(Duration.ofSeconds(1), [], ['model-a': new TokenUsage(inTokens, outTokens, 0, 0)])
+        new ExecutorUsage(Duration.ofSeconds(1), [], Unpriced.of(['model-a': new TokenUsage(inTokens, outTokens, 0, 0)]))
     }
 
-    static ExecutionResult.Completed completed(String stageName, int round, ExecutorUsage usage) {
-        new ExecutionResult.Completed(usage, new ToolTrace(new AttemptKey('TASK-1', stageName, round), []), [])
+    static ExecutionResult completed(String stageName, int round, ExecutorUsage usage) {
+        ExecutionResult.completed(usage, new ToolTrace(new AttemptKey('TASK-1', stageName, round), []), [])
     }
 
     static Verdict.Fail fail(String message) {

@@ -28,7 +28,7 @@ class DashboardOutcomesBlockSpec extends Specification {
                     new DayOutcomeCounts(LocalDate.parse('2026-08-04'), new OutcomeCounts(1, 1, 0, 0), 0, Duration.ZERO),
                     new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(10, 10, 0, 0), 0, Duration.ZERO)
                 ],
-                [:])
+                [:], 0L)
 
         when:
         def html = render(history)
@@ -50,7 +50,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         def history = new LedgerHistoryView(
                 [
                     new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(3, 0, 0, 0), 0, Duration.ZERO)
-                ], [:])
+                ], [:], 0L)
 
         when:
         def html = render(history)
@@ -75,7 +75,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         def history = new LedgerHistoryView(
                 [
                     new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(5, 3, 2, 10), 0, Duration.ZERO)
-                ], [:])
+                ], [:], 0L)
 
         when:
         def html = render(history)
@@ -100,7 +100,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         def history = new LedgerHistoryView(
                 [
                     new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(299, 0, 1, 0), 0, Duration.ZERO)
-                ], [:])
+                ], [:], 0L)
 
         when:
         def html = render(history)
@@ -117,7 +117,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         def history = new LedgerHistoryView(
                 [
                     new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 1, 1, 0), 0, Duration.ZERO)
-                ], [:])
+                ], [:], 0L)
 
         when:
         def html = render(history)
@@ -132,7 +132,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         def history = new LedgerHistoryView(
                 [
                     new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0), 0, Duration.ZERO)
-                ], [:])
+                ], [:], 0L)
 
         when:
         def html = render(history)
@@ -154,13 +154,13 @@ class DashboardOutcomesBlockSpec extends Specification {
                 [
                     new DayOutcomeCounts(LocalDate.parse('2026-08-04'), new OutcomeCounts(1, 0, 0, 0), 0, Duration.ZERO),
                     new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0), 0, Duration.ZERO)
-                ], [:])
+                ], [:], 0L)
 
         expect:
         render(history).contains('<span class="card__meta">2026-08-04 — 2026-08-05</span>')
 
         and: 'with no days there is no window to state, so the heading carries no meta slot at all'
-        def empty = render(new LedgerHistoryView([], [:]))
+        def empty = render(new LedgerHistoryView([], [:], 0L))
         empty.contains('No finished tasks yet')
         empty.contains('<h2 class="card__title">Outcomes by day</h2></div>')
     }
@@ -173,7 +173,7 @@ class DashboardOutcomesBlockSpec extends Specification {
                 [
                     new DayOutcomeCounts(LocalDate.parse('2026-08-04'), new OutcomeCounts(1, 0, 0, 0), 0, Duration.ZERO),
                     new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0), 2, Duration.ofMinutes(210))
-                ], [:])
+                ], [:], 0L)
 
         when:
         def html = render(history)
@@ -190,7 +190,7 @@ class DashboardOutcomesBlockSpec extends Specification {
         def history = new LedgerHistoryView(
                 [
                     new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(1, 0, 0, 0), 1, Duration.ofMinutes(12))
-                ], [:])
+                ], [:], 0L)
 
         when:
         def html = render(history)

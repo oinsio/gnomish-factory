@@ -99,7 +99,8 @@ class SecurityOverrideLockStateSpec extends Specification {
         expect: 'the scan found the production overrides, none of the test-scope ones, and the allowlist'
         production.keySet().containsAll(['jackson', 'logback', 'log4j'])
         !production.containsKey('httpclient5')
-        reasons.size() > 10
+        !reasons.isEmpty()
+        reasons.size() == (Files.readString(root().resolve('osv-scanner.toml')) =~ /(?m)^\[\[IgnoredVulns]]$/).size()
 
         and: 'each of their allowlisted advisories names a metadata-only candidate that no lockfile resolves'
         advisories.findAll { reasons.containsKey(it) }.findAll { id ->

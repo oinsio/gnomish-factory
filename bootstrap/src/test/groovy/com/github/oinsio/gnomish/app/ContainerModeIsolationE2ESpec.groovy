@@ -73,7 +73,8 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
                 new BoxGitLink(cloneDir, new ContainerHarvestFetch(gitRunner, cloneDir)),
                 ChildEnvAllowlist.none(),
                 'test-project',
-                { -> DenialRestoration.none() })
+                { -> DenialRestoration.none() },
+                [])
     }
 
     // M2: the self-check catches broken isolation fail-closed — no gnome process may run in a

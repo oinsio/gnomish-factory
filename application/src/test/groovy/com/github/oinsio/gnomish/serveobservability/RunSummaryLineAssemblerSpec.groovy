@@ -2,9 +2,12 @@ package com.github.oinsio.gnomish.serveobservability
 
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.domain.engine.fake.Snapshots
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import java.time.Instant
 import spock.lang.Specification
 
@@ -25,8 +28,7 @@ class RunSummaryLineAssemblerSpec extends Specification {
         given:
         def accumulator = new RunSummaryAccumulator()
         def finalState = new TaskState(
-                new Position.AtStage('build'), 0, [],
-                new ExecutorUsage(null, [], ['claude-x': new TokenUsage(100L, 50L, 10L, 5L)]))
+                new Position.AtStage('build'), 0, [], Snapshots.executed(['claude-x': new TokenUsage(100L, 50L, 10L, 5L)]), ExecutorVersions.none())
         accumulator.record(new TakeResult.Delivered(finalState, 'shipped it'))
 
         when:

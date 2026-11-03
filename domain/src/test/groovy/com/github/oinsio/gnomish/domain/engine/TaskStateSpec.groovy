@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
+import com.github.oinsio.gnomish.domain.engine.fake.Snapshots
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -14,11 +17,17 @@ import spock.lang.Specification
 class TaskStateSpec extends Specification {
 
     private static AttemptRecord round(int n) {
-        new AttemptRecord(n, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
+        round(n, ExecutorUsage.none())
     }
 
+    /** A round of the fixture identity, opened on a tip of its own, as every branch-mode round is. */
     private static AttemptRecord round(int n, ExecutorUsage usage) {
-        new AttemptRecord(n, AttemptRecord.Result.PASSED, Instant.EPOCH, [], usage, JudgeUsage.none(), [], Stop.none())
+        AttemptRecords.identified(AttemptRecords.TASK_ID, AttemptRecords.STAGE, token(n), n,
+                AttemptRecord.Result.PASSED, Instant.EPOCH, [], usage, [], Stop.none())
+    }
+
+    private static RoundToken token(int n) {
+        RoundToken.of(String.format('%040x', n + 1))
     }
 
     // FR8, FR13, FR14: the starting state parks at a named stage with no history
@@ -36,7 +45,7 @@ class TaskStateSpec extends Specification {
     // (pins requireNonNegative's return against a return-value mutation)
     def "a validated attemptsUsed round-trips the constructed literal"() {
         expect: 'the accessor returns the exact non-zero burn count it was built with'
-        new TaskState(new Position.AtStage('s'), 3, [], ExecutorUsage.none()).attemptsUsed() == 3
+        new TaskState(new Position.AtStage('s'), 3, [], UsageSnapshot.EMPTY, ExecutorVersions.none()).attemptsUsed() == 3
     }
 
     // FR13: an unburned round is appended to history without burning an attempt
@@ -45,7 +54,7 @@ class TaskStateSpec extends Specification {
         def start = TaskState.atStageStart('build')
 
         when: 'an unburned round is recorded'
-        def next = start.recordUnburnedRound(round(0))
+        def next = start.recordUnburnedRound(round(0), ExecutorVersions.none())
 
         then: 'the round is appended, the burn count is untouched, the position is held'
         next.attempts() == [round(0)]
@@ -59,7 +68,7 @@ class TaskStateSpec extends Specification {
         def start = TaskState.atStageStart('build')
 
         when: 'an unburned round is recorded'
-        def next = start.recordUnburnedRound(round(0))
+        def next = start.recordUnburnedRound(round(0), ExecutorVersions.none())
 
         then: 'a distinct new state is returned and the original is untouched'
         !next.is(start)
@@ -73,7 +82,7 @@ class TaskStateSpec extends Specification {
         def start = TaskState.atStageStart('build')
 
         when: 'a quality-failure round is recorded'
-        def next = start.recordQualityFailure(round(0))
+        def next = start.recordQualityFailure(round(0), ExecutorVersions.none())
 
         then: 'the round is appended, one attempt is burned, the position is held'
         next.attempts() == [round(0)]
@@ -87,7 +96,7 @@ class TaskStateSpec extends Specification {
         def start = TaskState.atStageStart('build')
 
         when: 'a quality-failure round is recorded'
-        def next = start.recordQualityFailure(round(0))
+        def next = start.recordQualityFailure(round(0), ExecutorVersions.none())
 
         then: 'a distinct new state is returned and the original is untouched'
         !next.is(start)
@@ -103,10 +112,10 @@ class TaskStateSpec extends Specification {
 
         when: 'unburned and quality-failure rounds are interleaved'
         def state = start
-                .recordUnburnedRound(round(0))
-                .recordQualityFailure(round(1))
-                .recordUnburnedRound(round(2))
-                .recordQualityFailure(round(3))
+                .recordUnburnedRound(round(0), ExecutorVersions.none())
+                .recordQualityFailure(round(1), ExecutorVersions.none())
+                .recordUnburnedRound(round(2), ExecutorVersions.none())
+                .recordQualityFailure(round(3), ExecutorVersions.none())
 
         then: 'every executed round is recorded, in order'
         state.attempts() == [
@@ -126,8 +135,8 @@ class TaskStateSpec extends Specification {
     def "advanceTo a next stage moves the position and resets attempts and attemptsUsed"() {
         given: 'a state with recorded rounds and a burned attempt'
         def state = TaskState.atStageStart('build')
-                .recordQualityFailure(round(0))
-                .recordUnburnedRound(round(1))
+                .recordQualityFailure(round(0), ExecutorVersions.none())
+                .recordUnburnedRound(round(1), ExecutorVersions.none())
 
         when: 'the task advances to the next stage'
         def advanced = state.advanceTo(new Position.AtStage('review'))
@@ -142,7 +151,7 @@ class TaskStateSpec extends Specification {
     def "advanceTo the pipeline end parks at PipelineEnd and resets attempts and attemptsUsed"() {
         given: 'a state with recorded rounds and a burned attempt'
         def state = TaskState.atStageStart('deploy')
-                .recordQualityFailure(round(0))
+                .recordQualityFailure(round(0), ExecutorVersions.none())
 
         when: 'the task advances past the last stage'
         def advanced = state.advanceTo(new Position.PipelineEnd())
@@ -160,8 +169,8 @@ class TaskStateSpec extends Specification {
     def "resetAttempts clears the burn in place, keeping the position and the cumulative totals"() {
         given: 'an exhausted stage with recorded rounds and cumulative usage'
         def state = TaskState.atStageStart('build')
-                .recordQualityFailure(round(0))
-                .recordQualityFailure(round(1))
+                .recordQualityFailure(round(0), ExecutorVersions.none())
+                .recordQualityFailure(round(1), ExecutorVersions.none())
 
         when: 'the human answer resumes it'
         def reset = state.resetAttempts()
@@ -182,10 +191,10 @@ class TaskStateSpec extends Specification {
     // place it is ever recorded.
     def "recordPassAndAdvance moves the position and keeps the passing round in the same state"() {
         given: 'a stage that failed once before passing'
-        def state = TaskState.atStageStart('build').recordQualityFailure(round(0))
+        def state = TaskState.atStageStart('build').recordQualityFailure(round(0), ExecutorVersions.none())
 
         when: 'the passing round is recorded with the advance it implies'
-        def passed = state.recordPassAndAdvance(round(1), new Position.AtStage('review'))
+        def passed = state.recordPassAndAdvance(round(1), new Position.AtStage('review'), ExecutorVersions.none())
 
         then: 'the position is already the next stage and nothing is burned there'
         passed.position() == new Position.AtStage('review')
@@ -195,7 +204,7 @@ class TaskStateSpec extends Specification {
         passed.attempts()*.round() == [0, 1]
 
         and: 'its usage is folded into the cumulative totals'
-        passed.totals() == state.totals().plus(round(1).executorUsage())
+        passed.totals() == UsageFold.fold(state.totals(), round(1))
     }
 
     // FR13: the attempts list is defensively copied from the constructor source
@@ -204,7 +213,7 @@ class TaskStateSpec extends Specification {
         def source = [round(0)]
 
         when: 'a state is created and the source is then mutated'
-        def state = new TaskState(new Position.AtStage('build'), 0, source, ExecutorUsage.none())
+        def state = new TaskState(new Position.AtStage('build'), 0, source, UsageSnapshot.EMPTY, ExecutorVersions.none())
         source.add(round(1))
 
         then: 'the state keeps the snapshot taken at construction'
@@ -214,7 +223,7 @@ class TaskStateSpec extends Specification {
     // FR13: the exposed attempts list is unmodifiable
     def "the exposed attempts list is unmodifiable"() {
         given: 'a state carrying one round'
-        def state = new TaskState(new Position.AtStage('build'), 0, [round(0)], ExecutorUsage.none())
+        def state = new TaskState(new Position.AtStage('build'), 0, [round(0)], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when: 'a caller tries to mutate the exposed list'
         state.attempts().add(round(1))
@@ -226,7 +235,7 @@ class TaskStateSpec extends Specification {
     // FR13: a burn count cannot be negative — a negative attemptsUsed is rejected
     def "a negative attemptsUsed is rejected with the component named"() {
         when: 'a state is created with a negative burn count'
-        new TaskState(new Position.AtStage('build'), attemptsUsed, [], ExecutorUsage.none())
+        new TaskState(new Position.AtStage('build'), attemptsUsed, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         then: 'construction fails and the message names the component'
         def failure = thrown(IllegalArgumentException)
@@ -239,12 +248,12 @@ class TaskStateSpec extends Specification {
     // FR8, FR13, FR14: TaskState is inert value data compared by content
     def "task states with the same components are equal values"() {
         expect: 'two independently constructed states with equal components are equal'
-        new TaskState(new Position.AtStage('build'), 1, [round(0)], ExecutorUsage.none()) ==
-        new TaskState(new Position.AtStage('build'), 1, [round(0)], ExecutorUsage.none())
+        new TaskState(new Position.AtStage('build'), 1, [round(0)], UsageSnapshot.EMPTY, ExecutorVersions.none()) ==
+        new TaskState(new Position.AtStage('build'), 1, [round(0)], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         and: 'a differing burn count makes them unequal'
-        new TaskState(new Position.AtStage('build'), 1, [round(0)], ExecutorUsage.none()) !=
-        new TaskState(new Position.AtStage('build'), 2, [round(0)], ExecutorUsage.none())
+        new TaskState(new Position.AtStage('build'), 1, [round(0)], UsageSnapshot.EMPTY, ExecutorVersions.none()) !=
+        new TaskState(new Position.AtStage('build'), 2, [round(0)], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     private static ExecutorUsage usage(long wallSecs, long tokensIn, long tokensOut, String tool, int calls) {
@@ -253,93 +262,105 @@ class TaskStateSpec extends Specification {
                 [
                     new ToolUsage(tool, calls, Duration.ofMillis(calls * 10L))
                 ],
-                ['model-a': new TokenUsage(tokensIn, tokensOut, 0, 0)])
+                Unpriced.of(['model-a': new TokenUsage(tokensIn, tokensOut, 0, 0)]))
     }
 
-    // FR13, NFR-C1, D5: a fresh stage-start state carries the identity totals (nothing recorded yet)
-    def "atStageStart totals are the empty ExecutorUsage"() {
+    // FR13, NFR-C1, D5: a fresh stage-start state carries the empty snapshot (nothing recorded yet)
+    def "atStageStart totals are the empty snapshot"() {
         expect: 'the starting totals know nothing'
-        TaskState.atStageStart('build').totals() == ExecutorUsage.none()
+        TaskState.atStageStart('build').totals() == UsageSnapshot.EMPTY
     }
 
-    // FR13, NFR-C1, D5: an unburned round folds its executor usage into the running totals
-    def "recordUnburnedRound folds the round's executor usage into the totals"() {
-        given: 'a starting state'
+    // FR13, D5; FR17 of define-executor-contract: each round writer folds its round through the fold
+    def "#writer folds the round's usage into the totals through the one fold"() {
+        given: 'a starting state and a round carrying usage'
         def start = TaskState.atStageStart('build')
+        def recorded = round(0, usage(5, 100, 20, 'read', 2))
 
-        when: 'an unburned round carrying usage is recorded'
-        def next = start.recordUnburnedRound(round(0, usage(5, 100, 20, 'read', 2)))
+        when: 'the round is recorded'
+        def next = write(start, recorded)
 
-        then: 'the totals equal that round\'s executor usage'
-        next.totals() == usage(5, 100, 20, 'read', 2)
+        then: 'the totals are the fold of that round'
+        next.totals() == UsageFold.fold(UsageSnapshot.EMPTY, recorded)
+        next.totals().byRole() == [(ExecutorRole.TRANSFORM): ['model-a': new TokenUsage(100L, 20L, 0L, 0L)]]
+        next.totals().rounds() == 1
+        next.totals().through() == token(0)
+
+        where:
+        writer | write
+        'recordUnburnedRound' | { TaskState s, AttemptRecord r ->
+            s.recordUnburnedRound(r, ExecutorVersions.none())
+        }
+        'recordQualityFailure' | { TaskState s, AttemptRecord r ->
+            s.recordQualityFailure(r, ExecutorVersions.none())
+        }
+        'recordPassAndAdvance' | { TaskState s, AttemptRecord r ->
+            s.recordPassAndAdvance(r, new Position.AtStage('review'), ExecutorVersions.none())
+        }
     }
 
-    // FR13, NFR-C1, D5: a quality-failure round also folds its executor usage into the totals
-    def "recordQualityFailure folds the round's executor usage into the totals"() {
-        given: 'a starting state'
-        def start = TaskState.atStageStart('build')
+    // FR17 of define-executor-contract: a round with no participant entry is refused by every writer
+    def "a round with no usage entry is refused"() {
+        given:
+        def empty = AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], [], [], Stop.none())
 
-        when: 'a quality-failure round carrying usage is recorded'
-        def next = start.recordQualityFailure(round(0, usage(3, 50, 10, 'edit', 1)))
+        when:
+        TaskState.atStageStart('build').recordUnburnedRound(empty, ExecutorVersions.none())
 
-        then: 'the totals equal that round\'s executor usage and one attempt burned'
-        next.totals() == usage(3, 50, 10, 'edit', 1)
-        next.attemptsUsed() == 1
+        then:
+        def failure = thrown(IllegalArgumentException)
+        failure.message.contains('no usage entry')
     }
 
-    // FR13, NFR-C1, D5: totals accumulate the running sum across several recorded rounds
-    def "totals accumulate the running sum across a sequence of recorded rounds"() {
-        given: 'a starting state'
-        def start = TaskState.atStageStart('build')
+    // FR13, NFR-C1, D5: totals accumulate across several recorded rounds
+    def "totals accumulate across a sequence of recorded rounds"() {
+        when: 'three rounds each report usage'
+        def state = TaskState.atStageStart('build')
+                .recordUnburnedRound(round(0, usage(5, 100, 20, 'read', 2)), ExecutorVersions.none())
+                .recordQualityFailure(round(1, usage(2, 40, 5, 'read', 3)), ExecutorVersions.none())
+                .recordUnburnedRound(round(2, usage(1, 10, 1, 'edit', 4)), ExecutorVersions.none())
 
-        when: 'three rounds each report usage on the same and a new tool'
-        def state = start
-                .recordUnburnedRound(round(0, usage(5, 100, 20, 'read', 2)))
-                .recordQualityFailure(round(1, usage(2, 40, 5, 'read', 3)))
-                .recordUnburnedRound(round(2, usage(1, 10, 1, 'edit', 4)))
-
-        then: 'wall time and tokens are summed'
-        state.totals().wallTime() == Duration.ofSeconds(8)
-        state.totals().tokensByModel() == ['model-a': new TokenUsage(150L, 26L, 0L, 0L)]
-
-        and: 'the same tool accumulated (read: 2+3 calls, 20+30ms) and the new tool joined, in order'
-        state.totals().tools() == [
-            new ToolUsage('read', 5, Duration.ofMillis(50)),
-            new ToolUsage('edit', 4, Duration.ofMillis(40))
-        ]
+        then: 'tokens are summed, three rounds folded, the last token named'
+        state.totals().byRole() == [(ExecutorRole.TRANSFORM): ['model-a': new TokenUsage(150L, 26L, 0L, 0L)]]
+        state.totals().rounds() == 3
+        state.totals().through() == token(2)
     }
 
     // FR13, NFR-C1, D5: "Cumulative totals survive advancement" — advanceTo resets attempts
-    // and attemptsUsed but PRESERVES the whole-task totals accumulated so far
+    // and attemptsUsed but PRESERVES the whole-task snapshot accumulated so far
     // Scenario: pipeline/stage-engine / Cumulative totals survive advancement
     def "advanceTo resets history but preserves the cumulative totals"() {
-        given: 'a state that has accumulated usage over a couple of rounds'
+        given: 'a stage that failed once and then passed, the pass advancing the position'
         def state = TaskState.atStageStart('build')
-                .recordQualityFailure(round(0, usage(5, 100, 20, 'read', 2)))
-                .recordUnburnedRound(round(1, usage(1, 10, 1, 'edit', 4)))
+                .recordQualityFailure(round(0, usage(5, 100, 20, 'read', 2)), ExecutorVersions.none())
+                .recordPassAndAdvance(round(1, usage(1, 10, 1, 'edit', 4)), new Position.AtStage('review'), ExecutorVersions.none())
         def totalsBefore = state.totals()
 
-        when: 'the task advances to the next stage'
-        def advanced = state.advanceTo(new Position.AtStage('review'))
+        when: 'the next stage starts'
+        def advanced = state.startOfStage()
 
         then: 'the current-stage history and burn count reset'
         advanced.attempts().isEmpty()
         advanced.attemptsUsed() == 0
 
-        and: 'the cumulative task totals survive the advancement unchanged'
+        and: 'the snapshot survives unchanged, still including the passed stage and naming its last round'
         advanced.totals() == totalsBefore
-        advanced.totals().wallTime() == Duration.ofSeconds(6)
-        advanced.totals().tokensByModel() == ['model-a': new TokenUsage(110L, 21L, 0L, 0L)]
+        advanced.totals().byRole() == [(ExecutorRole.TRANSFORM): ['model-a': new TokenUsage(110L, 21L, 0L, 0L)]]
+        advanced.totals().through() == token(1)
+        state.advanceTo(new Position.PipelineEnd()).totals() == totalsBefore
     }
 
     // FR13, NFR-C1, D5: totals participate in value equality
     def "totals participate in value equality"() {
+        given:
+        def snapshot = Snapshots.executed(['model-a': new TokenUsage(100, 20, 0, 0)])
+
         expect: 'states differing only in totals are unequal'
-        new TaskState(new Position.AtStage('build'), 0, [], usage(5, 100, 20, 'read', 2)) !=
-        new TaskState(new Position.AtStage('build'), 0, [], ExecutorUsage.none())
+        new TaskState(new Position.AtStage('build'), 0, [], snapshot, ExecutorVersions.none()) !=
+        new TaskState(new Position.AtStage('build'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         and: 'states with equal totals are equal'
-        new TaskState(new Position.AtStage('build'), 0, [], usage(5, 100, 20, 'read', 2)) ==
-        new TaskState(new Position.AtStage('build'), 0, [], usage(5, 100, 20, 'read', 2))
+        new TaskState(new Position.AtStage('build'), 0, [], snapshot, ExecutorVersions.none()) ==
+        new TaskState(new Position.AtStage('build'), 0, [], Snapshots.executed(['model-a': new TokenUsage(100, 20, 0, 0)]), ExecutorVersions.none())
     }
 }

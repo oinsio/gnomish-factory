@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -9,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
@@ -55,7 +57,7 @@ class EnginePreflightGateSpec extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter, listener,
-                persistence, VirtualTimeEquipment.on(clock, sleeper), delivery)
+                persistence, VirtualTimeEquipment.on(clock, sleeper), delivery, DescribedExecutors.none(), RoundIdentity.inPlace())
     }
 
     static StageDefinition stage(String name) {
@@ -73,8 +75,8 @@ class EnginePreflightGateSpec extends Specification {
     }
 
     static TaskState atGate(String gate) {
-        def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
-        new TaskState(new Position.AwaitingApproval(gate), 1, [round], ExecutorUsage.none())
+        def round = AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(), [], Stop.none())
+        new TaskState(new Position.AwaitingApproval(gate), 1, [round], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     // FR2 of make-checkpoint-gate-durable: a run from a gate pauses again with the recorded state
@@ -122,7 +124,7 @@ class EnginePreflightGateSpec extends Specification {
         outcome instanceof TaskOutcome.Escalated
         outcome.finalState().is(state)
         outcome.report() instanceof EscalationReport.PipelineMismatch
-        outcome.report().staleStage().forLog() == 'gone'
+        outcome.report().cause().stage().forLog() == 'gone'
 
         and: 'no port was invoked, and both bookends fired'
         0 * _

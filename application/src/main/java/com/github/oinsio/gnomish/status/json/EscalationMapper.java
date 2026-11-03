@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.status.json;
 
 import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
+import com.github.oinsio.gnomish.domain.engine.MismatchCause;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
@@ -19,7 +20,8 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * corrupt the document {@code ConsoleIO.printMachine} exists to keep verbatim. The exit is the
  * document, not a helper: nothing outside this switch reads a carrier through it.
  *
- * <p>Implements FR11, M3 of add-manual-run; FR3 of type-untrusted-text.
+ * <p>Implements FR11, M3 of add-manual-run; FR3 of type-untrusted-text; FR7 of
+ * define-executor-contract.
  */
 @UntrustedExit
 final class EscalationMapper {
@@ -48,11 +50,21 @@ final class EscalationMapper {
                         cannotVerify.reason().raw(),
                         cannotVerify.details().raw());
             case EscalationReport.PipelineMismatch pipelineMismatch ->
-                new EscalationDto.PipelineMismatch(
-                        "pipelineMismatch",
-                        null,
-                        null,
-                        pipelineMismatch.staleStage().raw());
+                switch (pipelineMismatch.cause()) {
+                    case MismatchCause.StaleStage stale ->
+                        new EscalationDto.PipelineMismatch(
+                                "pipelineMismatch", null, null, stale.stage().raw(), null);
+                    case MismatchCause.ExecutorVersion changed ->
+                        new EscalationDto.PipelineMismatch(
+                                "pipelineMismatch",
+                                null,
+                                null,
+                                null,
+                                new EscalationDto.ExecutorVersion(
+                                        changed.executor().raw(),
+                                        changed.recorded().raw(),
+                                        changed.current().raw()));
+                };
             case EscalationReport.CannotExecute cannotExecute ->
                 // The denials of a round that left no attempt record ride the escalation
                 // itself (FR2 of fix-denial-attribution-durability), through the one
@@ -63,6 +75,9 @@ final class EscalationMapper {
                         null,
                         cannotExecute.cause().raw(),
                         AttemptMapper.toFindings(Denial.findings(cannotExecute.denials())));
+            case EscalationReport.BudgetExhausted budgetExhausted ->
+                new EscalationDto.BudgetExhausted(
+                        "budgetExhausted", null, null, budgetExhausted.bound().raw());
         };
     }
 }

@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -50,7 +51,7 @@ class CannotExecuteSpec extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
-                listener, persistence, VirtualTimeEquipment.on(clock, sleeper))
+                listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static VerifyCheck.Builtin builtin(String name) {
@@ -67,8 +68,8 @@ class CannotExecuteSpec extends Specification {
         new PipelineDefinition('1', new AutonomyLimits(5), stages.toList())
     }
 
-    static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
+    static ExecutionResult completed() {
+        ExecutionResult.completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
     static Verdict.Fail fail(String message) {
@@ -179,10 +180,10 @@ class CannotExecuteSpec extends Specification {
     }
 
     // NFR-O1: the caught executor throw is logged at ERROR at the point of capture, naming the
-    //     round key — asserted via a Logback ListAppender on the RoundExecution logger.
+    //     round key — asserted via a Logback ListAppender on the RoundFailures logger.
     def "logs the caught executor throw at ERROR at the point of capture"() {
         given: 'a capture on the round mechanics'
-        def logs = LogCaptureSupport.attach(RoundExecution, Level.ERROR)
+        def logs = LogCaptureSupport.attach(RoundFailures, Level.WARN)
 
         and: 'a stage whose executor throws'
         def stageDef = stage('build', 5, [builtin('files_exist')])
@@ -196,6 +197,10 @@ class CannotExecuteSpec extends Specification {
         errors.size() == 1
         errors[0].formattedMessage.contains('executor threw')
         errors[0].formattedMessage.startsWith(OperatorEvent.EXECUTOR_THREW.head())
+
+        and: 'FR7 of define-executor-contract: the throw, classified as failed/infrastructure, adds no'
+        and: 'reported-failure WARN — one failure, one line'
+        logs.list.size() == 1
 
         cleanup:
         logs.detach()

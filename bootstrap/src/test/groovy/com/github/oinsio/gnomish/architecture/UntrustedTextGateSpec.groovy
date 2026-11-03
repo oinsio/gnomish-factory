@@ -51,9 +51,9 @@ import spock.lang.Specification
  * table below holds cut A's families — git, docker, in-box exec and agent, plus the one domain
  * carrier the agent adapter constructs — and, since task 5.0, cut B's: tracker, manifest label,
  * branch document, and the report and status text they reach. A private Jackson wire record
- * ({@code DecisionFileReader.Payload}) is deliberately absent: it is the shape the JSON has, not
- * an accessor the factory reads text through — the mint sits in the reader that builds
- * {@code Decision} from it.
+ * ({@code DecisionRequestRead.Payload}) is deliberately absent: it is the shape the JSON has, not
+ * an accessor the factory reads text through — the result reader mints its fields, and the
+ * request the read builds from it is listed.
  *
  * <p>Lives in {@code :bootstrap} for the same reason as {@link AtomicWriteBoundarySpec}: this is
  * the module whose test classpath sees every layer at once.
@@ -87,13 +87,38 @@ class UntrustedTextGateSpec extends Specification {
      */
     private static final List<String> ANNOTATED_EXITS = [
         'com.github.oinsio.gnomish.adapter.agent.JudgeVerdictExtractor',
+        // Joined at task 7.1 of define-executor-contract: the program executor's result mapped onto
+        //     the engine's shape — the executor's quality reason and denial texts become domain
+        //     Findings, which hold plain text (the CheckFindings precedent).
+        'com.github.oinsio.gnomish.adapter.agent.program.ProgramResultMapping',
+        // Joined at task 3.2 of define-executor-contract: the findings-funnel entry of a command
+        //     check, the JudgeVerdictExtractor precedent — the findings file's fields arrive from
+        //     the result reader as carriers and the domain Finding holds plain text.
+        'com.github.oinsio.gnomish.adapter.check.CheckFindings',
+        // Joined at task 4.4 of define-executor-contract: the executor version pin's describe
+        //     versions are written verbatim into state.json — split out of StateJsonMapper.
+        'com.github.oinsio.gnomish.adapter.git.state.StateExecutorVersionsMapper',
         'com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper',
         // Joined at task 2.1 of make-checkpoint-gate-durable: the attempt `stop` object's
         //     question, options, reason and details are written verbatim into state.json —
         //     split out of StateJsonMapper, the same branch-document writer.
         'com.github.oinsio.gnomish.adapter.git.state.StateStopMapper',
+        // Joined at task 4.2 of define-executor-contract: the task.json escalation reports' carried
+        //     text, split out of TaskJsonMapper when the sixth report kind arrived.
+        'com.github.oinsio.gnomish.adapter.git.state.TaskEscalationMapper',
         'com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper',
         'com.github.oinsio.gnomish.board.json.BoardJsonMapper',
+        // Joined at task 3.1 of define-executor-contract: the executor contract's two machine
+        //     writers. A result, describe or answer document carries the executor's own text as the
+        //     JSON string it was read from, and is read back only through ResultFileReader, which
+        //     mints it again — the AnswerWriter for the answer's tree, the serializer for every
+        //     other carrier field.
+        'com.github.oinsio.gnomish.executorcontract.AnswerWriter',
+        'com.github.oinsio.gnomish.executorcontract.UntrustedTextSerializer',
+        // Joined at task 4.5 of define-executor-contract: the ledger's roundOutcome line writes the
+        //     executor's describe version verbatim into the JSONL ledger — split out of
+        //     LedgerJsonMapper, whose every other field the factory minted.
+        'com.github.oinsio.gnomish.serveobservability.json.RoundOutcomeLineMapper',
         'com.github.oinsio.gnomish.status.json.AttemptMapper',
         'com.github.oinsio.gnomish.status.json.EscalationMapper',
         'com.github.oinsio.gnomish.status.json.StatusReportJsonMapper',
@@ -120,6 +145,8 @@ class UntrustedTextGateSpec extends Specification {
      * warrant of D11, applied in the module whose whole point is that it can reach nothing.
      */
     private static final Map<String, String> PARSER_CONVERSIONS = [
+        'com.github.oinsio.gnomish.app.describe.ProgramDescribe':
+        'a describe answer\'s version into the verdict that it carries no control character',
         'com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch':
         'a failed harvest fetch\'s stderr into the failure class it belongs to',
         'com.github.oinsio.gnomish.adapter.git.FetchRefusal':
@@ -190,6 +217,12 @@ class UntrustedTextGateSpec extends Specification {
         ' timing Instants the sweep decides on',
         'com.github.oinsio.gnomish.adapter.agent.TokenUsageMapper':
         'the round\'s model id into a telemetry key, held to ModelIdSyntax',
+        // FR11, NFR-S4 of define-executor-contract: the working-copy-unchanged check's view, read
+        // once BoundedCapture minted it at capture instead of handing the check a String.
+        'com.github.oinsio.gnomish.adapter.agent.program.StatusEntries':
+        'git status --porcelain=v2 -z output into status entries compared whole, never shown to a' +
+        ' reader; a path a refusal names is re-minted as a subprocess carrier and leaves through the' +
+        ' log exit\'s excerpt',
         'com.github.oinsio.gnomish.baseref.BaseDesignator$Single':
         'a task\'s base designator label into the accepted ref name, held to RefNameSyntax by' +
         ' BasePattern.matches — a value no pattern accepts is converted into nothing, since the' +
@@ -209,8 +242,8 @@ class UntrustedTextGateSpec extends Specification {
      * {@code ParsedMarker} is listed below with only {@code humanText}: its {@code instance} is an
      * identity compared against this process's own configured id and against a claim holder, so
      * task 5.1 held it to {@code InstanceIdSyntax} instead, the third time design D11's
-     * "make it parsed, do not type it" answer applied. The two
-     * {@code DecisionNeeded} variants are listed although D9's cut B sentence does not repeat
+     * "make it parsed, do not type it" answer applied. The executor's
+     * {@code DecisionRequest} answer and the {@code DecisionNeeded} report are listed although D9's cut B sentence does not repeat
      * {@code question}/{@code options}: task 5.0 types both ports when it deletes the cut
      * boundary's {@code forConsole()} renderings (design D6), and an accessor typed with no rule
      * over it is exactly the vacuous family rule (b) exists to prevent.
@@ -221,17 +254,27 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.sandbox.environment.DockerResult': ['stdout', 'stderr'],
         'com.github.oinsio.gnomish.sandbox.environment.EgressSelfCheckProbes$Probe': ['output'],
         'com.github.oinsio.gnomish.sandbox.CapturedExec': ['output'],
+        // Design D9 of define-executor-contract: the one bounded capture of an exec (a describe, a
+        // non-streaming program run, git's view of a working copy) mints its output at capture.
+        'com.github.oinsio.gnomish.sandbox.BoundedCapture': ['output'],
         'com.github.oinsio.gnomish.adapter.agent.AgentEvent$InitEvent': ['sessionId', 'model'],
         'com.github.oinsio.gnomish.adapter.agent.AgentEvent$AssistantEvent': ['sessionId', 'model'],
         'com.github.oinsio.gnomish.adapter.agent.AgentEvent$UserEvent': ['sessionId'],
         'com.github.oinsio.gnomish.adapter.agent.AgentEvent$ResultEvent': ['sessionId'],
-        'com.github.oinsio.gnomish.adapter.agent.DecisionFileReader$Decision': ['question', 'options'],
+        'com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest': ['question', 'options'],
         'com.github.oinsio.gnomish.domain.engine.Verdict$CannotVerify': ['reason', 'details'],
-        'com.github.oinsio.gnomish.domain.engine.ExecutionResult$DecisionNeeded': ['question', 'options'],
+        'com.github.oinsio.gnomish.domain.engine.ExecutionResult$DecisionRequest': ['question', 'options'],
+        'com.github.oinsio.gnomish.domain.engine.ExecutionResult$Failed': ['reason'],
         'com.github.oinsio.gnomish.domain.engine.EscalationReport$DecisionNeeded': ['question', 'options'],
         'com.github.oinsio.gnomish.domain.engine.EscalationReport$CannotVerify': ['reason', 'details'],
         'com.github.oinsio.gnomish.domain.engine.EscalationReport$CannotExecute': ['cause'],
-        'com.github.oinsio.gnomish.domain.engine.EscalationReport$PipelineMismatch': ['staleStage'],
+        // Task 4.4 of define-executor-contract: the mismatch's text moved onto its two causes.
+        'com.github.oinsio.gnomish.domain.engine.MismatchCause$StaleStage': ['stage'],
+        'com.github.oinsio.gnomish.domain.engine.MismatchCause$ExecutorVersion': [
+            'executor',
+            'recorded',
+            'current'
+        ],
         'com.github.oinsio.gnomish.domain.engine.PollStatus$CannotVerify': ['reason', 'details'],
         'com.github.oinsio.gnomish.domain.engine.TaskOutcome$Aborted': ['cause'],
         'com.github.oinsio.gnomish.domain.engine.TaskContext': ['title', 'body'],

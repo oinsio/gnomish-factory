@@ -9,11 +9,12 @@ package com.github.oinsio.gnomish.domain.engine;
  * would misrepresent cost by an order of magnitude either way (design D4).
  *
  * <p>Whether tokens are known at all — for a whole model, or for the round as a
- * whole — is the concern of the containing type ({@link ExecutorUsage#tokensByModel()},
- * {@link JudgeUsage#perVote()}): an empty map means unreported, never a fabricated
+ * whole — is the concern of the containing type ({@link ExecutorUsage#byModel()},
+ * a judge vote's map in {@link com.github.oinsio.gnomish.domain.engine.port.JudgeVoter.Vote}): an empty map means unreported, never a fabricated
  * zero. All four counts are non-negative — a token count cannot go below zero;
  * zero is accepted since a round may legitimately consume no tokens of a kind.
- * Inert value data compared by content.
+ * Inert value data compared by content. It carries no arithmetic: every sum of token counts is
+ * {@link UsageFold}'s (design D15 of define-executor-contract).
  *
  * <p>Implements FR5, D4 of add-agent-executor.
  *
@@ -29,19 +30,6 @@ public record TokenUsage(long input, long output, long cacheCreation, long cache
         output = requireNonNegative(output, "output");
         cacheCreation = requireNonNegative(cacheCreation, "cacheCreation");
         cacheRead = requireNonNegative(cacheRead, "cacheRead");
-    }
-
-    /**
-     * Returns a new {@code TokenUsage} that is the field-wise sum of {@code this} and
-     * {@code other} — the per-model merge step {@link ExecutorUsage#plus(ExecutorUsage)}
-     * folds in for every shared model id (FR5, NFR-C1, design D4).
-     *
-     * @param other the usage to add into this one; never null
-     */
-    public TokenUsage plus(TokenUsage other) {
-        return new TokenUsage(
-                input + other.input, output + other.output,
-                cacheCreation + other.cacheCreation, cacheRead + other.cacheRead);
     }
 
     /**

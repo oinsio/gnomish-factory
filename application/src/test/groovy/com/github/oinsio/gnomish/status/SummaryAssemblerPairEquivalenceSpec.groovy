@@ -7,10 +7,13 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.domain.engine.fake.Snapshots
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
@@ -45,8 +48,7 @@ class SummaryAssemblerPairEquivalenceSpec extends Specification {
     }
 
     private static TaskState state(Position position = new Position.AtStage('implement')) {
-        new TaskState(position, 2, [], new ExecutorUsage(
-                Duration.ofSeconds(4), [], ['sonnet': new TokenUsage(11, 22, 33, 44)]))
+        new TaskState(position, 2, [], Snapshots.executed(['sonnet': new TokenUsage(11, 22, 33, 44)]), ExecutorVersions.none())
     }
 
     /** The rendered summary minus the one component the two ends measure independently. */

@@ -73,14 +73,15 @@ stateDiagram-v2
     Working --> [*]: human closes (revocation)
     AwaitingHuman --> [*]: human closes
 ```
-**Implements**: FR2 of add-tracker-port
+**Implements**: FR2 of add-tracker-port; FR7 of define-executor-contract
+**Notes**: BudgetExhausted parks as `ESCALATION` because only a human can raise the bound or accept the stop; the factory has nothing to retry.
 
 #### Scenario: Outcome-to-transition mapping
 - **WHEN** an engine run ends with each of Completed, Escalated(report),
   Paused(passedStage), and Aborted
 - **THEN** the resulting port calls are `finish`; `park` with the reason picked
-  by escalation kind — `ESCALATION` for AttemptsExhausted and DecisionNeeded,
-  `INFRA` for CannotVerify, CannotExecute, and PipelineMismatch;
+  by escalation kind — `ESCALATION` for AttemptsExhausted, DecisionNeeded and
+  BudgetExhausted, `INFRA` for CannotVerify, CannotExecute, and PipelineMismatch;
   `park(CHECKPOINT)`; and `recordAbort` (or `park(INFRA)` at the fuse threshold)
   respectively
 - **AND** an infra park from an escalation leaves the abort counter untouched

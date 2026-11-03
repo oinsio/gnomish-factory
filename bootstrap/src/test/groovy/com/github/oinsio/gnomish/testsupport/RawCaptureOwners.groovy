@@ -103,12 +103,12 @@ class RawCaptureOwners {
         // which captures a subprocess stream rather than a file and mints the BRANCH_DOCUMENT there. Their entries are removed rather than kept, because the
         // reached-every-file assertion is what makes this allowlist a gate.
         [
-            'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/DecisionFileTransport.java',
-            'AGENT: reads the agent\'s decision file and hands it to DecisionFileReader, which is the mint',
+            'executor-contract/src/main/java/com/github/oinsio/gnomish/executorcontract/HostResultFile.java',
+            'channel family: the result reader\'s host-file source hands bytes to ResultFileReader, which mints them in the family its channel declares (the agent\'s decision file as AGENT; FR6 of define-executor-contract)',
         ],
         [
             'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/RoundScratchDirectory.java',
-            'AGENT: reads the tail of the agent CLI\'s stderr file and mints it at the read (design D18 of fix-terminal-receipt-convergence)',
+            'AGENT or SUBPROCESS: reads the tail of a round\'s stderr file and mints it at the read in its writer\'s family — the agent CLI\'s as AGENT, a program executor\'s as SUBPROCESS (design D18 of fix-terminal-receipt-convergence; task 7.1 of define-executor-contract)',
         ],
         [
             'adapters/src/main/java/com/github/oinsio/gnomish/adapter/law/WorkingTreeLawSource.java',

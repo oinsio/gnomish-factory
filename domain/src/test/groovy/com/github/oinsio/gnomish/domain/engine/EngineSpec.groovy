@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -42,7 +43,7 @@ class EngineSpec extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(clock, sleeper))
+                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static StageDefinition stage(String name, int attemptLimit) {
@@ -59,7 +60,7 @@ class EngineSpec extends Specification {
     //      executor or persistence port, framed by RunStarted and TaskFinished
     def "returns Completed immediately from a PipelineEnd position"() {
         given: 'a state parked at the pipeline end'
-        def state = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
+        def state = new TaskState(new Position.PipelineEnd(), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when: 'the run is driven'
         def outcome = new Engine().run(pipeline(stage('build', 3)), CONTEXT, state, WORKSPACE, ports())
@@ -92,7 +93,7 @@ class EngineSpec extends Specification {
         outcome instanceof TaskOutcome.Escalated
         outcome.finalState().is(state)
         outcome.report() instanceof EscalationReport.PipelineMismatch
-        outcome.report().staleStage().forLog() == 'gone'
+        outcome.report().cause().stage().forLog() == 'gone'
 
         and: 'no execution or persistence port was reached'
         executor.requests.isEmpty()
@@ -109,7 +110,7 @@ class EngineSpec extends Specification {
     // Scenario: pipeline/stage-engine / Stops without a recorded round are unchanged
     def "escalates AttemptsExhausted when attemptsUsed is at the limit on entry"() {
         given: 'a state at a 2-attempt stage with both attempts already burned'
-        def state = new TaskState(new Position.AtStage('build'), 2, [], ExecutorUsage.none())
+        def state = new TaskState(new Position.AtStage('build'), 2, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when: 'the run is driven'
         def outcome = new Engine().run(pipeline(stage('build', 2)), CONTEXT, state, WORKSPACE, ports())
@@ -134,7 +135,7 @@ class EngineSpec extends Specification {
     //       the terminal outcome — payloads verified end to end
     def "emits RunStarted with the entry position and attemptsUsed and TaskFinished with the outcome"() {
         given: 'a state at the limit so the run terminates in pre-flight'
-        def state = new TaskState(new Position.AtStage('build'), 2, [], ExecutorUsage.none())
+        def state = new TaskState(new Position.AtStage('build'), 2, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when: 'the run is driven'
         def outcome = new Engine().run(pipeline(stage('build', 2)), CONTEXT, state, WORKSPACE, ports())
@@ -159,7 +160,7 @@ class EngineSpec extends Specification {
         def manual = new StageDefinition('build', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [], new AutonomyLimits(3), AdvancementMode.MANUAL)
-        executor.scripted << new ExecutionResult.Completed(ExecutorUsage.none(),
+        executor.scripted << ExecutionResult.completed(ExecutorUsage.none(),
                 new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
 
         when: 'the run is driven'

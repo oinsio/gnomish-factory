@@ -4,10 +4,14 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Position;
+import com.github.oinsio.gnomish.domain.engine.TokenUsage;
+import com.github.oinsio.gnomish.domain.engine.UsageFold;
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -17,11 +21,10 @@ import org.jspecify.annotations.Nullable;
  * summaries; {@link #renderAttemptSummary(AttemptRecord)} produces a single line
  * per finished attempt. Kept as a separate class from {@link StatusReport}
  * (design D7 "one pure model behind every render"): the model stays plain data,
- * renders live beside it. Individual line formatting is delegated to {@link
- * StatusLineFormatter}, split out to keep both files within the project's
- * file-size guidance.
+ * renders live beside it. Line formatting is delegated to {@link StatusLineFormatter}.
  *
- * <p>Implements FR10, UX2, D7 of add-manual-run; UX1 of make-checkpoint-gate-durable.
+ * <p>Implements FR10, UX2, D7 of add-manual-run; UX1 of make-checkpoint-gate-durable; UX4 of
+ * define-executor-contract.
  */
 public final class StatusTextRenderer {
 
@@ -157,14 +160,16 @@ public final class StatusTextRenderer {
         }
     }
 
-    private void appendTotals(StringBuilder out, ExecutorUsage totals) {
-        out.append("Totals: wallMillis=")
-                .append(
-                        totals.wallTime() == null
-                                ? "unknown"
-                                : totals.wallTime().toMillis())
-                .append(", tokensByModel=")
-                .append(totals.tokensByModel().isEmpty() ? "unknown" : totals.tokensByModel())
+    /** The snapshot's tokens per model by the one fold, then its rounds and cost in {@link UsageCostWords}' words (UX4). */
+    private void appendTotals(StringBuilder out, UsageSnapshot totals) {
+        Map<String, TokenUsage> byModel = new TreeMap<>(UsageFold.byModel(totals));
+        out.append("Totals: tokensByModel=")
+                .append(byModel.isEmpty() ? "unknown" : byModel)
+                .append('\n');
+        out.append("  rounds folded: ")
+                .append(totals.rounds())
+                .append("; cost ")
+                .append(UsageCostWords.cost(totals.cost()))
                 .append('\n');
     }
 

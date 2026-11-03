@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.EngineEvent;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.domain.engine.UsageFold;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import java.time.Duration;
 import org.jspecify.annotations.Nullable;
@@ -101,7 +102,7 @@ public final class SummaryAccumulatorListener implements EngineEventListener {
                 stageOf(finalState.position()),
                 finalState.attemptsUsed(),
                 wall,
-                finalState.totals().tokensByModel());
+                UsageFold.byModel(finalState.totals()));
     }
 
     private static @Nullable String stageOf(Position position) {

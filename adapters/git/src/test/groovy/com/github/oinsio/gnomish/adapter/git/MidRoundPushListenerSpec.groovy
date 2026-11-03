@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -47,9 +48,9 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         commit(repo, fileName, content)
     }
 
-    /** One round's listener over the task worktree, observing its baseline tip at construction. */
+    /** One round's listener over the task worktree, its baseline the tip the round opened on. */
     private MidRoundPushListener newListener(RepeatSuppressor streakSuppressor = suppressor) {
-        new MidRoundPushListener(runner, repo, 'implement', 0,
+        new MidRoundPushListener(runner, repo, 'implement', 0, RoundToken.of(currentHead(repo)),
                 new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', streakSuppressor))
     }
 
@@ -149,15 +150,23 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         noExceptionThrown()
     }
 
-    def "FR13: an unresolvable HEAD at construction is an unknown baseline, not a thrown failure"() {
-        given: 'a worktree whose HEAD points at an unborn branch, so rev-parse HEAD cannot answer'
-        runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
+    // FR21 of define-executor-contract: the baseline is the round's token, so construction reads nothing
+    def "FR21: the baseline is the tip the round opened on, read by no git call of the listener's own"() {
+        given: 'a recording git, and a token the worktree HEAD no longer equals'
+        Path invocationLog = tempDir.resolve('listener-git.log')
+        def recording = new GitProcessRunner(recordingGit(invocationLog).toString())
+        def openedOn = currentHead(repo)
+        gnomeCommit()
 
-        when:
-        newListener()
+        when: 'the listener is built over the opened tip, then one event observes the moved HEAD'
+        def listener = new MidRoundPushListener(recording, repo, 'implement', 0, RoundToken.of(openedOn),
+                new MidRoundPollContext('PROJ-1', 'gnomish/PROJ-1', suppressor))
+        int afterConstruction = recordedSubcommands(invocationLog).size()
+        listener.onProgress(toolEvent)
 
-        then:
-        noExceptionThrown()
+        then: 'construction ran no git, and the movement away from the opened tip was pushed'
+        afterConstruction == 0
+        remoteTip() == currentHead(repo)
     }
 
     // Scenario: git/git-task-persistence / A failed poll observation is not a change
@@ -172,26 +181,6 @@ class MidRoundPushListenerSpec extends Specification implements BareGitRepoFixtu
         then: 'the listener contract holds and nothing was pushed on the strength of a blank read'
         noExceptionThrown()
         remoteBranchAbsent()
-    }
-
-    def "FR13: an unknown baseline is adopted by the first resolving event, and only later movement pushes"() {
-        given: 'the round starts with no resolvable HEAD, so the listener has no ancestry baseline'
-        runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
-        def listener = newListener()
-
-        when: 'HEAD becomes resolvable again on the task branch and an event adopts it'
-        runner.run(repo, 'checkout', '-q', '-f', 'gnomish/PROJ-1')
-        listener.onProgress(toolEvent)
-
-        then: 'the adoption alone pushes nothing - there was no observed tip to prove ancestry from'
-        remoteBranchAbsent()
-
-        when: 'the gnome then commits and a further event notices the movement'
-        gnomeCommit()
-        listener.onProgress(toolEvent)
-
-        then: 'the movement away from the adopted baseline is pushed'
-        remoteTip() == currentHead(repo)
     }
 
     def "FR4: a tip resolution that works again closes the streak with one INFO"() {

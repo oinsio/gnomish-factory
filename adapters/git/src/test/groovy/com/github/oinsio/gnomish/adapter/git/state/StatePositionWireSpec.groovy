@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.adapter.git.state
 
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -24,7 +26,7 @@ class StatePositionWireSpec extends Specification {
 
     private static String write(Position position) {
         TaskStateJson.mapper().writeValueAsString(
-                StateJsonMapper.toDto(new TaskState(position, 0, [], ExecutorUsage.none())))
+                StateJsonMapper.toDto(new TaskState(position, 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())))
     }
 
     // FR10: no hand-listed subset — every permitted subclass has a sample and comes back equal

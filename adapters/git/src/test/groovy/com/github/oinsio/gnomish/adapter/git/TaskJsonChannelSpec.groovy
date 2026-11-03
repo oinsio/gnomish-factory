@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -75,7 +76,9 @@ class TaskJsonChannelSpec extends Specification implements BareGitRepoFixture {
         new EnvironmentRoundSnapshot(box, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
                 .snapshot(TASK, 'implement', 0)
         new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
-                .persist(TASK, TaskState.atStageStart('implement'), new ToolTrace(new AttemptKey(TASK, 'implement', 0), [
+                .persist(TASK, RoundStates.recorded(new ToolTrace(new AttemptKey(TASK, 'implement', 0), [
+                    new ToolCall(0, 'bash', Instant.parse('2026-08-08T09:00:00Z'), Duration.ofMillis(100))
+                ]).key()), new ToolTrace(new AttemptKey(TASK, 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-08-08T09:00:00Z'), Duration.ofMillis(100))
                 ]))
         repository.recordOutcome(TASK, new TaskOutcome.Escalated(TaskState.atStageStart('implement'),

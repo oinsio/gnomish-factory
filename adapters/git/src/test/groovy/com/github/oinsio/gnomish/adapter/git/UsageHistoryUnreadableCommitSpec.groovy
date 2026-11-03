@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.git.UsageHistoryResult
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -39,16 +40,16 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
     def "FR16: an unreadable mid-history commit is skipped with a warning naming it, and the walk still renders"() {
         given: 'a first readable round'
         taskRepository().createTask(new TaskContext('PROJ-20', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def first = round(0, AttemptRecord.Result.QUALITY_FAILURE, 500, 50)
-        def afterFirst = TaskState.atStageStart('implement').recordQualityFailure(first)
+        def first = round('PROJ-20', 'implement', 0, AttemptRecord.Result.QUALITY_FAILURE, 500, 50)
+        def afterFirst = TaskState.atStageStart('implement').recordQualityFailure(first, ExecutorVersions.none())
         persistRound('PROJ-20', afterFirst, 'implement', 0)
 
         and: 'a mid-history commit whose state.json is unparseable'
         def brokenCommit = commitGarbageState('PROJ-20')
 
         and: 'a later readable round, written over the broken file'
-        def second = round(1, AttemptRecord.Result.PASSED, 700, 70)
-        persistRound('PROJ-20', afterFirst.recordUnburnedRound(second), 'implement', 1)
+        def second = round('PROJ-20', 'implement', 1, AttemptRecord.Result.PASSED, 700, 70)
+        persistRound('PROJ-20', afterFirst.recordUnburnedRound(second, ExecutorVersions.none()), 'implement', 1)
 
         when:
         UsageHistoryResult result = null
@@ -62,7 +63,7 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
         found.rows()*.attempt()*.round() == [0, 1]
 
         and: 'the totals are computed over the readable history'
-        found.totals() != null
+        found.recordedTotals() != null
 
         and: 'the skipped commit is named in a warning'
         def warning = events.find { it.level.toString() == 'WARN' }
@@ -75,8 +76,8 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
     def "FR16: an unsupported state.json version in history is skipped too, not a thrown refusal"() {
         given:
         taskRepository().createTask(new TaskContext('PROJ-21', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        def first = round(0, AttemptRecord.Result.PASSED, 100, 10)
-        persistRound('PROJ-21', TaskState.atStageStart('implement').recordUnburnedRound(first), 'implement', 0)
+        def first = round('PROJ-21', 'implement', 0, AttemptRecord.Result.PASSED, 100, 10)
+        persistRound('PROJ-21', TaskState.atStageStart('implement').recordUnburnedRound(first, ExecutorVersions.none()), 'implement', 0)
 
         and: 'a mid-history commit declaring a state-file version this factory does not support'
         def worktree = worktreeFor('PROJ-21')
@@ -86,9 +87,9 @@ class UsageHistoryUnreadableCommitSpec extends Specification implements UsageHis
         runner.run(worktree, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'version 2')
 
         and: 'a later readable round'
-        def second = round(1, AttemptRecord.Result.PASSED, 200, 20)
+        def second = round('PROJ-21', 'implement', 1, AttemptRecord.Result.PASSED, 200, 20)
         persistRound('PROJ-21', TaskState.atStageStart('implement')
-                .recordUnburnedRound(first).recordUnburnedRound(second), 'implement', 1)
+                .recordUnburnedRound(first, ExecutorVersions.none()).recordUnburnedRound(second, ExecutorVersions.none()), 'implement', 1)
 
         when:
         def result = walker.walk(cloneDir, 'PROJ-21')

@@ -127,8 +127,9 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, RegisteredClone register
         // The host half of the mid-round push (FR1, FR3, design D3 of wire-host-mid-round-push):
         // this runner is git-mode by type, so attaching here needs no flag; in-place mode never
         // reaches this line and keeps the assembly's identity default.
+        var described = ManualRunDescribe.described(assembly, order, new DescribeMedium.Host(worktree), law.binding());
         var assembled = assembly.withHostGitPush(git.midRoundPush())
-                .assemble(order, context, initialState, persistence, List.of(), law.binding());
+                .assemble(order, context, initialState, persistence, List.of(), described);
 
         var returnPath = new TerminalOutcomeRender.ReturnPath(cloneDir, taskId);
         TaskOutcome outcome;

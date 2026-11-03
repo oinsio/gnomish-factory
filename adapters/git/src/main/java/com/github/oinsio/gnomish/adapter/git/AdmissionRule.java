@@ -1,8 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
+import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import java.util.Optional;
 
 /**
@@ -59,12 +60,13 @@ record AdmissionRule(PathPermit gnome, Optional<FactoryTop> top) {
 
     /**
      * The state commit of round {@code key} ({@link EnvironmentAttemptPersistence}): the factory's
-     * {@code state.json} and the round's trace, above the admitted snapshot.
+     * {@code state.json} and the round's trace, above the admitted snapshot, under the subject
+     * rendered from the {@code recorded} round (FR14 of define-executor-contract).
      */
-    static AdmissionRule state(AttemptKey key, RoundToken token, String tracePath) {
+    static AdmissionRule state(AttemptKey key, AttemptRecord recorded, RoundToken token, String tracePath) {
         return closing(
                 PathPermit.only(GnomeRangeInspection.decisionPath(key, token)),
-                ServiceCommitMessages.round(key.stage(), key.attempt()),
+                ServiceCommitMessages.round(recorded),
                 PathPermit.only(EnvelopePaths.STATE_JSON_PATH, tracePath));
     }
 

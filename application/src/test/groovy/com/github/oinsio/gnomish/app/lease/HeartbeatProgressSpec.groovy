@@ -4,8 +4,11 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
+import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.Participants
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
@@ -77,7 +80,7 @@ class HeartbeatProgressSpec extends Specification {
         where:
         stage | attempt | event
         'implement' | 3 | new EngineEvent.AttemptStarted(key('implement', 3))
-        'implement' | 1 | new EngineEvent.ExecutionFinished(key('implement', 1), ExecutorUsage.none())
+        'implement' | 1 | new EngineEvent.ExecutionFinished(key('implement', 1), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
         'build' | 0 | new EngineEvent.CheckStarted(key('build', 0), new CheckRef(0, UntrustedText.manifest('builtin:files_exist')))
         'build' | 4 | new EngineEvent.CheckFinished(key('build', 4), passResult())
         'review' | 2 | new EngineEvent.AttemptFinished(key('review', 2), TaskState.atStageStart('review'), trace('review', 2))

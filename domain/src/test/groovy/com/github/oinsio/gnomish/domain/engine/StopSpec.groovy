@@ -11,14 +11,29 @@ class StopSpec extends Specification {
 
     private static final CheckRef CHECK = new CheckRef(0, UntrustedText.manifest('builtin:files_exist'))
 
-    // FR5: the stop vocabulary is closed — exactly None, DecisionNeeded and CannotVerify
-    def "permits exactly the three stop kinds"() {
+    // FR5: the stop vocabulary is closed — None, DecisionNeeded, CannotVerify and (FR7 of
+    //     define-executor-contract) BudgetExhausted
+    def "permits exactly the four stop kinds"() {
         expect:
         Stop.permittedSubclasses*.simpleName as Set == [
             'None',
             'DecisionNeeded',
-            'CannotVerify'
+            'CannotVerify',
+            'BudgetExhausted'
         ] as Set
+    }
+
+    // FR7 of define-executor-contract: a BudgetExhausted stop carries its bound; a blank one is refused
+    def "BudgetExhausted carries its bound and refuses a blank one"() {
+        expect:
+        new Stop.BudgetExhausted(UntrustedText.agent('tokens 1000')).bound() == UntrustedText.agent('tokens 1000')
+
+        when:
+        new Stop.BudgetExhausted(UntrustedText.agent(' '))
+
+        then:
+        def failure = thrown(IllegalArgumentException)
+        failure.message == 'Stop.BudgetExhausted.bound must not be blank'
     }
 
     // FR5: none() is the stop of a round that raised none

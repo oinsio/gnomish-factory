@@ -52,7 +52,7 @@ public final class StructuralValidation {
     private static final String PIPELINE = "pipeline.yaml";
 
     /** The known executor wire values (the domain {@code ExecutorType} enum). */
-    private static final List<String> EXECUTOR_TYPES = List.of("api", "agent-cli");
+    private static final List<String> EXECUTOR_TYPES = List.of("api", "agent-cli", "program");
 
     /** The known advancement wire values (the domain {@code AdvancementMode} enum). */
     private static final List<String> ADVANCEMENT_MODES = List.of("auto", "manual");

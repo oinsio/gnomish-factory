@@ -7,9 +7,10 @@ import spock.lang.Specification
 
 /**
  * JSON deny-list contract for {@link ReferenceDumpScrubber}: a committed fixture
- * must never carry real spend or per-run identifiers, yet must preserve token/cache
- * counts. Runs under {@code check} from {@code adapter.agent} (D2). Implements FR1
- * (strip cost), FR2 (drop {@code permission_denials}), FR3 (remove every {@code
+ * must never carry per-run identifiers, yet must preserve token/cache counts and the
+ * cost figures beside them. Runs under {@code check} from {@code adapter.agent} (D2).
+ * Implements FR22 of define-executor-contract (keep cost; it superseded FR1 of
+ * harden-reference-dump-scrubber, which stripped it), FR2 (drop {@code permission_denials}), FR3 (remove every {@code
  * uuid}/{@code request_id} at any depth), FR4 (preserve model ids and token/cache
  * counts), NFR-R1 (idempotent second pass) and D1 (non-JSON input falls through to
  * string scrub) of harden-reference-dump-scrubber. The string-level path and
@@ -19,8 +20,8 @@ class ReferenceDumpScrubberSpec extends Specification {
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
 
-    // Scenario: executor/agent-executor / Money is stripped
-    def "strips all cost fields from a result line while preserving every model's token and cache counts"() {
+    // Scenario: executor/agent-executor / Money is kept
+    def "keeps every cost field of a result line beside every model's token and cache counts"() {
         given: 'a real-shaped result line carrying total_cost_usd plus per-model costUSD and token counts'
         String rawLine = '{"type":"result","subtype":"success","is_error":false,' +
                 '"result":"Stage complete.","session_id":"sess-abc-123",' +
@@ -38,12 +39,14 @@ class ReferenceDumpScrubberSpec extends Specification {
         when: 'the line is scrubbed'
         String scrubbed = ReferenceDumpScrubber.scrub(rawLine, '/private/workspace', 'sess-abc-123', 'plain')
 
-        then: 'FR1: no cost field survives — neither the top-level total nor any per-model costUSD'
-        !scrubbed.contains('total_cost_usd')
-        !scrubbed.contains('costUSD')
+        then: 'FR22: both cost fields survive with their values — the top-level total and each per-model costUSD'
+        JsonNode tree = MAPPER.readTree(scrubbed)
+        tree.get('total_cost_usd').decimalValue() == new BigDecimal('0.16131700000000002')
+        JsonNode modelUsage = tree.get('modelUsage')
+        modelUsage.get('claude-opus-4-1-20250805').get('costUSD').decimalValue() == new BigDecimal('0.160717')
+        modelUsage.get('claude-haiku-4-5-20251001').get('costUSD').decimalValue() == new BigDecimal('0.0006')
 
         and: 'FR4: every resolved model id and its four token/cache counts survive intact'
-        JsonNode modelUsage = MAPPER.readTree(scrubbed).get('modelUsage')
         modelUsage.fieldNames().toList() == [
             'claude-opus-4-1-20250805',
             'claude-haiku-4-5-20251001'

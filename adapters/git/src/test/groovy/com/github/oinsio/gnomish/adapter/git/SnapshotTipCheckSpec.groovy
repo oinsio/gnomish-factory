@@ -1,9 +1,12 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.app.port.git.RoundToken
+import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.RoundToken
+import com.github.oinsio.gnomish.executorcontract.ResultSource
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -95,7 +98,30 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
         Files.delete(clone.resolve(path))
 
         expect:
-        new SnapshotTipCheck(runner, clone).inspect(TASK).get().request() == Optional.of('{"question":"which db?"}')
+        new SnapshotTipCheck(runner, clone).inspect(TASK).get().request().get().question().forLog() == 'which db?'
+    }
+
+    // FR6 of define-executor-contract; crash-consistency item 14: recovery parses the request
+    //     through the live path's read, so a resumed round asks exactly what the live one would.
+    def "FR6: the recovered request is what the live read makes of the same bytes, fallbacks included"() {
+        given: 'a round that wrote garbage instead of decision JSON, and died after its snapshot'
+        def token = RoundToken.of(tip())
+        def path = GnomeRangeInspection.decisionPath(new AttemptKey(TASK, 'implement', 0), token)
+        def garbage = 'not json, the agent rambled'
+        commitFile(path, garbage, ServiceCommitMessages.snapshot('implement', 0, token))
+
+        when:
+        def logs = LogCaptureSupport.attach(DecisionRequestRead)
+        def recovered = new SnapshotTipCheck(runner, clone).inspect(TASK).get().request()
+        def live = DecisionRequestRead.read({ long limit ->
+            Optional.of(garbage.getBytes(StandardCharsets.UTF_8))
+        } as ResultSource)
+        logs.detach()
+
+        then:
+        recovered == live
+        recovered.get().question().forLog() == garbage
+        recovered.get().options().isEmpty()
     }
 
     def "NFR-R4: a request at the same key under another round's token is not read"() {

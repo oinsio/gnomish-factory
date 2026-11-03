@@ -128,9 +128,9 @@ final class RequestSnapshotKillPoints {
         } as StageExecutor
         def result = new ResumeVerificationStageExecutor(agent, new CurrentRound(), pending.get())
                 .execute(request(world, pending.get().round()))
-        if (result instanceof ExecutionResult.DecisionNeeded) {
+        if (result.answer() instanceof ExecutionResult.DecisionRequest) {
             world.store.recordOutcome(world.taskId, new TaskOutcome.Escalated(TaskState.atStageStart(STAGE),
-                    new EscalationReport.DecisionNeeded(result.question(), result.options())), TrackerWrite.OWED)
+                    new EscalationReport.DecisionNeeded(result.answer().question(), result.answer().options())), TrackerWrite.OWED)
         }
     }
 

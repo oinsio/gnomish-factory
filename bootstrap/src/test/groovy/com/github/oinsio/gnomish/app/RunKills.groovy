@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.sandbox.Segment
@@ -184,7 +185,7 @@ final class RunKills {
         AttemptPersistence persistence() {
             def recorded = inner.persistence()
             return { taskId, state, trace ->
-                recorded.persist(taskId, state, trace)
+                recorded.persist(taskId, RoundStates.withRound(state, trace.key()), trace)
                 throw new SimulatedKill('after the round state commit')
             } as AttemptPersistence
         }

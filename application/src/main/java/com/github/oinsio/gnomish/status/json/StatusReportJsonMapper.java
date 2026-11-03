@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.status.Outcome;
 import com.github.oinsio.gnomish.status.StatusReport;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
+import com.github.oinsio.gnomish.usage.wire.UsageSnapshotWire;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -67,7 +68,7 @@ public final class StatusReportJsonMapper {
                 toPosition(report),
                 toOutcome(report.outcome()),
                 toCurrentStage(report),
-                UsageMapper.toUsage(report.totals()),
+                UsageSnapshotWire.toDto(report.totals()),
                 report.lastEscalation() == null ? null : EscalationMapper.toDto(report.lastEscalation()),
                 toDecision(report.lastDecision()));
     }

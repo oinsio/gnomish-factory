@@ -3,10 +3,13 @@ package com.github.oinsio.gnomish.serveobservability
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.take.DaemonConditionKind
 import com.github.oinsio.gnomish.app.take.TakeResult
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
+import com.github.oinsio.gnomish.domain.engine.fake.Snapshots
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
@@ -25,12 +28,12 @@ import spock.lang.Specification
  */
 class RunSummaryAccumulatorSpec extends Specification {
 
-    private static TaskState stateAt(ExecutorUsage totals) {
-        return new TaskState(new Position.AtStage('build'), 1, [], totals)
+    private static TaskState stateAt(UsageSnapshot totals) {
+        return new TaskState(new Position.AtStage('build'), 1, [], totals, ExecutorVersions.none())
     }
 
-    private static ExecutorUsage tokensOf(Map<String, TokenUsage> tokensByModel) {
-        return new ExecutorUsage(null, [], tokensByModel)
+    private static UsageSnapshot tokensOf(Map<String, TokenUsage> tokensByModel) {
+        return Snapshots.executed(tokensByModel)
     }
 
     def "counts each of the four terminal outcomes and starts at zero"() {
@@ -41,10 +44,10 @@ class RunSummaryAccumulatorSpec extends Specification {
         accumulator.counts() == new OutcomeCounts(0, 0, 0, 0)
 
         when:
-        accumulator.record(new TakeResult.Delivered(stateAt(ExecutorUsage.none()), 'shipped it'))
-        accumulator.record(new TakeResult.AwaitingHuman(stateAt(ExecutorUsage.none()), ParkReason.ESCALATION, 'needs a human'))
-        accumulator.record(new TakeResult.Aborted(stateAt(ExecutorUsage.none()), UntrustedText.subprocess('durability guarantee broke')))
-        accumulator.record(new TakeResult.Revoked(stateAt(ExecutorUsage.none()), UntrustedText.tracker('claim lost mid-run')))
+        accumulator.record(new TakeResult.Delivered(stateAt(UsageSnapshot.EMPTY), 'shipped it'))
+        accumulator.record(new TakeResult.AwaitingHuman(stateAt(UsageSnapshot.EMPTY), ParkReason.ESCALATION, 'needs a human'))
+        accumulator.record(new TakeResult.Aborted(stateAt(UsageSnapshot.EMPTY), UntrustedText.subprocess('durability guarantee broke')))
+        accumulator.record(new TakeResult.Revoked(stateAt(UsageSnapshot.EMPTY), UntrustedText.tracker('claim lost mid-run')))
 
         then:
         accumulator.counts() == new OutcomeCounts(1, 1, 1, 1)

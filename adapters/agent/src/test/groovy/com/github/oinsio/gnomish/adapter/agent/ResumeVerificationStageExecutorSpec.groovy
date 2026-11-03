@@ -1,13 +1,15 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.git.ClosedRound
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
-import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
@@ -16,7 +18,9 @@ import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.executorcontract.ResultSource
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 import spock.lang.Specification
 
@@ -38,8 +42,15 @@ class ResumeVerificationStageExecutorSpec extends Specification {
     /** A round a live run already holds in its cell before any request arrives. */
     static final RoundToken LIVE = RoundToken.of('0f0f0f0f')
 
-    private static PendingVerification pending(Optional<String> request = Optional.empty()) {
-        new PendingVerification('abc123', 'work', 2, RECORDED, request)
+    /**
+     * The pending verification of the interrupted round; {@code request} is the decision file the
+     * snapshot's tree held, read through the same {@link DecisionRequestRead} the detector uses.
+     */
+    private static PendingVerification pending(String request = null) {
+        def read = request == null ? Optional.<RoundDecisionRequest> empty() : DecisionRequestRead.read({ long limit ->
+            Optional.of(request.getBytes(StandardCharsets.UTF_8))
+        } as ResultSource)
+        new PendingVerification('abc123', 'work', 2, RECORDED, read)
     }
 
     private static StageExecutor.Request request(String stageName, int attempt) {
@@ -55,7 +66,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
     }
 
     private static ExecutionResult completed() {
-        new ExecutionResult.Completed(
+        ExecutionResult.completed(
                 new ExecutorUsage(Duration.ZERO, [], [:]),
                 new ToolTrace(
                         new AttemptKey('T-1', 'work', 1), []), [])
@@ -74,14 +85,14 @@ class ResumeVerificationStageExecutorSpec extends Specification {
 
         then: 'no delegation, the pending snapshot becomes the round result'
         0 * delegate.execute(_)
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
 
         and: "the cell holds the recorded round: the snapshot subject's token and the snapshot commit"
         ref.closed() == new ClosedRound(RECORDED, 'abc123')
         ref.opened() == RECORDED
-        (result as ExecutionResult.Completed).trace() == new ToolTrace(new AttemptKey('T-1', 'work', 2), [])
-        (result as ExecutionResult.Completed).usage() == new ExecutorUsage(Duration.ZERO, [], [:])
-        (result as ExecutionResult.Completed).denials().isEmpty()
+        result.trace() == new ToolTrace(new AttemptKey('T-1', 'work', 2), [])
+        result.usage() == new ExecutorUsage(Duration.ZERO, [], [:])
+        result.denials().isEmpty()
     }
 
     def "the pending verification is consumed exactly once — the next matching request delegates"() {
@@ -153,7 +164,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         def delegate = Mock(StageExecutor)
         def ref = new CurrentRound()
         def executor = new ResumeVerificationStageExecutor(delegate, ref, pending(
-                        Optional.of('{"question":"which db?","options":["pg","sqlite"]}')))
+                        '{"question":"which db?","options":["pg","sqlite"]}'))
 
         when:
         def result = executor.execute(request('work', 2))
@@ -163,7 +174,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         ref.closed() == new ClosedRound(RECORDED, 'abc123')
 
         and: "the snapshot's question, mapped through the same reader a live round uses"
-        def needed = result as ExecutionResult.DecisionNeeded
+        def needed = result.answer() as ExecutionResult.DecisionRequest
         needed.question() == UntrustedText.agent('which db?')
         needed.options() == [
             UntrustedText.agent('pg'),
@@ -171,22 +182,22 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         ]
 
         and: "the same empty telemetry as the Completed resume: the round's own died with its state commit"
-        needed.usage() == new ExecutorUsage(Duration.ZERO, [], [:])
-        needed.trace() == new ToolTrace(new AttemptKey('T-1', 'work', 2), [])
-        needed.denials().isEmpty()
+        result.usage() == new ExecutorUsage(Duration.ZERO, [], [:])
+        result.trace() == new ToolTrace(new AttemptKey('T-1', 'work', 2), [])
+        result.denials().isEmpty()
     }
 
     // Scenario: executor/agent-executor / A garbage request in a snapshot is re-raised as raw text
     def "FR15: an unparseable request still re-raises, its raw content as the question"() {
         given:
         def executor = new ResumeVerificationStageExecutor(
-                Mock(StageExecutor), new CurrentRound(), pending(Optional.of('not json')))
+                Mock(StageExecutor), new CurrentRound(), pending('not json'))
 
         when:
         def result = executor.execute(request('work', 2))
 
         then:
-        (result as ExecutionResult.DecisionNeeded).question() == UntrustedText.agent('not json')
-        (result as ExecutionResult.DecisionNeeded).options().isEmpty()
+        (result.answer() as ExecutionResult.DecisionRequest).question() == UntrustedText.agent('not json')
+        (result.answer() as ExecutionResult.DecisionRequest).options().isEmpty()
     }
 }

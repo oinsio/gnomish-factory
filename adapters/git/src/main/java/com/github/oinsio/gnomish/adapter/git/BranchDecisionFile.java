@@ -1,9 +1,10 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.app.port.git.RoundToken;
+import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead;
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 
@@ -30,7 +31,15 @@ import java.util.Optional;
  * hygiene (FR14), but no read relies on that removal — the token match alone
  * decides liveness.
  *
- * <p>Implements FR23 of add-sandbox-core; FR13, FR16 of make-checkpoint-gate-durable.
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.adapter.agent.DecisionFileTransport} (no
+ * shared classpath between {@code adapters/git} and {@code adapters/agent}): both spell the
+ * {@code GNOMISH_DECISION_FILE} variable name the executor prompt tells the agent to write to.
+ * The read is not part of the pair: both ends read through {@link DecisionRequestRead} over the
+ * executor contract's {@code ResultFileReader}, its one owner. Each end keeps its own staleness
+ * rule on purpose — this one reads only the path its round token names.
+ *
+ * <p>Implements FR23 of add-sandbox-core; FR13, FR16 of make-checkpoint-gate-durable; FR6 of
+ * define-executor-contract.
  */
 public final class BranchDecisionFile {
 
@@ -39,9 +48,6 @@ public final class BranchDecisionFile {
      * the executor prompt instructs the agent to write to.
      */
     static final String ENV_VAR = "GNOMISH_DECISION_FILE";
-
-    /** A decision request is a small JSON question; 1 MiB is generous (NFR-S3 read discipline). */
-    private static final long SIZE_CAP = 1L << 20;
 
     private BranchDecisionFile() {}
 
@@ -81,15 +87,17 @@ public final class BranchDecisionFile {
         }
 
         /**
-         * Reads the raw decision content through the environment channel at the
-         * round boundary — after the agent process exited, before persist. An
-         * absent file (the agent finished without asking) is empty; a file
-         * under any other name is never read.
+         * Reads this round's decision request through the environment channel at the round
+         * boundary — after the agent process exited, before persist — through the one tolerant
+         * {@link DecisionRequestRead} every medium shares, so the cap ({@code
+         * ResultFileReader.DECISION_FILE_CAP_BYTES}) and the fallbacks are the host transport's
+         * own (FR6 of define-executor-contract). An absent file (the agent finished without
+         * asking) is empty; a file under any other name is never read.
          *
-         * @return the raw content if the agent wrote this round's decision file
+         * @return the request, if the agent wrote this round's decision file
          */
-        public Optional<String> read() {
-            return environment.readFile(relativePath, SIZE_CAP).map(bytes -> new String(bytes, StandardCharsets.UTF_8));
+        public Optional<RoundDecisionRequest> read() {
+            return DecisionRequestRead.read(limit -> environment.readFile(relativePath, limit));
         }
     }
 }

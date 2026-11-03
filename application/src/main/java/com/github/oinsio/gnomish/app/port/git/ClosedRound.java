@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
+
 /**
  * A round that has its snapshot (design D10 of make-checkpoint-gate-durable): the identity the
  * round opened under and the harvested attempt commit that closed it, always together. A round

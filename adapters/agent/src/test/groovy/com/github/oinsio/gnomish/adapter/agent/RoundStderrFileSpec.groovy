@@ -5,7 +5,6 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
@@ -63,7 +62,7 @@ class RoundStderrFileSpec extends Specification {
 
     private Object execute(String role, TaskExecutionEnvironment environment, Path parent = scratchParent) {
         if (role == 'executor') {
-            return ExecutorRoundExecution.run(equipment(parent), new DecisionFileReader(),
+            return ExecutorRoundExecution.run(equipment(parent),
                     StageExecutorRequests.request(workspaceDir), 'prompt',
                     new StandInRound(environment, workspaceDir.resolve('decision.json')))
         }
@@ -99,19 +98,15 @@ class RoundStderrFileSpec extends Specification {
     // FR20: no file of the round remains on the host after it ended, however it ended
     // Scenario: executor/agent-executor / The stderr file leaves with the round
     def "FR20: after a #role round that #ending, no file of the round remains on the host"() {
-        when:
-        try {
-            execute(role, environment {
-                if (wait == null) {
-                    throw new ProcessStartException('could not start process: claude', new IOException('no such binary'))
-                }
-                new ScratchStderrHandle({
-                    stderrFile()
-                }, stream(content), wait, 'some stderr\n')
-            })
-        } catch (ExecutorFailure ignored) {
-            // the executor ends a failed round by an exception; its teardown is the subject
-        }
+        when: 'the executor reports a failed round as its result; its teardown is the subject'
+        execute(role, environment {
+            if (wait == null) {
+                throw new ProcessStartException('could not start process: claude', new IOException('no such binary'))
+            }
+            new ScratchStderrHandle({
+                stderrFile()
+            }, stream(content), wait, 'some stderr\n')
+        })
 
         then:
         seen != null
@@ -162,7 +157,7 @@ class RoundStderrFileSpec extends Specification {
         })
 
         then:
-        role == 'executor' ? outcome instanceof ExecutionResult.Completed : outcome.verdict() instanceof Verdict.Pass
+        role == 'executor' ? (outcome.status() instanceof ExecutionResult.Completed && outcome.answer() == null) : outcome.verdict() instanceof Verdict.Pass
         logs.list*.formattedMessage.any {
             it.contains('the error at the end') && !it.contains('HEAD')
         }
@@ -174,13 +169,12 @@ class RoundStderrFileSpec extends Specification {
     // FR20: a scratch directory that cannot be made is a round that cannot start, on each contract
     def "FR20: an executor round whose scratch directory cannot be made fails as infrastructure, before any launch"() {
         when:
-        execute('executor', environment {
+        def outcome = execute('executor', environment {
             throw new AssertionError('no launch expected')
         }, scratchParent.resolve('missing'))
 
         then:
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof UncheckedIOException
+        InfrastructureResults.endedBy(outcome as ExecutionResult, UncheckedIOException)
         seen == null
     }
 

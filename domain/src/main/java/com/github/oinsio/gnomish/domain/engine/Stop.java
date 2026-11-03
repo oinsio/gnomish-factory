@@ -10,16 +10,17 @@ import java.util.List;
  * (a pass, a quality failure, and any record read from a tip that predates the stop); {@link
  * DecisionNeeded} for a {@code DECISION_NEEDED} round, carrying the executor's question and
  * options; {@link CannotVerify} for a {@code CANNOT_VERIFY} round, carrying the check that could
- * not reach a verdict with its reason and details. Every text is an {@link UntrustedText} carrier:
+ * not reach a verdict with its reason and details; {@link BudgetExhausted} for a {@code
+ * BUDGET_EXHAUSTED} round, carrying the bound the round reached. Every text is an {@link UntrustedText} carrier:
  * it is the gnome's or a check's own output.
  *
  * <p>Because the stop rides the round record, a lost park commit loses nothing the next run needs:
  * the engine re-escalates from the record (FR6, task 1.4), the same shape a spent attempt limit
  * already has.
  *
- * <p>Implements FR5 of make-checkpoint-gate-durable.
+ * <p>Implements FR5 of make-checkpoint-gate-durable; FR7 of define-executor-contract.
  */
-public sealed interface Stop permits Stop.None, Stop.DecisionNeeded, Stop.CannotVerify {
+public sealed interface Stop permits Stop.None, Stop.DecisionNeeded, Stop.CannotVerify, Stop.BudgetExhausted {
 
     /**
      * The stop of a round that raised none.
@@ -60,6 +61,21 @@ public sealed interface Stop permits Stop.None, Stop.DecisionNeeded, Stop.Cannot
 
         public CannotVerify {
             reason = requireNonBlank(reason, "Stop.CannotVerify.reason");
+        }
+    }
+
+    /**
+     * The round ended {@code failed/limit}: a bound of the stage was reached (FR7 of
+     * define-executor-contract). Riding the round record is what keeps the budget verdict in the
+     * round's own commit — a pickup that sees the round re-raises the stop instead of running
+     * another paid round (design D11, D17; item 12 of crash-consistency.md).
+     *
+     * @param bound the text naming the bound that was reached; never blank
+     */
+    record BudgetExhausted(UntrustedText bound) implements Stop {
+
+        public BudgetExhausted {
+            bound = requireNonBlank(bound, "Stop.BudgetExhausted.bound");
         }
     }
 

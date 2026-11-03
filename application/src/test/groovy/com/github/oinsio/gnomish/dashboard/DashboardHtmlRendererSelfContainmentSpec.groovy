@@ -125,7 +125,7 @@ class DashboardHtmlRendererSelfContainmentSpec extends Specification {
                     new DayOutcomeCounts(LocalDate.parse('2026-08-04'), new OutcomeCounts(2, 0, 1, 0), 0, Duration.ZERO),
                     new DayOutcomeCounts(LocalDate.parse('2026-08-05'), new OutcomeCounts(3, 1, 0, 0), 0, Duration.ZERO)
                 ],
-                [claude: new LedgerTokenUsage(1000, 500, 0, 0)])
+                [claude: new LedgerTokenUsage(1000, 500, 0, 0)], 1500L)
     }
 
     private static BoardSectionView fullBoard() {

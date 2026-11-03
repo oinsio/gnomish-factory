@@ -71,8 +71,18 @@ final class ContainerTerminalDrive {
             LawBinding lawBinding,
             @Nullable PendingVerification pending) {
         PipelineDefinition definition = order.definition();
+        DescribedLaw described;
+        try {
+            described = ManualRunDescribe.described(
+                    assembly, order, DescribeMedium.box(support, state.position()), lawBinding);
+        } catch (PipelineLoadFailedException undescribed) {
+            // D5 of define-executor-contract: the run fails as an invalid law fails it, the box kept
+            // stopped as every stop keeps it, so a return finds it.
+            support.keepStopped();
+            throw undescribed;
+        }
         var assembled = assembly.withSandbox(support.pieces(pending))
-                .assemble(order, context, state, support.persistence(), List.of(), lawBinding);
+                .assemble(order, context, state, support.persistence(), List.of(), described);
 
         var returnPath = new TerminalOutcomeRender.ReturnPath(order.cloneDir(), context.taskId());
         TaskOutcome outcome;

@@ -14,12 +14,13 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Files
 import java.time.Duration
@@ -131,9 +132,9 @@ final class ReclaimKillPoints {
         if (index == 0) {
             new GitAttemptPersistence(runner, world.worktree, world.taskId, world.epochs).persist(
                     world.taskId,
-                    TaskState.atStageStart('build').recordUnburnedRound(new AttemptRecord(
+                    TaskState.atStageStart('build').recordUnburnedRound(AttemptRecords.of(
                             0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-18T09:00:00Z'), [],
-                            ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())),
+                            ExecutorUsage.none(), [], Stop.none()), ExecutorVersions.none()),
                     new ToolTrace(
                             new AttemptKey(world.taskId, 'build', 0),
                             [

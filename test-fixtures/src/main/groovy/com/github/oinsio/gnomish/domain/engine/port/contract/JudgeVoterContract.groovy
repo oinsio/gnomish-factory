@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine.port.contract
 
+import com.github.oinsio.gnomish.domain.engine.ModelUsage
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.Verdict
@@ -76,20 +77,20 @@ abstract class JudgeVoterContract extends Specification implements PortContractS
 
         expect: 'the verdict is a Pass and the tokens are carried'
         outcome.get().vote().verdict() instanceof Verdict.Pass
-        !outcome.get().vote().tokensByModel().isEmpty()
-        outcome.get().vote().tokensByModel().values().every {
-            it instanceof TokenUsage
+        !outcome.get().vote().byModel().isEmpty()
+        outcome.get().vote().byModel().values().every {
+            it instanceof ModelUsage && it.tokens() instanceof TokenUsage
         }
     }
 
-    // FR14: tokensByModel may be empty — a vote may report no token counts (NFR-C1, D4)
-    def "a vote can be produced with an empty tokensByModel map"() {
+    // FR14: byModel may be empty — a vote may report no usage (NFR-C1, D4)
+    def "a vote can be produced with an empty byModel map"() {
         given: 'a voter arranged to pass without reporting tokens'
         def outcome = arrange(VoteShape.PASS_WITHOUT_TOKENS, sampleContext())
         assumeProducible(outcome, 'JudgeVoter', 'Vote(Pass, no tokens)')
 
         expect: 'the tokens are absent, distinct from a fabricated zero'
-        outcome.get().vote().tokensByModel().isEmpty()
+        outcome.get().vote().byModel().isEmpty()
     }
 
     // FR14: the vote's verdict can be a Fail (FR3)

@@ -6,9 +6,11 @@ import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 
@@ -37,7 +39,7 @@ class GitResumeDecisionSpec extends GitResumeSpecBase {
         def taskId = 'PROJ-11'
         def branch = TaskIdSanitizer.branchName(taskId)
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        def afterRound = new TaskState(new Position.AtStage('build'), 2, [], ExecutorUsage.none())
+        def afterRound = new TaskState(new Position.AtStage('build'), 2, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         persistOneRound(taskId, afterRound)
         def report = new EscalationReport.DecisionNeeded(UntrustedText.agent('continue?'), [
             UntrustedText.agent('yes'),
@@ -86,7 +88,7 @@ class GitResumeDecisionSpec extends GitResumeSpecBase {
         def branch = TaskIdSanitizer.branchName(taskId)
         def pipeline = ParkPipelines.escalating()
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        def spent = new TaskState(new Position.AtStage('build'), 1, [], ExecutorUsage.none())
+        def spent = new TaskState(new Position.AtStage('build'), 1, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         persistOneRound(taskId, spent)
         repository().recordOutcome(taskId, new TaskOutcome.Escalated(spent, new EscalationReport.AttemptsExhausted(1)), TrackerWrite.NONE)
         def parkedTaskJson = gitOutput(cloneDir, 'show', "${branch}:.gnomish-task/task.json")
@@ -149,7 +151,7 @@ class GitResumeDecisionSpec extends GitResumeSpecBase {
         def taskId = 'PROJ-15'
         def branch = TaskIdSanitizer.branchName(taskId)
         repository().createTask(context(taskId), TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
-        def gateState = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+        def gateState = new TaskState(new Position.AwaitingApproval('build'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         persistOneRound(taskId, gateState)
         repository().recordOutcome(taskId, new TaskOutcome.Paused(gateState, 'build'), TrackerWrite.OWED)
         def tipBefore = gitOutput(cloneDir, 'rev-parse', branch).trim()

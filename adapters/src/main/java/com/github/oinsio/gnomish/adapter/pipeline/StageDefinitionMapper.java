@@ -19,7 +19,8 @@ import org.jspecify.annotations.Nullable;
  * unchanged.
  *
  * <p>Implements FR7, FR11, D2, D5a of load-pipeline-config; FR12, FR13 of
- * add-sandbox-core (sandbox mapping).
+ * add-sandbox-core (sandbox mapping); FR9, FR10 of define-executor-contract (the
+ * {@code program} type and the executor {@code name}).
  */
 final class StageDefinitionMapper {
 
@@ -60,7 +61,8 @@ final class StageDefinitionMapper {
                 mapExecutorType(executor.type()),
                 PipelineMapper.orEmpty(executor.model()),
                 PipelineMapper.copySettings(executor.settings()),
-                mapSandbox(executor.sandbox()));
+                mapSandbox(executor.sandbox()),
+                executor.name());
     }
 
     /**
@@ -82,7 +84,10 @@ final class StageDefinitionMapper {
 
     /** Total on structurally-valid input (task 5.2 guaranteed a known value); absent maps to API. */
     private static ExecutorType mapExecutorType(@Nullable String type) {
-        return "agent-cli".equals(type) ? ExecutorType.AGENT_CLI : ExecutorType.API;
+        if ("agent-cli".equals(type)) {
+            return ExecutorType.AGENT_CLI;
+        }
+        return "program".equals(type) ? ExecutorType.PROGRAM : ExecutorType.API;
     }
 
     /** Total on structurally-valid input (task 5.2 guaranteed a known value); absent maps to AUTO. */

@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.*
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -53,15 +54,15 @@ class GitTaskRepositoryApproveCheckpointSpec extends Specification implements Ba
     /** The state a passing {@code manual} round leaves: at the gate, its passing round recorded. */
     private static TaskState gated(Position position = GATE) {
         new TaskState(position, 0, [
-            new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [],
-            ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
-        ], ExecutorUsage.none())
+            AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [],
+            ExecutorUsage.none(), [], Stop.none())
+        ], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     /** What {@code TaskState.approveGate} yields for {@link #gated}: past the gate, history kept. */
     private static TaskState approved(Position next = new Position.AtStage('verify')) {
         def gate = gated()
-        new TaskState(next, gate.attemptsUsed(), gate.attempts(), gate.totals())
+        new TaskState(next, gate.attemptsUsed(), gate.attempts(), gate.totals(), ExecutorVersions.none())
     }
 
     private static final EscalationReport EARLIER = new EscalationReport.AttemptsExhausted(3)

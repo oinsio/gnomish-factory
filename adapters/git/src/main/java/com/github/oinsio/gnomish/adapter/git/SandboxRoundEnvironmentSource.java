@@ -2,10 +2,12 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
-import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
@@ -32,10 +34,19 @@ import java.util.Optional;
  * <p>Kept in sync with {@code com.github.oinsio.gnomish.adapter.agent.HostRoundEnvironmentSource}
  * (no shared classpath between {@code adapters/git} and {@code adapters/agent}): both implement
  * {@link RoundEnvironmentSource} for their execution mode and must open/close rounds with a
- * decision-file handle, a round listener, and close-round semantics consistent with FR4/FR21.
+ * decision-file handle, a round listener, and close-round semantics consistent with FR4/FR21; and
+ * in a branch mode both rounds open on a round token minted from the tip the round opens on through
+ * {@code RoundToken.of} — for the host, by its git-mode decoration {@link MidRoundPushRounds}; and
+ * both hand out an environment with a scratch area from the open to the close — here the live box's,
+ * there a host temp directory materialized at the open and disposed at the close or discard (task 7.1
+ * of define-executor-contract: a program executor names its result files under it).
+ *
+ * <p>Kept in sync with {@link MidRoundPushRounds}: both mint the round token once per opened round
+ * from a {@link VerifiedTip} read of the tip the round opens on, through {@link RoundToken#of}, and
+ * open it in the run's {@link CurrentRound} before the round runs (FR21 of define-executor-contract).
  *
  * <p>Implements FR4, FR5, FR21, FR23 of add-sandbox-core; FR13 of make-checkpoint-gate-durable; FR18 of
- * supervise-daemon-loops-and-embed-dashboard.
+ * supervise-daemon-loops-and-embed-dashboard; FR21 of define-executor-contract.
  */
 public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSource {
 
@@ -107,8 +118,14 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         return new SandboxRound(environment, decision, midRound, key);
     }
 
+    /** The run's round cell: every round this source opens is opened there with its token. */
+    @Override
+    public RoundIdentity identity() {
+        return rounds;
+    }
+
     /**
-     * The one minting of a round's identity (design D10 of make-checkpoint-gate-durable): the task
+     * The container minting of a round's identity (design D10 of make-checkpoint-gate-durable): the task
      * branch's tip in the factory clone as the round opens, verified before use ({@link
      * VerifiedTip}) — a failed resolution fails the round's open rather than naming a decision
      * path after nothing.
@@ -165,7 +182,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         }
 
         @Override
-        public Optional<String> readDecision() {
+        public Optional<RoundDecisionRequest> readDecision() {
             return decision.read();
         }
 

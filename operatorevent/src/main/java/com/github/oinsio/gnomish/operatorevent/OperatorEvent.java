@@ -314,7 +314,29 @@ public enum OperatorEvent {
     CONDITION_IMAGE_CONTRACT_OPENED("GF178"),
     CONDITION_IMAGE_CONTRACT_SUSTAINED_OPEN("GF179"),
     CONDITION_BOX_GIT_FLOOR_OPENED("GF180"),
-    CONDITION_BOX_GIT_FLOOR_SUSTAINED_OPEN("GF181");
+    CONDITION_BOX_GIT_FLOOR_SUSTAINED_OPEN("GF181"),
+    // domain engine, executor outcome classification (define-executor-contract, FR7): the one WARN of
+    // a round whose executor REPORTED a failure the stage cannot run past (failed/infrastructure, or
+    // pending the stage cannot poll), and the one WARN of a round that reported failed/limit. A
+    // thrown executor failure keeps its own ERROR, EXECUTOR_THREW.
+    EXECUTOR_REPORTED_FAILURE("GF182"),
+    EXECUTOR_BUDGET_EXHAUSTED("GF183"),
+    // serve ledger (define-executor-contract, NFR-O2, UX3): the roundOutcome line of a finished
+    // round could not be appended; the round itself is unaffected.
+    ROUND_OUTCOME_LEDGER_APPEND_FAILED("GF184"),
+    // gnomish usage history walk (define-executor-contract, FR19, design D13): a state.json on the
+    // task's first-parent line carried a round record naming another task; the record is rejected,
+    // one WARN per record, naming the commit.
+    USAGE_HISTORY_FOREIGN_RECORD("GF185"),
+    // describe preflight (define-executor-contract, FR4, FR13, design D5 as revised 2026-10-31): a
+    // claimed task whose law declares a program executor that could not be described is parked as an
+    // invalid law is, one ERROR naming the law and the count of located errors.
+    TASK_LAW_UNDESCRIBED("GF186"),
+    // program executor (define-executor-contract, FR5, design D3): a run whose describe declares
+    // streams_progress wrote a stdout line that is not JSON, a contract violation, or one the
+    // 64 KiB line cap cut so it no longer parses (named as cut); the line is skipped, the first of
+    // a run at WARN and the rest at DEBUG.
+    PROGRAM_PROGRESS_NOT_JSON("GF187");
 
     private final String code;
     private final String head;

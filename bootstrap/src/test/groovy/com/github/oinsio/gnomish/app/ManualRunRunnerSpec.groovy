@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
@@ -595,7 +596,7 @@ advancement: auto
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ])
-        persistence.persist(taskId, state, trace)
+        persistence.persist(taskId, RoundStates.withRound(state, trace.key()), trace)
     }
 
     // FR8: --resume dispatches to GitResumeRunner#run from within ManualRunRunner#drive itself —

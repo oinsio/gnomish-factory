@@ -111,6 +111,19 @@ public final class ChildEnvAllowlist {
         return credentialNames;
     }
 
+    /**
+     * The grant a {@code program} executor's child takes its credentials from (design D10 of
+     * define-executor-contract): over this allowlist's passthrough, declared names and value source,
+     * so a granted name is resolved through the same source and judged against both shared layers.
+     *
+     * <p>Implements NFR-S1 of define-executor-contract.
+     *
+     * @return the grant; never null
+     */
+    public ProgramCredentialGrant programGrant() {
+        return new ProgramCredentialGrant(passthroughNames, credentialNames, values);
+    }
+
     private static ChildEnvAllowlist validated(ChildEnvAllowlist allowlist) {
         List<String> refused = new ArrayList<>();
         for (String name : allowlist.passthroughNames) {

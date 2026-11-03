@@ -19,8 +19,11 @@ import java.util.Map;
  *
  * @param perDay one row per day with a readable ledger file, oldest first; never null, may be empty
  * @param tokensByModel token usage keyed by model id, summed across the whole window; never null, may be empty
+ * @param totalTokens every kind of every model's tokens across the window, summed by {@link LedgerAggregator}
+ *     so a renderer only displays it (FR17 of define-executor-contract, design D10); zero when none
  */
-public record LedgerHistoryView(List<DayOutcomeCounts> perDay, Map<String, LedgerTokenUsage> tokensByModel) {
+public record LedgerHistoryView(
+        List<DayOutcomeCounts> perDay, Map<String, LedgerTokenUsage> tokensByModel, long totalTokens) {
 
     public LedgerHistoryView {
         perDay = List.copyOf(perDay);

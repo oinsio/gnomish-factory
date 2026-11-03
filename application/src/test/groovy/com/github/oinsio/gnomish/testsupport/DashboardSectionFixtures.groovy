@@ -18,7 +18,7 @@ class DashboardSectionFixtures {
     static final Instant GENERATED_AT = Instant.parse('2026-08-06T09:00:00Z')
 
     static LedgerHistoryView emptyHistory() {
-        new LedgerHistoryView([], [:])
+        new LedgerHistoryView([], [:], 0L)
     }
 
     /**

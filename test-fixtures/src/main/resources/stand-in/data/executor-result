@@ -1,0 +1,35 @@
+# The result files an executor stand-in writes (design D18 of define-executor-contract).
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[completed]
+{"status":"completed","usage":{"provenance":"REPORTED","wallMillis":1200,"models":{"acme-model-1":{"input":120,"output":45,"cacheCreation":0,"cacheRead":10,"costUsd":0.0031}},"tools":[{"name":"lint","calls":2,"totalMillis":300}]}}
+
+[quality]
+{"status":"failed","failureClass":"quality","reason":"src/Main.java: 2 lint errors remain","usage":{"provenance":"ABSENT"}}
+
+[limit]
+{"status":"failed","failureClass":"limit","reason":"turn bound of 20 reached","usage":{"provenance":"REPORTED","models":{}}}
+
+[decision]
+{"status":"completed","answer":{"kind":"decision-request","question":"Which build tool?","options":["gradle","maven"]},"usage":{"provenance":"ABSENT"}}
+
+[unknown-status]
+{"status":"done","usage":{"provenance":"ABSENT"}}
+
+[malformed]
+{"status":"completed","usage":
+
+[transform]
+{"status":"completed","usage":{"provenance":"ABSENT"}}
+
+[verdict]
+{"status":"completed","answer":{"kind":"verdict","sarif":{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"reference"}},"results":[]}]}},"usage":{"provenance":"ABSENT"}}
+
+[select]
+{"status":"completed","answer":{"kind":"select","chosen":"@chosen"},"usage":{"provenance":"ABSENT"}}
+
+[pending]
+{"status":"pending","pendingKey":"reference-deferred","usage":{"provenance":"ABSENT"}}
+
+[malformed-answer]
+{"status":"completed","answer":{"kind":"decision-request","question":"Which build tool?","options":["gradle"]},"usage":{"provenance":"ABSENT"}}

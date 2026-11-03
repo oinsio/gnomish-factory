@@ -175,6 +175,49 @@ class TaskTierLawSpec extends Specification {
         logs.detach()
     }
 
+    // FR4, FR13, UX1 of define-executor-contract (design D5, as revised 2026-10-31): a law the
+    // describe preflight refused parks its task as an invalid base law does — INFRA, no abort, no
+    // release — at the state the task stands at, with a report naming the law and every error.
+    def "a law the describe preflight refused parks INFRA at the task's state, with one coded ERROR"() {
+        given:
+        def errors = [
+            new ConfigError('config.yaml', 'executors.acme.program',
+            "executor 'acme' cannot be described (configuration error): describe exited 3")
+        ]
+        def state = TaskState.atStageStart('review')
+        def logs = LogCaptureSupport.attach(TaskTierLaw)
+
+        when:
+        def result = TaskTierLaw.parkUndescribed(
+                BINDING, errors, TrackerTaskFixtures.orderFor(REF, tracker, INSTANCE, pipeline()), state)
+
+        then:
+        1 * tracker.park(REF, ParkReason.INFRA, { String report ->
+            report.startsWith('Task PROJ-1 is parked: an executor its pipeline law declares could not be described.\n'
+            + 'Law: ' + LAW_COMMIT.hex() + '\nLocated errors (1):\n')
+            && report.contains("config.yaml: executors.acme.program: executor 'acme' cannot be described")
+            && report.contains("Fix the executor's program or its declaration in .gnomish/ and return the task to work.")
+        })
+        0 * tracker.recordAbort(*_)
+        0 * tracker.release(*_)
+
+        and:
+        result instanceof TakeResult.AwaitingHuman
+        (result as TakeResult.AwaitingHuman).reason() == ParkReason.INFRA
+        (result as TakeResult.AwaitingHuman).finalState() == state
+
+        and: 'the park is one coded ERROR naming the task, the law and the count'
+        def event = logs.list.find {
+            it.formattedMessage.startsWith(OperatorEvent.TASK_LAW_UNDESCRIBED.head())
+        }
+        event.level == Level.ERROR
+        event.formattedMessage.contains('parking task PROJ-1: the pipeline law at ' + LAW_COMMIT.hex()
+                + ' failed its describe preflight with 1 located error(s)')
+
+        cleanup:
+        logs.detach()
+    }
+
     // D14: a genuine I/O fault reading the law is an infra-shaped fault the caller's crash arm
     // classifies — never a validation problem this class parks on its own.
     def "an I/O fault reading the law propagates as UncheckedIOException and is never parked"() {

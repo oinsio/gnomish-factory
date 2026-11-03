@@ -6,13 +6,19 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
+import com.github.oinsio.gnomish.domain.engine.Participants
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.Snapshots
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
@@ -39,8 +45,7 @@ class SummaryAccumulatorListenerSpec extends Specification {
     }
 
     private static TaskState state(int attemptsUsed = 2, Position position = new Position.AtStage('implement')) {
-        new TaskState(position, attemptsUsed, [], new ExecutorUsage(
-                Duration.ofSeconds(4), [], ['sonnet': new TokenUsage(11, 22, 33, 44)]))
+        new TaskState(position, attemptsUsed, [], Snapshots.executed(['sonnet': new TokenUsage(11, 22, 33, 44)]), ExecutorVersions.none())
     }
 
     private static void run(SummaryAccumulatorListener listener, TaskOutcome outcome) {
@@ -150,7 +155,7 @@ class SummaryAccumulatorListenerSpec extends Specification {
         listener.onEvent(new EngineEvent.CheckStarted(key, new CheckRef(0, UntrustedText.manifest('files_exist'))))
         listener.onEvent(new EngineEvent.CheckFinished(key,
                 new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(), Duration.ZERO)))
-        listener.onEvent(new EngineEvent.ExecutionFinished(key, ExecutorUsage.none()))
+        listener.onEvent(new EngineEvent.ExecutionFinished(key, Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()))
         listener.onEvent(new EngineEvent.AttemptFinished(key, state(), new ToolTrace(key, [])))
         listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Completed(state())))
 

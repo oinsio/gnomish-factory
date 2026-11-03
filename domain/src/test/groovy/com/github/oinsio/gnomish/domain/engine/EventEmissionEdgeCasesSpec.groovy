@@ -7,8 +7,9 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
  * {@code Engine.run}, this spec pins the event stream for the runs that deviate from the
  * standard per-round choreography (FR12) — a pre-flight run parked at PipelineEnd emits only
  * the two bookends, a DecisionNeeded round emits ExecutionFinished but no check events, and a
- * CannotExecute round (executor throws) emits no ExecutionFinished. Implements FR12 of
- * add-stage-engine.
+ * round whose executor throws still emits its ExecutionFinished, as {@code failed/infrastructure}
+ * (NFR-O2 of define-executor-contract: every executor run has its round line). Implements FR12 of
+ * add-stage-engine; NFR-O2 of define-executor-contract.
  */
 class EventEmissionEdgeCasesSpec extends EventEmissionSpecBase {
 
@@ -16,7 +17,7 @@ class EventEmissionEdgeCasesSpec extends EventEmissionSpecBase {
     //      TaskFinished and nothing else — no ExecutionFinished, no per-round events.
     def "a PipelineEnd run emits only the two bookends"() {
         given: 'a state already parked at pipeline end'
-        def state = new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())
+        def state = new TaskState(new Position.PipelineEnd(), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
 
         when: 'the run is driven'
         new Engine().run(pipeline(stage('build', 5, [builtin('files_exist')])), CONTEXT, state, WORKSPACE, ports())
@@ -33,7 +34,7 @@ class EventEmissionEdgeCasesSpec extends EventEmissionSpecBase {
     def "a DecisionNeeded round emits ExecutionFinished but no check events"() {
         given: 'a stage whose executor asks a human instead of completing'
         def stageDef = stage('build', 5, [builtin('files_exist')])
-        executor.scripted << new ExecutionResult.DecisionNeeded(
+        executor.scripted << ExecutionResult.decisionNeeded(
                 UntrustedText.agent('which?'),
                 [
                     UntrustedText.agent('a'),
@@ -60,9 +61,10 @@ class EventEmissionEdgeCasesSpec extends EventEmissionSpecBase {
         }.isEmpty()
     }
 
-    // FR12: a CannotExecute round (executor throws) emits NO ExecutionFinished — the execution
-    //       never finished; the throw is caught before the event point.
-    def "a CannotExecute round emits no ExecutionFinished"() {
+    // FR12; NFR-O2 of define-executor-contract: a round whose executor throws records nothing, yet
+    //       it was an executor run, so it emits ExecutionFinished as failed/infrastructure — and no
+    //       AttemptFinished, since nothing was recorded.
+    def "a round whose executor throws emits ExecutionFinished as failed infrastructure and no AttemptFinished"() {
         given: 'a stage whose executor port throws'
         def stageDef = stage('build', 5, [builtin('files_exist')])
         executor.toThrow = new RuntimeException('boom')
@@ -70,9 +72,16 @@ class EventEmissionEdgeCasesSpec extends EventEmissionSpecBase {
         when: 'the run is driven'
         new Engine().run(pipeline(stageDef), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports())
 
-        then: 'no ExecutionFinished was emitted'
-        listener.events.findAll {
+        then: 'one ExecutionFinished names the failed/infrastructure status'
+        def finished = listener.events.findAll {
             it instanceof EngineEvent.ExecutionFinished
+        }
+        finished.size() == 1
+        def status = (finished[0] as EngineEvent.ExecutionFinished).status()
+        status instanceof ExecutionResult.Failed
+        (status as ExecutionResult.Failed).failureClass() == ExecutionResult.FailureClass.INFRASTRUCTURE
+        listener.events.findAll {
+            it instanceof EngineEvent.AttemptFinished
         }.isEmpty()
 
         and: 'the run bookends still framed the run'

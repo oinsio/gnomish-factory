@@ -1,34 +1,14 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
-import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
-import com.github.oinsio.gnomish.app.port.tracker.InstanceId
-import com.github.oinsio.gnomish.app.port.tracker.ParkReason
-import com.github.oinsio.gnomish.app.port.tracker.TaskRef
-import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
-import com.github.oinsio.gnomish.app.port.tracker.Tracker
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
-import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
-import com.github.oinsio.gnomish.app.take.AbortFuse
-import com.github.oinsio.gnomish.app.take.AbortHandler
-import com.github.oinsio.gnomish.app.take.FinishTransition
-import com.github.oinsio.gnomish.app.take.ParkTransition
-import com.github.oinsio.gnomish.app.take.TerminalTransitions
-import com.github.oinsio.gnomish.domain.engine.AttemptKey
-import com.github.oinsio.gnomish.domain.engine.CheckRef
-import com.github.oinsio.gnomish.domain.engine.Decision
-import com.github.oinsio.gnomish.domain.engine.EscalationReport
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.Position
-import com.github.oinsio.gnomish.domain.engine.TaskContext
-import com.github.oinsio.gnomish.domain.engine.TaskOutcome
-import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.app.port.tracker.*
+import com.github.oinsio.gnomish.app.take.*
+import com.github.oinsio.gnomish.domain.engine.*
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification
-
 /**
  * The outcome-to-transition mapping as the tracker receives it (FR2, FR9, FR12 of add-tracker-port):
  * each way an engine run can end reaches the port as exactly one write — {@code finish}, {@code
@@ -84,10 +64,12 @@ class TakeOutcomeTransitionMapSpec extends Specification {
         report || reason
         new EscalationReport.AttemptsExhausted(3) || ParkReason.ESCALATION
         new EscalationReport.DecisionNeeded(UntrustedText.agent('proceed?'), [UntrustedText.agent('yes')]) || ParkReason.ESCALATION
+        // FR7 of define-executor-contract: a reached bound is resumed by the human's return
+        new EscalationReport.BudgetExhausted(UntrustedText.agent('token bound 1000')) || ParkReason.ESCALATION
         new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('tests')),
                 UntrustedText.subprocess('timeout'), UntrustedText.subprocess('')) || ParkReason.INFRA
         new EscalationReport.CannotExecute(UntrustedText.subprocess('executor crashed'), []) || ParkReason.INFRA
-        new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('stale-stage')) || ParkReason.INFRA
+        new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument('stale-stage'))) || ParkReason.INFRA
         kind = report.getClass().simpleName
     }
 
@@ -95,7 +77,7 @@ class TakeOutcomeTransitionMapSpec extends Specification {
     // Scenario: tracker/tracker-port / Outcome-to-transition mapping
     def "Completed is finished and Paused is parked at its checkpoint"() {
         when:
-        dispatch(new TaskOutcome.Completed(new TaskState(new Position.PipelineEnd(), 0, [], ExecutorUsage.none())))
+        dispatch(new TaskOutcome.Completed(new TaskState(new Position.PipelineEnd(), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())))
 
         then:
         1 * tracker.finish(REF, _ as String)

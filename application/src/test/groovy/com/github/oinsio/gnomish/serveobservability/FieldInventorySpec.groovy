@@ -38,7 +38,9 @@ class FieldInventorySpec extends Specification {
 
     /** The closed set of field meanings NFR-S1 permits. */
     enum FieldCategory {
-        IDENTIFIER, STATE, COUNTER, TIMESTAMP, TOKEN_COUNT, SHORT_PHRASE
+        IDENTIFIER, STATE, COUNTER, TIMESTAMP, TOKEN_COUNT, SHORT_PHRASE,
+        /** A token with one qualifier: {@code <name>@<version>}, {@code <status>/<class>}. */
+        QUALIFIED_TOKEN
     }
 
     /**
@@ -122,6 +124,11 @@ class FieldInventorySpec extends Specification {
         durationMillis : FieldCategory.COUNTER,
         probeCount : FieldCategory.COUNTER,
         releasedClaims : FieldCategory.COUNTER,
+        // roundOutcome ledger line (define-executor-contract, NFR-O2, UX3): the executor as
+        // <name>@<version> — the version is what the executor's describe answered, which runs with
+        // no task input — and the status as <status>/<class>; role and attempt are listed above
+        executor : FieldCategory.QUALIFIED_TOKEN,
+        status : FieldCategory.QUALIFIED_TOKEN,
     ]
 
     /**
@@ -158,6 +165,7 @@ class FieldInventorySpec extends Specification {
 
     static final ISO_INSTANT = ~/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
     static final SHORT_TOKEN = ~/^[A-Za-z0-9][A-Za-z0-9._\-]{0,63}$/
+    static final QUALIFIED = ~/^[A-Za-z0-9][A-Za-z0-9._\-]{0,63}([@\/][A-Za-z0-9._+\-]{1,64})?$/
     static final SHORT_PHRASE = ~/^[A-Za-z0-9][A-Za-z0-9._\-, ]{0,79}$/
 
     // Scenario: observability/serve-observability / Pointers instead of payloads
@@ -182,7 +190,7 @@ class FieldInventorySpec extends Specification {
             def root = LedgerJson.mapper().readTree(line)
             assertSubtree('$', root, false)
         }
-        lines.size() == 8
+        lines.size() == 9
     }
 
     /**
@@ -260,6 +268,11 @@ class FieldInventorySpec extends Specification {
                 assert value.isTextual(): "Field '${path}' (short phrase) must be a string, was: ${value.nodeType}"
                 assert value.textValue() ==~ SHORT_PHRASE:
                 "Field '${path}' (short phrase) value '${value.textValue()}' is not a short phrase — possible free text"
+                break
+            case FieldCategory.QUALIFIED_TOKEN:
+                assert value.isTextual(): "Field '${path}' (qualified token) must be a string, was: ${value.nodeType}"
+                assert value.textValue() ==~ QUALIFIED:
+                "Field '${path}' (qualified token) value '${value.textValue()}' is not a qualified token — possible free text"
                 break
             case FieldCategory.STATE:
                 assert value.isTextual(): "Field '${path}' (state) must be a string, was: ${value.nodeType}"

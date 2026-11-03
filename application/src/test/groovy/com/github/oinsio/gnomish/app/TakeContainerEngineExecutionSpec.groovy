@@ -27,6 +27,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
@@ -51,8 +52,8 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
 
     private static final BranchAdoption.AlreadyLocal BRANCH = new BranchAdoption.AlreadyLocal('PROJ-1')
 
-    private static ExecutionResult.DecisionNeeded decisionRound(String taskId = 'PROJ-1') {
-        new ExecutionResult.DecisionNeeded(
+    private static ExecutionResult decisionRound(String taskId = 'PROJ-1') {
+        ExecutionResult.decisionNeeded(
                 UntrustedText.agent('which way?'), [], ExecutorUsage.none(), new ToolTrace(new AttemptKey(taskId, 'build', 0), []), [])
     }
 
@@ -153,6 +154,44 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         1 * support.confirmTerminalWrite()
         result instanceof TakeResult.AwaitingHuman
         (result as TakeResult.AwaitingHuman).reason() == ParkReason.ESCALATION
+    }
+
+    // FR4, FR13, UX1 of define-executor-contract (design D5, as revised 2026-10-31): a law the
+    // describe preflight could not describe parks the task as an invalid law does — before any
+    // assembly, so no round runs — with the box kept stopped as every park keeps it.
+    def "a law the describe preflight refuses parks the task INFRA before any assembly, the box kept stopped"() {
+        given:
+        def tracker = Mock(Tracker)
+        def support = Mock(SandboxRunSupport)
+        def error = new ConfigError('config.yaml', 'executors.acme.program', "executor 'acme' cannot be described (configuration error): describe exited 3")
+        def mediums = []
+        def refusing = [
+            describe: { order, medium, credentials, binding ->
+                mediums << medium
+                new LawDescription.Refused([error])
+            },
+        ] as RunAssembly
+
+        when:
+        def result = execution(refusing, tracker).run(
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, BRANCH, trackerContext(), trackerState(), null)
+
+        then: 'described in the box of the stage the run starts in'
+        mediums == [
+            new DescribeMedium.Box(support, trackerState().position().name())
+        ]
+
+        and:
+        1 * support.keepStopped()
+        1 * tracker.park(REF, ParkReason.INFRA, {
+            it.contains("executor 'acme' cannot be described (configuration error)")
+        })
+        0 * support.pieces(_)
+        0 * support.recordPark(*_)
+        0 * tracker.recordAbort(*_)
+        result instanceof TakeResult.AwaitingHuman
+        (result as TakeResult.AwaitingHuman).reason() == ParkReason.INFRA
+        (result as TakeResult.AwaitingHuman).finalState() == trackerState()
     }
 
     // FR13, FR18, D12, D19: a fresh Paused (manual checkpoint) outcome keeps the environment

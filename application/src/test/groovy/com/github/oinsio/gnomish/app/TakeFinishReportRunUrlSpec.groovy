@@ -9,13 +9,15 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
@@ -43,9 +45,9 @@ class TakeFinishReportRunUrlSpec extends Specification {
         given: 'a task whose one round passed an external check carrying the run URL'
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('external:ci')), new Verdict.Pass(RUN_URL),
                 Duration.ofSeconds(3))
-        def round = new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [check], ExecutorUsage.none(),
-        JudgeUsage.none(), [], Stop.none())
-        def state = new TaskState(new Position.PipelineEnd(), 1, [round], ExecutorUsage.none())
+        def round = AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [check], ExecutorUsage.none(),
+        [], Stop.none())
+        def state = new TaskState(new Position.PipelineEnd(), 1, [round], UsageSnapshot.EMPTY, ExecutorVersions.none())
         def context = new TaskContext('PROJ-1', UntrustedText.tracker('Fix the widget'), UntrustedText.tracker('body'),
                 List.<Decision> of())
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))

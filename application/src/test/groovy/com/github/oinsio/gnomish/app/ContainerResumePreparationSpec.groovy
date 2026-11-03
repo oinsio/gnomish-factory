@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
-import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import spock.lang.Specification
 
 /**

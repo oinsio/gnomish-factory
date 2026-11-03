@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.project.RegisteredClone
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
@@ -74,7 +76,7 @@ class GitInvocationIdentitySpec extends Specification implements BareGitRepoFixt
 
         then: 'every operation landed'
         gitOutput(clone, 'rev-parse', BRANCH) == flow.registeredCommit()
-        gitOutput(clone, 'log', '-1', '--format=%s', flow.registeredCommit()) == ServiceCommitMessages.round('verify', 1)
+        gitOutput(clone, 'log', '-1', '--format=%s', flow.registeredCommit()) == ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey('T-1', 'verify', 1)))
         gitOutput(clone, 'rev-parse', 'refs/heads/forged') == written
 
         and: 'nothing planted ran, and .git/config is byte-identical (cleanup)'
@@ -102,7 +104,7 @@ class GitInvocationIdentitySpec extends Specification implements BareGitRepoFixt
 
         then: 'every operation landed'
         gitOutput(clone, 'rev-parse', BRANCH) == flow.registeredCommit()
-        gitOutput(clone, 'log', '-1', '--format=%s', flow.registeredCommit()) == ServiceCommitMessages.round('verify', 1)
+        gitOutput(clone, 'log', '-1', '--format=%s', flow.registeredCommit()) == ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey('T-1', 'verify', 1)))
 
         and: 'the configured hook never ran; .git/config is byte-identical apart from the plant (cleanup)'
         !Files.exists(StandIn.log(hook))

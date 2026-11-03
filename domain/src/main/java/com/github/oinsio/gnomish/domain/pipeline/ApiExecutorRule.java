@@ -15,12 +15,14 @@ import java.util.List;
  *
  * <p>Problems are located {@link ConfigError}s naming the stage manifest
  * (NFR-O1, UX2) and the {@code executor.type} field, with a message that
- * names {@code agent-cli} as the only currently supported executor type — an
+ * names the supported executor types, {@code agent-cli} and {@code program}
+ * (FR10 of define-executor-contract) — an
  * actionable instruction for the operator, since this text is what surfaces
  * on stderr before exit code 3 (FR10). Nothing is thrown (design D3). Error
  * order is deterministic (NFR-R1): stages in pipeline declaration order.
  *
- * <p>Implements FR10, UX2, D6 of add-agent-executor.
+ * <p>Implements FR10, UX2, D6 of add-agent-executor; FR10 of
+ * define-executor-contract (the message names {@code program}).
  */
 public final class ApiExecutorRule {
 
@@ -28,7 +30,7 @@ public final class ApiExecutorRule {
 
     /**
      * Validates every stage's executor type against the {@code api}-rejection
-     * rule: a stage with an {@code agent-cli} executor yields no error; each
+     * rule: a stage with an {@code agent-cli} or {@code program} executor yields no error; each
      * {@code api}-executor stage yields exactly one located {@link ConfigError}.
      *
      * <p>Implements FR10, UX2, D6 of add-agent-executor.
@@ -46,7 +48,7 @@ public final class ApiExecutorRule {
                         new ConfigError(
                                 manifestPath(stage.name()),
                                 "executor.type",
-                                "api executor is not yet supported; 'agent-cli' is the only supported executor type currently"));
+                                "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'"));
             }
         }
         return List.copyOf(errors);

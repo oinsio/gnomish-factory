@@ -1,7 +1,12 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.app.port.git.RoundToken
+import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.RoundToken
+import com.github.oinsio.gnomish.executorcontract.ResultFileReader
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.Provenance
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -56,9 +61,51 @@ class BranchDecisionFileSpec extends Specification implements BareGitRepoFixture
         Files.createDirectories(target.parent)
         target.toFile().text = '{"question":"which db?"}'
 
-        expect: 'the boundary-time read returns the raw content and leaves the file in place for the snapshot'
-        handle.read().get() == '{"question":"which db?"}'
+        expect: 'the boundary-time read returns the request and leaves the file in place for the snapshot'
+        handle.read().get().question().forLog() == 'which db?'
         Files.isRegularFile(target)
+    }
+
+    // FR6 of define-executor-contract: the in-branch read goes through the shared result reader,
+    //     so the box medium gets the host medium's tolerant fallback and cap, not a copy of them.
+    // Scenario: executor/result-channel / Garbage decision file keeps its fallback
+    def "FR6: garbage at the round's path becomes the question verbatim, read through the shared reader"() {
+        given:
+        def handle = BranchDecisionFile.open(box, KEY, TOKEN)
+        def target = box.workingCopy.resolve(handle.relativePath())
+        Files.createDirectories(target.parent)
+        target.toFile().text = 'not json, just words'
+
+        when:
+        def logs = LogCaptureSupport.attach(DecisionRequestRead)
+        def request = handle.read()
+        logs.detach()
+
+        then:
+        request.get().question().forLog() == 'not json, just words'
+        request.get().question().provenance() == Provenance.AGENT
+        request.get().options().isEmpty()
+    }
+
+    def "FR6: a decision file over the cap is read up to the cap through the box channel, and still asks"() {
+        given:
+        def cap = ResultFileReader.DECISION_FILE_CAP_BYTES
+        def handle = BranchDecisionFile.open(box, KEY, TOKEN)
+        def target = box.workingCopy.resolve(handle.relativePath())
+        Files.createDirectories(target.parent)
+        target.toFile().text = '{"question":"' + ('q' * cap) + '"}'
+
+        when:
+        def logs = LogCaptureSupport.attach(DecisionRequestRead)
+        def request = handle.read()
+        logs.detach()
+
+        then: 'the cut text is the question, ending with the reader\'s truncation marker'
+        def marker = new ResultFileReader(cap, { String text ->
+            UntrustedText.agent(text)
+        }).truncationMarker()
+        request.get().question().length() == cap + marker.length()
+        request.get().options().isEmpty()
     }
 
     def "FR23: no decision file means an empty read, never a fabricated value"() {
@@ -97,6 +144,6 @@ class BranchDecisionFileSpec extends Specification implements BareGitRepoFixture
         decisions.resolve('implement-a1-' + TOKEN.commit() + '.json').toFile().text = '{"question":"live"}'
 
         then: 'only that file is read'
-        BranchDecisionFile.open(box, KEY, TOKEN).read().get() == '{"question":"live"}'
+        BranchDecisionFile.open(box, KEY, TOKEN).read().get().question().forLog() == 'live'
     }
 }

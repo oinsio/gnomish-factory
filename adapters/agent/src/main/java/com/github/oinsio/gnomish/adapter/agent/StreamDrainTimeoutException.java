@@ -14,8 +14,8 @@ import java.time.Duration;
  * operator setting, so the message advises raising nothing.
  *
  * <p>Unchecked, like {@link MissingResultEventException} and {@link
- * RoundTimeoutException}: the executor lets it propagate into {@code
- * RoundOutcome.CannotExecute} (no stage attempt burned, NFR-R2), while the
+ * RoundTimeoutException}: the executor round reports it as its {@code failed/infrastructure}
+ * result (no stage attempt burned, NFR-R2), while the
  * judge — which never throws (design D5 of add-agent-executor) — maps it to a
  * {@code CannotVerify} vote.
  *

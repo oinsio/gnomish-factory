@@ -19,9 +19,9 @@
 // never suppressed (NFR-S1, D4 of fix-osv-dependency-gate).
 dependencies {
     // PIN, production and test: the Jackson BOM at the CVE-fixed version (GHSA-5jmj-h7xm-6q6v,
-    // see libs.versions.toml). Boot 4.1.0 imports jackson-bom 2.21.4 transitively; declaring
-    // 2.22.1 here wins by Gradle's highest-version conflict resolution and bumps the whole family
-    // at once. Drop once a Boot 4.1.x upgrade manages 2.22.1+.
+    // see libs.versions.toml). Boot 4.1.2 imports jackson-bom 2.21.7 transitively; declaring
+    // the catalog's 2.22.x here wins by Gradle's highest-version conflict resolution and bumps the
+    // whole family at once. Drop once a Boot 4.1.x upgrade manages the catalog's version.
     implementation platform(libs.jackson.bom)
 
     // PIN, production: the logging stack spring-boot-starter pulls in — logback (BOM-pinned
@@ -36,7 +36,7 @@ dependencies {
     }
 
     // PIN, test only: WireMock 3.13.1's HttpServerFactoryLoader needs an internally consistent
-    // Jetty 11 stack (its own jetty-bom import); the Boot 4.1.0 BOM otherwise wins conflict
+    // Jetty 11 stack (its own jetty-bom import); the Boot BOM otherwise wins conflict
     // resolution on jetty-server/-http/-io/etc. while jetty-servlet/-webapp (which Boot does not
     // manage) stay on 11 — the mixed 11/12 classpath then fails at WireMockServer startup with
     // "Jetty 11 is not present" (task 4.4). enforcedPlatform (not platform) forces every

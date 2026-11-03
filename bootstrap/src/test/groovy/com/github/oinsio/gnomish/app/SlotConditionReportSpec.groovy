@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
+import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask
@@ -49,6 +50,7 @@ import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
 import com.github.oinsio.gnomish.sandbox.environment.ScriptedSandboxDocker
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -158,6 +160,37 @@ class SlotConditionReportSpec extends Specification implements BareGitRepoFixtur
         runner(vanishing).run(REF)
 
         then:
+        !conditions.anyOpen()
+        logs.list.findAll { it.level.isGreaterOrEqual(Level.WARN) }.isEmpty()
+    }
+
+    // Scenario: pipeline/pipeline-config / Describe runs in the task's own environment
+    def "FR4, FR13: a program executor is described inside the task's box before the engine, and a failed describe parks the task with no condition opened"() {
+        given: 'the law declares a program executor the scripted box answers describe for with no answer file'
+        Files.writeString(cloneDir.resolve('.gnomish/config.yaml'), Files.readString(cloneDir.resolve('.gnomish/config.yaml'))
+                + 'executors:\n  acme:\n    type: program\n    program: [/opt/acme/bin/acme, --json]\n')
+        Files.writeString(cloneDir.resolve('.gnomish/stages/build/stage.yaml'),
+                'purpose: build it\nexecutor:\n  type: program\n  name: acme\ninstructions: stages/build/instructions.md\nadvancement: auto\n')
+        commitAll(cloneDir, 'declare acme')
+        pushOrigin(cloneDir)
+        tracker.claim(REF, INSTANCE.value())
+
+        when:
+        runner(tracker).run(REF)
+
+        then: 'describe ran in the box: the declared argv with the word describe appended'
+        docker.starts.any {
+            it.containsAll([
+                '/opt/acme/bin/acme',
+                '--json'
+            ]) && it.last() == 'describe'
+        }
+
+        and: 'the task parked as an invalid law parks it, before any round'
+        tracker.fetchTask(REF).state() == new TrackerTaskState.AwaitingHuman(ParkReason.INFRA)
+        !docker.starts.any { it.contains('stream-json') }
+
+        and: 'no daemon condition opened, and no condition WARN was written'
         !conditions.anyOpen()
         logs.list.findAll { it.level.isGreaterOrEqual(Level.WARN) }.isEmpty()
     }

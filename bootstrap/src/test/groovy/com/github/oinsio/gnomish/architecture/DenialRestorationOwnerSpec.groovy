@@ -36,6 +36,7 @@ class DenialRestorationOwnerSpec extends Specification {
         (ENV + 'LeasedEnvironment.java') : 'hands the offer to the leased box',
         (ENV + 'SelfCheckedEnvironment.java') : 'hands the offer to its guard',
         (ENV + 'EgressGuard.java') : 'applies the offer to its denial cursor',
+        ('bootstrap/src/main/java/com/github/oinsio/gnomish/app/conformance/WireObservation.java'): 'the conformance kit\'s decorator hands the offer to its delegate (D19 of define-executor-contract)',
     ]
 
     // FR17: the offer is made at build time only; no other component calls it on an environment

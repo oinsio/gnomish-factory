@@ -4,10 +4,10 @@ import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -40,10 +40,10 @@ import org.jspecify.annotations.Nullable;
  * <p>{@code attempts} passes {@link AttemptRecord} through unchanged rather than a
  * bespoke summary type: {@code AttemptRecord} is already a clean, inert value type,
  * so wrapping it would add a translation layer with no behavior of its own.
- * {@code totals} is {@link ExecutorUsage}, whose {@code wallTime}/{@code tokens}
- * fields are themselves nullable — the mechanism behind the contract's "optional
- * usage" requirement (NFR-C1): a human-only run reports zero/absent usage without
- * violating the contract.
+ * {@code totals} is the task's {@link UsageSnapshot} as recorded at the tip, passed through
+ * unchanged: a human-only run's snapshot counts its rounds and names no model, without
+ * violating the contract's "optional usage" requirement (NFR-C1; FR17 of
+ * define-executor-contract).
  *
  * <p>Text rendering is {@link StatusTextRenderer}; JSON rendering is {@code
  * StatusReportJsonMapper}. This type only holds the data both render.
@@ -65,8 +65,7 @@ import org.jspecify.annotations.Nullable;
  *     unmodifiable, possibly empty (state-derived)
  * @param lastDecision the most recent element of {@code decisions}, or {@code null}
  *     when {@code decisions} is empty (state-derived)
- * @param totals cumulative executor usage for the whole task; never null, its own
- *     {@code wallTime}/{@code tokens} fields nullable (state-derived)
+ * @param totals the usage snapshot of the whole task; never null (state-derived)
  * @param outcome the task's recorded terminal outcome, or {@code null} when none
  *     is recorded (recorded)
  * @param lastEscalation the task's recorded most recent escalation report, or
@@ -81,7 +80,7 @@ public record StatusReport(
         List<AttemptRecord> attempts,
         List<Decision> decisions,
         @Nullable Decision lastDecision,
-        ExecutorUsage totals,
+        UsageSnapshot totals,
         @Nullable Outcome outcome,
         @Nullable EscalationReport lastEscalation) {
 

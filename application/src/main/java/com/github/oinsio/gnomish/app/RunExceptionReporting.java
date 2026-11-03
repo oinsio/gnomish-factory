@@ -21,7 +21,7 @@ import org.slf4j.Logger;
  * <p>Implements FR1, FR2, FR4, FR9, FR12, NFR-O1, UX3 of add-manual-run; FR5 of
  * harden-untrusted-text-sinks; NFR-O1, FR16 of fix-operator-blockers; FR7 of add-project-registry;
  * FR4, NFR-O1 of make-run-headless; FR9 of supervise-daemon-loops-and-embed-dashboard; FR5, FR14 of
- * add-sandbox-base-image; FR6 of add-doctor-command.
+ * add-sandbox-base-image; FR6 of add-doctor-command; FR18 of define-executor-contract.
  */
 final class RunExceptionReporting {
 
@@ -37,7 +37,8 @@ final class RunExceptionReporting {
             DefaultBranchUnboundException.class,
             GitVersionRefusedException.class, // UX2 of own-git-transfer-argv: a precondition, not a crash
             UnsupportedStateFileVersionException.class, // FR4: clean refusal, no WARN/stack trace
-            ConfigurationViolationsException.class); // FR7 of add-project-registry: the loader's report
+            ConfigurationViolationsException.class, // FR7 of add-project-registry: the loader's report
+            UsageTotalsMismatchException.class); // FR18 of define-executor-contract: both figures, no report
 
     /** Families whose outcome the callee already put on the console. */
     private static final List<Class<? extends Throwable>> ALREADY_REPORTED = List.of(
@@ -48,7 +49,8 @@ final class RunExceptionReporting {
             RunParkedException.class, // FR1, FR2 of make-run-headless: the stop render is on stdout
             DecisionRequiredException.class, // FR4 of make-run-headless: the question is restated on stdout
             DashboardDisabledException.class, // FR9 of supervise-daemon-loops-and-embed-dashboard: loop's ERROR
-            DoctorFailedException.class); // FR6 of add-doctor-command: the report is on stdout
+            DoctorFailedException.class, // FR6 of add-doctor-command: the report is on stdout
+            ExecutorVerifyFailedException.class); // FR12, UX2 of define-executor-contract: one line per case on stdout
 
     private RunExceptionReporting() {}
 

@@ -2,7 +2,9 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
+import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
@@ -60,6 +62,11 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
                 stage, new DirectoryWorkspace(workspace), attempt, [])
     }
 
+    /** Points the worktree's HEAD at an unborn branch, so {@code rev-parse HEAD} cannot answer. */
+    private void unbornHead() {
+        runner.run(repo, 'checkout', '-q', '--orphan', 'unborn')
+    }
+
     /** One gnome commit on the task branch, through the fixture's own write/add/commit step. */
     private void gnomeCommit() {
         commit(repo, 'gnome.txt', 'gnome work')
@@ -114,7 +121,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         delegate.round.environment.is(round.environment())
         round.decisionFilePath() == Path.of('decision.json')
         round.decisionEnvFragment() == [GNOMISH_DECISION_FILE: 'decision.json']
-        round.readDecision() == Optional.of('decision-content')
+        round.readDecision() == Optional.of(PassThroughRounds.DECISION)
         delegate.round.closed
         delegate.round.discarded
     }
@@ -148,14 +155,16 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     // cannot be resolved is one fault whether it spans polls of one round or rounds of one task,
     // so the second round's failure is a suppressed repeat, not a fresh WARN edge.
     def "a tip-resolution failure spanning two rounds logs one WARN edge, not one per round"() {
-        given: 'a workspace that is not a git repository, so every rev-parse fails'
-        Path notARepo = Files.createDirectories(tempDir.resolve('not-a-repo'))
+        given: 'two rounds opened over the worktree, whose HEAD then stops resolving, so every poll fails'
         def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock())
+        def first = source.openRound(request(0))
+        def second = source.openRound(request(1))
+        unbornHead()
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
 
-        when: 'two rounds open over the broken workspace and each observes one event'
-        source.openRound(request(notARepo, 0)).roundListener().onProgress(toolEvent)
-        source.openRound(request(notARepo, 1)).roundListener().onProgress(toolEvent)
+        when: 'each round observes one event over the broken worktree'
+        first.roundListener().onProgress(toolEvent)
+        second.roundListener().onProgress(toolEvent)
 
         then: 'one WARN edge for the whole streak; the later polls are DEBUG repeats'
         def warnings = logs.list.findAll { it.level == Level.WARN }
@@ -198,12 +207,12 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     // NFR-R1: a failing rev-parse skips the observation and never throws — the round closes
     // and reads its decision exactly as an undisturbed one does.
     def "a failing rev-parse inside onProgress never throws and leaves the round usable"() {
-        given: 'a workspace that is not a git repository'
-        Path notARepo = Files.createDirectories(tempDir.resolve('broken'))
+        given: 'a round opened over the worktree, whose HEAD then stops resolving'
         def delegate = new PassThroughRounds()
         def source = new MidRoundPushRounds(delegate, runner, new VirtualClock())
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
-        def round = source.openRound(request(notARepo, 0))
+        def round = source.openRound(request(0))
+        unbornHead()
 
         when:
         round.roundListener().onProgress(toolEvent)
@@ -212,7 +221,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         then:
         noExceptionThrown()
         delegate.round.closed
-        round.readDecision() == Optional.of('decision-content')
+        round.readDecision() == Optional.of(PassThroughRounds.DECISION)
         logs.list.findAll { it.level == Level.WARN }*.formattedMessage
         .any {
             it.startsWith(OperatorEvent.MID_ROUND_POLL_SKIPPED.head())
@@ -220,5 +229,41 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
 
         cleanup:
         logs.detach()
+    }
+
+    // FR21 of define-executor-contract: a git-mode host round opens on the worktree tip it starts
+    // at, in the run's own cell, and the next round on the tip the first one's commit left
+    def "FR21: each round opens on the worktree tip as its round token, in the cell the engine reads"() {
+        given:
+        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock())
+
+        when: 'a round opens, the round commits, and the next round opens'
+        def firstTip = currentHead(repo)
+        source.openRound(request(0))
+        def firstToken = source.identity().takeToken()
+        gnomeCommit()
+        source.openRound(request(1))
+        def secondToken = source.identity().takeToken()
+
+        then: 'each token is the tip its round opened on, and the two differ'
+        firstToken.get() == RoundToken.of(firstTip)
+        secondToken.get() == RoundToken.of(currentHead(repo))
+        firstToken != secondToken
+    }
+
+    // FR21 of define-executor-contract: no round is recorded under nothing — an unresolvable tip
+    // fails the round's open before the host round is opened
+    def "FR21: a worktree whose tip does not resolve fails the round's open"() {
+        given:
+        def delegate = new PassThroughRounds()
+        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock())
+        unbornHead()
+
+        when:
+        source.openRound(request(0))
+
+        then:
+        thrown(BranchTipUnavailableException)
+        delegate.round == null
     }
 }

@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.RoundToken
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -16,7 +18,7 @@ class ServiceCommitMessagesSpec extends Specification {
     @Unroll
     def "FR2: round(#stage, #round) == #expected"() {
         expect:
-        ServiceCommitMessages.round(stage, round) == expected
+        ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey('T-1', stage, round))) == expected
 
         where:
         stage | round | expected

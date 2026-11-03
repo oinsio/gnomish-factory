@@ -23,16 +23,16 @@ import org.slf4j.LoggerFactory;
  * stage and round therefore skips the agent entirely: it restores the interrupted
  * round into the run's {@link CurrentRound} — the token its snapshot recorded and the
  * snapshot itself, through the same two transitions a live round runs (design D10 of
- * make-checkpoint-gate-durable, as amended 2026-10-07) — and returns {@link
- * ExecutionResult.Completed} with empty telemetry (the original round's trace died
+ * make-checkpoint-gate-durable, as amended 2026-10-07) — and returns a {@link
+ * ExecutionResult#completed} result with empty telemetry (the original round's trace died
  * with the unrecorded state commit), so the engine proceeds straight to verification of exactly the
  * harvested attempt commit — no agent re-run, no attempt burned. Every other
  * request delegates unchanged; the engine stays untouched (D15).
  *
  * <p>A round that asked for a decision before the death left its request in the snapshot's tree,
- * and the pending verification carries it: the matching round then maps it through the same
- * tolerant {@link DecisionFileReader} a live round uses and returns {@link
- * ExecutionResult.DecisionNeeded} with the same empty telemetry — the question is re-raised, the
+ * and the pending verification carries it, already read through the same tolerant {@code
+ * DecisionRequestRead} a live round uses: the matching round returns {@link
+ * ExecutionResult#decisionNeeded} with the same empty telemetry — the question is re-raised, the
  * round is not replayed, no attempt is burned (FR15, NFR-R4 of make-checkpoint-gate-durable, design
  * D10). A pending verification without a request resumes as {@code Completed}, as before.
  *
@@ -44,7 +44,6 @@ public final class ResumeVerificationStageExecutor implements StageExecutor {
 
     private final StageExecutor delegate;
     private final CurrentRound rounds;
-    private final DecisionFileReader decisionFileReader = new DecisionFileReader();
 
     private @Nullable PendingVerification pending;
 
@@ -79,11 +78,9 @@ public final class ResumeVerificationStageExecutor implements StageExecutor {
             // environment is long gone, and its guard log died with the unrecorded state commit.
             var usage = new ExecutorUsage(Duration.ZERO, List.of(), Map.of());
             var trace = new ToolTrace(key, List.of());
-            return decisionFileReader
-                    .read(p.request())
-                    .map(d -> (ExecutionResult)
-                            new ExecutionResult.DecisionNeeded(d.question(), d.options(), usage, trace, List.of()))
-                    .orElseGet(() -> new ExecutionResult.Completed(usage, trace, List.of()));
+            return p.request()
+                    .map(d -> ExecutionResult.decisionNeeded(d.question(), d.options(), usage, trace, List.of()))
+                    .orElseGet(() -> ExecutionResult.completed(usage, trace, List.of()));
         }
         return delegate.execute(request);
     }

@@ -4,8 +4,11 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.EngineEvent
+import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.Participants
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
@@ -64,7 +67,7 @@ abstract class EngineEventListenerContract extends Specification implements Port
         [
             new EngineEvent.RunStarted('TASK-1', new Position.AtStage('build'), 0),
             new EngineEvent.AttemptStarted(key),
-            new EngineEvent.ExecutionFinished(key, ExecutorUsage.none()),
+            new EngineEvent.ExecutionFinished(key, Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()),
             new EngineEvent.CheckStarted(key, new CheckRef(0, UntrustedText.manifest('files_exist'))),
             new EngineEvent.CheckFinished(key,
             new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(), Duration.ZERO)),

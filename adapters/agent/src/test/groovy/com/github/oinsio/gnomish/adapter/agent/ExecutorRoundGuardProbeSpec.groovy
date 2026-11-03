@@ -1,15 +1,14 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.sandbox.environment.GuardUnavailableException
 
 /**
  * D14 of tighten-spec-contract (F85), executor side: the round probes its environment's egress
  * guard before the launch and again once the process has exited, before anything is graded or
  * committed. A guard found dead fails the round the way every round that never reached its close
- * fails — an {@code ExecutorFailure} the engine shapes into {@code CannotExecute}, no attempt
- * burned — instead of grading whatever the agent reported. Driven through the real host round
+ * fails — a {@code failed/infrastructure} result the engine classifies as {@code CannotExecute},
+ * no attempt burned — instead of grading whatever the agent reported. Driven through the real host round
  * with only the environment's guard answer scripted.
  *
  * <p>NFR-R1 of add-sandbox-core.
@@ -24,12 +23,11 @@ class ExecutorRoundGuardProbeSpec extends AbstractDenialRoundSpec {
         source.guardDiesAtProbe = 1
 
         when: 'the agent completes normally'
-        executorFor('plain-round', source).execute(requestFor())
+        def result = executorFor('plain-round', source).execute(requestFor())
 
-        then: 'the round leaves as an infrastructure failure naming the guard, not as a result'
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof GuardUnavailableException
-        failure.cause().message.contains('gnomish-guard-k1')
+        then: 'the round leaves as an infrastructure failure naming the guard, not as a graded result'
+        InfrastructureResults.endedBy(result, GuardUnavailableException)
+        InfrastructureResults.of(result).reason().contains('gnomish-guard-k1')
 
         and: 'the guard was probed at both ends, and the failed round still drained its denials'
         source.probes() == 2
@@ -44,11 +42,10 @@ class ExecutorRoundGuardProbeSpec extends AbstractDenialRoundSpec {
         source.guardDiesAtProbe = 0
 
         when: 'the retry would also fail to launch, were it launched'
-        executorFor('plain-round', source).execute(requestFor())
+        def result = executorFor('plain-round', source).execute(requestFor())
 
         then: 'the probe precedes the launch: the failure is the guard, not the start'
-        def failure = thrown(ExecutorFailure)
-        failure.cause() instanceof GuardUnavailableException
+        InfrastructureResults.endedBy(result, GuardUnavailableException)
         source.probes() == 1
     }
 
@@ -61,7 +58,7 @@ class ExecutorRoundGuardProbeSpec extends AbstractDenialRoundSpec {
         def result = executorFor('plain-round', source).execute(requestFor())
 
         then:
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         source.probes() == 2
     }
 }

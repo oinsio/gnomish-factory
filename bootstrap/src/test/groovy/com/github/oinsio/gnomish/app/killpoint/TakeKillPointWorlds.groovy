@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.app.port.tracker.InstanceId
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.*
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.gitobjects.GitObjects
@@ -65,7 +66,7 @@ trait TakeKillPointWorlds implements BareGitRepoFixture {
                 new GitTaskRepository(new GitProcessRunner(), registered, git.epochs(), new VirtualClock()), new GitProcessRunner(), registered.clonePath())
         world.roundWriter = { TaskState expected ->
             new GitAttemptPersistence(new GitProcessRunner(), world.worktree, TAKE_TASK_ID, git.epochs())
-            .persist(TAKE_TASK_ID, expected, trace(expected))
+            .persist(TAKE_TASK_ID, RoundStates.withRound(expected, trace(expected).key()), trace(expected))
         }
         seedClaim(world)
         world.routes = new KillPointTakeRoutes().host(registered, git, world.tracker, definition, agent)

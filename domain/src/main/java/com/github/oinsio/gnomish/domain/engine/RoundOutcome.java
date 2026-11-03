@@ -1,62 +1,56 @@
 package com.github.oinsio.gnomish.domain.engine;
 
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.util.List;
-
 /**
- * One round shaped for the {@link StageAttemptLoop} to route: {@link Verified} — the
- * executor completed and the verify chain ran — {@link NeedsDecision} — the executor asked
- * a human and no chain ran (FR6) — or {@link CannotExecute} — the executor port threw and
- * no round ran at all (FR10). A sealed carrier so the loop records, persists, events and
- * routes each round without re-deriving any of it.
+ * One round shaped for the {@link StageAttemptLoop} to route, from the {@link AttemptAccounting}
+ * the {@link ExecutorOutcomeClassifier} gave its result (FR7 of define-executor-contract): {@link
+ * Judged} — the round reached a verdict, from the verify chain after a {@code completed} result or
+ * from the executor's own {@code failed/quality} report with no chain run; {@link Stopped} — the
+ * round was recorded unburned with a stop that ends the stage (a decision request, FR6; a reached
+ * bound); or {@link Unrecorded} — the executor threw, reported {@code failed/infrastructure} or a
+ * {@code pending} the stage cannot poll, and no round was recorded (FR10). A sealed carrier so the
+ * loop records, persists, events and routes each round without re-deriving any of it.
  *
- * <p>Implements FR4, FR6, FR10, FR13 of add-stage-engine.
+ * <p>Implements FR4, FR6, FR10, FR13 of add-stage-engine; FR7 of define-executor-contract.
  */
-sealed interface RoundOutcome permits RoundOutcome.Verified, RoundOutcome.NeedsDecision, RoundOutcome.CannotExecute {
+sealed interface RoundOutcome permits RoundOutcome.Judged, RoundOutcome.Stopped, RoundOutcome.Unrecorded {
 
     /**
-     * A round the executor completed and the verify chain ran on: the {@link AttemptKey}
-     * it ran under, its recorded {@link AttemptRecord}, the overall {@link Verdict} derived
-     * from the chain, and the executor's raw {@link ToolTrace}.
+     * A round that reached a verdict: the {@link AttemptKey} it ran under, its recorded {@link
+     * AttemptRecord}, the overall {@link Verdict} — derived from the verify chain, or the {@link
+     * Verdict.Fail} of an executor-reported {@code failed/quality} round whose findings the record
+     * carries as its one check result (FR7 of define-executor-contract) — and the executor's raw
+     * {@link ToolTrace}.
      *
      * @param key the round's correlation key; never null
      * @param record the round's recorded metrics and check results; never null
      * @param verdict the round's overall verdict; never null
      * @param trace the executor's raw tool trace for the round; never null
      */
-    record Verified(AttemptKey key, AttemptRecord record, Verdict verdict, ToolTrace trace) implements RoundOutcome {}
+    record Judged(AttemptKey key, AttemptRecord record, Verdict verdict, ToolTrace trace) implements RoundOutcome {}
 
     /**
-     * A round whose executor asked a human instead of completing (FR6, design D6): no
-     * verify chain ran. Carries the {@link AttemptKey}, the {@link AttemptRecord} (executor
-     * metrics, no check results — FR13; the question and options the engine escalates verbatim
-     * ride the record as its {@link Stop.DecisionNeeded}, FR5 of make-checkpoint-gate-durable)
-     * and the executor's raw {@link ToolTrace}.
+     * A round recorded without burning an attempt whose stop ends the stage ({@link
+     * AttemptAccounting.EndStage}): no verify chain ran. The record carries the stop — the
+     * executor's question and options ({@link Stop.DecisionNeeded}, FR6) or the bound it reached
+     * ({@link Stop.BudgetExhausted}, FR7 of define-executor-contract) — so the escalation the loop
+     * raises and a later pickup's re-escalation both read the same record (FR5 of
+     * make-checkpoint-gate-durable).
      *
      * @param key the round's correlation key; never null
-     * @param record the round's recorded metrics and its decision stop, no check results; never
-     *     null
+     * @param record the round's recorded metrics and its stop, no check results; never null
      * @param trace the executor's raw tool trace for the round; never null
      */
-    record NeedsDecision(AttemptKey key, AttemptRecord record, ToolTrace trace) implements RoundOutcome {}
+    record Stopped(AttemptKey key, AttemptRecord record, ToolTrace trace) implements RoundOutcome {}
 
     /**
-     * A round whose executor port threw — its own retries exhausted — so no round ran at
-     * all (FR10): no {@link AttemptRecord}, no verify chain, no persisted state. The loop
-     * escalates it as {@link EscalationReport.CannotExecute} without burning an attempt.
-     *
-     * <p>{@code denials} carries the egress denials the failed round's environment recorded,
-     * drained by the executor adapter and handed over on a {@link
-     * com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure} (FR1 of
-     * fix-denial-attribution-durability). Because this round leaves no {@link AttemptRecord},
-     * the list travels straight onto the escalation report. Any other {@link RuntimeException}
-     * yields an empty list. No defensive copy here: the only two producers hand over an already
-     * unmodifiable list, and the {@link EscalationReport.CannotExecute} this feeds copies again.
+     * A round that records nothing ({@link AttemptAccounting.Escalate}, FR10): no {@link
+     * AttemptRecord}, no verify chain, no persisted state. The loop escalates the accounting's
+     * {@link EscalationReport.CannotExecute} — cause and the failed round's denials (FR1 of
+     * fix-denial-attribution-durability) — from the state the round started from, without
+     * burning an attempt.
      *
      * @param key the correlation key of the round that could not run; never null
-     * @param cause the executor failure's preserved stack trace (NFR-O1); never null
-     * @param denials the failed round's egress denials; already unmodifiable when built (the
-     *     wrapper copies, and a non-wrapper throw yields {@link List#of()}), possibly empty
+     * @param escalation the classifier's accounting carrying the report; never null
      */
-    record CannotExecute(AttemptKey key, UntrustedText cause, List<Denial> denials) implements RoundOutcome {}
+    record Unrecorded(AttemptKey key, AttemptAccounting.Escalate escalation) implements RoundOutcome {}
 }

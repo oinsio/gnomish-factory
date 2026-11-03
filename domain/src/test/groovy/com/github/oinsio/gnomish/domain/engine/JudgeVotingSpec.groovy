@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 
@@ -99,7 +100,7 @@ class JudgeVotingSpec extends JudgeVotingSpecBase {
 
         then: 'only the two cast votes are accounted, each contributing its own map'
         voter.voteCount == 2
-        result.perVote() == [t1, [:]]
+        result.perVote() == [Unpriced.of(t1), [:]]
     }
 
     // FR7: the TaskContext is threaded through to every vote unchanged

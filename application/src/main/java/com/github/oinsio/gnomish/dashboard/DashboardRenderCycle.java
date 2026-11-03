@@ -98,7 +98,7 @@ public final class DashboardRenderCycle {
                     OperatorEvent.OUTCOME_LEDGER_UNAGGREGATABLE.head()
                             + "outcome ledger could not be aggregated; the history block renders empty",
                     malformedLedger);
-            return new LedgerHistoryView(List.of(), Map.of());
+            return new LedgerHistoryView(List.of(), Map.of(), 0L);
         }
     }
 }

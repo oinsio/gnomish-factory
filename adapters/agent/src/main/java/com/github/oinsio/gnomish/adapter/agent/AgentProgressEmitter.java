@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.domain.engine.ModelUsages;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import org.jspecify.annotations.Nullable;
@@ -62,7 +63,7 @@ record AgentProgressEmitter(AgentProgressListener progressListener, TokenUsageMa
                 }
             }
             case AgentEvent.ResultEvent result -> {
-                var tokensByModel = tokenUsageMapper.toTokensByModel(result, roundInit);
+                var tokensByModel = ModelUsages.tokensOf(tokenUsageMapper.toByModel(result, roundInit));
                 deliver(new AgentProgressEvent.RoundFinished(result.subtype(), tokensByModel, result.result()));
             }
             case AgentEvent.UserEvent ignored -> {

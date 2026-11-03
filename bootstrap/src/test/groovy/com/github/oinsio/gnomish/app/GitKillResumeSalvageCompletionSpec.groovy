@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -103,7 +104,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ])
-        persistence.persist(taskId, state, trace)
+        persistence.persist(taskId, RoundStates.withRound(state, trace.key()), trace)
     }
 
     // FR8, FR10, M1: kill -9 mid-round, then --resume salvages the leftovers into a service commit

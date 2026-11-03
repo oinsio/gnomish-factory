@@ -70,6 +70,9 @@ dependencies {
     // the agent adapter in prose and in the scripts they lay down, never in
     // bytecode.
     api project(':adapters:git')
+    // `InProcessExecutorDouble` implements the executor contract's mirror interface over its DTOs
+    // (task 8.2a of define-executor-contract), so the contract is on this module's own signatures.
+    api project(':executor-contract')
     // `ScriptedSandboxDocker` builds the docker environments over a scripted CLI
     // and hands back `:sandbox:core` port types.
     api project(':sandbox:core')

@@ -1,12 +1,13 @@
 package com.github.oinsio.gnomish.usage.json;
 
+import com.github.oinsio.gnomish.executorcontract.usagewire.ParticipantUsageDto;
 import java.util.List;
 
 /**
  * The {@code gnomish usage --json} mini-contract's per-round shape: one reconstructed round from
  * {@link com.github.oinsio.gnomish.app.port.git.UsageRow}, carried at full granularity — every
- * model's token breakdown, per-tool aggregates, individual checks, and per-vote judge usage, none
- * summed (that summing is text-mode-only, {@code UsageTextRenderer}'s job).
+ * participant entry of the round in the one usage wire vocabulary (FR15, FR16 of
+ * define-executor-contract), individual checks, none summed (that summing is text-mode-only, {@code UsageTextRenderer}'s job).
  *
  * <p>Implements FR14, NFR-C1 of add-git-workflow.
  *
@@ -16,8 +17,7 @@ import java.util.List;
  *     qualityFailure}/{@code cannotVerify}/{@code decisionNeeded})
  * @param startedAt ISO-8601 UTC instant the round began
  * @param checks the verify results produced this round; possibly empty
- * @param executorUsage the round's full executor usage
- * @param judgeUsage the round's per-vote judge token usage
+ * @param usage the round's participant entries
  */
 public record UsageRowDto(
         String stage,
@@ -25,5 +25,4 @@ public record UsageRowDto(
         String result,
         String startedAt,
         List<CheckDto> checks,
-        ExecutorUsageDto executorUsage,
-        JudgeUsageDto judgeUsage) {}
+        List<ParticipantUsageDto> usage) {}

@@ -11,11 +11,14 @@ import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.DenialIdentity
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Finding
+import com.github.oinsio.gnomish.domain.engine.MismatchCause
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.untrustedtext.Provenance
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
@@ -161,8 +164,9 @@ class TaskJsonMapperSpec extends Specification {
             UntrustedText.agent("b")
         ]) | new EscalationReportDto.DecisionNeeded("decisionNeeded", "Q?", ["a", "b"])
         new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), UntrustedText.subprocess("timeout"), UntrustedText.subprocess("detail")) | new EscalationReportDto.CannotVerify("cannotVerify", "command:./gradlew test", "timeout", "detail")
-        new EscalationReport.PipelineMismatch(UntrustedText.branchDocument("removed-stage")) | new EscalationReportDto.PipelineMismatch("pipelineMismatch", "removed-stage")
+        new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument("removed-stage"))) | new EscalationReportDto.PipelineMismatch("pipelineMismatch", "removed-stage", null)
         new EscalationReport.CannotExecute(UntrustedText.subprocess("adapter crashed"), []) | new EscalationReportDto.CannotExecute("cannotExecute", "adapter crashed", [])
+        new EscalationReport.BudgetExhausted(UntrustedText.agent("token bound 1000")) | new EscalationReportDto.BudgetExhausted("budgetExhausted", "token bound 1000")
     }
 
     def "round-trip: serialize then deserialize a full TaskJsonDto tree is equal"() {
@@ -247,7 +251,8 @@ class TaskJsonMapperSpec extends Specification {
             new EscalationReportDto.AttemptsExhausted("attemptsExhausted", 3),
             new EscalationReportDto.DecisionNeeded("decisionNeeded", "Q?", ["a", "b"]),
             new EscalationReportDto.CannotVerify("cannotVerify", "command:./gradlew test", "timeout", "detail"),
-            new EscalationReportDto.PipelineMismatch("pipelineMismatch", "removed-stage"),
+            new EscalationReportDto.PipelineMismatch("pipelineMismatch", "removed-stage", null),
+            new EscalationReportDto.BudgetExhausted("budgetExhausted", "token bound 1000"),
             new EscalationReportDto.CannotExecute("cannotExecute", "adapter crashed", []),
             new EscalationReportDto.CannotExecute("cannotExecute", "adapter crashed", [
                 new StateDenialDto(
@@ -596,7 +601,7 @@ class TaskJsonMapperSpec extends Specification {
 
     def "fromDto maps lastEscalation back to a domain EscalationReport"() {
         given:
-        def lastEscalation = new EscalationReport.PipelineMismatch(UntrustedText.branchDocument("removed-stage"))
+        def lastEscalation = new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument("removed-stage")))
         def dto = TaskJsonMapper.toDto(someContext, baseCommit, createdAt, null, lastEscalation, false, BasePin.UNPINNED)
 
         when:
@@ -625,7 +630,7 @@ class TaskJsonMapperSpec extends Specification {
     }
 
     private static TaskState someState() {
-        return new TaskState(new Position.AtStage("implement"), 0, [], ExecutorUsage.none())
+        return new TaskState(new Position.AtStage("implement"), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
     }
 
     // FR7 of fix-denial-attribution-durability: the escalation path carries identities exactly

@@ -25,9 +25,16 @@ import com.github.oinsio.gnomish.app.serve.SlotRunner
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.app.serve.WorktreeJanitor
 import com.github.oinsio.gnomish.app.take.TakeResult
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.EngineEvent
+import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
+import com.github.oinsio.gnomish.domain.engine.Participants
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
@@ -215,11 +222,16 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
                         RemoteOutageGates.forServe(BaseRefGit.UNWIRED, homeDir, new ServeProperties(0, null, null, null, null, null, null, null, null, null), clock, {}, { ignored -> }, { kind ->
                             Optional.empty()
                         })))
-        def finalState = new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none())
+        def finalState = new TaskState(new Position.PipelineEnd(), 1, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(finalState, 'done'))
 
         then: 'the remoteOutage write point exists too (NFR-O1, NFR-O3 of add-base-ref-resolution)'
         observability.remoteOutageLedgerWriter() != null
+
+        when: 'NFR-O2, UX3 of define-executor-contract: a round finishes through the roundOutcome write point'
+        observability.roundOutcomeLedgerWriter().onEvent(new EngineEvent.ExecutionFinished(
+                        new AttemptKey('github:o/r#1', 'build', 0), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null),
+                        new ExecutionResult.Completed()))
 
         then: 'a taskOutcome line lands for the SAME ref this test assigned to the slot ledger'
         def ledgerFile = ObservabilityPaths.ledgerFile(serveDir(), LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
@@ -227,6 +239,7 @@ class ObservabilityAssemblySpec extends Specification implements RunChainFakes {
             assert Files.exists(ledgerFile)
         }
         Files.readString(ledgerFile).contains('"taskId":"github:o/r#1"')
+        Files.readString(ledgerFile).contains('"type":"roundOutcome"')
 
         cleanup:
         slotLedger.release(ref)

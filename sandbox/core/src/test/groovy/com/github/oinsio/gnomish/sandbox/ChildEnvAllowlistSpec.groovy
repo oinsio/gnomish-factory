@@ -237,10 +237,21 @@ class ChildEnvAllowlistSpec extends Specification {
             'declaring',
             'compose',
             'resolve',
-            'credentialNames'
+            'credentialNames',
+            'programGrant'
         ] as Set
         publicMethods.every { !ChildEnvValues.isAssignableFrom(it.returnType) }
         ChildEnvAllowlist.declaredFields.every {
+            !Modifier.isPublic(it.modifiers)
+        }
+
+        and: 'NFR-S1 of define-executor-contract: the program grant exposes no accessor for the source either'
+        def grantMethods = ProgramCredentialGrant.declaredMethods.findAll {
+            Modifier.isPublic(it.modifiers) && !it.synthetic
+        }
+        grantMethods*.name.toSet() == ['standing', 'grant'] as Set
+        grantMethods.every { !ChildEnvValues.isAssignableFrom(it.returnType) }
+        ProgramCredentialGrant.declaredFields.every {
             !Modifier.isPublic(it.modifiers)
         }
     }

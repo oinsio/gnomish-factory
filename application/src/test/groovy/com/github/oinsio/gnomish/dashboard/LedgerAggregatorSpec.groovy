@@ -90,6 +90,34 @@ class LedgerAggregatorSpec extends Specification {
         view.perDay()*.date() == [TODAY.minusDays(1), TODAY]
     }
 
+    // FR17 of define-executor-contract (design D10, the one exemption over ledger lines): the
+    //     window's grand total across models and kinds is the aggregator's, the renderer only shows it
+    def "the view carries the window's grand total of every kind across every model"() {
+        given:
+        writeLedgerFile(TODAY, [
+            taskOutcomeLine('delivered', [claude: [input: 1, output: 2, cacheCreation: 3, cacheRead: 4]]),
+            taskOutcomeLine('delivered', [gpt: [input: 10, output: 20, cacheCreation: 30, cacheRead: 40]])
+        ])
+
+        expect:
+        aggregator.aggregate(tempDir, TODAY, 1).totalTokens() == 110L
+        aggregator.aggregate(tempDir.resolve('nothing-here'), TODAY, 1).totalTokens() == 0L
+    }
+
+    def "a grand total past the long range fails loudly rather than wrapping"() {
+        given:
+        writeLedgerFile(TODAY, [
+            taskOutcomeLine('delivered', [a: [input: Long.MAX_VALUE, output: 0, cacheCreation: 0, cacheRead: 0]]),
+            taskOutcomeLine('delivered', [b: [input: 1, output: 0, cacheCreation: 0, cacheRead: 0]])
+        ])
+
+        when:
+        aggregator.aggregate(tempDir, TODAY, 1)
+
+        then:
+        thrown(ArithmeticException)
+    }
+
     def "tokensByModel sums cacheCreation and cacheRead across lines for the same model, not just input/output"() {
         given:
         writeLedgerFile(TODAY, [

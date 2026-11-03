@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.adapter.sandbox.SandboxBindingConfiguration
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.adapter.tracker.FixedTrackerAdapterFactory
+import com.github.oinsio.gnomish.app.conformance.ExecutorVerifyCommand
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
@@ -28,6 +29,7 @@ import com.github.oinsio.gnomish.app.project.ProjectRegistry
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.sandbox.BindingProperties
@@ -291,7 +293,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
         def slotWiringFactory = commands.slotWiringFactory(assembly, resolvedClone, containerSupports, trackerWiring)
         def reportCommands = new ReportCommands(
                 new StatusCommand(TaskGitFixture.realClaimless(), scope, LiveConsoleIO.onStdout()),
-                new UsageCommand(TaskGitFixture.realClaimless(), scope, LiveConsoleIO.onStdout()),
+                new UsageCommand(TaskGitFixture.realClaimless(), scope, LiveConsoleIO.onStdout(), new VirtualClock()),
                 boardCommand,
                 new DashboardCommand(timeEquipment, scope, factoryProperties, new TrackerWiring([:], MapSecretsProvider.NONE, TrackerValidatorStub.plainSource(), timeEquipment)))
         def dispatch = commands.subcommandDispatch(
@@ -322,7 +324,8 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
         trackerWiring: trackerWiring, checks: assembly.checks, bindingProperties: bindingProperties,
         bindingRegistry: DiscoveredBindings.real(), gitVersionCheck: gitVersionCheck, secretLocator: secrets,
         factoryProperties: factoryProperties, resolvedClone: resolvedClone, console: console)
-        new ManualRunRunner(gitVersionCheck, dispatch, projectCommand, doctorCommand, drive, errorConsole)
+        def executorVerifyCommand = new ExecutorVerifyCommand(new GitProcessRunner(), timeEquipment, secrets, console)
+        new ManualRunRunner(gitVersionCheck, dispatch, projectCommand, doctorCommand, executorVerifyCommand, drive, errorConsole)
     }
 
     /** The runners as the drive's lazily read provider yields them: built on the first git-mode run. */

@@ -1,0 +1,102 @@
+# The reference executor and the fakes that break it (design D18 of define-executor-contract): a
+# program speaking the executor contract, its operation the first argument (`describe`, `start`,
+# `poll`), its answer written to the result file the factory names in GNOMISH_RESULT_FILE.
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
+
+[reference]
+# The reference executor, the subject that passes the conformance kit (task 8.1 of
+# define-executor-contract): describe answers protocol version 1, executor version 1, the three live
+# roles, the one capability poll, and a settings schema with one boolean `defer`; start prints a
+# line on stdout and one on stderr (logs, never the result) and answers its role — or `pending` when
+# the settings ask `defer` — refusing a role it does not list, and poll answers the role
+# (steps/executor-run.sh).
+describe result data/executor-describe#reference
+describe exit 0
+start stdout data/stdout-executor#progress
+start stderr data/stderr-executor#start-noise
+start exec-sh steps/executor-run.sh
+poll exec-sh steps/executor-run.sh
+
+[break]
+# The misbehaving fake: the reference executor with exactly one conformance case broken, the case its
+# link is named after (`break-<case>`, which StandIn.executor makes) — steps/executor-run.sh lists
+# the cases and how each breaks; a run in another case's workspace answers as the reference does.
+* export-name BROKEN
+describe exec-sh steps/executor-run.sh
+start stdout data/stdout-executor#progress
+start stderr data/stderr-executor#start-noise
+start exec-sh steps/executor-run.sh
+poll exec-sh steps/executor-run.sh
+
+[verdict-only]
+# The reference executor under a describe that lists the role verdict alone and no capability
+# (data/executor-describe#verdict-only): the conformance kit's subject for the cases that do not
+# apply — every other role, the pending case (task 8.2 of define-executor-contract).
+describe result data/executor-describe#verdict-only
+describe exit 0
+start exec-sh steps/executor-run.sh
+
+[reference-recorded]
+# The reference executor's describe, every invocation recorded in the per-run log with the result
+# path it was handed: a spec counts the describes a run spawned and finds where the answer went
+# (DescribePreflightSpec, RunDescribeSpec).
+* record GNOMISH_RESULT_FILE
+describe result data/executor-describe#reference
+describe exit 0
+
+[describe-as]
+# An executor whose describe answers the section of data/executor-describe its per-run link is named
+# after: one preset for every describe a spec needs (version-2, protocol-2, verdict-only, effect-only,
+# effect-and-verdict, no-role, malformed, control-chars, strict-settings, remote-schema, grants,
+# bad-egress), the name its link carries.
+describe result data/executor-describe#@name
+describe exit 0
+
+[describe-failing]
+# An executor whose describe exits 3 with a line on stderr and writes no result file.
+describe refuse 3 data/stderr-executor#describe-failed
+
+[describe-silent]
+# An executor whose describe exits 0 and writes no result file.
+describe exit 0
+
+[describe-oversized]
+# An executor whose describe writes more than the factory's describe cap into the result file.
+describe run steps/oversized-result.sh
+describe exit 0
+
+[run-as]
+# The reference executor's describe, and a start that answers the section of data/executor-result
+# its per-run link is named after (completed, quality, limit, decision, unknown-status, malformed):
+# one preset for every result a ProgramExecutor spec reads (task 7.1 of define-executor-contract;
+# task 8.1 extends the reference preset itself). A line on stdout and one on stderr show that both
+# are logs, never the result.
+describe result data/executor-describe#reference
+describe exit 0
+start stdout data/stdout-executor#progress
+start stderr data/stderr-executor#start-noise
+start result data/executor-result#@name
+start exit 0
+
+[run-silent]
+# A start that exits 0 and writes no result file.
+start exit 0
+
+[run-recorded]
+# A completed start that records the variables a run received in the per-run log — the two result
+# paths and the credential a spec grants — and copies its request beside the answer path
+# (ProgramExecutorSpec: the request on stdin, the factory-chosen paths, no credential in the request).
+* record GNOMISH_RESULT_FILE GNOMISH_ANSWER_FILE ACME_API_KEY
+start run steps/request-copy.sh
+start result data/executor-result#completed
+start exit 0
+
+[edit-as]
+# A completed start that first changes the working copy it runs in the way its per-run link is named
+# (modify, untracked, chmod, commit, rename, ungit, files-<n>, none — steps/working-copy-edit.sh): the judge that wrote
+# a file, for the working-copy check of a verdict or decision run (task 7.2 of
+# define-executor-contract).
+start export-name EDIT
+start run steps/working-copy-edit.sh
+start result data/executor-result#completed
+start exit 0

@@ -34,7 +34,8 @@ class CaptureThread {
  * A canned {@link ExecHandle} over the one {@code Process} double (design D6 of
  * make-pipe-reads-non-parking): its output is the {@link FakeProcess}'s stdout minted as a
  * {@link ChildOutput}, its wait the process's own, or — with {@link #interruptsWait} — a wait cut
- * short by an interrupt that reports {@link #exit}, the killed process's meaningless code.
+ * short by an interrupt that reports {@link #exit}, the killed process's meaningless code. With
+ * {@link #boundedWait} set, the bounded wait waits for the process's exit and reports that outcome.
  */
 class CannedExecHandle implements ExecHandle {
 
@@ -44,6 +45,9 @@ class CannedExecHandle implements ExecHandle {
     Duration bound = Duration.ofSeconds(5)
     CountDownLatch exited = new CountDownLatch(1)
     int boundReads = 0
+    /** The bounded wait's canned outcome, reported once the child exited; unset, the bounded wait is not driven. */
+    Wait boundedWait = null
+    Duration boundedTimeout = null
 
     private ChildOutput stdout
 
@@ -95,8 +99,14 @@ class CannedExecHandle implements ExecHandle {
     }
 
     @Override
-    ExecHandle.Wait waitForExitOrTimeout(Duration timeout, InstantSource clock) {
-        throw new UnsupportedOperationException('not driven by the capture helper')
+    Wait waitForExitOrTimeout(Duration timeout, InstantSource clock) {
+        if (boundedWait == null) {
+            throw new UnsupportedOperationException('not driven by the capture helper')
+        }
+        boundedTimeout = timeout
+        process.waitFor()
+        exited.countDown()
+        boundedWait
     }
 
     @Override

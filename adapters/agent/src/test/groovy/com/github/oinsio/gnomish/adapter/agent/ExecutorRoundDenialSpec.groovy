@@ -34,7 +34,7 @@ class ExecutorRoundDenialSpec extends AbstractDenialRoundSpec {
         def result = runWith('plain-round', [DENIAL])
 
         then:
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         result.denials() == [Denial.unidentified(DENIAL)]
     }
 
@@ -44,7 +44,7 @@ class ExecutorRoundDenialSpec extends AbstractDenialRoundSpec {
         def result = runWith('decision-needed', [DENIAL])
 
         then:
-        result instanceof ExecutionResult.DecisionNeeded
+        result.answer() instanceof ExecutionResult.DecisionRequest
         result.denials() == [Denial.unidentified(DENIAL)]
     }
 
@@ -61,7 +61,7 @@ class ExecutorRoundDenialSpec extends AbstractDenialRoundSpec {
 
         then: 'the finished round survives, reporting no denials rather than being discarded'
         noExceptionThrown()
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         result.denials() == []
 
         and: 'FR15 of harden-logging-observability: an empty denial list that means "could not read" says so'
@@ -84,7 +84,7 @@ class ExecutorRoundDenialSpec extends AbstractDenialRoundSpec {
         def result = runWith('plain-round', [])
 
         then:
-        result instanceof ExecutionResult.Completed
+        (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
         result.denials() == []
     }
 }

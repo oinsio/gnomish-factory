@@ -22,9 +22,10 @@ import org.slf4j.LoggerFactory;
  * and keeping them together is what stops one of them from being "improved" into a throwing read.
  *
  * <p>Implements FR3, NFR-R1 of fix-denial-report-attachment; FR1, FR3 of
- * fix-denial-attribution-durability.
+ * fix-denial-attribution-durability; read by the {@code program} executor's rounds too (FR10 of
+ * define-executor-contract).
  */
-final class RoundDenialRead {
+public final class RoundDenialRead {
 
     private static final Logger log = LoggerFactory.getLogger(RoundDenialRead.class);
 
@@ -37,7 +38,7 @@ final class RoundDenialRead {
      * read must not be what discards it. Same best-effort stance as {@link #onFailure}, on the
      * side where there IS an attempt record to carry the result.
      */
-    static List<Denial> onFinish(RoundEnvironmentSource.Round round) {
+    public static List<Denial> onFinish(RoundEnvironmentSource.Round round) {
         try {
             return round.environment().readDenials().denials();
         } catch (RuntimeException e) {
@@ -53,8 +54,8 @@ final class RoundDenialRead {
      * Drains the denials of a round that died before its close — a {@code roundTimeout} kill, a
      * missing result event, a process that would not start (D1 of fix-denial-report-attachment).
      * Such a round produces no {@code AttemptRecord}, so the caller carries what this returns out
-     * on an {@code ExecutorFailure} instead: the engine copies it onto the {@code CannotExecute}
-     * escalation, which is the failed round's only place to land denials (FR1 of
+     * on its {@code failed/infrastructure} result instead: the engine's classifier copies it onto
+     * the {@code CannotExecute} escalation, which is the failed round's only place to land denials (FR1 of
      * fix-denial-attribution-durability). Draining is also what keeps them from becoming the NEXT
      * round's report, since the guard's per-round delta cursor advances only on a read and an
      * in-process resume reuses the same environment. The position that read leaves behind is the
@@ -67,7 +68,7 @@ final class RoundDenialRead {
      *
      * @return the failed round's denials, or an empty list when the environment cannot answer
      */
-    static List<Denial> onFailure(RoundEnvironmentSource.Round round) {
+    public static List<Denial> onFailure(RoundEnvironmentSource.Round round) {
         try {
             List<Denial> denials = round.environment().readDenials().denials();
             log.warn(

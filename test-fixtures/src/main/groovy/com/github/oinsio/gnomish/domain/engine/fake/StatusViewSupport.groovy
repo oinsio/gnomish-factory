@@ -94,7 +94,8 @@ class StatusViewSupport {
             def exec = events.find {
                 it instanceof EngineEvent.ExecutionFinished && (it as EngineEvent.ExecutionFinished).key() == key
             }
-            view.roundUsages << (exec == null ? null : (exec as EngineEvent.ExecutionFinished).usage())
+            def entry = exec == null ? null : (exec as EngineEvent.ExecutionFinished).usage()
+            view.roundUsages << (entry == null ? null : new ExecutorUsage(entry.wallTime(), entry.tools(), entry.byModel()))
         }
 
         view

@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
@@ -29,31 +29,43 @@ class RoundInterruptedWaitSpec extends Specification {
     @TempDir
     Path workspaceDir
 
-    // FR11: the executor's side — a distinct exception, never RoundTimeoutException
+    // FR11: the executor's side — a distinct failure, never RoundTimeoutException; FR7 of
+    //     define-executor-contract: reported as failed/infrastructure, never thrown, and the
+    //     interrupt stays set on the thread so the run above can stop
     def "FR11: an interrupted wait fails the executor round without blaming the round timeout"() {
-        given:
+        given: 'a wait that, like the supervisor, restores the interrupt and took 42 s of the clock'
+        def clock = new VirtualClock()
         def environment = Stub(TaskExecutionEnvironment) {
-            exec(_ as ExecCommand) >> new InterruptedWaitExecHandle()
+            exec(_ as ExecCommand) >> new InterruptedWaitExecHandle(clock: clock, restoresInterrupt: true)
         }
+        def round = new StandInRound(environment, workspaceDir.resolve('decision.json'))
+        def request = StageExecutorRequests.request(workspaceDir)
 
         when:
-        ExecutorRoundExecution.run(
+        def result = ExecutorRoundExecution.run(
                 new AgentRoundEquipment(
                         new FactoryProperties('factory-01', 'claude', null, null),
-                        new VirtualClock(),
+                        clock,
                         { event -> },
                         new AgentRoundResultExtractor(), ChildEnvAllowlist.none(), RoundScratchDirectory.HOST_TEMP),
-                new DecisionFileReader(),
-                StageExecutorRequests.request(workspaceDir),
+                request,
                 'prompt',
-                new StandInRound(environment, workspaceDir.resolve('decision.json')))
+                round)
+        def stillInterrupted = Thread.interrupted()
 
-        then:
-        def failure = thrown(ExecutorFailure)
-        def e = failure.cause()
-        e instanceof RoundInterruptedException
-        e.message.contains('interrupted')
-        !e.message.contains('roundTimeout')
+        then: 'the round reports its failure as the contract status, naming the interruption'
+        def failed = InfrastructureResults.of(result)
+        InfrastructureResults.endedBy(result, RoundInterruptedException)
+        failed.reason().contains('interrupted')
+        !failed.reason().contains('roundTimeout')
+
+        and: 'it carries the wall time the round spent, under the round\'s own key'
+        result.usage().wallTime() == Duration.ofSeconds(42)
+        result.trace().key() == new AttemptKey(request.context().taskId(), request.stage().name(), request.attempt())
+
+        and: 'the cancellation is not swallowed, and the round was discarded'
+        stillInterrupted
+        round.discarded
     }
 
     // FR11: the judge's side — the never-throw contract holds, and the reason names the interruption
@@ -89,6 +101,12 @@ class RoundInterruptedWaitSpec extends Specification {
  */
 class InterruptedWaitExecHandle implements ExecHandle {
 
+    /** When set, the wait advances it by 42 s, the time the round spent. */
+    VirtualClock clock
+
+    /** Whether the wait leaves the interrupt flag set, as {@code ProcessSupervisor} does. */
+    boolean restoresInterrupt
+
     @Override
     ChildOutput output() {
         CannedOutputs.written('')
@@ -100,7 +118,11 @@ class InterruptedWaitExecHandle implements ExecHandle {
     }
 
     @Override
-    Wait waitForExitOrTimeout(Duration timeout, InstantSource clock) {
+    Wait waitForExitOrTimeout(Duration timeout, InstantSource ignored) {
+        clock?.advance(Duration.ofSeconds(42))
+        if (restoresInterrupt) {
+            Thread.currentThread().interrupt()
+        }
         new Wait.Interrupted()
     }
 

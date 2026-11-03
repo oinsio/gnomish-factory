@@ -133,6 +133,36 @@ final class TaskTierLaw {
         return new TakeResult.AwaitingHuman(finalState, ParkReason.INFRA, report);
     }
 
+    /**
+     * Parks a claimed task whose law could not be described (design D5 of define-executor-contract,
+     * as revised 2026-10-31; ADR 0019, decision 5): the same park an invalid base law takes — {@link
+     * ParkReason#INFRA}, best-effort, no abort marker, no attempt burned, no daemon condition — with
+     * a report naming the law and every located error. Called after the task branch exists, so the
+     * state the task stands at is the caller's.
+     *
+     * <p>Implements FR4, FR13, UX1 of define-executor-contract.
+     *
+     * @param binding the law the run was to be frozen from; never null
+     * @param errors the preflight's located errors; never empty
+     * @param order the take order of the claimed task; never null
+     * @param state the state the task stands at; never null
+     * @return the parked result; never null
+     */
+    static TakeResult parkUndescribed(LawBinding binding, List<ConfigError> errors, TakeOrder order, TaskState state) {
+        TaskRef ref = order.ref();
+        String law = revisionOf(binding);
+        log.error(
+                OperatorEvent.TASK_LAW_UNDESCRIBED.head()
+                        + "parking task {}: the pipeline law at {} failed its describe preflight with {} located"
+                        + " error(s)",
+                ref.id(),
+                law,
+                errors.size());
+        String report = BaseLawReport.undescribed(order.taskId(), law, errors);
+        parkBestEffort(order.tracker(), ref, report);
+        return new TakeResult.AwaitingHuman(state, ParkReason.INFRA, report);
+    }
+
     private static void parkBestEffort(Tracker tracker, TaskRef ref, String report) {
         try {
             tracker.park(ref, ParkReason.INFRA, report);

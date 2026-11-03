@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.branch.TipRelation;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -107,6 +108,33 @@ public final class FactoryRegisterRead {
                                 "rev-parse",
                                 runner.run(repo, "rev-parse", "--verify", "--quiet", parent + "^{commit}")))
                 .map(RegisteredCommit::new);
+    }
+
+    /**
+     * The commit whose tree carries the task's envelope as the register recorded it (design D5 of
+     * fix-envelope-medium, design D13 of tighten-spec-contract): the registered commit itself when it
+     * carries {@code task.json}, and otherwise, when the registered commit is the cleanup commit,
+     * the {@code Completed} commit it was written on. The same commit the branch classifier calls a
+     * delivery, so the delivered-state reader and the usage walk cannot disagree about which one it
+     * is.
+     *
+     * @param repo the clone
+     * @param registered the commit the task's register names
+     * @return the commit to read the envelope at
+     * @throws BranchStateFileMissingException when neither holds: a registered commit with no
+     *     envelope that is not the cleanup commit carries no envelope to read
+     */
+    RegisteredCommit envelopeRevision(Path repo, RegisteredCommit registered) {
+        GitShowTip reader = new GitShowTip(runner, repo, registered);
+        if (reader.readAtRegister(EnvelopePaths.TASK_JSON_PATH).isPresent()) {
+            return registered;
+        }
+        Optional<RegisteredCommit> completed =
+                reader.isCleanupCommit() ? completedBefore(repo, registered) : Optional.empty();
+        return completed.orElseThrow(() -> new BranchStateFileMissingException(
+                registered.id(),
+                EnvelopePaths.TASK_JSON_PATH,
+                UntrustedText.factory("the registered commit carries no envelope and is not the cleanup commit")));
     }
 
     /** Whether the tip's tree carries the envelope directory, for presence only. */

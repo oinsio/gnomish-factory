@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import java.time.Duration
 import spock.lang.Specification
 
@@ -25,12 +26,12 @@ class ExecutorUsageSpec extends Specification {
         def tokens = ['claude-3-opus': new TokenUsage(500L, 120L, 0L, 0L)]
 
         when: 'an executor usage is created'
-        def usage = new ExecutorUsage(Duration.ofSeconds(5), tools, tokens)
+        def usage = new ExecutorUsage(Duration.ofSeconds(5), tools, Unpriced.of(tokens))
 
         then: 'each component is exposed exactly as constructed'
         usage.wallTime() == Duration.ofSeconds(5)
         usage.tools() == tools
-        usage.tokensByModel() == tokens
+        ModelUsages.tokensOf(usage.byModel()) == tokens
     }
 
     // FR5: wallTime is optional — a null is accepted and exposed as null
@@ -48,8 +49,8 @@ class ExecutorUsageSpec extends Specification {
         def usage = new ExecutorUsage(null, [], [:])
 
         then: 'the map is empty rather than null or a fabricated zero entry'
-        usage.tokensByModel() != null
-        usage.tokensByModel().isEmpty()
+        ModelUsages.tokensOf(usage.byModel()) != null
+        ModelUsages.tokensOf(usage.byModel()).isEmpty()
     }
 
     // FR5: tools are copied on construction — later source mutation cannot leak in
@@ -88,21 +89,21 @@ class ExecutorUsageSpec extends Specification {
         def source = ['model-a': new TokenUsage(1L, 2L, 0L, 0L)]
 
         when: 'an executor usage is created and the source is then mutated'
-        def usage = new ExecutorUsage(null, [], source)
+        def usage = new ExecutorUsage(null, [], Unpriced.of(source))
         source['model-b'] = new TokenUsage(9L, 9L, 0L, 0L)
 
         then: 'the usage keeps only its original single entry'
-        usage.tokensByModel().size() == 1
-        usage.tokensByModel()['model-a'] == new TokenUsage(1L, 2L, 0L, 0L)
+        ModelUsages.tokensOf(usage.byModel()).size() == 1
+        ModelUsages.tokensOf(usage.byModel())['model-a'] == new TokenUsage(1L, 2L, 0L, 0L)
     }
 
     // NFR-C1: the exposed tokensByModel map is unmodifiable — no one edits it in place
     def "the exposed tokensByModel map is unmodifiable"() {
         given: 'an executor usage'
-        def usage = new ExecutorUsage(null, [], ['model-a': new TokenUsage(1L, 1L, 0L, 0L)])
+        def usage = new ExecutorUsage(null, [], Unpriced.of(['model-a': new TokenUsage(1L, 1L, 0L, 0L)]))
 
         when: 'a caller tries to add a model entry'
-        usage.tokensByModel()['model-b'] = new TokenUsage(2L, 2L, 0L, 0L)
+        usage.byModel()['model-b'] = new ModelUsage(new TokenUsage(2L, 2L, 0L, 0L), null)
 
         then: 'the modification is rejected'
         thrown(UnsupportedOperationException)
@@ -141,7 +142,7 @@ class ExecutorUsageSpec extends Specification {
         then: 'nothing is known'
         usage.wallTime() == null
         usage.tools().isEmpty()
-        usage.tokensByModel().isEmpty()
+        ModelUsages.tokensOf(usage.byModel()).isEmpty()
     }
 
     // FR5: ExecutorUsage is inert value data compared by content
@@ -153,137 +154,31 @@ class ExecutorUsageSpec extends Specification {
         def tokens = ['model-a': new TokenUsage(1L, 2L, 0L, 0L)]
 
         expect: 'two usages built from equal components are equal'
-        new ExecutorUsage(Duration.ofSeconds(1), tools, tokens) ==
-                new ExecutorUsage(Duration.ofSeconds(1), tools, tokens)
+        new ExecutorUsage(Duration.ofSeconds(1), tools, Unpriced.of(tokens)) ==
+                new ExecutorUsage(Duration.ofSeconds(1), tools, Unpriced.of(tokens))
 
         and: 'a differing wallTime makes them unequal'
         new ExecutorUsage(Duration.ofSeconds(1), tools, [:]) !=
         new ExecutorUsage(Duration.ofSeconds(2), tools, [:])
     }
 
-    // FR5, D4: plus sums wallTime null-awarely across all four null combinations
-    def "plus sums wallTime null-awarely: #desc"() {
-        expect: 'the merged wallTime follows null-as-unknown semantics'
-        new ExecutorUsage(left, [], [:]).plus(new ExecutorUsage(right, [], [:])).wallTime() == expected
-
-        where:
-        desc | left | right || expected
-        'both null' | null | null || null
-        'present + null' | Duration.ofSeconds(5) | null || Duration.ofSeconds(5)
-        'null + present' | null | Duration.ofSeconds(7) || Duration.ofSeconds(7)
-        'present + present' | Duration.ofSeconds(5) | Duration.ofSeconds(7) || Duration.ofSeconds(12)
+    // NFR-O1 of define-executor-contract: the carrier holds the executor's provenance word; the agent's derives it from the map
+    def "NFR-O1: provenance is the map's for a carrier with no word, and the executor's own otherwise"() {
+        expect:
+        new ExecutorUsage(null, [], [:]).provenance() == UsageProvenance.ABSENT
+        new ExecutorUsage(null, [], Unpriced.of(['m': new TokenUsage(1, 1, 0, 0)])).provenance() == UsageProvenance.REPORTED
+        new ExecutorUsage(null, [], [:], UsageProvenance.REPORTED).provenance() == UsageProvenance.REPORTED
+        UsageProvenance.of([:]) == UsageProvenance.ABSENT
+        UsageProvenance.of([m: 1]) == UsageProvenance.REPORTED
     }
 
-    // FR5, NFR-C1, D4: plus unions token map keys and sums the four counts per shared key
-    // Scenario: pipeline/stage-engine / Per-model grain survives merging
-    def "plus unions tokensByModel keys and sums per-model counts"() {
-        given: 'two usages reporting overlapping and distinct model ids'
-        def a = new ExecutorUsage(null, [], [
-            'model-a': new TokenUsage(10L, 2L, 1L, 3L),
-            'model-b': new TokenUsage(5L, 1L, 0L, 0L),
-        ])
-        def b = new ExecutorUsage(null, [], [
-            'model-a': new TokenUsage(3L, 4L, 0L, 2L),
-            'model-c': new TokenUsage(7L, 7L, 0L, 0L),
-        ])
+    // NFR-O1: an executor that reported nothing reported no model either
+    def "NFR-O1: an ABSENT carrier with a model is refused, naming the model"() {
+        when:
+        new ExecutorUsage(null, [], Unpriced.of(['m': new TokenUsage(1, 1, 0, 0)]), UsageProvenance.ABSENT)
 
-        when: 'they are merged'
-        def merged = a.plus(b)
-
-        then: 'shared keys sum field-wise and distinct keys union'
-        merged.tokensByModel() == [
-            'model-a': new TokenUsage(13L, 6L, 1L, 5L),
-            'model-b': new TokenUsage(5L, 1L, 0L, 0L),
-            'model-c': new TokenUsage(7L, 7L, 0L, 0L),
-        ]
-    }
-
-    // FR5, NFR-C1, D4: an empty operand map leaves the other operand's entries untouched
-    // Scenario: pipeline/stage-engine / Unreported tokens stay distinguishable from zero
-    def "plus leaves tokensByModel untouched when the other operand reports nothing"() {
-        given: 'a usage with reported tokens and one that reports none'
-        def reported = new ExecutorUsage(null, [], ['model-a': new TokenUsage(10L, 2L, 0L, 0L)])
-        def unreported = new ExecutorUsage(null, [], [:])
-
-        expect: 'merging with an empty map from either side is the identity on tokensByModel'
-        reported.plus(unreported).tokensByModel() == reported.tokensByModel()
-        unreported.plus(reported).tokensByModel() == reported.tokensByModel()
-    }
-
-    // FR13: matching tool names accumulate — calls and totalDuration summed
-    def "plus accumulates a matching tool name, summing calls and totalDuration"() {
-        given: 'two usages that both report the read tool'
-        def a = new ExecutorUsage(null, [
-            new ToolUsage('read', 2, Duration.ofMillis(20))
-        ], [:])
-        def b = new ExecutorUsage(null, [
-            new ToolUsage('read', 3, Duration.ofMillis(30))
-        ], [:])
-
-        when: 'they are merged'
-        def merged = a.plus(b)
-
-        then: 'the single read aggregate carries the summed calls and duration'
-        merged.tools() == [
-            new ToolUsage('read', 5, Duration.ofMillis(50))
-        ]
-    }
-
-    // FR13: distinct tool names union, and order is deterministic — this-first
-    // then other's not-yet-seen tools, with matching names accumulated in place
-    def "plus unions distinct tools in deterministic this-first order"() {
-        given: 'this reports read then edit; other reports edit then grep'
-        def a = new ExecutorUsage(null, [
-            new ToolUsage('read', 1, Duration.ofMillis(10)),
-            new ToolUsage('edit', 1, Duration.ofMillis(10)),
-        ], [:])
-        def b = new ExecutorUsage(null, [
-            new ToolUsage('edit', 2, Duration.ofMillis(20)),
-            new ToolUsage('grep', 1, Duration.ofMillis(5)),
-        ], [:])
-
-        when: 'they are merged'
-        def merged = a.plus(b)
-
-        then: 'read stays first, edit accumulates in place, grep is appended last'
-        merged.tools() == [
-            new ToolUsage('read', 1, Duration.ofMillis(10)),
-            new ToolUsage('edit', 3, Duration.ofMillis(30)),
-            new ToolUsage('grep', 1, Duration.ofMillis(5)),
-        ]
-    }
-
-    // FR5, NFR-C1, D4: none() is the identity for plus, from both sides, by value
-    def "none() is the identity for plus from both sides"() {
-        given: 'a fully-populated usage'
-        def u = new ExecutorUsage(Duration.ofSeconds(3),
-                [
-                    new ToolUsage('read', 2, Duration.ofMillis(20))
-                ], ['model-a': new TokenUsage(10L, 5L, 1L, 2L)])
-
-        expect: 'folding in none() from either side yields an equal value'
-        u.plus(ExecutorUsage.none()) == u
-        ExecutorUsage.none().plus(u) == u
-    }
-
-    // NFR-C1: a display-total helper derives the total across all models rather
-    // than storing a redundant field (design D4)
-    // Scenario: pipeline/stage-engine / No display total is stored
-    def "totalTokens derives the field-wise sum across all reported models"() {
-        given: 'a usage reporting two models'
-        def usage = new ExecutorUsage(null, [], [
-            'model-a': new TokenUsage(10L, 2L, 1L, 3L),
-            'model-b': new TokenUsage(5L, 1L, 0L, 4L),
-        ])
-
-        expect: 'the derived total sums every model field-wise'
-        usage.totalTokens() == new TokenUsage(15L, 3L, 1L, 7L)
-    }
-
-    // NFR-C1: an empty tokensByModel map derives a zero total, distinguishable in
-    // source only by checking tokensByModel().isEmpty() first
-    def "totalTokens derives an all-zero TokenUsage when tokensByModel is empty"() {
-        expect: 'the derived total is all zeros for an unreported usage'
-        ExecutorUsage.none().totalTokens() == new TokenUsage(0L, 0L, 0L, 0L)
+        then:
+        def refused = thrown(IllegalArgumentException)
+        refused.message == 'an ABSENT usage carries no model, got [m]'
     }
 }

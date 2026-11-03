@@ -63,6 +63,11 @@ class CliArgumentsContractSpec extends Specification implements ApplicationArgum
             parse : { ApplicationArguments a ->
                 new DoctorArgumentsParser().parse(a, CLONE)
             }],
+        // FR12 of define-executor-contract: the conformance kit works in no project, so it takes no --dir
+        (Subcommand.EXECUTOR) : [tokens: ['executor', 'verify', 'acme'], dirRequired: false, projectless: true,
+            parse : { ApplicationArguments a ->
+                new ExecutorVerifyArgumentsParser().parse(a)
+            }],
     ]
 
     private static final Path WORKING_DIRECTORY = Path.of('').toAbsolutePath()
@@ -93,7 +98,7 @@ class CliArgumentsContractSpec extends Specification implements ApplicationArgum
         e.message.contains('unknown option --no-such-option')
         e.message.contains("'gnomish ${token(subcommand)}'")
         e.message.contains('accepted:')
-        e.message.contains('--dir')
+        e.message.contains('--dir') == !CONTRACT[subcommand].projectless
 
         where:
         subcommand << Subcommand.values()
@@ -147,7 +152,9 @@ class CliArgumentsContractSpec extends Specification implements ApplicationArgum
         dir == CLONE.clonePath()
 
         where:
-        subcommand << Subcommand.values().findAll { it != Subcommand.PROJECT }
+        subcommand << Subcommand.values().findAll {
+            it != Subcommand.PROJECT && !CONTRACT[it].projectless
+        }
     }
 
     // FR7, M2: a relative --dir reaches the resolved directory absolute and normalized — in the

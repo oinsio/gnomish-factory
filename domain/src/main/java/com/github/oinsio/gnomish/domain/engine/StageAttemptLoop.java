@@ -22,28 +22,28 @@ import org.jspecify.annotations.Nullable;
  * only immutable collaborators so the engine stays reentrant (NFR-R1).
  *
  * <p>A round's outcome routes through a single exhaustive switch (design D4). A {@link
- * RoundOutcome.Verified} routes on its verdict: a {@link Verdict.Fail} burns an
- * attempt and, when that burn reaches the stage's resolved limit, escalates as {@link
- * EscalationReport.AttemptsExhausted} with the full recorded attempt history (FR5) — otherwise
- * it retries the stage, feeding the failed check results of ALL prior attempts forward (FR4,
- * FR5); a {@link Verdict.CannotVerify} records the round unburned and escalates {@link
- * EscalationReport.CannotVerify} naming the failing check (FR4, FR13); a {@link Verdict.Pass}
- * hands the recorded, persisted state back as {@link StageResult.Passed} for the {@link Engine}
- * to advance (FR8). A {@link RoundOutcome.NeedsDecision} records the round
- * unburned and escalates {@link EscalationReport.DecisionNeeded} verbatim, without burning an
- * attempt (FR6, design D6). A {@link RoundOutcome.CannotExecute} — the executor port
- * threw — escalates {@link EscalationReport.CannotExecute} from the entry state, carrying the
- * failed round's drained egress denials onto the report: no round ran, so nothing is recorded,
+ * RoundOutcome.Judged} routes on its verdict — from the verify chain, or the {@link Verdict.Fail}
+ * of an executor-reported {@code failed/quality} round (FR7 of define-executor-contract): a
+ * {@link Verdict.Fail} burns an attempt and escalates {@link EscalationReport.AttemptsExhausted}
+ * at the stage's resolved limit (FR5), otherwise retries with the failed check results of ALL
+ * prior attempts fed forward (FR4); a {@link Verdict.CannotVerify} records the round unburned and
+ * escalates {@link EscalationReport.CannotVerify} (FR4, FR13); a {@link Verdict.Pass} hands the
+ * persisted state back as {@link StageResult.Passed} (FR8). A {@link RoundOutcome.Stopped} records
+ * the round unburned and escalates the report its stop raises through {@link StopEscalation} — a
+ * {@link EscalationReport.DecisionNeeded} verbatim (FR6, design D6), or a {@link
+ * EscalationReport.BudgetExhausted} naming the bound (FR7 of define-executor-contract). A {@link
+ * RoundOutcome.Unrecorded} escalates the {@link EscalationReport.CannotExecute} the {@link
+ * ExecutorOutcomeClassifier} built, from the entry state with its denials: nothing is recorded,
  * persisted or emitted and no attempt is burned (FR10, NFR-O1; FR1 of
- * fix-denial-attribution-durability). A
- * thrown {@code persist} instead ends the run as {@link TaskOutcome.Aborted} through the
- * journal (FR11, NFR-O1).
+ * fix-denial-attribution-durability). A thrown {@code persist}
+ * ends the run as {@link TaskOutcome.Aborted} through the journal (FR11, NFR-O1).
  *
  * <p>A passing round's persisted state already carries the advanced position (FR4 of
  * harden-task-branch-contract), so no kill can freeze "passed, but still at it".
  *
  * <p>Implements FR4, FR5, FR6, FR8, FR10, FR11, FR13, NFR-O1 of add-stage-engine; FR4 of
- * harden-task-branch-contract; FR1 of fix-denial-attribution-durability.
+ * harden-task-branch-contract; FR1 of fix-denial-attribution-durability; FR7 of
+ * define-executor-contract (FR13: the version pin rides each round writer).
  */
 final class StageAttemptLoop {
 
@@ -51,12 +51,15 @@ final class StageAttemptLoop {
     private final AttemptJournal journal;
     private final InstantSource clock;
     private final PipelineDefinition definition;
+    private final DescribedExecutors described;
 
     /**
      * Wires the loop from a run's ports: the {@link RoundExecution} that runs each round is
      * built from the executor and {@code verifyOrchestrator}, and the {@link AttemptJournal}
      * that owns per-round persistence and events is built from the run's listener and
-     * persistence ports. All immutable, so the loop carries no mutable state (NFR-R1).
+     * persistence ports, and every round writer pins the versions of the executors the stage
+     * runs from the run's {@link DescribedExecutors} (FR13 of define-executor-contract). All
+     * immutable, so the loop carries no mutable state (NFR-R1).
      *
      * @param ports the run's collaborators the loop reads executor/listener/persistence from;
      *     never null
@@ -65,29 +68,21 @@ final class StageAttemptLoop {
      *     advanced position rides that round's own commit (FR4 of harden-task-branch-contract)
      */
     StageAttemptLoop(EnginePorts ports, VerifyOrchestrator verifyOrchestrator, PipelineDefinition definition) {
-        this.roundExecution = new RoundExecution(ports.executor(), verifyOrchestrator, ports.listener());
+        this.roundExecution = new RoundExecution(ports, verifyOrchestrator);
         this.journal = new AttemptJournal(ports.listener(), ports.persistence());
         this.clock = ports.time().clock();
         this.definition = definition;
+        this.described = ports.describedExecutors();
     }
 
     /**
      * Drives {@code stage} from the recorded {@code state} to a {@link StageResult}, looping
      * over rounds within the stage. Each iteration emits {@link EngineEvent.AttemptStarted}
      * through the journal, executes the round through {@link RoundExecution}, then routes its
-     * sealed {@link RoundOutcome} through an exhaustive switch: a {@link
-     * RoundOutcome.Verified} routes on its verdict — a {@link Verdict.Fail} retries
-     * or escalates {@link EscalationReport.AttemptsExhausted} at the limit (FR4, FR5), a {@link
-     * Verdict.CannotVerify} escalates (FR4), a {@link Verdict.Pass} hands the recorded, persisted
-     * state back as {@link StageResult.Passed} for the {@link Engine} to advance (FR8); a {@link
-     * RoundOutcome.NeedsDecision} escalates {@link EscalationReport.DecisionNeeded}
-     * without burning an attempt (FR6); a {@link RoundOutcome.CannotExecute} escalates
-     * {@link EscalationReport.CannotExecute} — carrying that round's drained egress denials —
-     * from the entry state with nothing recorded, persisted or emitted (FR10, FR1 of
-     * fix-denial-attribution-durability). Every result but {@code Passed} is a {@link StageResult.Terminal} the
-     * engine returns verbatim. A completed round is recorded and committed (persist →
-     * AttemptFinished) before it routes; the loop threads {@code state} through one local
-     * variable, so the engine stays reentrant (NFR-R1).
+     * sealed {@link RoundOutcome} as the class javadoc describes. Every result but {@code Passed}
+     * is a {@link StageResult.Terminal} the engine returns verbatim. A recorded round is committed
+     * (persist → AttemptFinished) before it routes; the loop threads {@code state} through one
+     * local variable, so the engine stays reentrant (NFR-R1).
      *
      * <p>Implements FR4, FR5, FR6, FR8, FR10, FR11, FR13 of add-stage-engine; FR1 of
      * fix-denial-attribution-durability.
@@ -106,7 +101,7 @@ final class StageAttemptLoop {
             journal.started(new AttemptKey(
                     context.taskId(), stage.name(), current.attempts().size()));
             switch (roundExecution.execute(context, current, workspace, stage, startedAt)) {
-                case RoundOutcome.Verified verified -> {
+                case RoundOutcome.Judged verified -> {
                     var newState = newState(current, verified, stage);
                     var aborted = journal.commit(context.taskId(), newState, verified.key(), verified.trace());
                     if (aborted != null) {
@@ -118,60 +113,55 @@ final class StageAttemptLoop {
                     }
                     current = newState;
                 }
-                case RoundOutcome.NeedsDecision decision -> {
-                    var newState = current.recordUnburnedRound(decision.record());
-                    var aborted = journal.commit(context.taskId(), newState, decision.key(), decision.trace());
+                case RoundOutcome.Stopped stopped -> {
+                    var newState = current.recordUnburnedRound(stopped.record(), described.ranBy(stage));
+                    var aborted = journal.commit(context.taskId(), newState, stopped.key(), stopped.trace());
                     if (aborted != null) {
                         return new StageResult.Terminal(aborted);
                     }
                     return new StageResult.Terminal(new TaskOutcome.Escalated(
-                            newState,
-                            StopEscalation.of(decision.record().stop()).orElseThrow()));
+                            newState, StopEscalation.of(stopped.record().stop()).orElseThrow()));
                 }
-                case RoundOutcome.CannotExecute ce -> {
-                    // FR1 of fix-denial-attribution-durability: the failed round left no
-                    // attempt record, so its denials ride the escalation report instead. A
-                    // pure copy — the list is carried, never consulted, so nothing about the
-                    // classification changes.
+                case RoundOutcome.Unrecorded unrecorded -> {
+                    // The round left no record, so its denials ride the classifier's report (FR1 of
+                    // fix-denial-attribution-durability); the loop builds no report (FR7).
                     return new StageResult.Terminal(new TaskOutcome.Escalated(
-                            current, new EscalationReport.CannotExecute(ce.cause(), ce.denials())));
+                            current, unrecorded.escalation().report()));
                 }
             }
         }
     }
 
     /**
-     * Records a {@link RoundOutcome.Verified} round into a new {@link TaskState}
+     * Records a {@link RoundOutcome.Judged} round into a new {@link TaskState}
      * (FR13): a {@link Verdict.Fail} burns one attempt via {@link TaskState#recordQualityFailure},
      * every other verdict records the round without counting it via {@link
      * TaskState#recordUnburnedRound}. Recorded before persisting, so routing later reads an
      * already-computed state and never re-records.
      */
-    private TaskState newState(TaskState state, RoundOutcome.Verified verified, StageDefinition stage) {
+    private TaskState newState(TaskState state, RoundOutcome.Judged verified, StageDefinition stage) {
+        var ran = described.ranBy(stage);
         if (verified.verdict() instanceof Verdict.Fail) {
-            return state.recordQualityFailure(verified.record());
+            return state.recordQualityFailure(verified.record(), ran);
         }
         if (verified.verdict() instanceof Verdict.Pass) {
             // FR4 of harden-task-branch-contract: a pass and the advancement it implies are one
             // transition, so they are one commit. For a manual stage the position recorded is the
             // gate, AwaitingApproval(stage), never past it (FR1 of make-checkpoint-gate-durable).
-            return state.recordPassAndAdvance(verified.record(), Advancement.positionAfter(definition, stage));
+            return state.recordPassAndAdvance(verified.record(), Advancement.positionAfter(definition, stage), ran);
         }
-        return state.recordUnburnedRound(verified.record());
+        return state.recordUnburnedRound(verified.record(), ran);
     }
 
     /**
-     * Routes a committed {@link RoundOutcome.Verified} round on its verdict, returning
+     * Routes a committed {@link RoundOutcome.Judged} round on its verdict, returning
      * the {@link StageResult} it resolves to or {@code null} to retry the stage. A {@link
      * Verdict.Fail} at the resolved limit escalates {@link EscalationReport.AttemptsExhausted} as
-     * a {@link StageResult.Terminal} (FR5), otherwise returns {@code null} to retry (FR4); a
-     * {@link Verdict.CannotVerify} escalates {@link EscalationReport.CannotVerify} naming the
-     * failing check as a {@link StageResult.Terminal} (FR4); a {@link Verdict.Pass} hands the
-     * recorded, persisted {@code newState} back as {@link StageResult.Passed} for the {@link
-     * Engine} to advance (FR8).
+     * a {@link StageResult.Terminal} (FR5), otherwise retries (FR4); a {@link Verdict.CannotVerify}
+     * escalates (FR4); a {@link Verdict.Pass} hands {@code newState} back to advance (FR8).
      */
     @Nullable
-    private static StageResult route(TaskState newState, RoundOutcome.Verified verified, StageDefinition stage) {
+    private static StageResult route(TaskState newState, RoundOutcome.Judged verified, StageDefinition stage) {
         return switch (verified.verdict()) {
             case Verdict.Fail ignored -> exhausted(newState, stage) ? exhaust(newState, stage) : null;
             case Verdict.CannotVerify ignored -> escalate(newState, verified);
@@ -185,7 +175,7 @@ final class StageAttemptLoop {
      * (FR4), built from the round's recorded, persisted {@link Stop} by {@link StopEscalation} — the
      * mapping pre-flight re-escalation reads too (FR6 of make-checkpoint-gate-durable).
      */
-    private static StageResult escalate(TaskState newState, RoundOutcome.Verified verified) {
+    private static StageResult escalate(TaskState newState, RoundOutcome.Judged verified) {
         return new StageResult.Terminal(new TaskOutcome.Escalated(
                 newState, StopEscalation.of(verified.record().stop()).orElseThrow()));
     }
@@ -200,10 +190,8 @@ final class StageAttemptLoop {
 
     /**
      * Escalates the exhausted stage as a {@link StageResult.Terminal} carrying {@link
-     * EscalationReport.AttemptsExhausted} with the stage's resolved limit (FR5). The exhausting
-     * round is already recorded and persisted into {@code newState}, whose {@code attempts} hold
-     * every failed round of the stage — so the outcome and its final state alone render the
-     * escalation (UX1).
+     * EscalationReport.AttemptsExhausted} with the stage's resolved limit (FR5); {@code newState}
+     * already holds every failed round of the stage, so it alone renders the escalation (UX1).
      */
     private static StageResult exhaust(TaskState newState, StageDefinition stage) {
         return new StageResult.Terminal(new TaskOutcome.Escalated(

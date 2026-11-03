@@ -37,18 +37,44 @@ import org.slf4j.LoggerFactory;
  * directory: in container mode the decision file lives in the task branch, which is the envelope
  * and no place for a host diagnostic.
  *
- * <p>Implements FR20 of fix-terminal-receipt-convergence.
+ * <p>A {@code program} executor's run keeps its stderr by the same rule (design D3 of
+ * define-executor-contract: "its tail kept as the agent round keeps it"); the {@link Writer} names
+ * whose stderr it is, so the tail is minted in that writer's family — the agent CLI's as agent text,
+ * a program's as subprocess output — and the log line names it.
+ *
+ * <p>Implements FR20 of fix-terminal-receipt-convergence; FR5 of define-executor-contract.
  */
-final class RoundScratchDirectory implements AutoCloseable {
+public final class RoundScratchDirectory implements AutoCloseable {
+
+    /** Whose stderr the directory holds: the family its tail is minted in, and the noun its lines use. */
+    public enum Writer {
+        /** The agent CLI of an agent round: agent text. */
+        AGENT_CLI("agent CLI"),
+        /** A {@code program} executor's process: subprocess output. */
+        PROGRAM("program executor");
+
+        private final String noun;
+
+        Writer(String noun) {
+            this.noun = noun;
+        }
+
+        private UntrustedText mint(String text) {
+            return switch (this) {
+                case AGENT_CLI -> UntrustedText.agent(text);
+                case PROGRAM -> UntrustedText.subprocess(text);
+            };
+        }
+    }
 
     /** The JVM's temp directory: where every production round's directory is created. */
-    static final Path HOST_TEMP = Path.of(System.getProperty("java.io.tmpdir"));
+    public static final Path HOST_TEMP = Path.of(System.getProperty("java.io.tmpdir"));
 
     /**
      * How much of the stderr's end is read: the bound the command check keeps of its output tail
      * ({@code TailLines}), since an error is written last; the log exit narrows it further.
      */
-    static final int STDERR_TAIL_BYTES = 10 * 1024;
+    public static final int STDERR_TAIL_BYTES = 10 * 1024;
 
     private static final Logger log = LoggerFactory.getLogger(RoundScratchDirectory.class);
 
@@ -57,9 +83,11 @@ final class RoundScratchDirectory implements AutoCloseable {
     private static final String STDERR_FILE = "stderr";
 
     private final Path directory;
+    private final Writer writer;
 
-    private RoundScratchDirectory(Path directory) {
+    private RoundScratchDirectory(Path directory, Writer writer) {
         this.directory = directory;
+        this.writer = writer;
     }
 
     /**
@@ -70,15 +98,27 @@ final class RoundScratchDirectory implements AutoCloseable {
      * @throws UncheckedIOException if it cannot be created — the round cannot start
      */
     static RoundScratchDirectory open(Path parent) {
+        return open(parent, Writer.AGENT_CLI);
+    }
+
+    /**
+     * Creates a fresh round directory under {@code parent} for {@code writer}'s stderr.
+     *
+     * @param parent the host directory to create it in; must exist and be writable
+     * @param writer whose stderr the directory holds; never null
+     * @return the open directory; never null
+     * @throws UncheckedIOException if it cannot be created — the round cannot start
+     */
+    public static RoundScratchDirectory open(Path parent, Writer writer) {
         try {
-            return new RoundScratchDirectory(Files.createTempDirectory(parent, PREFIX));
+            return new RoundScratchDirectory(Files.createTempDirectory(parent, PREFIX), writer);
         } catch (IOException e) {
             throw new UncheckedIOException("could not create the round scratch directory under " + parent, e);
         }
     }
 
-    /** Where the round's CLI writes its stderr: a policy the environment applies at the launch. */
-    StderrPolicy stderr() {
+    /** Where the round's process writes its stderr: a policy the environment applies at the launch. */
+    public StderrPolicy stderr() {
         return StderrPolicy.toFile(directory.resolve(STDERR_FILE));
     }
 
@@ -92,9 +132,9 @@ final class RoundScratchDirectory implements AutoCloseable {
         Path file = directory.resolve(STDERR_FILE);
         try (InputStream in = Files.newInputStream(file)) {
             in.skipNBytes(Math.max(0, Files.size(file) - STDERR_TAIL_BYTES));
-            return UntrustedText.agent(new String(in.readNBytes(STDERR_TAIL_BYTES), StandardCharsets.UTF_8));
+            return writer.mint(new String(in.readNBytes(STDERR_TAIL_BYTES), StandardCharsets.UTF_8));
         } catch (NoSuchFileException e) {
-            return UntrustedText.agent("");
+            return writer.mint("");
         }
     }
 
@@ -105,11 +145,12 @@ final class RoundScratchDirectory implements AutoCloseable {
      *
      * @return the tail as agent text, empty when nothing was written; never null
      */
-    UntrustedText tailForFailure() {
+    public UntrustedText tailForFailure() {
         try {
             return stderrTail();
         } catch (IOException e) {
-            return UntrustedText.factory("the agent CLI's stderr in " + directory + " could not be read: " + e);
+            return UntrustedText.factory(
+                    "the " + writer.noun + "'s stderr in " + directory + " could not be read: " + e);
         }
     }
 
@@ -117,14 +158,18 @@ final class RoundScratchDirectory implements AutoCloseable {
      * Writes the tail of a successful round's stderr as one DEBUG line, and nothing when the CLI
      * wrote none; a tail that cannot be read is a DEBUG line naming the directory. Never throws.
      */
-    void logTailOnSuccess() {
+    public void logTailOnSuccess() {
         try {
             UntrustedText tail = stderrTail();
             if (!tail.isBlank()) {
-                log.debug("agent CLI stderr of the round, last {} bytes at most: {}", STDERR_TAIL_BYTES, tail.forLog());
+                log.debug(
+                        "{} stderr of the round, last {} bytes at most: {}",
+                        writer.noun,
+                        STDERR_TAIL_BYTES,
+                        tail.forLog());
             }
         } catch (IOException e) {
-            log.debug("agent CLI stderr of the round in {} could not be read", directory, e);
+            log.debug("{} stderr of the round in {} could not be read", writer.noun, directory, e);
         }
     }
 

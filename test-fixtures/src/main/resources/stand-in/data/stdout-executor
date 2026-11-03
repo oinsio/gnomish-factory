@@ -1,0 +1,5 @@
+# What an executor stand-in prints on stdout: a log, never its result.
+# One section per answer: its lines up to the blank line that separates it from the next one.
+
+[progress]
+starting the round, a line no reader parses

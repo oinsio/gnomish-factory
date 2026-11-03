@@ -40,6 +40,7 @@ class ApplicationLayeringSpec extends Specification {
         'com.github.oinsio.gnomish.app.branch',
         'com.github.oinsio.gnomish.app.console',
         'com.github.oinsio.gnomish.app.daemon',
+        'com.github.oinsio.gnomish.app.describe',
         'com.github.oinsio.gnomish.app.git',
         'com.github.oinsio.gnomish.app.lease',
         'com.github.oinsio.gnomish.app.port',
@@ -67,8 +68,9 @@ class ApplicationLayeringSpec extends Specification {
         'com.github.oinsio.gnomish.serveobservability.writer',
         'com.github.oinsio.gnomish.status',
         'com.github.oinsio.gnomish.status.json',
-        // `..usage` itself holds no class — only its `json` subpackage does.
-        'com.github.oinsio.gnomish.usage.json'
+        // `..usage` itself holds no class — only its `json` and `wire` subpackages do.
+        'com.github.oinsio.gnomish.usage.json',
+        'com.github.oinsio.gnomish.usage.wire'
     ]
 
     /**

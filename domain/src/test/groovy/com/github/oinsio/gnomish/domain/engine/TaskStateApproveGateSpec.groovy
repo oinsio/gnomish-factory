@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
+import com.github.oinsio.gnomish.domain.engine.fake.Snapshots
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import java.time.Duration
 import java.time.Instant
@@ -20,11 +22,11 @@ class TaskStateApproveGateSpec extends Specification {
     AdvancementSpec.stage('build', AdvancementMode.MANUAL, []),
     AdvancementSpec.stage('test', AdvancementMode.MANUAL, []))
 
-    static final def TOTALS = new ExecutorUsage(Duration.ofSeconds(7), [], [:])
+    static final def TOTALS = Snapshots.executed(['m': new TokenUsage(7, 0, 0, 0)])
 
     static TaskState gateAt(String stage) {
-        def passed = new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
-        new TaskState(new Position.AwaitingApproval(stage), 2, [passed], TOTALS)
+        def passed = AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [], ExecutorUsage.none(), [], Stop.none())
+        new TaskState(new Position.AwaitingApproval(stage), 2, [passed], TOTALS, ExecutorVersions.none())
     }
 
     // FR3: the approved position is the one following the gate's stage — the next stage in the
@@ -53,7 +55,7 @@ class TaskStateApproveGateSpec extends Specification {
     // FR3: only a gate can be approved — any other position is refused, no state produced
     def "approveGate refuses a state that is not at a gate"() {
         when: 'a state at a stage or at the pipeline end is approved'
-        new TaskState(position, 0, [], ExecutorUsage.none()).approveGate(DEFINITION)
+        new TaskState(position, 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none()).approveGate(DEFINITION)
 
         then: 'the approval is refused'
         def failure = thrown(IllegalStateException)

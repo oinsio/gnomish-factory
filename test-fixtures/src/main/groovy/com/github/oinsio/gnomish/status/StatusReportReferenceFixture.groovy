@@ -6,16 +6,24 @@ import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorRole
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Finding
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.MismatchCause
+import com.github.oinsio.gnomish.domain.engine.ModelUsage
+import com.github.oinsio.gnomish.domain.engine.ParticipantUsage
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolUsage
+import com.github.oinsio.gnomish.domain.engine.UsageCost
+import com.github.oinsio.gnomish.domain.engine.UsageProvenance
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -75,11 +83,12 @@ final class StatusReportReferenceFixture {
         def failCheck = new CheckResult(
                 new CheckRef(1, UntrustedText.manifest('command:./gradlew test')), new Verdict.Fail([failFinding]), Duration.ofMillis(41250))
 
-        def attempt = new AttemptRecord(
+        def attempt = AttemptRecords.identified(
+                TASK_ID, 'implement', RoundToken.of('9f1c2b7a4e6d8c0b1a2f3e4d5c6b7a8f9e0d1c2b'),
                 1, AttemptRecord.Result.QUALITY_FAILURE, Instant.parse('2026-07-16T14:35:10Z'),
-                [passCheck, failCheck], usage(183000, 1200, 5400, 410000), JudgeUsage.none(), [], Stop.none())
+                [passCheck, failCheck], [executed()], [], Stop.none())
 
-        new TaskState(new Position.AtStage('implement'), 1, [attempt], usage(232000, 1450, 6100, 512000))
+        new TaskState(new Position.AtStage('implement'), 1, [attempt], referenceTotals(), ExecutorVersions.none())
     }
 
     /** The whole canonical report: the state above, the recorded escalation, no outcome. */
@@ -88,7 +97,8 @@ final class StatusReportReferenceFixture {
     }
 
     /**
-     * One sample per {@link EscalationReport} kind, in the order their lines are committed
+     * One sample per {@link EscalationReport} kind — and one per {@link MismatchCause} of a {@code
+     * PipelineMismatch} (FR13 of define-executor-contract) — in the order their lines are committed
      * to {@code status-report-v1.escalations.reference.jsonl}. The {@code CannotExecute}
      * sample carries a denial: its serialized form is what pins FR2's additive field, and
      * an empty list would pin nothing.
@@ -98,22 +108,40 @@ final class StatusReportReferenceFixture {
             new EscalationReport.AttemptsExhausted(3),
             referenceEscalation(),
             new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('external:ci')), UntrustedText.subprocess('timeout'), UntrustedText.subprocess('poll exceeded 5m')),
-            new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('removed-stage')),
+            new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument('removed-stage'))),
+            new EscalationReport.PipelineMismatch(new MismatchCause.ExecutorVersion(
+                    UntrustedText.manifest('acme'), UntrustedText.branchDocument('1.4.0'), UntrustedText.subprocess('2.0.0'))),
             new EscalationReport.CannotExecute(UntrustedText.subprocess('round timed out after 15m'), [
                 Denial.unidentified(new Finding(
                         'egress denied: paste.example.com:443',
                         'paste.example.com:443/upload',
                         'kind=http method=POST'))
-            ])
+            ]),
+            new EscalationReport.BudgetExhausted(UntrustedText.agent('token bound 200000 reached'))
         ]
     }
 
-    private static ExecutorUsage usage(long wallMillis, int input, int output, int cacheRead) {
-        new ExecutorUsage(
-                Duration.ofMillis(wallMillis),
+    /**
+     * The canonical attempt's one participant: the stage's executor, reported, priced — the entry
+     * the spec's canonical example shows (FR15 of define-executor-contract).
+     */
+    private static ParticipantUsage executed() {
+        new ParticipantUsage(ExecutorRole.TRANSFORM, 'agent-cli', null, UsageProvenance.REPORTED, Duration.ofMillis(183000),
                 [
                     new ToolUsage('Edit', 4, Duration.ofMillis(2100))
                 ],
-                ['claude-sonnet-5': new TokenUsage(input, output, 30000, cacheRead)])
+                ['claude-sonnet-5': new ModelUsage(new TokenUsage(1200, 5400, 30000, 410000), new BigDecimal('0.1607'))])
+    }
+
+    /**
+     * The task's snapshot after two rounds of {@code implement}, both priced: the totals the spec's
+     * canonical example shows (FR17 of define-executor-contract).
+     */
+    private static UsageSnapshot referenceTotals() {
+        new UsageSnapshot(
+                [(ExecutorRole.TRANSFORM): ['claude-sonnet-5': new TokenUsage(1450, 6100, 30000, 512000)]],
+                new UsageCost(new BigDecimal('0.1922'), [:], true),
+                2,
+                RoundToken.of('9f1c2b7a4e6d8c0b1a2f3e4d5c6b7a8f9e0d1c2b'))
     }
 }

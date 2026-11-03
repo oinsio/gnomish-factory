@@ -31,8 +31,8 @@ class FakesSanitySpec extends Specification {
         new ToolTrace(new AttemptKey('TASK-1', 'build', 0), [])
     }
 
-    private static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), trace(), [])
+    private static ExecutionResult completed() {
+        ExecutionResult.completed(ExecutorUsage.none(), trace(), [])
     }
 
     private static StageExecutor.Request request(int attempt) {
@@ -47,7 +47,7 @@ class FakesSanitySpec extends Specification {
     def "ScriptedExecutor returns queued results in order and records each request"() {
         given: 'an executor scripted with two results'
         def r0 = completed()
-        def r1 = new ExecutionResult.DecisionNeeded(UntrustedText.agent('Q?'), [], ExecutorUsage.none(), trace(), [])
+        def r1 = ExecutionResult.decisionNeeded(UntrustedText.agent('Q?'), [], ExecutorUsage.none(), trace(), [])
         def executor = new ScriptedExecutor([r0, r1])
 
         when: 'two rounds are executed'
@@ -121,7 +121,7 @@ class FakesSanitySpec extends Specification {
     def "ScriptedJudgeVoter returns a vote sequence, counts votes and records the context"() {
         given: 'a voter scripted with two votes'
         def voter = new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.Pass(), ['model-a': new TokenUsage(1, 2, 0, 0)]),
+            new JudgeVoter.Vote(new Verdict.Pass(), Unpriced.of(['model-a': new TokenUsage(1, 2, 0, 0)])),
             new JudgeVoter.Vote(new Verdict.Fail([]), [:]),
         ])
 

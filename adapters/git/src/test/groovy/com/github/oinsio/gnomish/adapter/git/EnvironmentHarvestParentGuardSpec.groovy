@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import java.nio.file.Files
 import java.nio.file.Path
@@ -65,7 +66,11 @@ class EnvironmentHarvestParentGuardSpec extends Specification implements BareGit
         box.hijack = { setBranchToOrphan() }
 
         when:
-        persistence.persist(TASK, TaskState.atStageStart('implement'), new ToolTrace(
+        persistence.persist(TASK, RoundStates.recorded(new ToolTrace(
+                        new AttemptKey(TASK, 'implement', 1),
+                        [
+                            new ToolCall(0, 'bash', Instant.parse('2026-08-08T09:00:00Z'), Duration.ofMillis(100))
+                        ]).key()), new ToolTrace(
                         new AttemptKey(TASK, 'implement', 1),
                         [
                             new ToolCall(0, 'bash', Instant.parse('2026-08-08T09:00:00Z'), Duration.ofMillis(100))

@@ -21,21 +21,20 @@ import java.time.InstantSource;
  * add-sandbox-core), {@link AgentInvocationOptions#renderForExecutor} for the
  * invocation flags (including the pinpoint decision-file {@code Write}
  * allowance), {@link StreamJsonParser} to read its stream-json stdout, {@link
- * AgentRoundResultExtractor} to shape the essential result, and {@link
- * DecisionFileReader} to interpret the decision file's raw content.
+ * AgentRoundResultExtractor} to shape the essential result; the round source reads the
+ * decision file through the shared {@code DecisionRequestRead}.
  *
- * <p>Infrastructure failures — an unreadable control/criteria file ({@link
- * UnreadableLawFileException}), a process that
- * cannot even start, a {@code roundTimeout} expiry ({@link
- * RoundTimeoutException}), a missing result event ({@link
- * MissingResultEventException}) — all propagate uncaught: {@code
- * RoundExecution#execute} catches any {@link RuntimeException} this port
- * throws and shapes it into {@code RoundOutcome.CannotExecute} without
- * burning a stage attempt (NFR-R1). A failure of a round that had already been
- * opened propagates wrapped in {@code ExecutorFailure}, which carries the
- * round's drained egress denials alongside the original cause onto that
- * escalation (FR1 of fix-denial-attribution-durability). Both {@link ExecutionResult.Completed}
- * and {@link ExecutionResult.DecisionNeeded} carry the exact same {@code
+ * <p>A round that was opened and ended without its result — a process that cannot even start, a
+ * {@code roundTimeout} expiry ({@link RoundTimeoutException}), an interrupted wait, a missing
+ * result event ({@link MissingResultEventException}) — is reported, not thrown: the {@code
+ * failed/infrastructure} result of {@link AgentRoundFailure}, carrying the round's wall time, its
+ * drained egress denials (FR1 of fix-denial-attribution-durability) and its stderr tail, with the
+ * round discarded; the engine's classifier decides what it means (FR7 of define-executor-contract,
+ * design D10). What fails before a round exists — an unreadable control file ({@link
+ * UnreadableLawFileException}), a round source that cannot open one — still propagates, and the
+ * engine turns that throw into the same {@code failed/infrastructure} input (NFR-R1). Both {@link
+ * ExecutionResult#completed}
+ * and {@link ExecutionResult#decisionNeeded} results carry the exact same {@code
  * usage}/{@code trace} pair — telemetry is collected from the stream
  * regardless of the round's outcome (FR3).
  *
@@ -51,7 +50,6 @@ public final class CliStageExecutor implements StageExecutor {
     private final AgentRoundEquipment equipment;
     private final ExecutorPromptBuilder promptBuilder;
     private final RoundEnvironmentSource environmentSource;
-    private final DecisionFileReader decisionFileReader = new DecisionFileReader();
 
     /**
      * No-op listener. See the canonical constructor {@link #CliStageExecutor(FactoryProperties,
@@ -126,9 +124,8 @@ public final class CliStageExecutor implements StageExecutor {
     /**
      * Testing seam (package-private): the same executor with the per-round
      * decision-file transport supplied by the caller, so a spec can assert the
-     * infrastructure-failure cleanup contract — {@code runRound} must {@link
-     * DecisionFileTransport.Handle#discard()} the round directory on any {@link
-     * RuntimeException} (NFR-R3, D1) — without depending on the shared JVM temp
+     * infrastructure-failure cleanup contract — a failed round must {@link
+     * DecisionFileTransport.Handle#discard()} the round directory (NFR-R3, D1) — without depending on the shared JVM temp
      * directory. Production always uses the no-arg transport.
      */
     CliStageExecutor(
@@ -186,8 +183,8 @@ public final class CliStageExecutor implements StageExecutor {
      * the process, parses its stream-json output, waits for exit within {@code
      * roundTimeout}, closes the round (the sandboxed snapshot commit, FR21),
      * extracts the round's essential result, and maps the decision file's
-     * presence to {@link ExecutionResult.Completed} or
-     * {@link ExecutionResult.DecisionNeeded}.
+     * presence to {@link ExecutionResult#completed} or
+     * {@link ExecutionResult#decisionNeeded}.
      *
      * <p>Implements FR1, FR3, FR4, FR13, D1, D2, D3, D9 of add-agent-executor.
      *
@@ -196,26 +193,11 @@ public final class CliStageExecutor implements StageExecutor {
      *     variant; never null
      * @throws UnreadableLawFileException if the control file or a judge criteria
      *     file was unreadable when the invocation's law was frozen (FR13, D14)
-     * @throws RoundTimeoutException if {@code roundTimeout} expires (FR13)
-     * @throws MissingResultEventException if no result event was emitted (FR4)
      */
     @Override
     public ExecutionResult execute(Request request) {
         String prompt = promptBuilder.build(request);
         RoundEnvironmentSource.Round round = environmentSource.openRound(request);
-        return runRound(request, prompt, round);
-    }
-
-    private ExecutionResult runRound(Request request, String prompt, RoundEnvironmentSource.Round round) {
-        try {
-            return runRoundInEnvironment(request, prompt, round);
-        } catch (RuntimeException e) {
-            round.discard();
-            throw e;
-        }
-    }
-
-    private ExecutionResult runRoundInEnvironment(Request request, String prompt, RoundEnvironmentSource.Round round) {
-        return ExecutorRoundExecution.run(equipment, decisionFileReader, request, prompt, round);
+        return ExecutorRoundExecution.run(equipment, request, prompt, round);
     }
 }

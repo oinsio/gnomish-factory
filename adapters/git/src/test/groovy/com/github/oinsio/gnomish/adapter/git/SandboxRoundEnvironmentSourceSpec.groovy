@@ -4,8 +4,8 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
-import com.github.oinsio.gnomish.app.port.git.RoundToken
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
@@ -131,6 +131,20 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         second.decisionFilePath().toString() != firstPath
     }
 
+    // FR21 of define-executor-contract: the engine takes the round's token from the run's cell
+    def "FR21: the source's identity is the run's round cell, yielding the tip the round opened on"() {
+        given:
+        def source = source()
+        def openTip = branchTip()
+
+        when:
+        source.openRound(request(0))
+
+        then:
+        source.identity().is(rounds)
+        source.identity().takeToken() == Optional.of(RoundToken.of(openTip))
+    }
+
     def "FR13: openRound refuses, recording no token, when the branch tip cannot be resolved"() {
         given: 'the tip read fails while the environment still materializes'
         def failing = new GitProcessRunner(gitFailingOn(tempDir, 'rev-parse').toString())
@@ -166,7 +180,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         round.readDecision().isEmpty()
     }
 
-    def "FR23: readDecision returns the exact content the agent wrote at this round's decision path"() {
+    def "FR23: readDecision returns the request the agent wrote at this round's decision path"() {
         given:
         def round = source().openRound(request(1))
         def decisionFile = new File(
@@ -180,7 +194,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
 
         then:
         decision.isPresent()
-        decision.get() == '{"question":"which db?"}'
+        decision.get().question().forLog() == 'which db?'
     }
 
     def "FR21: closeRound snapshots the environment and records the harvested attempt commit"() {

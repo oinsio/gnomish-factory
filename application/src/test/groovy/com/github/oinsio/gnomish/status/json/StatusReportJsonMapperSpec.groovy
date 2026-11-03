@@ -6,20 +6,29 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.ExecutorRole
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Finding
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.MismatchCause
 import com.github.oinsio.gnomish.domain.engine.Position
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolUsage
+import com.github.oinsio.gnomish.domain.engine.UsageCost
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
+import com.github.oinsio.gnomish.executorcontract.usagewire.UsageCostDto
+import com.github.oinsio.gnomish.executorcontract.usagewire.UsageSnapshotDto
 import com.github.oinsio.gnomish.status.Outcome
 import com.github.oinsio.gnomish.status.StatusReport
 import com.github.oinsio.gnomish.status.StatusReportReferenceFixture
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import com.github.oinsio.gnomish.usage.wire.UsageSnapshotWire
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -36,11 +45,9 @@ class StatusReportJsonMapperSpec extends Specification {
 
     def mapper = new StatusReportJsonMapper()
 
-    // FR5, NFR-C1, D12 of add-agent-executor: reference anchor covers the
-    // spec's canonical example shape, including populated tokensByModel and
-    // byTool (a fabricated zero entry would be wrong; the empty-map/list case
-    // for unreported usage is covered separately, e.g. "byTool maps each
-    // ToolUsage's...")
+    // FR5, NFR-C1, D12 of add-agent-executor; FR17 of define-executor-contract: reference anchor
+    // covers the spec's canonical example shape, including a priced participant entry and the
+    // usage snapshot (the empty snapshot of an unreported run is covered separately)
     // Scenario: observability/status-report / Canonical document
     // Scenario: observability/status-report / The task and position sections
     // Scenario: observability/status-report / An attempt carries its round record
@@ -76,13 +83,20 @@ class StatusReportJsonMapperSpec extends Specification {
     //     cannot ship with its wire form unpinned (the rule testing.md states for wire
     //     vocabularies: iterate the variants, never a hand-listed subset).
     // Scenario: observability/status-report / A new escalation kind cannot ship unpinned
+    // FR13 of define-executor-contract: each MismatchCause of a PipelineMismatch is its own line too
     def "the escalation corpus pins every EscalationReport kind"() {
         given:
-        def kinds = EscalationReport.permittedSubclasses.length
+        def kinds = EscalationReport.permittedSubclasses.length + MismatchCause.permittedSubclasses.length - 1
+        def causes = StatusReportReferenceFixture.referenceEscalations()
+                .findAll { it instanceof EscalationReport.PipelineMismatch }
+                .collect {
+                    (it as EscalationReport.PipelineMismatch).cause().class
+                } as Set
 
         expect:
         StatusReportReferenceFixture.referenceEscalations().size() == kinds
         corpusLines().length == kinds
+        causes == MismatchCause.permittedSubclasses as Set
     }
 
     def "position renders atStage with the stage name"() {
@@ -235,14 +249,22 @@ class StatusReportJsonMapperSpec extends Specification {
 
     def "escalation pipelineMismatch renders staleStage"() {
         expect:
-        EscalationMapper.toDto(new EscalationReport.PipelineMismatch(UntrustedText.branchDocument("removed-stage"))) ==
-                new EscalationDto.PipelineMismatch("pipelineMismatch", null, null, "removed-stage")
+        EscalationMapper.toDto(new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument("removed-stage")))) ==
+                new EscalationDto.PipelineMismatch("pipelineMismatch", null, null, "removed-stage", null)
     }
 
     def "escalation cannotExecute renders cause"() {
         expect:
         EscalationMapper.toDto(new EscalationReport.CannotExecute(UntrustedText.subprocess("adapter crashed"), [])) ==
         new EscalationDto.CannotExecute("cannotExecute", null, null, "adapter crashed", [])
+    }
+
+    // FR7 of define-executor-contract: the sixth kind carries the bound
+    // Scenario: observability/status-report / The last escalation and the last decision
+    def "escalation budgetExhausted renders the bound"() {
+        expect:
+        EscalationMapper.toDto(new EscalationReport.BudgetExhausted(UntrustedText.agent("token bound 1000"))) ==
+                new EscalationDto.BudgetExhausted("budgetExhausted", null, null, "token bound 1000")
     }
 
     // FR2, NFR-S1 of fix-denial-attribution-durability: the round that could not execute
@@ -272,11 +294,8 @@ class StatusReportJsonMapperSpec extends Specification {
     }
 
     def "durations render as millisecond longs"() {
-        given:
-        def usage = new ExecutorUsage(Duration.ofMillis(183000), [], [:])
-
         expect:
-        UsageMapper.toUsage(usage).wallMillis() == 183000L
+        mapper.toDto(referenceReport()).currentStage().attempts()[0].usage()[0].wallMillis() == 183000L
     }
 
     def "instants render as ISO-8601 UTC strings"() {
@@ -284,8 +303,7 @@ class StatusReportJsonMapperSpec extends Specification {
         mapper.toDto(referenceReport()).lastDecision().at() == "2026-07-16T14:21:30Z"
     }
 
-    // Scenario: observability/status-report / A usage object carries wall time, tools and tokens by model
-    def "human-only run: empty tokensByModel map, empty byTool/perVote, wall time present"() {
+    def "human-only run: totals carry the empty snapshot"() {
         given:
         def report = idleReport(new Position.AtStage("implement"))
 
@@ -293,85 +311,29 @@ class StatusReportJsonMapperSpec extends Specification {
         def dto = mapper.toDto(report)
 
         then:
-        dto.totals().tokensByModel() == [:]
-        dto.totals().byTool() == []
+        dto.totals() == new UsageSnapshotDto([:], new UsageCostDto(BigDecimal.ZERO, [:], true), 0, null)
     }
 
-    // Scenario: observability/status-report / A usage object carries wall time, tools and tokens by model
-    def "byTool maps each ToolUsage's name, calls and duration-in-millis"() {
-        given: 'totals reporting a per-tool breakdown with two distinct tools'
+    // FR17 of define-executor-contract: the status document writes the tip's snapshot as recorded,
+    //     every component, through the one snapshot mapping
+    def "totals are the recorded snapshot, every component written"() {
+        given:
         def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
-        def totals = new ExecutorUsage(
-                Duration.ofMillis(500),
-                [
-                    new ToolUsage("shell", 3, Duration.ofMillis(1200)),
-                    new ToolUsage("editor", 1, Duration.ofMillis(75))
-                ],
-                [:])
-        def state = new TaskState(new Position.AtStage("implement"), 0, [], totals)
-        def report = StatusReport.build(context, state, null, null)
+        def snapshot = new UsageSnapshot(
+                [(ExecutorRole.VERDICT): ['j': new TokenUsage(1, 2, 3, 4)]],
+                new UsageCost(new BigDecimal('0.5'), [(ExecutorRole.VERDICT): ['j': new TokenUsage(1, 2, 3, 4)]], false),
+                4,
+                RoundToken.of('9f1c2b7a4e6d8c0b1a2f3e4d5c6b7a8f9e0d1c2b'))
+        def state = new TaskState(new Position.AtStage("implement"), 0, [], snapshot, ExecutorVersions.none())
 
-        when:
-        def byTool = mapper.toDto(report).totals().byTool()
-
-        then:
-        byTool.size() == 2
-        byTool[0].name() == "shell"
-        byTool[0].calls() == 3
-        byTool[0].totalMillis() == 1200
-        byTool[1].name() == "editor"
-        byTool[1].calls() == 1
-        byTool[1].totalMillis() == 75
-    }
-
-    // FR9, D12 of add-agent-executor: perVote maps each vote's per-model token map
-    // Scenario: observability/status-report / Totals carry the task's executor usage
-    def "an attempt's judgeUsage.perVote maps each vote's tokensByModel in vote order"() {
-        given: 'an attempt whose judge usage carries two cast votes'
-        def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
-        def judgeUsage = new JudgeUsage([
-            ['model-a': new TokenUsage(100, 20, 0, 0)],
-            ['model-a': new TokenUsage(150, 30, 0, 0)]
-        ])
-        def attempt = new AttemptRecord(
-                0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"),
-                [], ExecutorUsage.none(), judgeUsage, [], Stop.none())
-        def state = new TaskState(new Position.AtStage("implement"), 0, [attempt], ExecutorUsage.none())
-        def report = StatusReport.build(context, state, null, null)
-
-        when:
-        def perVote = mapper.toDto(report).currentStage().attempts()[0].judgeUsage().perVote()
-
-        then:
-        perVote.size() == 2
-        perVote[0].tokensByModel() == ['model-a': new TokenUsageDto(100, 20, 0, 0)]
-        perVote[1].tokensByModel() == ['model-a': new TokenUsageDto(150, 30, 0, 0)]
-    }
-
-    // FR9, NFR-C1, D4, D12 of add-agent-executor: a cast vote that reported no tokens (its
-    // own map is empty) maps to a Vote DTO with an empty tokensByModel map, distinct from a
-    // fabricated zero entry
-    def "a judge vote with an empty token map maps to an empty tokensByModel map"() {
-        given: 'an attempt whose judge usage carries one unreported vote'
-        def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
-        def judgeUsage = new JudgeUsage([[:]])
-        def attempt = new AttemptRecord(
-                0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-17T09:00:00Z"),
-                [], ExecutorUsage.none(), judgeUsage, [], Stop.none())
-        def state = new TaskState(new Position.AtStage("implement"), 0, [attempt], ExecutorUsage.none())
-        def report = StatusReport.build(context, state, null, null)
-
-        when:
-        def perVote = mapper.toDto(report).currentStage().attempts()[0].judgeUsage().perVote()
-
-        then:
-        perVote.size() == 1
-        perVote[0].tokensByModel() == [:]
+        expect:
+        mapper.toDto(StatusReport.build(context, state, null, null)).totals() == UsageSnapshotWire.toDto(snapshot)
+        UsageSnapshotWire.fromDto(mapper.toDto(StatusReport.build(context, state, null, null)).totals()) == snapshot
     }
 
     private static StatusReport idleReport(Position position) {
         def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
-        def state = new TaskState(position, 0, [], ExecutorUsage.none())
+        def state = new TaskState(position, 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         return StatusReport.build(context, state, null, null)
     }
 
@@ -385,9 +347,9 @@ class StatusReportJsonMapperSpec extends Specification {
         def denial = new Finding(
                 "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
         def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("builtin:files_exist")), new Verdict.Pass(), Duration.ofMillis(3))
-        def attempt = new AttemptRecord(
+        def attempt = AttemptRecords.of(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-16T14:35:10Z"),
-                [check], ExecutorUsage.none(), JudgeUsage.none(), [Denial.unidentified(denial)], Stop.none())
+                [check], ExecutorUsage.none(), [Denial.unidentified(denial)], Stop.none())
 
         when:
         def dto = mapper.toDto(reportOf(attempt)).currentStage().attempts()[0]
@@ -406,9 +368,9 @@ class StatusReportJsonMapperSpec extends Specification {
     // Scenario: observability/status-report / Quiet task reports no noise
     def "UX2: an attempt with no denials renders an empty array"() {
         given:
-        def attempt = new AttemptRecord(
+        def attempt = AttemptRecords.of(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-16T14:35:10Z"),
-                [], ExecutorUsage.none(), JudgeUsage.none(), [], Stop.none())
+                [], ExecutorUsage.none(), [], Stop.none())
 
         expect:
         mapper.toDto(reportOf(attempt)).currentStage().attempts()[0].denials() == []
@@ -416,13 +378,13 @@ class StatusReportJsonMapperSpec extends Specification {
 
     private static StatusReport reportOf(AttemptRecord attempt) {
         def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
-        def state = new TaskState(new Position.AtStage("implement"), 1, [attempt], ExecutorUsage.none())
+        def state = new TaskState(new Position.AtStage("implement"), 1, [attempt], UsageSnapshot.EMPTY, ExecutorVersions.none())
         return StatusReport.build(context, state, null, null)
     }
 
     private static StatusReport outcomeReport(Outcome outcome) {
         def context = new TaskContext("task-1", UntrustedText.tracker("Title"), UntrustedText.tracker("Body"), [])
-        def state = new TaskState(new Position.AtStage("implement"), 0, [], ExecutorUsage.none())
+        def state = new TaskState(new Position.AtStage("implement"), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         return StatusReport.build(context, state, null, outcome)
     }
 

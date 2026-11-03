@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.status.json;
 
+import com.github.oinsio.gnomish.executorcontract.usagewire.UsageSnapshotDto;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -17,7 +18,7 @@ import org.jspecify.annotations.Nullable;
  * @param outcome the terminal outcome of the run, or {@code null} mid-run
  * @param currentStage the current stage's attempt data, or {@code null} at {@code
  *     pipelineEnd}
- * @param totals cumulative executor usage for the whole task
+ * @param totals the usage snapshot of the whole task, in the one usage wire vocabulary
  * @param lastEscalation the most recent escalation report, or {@code null} when
  *     none occurred
  * @param lastDecision the most recent human decision, or {@code null} when none
@@ -29,6 +30,6 @@ public record StatusReportDto(
         PositionDto position,
         @Nullable OutcomeDto outcome,
         @Nullable CurrentStageDto currentStage,
-        UsageDto totals,
+        UsageSnapshotDto totals,
         @Nullable EscalationDto lastEscalation,
         @Nullable DecisionDto lastDecision) {}

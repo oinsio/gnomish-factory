@@ -9,11 +9,14 @@ import com.github.oinsio.gnomish.domain.engine.EnginePorts
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
+import com.github.oinsio.gnomish.domain.engine.MismatchCause
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
@@ -26,6 +29,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -69,15 +73,15 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         new AutonomyLimits(1), advancement)
     }
 
-    private static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('task-1', 'build', 0), []), [])
+    private static ExecutionResult completed() {
+        ExecutionResult.completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('task-1', 'build', 0), []), [])
     }
 
     private static EnginePorts ports(ScriptedExecutor executor, List<Verdict> verdicts, InMemoryAttemptPersistence persistence = new InMemoryAttemptPersistence()) {
         def clock = new VirtualClock()
         new EnginePorts(executor, new ScriptedBuiltinCheckRunner(verdicts), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
-                persistence, VirtualTimeEquipment.on(clock))
+                persistence, VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 
     // Scenario: cli/manual-run / A completed run ends with its final status
@@ -95,7 +99,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
     // Scenario: cli/manual-run / A checkpoint ends the process with its resume command
     def "FR2: dispatch returns a Paused stop after printing the checkpoint line and the return path"() {
         given: 'a state already advanced past the passed stage'
-        def outcome = new TaskOutcome.Paused(new TaskState(new Position.AtStage('deploy'), 2, [], ExecutorUsage.none()), 'build')
+        def outcome = new TaskOutcome.Paused(new TaskState(new Position.AtStage('deploy'), 2, [], UsageSnapshot.EMPTY, ExecutorVersions.none()), 'build')
 
         expect:
         loop.dispatch(CONTEXT, outcome, RETURN_PATH).is(outcome)
@@ -109,7 +113,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
     def "FR1: dispatch returns an Escalated stop after printing the report and the return path"() {
         given:
         def report = new EscalationReport.AttemptsExhausted(3)
-        def outcome = new TaskOutcome.Escalated(new TaskState(new Position.AtStage('build'), 3, [], ExecutorUsage.none()), report)
+        def outcome = new TaskOutcome.Escalated(new TaskState(new Position.AtStage('build'), 3, [], UsageSnapshot.EMPTY, ExecutorVersions.none()), report)
 
         expect:
         loop.dispatch(CONTEXT, outcome, RETURN_PATH).is(outcome)
@@ -136,7 +140,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
 
     def "dispatch throws InternalErrorException carrying the console render for PipelineMismatch, printing nothing"() {
         given:
-        def report = new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('\u001B[31mstale-stage @team #12'))
+        def report = new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument('\u001B[31mstale-stage @team #12')))
 
         when:
         loop.dispatch(CONTEXT, new TaskOutcome.Escalated(STATE, report), RETURN_PATH)
@@ -154,7 +158,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
     // Scenario: cli/manual-run / Persistence failure is Aborted
     def "dispatch throws AbortedException carrying the full outcome after reporting it to stderr only"() {
         given: 'a burned-attempts state that never reached durable storage'
-        def unpersistedState = new TaskState(new Position.AtStage('build'), 2, [], ExecutorUsage.none())
+        def unpersistedState = new TaskState(new Position.AtStage('build'), 2, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         def outcome = new TaskOutcome.Aborted(unpersistedState, new AttemptKey('task-1', 'build', 2), UntrustedText.subprocess('connection reset by peer'))
 
         and: 'stderr is captured for the duration of this test only'

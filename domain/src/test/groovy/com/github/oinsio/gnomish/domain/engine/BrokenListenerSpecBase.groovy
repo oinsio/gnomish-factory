@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -39,7 +40,7 @@ abstract class BrokenListenerSpecBase extends Specification {
         def clock = new VirtualClock()
         new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence,
-                VirtualTimeEquipment.on(clock))
+                VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 
     static VerifyCheck.Builtin builtin(String name) {
@@ -56,8 +57,8 @@ abstract class BrokenListenerSpecBase extends Specification {
         new PipelineDefinition('1', new AutonomyLimits(5), stages.toList())
     }
 
-    static ExecutionResult.Completed completed(int round) {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', round), []), [])
+    static ExecutionResult completed(int round) {
+        ExecutionResult.completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', round), []), [])
     }
 
     static Verdict.Fail fail(String message) {

@@ -44,6 +44,7 @@ class LedgerJsonMapperSpec extends Specification {
         mapper.serialize(sweepActionLine()) == referenceLines[5]
         mapper.serialize(sweepTickLine()) == referenceLines[6]
         mapper.serialize(remoteOutageLine()) == referenceLines[7]
+        mapper.serialize(RoundOutcomeLineMapperSpec.limitRoundLine()) == referenceLines[8]
     }
 
     // NFR-O1, NFR-O3 of add-base-ref-resolution.

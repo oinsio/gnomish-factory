@@ -6,10 +6,13 @@ import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.CheckRef;
 import com.github.oinsio.gnomish.domain.engine.CheckResult;
 import com.github.oinsio.gnomish.domain.engine.Position;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import com.github.oinsio.gnomish.usage.wire.ParticipantUsageWire;
+import com.github.oinsio.gnomish.usage.wire.UsageSnapshotWire;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -20,7 +23,8 @@ import org.jspecify.annotations.Nullable;
  * Maps between the domain's {@link TaskState} tree and the {@code state.json}
  * v1 DTO tree ({@link StateJsonDto}) — the mapper counterpart of {@code
  * status.json.AttemptMapper}, kept as a wholly separate contract (design D5).
- * Usage/token mapping delegates to {@link StateUsageMapper}. Every sealed
+ * Usage mapping goes through the one usage wire vocabulary's mappers, {@link ParticipantUsageWire}
+ * and {@link UsageSnapshotWire} (FR16, FR17 of define-executor-contract). Every sealed
  * domain type is mapped through an exhaustive switch with no {@code default}
  * arm: a new variant fails to compile here until its mapping is added.
  *
@@ -33,7 +37,8 @@ import org.jspecify.annotations.Nullable;
  * index from {@code state.json} today (same documented caveat as {@code
  * task.json}'s {@code EscalationReportDto.CannotVerify} mapping).
  *
- * <p>Implements FR3, FR4 of add-git-workflow.
+ * <p>Implements FR3, FR4 of add-git-workflow; FR13 of define-executor-contract (the version pin,
+ * through {@link StateExecutorVersionsMapper}).
  *
  * <p>An {@link UntrustedExit} (design D2 of type-untrusted-text): this writer carries untrusted
  * text to a machine medium, where the document's own encoding bounds it and a neutralized value
@@ -93,8 +98,9 @@ public final class StateJsonMapper {
                 toPosition(state.position()),
                 state.attemptsUsed(),
                 state.attempts().stream().map(StateJsonMapper::toAttempt).toList(),
-                StateUsageMapper.toUsage(state.totals()),
-                egressCursor);
+                UsageSnapshotWire.toDto(state.totals()),
+                egressCursor,
+                StateExecutorVersionsMapper.toDto(state.executorVersions()));
     }
 
     /**
@@ -109,7 +115,8 @@ public final class StateJsonMapper {
                 fromPosition(dto.position()),
                 dto.attemptsUsed(),
                 dto.attempts().stream().map(StateJsonMapper::fromAttempt).toList(),
-                StateUsageMapper.fromUsage(dto.totals()));
+                UsageSnapshotWire.fromDto(dto.totals()),
+                StateExecutorVersionsMapper.fromDto(dto.executorVersions()));
     }
 
     private static StatePositionDto toPosition(Position position) {
@@ -139,14 +146,17 @@ public final class StateJsonMapper {
     }
 
     private static StateAttemptDto toAttempt(AttemptRecord record) {
+        RoundToken token = record.roundToken();
         return new StateAttemptDto(
+                record.taskId(),
+                record.stage(),
+                token == null ? null : token.commit(),
                 record.round(),
                 toResult(record.result()),
                 record.startedAt().toString(),
                 record.checkResults().stream().map(StateJsonMapper::toCheck).toList(),
                 StateDenialMapper.toDtos(record.denials()),
-                StateUsageMapper.toUsage(record.executorUsage()),
-                StateUsageMapper.toJudgeUsage(record.judgeUsage()),
+                ParticipantUsageWire.toDtos(record.usage()),
                 StateStopMapper.toDto(record.stop()));
     }
 
@@ -155,19 +165,31 @@ public final class StateJsonMapper {
      * mapping {@link #fromDto(StateJsonDto)} applies to every element of {@code attempts},
      * exposed because the usage-history walk reconstructs rounds one at a time as it diffs
      * successive commits, and its port-level rows carry the domain record rather than this
-     * package's wire DTO (FR12b, design D12 of split-into-modules).
+     * package's wire DTO (FR12b, design D12 of split-into-modules). The round's identity is read as
+     * written, never filled in: a missing {@code taskId} or {@code stage} is refused by the record,
+     * and the token goes back through the one parse {@link RoundToken#of} (FR14 of
+     * define-executor-contract). A round with no {@code usage} entry is refused, never read as a
+     * round that consumed nothing: every executed round records the entry of the executor that ran
+     * it (FR17 of define-executor-contract).
      *
      * @param dto the per-attempt DTO to map; never null
      * @return the equivalent domain attempt record
+     * @throws IllegalArgumentException if the attempt carries no usage entry
      */
     public static AttemptRecord fromAttempt(StateAttemptDto dto) {
+        if (dto.usage().isEmpty()) {
+            throw new IllegalArgumentException("state.json attempt " + dto.round() + " carries no usage entry");
+        }
+        String token = dto.roundToken();
         return new AttemptRecord(
+                dto.taskId(),
+                dto.stage(),
+                token == null ? null : RoundToken.of(token),
                 dto.round(),
                 fromResult(dto.result()),
                 Instant.parse(dto.startedAt()),
                 dto.checks().stream().map(StateJsonMapper::fromCheck).toList(),
-                StateUsageMapper.fromUsage(dto.executorUsage()),
-                StateUsageMapper.fromJudgeUsage(dto.judgeUsage()),
+                ParticipantUsageWire.fromDtos(dto.usage()),
                 StateDenialMapper.fromDtos(dto.denials()),
                 StateStopMapper.fromDto(dto.stop()));
     }
@@ -178,6 +200,7 @@ public final class StateJsonMapper {
             case QUALITY_FAILURE -> "qualityFailure";
             case CANNOT_VERIFY -> "cannotVerify";
             case DECISION_NEEDED -> "decisionNeeded";
+            case BUDGET_EXHAUSTED -> "budgetExhausted";
         };
     }
 
@@ -187,6 +210,7 @@ public final class StateJsonMapper {
             case "qualityFailure" -> AttemptRecord.Result.QUALITY_FAILURE;
             case "cannotVerify" -> AttemptRecord.Result.CANNOT_VERIFY;
             case "decisionNeeded" -> AttemptRecord.Result.DECISION_NEEDED;
+            case "budgetExhausted" -> AttemptRecord.Result.BUDGET_EXHAUSTED;
             default -> throw new IllegalArgumentException("Unknown AttemptRecord.Result: " + result);
         };
     }

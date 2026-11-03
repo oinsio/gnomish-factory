@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
+import com.github.oinsio.gnomish.domain.engine.ModelUsage;
 import com.github.oinsio.gnomish.domain.engine.TokenUsage;
+import com.github.oinsio.gnomish.domain.engine.UsageFold;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.util.LinkedHashMap;
@@ -10,12 +12,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Derives a round's {@code tokensByModel} map from a {@link
+ * Derives a round's per-model usage map from a {@link
  * AgentEvent.ResultEvent}'s raw wire data (design D4, FR5): {@code
  * modelUsage} is authoritative when present — every key becomes an entry,
  * keyed by the CLI-resolved model id; when the wire event omitted {@code
  * modelUsage} entirely (older CLIs), the flat {@code usage} object is used
  * instead, keyed by the round's {@link AgentEvent.InitEvent#model()}.
+ *
+ * <p>Each {@code modelUsage} entry's {@code costUSD} rides beside that model's four counts, for
+ * stage rounds and judge votes alike (FR22 of define-executor-contract), accepted or refused by
+ * {@link ReportedCost}; the flat fallback carries none, since the flat {@code usage} object reports
+ * no cost.
  *
  * <p>Telemetry is best-effort (FR4, NFR-R2): this class never throws.
  * Numeric coercion or a missing field degrades gracefully, at two
@@ -37,7 +44,7 @@ import org.slf4j.LoggerFactory;
  * report the loss — the degradation this class is allowed is an unnamed model,
  * never an unreported cost.
  *
- * <p>Implements FR5, D4 of add-agent-executor.
+ * <p>Implements FR5, D4 of add-agent-executor; FR22, NG10 of define-executor-contract.
  */
 @UntrustedParser
 final class TokenUsageMapper {
@@ -45,20 +52,19 @@ final class TokenUsageMapper {
     private static final Logger log = LoggerFactory.getLogger(TokenUsageMapper.class);
 
     /**
-     * Derives the round's {@code tokensByModel} map from the result event.
+     * Derives the round's per-model usage map from the result event.
      *
      * @param resultEvent the round's result event; never null
      * @param initEvent the round's init event, used only for the fallback's
      *     model key, or {@code null} when none was parsed
-     * @return {@code tokensByModel}, keyed by resolved model id; never null,
+     * @return the usage keyed by resolved model id; never null,
      *     empty when neither wire shape was interpretable (NFR-R2)
      */
-    Map<String, TokenUsage> toTokensByModel(
-            AgentEvent.ResultEvent resultEvent, AgentEvent.@Nullable InitEvent initEvent) {
+    Map<String, ModelUsage> toByModel(AgentEvent.ResultEvent resultEvent, AgentEvent.@Nullable InitEvent initEvent) {
         Map<String, Object> modelUsage = resultEvent.modelUsage();
-        Map<String, TokenUsage> tokensByModel =
+        Map<String, ModelUsage> byModel =
                 modelUsage != null ? fromModelUsage(modelUsage) : fromFlatUsage(resultEvent.usage(), initEvent);
-        if (tokensByModel.isEmpty()) {
+        if (byModel.isEmpty()) {
             // The per-entry lines above are DEBUG because one skipped model says nothing about the
             // round; an extraction that yields nothing at all is different — the round's whole cost
             // is lost to the budget and the summary, and the operator sees "unreported" with no way
@@ -68,11 +74,11 @@ final class TokenUsageMapper {
             log.warn(OperatorEvent.TOKEN_USAGE_UNREPORTED.head()
                     + "stream-json: the round reported no usable token usage; its cost reads as unreported");
         }
-        return tokensByModel;
+        return byModel;
     }
 
-    private Map<String, TokenUsage> fromModelUsage(Map<String, Object> modelUsage) {
-        Map<String, TokenUsage> tokensByModel = new LinkedHashMap<>();
+    private Map<String, ModelUsage> fromModelUsage(Map<String, Object> modelUsage) {
+        Map<String, ModelUsage> byModel = new LinkedHashMap<>();
         modelUsage.forEach((model, rawEntry) -> {
             TokenUsage tokens = toTokenUsage(
                     rawEntry, "inputTokens", "outputTokens", "cacheCreationInputTokens", "cacheReadInputTokens");
@@ -88,14 +94,17 @@ final class TokenUsageMapper {
                 // state.json, from the budget and from the dashboard, with the empty-map WARN below
                 // staying quiet because the map is not empty. Summing keeps the round's total
                 // honest: the placeholder reports what was spent under ids that could not be named,
-                // which is the whole of what is still knowable about them.
-                tokensByModel.merge(id, tokens, TokenUsage::plus);
+                // which is the whole of what is still knowable about them. UsageFold.sameModel keeps a
+                // cost only when both halves carry one, so the placeholder never claims a price for
+                // tokens nobody priced.
+                byModel.merge(
+                        id, new ModelUsage(tokens, ReportedCost.of((Map<?, ?>) rawEntry, id)), UsageFold::sameModel);
             }
         });
-        return tokensByModel;
+        return byModel;
     }
 
-    private Map<String, TokenUsage> fromFlatUsage(
+    private Map<String, ModelUsage> fromFlatUsage(
             @Nullable Map<String, Object> usage, AgentEvent.@Nullable InitEvent initEvent) {
         if (usage == null || initEvent == null) {
             return Map.of();
@@ -109,7 +118,8 @@ final class TokenUsageMapper {
         // @UntrustedParser warrant (design D11): the init event's model id becomes a telemetry
         //     key, held to ModelIdSyntax — which is what makes it inert enough for state.json and
         //     the dashboard, where it is displayed.
-        return Map.of(modelKey(initEvent.model().forParsing()), tokens);
+        //     The flat usage object carries no cost, so the entry is unpriced (FR22).
+        return Map.of(modelKey(initEvent.model().forParsing()), new ModelUsage(tokens, null));
     }
 
     /**

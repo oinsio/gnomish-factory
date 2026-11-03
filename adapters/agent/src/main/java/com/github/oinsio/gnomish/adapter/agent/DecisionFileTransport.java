@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
+import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead;
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
+import com.github.oinsio.gnomish.executorcontract.ResultSource;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -22,15 +25,24 @@ import org.jspecify.annotations.Nullable;
  * directory never lives under the workspace, so nothing from the decision
  * protocol can leak into a future task branch (NFR-S2).
  *
- * <p>This class does not interpret the file's content: tolerant parsing
- * (garbage → raw text becomes the question, empty file → fallback text) is
- * task 6.3's job, and mapping to {@link
- * com.github.oinsio.gnomish.domain.engine.ExecutionResult} is task 6.5's.
- * {@link Handle#readAndClose()} returns the file's raw content when present,
- * or {@link Optional#empty()} when the agent never wrote it — the file
- * absent case that maps to {@code Completed} downstream.
+ * <p>This class does not interpret the file's content: the read goes through the one tolerant
+ * {@link DecisionRequestRead} every decision-file medium shares, over the executor contract's
+ * result reader (FR6 of define-executor-contract) — capped at {@code
+ * ResultFileReader.DECISION_FILE_CAP_BYTES}, a symbolic link at the path refused rather than
+ * followed, a file over the cap cut with the reader's truncation marker. {@link
+ * Handle#readAndClose()} returns the request when the agent wrote the file, or {@link
+ * Optional#empty()} when it never did — the file absent case that maps to {@code Completed}
+ * downstream. Removing the directory afterwards is this transport's own cleanup, never the
+ * reader's.
  *
- * <p>Implements FR3, NFR-R3, NFR-S2, D1 of add-agent-executor.
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.adapter.git.BranchDecisionFile} (no
+ * shared classpath between {@code adapters/agent} and {@code adapters/git}): both spell the
+ * {@code GNOMISH_DECISION_FILE} variable name the executor prompt tells the agent to write to.
+ * The read is not part of the pair: both ends read through {@link DecisionRequestRead} over the
+ * executor contract's {@code ResultFileReader}, its one owner. Each end keeps its own staleness
+ * rule on purpose — this one deletes its per-round temp directory after the read.
+ *
+ * <p>Implements FR3, NFR-R3, NFR-S2, D1 of add-agent-executor; FR6 of define-executor-contract.
  */
 public final class DecisionFileTransport {
 
@@ -126,27 +138,26 @@ public final class DecisionFileTransport {
         }
 
         /**
-         * Reads the decision file's raw content, if the agent wrote one, then
-         * deletes this round's temp directory and everything in it — the
-         * lifecycle's terminal step (NFR-R3). Safe to call more than once:
-         * a directory already deleted by a prior call simply yields {@link
-         * Optional#empty()} again.
+         * Reads the decision request, if the agent wrote one, through {@link DecisionRequestRead},
+         * then deletes this round's temp directory and everything in it — the lifecycle's
+         * terminal step (NFR-R3). Safe to call more than once: a directory already deleted by a
+         * prior call simply yields {@link Optional#empty()} again.
          *
-         * <p>Implements FR3, NFR-R3, D1 of add-agent-executor.
+         * <p>Implements FR3, NFR-R3, D1 of add-agent-executor; FR6 of define-executor-contract.
          *
-         * @return the file's raw content if present, {@link Optional#empty()}
-         *     if the agent never wrote it; never null
+         * @return the request if the agent wrote the file, {@link Optional#empty()} if it never
+         *     did; never null
+         * @throws UncheckedIOException if the file cannot be read (a symbolic link or another
+         *     non-regular file at the path included) or the directory cannot be deleted
          */
-        public Optional<String> readAndClose() {
+        public Optional<RoundDecisionRequest> readAndClose() {
+            Optional<RoundDecisionRequest> request = DecisionRequestRead.read(ResultSource.hostFile(decisionFilePath));
             try {
-                Optional<String> content = Files.isRegularFile(decisionFilePath)
-                        ? Optional.of(Files.readString(decisionFilePath))
-                        : Optional.empty();
                 deleteRecursively(Objects.requireNonNull(decisionFilePath.getParent()));
-                return content;
             } catch (IOException e) {
-                throw new UncheckedIOException("could not read decision file: " + decisionFilePath, e);
+                throw new UncheckedIOException("could not delete decision-file temp directory: " + decisionFilePath, e);
             }
+            return request;
         }
 
         /**

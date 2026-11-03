@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -22,7 +23,7 @@ import spock.lang.Specification
 
 /**
  * StageAttemptLoop, task 5.6 — the gnome-initiated decision escalation path. A round
- * whose executor returns {@code ExecutionResult.DecisionNeeded(question, options, ...)}
+ * whose executor returns a {@code completed} result with a {@code DecisionRequest(question, options)} answer
  * escalates immediately as {@code Escalated(EscalationReport.DecisionNeeded)} carrying
  * the question and options verbatim, and does NOT burn a stage attempt: the round is
  * recorded (with the executor's usage and no check results) and persisted like any
@@ -48,7 +49,7 @@ class DecisionNeededSpec extends Specification {
 
     EnginePorts ports() {
         new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
-                listener, persistence, VirtualTimeEquipment.on(clock, sleeper))
+                listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static VerifyCheck.Builtin builtin(String name) {
@@ -65,12 +66,12 @@ class DecisionNeededSpec extends Specification {
         new PipelineDefinition('1', new AutonomyLimits(5), stages.toList())
     }
 
-    static ExecutionResult.Completed completed() {
-        new ExecutionResult.Completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
+    static ExecutionResult completed() {
+        ExecutionResult.completed(ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
     }
 
-    static ExecutionResult.DecisionNeeded decisionNeeded(String question, List<String> options) {
-        new ExecutionResult.DecisionNeeded(
+    static ExecutionResult decisionNeeded(String question, List<String> options) {
+        ExecutionResult.decisionNeeded(
                 UntrustedText.agent(question),
                 options.collect { UntrustedText.agent(it) },
                 ExecutorUsage.none(),
@@ -89,12 +90,15 @@ class DecisionNeededSpec extends Specification {
     //     while the round IS recorded (its executor usage, no check results — FR13).
     // Scenario: pipeline/stage-engine / Undecidable choice
     // Scenario: pipeline/stage-engine / Round result is explicit
+    // FR7 of define-executor-contract: the decision request is a completed result carrying a
+    //     decision-request answer, routed exactly as the former DecisionNeeded result was.
+    // Scenario: pipeline/stage-engine / Decision request routes as before
     def "a DecisionNeeded round escalates without burning an attempt and records the round"() {
         given: 'a stage whose executor asks a human instead of completing'
         def stageDef = stage('build', 5, [builtin('files_exist')])
         def usage = ExecutorUsage.none()
         def trace = new ToolTrace(new AttemptKey('TASK-1', 'build', 0), [])
-        executor.scripted << new ExecutionResult.DecisionNeeded(UntrustedText.agent('which db?'), [
+        executor.scripted << ExecutionResult.decisionNeeded(UntrustedText.agent('which db?'), [
             UntrustedText.agent('postgres'),
             UntrustedText.agent('mysql')
         ], usage, trace, [])
@@ -117,7 +121,9 @@ class DecisionNeededSpec extends Specification {
         and: 'the recorded round carries the executor usage with empty check results (FR13)'
         def round = finalState.attempts()[0]
         round.round() == 0
-        round.executorUsage().is(usage)
+        round.usage() == [
+            Participants.transform(round.usage()[0].executor(), usage)
+        ]
         round.checkResults().isEmpty()
 
         and: 'the round result is explicitly DECISION_NEEDED, not inferred from the empty check list (FR13, D5)'

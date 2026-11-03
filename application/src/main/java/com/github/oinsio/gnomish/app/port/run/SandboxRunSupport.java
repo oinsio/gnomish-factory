@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
+import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
@@ -60,6 +61,19 @@ public interface SandboxRunSupport {
      * to run (FR6).
      */
     void reattachFor(String stage);
+
+    /**
+     * The task's live box for {@code stage}, made live as {@link #reattachFor} makes it: the
+     * environment the describe preflight runs a declared program executor in, after the box is live
+     * and before the engine (design D5 of define-executor-contract). The first round of the same
+     * stage then gets the same box, so nothing is materialized twice.
+     *
+     * <p>Implements FR4, FR13 of define-executor-contract.
+     *
+     * @param stage the stage the engine runs first; never blank
+     * @return the live environment; never null
+     */
+    TaskExecutionEnvironment liveEnvironment(String stage);
 
     /**
      * Commits the interrupted round's uncommitted leftovers in-box, as-is and unrecorded (FR6). A

@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -51,7 +52,7 @@ class StatusFromAnotherTerminalSpec extends Specification implements SeededClone
     def "FR13: status of a task another process is mid-round on prints the last round commit and mutates nothing"() {
         given: 'a task with one committed round, its worker now mid-round with uncommitted work'
         persistRound('LIVE-1', TaskState.atStageStart('implement').recordUnburnedRound(
-                        round(0, AttemptRecord.Result.PASSED, 500, 100)))
+                        round(0, AttemptRecord.Result.PASSED, 500, 100), ExecutorVersions.none()))
         def worktree = worktreeFor('LIVE-1')
         Files.writeString(worktree.resolve('half-written.txt'), 'the next round, unfinished')
         Files.writeString(worktree.resolve('.gnomish-task/state.json'), '{ "being": "rewritten"')

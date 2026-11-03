@@ -179,11 +179,21 @@ class StageDefinitionSpec extends Specification {
         model << ['', '   ']
     }
 
+    // FR9 of define-executor-contract: the executor declaration a stage names rides the
+    //     Mechanism; the shorter constructors name none
+    def "Executor carries the named executor declaration, defaulting to none"() {
+        expect:
+        new StageDefinition.Executor(ExecutorType.PROGRAM, '', [:], Sandbox.none(), 'acme').name() == 'acme'
+        new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:], Sandbox.none()).name() == null
+        new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]).name() == null
+    }
+
     // FR2/D5a: the domain enums are closed and pure — the yaml wire values
-    // ('api'/'agent-cli', 'auto'/'manual') are the adapter's mapping concern
+    // ('api'/'agent-cli'/'program', 'auto'/'manual') are the adapter's mapping concern;
+    // PROGRAM is FR10 of define-executor-contract
     def "the executor-type and advancement-mode enums are closed"() {
-        expect: 'each enum holds exactly its two contract values'
-        ExecutorType.values()*.name() == ['API', 'AGENT_CLI']
+        expect: 'each enum holds exactly its contract values'
+        ExecutorType.values()*.name() == ['API', 'AGENT_CLI', 'PROGRAM']
         AdvancementMode.values()*.name() == ['AUTO', 'MANUAL']
     }
 

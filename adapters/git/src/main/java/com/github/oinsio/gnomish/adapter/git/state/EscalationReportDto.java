@@ -1,22 +1,24 @@
 package com.github.oinsio.gnomish.adapter.git.state;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code task.json} contract's escalation-report shape, used both nested
  * inside {@link TaskOutcomeDto.Escalated#report()} and standalone as the
- * top-level {@code lastEscalation} field (FR5): one of the five {@link
+ * top-level {@code lastEscalation} field (FR5): one of the six {@link
  * com.github.oinsio.gnomish.domain.engine.EscalationReport} kinds, mirrored
  * 1:1 — {@link AttemptsExhausted}, {@link DecisionNeeded}, {@link CannotVerify},
- * {@link PipelineMismatch}, {@link CannotExecute}.
+ * {@link PipelineMismatch}, {@link CannotExecute}, {@link BudgetExhausted}.
  *
  * <p>Uses {@link JsonTypeInfo.As#PROPERTY} rather than {@code EXISTING_PROPERTY}
  * — see {@link TaskOutcomeDto}'s type-level note for why this contract cannot
  * reuse {@code status.json}'s {@code EXISTING_PROPERTY} idiom.
  *
- * <p>Implements FR3, FR4 of add-git-workflow.
+ * <p>Implements FR3, FR4 of add-git-workflow; FR7 of define-executor-contract.
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 @JsonSubTypes({
@@ -24,7 +26,8 @@ import java.util.List;
     @JsonSubTypes.Type(value = EscalationReportDto.DecisionNeeded.class, name = "decisionNeeded"),
     @JsonSubTypes.Type(value = EscalationReportDto.CannotVerify.class, name = "cannotVerify"),
     @JsonSubTypes.Type(value = EscalationReportDto.PipelineMismatch.class, name = "pipelineMismatch"),
-    @JsonSubTypes.Type(value = EscalationReportDto.CannotExecute.class, name = "cannotExecute")
+    @JsonSubTypes.Type(value = EscalationReportDto.CannotExecute.class, name = "cannotExecute"),
+    @JsonSubTypes.Type(value = EscalationReportDto.BudgetExhausted.class, name = "budgetExhausted")
 })
 public sealed interface EscalationReportDto {
 
@@ -56,12 +59,35 @@ public sealed interface EscalationReportDto {
     record CannotVerify(String type, String check, String reason, String details) implements EscalationReportDto {}
 
     /**
-     * The recorded position named a stage absent from the current pipeline.
+     * The recorded task no longer matches the run: exactly one of the two causes is present, the
+     * other absent from the document (each omitted when null, so a stale-stage report written before
+     * the executor cause existed keeps its bytes).
      *
      * @param type the discriminator, always {@code "pipelineMismatch"}
-     * @param staleStage the recorded stage name absent from the pipeline
+     * @param staleStage the recorded stage name absent from the pipeline, or null
+     * @param executorVersion the executor whose describe version changed since the pin, or null (FR13
+     *     of define-executor-contract)
      */
-    record PipelineMismatch(String type, String staleStage) implements EscalationReportDto {}
+    record PipelineMismatch(
+            String type,
+
+            @JsonInclude(JsonInclude.Include.NON_NULL) @Nullable
+            String staleStage,
+
+            @JsonInclude(JsonInclude.Include.NON_NULL) @Nullable
+            ExecutorVersion executorVersion)
+            implements EscalationReportDto {}
+
+    /**
+     * An executor whose describe version differs from the version the task pinned (FR13 of
+     * define-executor-contract). Not a kind: the {@code executorVersion} cause of {@link
+     * PipelineMismatch}.
+     *
+     * @param executor the executor's law name
+     * @param recorded the version the task's pin carries
+     * @param current the version the run's describe preflight obtained
+     */
+    record ExecutorVersion(String executor, String recorded, String current) {}
 
     /**
      * An executor infrastructure failure prevented running the stage.
@@ -86,4 +112,13 @@ public sealed interface EscalationReportDto {
             denials = StateDenialMapper.absentAsEmpty(denials);
         }
     }
+
+    /**
+     * A round ended {@code failed/limit}: a bound of the stage was reached (FR7 of
+     * define-executor-contract).
+     *
+     * @param type the discriminator, always {@code "budgetExhausted"}
+     * @param bound the text naming the bound that was reached
+     */
+    record BudgetExhausted(String type, String bound) implements EscalationReportDto {}
 }

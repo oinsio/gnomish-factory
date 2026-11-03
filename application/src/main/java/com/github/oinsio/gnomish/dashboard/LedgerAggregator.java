@@ -21,9 +21,11 @@ import org.jspecify.annotations.Nullable;
 /**
  * Aggregates the last N daily ledger files into the dashboard's history-
  * section view model (task 1.3): per-day {@code taskOutcome} counts and
- * window-total tokens-by-model. Other {@link
+ * window-total tokens-by-model with their grand total. Other {@link
  * com.github.oinsio.gnomish.serveobservability.LedgerLine} variants ({@code
- * lifecycle}, {@code runSummary}) are ignored. Reuses {@link
+ * lifecycle}, {@code runSummary}, and the per-round {@code roundOutcome} line of
+ * define-executor-contract, NFR-O2, UX3) are ignored: the day view sums the
+ * {@code taskOutcome} snapshots only, so a round is never counted twice. Reuses {@link
  * LedgerLineReader} for the torn-last-line tolerance (NFR-R2 of
  * add-serve-observability) — a malformed non-tail line still surfaces as an
  * {@link IOException}, unweakened; a day whose ledger file does not exist
@@ -80,7 +82,20 @@ public final class LedgerAggregator {
             List<JsonNode> lines = reader.read(file);
             perDay.add(dayRow(date, lines, tokensByModel));
         }
-        return new LedgerHistoryView(perDay, tokensByModel);
+        return new LedgerHistoryView(perDay, tokensByModel, grandTotal(tokensByModel));
+    }
+
+    /** The card's grand total, summed here so the renderer adds nothing (D10); overflow fails loudly. */
+    private static long grandTotal(Map<String, LedgerTokenUsage> tokensByModel) {
+        long total = 0L;
+        for (LedgerTokenUsage usage : tokensByModel.values()) {
+            total = Math.addExact(
+                    total,
+                    Math.addExact(
+                            Math.addExact(usage.input(), usage.output()),
+                            Math.addExact(usage.cacheCreation(), usage.cacheRead())));
+        }
+        return total;
     }
 
     private static DayOutcomeCounts dayRow(
@@ -164,11 +179,9 @@ public final class LedgerAggregator {
     }
 
     /**
-     * Maps a raw {@code taskOutcome.outcome} value to its {@link TaskOutcome}, or
-     * {@code null} when the value is missing or unrecognized. Returning {@code null}
-     * (rather than throwing) lets {@link #dayRow} skip the offending line and
-     * keep the window intact — a forward-compatible outcome from a newer factory
-     * version must never crash the dashboard render (FR6, NFR-R1 of add-dashboard-page).
+     * The {@link TaskOutcome} a raw {@code taskOutcome.outcome} names, or {@code null} when missing
+     * or unrecognized, so {@link #dayRow} skips the line and a newer version's outcome never crashes
+     * the render (FR6, NFR-R1 of add-dashboard-page).
      */
     private static @Nullable TaskOutcome parseOutcome(@Nullable String outcome) {
         if (outcome == null) {

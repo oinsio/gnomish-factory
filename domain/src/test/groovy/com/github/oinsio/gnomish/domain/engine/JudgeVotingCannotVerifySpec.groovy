@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 
 /**
  * JudgeVoting, task 4.4 — the CannotVerify short-circuit and defensive-copy behavior
@@ -75,7 +76,10 @@ class JudgeVotingCannotVerifySpec extends JudgeVotingSpecBase {
 
         then: 'the check is CannotVerify and both cast votes token maps are accounted, in order'
         result.verdict() instanceof Verdict.CannotVerify
-        result.perVote() == [t1, t2]
+        result.perVote() == [
+            Unpriced.of(t1),
+            Unpriced.of(t2)
+        ]
 
         and: 'no further vote was cast'
         voter.voteCount == 2
@@ -90,7 +94,7 @@ class JudgeVotingCannotVerifySpec extends JudgeVotingSpecBase {
 
         when: 'the check runs and its perVote list is mutated'
         def result = voting(voter).vote(judge(1), CONTEXT, WORKSPACE)
-        result.perVote().add(['model-b': new TokenUsage(2, 2, 0, 0)])
+        result.perVote().add(Unpriced.of(['model-b': new TokenUsage(2, 2, 0, 0)]))
 
         then: 'the copy rejects mutation'
         thrown(UnsupportedOperationException)

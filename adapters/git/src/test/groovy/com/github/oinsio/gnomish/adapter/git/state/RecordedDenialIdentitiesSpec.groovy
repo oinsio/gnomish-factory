@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.adapter.git.state
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.DenialIdentity
+import com.github.oinsio.gnomish.executorcontract.usagewire.UsageCostDto
+import com.github.oinsio.gnomish.executorcontract.usagewire.UsageSnapshotDto
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
 
@@ -19,14 +21,13 @@ class RecordedDenialIdentitiesSpec extends Specification {
 
     private static StateJsonDto stateWith(List<StateDenialDto> denials) {
         new StateJsonDto(1, new StatePositionDto.AtStage('atStage', 'build'), 1, [
-            new StateAttemptDto(0, 'passed', '2026-08-19T10:00:00Z', [], denials,
-            emptyUsage(), new StateJudgeUsageDto([]), null)
-        ], emptyUsage(), null)
+            new StateAttemptDto('T-1', 'build', null, 0, 'passed', '2026-08-19T10:00:00Z', [], denials, [], null)
+        ], emptyTotals(), null, null)
     }
 
-    /** The usage components this package declares non-null, with nothing recorded in them. */
-    private static StateUsageDto emptyUsage() {
-        new StateUsageDto(null, [:], [])
+    /** The totals component this package declares non-null, with nothing recorded in it. */
+    private static UsageSnapshotDto emptyTotals() {
+        new UsageSnapshotDto([:], new UsageCostDto(BigDecimal.ZERO, [:], true), 0, null)
     }
 
     private static TaskJsonDto taskWith(EscalationReportDto escalation) {

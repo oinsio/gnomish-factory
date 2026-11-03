@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.e2e
 
-import static com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages.round
 import static com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages.taskEvent
 import static com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent.APPROVED
 import static com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent.COMPLETED
@@ -12,6 +11,8 @@ import static com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent.STARTED
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
 import com.github.oinsio.gnomish.app.TerminalOutcomeRender
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import java.nio.file.Path
 
 /**
@@ -78,7 +79,7 @@ class ReferenceE2ESessionSpec extends AbstractE2eProcessSpec {
         and: 'FR1: the escalation is parked on the branch before the exit'
         pushedSubjects(clone) == [
             taskEvent(STARTED),
-            round('work', 0),
+            roundSubject('work', 0),
             taskEvent(ESCALATED)
         ]
 
@@ -95,8 +96,8 @@ class ReferenceE2ESessionSpec extends AbstractE2eProcessSpec {
         and: 'the decision resume reset the attempts, round 0 failed the command check, the retry passed, and the pause is parked'
         pushedSubjects(clone).drop(3) == [
             taskEvent(RESUMED),
-            round('work', 0),
-            round('work', 1),
+            roundSubject('work', 0),
+            roundSubject('work', 1),
             taskEvent(PAUSED)
         ]
 
@@ -146,6 +147,10 @@ class ReferenceE2ESessionSpec extends AbstractE2eProcessSpec {
     }
 
     /** @return the subjects of the task branch's commits on the bare origin, oldest first, above {@code main} */
+    private static String roundSubject(String stage, int round) {
+        ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey(TASK, stage, round)))
+    }
+
     private static List<String> pushedSubjects(Path clone) {
         E2eGitTree.git(clone.resolveSibling('origin.git'), 'log', '--reverse', '--format=%s', '--branches', '--not', 'main')
                 .readLines()

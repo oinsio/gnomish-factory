@@ -40,7 +40,7 @@ SHALL be infrastructure regardless of class.
 A resuming instance SHALL read the persisted key and continue with `poll(key)`; it SHALL NOT
 call `start` again. A persisted key for an executor that no longer declares `poll` SHALL be an
 infrastructure failure.
-**Implements**: FR3, NFR-R1, UX3 of migrate-verify-to-executor-contract
+**Implements**: FR3, NFR-R1, NFR-R4, UX3 of migrate-verify-to-executor-contract
 
 #### Scenario: Kill between start and persist re-drives start
 - **WHEN** the factory is killed after `start` returned `pending` and before the key commit
@@ -54,6 +54,26 @@ infrastructure failure.
 #### Scenario: Second recovery is a no-op
 - **WHEN** recovery runs on a branch whose poll already resolved
 - **THEN** nothing is re-polled and the state is unchanged
+
+#### Scenario: Kill after the terminal poll re-polls the persisted key
+- **WHEN** the factory is killed after a `poll` returned a terminal status and before the attempt record carrying the verdict was pushed
+- **THEN** the resuming instance polls the persisted key again, makes no `start` call, and resolves the check with the terminal result that poll returns
+
+### Requirement: A changed pending key is persisted before the next poll
+When a `poll` returns `pending` with a key different from the recorded one, the engine SHALL
+persist the new key in the pending record, in one commit with its register, pushed, before the
+next `poll`. This SHALL hold for every pending record the engine's one pending-poll owner holds,
+whatever its subject. A pickup SHALL poll the key the registered commit records.
+**Implements**: FR10, NFR-R4 of migrate-verify-to-executor-contract
+**Notes**: `extract-agent-round-runner` reuses this requirement for a pending `transform` round (its FR12); it adds no second one.
+
+#### Scenario: New key lands before the next poll
+- **WHEN** a poll returns `pending` with a new key
+- **THEN** the registered commit carries the new key before the next `poll` call is made
+
+#### Scenario: Kill before the new key lands polls the previous key
+- **WHEN** the factory is killed after a poll returned a new key and before its commit was pushed
+- **THEN** the resuming instance polls the previous key, makes no `start` call, and a refusal of that key is `failed/infrastructure` naming the key, never a silent restart
 
 ### Requirement: Poll observability
 Each `poll` SHALL log executor, key prefix, elapsed and remaining time under the task's MDC; the

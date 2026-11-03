@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
+import com.github.oinsio.gnomish.app.lease.HeartbeatProgress
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -17,12 +18,14 @@ import com.github.oinsio.gnomish.app.take.TerminalTransitions
 import com.github.oinsio.gnomish.app.take.TerminalWriteRetry
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Decision
+import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -88,6 +91,39 @@ class SlotWiringFactorySpec extends Specification implements RunChainFakes {
         wiring.abort().threshold() == 5
         wiring.credentialEnvVarsToScrub() == ['GNOMISH_GITHUB_TOKEN']
         wiring.trustedBase().is(DEFAULT_TRUSTED_BASE)
+    }
+
+    // NFR-O2, UX3 of define-executor-contract: a ledger-keeping command's slots fan every engine
+    //     event into the heartbeat's progress AND the round ledger listener it hands in
+    def "a wiring with a round ledger fans the slot's events into the heartbeat progress and the ledger"() {
+        given:
+        def plain = Mock(RunAssembly)
+        def listened = Stub(RunAssembly) {
+            withPipelineSource(_) >> Stub(RunAssembly) {
+                timeEquipment() >> VirtualTimeEquipment.create()
+            }
+        }
+        def tracker = Stub(Tracker)
+        def bound = new BoundTracker(pipeline(), DEFAULT_TRUSTED_BASE, CONFIG, Stub(TrackerAdapterFactory), tracker, INSTANCE)
+        def git = new TaskGit(Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), new ClaimEpochBook())
+        def heartbeat = TakeHeartbeat.forRun(tracker, CONFIG, VirtualTimeEquipment.on(FIXED_CLOCK, { Duration d -> } as Sleeper))
+        def factory = new SlotWiringFactory(plain, RegisteredCloneFixture.provider(CLONE), 'taskId', ContainerTakeSupportFixture.hostOnly(), Stub(PipelineSource))
+        def ledgered = []
+        EngineEventListener slotListener = null
+
+        when:
+        def wiring = factory.slotWiring(bound, git, heartbeat, { e ->
+            ledgered << e
+        } as EngineEventListener)
+        slotListener.onEvent(new EngineEvent.AttemptStarted(new AttemptKey('TASK-1', 'build', 0)))
+
+        then:
+        1 * plain.withExtraListener(_) >> { EngineEventListener l ->
+            slotListener = l; listened
+        }
+        wiring != null
+        ledgered*.class == [EngineEvent.AttemptStarted]
+        heartbeat.progress().progressFor('TASK-1') == new HeartbeatProgress.Progress('build', 0)
     }
 
     // FR18, FR22 of supervise-daemon-loops-and-embed-dashboard (design D22, the identity of the

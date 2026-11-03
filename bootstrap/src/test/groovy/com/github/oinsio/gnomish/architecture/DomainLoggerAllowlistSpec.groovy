@@ -27,7 +27,7 @@ class DomainLoggerAllowlistSpec extends Specification {
     private static final List<String> ALLOWED = [
         'AttemptJournal',
         'Events',
-        'RoundExecution',
+        'RoundFailures',
         'VerifyOrchestrator'
     ]
 

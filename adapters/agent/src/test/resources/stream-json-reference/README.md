@@ -27,9 +27,10 @@ exact strip/keep contract — change `harden-reference-dump-scrubber`)
 strips: workspace and home paths, the macOS `/private/var/folders/…` temp
 hash and per-uid `/private/tmp/claude-<uid>/…` dir (and their dashed
 project-dir encoding) → `/workspace-scrubbed`; real session ids →
-`ref-session-<label>-1`; cost (`total_cost_usd`, every `costUSD`); the
-`permission_denials` array (raw tool inputs); every `uuid`/`request_id`.
-It keeps: resolved model ids, all token/cache counts, durations, API
+`ref-session-<label>-1`; the `permission_denials` array (raw tool inputs);
+every `uuid`/`request_id`. It keeps: resolved model ids, all token/cache
+counts and the cost figures beside them (`total_cost_usd`, every `costUSD`
+— kept since `define-executor-contract`, FR22), durations, API
 message ids and the `tool_use_id` linkage, `result` text, event shape,
 and opaque per-run tokens (`agentId`, `task_id`) that carry no machine or
 user identity. `ReferenceDumpHygieneSpec` is the always-on regression
@@ -46,9 +47,9 @@ catch.
 
 | File                                        | Exercises                                                                                                                                                                        |
 |---------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `plain-round.reference.json`                | a multi-model round: init, top-level `Read`/`Write`/`Bash` calls with repeat counts, final text, `result` with both flat `usage` and a multi-entry `modelUsage`                  |
-| `subagent-round.reference.json`             | a top-level `Agent` call delegating to a subagent: nested events carry `parent_tool_use_id` (excluded from the top-level trace), `result.modelUsage` reports two distinct models |
-| `judge-verdict.reference.json`              | a judge-shaped round: read-only tool calls (`Grep`, `Read`), final message is a fenced JSON verdict (`{"passed": true, ...}`)                                                    |
+| `plain-round.reference.json`                | a plain round: init, top-level `Read`/`Write` calls, final text, `result` with flat `usage`, `modelUsage` and cost (`costUSD`, `total_cost_usd`)                                |
+| `subagent-round.reference.json`             | a top-level `Agent` call delegating to a subagent: nested events carry `parent_tool_use_id` (excluded from the top-level trace); the subagent ran on the main model, so `modelUsage` has one entry |
+| `judge-verdict.reference.json`              | a judge-shaped round: a read-only tool call (`Read`), final message is a fenced JSON verdict (`{"passed": true, ...}`)                                                         |
 | `result-without-model-usage.reference.json` | hand-authored: a `result` event carrying only the flat `usage` field — `modelUsage` omitted entirely, exercising the fallback-to-init-model path                                 |
 
 ## Distinction from `fake-agent/scenarios/`

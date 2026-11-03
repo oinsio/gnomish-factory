@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
+import com.github.oinsio.gnomish.domain.engine.MismatchCause
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
@@ -103,7 +104,7 @@ class TakeEscalationExitSpec extends Specification {
         kind | escalationReport
         'CannotVerify' | new EscalationReport.CannotVerify(new CheckRef(0, UntrustedText.manifest('command:test')), UntrustedText.subprocess('timed out'), UntrustedText.subprocess(''))
         'CannotExecute' | new EscalationReport.CannotExecute(UntrustedText.subprocess('executor crashed'), [])
-        'PipelineMismatch' | new EscalationReport.PipelineMismatch(UntrustedText.branchDocument('old-stage'))
+        'PipelineMismatch' | new EscalationReport.PipelineMismatch(new MismatchCause.StaleStage(UntrustedText.branchDocument('old-stage')))
     }
 
     // FR7 of add-claim-heartbeat: the park write is git-unfenced, so a claim reaped/taken over

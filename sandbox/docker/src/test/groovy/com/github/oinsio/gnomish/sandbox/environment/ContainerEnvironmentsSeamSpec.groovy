@@ -25,7 +25,7 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
     private ContainerEnvironments factoryBuilt(OwnershipMode mode, ChildEnvAllowlist allowlist) {
         new ContainerEnvironmentFactory(sandbox, timing, Path.of('/factory/guard-config'), mode).forTask(
                 KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), allowlist, 'proj-1',
-                { -> DenialRestoration.none() })
+                { -> DenialRestoration.none() }, [])
     }
 
     // FR19 of make-checkpoint-gate-durable: the app-layer assemblies construct through the
@@ -76,7 +76,7 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
         new ContainerEnvironments(
                 new BoxEquipment(docker, sandbox, timing, Path.of('/factory/guard-config'), OwnershipMode.MANUAL, ImageContractCheck.current()),
                 KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), ChildEnvAllowlist.none(), 'proj-1',
-                { -> DenialRestoration.none() })
+                { -> DenialRestoration.none() }, [])
                 .ownershipMode() == OwnershipMode.MANUAL
     }
 

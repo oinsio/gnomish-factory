@@ -132,7 +132,8 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
                 } as ContainerHarvest),
                 ChildEnvAllowlist.none(),
                 projectId,
-                restoration)
+                restoration,
+                [])
     }
 
     /** Reads a fake-agent scenario's scripted stream from the {@code fake-agent} resources beside this fixture. */

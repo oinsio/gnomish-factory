@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
@@ -39,7 +40,7 @@ class HostRoundEnvelopeSpec extends Specification implements RegisteredRoundFixt
     }
 
     private static void persistRound(def persistence, int attempt) {
-        persistence.persist(TASK, TaskState.atStageStart('implement'), new ToolTrace(new AttemptKey(TASK, 'implement', attempt), []))
+        persistence.persist(TASK, RoundStates.recorded(new ToolTrace(new AttemptKey(TASK, 'implement', attempt), []).key()), new ToolTrace(new AttemptKey(TASK, 'implement', attempt), []))
     }
 
     // Scenario: git/git-task-persistence / An uncommitted envelope edit does not ride the host round commit
@@ -138,7 +139,7 @@ class HostRoundEnvelopeSpec extends Specification implements RegisteredRoundFixt
                 new ScriptedRestoreFailure(runner), worktree(), TASK, ClaimEpochSource.NONE)
 
         when:
-        persistence.persist(TASK, TaskState.atStageStart('implement'), new ToolTrace(new AttemptKey(TASK, 'implement', 1), []))
+        persistence.persist(TASK, RoundStates.recorded(new ToolTrace(new AttemptKey(TASK, 'implement', 1), []).key()), new ToolTrace(new AttemptKey(TASK, 'implement', 1), []))
 
         then:
         def failure = thrown(GitPersistFailedException)

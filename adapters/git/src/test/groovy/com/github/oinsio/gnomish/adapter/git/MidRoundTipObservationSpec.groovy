@@ -53,7 +53,7 @@ class MidRoundTipObservationSpec extends Specification implements PlumbingCommit
                 env,
                 new HarvestAdmission(new GitProcessRunner(gitFailingOn(tempDir, 'rev-parse').toString()), clone),
                 gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH),
-                AdmissionRule.midRound(new com.github.oinsio.gnomish.domain.engine.AttemptKey('PROJ-9', 'implement', 0), com.github.oinsio.gnomish.app.port.git.RoundToken.of('a' * 40)),
+                AdmissionRule.midRound(new com.github.oinsio.gnomish.domain.engine.AttemptKey('PROJ-9', 'implement', 0), com.github.oinsio.gnomish.domain.engine.RoundToken.of('a' * 40)),
                 clock,
                 Duration.ofSeconds(30),
                 new MidRoundPollContext('PROJ-9', BRANCH, suppressor))

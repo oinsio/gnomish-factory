@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/oinsio/gnomish-factory/schemas/executor-contract/1/executor-answer.schema.json",
+  "title": "Executor answer",
+  "description": "The optional structured answer of a result, written to the factory-named GNOMISH_ANSWER_FILE or carried in the result's answer slot, and read through the one capped result reader. A malformed answer is never read as a pass. Unknown-token arm: an unknown kind is a malformed answer (failed/infrastructure for transform, cannot-verify for verdict). Readers ignore unknown properties. Implements FR3, NFR-S2 of define-executor-contract.",
+  "type": "object",
+  "required": ["kind"],
+  "properties": {
+    "kind": { "enum": ["verdict", "select", "decision-request"] }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/verdict" },
+    { "$ref": "#/$defs/select" },
+    { "$ref": "#/$defs/decisionRequest" }
+  ],
+  "$defs": {
+    "verdict": {
+      "description": "Findings as a SARIF 2.1.0 log. The executor declares no pass: the engine derives pass or fail from the result levels against the check's threshold.",
+      "type": "object",
+      "required": ["kind", "sarif"],
+      "properties": {
+        "kind": { "const": "verdict" },
+        "sarif": { "$ref": "#/$defs/sarifLog" }
+      }
+    },
+    "sarifLog": {
+      "description": "The subset of SARIF 2.1.0 the engine reads: runs[].results[] with their level and message. Every other SARIF property is allowed and ignored.",
+      "type": "object",
+      "required": ["version", "runs"],
+      "properties": {
+        "version": { "const": "2.1.0" },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tool", "results"],
+            "properties": {
+              "tool": {
+                "type": "object",
+                "required": ["driver"],
+                "properties": {
+                  "driver": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } }
+                }
+              },
+              "results": { "type": "array", "items": { "$ref": "#/$defs/sarifResult" } }
+            }
+          }
+        }
+      }
+    },
+    "sarifResult": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {
+        "ruleId": { "type": "string" },
+        "level": {
+          "description": "SARIF's level; absent means warning, as SARIF 2.1.0 defines.",
+          "enum": ["none", "note", "warning", "error"]
+        },
+        "message": {
+          "type": "object",
+          "required": ["text"],
+          "properties": { "text": { "type": "string" } }
+        },
+        "locations": { "type": "array" }
+      }
+    },
+    "select": {
+      "description": "The option chosen among those the request offered, with an optional ranking of all of them.",
+      "type": "object",
+      "required": ["kind", "chosen"],
+      "properties": {
+        "kind": { "const": "select" },
+        "chosen": { "type": "string", "minLength": 1 },
+        "ranking": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "rationale": { "type": "string" }
+      }
+    },
+    "decisionRequest": {
+      "description": "A question the executor cannot answer itself; a request with fewer than two options is malformed.",
+      "type": "object",
+      "required": ["kind", "question", "options"],
+      "properties": {
+        "kind": { "const": "decision-request" },
+        "question": { "type": "string", "minLength": 1 },
+        "options": { "type": "array", "minItems": 2, "items": { "type": "string", "minLength": 1 } },
+        "continuationKey": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "examples": [
+    {
+      "kind": "verdict",
+      "sarif": {
+        "version": "2.1.0",
+        "runs": [
+          {
+            "tool": { "driver": { "name": "example-judge" } },
+            "results": [
+              { "ruleId": "javadoc", "level": "warning", "message": { "text": "Foo.bar has no javadoc" } }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "select",
+      "chosen": "main",
+      "ranking": ["main", "release/1.x"],
+      "rationale": "The task names no release line."
+    },
+    {
+      "kind": "decision-request",
+      "question": "Should the public API keep the deprecated overload?",
+      "options": ["keep it", "remove it"],
+      "continuationKey": "k-7f3a"
+    }
+  ]
+}

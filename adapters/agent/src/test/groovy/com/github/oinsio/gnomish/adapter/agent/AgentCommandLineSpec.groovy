@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
@@ -44,16 +43,12 @@ class AgentCommandLineSpec extends Specification {
     }
 
     private List<String> executorArgv() {
-        try {
-            ExecutorRoundExecution.run(
-                    equipment(),
-                    new DecisionFileReader(),
-                    StageExecutorRequests.request(workspaceDir),
-                    'prompt',
-                    new StandInRound(recordingEnvironment(), workspaceDir.resolve('decision.json')))
-        } catch (ExecutorFailure ignored) {
-            // the interrupted wait fails the round; the launched command was already captured
-        }
+        // the interrupted wait fails the round as its result; the launched command was already captured
+        ExecutorRoundExecution.run(
+                equipment(),
+                StageExecutorRequests.request(workspaceDir),
+                'prompt',
+                new StandInRound(recordingEnvironment(), workspaceDir.resolve('decision.json')))
         assert launched.size() == 1
         launched.first().command()
     }

@@ -8,8 +8,10 @@ import com.github.oinsio.gnomish.app.serve.ForwardingDirtyNotifier
 import com.github.oinsio.gnomish.app.serve.SlotLedger
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.fake.InterruptOnlySleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -104,7 +106,7 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
         when:
         def observability = builders.observability(INSTANCE, new ForwardingDirtyNotifier(), sources)
         observability.taskOutcomeLedgerWriter().write(ref, new TakeResult.Delivered(
-                        new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none()), 'done'))
+                        new TaskState(new Position.PipelineEnd(), 1, [], UsageSnapshot.EMPTY, ExecutorVersions.none()), 'done'))
 
         then:
         def ledgerFile = ObservabilityPaths.ledgerFile(
@@ -120,7 +122,7 @@ class ServeAssemblyEquipmentSpec extends Specification implements RunChainFakes 
     def "FR10 of add-project-registry: two projects with the default instance name write to separate serve directories"() {
         given: 'daemons for projects widgets and gateway, both with the default instance name'
         def ref = new TaskRef('github:o/r#1')
-        def delivered = new TakeResult.Delivered(new TaskState(new Position.PipelineEnd(), 1, [], ExecutorUsage.none()), 'done')
+        def delivered = new TakeResult.Delivered(new TaskState(new Position.PipelineEnd(), 1, [], UsageSnapshot.EMPTY, ExecutorVersions.none()), 'done')
         def widgetsLedger = new SlotLedger(1, clock)
         def gatewayLedger = new SlotLedger(1, clock)
         [widgetsLedger, gatewayLedger].each { it.acquire(); it.assign(ref) }

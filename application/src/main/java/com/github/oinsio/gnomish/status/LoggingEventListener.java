@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.status;
 
 import com.github.oinsio.gnomish.domain.engine.EngineEvent;
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.logtext.LogText;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,11 +37,14 @@ import org.slf4j.LoggerFactory;
  * itself, so — like {@link MdcEventListener} and {@link StatusEventListener} — this class needs no
  * defensive exception handling to satisfy the port's "never throw past {@code onEvent}" contract.
  *
- * <p>Implements NFR-O2 of add-manual-run.
+ * <p>Implements NFR-O2 of add-manual-run; NFR-O2, UX3 of define-executor-contract.
  */
 public final class LoggingEventListener implements EngineEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(LoggingEventListener.class);
+
+    /** How the round line spells a value the round has none of. */
+    private static final String ABSENT = "-";
 
     /**
      * Logs one structured INFO line for {@code event}, with content specific to its kind, by an
@@ -58,7 +61,7 @@ public final class LoggingEventListener implements EngineEventListener {
             case EngineEvent.RunStarted started ->
                 log.info("run started: position={}, attemptsUsed={}", started.position(), started.attemptsUsed());
             case EngineEvent.AttemptStarted started -> log.info("attempt started: {}", started.key());
-            case EngineEvent.ExecutionFinished finished -> logExecutionFinished(finished.usage());
+            case EngineEvent.ExecutionFinished finished -> logExecutionFinished(finished);
             case EngineEvent.CheckStarted started ->
                 log.info("check started: {}", started.check().label().forLog());
             case EngineEvent.CheckFinished finished ->
@@ -76,7 +79,29 @@ public final class LoggingEventListener implements EngineEventListener {
         }
     }
 
-    private void logExecutionFinished(ExecutorUsage usage) {
-        log.info("execution finished: wallTime={}, tokensByModel={}", usage.wallTime(), usage.tokensByModel());
+    /**
+     * The round's line (NFR-O2, UX3 of define-executor-contract): the executor, the protocol version
+     * it was spoken in, the role, the status, the failure class and the bound it reached, in the
+     * words {@link RoundOutcomeWords} owns, beside the round's usage; absent values are {@code -}. The
+     * executor's version and a reported bound are its own text and leave through their log exit.
+     */
+    private void logExecutionFinished(EngineEvent.ExecutionFinished finished) {
+        var status = finished.status();
+        var bound = RoundOutcomeWords.bound(status);
+        log.info(
+                "execution finished: executor={}, protocolVersion={}, role={}, status={}, class={}, bound={},"
+                        + " wallTime={}, byModel={}",
+                RoundOutcomeWords.executorForLog(finished.executor()),
+                orDash(RoundOutcomeWords.protocolVersion(finished.executor())),
+                RoundOutcomeWords.STAGE_ROLE,
+                RoundOutcomeWords.status(status),
+                orDash(RoundOutcomeWords.failureClass(status)),
+                bound == null ? ABSENT : bound.forLog(),
+                finished.usage().wallTime(),
+                finished.usage().byModel());
+    }
+
+    private static Object orDash(@Nullable Object value) {
+        return value == null ? ABSENT : value;
     }
 }

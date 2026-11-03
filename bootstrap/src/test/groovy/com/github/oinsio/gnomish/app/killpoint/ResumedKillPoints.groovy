@@ -6,10 +6,11 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import java.time.Instant
 
 /**
@@ -75,9 +76,9 @@ final class ResumedKillPoints {
 
     /** The premise: a round that failed its check, the exhausted park delivered and receipted, the return. */
     private static TakeKillPointWorld returnedEscalation(TakeKillPointWorld world) {
-        world.roundCommit(TaskState.atStageStart('build').recordQualityFailure(new AttemptRecord(0,
+        world.roundCommit(TaskState.atStageStart('build').recordQualityFailure(AttemptRecords.of(0,
                 AttemptRecord.Result.QUALITY_FAILURE, Instant.parse('2026-10-08T09:00:00Z'), [], ExecutorUsage.none(),
-                JudgeUsage.none(), [], Stop.none())))
+                [], Stop.none()), ExecutorVersions.none()))
         world.store.recordOutcome(world.taskId, new TaskOutcome.Escalated(world.tipState(),
                 new EscalationReport.AttemptsExhausted(1)), TrackerWrite.OWED)
         world.tracker.park(world.ref, ParkReason.ESCALATION, 'stopped for a human')

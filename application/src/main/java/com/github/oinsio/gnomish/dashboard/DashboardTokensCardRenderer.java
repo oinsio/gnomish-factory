@@ -39,14 +39,12 @@ final class DashboardTokensCardRenderer {
         out.append("</section>\n");
     }
 
+    /** The heading shows the grand total {@link LedgerAggregator} summed; it adds nothing itself. */
     private static @Nullable String heading(LedgerHistoryView history, Map<String, LedgerTokenUsage> byModel) {
         if (byModel.isEmpty()) {
             return null;
         }
-        long grandTotal = 0L;
-        for (LedgerTokenUsage usage : byModel.values()) {
-            grandTotal = Math.addExact(grandTotal, total(usage));
-        }
+        long grandTotal = history.totalTokens();
         StringBuilder heading = new StringBuilder("<span class=\"num\" title=\"")
                 .append(grandTotal)
                 .append("\">")

@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  * before a validator could see and report it.
  *
  * <p>Implements FR1 of load-pipeline-config; FR17 of add-tracker-port (the
- * {@code tracker} field).
+ * {@code tracker} field); FR9 of define-executor-contract (the {@code executors} field).
  *
  * @param schemaVersion the version declared in {@code config.yaml} for the
  *     whole {@code .gnomish/} tree (FR9); supported-ness validated by task
@@ -35,15 +35,35 @@ import org.jspecify.annotations.Nullable;
  * @param tracker the core {@code tracker} section config, or {@code null}
  *     when {@code config.yaml} declares no {@code tracker} section at all
  *     (FR17 of add-tracker-port)
+ * @param executors the {@code executors:} declarations of {@code config.yaml}, in declaration
+ *     order; empty when the section is absent (FR9 of define-executor-contract); that every
+ *     stage's {@code executor.name} names one of them is {@code ExecutorReferenceRule}'s concern
  */
 public record PipelineDefinition(
         String schemaVersion,
         AutonomyLimits defaultLimits,
         List<StageDefinition> stages,
-        @Nullable TrackerConfig tracker) {
+        @Nullable TrackerConfig tracker,
+        List<ExecutorDeclaration> executors) {
 
     public PipelineDefinition {
         stages = List.copyOf(stages);
+        executors = List.copyOf(executors);
+    }
+
+    /**
+     * Convenience constructor for callers that declare no {@code executors:} section — every call
+     * site predating define-executor-contract keeps compiling unchanged, with {@link #executors()}
+     * defaulting to empty.
+     *
+     * <p>Implements FR9 of define-executor-contract.
+     */
+    public PipelineDefinition(
+            String schemaVersion,
+            AutonomyLimits defaultLimits,
+            List<StageDefinition> stages,
+            @Nullable TrackerConfig tracker) {
+        this(schemaVersion, defaultLimits, stages, tracker, List.of());
     }
 
     /**

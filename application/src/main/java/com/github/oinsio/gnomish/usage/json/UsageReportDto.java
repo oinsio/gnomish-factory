@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.usage.json;
 
+import com.github.oinsio.gnomish.executorcontract.usagewire.UsageSnapshotDto;
 import java.util.List;
 
 /**
@@ -14,6 +15,6 @@ import java.util.List;
  * @param version the mini-contract version; always {@code 1} today
  * @param taskId the tracker's original taskId
  * @param rows every reconstructed round, oldest to newest; possibly empty
- * @param totals the cumulative usage across {@code rows}
+ * @param totals the cumulative usage across {@code rows}, in the one usage wire vocabulary
  */
-public record UsageReportDto(int version, String taskId, List<UsageRowDto> rows, ExecutorUsageDto totals) {}
+public record UsageReportDto(int version, String taskId, List<UsageRowDto> rows, UsageSnapshotDto totals) {}

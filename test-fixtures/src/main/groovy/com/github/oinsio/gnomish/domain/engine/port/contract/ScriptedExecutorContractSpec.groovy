@@ -24,9 +24,9 @@ class ScriptedExecutorContractSpec extends StageExecutorContract {
         def trace = new ToolTrace(new AttemptKey('TASK-1', 'build', 0), [])
         switch (variant) {
                     case ExecutorVariant.COMPLETED ->
-                    new ExecutionResult.Completed(ExecutorUsage.none(), trace, [])
+                    ExecutionResult.completed(ExecutorUsage.none(), trace, [])
                     case ExecutorVariant.DECISION_NEEDED ->
-                    new ExecutionResult.DecisionNeeded(UntrustedText.agent('which path?'), [
+                    ExecutionResult.decisionNeeded(UntrustedText.agent('which path?'), [
                         UntrustedText.agent('a'),
                         UntrustedText.agent('b')
                     ], ExecutorUsage.none(), trace, [])

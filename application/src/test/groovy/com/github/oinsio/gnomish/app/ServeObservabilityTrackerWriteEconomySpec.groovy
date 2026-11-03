@@ -25,8 +25,10 @@ import com.github.oinsio.gnomish.app.serve.SlotRunner
 import com.github.oinsio.gnomish.app.take.TakeResult
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.fake.BudgetedVirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -145,7 +147,7 @@ class ServeObservabilityTrackerWriteEconomySpec extends Specification {
     }
 
     private static TakeResult.Delivered scriptedResult() {
-        new TakeResult.Delivered(new TaskState(new Position.AtStage('build'), 1, [], ExecutorUsage.none()), 'shipped it')
+        new TakeResult.Delivered(new TaskState(new Position.AtStage('build'), 1, [], UsageSnapshot.EMPTY, ExecutorVersions.none()), 'shipped it')
     }
 
     /** The bare {@code SlotRunner} every daemon slot ran before task 5.1: fetch, finish, nothing else. */

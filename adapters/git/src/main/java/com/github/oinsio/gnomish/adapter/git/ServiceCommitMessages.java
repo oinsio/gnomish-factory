@@ -1,7 +1,8 @@
 package com.github.oinsio.gnomish.adapter.git;
 
-import com.github.oinsio.gnomish.app.port.git.RoundToken;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
+import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
 
 /**
  * Formats the service commit-message shapes the git adapter uses across its round
@@ -18,7 +19,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
  * the git {@code AttemptPersistence} and {@code TaskRepository} adapters pass these
  * strings as the {@code git commit -m} message.
  *
- * <p>Implements FR2 of add-git-workflow (design D14).
+ * <p>Implements FR2 of add-git-workflow (design D14); FR14 of define-executor-contract.
  */
 public final class ServiceCommitMessages {
 
@@ -35,16 +36,18 @@ public final class ServiceCommitMessages {
     private ServiceCommitMessages() {}
 
     /**
-     * The round commit message: {@code gnomish: round <stage>#<round>}.
+     * The round commit message, {@code gnomish: round <stage>#<round>}, rendered from the recorded
+     * round itself (FR14 of define-executor-contract, design D13): the record's {@code stage} — the
+     * stage that ran the round, not the stage a same-commit advance moved the position to — and its
+     * {@code round} as recorded, the attempt key's non-negative number. The subject and the record
+     * cannot spell different stages, since the subject has no other source.
      *
-     * @param stage the stage id the round belongs to; matches {@code
-     *     StatePositionDto.AtStage#stage}
-     * @param round the round's 1-based sequence number within the current stage visit;
-     *     matches {@code StateAttemptDto#round}
+     * @param record the round this commit records; its {@code stage} and {@code round} are the
+     *     subject's
      * @return the formatted commit message
      */
-    public static String round(String stage, int round) {
-        return PREFIX + "round " + stage + "#" + round;
+    public static String round(AttemptRecord record) {
+        return PREFIX + "round " + record.stage() + "#" + record.round();
     }
 
     /**
@@ -68,7 +71,7 @@ public final class ServiceCommitMessages {
      * tree ({@link GnomeRangeInspection#decisionPath}).
      *
      * @param stage the stage id the round belongs to
-     * @param round the round's 1-based sequence number within the current stage visit
+     * @param round the attempt key's non-negative number, as the round's record carries it
      * @param token the round's token, from the run's {@link com.github.oinsio.gnomish.app.port.git.CurrentRound} — never re-read here
      * @return the formatted commit message
      */

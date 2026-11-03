@@ -20,7 +20,8 @@ import org.jspecify.annotations.Nullable;
  * question, options, reason and details verbatim into the branch document, and re-mints each one
  * as branch text on the way back (design D3 of type-untrusted-text).
  *
- * <p>Implements FR5, FR10 of make-checkpoint-gate-durable (design D3, D5).
+ * <p>Implements FR5, FR10 of make-checkpoint-gate-durable (design D3, D5); FR7 of
+ * define-executor-contract.
  */
 @UntrustedExit
 final class StateStopMapper {
@@ -41,6 +42,9 @@ final class StateStopMapper {
                         cannotVerify.check().label().raw(),
                         cannotVerify.reason().raw(),
                         cannotVerify.details().raw());
+            case Stop.BudgetExhausted budgetExhausted ->
+                new StateStopDto.BudgetExhausted(
+                        "budgetExhausted", budgetExhausted.bound().raw());
         };
     }
 
@@ -60,6 +64,8 @@ final class StateStopMapper {
                         new CheckRef(0, UntrustedText.branchDocument(cannotVerify.check())),
                         UntrustedText.branchDocument(cannotVerify.reason()),
                         UntrustedText.branchDocument(cannotVerify.details()));
+            case StateStopDto.BudgetExhausted budgetExhausted ->
+                new Stop.BudgetExhausted(UntrustedText.branchDocument(budgetExhausted.bound()));
         };
     }
 

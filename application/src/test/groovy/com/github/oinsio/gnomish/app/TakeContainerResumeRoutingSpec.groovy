@@ -26,10 +26,12 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
@@ -230,7 +232,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
     // the checkpoint park, the receipt — with no box reattached and no round run.
     def "a gate whose park was lost is parked without reattaching or running"() {
         given:
-        def gated = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+        def gated = new TaskState(new Position.AwaitingApproval('build'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         def branches = Mock(TaskBranchGit) {
             ensureLocalTaskBranch(_, _) >> new BranchAdoption.AlreadyLocal('PROJ-1')
         }
@@ -260,7 +262,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
     // Scenario: tracker/tracker-take / Returned checkpoint is approved before the run continues
     def "a returned gate is approved before the run continues"() {
         given:
-        def gated = new TaskState(new Position.AwaitingApproval('build'), 0, [], ExecutorUsage.none())
+        def gated = new TaskState(new Position.AwaitingApproval('build'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
         def repository = Mock(TaskLifecycleStore)
         def calls = []
         def branches = Mock(TaskBranchGit) {

@@ -1,0 +1,7 @@
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3
+executors:
+  reference:
+    type: program
+    program: [/opt/gnomish-stand-in/reference]

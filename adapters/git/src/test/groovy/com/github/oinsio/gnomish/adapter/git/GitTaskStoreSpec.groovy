@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -84,7 +85,10 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
 
         when:
         AttemptPersistence persistence = store.attemptPersistence(worktree, 'PROJ-2')
-        persistence.persist('PROJ-2', TaskState.atStageStart('verify'), new ToolTrace(
+        persistence.persist('PROJ-2', RoundStates.recorded(new ToolTrace(
+                        new AttemptKey('PROJ-2', 'verify', 0), [
+                            new ToolCall(0, 'bash', Instant.parse('2026-07-18T10:00:00Z'), Duration.ofMillis(50))
+                        ]).key()), new ToolTrace(
                         new AttemptKey('PROJ-2', 'verify', 0), [
                             new ToolCall(0, 'bash', Instant.parse('2026-07-18T10:00:00Z'), Duration.ofMillis(50))
                         ]))
@@ -211,7 +215,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
 
         then: 'the walk reached the task branch — a state with no recorded attempts yields a Found with no rows'
         history instanceof UsageHistoryResult.Found
-        (history as UsageHistoryResult.Found).totals() != null
+        (history as UsageHistoryResult.Found).recordedTotals() != null
     }
 
     def "usageHistory reports a task with no branch as not-found rather than an empty history"() {

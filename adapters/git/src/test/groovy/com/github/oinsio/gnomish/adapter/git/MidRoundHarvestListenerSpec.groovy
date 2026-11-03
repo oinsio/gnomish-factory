@@ -72,7 +72,7 @@ class MidRoundHarvestListenerSpec extends Specification implements PlumbingCommi
             MidRoundPollContext context = new MidRoundPollContext('PROJ-9', BRANCH, suppressor),
             GitRunner admissionRunner = runner) {
         new MidRoundHarvestListener(env, new HarvestAdmission(admissionRunner, clone), gitOutput(clone, 'rev-parse', 'refs/heads/' + BRANCH),
-                AdmissionRule.midRound(new com.github.oinsio.gnomish.domain.engine.AttemptKey('PROJ-9', 'implement', 0), com.github.oinsio.gnomish.app.port.git.RoundToken.of('a' * 40)), clock, interval, context)
+                AdmissionRule.midRound(new com.github.oinsio.gnomish.domain.engine.AttemptKey('PROJ-9', 'implement', 0), com.github.oinsio.gnomish.domain.engine.RoundToken.of('a' * 40)), clock, interval, context)
     }
 
     // Scenario: git/git-task-persistence / Mid-round tip movement in a box is pushed

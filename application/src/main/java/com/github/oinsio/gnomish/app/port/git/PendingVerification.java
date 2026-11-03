@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.app.port.git;
 
+import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead;
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
+import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import java.util.Optional;
 
 /**
@@ -17,9 +20,10 @@ import java.util.Optional;
  *
  * <p>A round that asked for a decision carries its request in the snapshot's tree, at the path its
  * round token names; the detector reads it from there — a read of the durable medium, never of a
- * working copy — and hands it on raw, so the resuming executor re-raises exactly that question
- * through the same tolerant reader a live round uses, without re-running the round (FR15, NFR-R4
- * of make-checkpoint-gate-durable, design D10).
+ * working copy — through the same tolerant {@link DecisionRequestRead} a live round uses, so the
+ * resuming executor re-raises exactly the question the live round would have raised, without
+ * re-running the round (FR15, NFR-R4 of make-checkpoint-gate-durable, design D10; FR6 of
+ * define-executor-contract: recovery parses through the live path's read).
  *
  * <p>The round's token travels on the value, typed, as the snapshot subject recorded it: the
  * resuming executor {@linkplain CurrentRound#restore restores} the round from it, so the pickup's
@@ -31,8 +35,8 @@ import java.util.Optional;
  * @param round the interrupted round's number within that stage
  * @param token the identity the interrupted round opened under, from its snapshot subject; never
  *     null
- * @param request the decision request's raw content as the snapshot's tree holds it under the
- *     round's token, or empty when the round asked nothing; never null
+ * @param request the decision request the snapshot's tree holds under the round's token, read
+ *     tolerantly, or empty when the round asked nothing; never null
  */
 public record PendingVerification(
-        String attemptCommit, String stage, int round, RoundToken token, Optional<String> request) {}
+        String attemptCommit, String stage, int round, RoundToken token, Optional<RoundDecisionRequest> request) {}

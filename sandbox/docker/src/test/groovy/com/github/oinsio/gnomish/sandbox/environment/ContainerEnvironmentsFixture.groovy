@@ -34,9 +34,10 @@ trait ContainerEnvironmentsFixture {
             ChildEnvAllowlist allowlist = ChildEnvAllowlist.none(),
             Supplier<DenialRestoration> restoration = {
                 -> DenialRestoration.none()
-            }) {
+            },
+            List<String> executorEgress = []) {
         new ContainerEnvironments(
                 new BoxEquipment(docker, sandbox, timing, Path.of('/factory/guard-config'), OwnershipMode.TRACKED, ImageContractCheck.current()),
-                key, new BoxGitLink(Path.of('/factory/clone'), harvester), allowlist, 'proj-1', restoration)
+                key, new BoxGitLink(Path.of('/factory/clone'), harvester), allowlist, 'proj-1', restoration, executorEgress)
     }
 }

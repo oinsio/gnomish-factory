@@ -9,7 +9,8 @@ import org.springframework.boot.ApplicationArguments;
 
 /**
  * Parses {@code gnomish usage}'s command-line flags into a {@link UsageArguments} (task 5.6):
- * {@code --dir <clone>} (required; resolved by the configuration loader), a required positional {@code <task>} id, and {@code --json}.
+ * {@code --dir <clone>} (required; resolved by the configuration loader), a required positional {@code <task>} id, and one of {@code --json} or {@code --markdown}
+ * (FR20 of define-executor-contract).
  * Mirrors {@link StatusArgumentsParser}'s conventions closely — same {@code --dir}/positional/
  * {@code --json} idiom — except the task id is mandatory here (FR14: {@code usage} has no list
  * mode), kept as its own small class rather than a shared parser since the two commands' required-
@@ -23,10 +24,11 @@ final class UsageArgumentsParser {
 
     private static final String DIR = "dir";
     private static final String JSON = "json";
+    private static final String MARKDOWN = "markdown";
     private static final String USAGE_TOKEN = "usage";
 
     /** Every option {@code usage} accepts (FR8 of fix-operator-blockers). */
-    private static final List<String> ACCEPTED = List.of(DIR, JSON);
+    private static final List<String> ACCEPTED = List.of(DIR, JSON, MARKDOWN);
 
     /** UX2 of fix-operator-blockers: {@code --task} is the positional task id mistyped as a flag. */
     private static final Map<String, String> POSITIONAL_HINTS = Map.of("task", "the task id is positional");
@@ -46,7 +48,14 @@ final class UsageArgumentsParser {
             throw new UsageException("a task id is required (e.g. gnomish usage --dir=/path/to/clone <task>)");
         }
         boolean json = SwitchFlag.isOn(args, JSON);
-        return new UsageArguments(dir, task, json);
+        boolean markdown = SwitchFlag.isOn(args, MARKDOWN);
+        if (json && markdown) {
+            throw new UsageException("--json and --markdown are two renderings of one report; pass one of them");
+        }
+        UsageArguments.Rendering rendering = json
+                ? UsageArguments.Rendering.JSON
+                : markdown ? UsageArguments.Rendering.MARKDOWN : UsageArguments.Rendering.TEXT;
+        return new UsageArguments(dir, task, rendering);
     }
 
     /**

@@ -86,9 +86,7 @@ change=$(sed -n 's/^Change:[[:space:]]*//p' $dir/change.md | head -1)
             commands: Path.of(GradleRunnerSupport.requiredProperty('gnomish.claudeCommandsDir')),
         ]
         Map<String, Boolean> spelled = roots.collectMany { String name, Path root ->
-            Files.walk(root).withCloseable { walk ->
-                walk.filter { Files.isRegularFile(it) }.toList()
-            }.collect { Path file ->
+            repositoryFiles(root).collect { Path file ->
                 ["${name}/${root.relativize(file)}".toString(), file.getText('UTF-8').contains('openspec archive')]
             }
         }.collectEntries()
@@ -104,5 +102,22 @@ change=$(sed -n 's/^Change:[[:space:]]*//p' $dir/change.md | head -1)
         File manifest = new File(GradleRunnerSupport.requiredProperty('gnomish.fixArtifactsStage'))
         Map<String, Object> stage = new Yaml().load(manifest.getText('UTF-8')) as Map<String, Object>
         (stage.verify as List<Map<String, Object>>).findAll { it.type == 'command' }.collect { it.command as String }
+    }
+
+    /**
+     * The files of {@code root} that belong to the repository — tracked, or new and not ignored —
+     * as git lists them. A tree walk would also read what the repository ignores there: the
+     * operator's launcher jars and run logs under {@code .gnomish/factory/}, which are no stage or
+     * command file, and a log of an archive run would spell the command it scans for.
+     */
+    private static List<Path> repositoryFiles(Path root) {
+        def process = new ProcessBuilder('git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard')
+                .directory(root.toFile())
+                .redirectInput(ProcessBuilder.Redirect.from(new File('/dev/null')))
+                .start()
+        String listing = process.inputStream.getText('UTF-8')
+        String errors = process.errorStream.getText('UTF-8')
+        assert process.waitFor() == 0: "git ls-files failed in ${root}:\n${errors}"
+        listing.split('\u0000').findAll { !it.isEmpty() }.collect { root.resolve(it) }.findAll { Files.isRegularFile(it) }
     }
 }

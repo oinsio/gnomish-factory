@@ -1,8 +1,11 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 
 /**
@@ -13,6 +16,9 @@ import java.nio.file.Path
  */
 final class PassThroughRounds implements RoundEnvironmentSource {
 
+    /** The request every round of this source reports, handed through untouched. */
+    static final RoundDecisionRequest DECISION = new RoundDecisionRequest(UntrustedText.agent('decision-content'), [])
+
     /** The round opened most recently — the handle a spec reads the recordings from. */
     FakeRound round
 
@@ -20,6 +26,12 @@ final class PassThroughRounds implements RoundEnvironmentSource {
     Round openRound(StageExecutor.Request request) {
         round = new FakeRound()
         round
+    }
+
+    /** The bare host source's identity: the decorator under test names its own. */
+    @Override
+    RoundIdentity identity() {
+        RoundIdentity.inPlace()
     }
 
     /** One round: an identity-only environment plus the flags recording its boundary hooks. */
@@ -51,8 +63,8 @@ final class PassThroughRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        Optional<String> readDecision() {
-            Optional.of('decision-content')
+        Optional<RoundDecisionRequest> readDecision() {
+            Optional.of(DECISION)
         }
 
         @Override

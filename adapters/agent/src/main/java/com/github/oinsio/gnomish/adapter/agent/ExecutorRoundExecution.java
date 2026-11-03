@@ -2,13 +2,13 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
-import com.github.oinsio.gnomish.domain.engine.port.ExecutorFailure;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
@@ -35,8 +35,9 @@ import org.jspecify.annotations.Nullable;
  * roundTimeout} with timeout and interrupt classified before the drain's events are consulted,
  * then the handle's {@link ExecHandle#postExitBound()} for the tail, never a bound of its own —
  * and each maps every failure of that launch sequence through one site that carries the stderr
- * tail of the round (here: {@link ExecutorFailure}; there: {@link JudgeCannotVerify}), leaving it
- * one DEBUG line on success. Both
+ * tail of the round (here: {@link AgentRoundFailure}, a {@code failed/infrastructure} result;
+ * there: {@link JudgeCannotVerify}), leaving it one DEBUG line on success. Neither throws a
+ * failure of the round to its caller. Both
  * probe the environment's egress guard before the launch and again once the process has exited,
  * before anything is graded (D14 of tighten-spec-contract).
  *
@@ -45,7 +46,8 @@ import org.jspecify.annotations.Nullable;
  * NFR-R1 of add-sandbox-core as probed per round by D14 of tighten-spec-contract; FR19 of
  * fix-terminal-receipt-convergence (design D17 as amended 2026-10-17: the post-exit wait is the
  * handle's bound); FR20 (design D18: the CLI's stderr goes to the round scratch directory; as amended 2026-10-17, its tail rides the
- * failure).
+ * failure); FR7 of define-executor-contract (design D10: the round reports its failure as the
+ * contract status).
  */
 final class ExecutorRoundExecution {
 
@@ -55,46 +57,38 @@ final class ExecutorRoundExecution {
     private ExecutorRoundExecution() {}
 
     /**
-     * Runs the round already opened as {@code round}. Throws on infrastructure failure (unlike
-     * the judge's round execution) — {@code RoundExecution#execute} maps any {@link
-     * RuntimeException} to {@code RoundOutcome.CannotExecute} without burning a stage attempt
-     * (NFR-R1); this method itself never discards the round on failure — the caller does, so the
-     * discard happens exactly once regardless of where in this method the failure occurred.
-     *
-     * <p>The throw is an {@link ExecutorFailure} wrapping the original exception together with
-     * the denials drained from the dead round ({@link RoundDenialRead#onFailure}), so a gnome
-     * that hung while attempting a blocked egress reports that denial on the escalation instead
-     * of only in the factory log (FR1 of fix-denial-attribution-durability, design D1). Every
-     * failure of the round is wrapped, the launch included — the three ExecutorFailure names.
+     * Runs the round already opened as {@code round} and reports how it ended — never by a throw
+     * (FR7 of define-executor-contract, design D10). A round that ended without its result — a
+     * {@code roundTimeout} kill, an interrupted wait, a launch that failed, a missing result event,
+     * a dead guard, a close that could not commit — is the {@code failed/infrastructure} result of
+     * {@link AgentRoundFailure}, carrying the round's wall time, the denials drained from the dead
+     * round ({@link RoundDenialRead#onFailure}, FR1 of fix-denial-attribution-durability) and its
+     * stderr tail; the round is discarded once, here, and the engine's classifier decides what the
+     * status means. An interrupt stays set on the thread for the caller above.
      */
     static ExecutionResult run(
             AgentRoundEquipment equipment,
-            DecisionFileReader decisionFileReader,
             StageExecutor.Request request,
             String prompt,
             RoundEnvironmentSource.Round round) {
         FactoryProperties factoryProperties = equipment.factoryProperties();
         InstantSource clock = equipment.clock();
-        var stage = request.stage();
-        var executor = stage.executor();
-        var invocationFlags = AgentInvocationOptions.renderForExecutor(
-                executor.model(), executor.settings(), round.decisionFilePath());
-        List<String> command = AgentCommandLine.fromRenderedFlags(
-                AgentRole.EXECUTOR, factoryProperties.agentCliBinary(), invocationFlags);
-
-        // Factory-set protocol layer (D6, FR9): the AI seam variables plus this round's
-        // decision-file path — the only variables beyond base and passthrough a round sees.
-        Map<String, String> env = new java.util.LinkedHashMap<>(AgentAiSeam.variables(equipment.childEnv()));
-        env.putAll(round.decisionEnvFragment());
-        // The launch is inside the wrapped region, not before it: a process that would not
-        // start is a round that died before its close exactly like a roundTimeout kill, and
-        // ExecutorFailure promises the denials of all three. A box whose materialization was
-        // itself partly denied has them recorded before the first process ever runs. The scratch
-        // directory (D18 of fix-terminal-receipt-convergence) takes the CLI's stderr; the catch
-        // reads its tail into the failure before the finally removes it, and a round that
-        // succeeded leaves the tail as one DEBUG line (D18 as amended 2026-10-17).
+        Instant roundStart = clock.instant();
+        var executor = request.stage().executor();
+        // Everything after the round opened is inside the guarded region — the command, the
+        // seam variables, the launch: whatever fails there is this round's failed result, and the
+        // round is discarded. The scratch directory (D18 of fix-terminal-receipt-convergence)
+        // takes the CLI's stderr; the catch reads its tail before the finally removes it.
         @Nullable RoundScratchDirectory scratch = null;
         try {
+            var invocationFlags = AgentInvocationOptions.renderForExecutor(
+                    executor.model(), executor.settings(), round.decisionFilePath());
+            List<String> command = AgentCommandLine.fromRenderedFlags(
+                    AgentRole.EXECUTOR, factoryProperties.agentCliBinary(), invocationFlags);
+            // Factory-set protocol layer (D6, FR9): the AI seam variables plus this round's
+            // decision-file path — the only variables beyond base and passthrough a round sees.
+            Map<String, String> env = new java.util.LinkedHashMap<>(AgentAiSeam.variables(equipment.childEnv()));
+            env.putAll(round.decisionEnvFragment());
             scratch = RoundScratchDirectory.open(equipment.roundScratchParent());
             // D14 of tighten-spec-contract: an in-box retry reuses the box, and with it a guard
             // that may have died after the previous round closed. A dead guard fails this round
@@ -102,13 +96,10 @@ final class ExecutorRoundExecution {
             round.environment().probeGuard();
             ExecHandle launched =
                     launch(factoryProperties, round, new ExecCommand(command, env, prompt, scratch.stderr()));
-            // The stdout drain starts here, before the wait, and runs concurrently with the
-            // process (FR1, D1 of fix-round-stdout-drain): deferring the read until after exit
-            // let a stream larger than the ~64 KB OS pipe buffer either block the child on a
-            // full pipe until the roundTimeout kill or lose its tail — and the tail is where
-            // the essential result event lives. try-with-resources is what guarantees no drain
-            // thread outlives the round on any exit path (NFR-R1): its close stops the drain and
-            // closes no pipe, which is the JDK's to close at the exit (D5 of make-pipe-reads-non-parking).
+            // The stdout drain starts before the wait and runs with the process (FR1, D1 of
+            // fix-round-stdout-drain): a deferred read let a stream past the OS pipe buffer block the
+            // child or lose the result event. try-with-resources keeps no drain thread past the
+            // round (NFR-R1); its close closes no pipe (D5 of make-pipe-reads-non-parking).
             try (StreamDrain drain =
                     StreamDrain.start(launched.output(), clock, listenerFor(equipment.progressListener(), round))) {
                 Duration roundTimeout = RoundTimeout.resolve(executor.settings());
@@ -145,20 +136,24 @@ final class ExecutorRoundExecution {
                 // ExecutionResult exactly like usage and trace.
                 List<Denial> denials = RoundDenialRead.onFinish(round);
 
-                Optional<DecisionFileReader.Decision> decision = decisionFileReader.read(round.readDecision());
+                // The round's source read its decision file through the one tolerant read (FR6 of
+                // define-executor-contract): this class reads no file and parses nothing.
+                Optional<RoundDecisionRequest> decision = round.readDecision();
                 scratch.logTailOnSuccess();
-                return decision.map(d -> (ExecutionResult)
-                                new ExecutionResult.DecisionNeeded(d.question(), d.options(), usage, trace, denials))
-                        .orElseGet(() -> new ExecutionResult.Completed(usage, trace, denials));
+                return decision.map(
+                                d -> ExecutionResult.decisionNeeded(d.question(), d.options(), usage, trace, denials))
+                        .orElseGet(() -> ExecutionResult.completed(usage, trace, denials));
             }
         } catch (RuntimeException e) {
-            // FR1 of fix-denial-attribution-durability: the drained denials leave the round
-            // with the failure instead of only reaching the log. The original exception stays
-            // the cause, so the engine's escalation text is unchanged but for the stderr tail
-            // (FR20 of fix-terminal-receipt-convergence); the round is still discarded exactly
-            // once by the caller. No directory means no process ran, so no tail.
+            // FR1 of fix-denial-attribution-durability: the drained denials leave the round on
+            // its failed result instead of only reaching the log; the stderr tail rides the reason
+            // (FR20 of fix-terminal-receipt-convergence). No directory means no process ran, so no
+            // tail. The round is discarded exactly once, after the denials were drained from it.
             UntrustedText tail = scratch == null ? NO_STDERR : scratch.tailForFailure();
-            throw new ExecutorFailure(e, RoundDenialRead.onFailure(round), tail);
+            List<Denial> denials = RoundDenialRead.onFailure(round);
+            round.discard();
+            Duration wallTime = AgentRoundFailure.elapsed(roundStart, clock.instant());
+            return AgentRoundFailure.of(key(request), e, tail, wallTime, denials);
         } finally {
             if (scratch != null) {
                 scratch.close();
@@ -189,12 +184,14 @@ final class ExecutorRoundExecution {
     }
 
     private static ExecutorUsage withWallTime(ExecutorUsage usage, Duration wallTime) {
-        return new ExecutorUsage(wallTime, usage.tools(), usage.tokensByModel());
+        return new ExecutorUsage(wallTime, usage.tools(), usage.byModel());
     }
 
     private static ToolTrace trace(StageExecutor.Request request, List<TimestampedEvent> events, Instant roundEnd) {
-        AttemptKey key =
-                new AttemptKey(request.context().taskId(), request.stage().name(), request.attempt());
-        return new ToolTrace(key, new ToolTraceBuilder().buildTrace(events, roundEnd));
+        return new ToolTrace(key(request), new ToolTraceBuilder().buildTrace(events, roundEnd));
+    }
+
+    private static AttemptKey key(StageExecutor.Request request) {
+        return new AttemptKey(request.context().taskId(), request.stage().name(), request.attempt());
     }
 }

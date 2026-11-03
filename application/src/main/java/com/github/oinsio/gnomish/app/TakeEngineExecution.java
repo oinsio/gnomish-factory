@@ -131,11 +131,19 @@ record TakeEngineExecution(
         var persistence = new RevocationCheckingAttemptPersistence(
                 delegate, order.tracker(), order.ref(), order.instanceId(), claimLossFlag);
         var workspace = assembly.workspaceAt(worktree);
+        // D5 of define-executor-contract: the describe preflight, on the host, over the worktree
+        // the rounds run in, after the law is bound and before the engine. Fresh and resume both
+        // funnel through here; every failure parks the task as an invalid law does.
+        var described =
+                assembly.describe(order.run(), new DescribeMedium.Host(worktree), credentialEnvVarsToScrub, lawBinding);
+        if (described instanceof LawDescription.Refused(var errors)) {
+            return TaskTierLaw.parkUndescribed(lawBinding, errors, order, state);
+        }
         // The one take attachment point for the mid-round push decoration (FR1, FR3, design D3
         // of wire-host-mid-round-push): fresh (TakeFreshClaim) and resume (TakeResumeRunner) both
         // funnel through this method, so neither entry point can silently lose it.
         var assembled = assembly.withHostGitPush(git.midRoundPush())
-                .assemble(order.run(), context, state, persistence, credentialEnvVarsToScrub, lawBinding);
+                .assemble(order.run(), context, state, persistence, credentialEnvVarsToScrub, (DescribedLaw) described);
 
         TaskOutcome outcome = new Engine().run(definition, context, state, workspace, assembled.ports());
 

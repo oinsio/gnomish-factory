@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckResult;
 import com.github.oinsio.gnomish.domain.engine.Decision;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.domain.engine.MismatchCause;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -32,9 +33,18 @@ final class StatusLineFormatter {
                 "cannot verify " + plane.render(cannotVerify.check().label()) + ": "
                         + plane.render(cannotVerify.reason());
             case EscalationReport.PipelineMismatch pipelineMismatch ->
-                "pipeline mismatch: stage \"" + plane.render(pipelineMismatch.staleStage()) + "\" not found";
+                switch (pipelineMismatch.cause()) {
+                    case MismatchCause.StaleStage stale ->
+                        "pipeline mismatch: stage \"" + plane.render(stale.stage()) + "\" not found";
+                    case MismatchCause.ExecutorVersion changed ->
+                        "pipeline mismatch: executor \"" + plane.render(changed.executor()) + "\" version "
+                                + plane.render(changed.recorded()) + " recorded, " + plane.render(changed.current())
+                                + " described";
+                };
             case EscalationReport.CannotExecute cannotExecute ->
                 "cannot execute: " + plane.render(cannotExecute.cause());
+            case EscalationReport.BudgetExhausted budgetExhausted ->
+                "budget exhausted: " + plane.render(budgetExhausted.bound());
         };
     }
 
@@ -108,6 +118,7 @@ final class StatusLineFormatter {
             case QUALITY_FAILURE -> "quality failure";
             case CANNOT_VERIFY -> "cannot verify";
             case DECISION_NEEDED -> "decision needed";
+            case BUDGET_EXHAUSTED -> "budget exhausted";
         };
     }
 

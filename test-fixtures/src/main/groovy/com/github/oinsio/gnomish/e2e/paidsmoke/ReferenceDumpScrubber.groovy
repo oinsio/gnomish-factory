@@ -25,33 +25,31 @@ import com.fasterxml.jackson.databind.node.ObjectNode
  *       ({@code -private-var-folders-...}) — each collapsed to {@code /workspace-scrubbed}
  *       ({@code -workspace-scrubbed} for the dashed form) as defense in depth;</li>
  *   <li>real session ids — replaced with the synthetic placeholder {@code ref-session-<label>-1};</li>
- *   <li>money — {@code total_cost_usd} and every nested {@code costUSD};</li>
  *   <li>the {@code permission_denials} array — it carries raw tool inputs;</li>
  *   <li>every per-event {@code uuid} and {@code request_id}.</li>
  * </ul>
  *
  * <p><strong>Kept</strong> (deliberately, for D11 realism): resolved model ids and all token/cache
  * counts (top-level {@code usage} and per-model {@code modelUsage}) — recording exactly those real
- * values, which a local Ollama run cannot produce, is this task's whole point; also durations, API
+ * values, which a local Ollama run cannot produce, is this task's whole point; the cost figures
+ * ({@code total_cost_usd} and every nested {@code costUSD}), a derived view of those counts and not
+ * sensitive data, which the adapter maps beside them (FR22 of define-executor-contract); also durations, API
  * message ids and the {@code tool_use_id} linkage, {@code result} text, and the overall event shape.
  * Opaque per-run identifiers that carry no machine or user identity — {@code agentId},
  * {@code task_id}, the random {@code workspaceRoot<n>} temp suffix — are kept for the same reason
  * (they are representative CLI output, like the API message ids; harden-reference-dump-scrubber NG3).
  *
- * <p>The deny-list ({@code total_cost_usd}, {@code costUSD}, {@code permission_denials},
- * {@code uuid}, {@code request_id}) is the single place to extend when a future CLI version adds a
+ * <p>The deny-list ({@code permission_denials}, {@code uuid}, {@code request_id}) is the single place to extend when a future CLI version adds a
  * new sensitive field — that keeps the design risk of "deny-list drift" contained to one edit.
  *
  * <p>Implements M4, D11 of add-agent-executor.
- * <p>Implements NFR-O1 of harden-reference-dump-scrubber.
+ * <p>Implements NFR-O1 of harden-reference-dump-scrubber; FR22 of define-executor-contract.
  */
 final class ReferenceDumpScrubber {
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
 
     private static final Set<String> DENY_LIST = [
-        'total_cost_usd',
-        'costUSD',
         'permission_denials',
         'uuid',
         'request_id',

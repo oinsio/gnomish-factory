@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.DenialRestoration;
+import java.util.List;
 import java.util.function.Supplier;
 
 /**
@@ -53,6 +54,9 @@ public final class ContainerEnvironments {
      * @param restoration what the task branch tip records about denials already reported, read
      *     afresh each time a round environment is built (design D11 of
      *     make-checkpoint-gate-durable); never null
+     * @param executorEgress the hosts the law's {@code program} executors are granted (design D10 of
+     *     define-executor-contract), admitted by every box guard of this task beside the operator's
+     *     egress allowlist; never null, may be empty
      */
     ContainerEnvironments(
             BoxEquipment equipment,
@@ -60,10 +64,11 @@ public final class ContainerEnvironments {
             BoxGitLink link,
             ChildEnvAllowlist allowlist,
             String projectId,
-            Supplier<DenialRestoration> restoration) {
+            Supplier<DenialRestoration> restoration,
+            List<String> executorEgress) {
         this.equipment = equipment;
         this.baseKey = baseKey;
-        this.builder = new ContainerEnvironmentBuilder(equipment, link, allowlist, projectId);
+        this.builder = new ContainerEnvironmentBuilder(equipment, link, allowlist, projectId, executorEgress);
         this.restoration = restoration;
     }
 

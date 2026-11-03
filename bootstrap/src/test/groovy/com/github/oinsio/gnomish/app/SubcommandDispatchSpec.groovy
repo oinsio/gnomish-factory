@@ -93,7 +93,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
 
     def usageCommand = new UsageCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.lazyScope {
         registeredClone()
-    }, LiveConsoleIO.onStdout())
+    }, LiveConsoleIO.onStdout(), new VirtualClock())
 
     def dispatch = new SubcommandDispatch(
     new ReportCommands(statusCommand, usageCommand, newBoardCommand(), newDashboardCommand()),
@@ -158,7 +158,7 @@ class SubcommandDispatchSpec extends Specification implements BareGitRepoFixture
         // FR3 of add-project-registry: usage reads the clone the loader resolved for --dir
         def usageDispatch = new SubcommandDispatch(
                 new ReportCommands(statusCommand,
-                new UsageCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(clone), LiveConsoleIO.onStdout()),
+                new UsageCommand(TaskGitFixture.realClaimless(), RegisteredCloneFixture.scope(clone), LiveConsoleIO.onStdout(), new VirtualClock()),
                 newBoardCommand(), newDashboardCommand()),
                 dispatch.takeCommand(), dispatch.serveCommand())
         def args = new DefaultApplicationArguments('usage', "--dir=${cloneDir}".toString(), 'PROJ-1')

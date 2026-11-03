@@ -21,10 +21,11 @@ public interface StageExecutor {
 
     /**
      * Runs one round of the stage described by {@code request} and returns its
-     * outcome — {@link ExecutionResult.Completed} when the work finished (the
-     * engine proceeds to verify) or {@link ExecutionResult.DecisionNeeded} when
-     * the executor hands control back with a question (a gnome-initiated
-     * escalation, design D6). The engine never inspects the request's workspace
+     * outcome as a status plus an optional answer — {@code completed} when the
+     * work finished (the engine proceeds to verify), {@code completed} with a
+     * {@link ExecutionResult.DecisionRequest} when the executor hands control
+     * back with a question (a gnome-initiated escalation, design D6), or a
+     * {@code failed}/{@code pending} status (FR7 of define-executor-contract). The engine never inspects the request's workspace
      * or the round's mechanism; both belong to the adapter.
      *
      * <p>Implements FR1, D2 of add-stage-engine.

@@ -83,11 +83,11 @@ final class VerifyOrchestrator {
      * @param context the task context threaded through to judge checks (task 4.4)
      * @param workspace the opaque working copy the checks operate on
      * @param key the {@code (taskId, stage, attempt)} key the per-check events carry
-     * @return the results of the checks that ran plus the judge token accounting
+     * @return the results of the checks that ran plus the judge votes' participant entries
      */
     VerificationResult verify(List<VerifyCheck> checks, TaskContext context, Workspace workspace, AttemptKey key) {
         var results = new ArrayList<CheckResult>();
-        var judgePerVote = new ArrayList<Map<String, TokenUsage>>();
+        var judgePerVote = new ArrayList<Map<String, ModelUsage>>();
         for (int i = 0; i < checks.size(); i++) {
             var check = checks.get(i);
             var ref = CheckRef.of(i, check);
@@ -102,7 +102,11 @@ final class VerifyOrchestrator {
                 break;
             }
         }
-        return new VerificationResult(List.copyOf(results), new JudgeUsage(List.copyOf(judgePerVote)));
+        var votes = new ArrayList<ParticipantUsage>();
+        for (int vote = 0; vote < judgePerVote.size(); vote++) {
+            votes.add(Participants.verdict(Participants.JUDGE_EXECUTOR, vote, judgePerVote.get(vote)));
+        }
+        return new VerificationResult(results, votes);
     }
 
     /**
@@ -110,8 +114,8 @@ final class VerifyOrchestrator {
      * (design D3): {@link VerifyCheck.Builtin}/{@link VerifyCheck.Command} to their
      * runners, {@link VerifyCheck.External} to the {@link ExternalPolling} poll loop, and
      * {@link VerifyCheck.Judge} to the {@link JudgeVoting} majority loop — whose per-vote
-     * token usage is folded into {@code judgePerVote} for the run's {@link JudgeUsage}
-     * (NFR-C1). The whole dispatch is wrapped so any {@link RuntimeException} a check
+     * token usage is appended to {@code judgePerVote}, from which the run's {@code verdict}
+     * participant entries are built (NFR-C1; FR15 of define-executor-contract). The whole dispatch is wrapped so any {@link RuntimeException} a check
      * adapter throws is caught, logged at ERROR at the point of capture, and turned into a
      * {@link Verdict.CannotVerify} carrying the full stack trace in its details (FR4,
      * NFR-O1) — a check that could not run is an infrastructure failure, not a quality
@@ -129,7 +133,7 @@ final class VerifyOrchestrator {
             CheckRef ref,
             TaskContext context,
             Workspace workspace,
-            List<Map<String, TokenUsage>> judgePerVote) {
+            List<Map<String, ModelUsage>> judgePerVote) {
         try {
             return switch (check) {
                 case VerifyCheck.Builtin b -> builtinRunner.run(b, workspace);

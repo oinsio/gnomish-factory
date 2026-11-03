@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/oinsio/gnomish-factory/schemas/executor-contract/1/executor-request.schema.json",
+  "title": "Executor request",
+  "description": "One executor run, requested in exactly one role. The request is the child's standard input (a file the launch owner hands it) and carries no credential value. Additive evolution (protocol version 1): readers ignore unknown properties; a property is never renamed, retyped or removed within a protocol version. Implements FR1, FR11 of define-executor-contract.",
+  "type": "object",
+  "required": ["role", "workspace", "policy", "roleInputs", "settings", "bounds", "feedback"],
+  "properties": {
+    "role": { "$ref": "#/$defs/role" },
+    "workspace": {
+      "description": "The working copy the run acts on, as the execution environment names it.",
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "policy": { "$ref": "#/$defs/policy" },
+    "roleInputs": {
+      "description": "The inputs that differ by role: instructions for transform, criteria for verdict, a question and options for decision. Effect is reserved and takes none in this version.",
+      "type": "object",
+      "properties": {
+        "instructions": { "type": "string", "minLength": 1 },
+        "criteria": { "type": "string", "minLength": 1 },
+        "question": { "type": "string", "minLength": 1 },
+        "options": { "type": "array", "minItems": 2, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "settings": {
+      "description": "The executor's own settings from the law, validated against the settings schema its describe declared.",
+      "type": "object"
+    },
+    "bounds": { "$ref": "#/$defs/bounds" },
+    "feedback": {
+      "description": "Findings of the previous attempts, fed forward; empty on a first attempt.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "continuation": {
+      "description": "Present when the run continues one that asked a question: the continuation key the decision request carried and the reply it received.",
+      "type": "object",
+      "required": ["key", "reply"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "reply": { "type": "string" }
+      }
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "role": { "const": "transform" } } },
+      "then": { "properties": { "roleInputs": { "required": ["instructions"] } } } },
+    { "if": { "properties": { "role": { "const": "verdict" } } },
+      "then": { "properties": { "roleInputs": { "required": ["criteria"] } } } },
+    { "if": { "properties": { "role": { "const": "decision" } } },
+      "then": { "properties": { "roleInputs": { "required": ["question", "options"] } } } }
+  ],
+  "$defs": {
+    "role": {
+      "description": "The contract role. Unknown-token arm: a role outside this set is refused by the describe preflight as undeclared; effect is reserved and not executed in this version.",
+      "enum": ["transform", "verdict", "decision", "effect"]
+    },
+    "policy": {
+      "description": "The abstract policy the executor compiles to its own mechanism; never a vendor tool name. Unknown-token arm: an unknown kind is refused, never widened to workspaceWrite.",
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["readOnly", "writeExactly", "workspaceWrite"] },
+        "path": { "type": "string", "minLength": 1 }
+      },
+      "if": { "properties": { "kind": { "const": "writeExactly" } } },
+      "then": { "required": ["path"] }
+    },
+    "bounds": {
+      "description": "Hints to the executor. The factory enforces the three time bounds itself; the ledger enforces budget after the round. An absent bound is no bound.",
+      "type": "object",
+      "properties": {
+        "turns": { "type": "integer", "minimum": 1 },
+        "tokens": { "type": "integer", "minimum": 1 },
+        "moneyUsd": { "type": "number", "exclusiveMinimum": 0 },
+        "startupReadMillis": { "type": "integer", "minimum": 1 },
+        "silenceMillis": { "type": "integer", "minimum": 1 },
+        "overallMillis": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {
+        "message": { "type": "string" },
+        "location": { "type": "string" },
+        "details": { "type": "string" }
+      }
+    }
+  },
+  "examples": [
+    {
+      "role": "transform",
+      "workspace": { "path": "/workspace" },
+      "policy": { "kind": "workspaceWrite" },
+      "roleInputs": { "instructions": "Implement the task described in .gnomish-task/task.json." },
+      "settings": { "model": "example-model" },
+      "bounds": { "turns": 40, "moneyUsd": 2.5, "startupReadMillis": 30000, "silenceMillis": 600000, "overallMillis": 3600000 },
+      "feedback": [ { "message": "test FooSpec failed", "location": "src/test/FooSpec.groovy:12" } ]
+    },
+    {
+      "role": "verdict",
+      "workspace": { "path": "/workspace" },
+      "policy": { "kind": "readOnly" },
+      "roleInputs": { "criteria": "Every public method carries a javadoc." },
+      "settings": {},
+      "bounds": {},
+      "feedback": []
+    },
+    {
+      "role": "decision",
+      "workspace": { "path": "/workspace" },
+      "policy": { "kind": "readOnly" },
+      "roleInputs": { "question": "Which base should the task start from?", "options": ["main", "release/1.x"] },
+      "settings": {},
+      "bounds": { "overallMillis": 600000 },
+      "feedback": [],
+      "continuation": { "key": "k-7f3a", "reply": "main" }
+    }
+  ]
+}

@@ -90,6 +90,20 @@ pitest {
         //     :bootstrap classes it reaches (ContainerRunSupport, ContainerRunTermination):
         //     ContainerRunSupportSpec and the daemon-free container rows of DeliveredCleanupIdentitySpec
         'com.github.oinsio.gnomish.app.DeliveredCleanupContainerE2ESpec',
+        //   ProgramDispatchContainerE2ESpec (task 7.3 of define-executor-contract; real Docker, a
+        //     guard image and a Gitea remote, @Timeout 420 s) — the :bootstrap classes it reaches:
+        //     ExecutorDispatch, ExecutorRegistry: ExecutorDispatchSpec and ProgramDispatchFlowSpec;
+        //     ExecutorAdapterSelector: ExecutorAdapterSelectorSpec; RunDescribe and
+        //     ContainerRunSupport.liveEnvironment: RunDescribeSpec, ContainerRunSupportSpec,
+        //     SlotConditionReportSpec. ProgramStageExecutor is :adapters:agent's, mutated there.
+        'com.github.oinsio.gnomish.app.ProgramDispatchContainerE2ESpec',
+        //   ProgramCredentialDeliverySpec (NFR-S1, NFR-C1, FR10 of define-executor-contract; real
+        //     Docker and a guard image, @Timeout 240 s) — the :bootstrap classes it reaches:
+        //     ContainerRunSupportFactory.create: ContainerSupportsSpec; ContainerRunSupport (lease,
+        //     pieces, workspace, taskRepository): ContainerRunSupportSpec, RunnerStartHardeningSpec.
+        //     DescribePreflight is :application's, ProgramExecutor :adapters:agent's,
+        //     ShellCommandCheckRunner :adapters', ChildEnvAllowlist :sandbox:core's, mutated there.
+        'com.github.oinsio.gnomish.app.ProgramCredentialDeliverySpec',
         //   GiteaActionsStageVerifyE2ESpec (outside app.*) — CheckEquipment:
         //     CheckEquipmentCommandRunnerSpec, ManualRunAssemblyCheckClientWiringSpec
         'com.github.oinsio.gnomish.domain.engine.GiteaActionsStageVerifyE2ESpec',

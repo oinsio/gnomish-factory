@@ -59,8 +59,12 @@ import org.jspecify.annotations.Nullable;
  * tighten-only {@code binding} violation is caught earlier by
  * {@link StructuralValidation} and never carried into the domain.
  *
+ * <p><b>Executor declarations (FR9 of define-executor-contract).</b> The
+ * {@code config.yaml} {@code executors:} section maps through
+ * {@link ExecutorDeclarations}, in declaration order.
+ *
  * <p>Implements FR7, FR11, D2, D5a of load-pipeline-config; FR12, FR13 of
- * add-sandbox-core (sandbox mapping).
+ * add-sandbox-core (sandbox mapping); FR9 of define-executor-contract.
  */
 public final class PipelineMapper {
 
@@ -125,7 +129,11 @@ public final class PipelineMapper {
             return new Result(null, errors);
         }
         PipelineDefinition definition = new PipelineDefinition(
-                orEmpty(config.schemaVersion()), new AutonomyLimits(defaultLimit), stages, tracker);
+                orEmpty(config.schemaVersion()),
+                new AutonomyLimits(defaultLimit),
+                stages,
+                tracker,
+                ExecutorDeclarations.map(config.executors()));
         return new Result(definition, List.of());
     }
 

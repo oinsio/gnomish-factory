@@ -4,9 +4,12 @@ import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
+import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolCall
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -53,7 +56,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         def headBefore = currentHead(repo)
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('implement', 0).key()), sampleTrace('implement', 0))
 
         then:
         def log = runner.run(repo, 'log', '--format=%H', "${headBefore}..HEAD")
@@ -64,8 +67,8 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
     def "FR2: the commit contains a round-trippable state.json and the trace file at the correct path"() {
         given:
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
-        def state = sampleState()
         def trace = sampleTrace('implement', 2)
+        def state = RoundStates.recorded(trace.key())
 
         when:
         persistence.persist('PROJ-1', state, trace)
@@ -81,16 +84,36 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         traceFile.stdout().forParsing().contains('"tool":"bash"')
     }
 
-    def "FR2: the commit message matches ServiceCommitMessages.round(stage, round)"() {
+    def "FR2: the commit message is the round subject of the recorded round"() {
         given:
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('verify', 3))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('verify', 3).key()), sampleTrace('verify', 3))
 
         then:
         def message = runner.run(repo, 'log', '-1', '--format=%s').stdout().forParsing().trim()
-        message == ServiceCommitMessages.round('verify', 3)
+        message == ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey('T-1', 'verify', 3)))
+    }
+
+    // FR14 of define-executor-contract (design D13): the subject is rendered from the recorded
+    // round — a pass that advances the position in the same commit still names its own stage
+    // Scenario: git/git-task-persistence / Subject and record agree by construction
+    def "FR14: the round subject names the recorded round's stage and number, not the position's stage"() {
+        given: 'the implement stage passes its first round and the same state advances to review'
+        def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
+        def record = RoundStates.roundOf(new AttemptKey('PROJ-1', 'implement', 0))
+        def state = TaskState.atStageStart('implement')
+                .recordPassAndAdvance(record, new Position.AtStage('review'), ExecutorVersions.none())
+
+        when:
+        persistence.persist('PROJ-1', state, sampleTrace('implement', 0))
+
+        then: 'the subject equals the record\'s own rendering and spells the record\'s stage and round'
+        def subject = runner.run(repo, 'log', '-1', '--format=%s').stdout().forParsing().trim()
+        subject == ServiceCommitMessages.round(state.attempts().last())
+        subject == "gnomish: round ${record.stage()}#${record.round()}".toString()
+        state.position() == new Position.AtStage('review')
     }
 
     // FR13 of harden-task-branch-contract: the round commit carries the tenure's epoch as a
@@ -104,12 +127,12 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', held)
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('verify', 3))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('verify', 3).key()), sampleTrace('verify', 3))
 
         then:
         def full = runner.run(repo, 'log', '-1', '--format=%B').stdout()
         full.contains('Gnomish-Claim-Epoch: 4711')
-        runner.run(repo, 'log', '-1', '--format=%s').stdout().forParsing().trim() == ServiceCommitMessages.round('verify', 3)
+        runner.run(repo, 'log', '-1', '--format=%s').stdout().forParsing().trim() == ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey('T-1', 'verify', 3)))
     }
 
     // FR13: a writer holding no claim stamps nothing — the pre-contract shape stays legal
@@ -118,7 +141,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('verify', 3))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('verify', 3).key()), sampleTrace('verify', 3))
 
         then:
         !runner.run(repo, 'log', '-1', '--format=%B').stdout().forParsing().contains('Gnomish-Claim-Epoch')
@@ -130,7 +153,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         new File(repo.toFile(), 'gnome-change.txt').text = 'written by the gnome'
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('implement', 0).key()), sampleTrace('implement', 0))
 
         then:
         def show = runner.run(repo, 'show', '--stat', 'HEAD').stdout()
@@ -146,7 +169,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         new File(repo.toFile(), '.git/index.lock').text = 'held by another process'
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('implement', 0).key()), sampleTrace('implement', 0))
 
         then:
         def e = thrown(GitPersistFailedException)
@@ -163,7 +186,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         gnomeCommit('gnome-3.txt')
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('implement', 0).key()), sampleTrace('implement', 0))
 
         then: 'all three gnome commits plus the round-closing commit reach the branch'
         def log = runner.run(repo, 'log', '--format=%H', "${headBefore}..HEAD")
@@ -185,7 +208,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         runner.run(repo, 'checkout', '-q', 'gnomish/PROJ-1')
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('implement', 0).key()), sampleTrace('implement', 0))
 
         then:
         thrown(RoundBoundaryViolationException)
@@ -198,7 +221,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         runner.run(repo, 'checkout', '-q', '-b', 'not-the-task-branch')
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('implement', 0).key()), sampleTrace('implement', 0))
 
         then:
         thrown(RoundBoundaryViolationException)
@@ -214,7 +237,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         runner.run(repo, '-c', 'user.email=gnome@b.c', '-c', 'user.name=gnome', 'commit', '-m', 'gnome tampers')
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('implement', 0).key()), sampleTrace('implement', 0))
 
         then:
         thrown(RoundBoundaryViolationException)
@@ -225,12 +248,12 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('implement', 0).key()), sampleTrace('implement', 0))
 
         then:
         noExceptionThrown()
         def log = runner.run(repo, 'log', '-1', '--format=%s')
-        log.stdout().forParsing().trim() == ServiceCommitMessages.round('implement', 0)
+        log.stdout().forParsing().trim() == ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey('T-1', 'implement', 0)))
         runner.run(repo, 'remote', 'get-url', 'origin').exitCode() != 0
     }
 
@@ -241,7 +264,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         def persistence = new GitAttemptPersistence(runner, repo, 'PROJ-1', ClaimEpochSource.NONE)
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('implement', 0).key()), sampleTrace('implement', 0))
 
         then:
         def localHead = currentHead(repo)
@@ -259,7 +282,7 @@ class GitAttemptPersistenceSpec extends Specification implements BareGitRepoFixt
         def headBefore = currentHead(repo)
 
         when:
-        persistence.persist('PROJ-1', sampleState(), sampleTrace('implement', 0))
+        persistence.persist('PROJ-1', RoundStates.recorded(sampleTrace('implement', 0).key()), sampleTrace('implement', 0))
 
         then:
         noExceptionThrown()

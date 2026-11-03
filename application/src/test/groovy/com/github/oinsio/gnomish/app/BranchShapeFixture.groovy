@@ -8,10 +8,12 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
+import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -35,7 +37,7 @@ trait BranchShapeFixture implements SeededCloneFixture {
     }
 
     void withRound(String taskId) {
-        persistRound(taskId, TaskState.atStageStart('implement').recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 100)))
+        persistRound(taskId, TaskState.atStageStart('implement').recordUnburnedRound(round(0, AttemptRecord.Result.PASSED, 500, 100), ExecutorVersions.none()))
     }
 
     /** A task with one round, then {@code damage} committed to its envelope as a broken factory writer would. */
@@ -88,7 +90,7 @@ trait BranchShapeFixture implements SeededCloneFixture {
                     case 'Answered' -> create(taskId, implement, [
                         new Decision('go on', 'implement', 'op', Instant.EPOCH)
                     ])
-                    case 'AwaitingApproval' -> create(taskId, new TaskState(new Position.AwaitingApproval('implement'), 0, [], ExecutorUsage.none()))
+                    case 'AwaitingApproval' -> create(taskId, new TaskState(new Position.AwaitingApproval('implement'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none()))
                     case 'InProgress' -> withRound(taskId)
                     case 'Parked' -> finished(taskId, new TaskOutcome.Paused(TaskState.atStageStart('verify'), 'implement'))
                     case 'CompletedUncleaned' -> finished(taskId, new TaskOutcome.Completed(implement))

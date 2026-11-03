@@ -27,10 +27,10 @@ factory's schema, so an entry tested on an older build may need edits on a newer
 
 ## Pipelines
 
-| name         | link                                                      | stack                                                                    | stages                                                                                               | maturity | tested on                       | maintainer | license         |
-|--------------|-----------------------------------------------------------|--------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|----------|---------------------------------|------------|-----------------|
-| `gf-tests`   | [oinsio/gf-tests](https://github.com/oinsio/gf-tests)     | Java 25, Gradle 9, Spock 2; OpenSpec                                     | `specify`, `implement`, `archive`, `deliver`                                                         | `runs`   | built from source, before 0.1.0 | oinsio     | Apache-2.0      |
-| `time-zones` | [oinsio/time-zones](https://github.com/oinsio/time-zones) | TypeScript, React, Vite, pnpm; Vitest, playwright-bdd, Stryker; OpenSpec | `specify`, `review-specs`, `fix-specs`, `implement`, `review-code`, `fix-code`, `archive`, `deliver` | `runs`   | built from source, before 0.1.0 | oinsio     | Apache-2.0      |
+| name         | link                                                      | stack                                                                    | stages                                                                                                                          | maturity   | tested on                       | maintainer | license    |
+|--------------|-----------------------------------------------------------|--------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|------------|---------------------------------|------------|------------|
+| `gf-tests`   | [oinsio/gf-tests](https://github.com/oinsio/gf-tests)     | Java 25, Gradle 9, Spock 2; OpenSpec                                     | `specify`, `implement`, `archive`, `deliver`                                                                                    | `runs`     | built from source, before 0.1.0 | oinsio     | Apache-2.0 |
+| `time-zones` | [oinsio/time-zones](https://github.com/oinsio/time-zones) | TypeScript, React, Vite, pnpm; Vitest, playwright-bdd, Stryker; OpenSpec | `specify`, `review-specs`, `fix-specs`, `implement`, `review-code`, `fix-code`, `archive`, `cleanup`, `deliver`, `usage-report` | `hardened` | release 0.1.0                   | oinsio     | Apache-2.0 |
 
 ## Entries
 
@@ -73,26 +73,31 @@ check after cheaper `command` checks.
 
 A client-only progressive web app (world clock, time zone conversion, meeting planning),
 deployed to GitHub Pages. Unlike `gf-tests`, it is a real product: its features after the
-first scaffold were delivered by the factory from GitHub issues (pull requests #13, #21, #28,
-#31, #33).
+first scaffold are delivered by the factory from GitHub issues — 28 merged pull requests from
+`gnomish/` task branches so far (the first #13, the latest #95), the later ones on the 0.1.0
+release, which the repository pins in `.gnomish/factory/gnomish.env`.
 
-**Pipeline.** Eight stages in `.gnomish/stages/<stage>/`, all on the `agent-cli` executor.
+**Pipeline.** Ten stages in `.gnomish/stages/<stage>/`, all on the `agent-cli` executor.
 The `gf-tests` shape is extended with a review-and-fix pair after the specification and
 after the code: a reviewer stage writes numbered findings to a report and changes nothing
-else, and a fixer stage resolves or rejects every finding with evidence. The stages that
-review, and every judge that decides between reviewer and fixer, run on Opus; `implement`,
-`fix-code`, `archive` and `deliver` run on Sonnet.
+else, and a fixer stage resolves or rejects every finding with evidence. Every stage's
+reports live in one directory, `temporary-docs/gnomish/<task>/`, which `cleanup` removes
+before the pull request; `usage-report` then posts what the task cost. `specify`, the two
+review stages and `fix-specs` run on Opus, as does every judge but `archive`'s; `implement`,
+`fix-code`, `archive` and `deliver` run on Sonnet; `cleanup` and `usage-report` run on Haiku.
 
-| Stage          | Produces                                                           | Command checks before the judge                                                                             |
-|----------------|--------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| `specify`      | one OpenSpec change under `openspec/changes/`                      | one active change; `openspec validate --changes --strict`; proposal sections and requirement IDs            |
-| `review-specs` | `review-specs.md` with `R<n>` findings, all `open`                 | report sections; well-formed findings; no other file touched                                                |
-| `fix-specs`    | the change revised, every finding resolved or rejected             | no `open` finding; a resolution for each; nothing outside the change; strict validation                     |
-| `implement`    | the code and BDD specs in `packages/client`, every task ticked     | all tasks ticked; 300-line file cap; the CI steps: lint, typecheck, unit tests, build, bundle size, BDD E2E |
-| `review-code`  | `review-code.md` in the same format, with scoped mutation runs     | report sections; well-formed findings; no other file touched                                                |
-| `fix-code`     | the findings fixed with TDD or rejected with evidence              | no `open` finding; tasks stay ticked; the CI steps again                                                    |
-| `archive`      | the change archived under `YYYY/MM/`, spec deltas merged           | no active change; grouped archive layout; `openspec validate --specs --strict`                              |
-| `deliver`      | an open pull request against `main`, body mirrored to `pr-body.md` | the pull request targets `main`; real title; body references the issue and equals `pr-body.md` — no judge   |
+| Stage          | Produces                                                                    | Command checks before the judge                                                                             |
+|----------------|-----------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `specify`      | the task's OpenSpec change, picked or written, named in a change record     | the record names an active change; dependency verdict; strict validation; proposal sections and IDs         |
+| `review-specs` | `review-specs.md` with `R<n>` findings, all `open`                          | report sections; well-formed findings; no other file touched                                                |
+| `fix-specs`    | the change revised, every finding resolved or rejected                      | no `open` finding; a resolution for each; nothing outside the change; strict validation                     |
+| `implement`    | the code and BDD specs in `packages/client`, every task ticked              | all tasks ticked; 300-line file cap; the CI steps: lint, typecheck, unit tests, build, bundle size, BDD E2E |
+| `review-code`  | `review-code.md` in the same format, with scoped mutation runs              | report sections; well-formed findings; no other file touched                                                |
+| `fix-code`     | the findings fixed with TDD or rejected with evidence                       | no `open` finding; tasks stay ticked; the CI steps again                                                    |
+| `archive`      | the change archived under `YYYY/MM/`, spec deltas merged                    | the task's change no longer active; grouped archive layout; `openspec validate --specs --strict`            |
+| `cleanup`      | the task's report directory removed from the branch                         | the directory is gone, nothing else touched — no judge                                                      |
+| `deliver`      | an open pull request against `main`, body mirrored to `pr-body.md`          | the pull request targets `main`; real title; body references the issue and equals `pr-body.md` — no judge   |
+| `usage-report` | one marked comment on the pull request: time and tokens per stage and model | the comment is on the pull request; no file touched — no judge                                              |
 
 **Worth copying:**
 

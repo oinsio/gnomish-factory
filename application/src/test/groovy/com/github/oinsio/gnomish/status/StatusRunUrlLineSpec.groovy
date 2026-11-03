@@ -5,10 +5,11 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Finding
-import com.github.oinsio.gnomish.domain.engine.JudgeUsage
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.Stop
+import com.github.oinsio.gnomish.domain.engine.UsageSnapshot
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -30,8 +31,8 @@ class StatusRunUrlLineSpec extends Specification {
     }
 
     private static AttemptRecord round(List<CheckResult> checks) {
-        new AttemptRecord(0, AttemptRecord.Result.PASSED, Instant.EPOCH, checks, ExecutorUsage.none(),
-                JudgeUsage.none(), [], Stop.none())
+        AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, checks, ExecutorUsage.none(),
+                [], Stop.none())
     }
 
     def "NFR-O2: only a passing check that carried a run URL gets a line, on either plane"() {
@@ -84,7 +85,7 @@ class StatusRunUrlLineSpec extends Specification {
                         check('external:ci', new Verdict.Pass(RUN_URL))
                     ])
                 ], [], null,
-                ExecutorUsage.none(), null, null)
+                UsageSnapshot.EMPTY, null, null)
 
         expect:
         new StatusTextRenderer(ReportPlane.COMMENT).renderFull(report).contains(

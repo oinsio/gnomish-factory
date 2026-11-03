@@ -46,7 +46,7 @@ class EngineEventTaskIdSpec extends Specification {
         description | event
         'RunStarted' | new EngineEvent.RunStarted('t1', new Position.AtStage('build'), 0)
         'AttemptStarted' | new EngineEvent.AttemptStarted(sampleKey())
-        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), ExecutorUsage.none())
+        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
         'CheckFinished' | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult())
         'AttemptFinished' | new EngineEvent.AttemptFinished(sampleKey(), sampleState(), sampleTrace())
@@ -64,7 +64,7 @@ class EngineEventTaskIdSpec extends Specification {
         where:
         description | event
         'AttemptStarted' | new EngineEvent.AttemptStarted(new AttemptKey('t1', 'build', 0))
-        'ExecutionFinished' | new EngineEvent.ExecutionFinished(new AttemptKey('t1', 'build', 0), ExecutorUsage.none())
+        'ExecutionFinished' | new EngineEvent.ExecutionFinished(new AttemptKey('t1', 'build', 0), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(new AttemptKey('t1', 'build', 0), sampleCheckRef())
         'CheckFinished' | new EngineEvent.CheckFinished(new AttemptKey('t1', 'build', 0), sampleCheckResult())
         'AttemptFinished' | new EngineEvent.AttemptFinished(new AttemptKey('t1', 'build', 0), sampleState(), sampleTrace())
@@ -79,7 +79,7 @@ class EngineEventTaskIdSpec extends Specification {
         description | event
         'RunStarted' | new EngineEvent.RunStarted('t1', new Position.AtStage('build'), 0)
         'AttemptStarted' | new EngineEvent.AttemptStarted(sampleKey())
-        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), ExecutorUsage.none())
+        'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
         'CheckFinished' | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult())
         'AttemptFinished' | new EngineEvent.AttemptFinished(sampleKey(), sampleState(), sampleTrace())

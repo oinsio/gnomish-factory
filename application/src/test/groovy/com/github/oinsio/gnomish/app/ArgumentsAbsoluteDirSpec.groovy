@@ -22,7 +22,9 @@ class ArgumentsAbsoluteDirSpec extends Specification {
         },
         serve : { Path d -> new ServeArguments(d, null, false, false, null) },
         status : { Path d -> new StatusArguments(d, null, false) },
-        usage : { Path d -> new UsageArguments(d, 'task-1', false) },
+        usage : { Path d ->
+            new UsageArguments(d, 'task-1', UsageArguments.Rendering.TEXT)
+        },
         board : { Path d -> new BoardArguments(d, false, 50) },
         dashboard: { Path d -> new DashboardArguments(d, null, false) },
         project : { Path d ->
@@ -54,11 +56,15 @@ class ArgumentsAbsoluteDirSpec extends Specification {
         name << RECORDS.keySet()
     }
 
-    def "FR7: a record exists here for every subcommand"() {
+    /** Subcommands whose record has no directory: the conformance kit works in no project (FR12 of define-executor-contract). */
+    private static final Set<String> PROJECTLESS = ['executor'] as Set
+
+    def "FR7: a record exists here for every subcommand that works in a directory"() {
         expect:
-        RECORDS.keySet() == Subcommand.values().collect {
+        RECORDS.keySet() + PROJECTLESS == Subcommand.values().collect {
             it.name().toLowerCase()
         } as Set
+        !ExecutorVerifyArguments.recordComponents*.name.contains('dir')
     }
 
     def "FR2 of add-doctor-command: --dir names the directory exactly when it is given: #args"() {

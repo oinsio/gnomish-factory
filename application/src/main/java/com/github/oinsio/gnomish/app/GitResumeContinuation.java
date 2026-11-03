@@ -149,17 +149,16 @@ final class GitResumeContinuation {
         Path worktree = bootstrap.worktreePath();
         var persistence = git.store().attemptPersistence(worktree, bootstrap.taskId());
         var workspace = assembly.workspaceAt(worktree);
+        var described = ManualRunDescribe.described(
+                assembly,
+                order,
+                new DescribeMedium.Host(worktree),
+                ManualResumeLawBinding.of(cloneDir, bootstrap.pin(), bootstrap.baseCommit()));
         var assembled =
                 // Git-mode host resume attaches the same mid-round push decoration the fresh
                 // run does (FR1, FR3, design D3 of wire-host-mid-round-push).
                 assembly.withHostGitPush(git.midRoundPush())
-                        .assemble(
-                                order,
-                                context,
-                                state,
-                                persistence,
-                                List.of(),
-                                ManualResumeLawBinding.of(cloneDir, bootstrap.pin(), bootstrap.baseCommit()));
+                        .assemble(order, context, state, persistence, List.of(), described);
 
         var returnPath = returnPath();
         TaskOutcome outcome;

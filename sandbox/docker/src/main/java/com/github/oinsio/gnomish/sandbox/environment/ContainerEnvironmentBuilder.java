@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -21,7 +22,11 @@ import java.util.Map;
  * {@link ContainerEnvironments} delegates to, so the class stays in the mutation scope, its
  * mutants killed by {@code ContainerEnvironmentsSeamSpec}.
  *
- * <p>Implements FR6 of add-parameter-count-gate; FR13 of tighten-spec-contract.
+ * <p>The guard admits the operator's egress allowlist and the hosts the task's law grants its
+ * {@code program} executors (design D10 of define-executor-contract).
+ *
+ * <p>Implements FR6 of add-parameter-count-gate; FR13 of tighten-spec-contract; FR10 of
+ * define-executor-contract.
  */
 final class ContainerEnvironmentBuilder {
 
@@ -29,6 +34,7 @@ final class ContainerEnvironmentBuilder {
     private final BoxGitLink link;
     private final ChildEnvAllowlist allowlist;
     private final String projectId;
+    private final List<String> guardAllowlist;
 
     /**
      * @param equipment the installation's box equipment every role is built with; never null
@@ -37,13 +43,23 @@ final class ContainerEnvironmentBuilder {
      *     null
      * @param projectId the project identity stamped beside the ownership mode on every object this
      *     task creates (FR8 of add-serve-sandbox-lifecycle); never blank
+     * @param executorEgress the hosts the law's {@code program} executors are granted (design D10 of
+     *     define-executor-contract), admitted by the guard beside the operator's
+     *     egress allowlist; never null, may be empty
      */
     ContainerEnvironmentBuilder(
-            BoxEquipment equipment, BoxGitLink link, ChildEnvAllowlist allowlist, String projectId) {
+            BoxEquipment equipment,
+            BoxGitLink link,
+            ChildEnvAllowlist allowlist,
+            String projectId,
+            List<String> executorEgress) {
         this.equipment = equipment;
         this.link = link;
         this.allowlist = allowlist;
         this.projectId = projectId;
+        List<String> union = new ArrayList<>(equipment.sandbox().egressAllowlist());
+        union.addAll(executorEgress);
+        this.guardAllowlist = List.copyOf(union);
     }
 
     /** Builds the self-checked environment for the given role key ({@code <key>}, {@code <key>-j}, or {@code <key>-v}). */
@@ -55,7 +71,7 @@ final class ContainerEnvironmentBuilder {
                 docker,
                 key,
                 sandbox.guardImage(),
-                sandbox.egressAllowlist(),
+                guardAllowlist,
                 equipment.guardConfig(key),
                 equipment.ownership(projectId));
         var selfCheck = new EnvironmentSelfCheck(
@@ -64,6 +80,8 @@ final class ContainerEnvironmentBuilder {
                 docker,
                 key,
                 sandbox.runtime(),
+                // The operator's own list: the self-check's allowed-destination probe dials one of
+                // its hosts, which must not be an executor's API the box may not reach at startup.
                 sandbox.egressAllowlist(),
                 equipment.timing().equipment().sleeper());
         return new SelfCheckedEnvironment(environment, selfCheck, guard);

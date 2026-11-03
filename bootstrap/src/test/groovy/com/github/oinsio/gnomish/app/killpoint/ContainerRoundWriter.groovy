@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.*
 import com.github.oinsio.gnomish.domain.engine.fake.*
+import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
@@ -76,7 +77,7 @@ final class ContainerRoundWriter {
         def clock = new VirtualClock()
         def ports = new EnginePorts(executor, new FilesExistCheckRunner(), new ScriptedCommandCheckRunner(),
                 new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
-                VirtualTimeEquipment.on(clock))
+                VirtualTimeEquipment.on(clock), source.identity())
         new Engine().run(world.definition, context(),
                 TaskState.atStageStart(world.definition.stages().first().name()),
                 new DirectoryWorkspace(Files.createTempDirectory(root, 'workspace')), ports)
