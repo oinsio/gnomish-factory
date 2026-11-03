@@ -30,7 +30,8 @@ layered child-env allowlist, bounded output capture, and an exit-code contract i
   findings, feeding the normal attempt/retry loop; exit 0 is `completed` and the verify
   chain runs as usual. No engine result-model change is made here.
 - **ADDED**: `command` registers as the first **built-in executor** of the contract's
-  executor registry; the name-keyed dispatch itself comes from `define-executor-contract`.
+  executor registry; the name-keyed dispatch itself comes from `define-executor-contract`,
+  and its `COMMAND` arm maps the stage type to the built-in's registry name (design D6).
 - No decision-file protocol for command stages — decisions are an agent concept.
   Round boundary checks, attempt persistence, and harvest apply unchanged: a command
   may legitimately modify the working copy — that is its purpose.
@@ -89,16 +90,19 @@ layered child-env allowlist, bounded output capture, and an exit-code contract i
   layered child-env allowlist and no `GNOMISH_DECISION_FILE`; the observed protocol
   (exit code, output) is identical in host and container modes.
 - FR5: Exit 0 completes the round; the stage's verify chain runs as usual.
-- FR6: Exit ≠ 0 is reported as the contract's `failed/quality` status with one finding
-  naming the exit code and the bounded, sanitized output tail as details; the engine's
-  own rule (define-executor-contract FR7) then burns the attempt, records the round,
-  feeds the finding forward and skips the verify chain.
+- FR6: Exit ≠ 0 is reported as the contract's `failed/quality` status whose `reason` is
+  the round's one finding: a text naming the exit code and carrying the bounded, sanitized
+  output tail (the contract's result carries no findings list; the contract's one status
+  mapping turns the reason into the engine's finding); the engine's own rule
+  (define-executor-contract FR7) then burns the attempt, records the round, feeds the
+  finding forward and skips the verify chain.
 - FR7: A command that cannot start (spawn failure, exit 126/127) or outlives its
   timeout (process tree killed) is reported as `failed/infrastructure` — no attempt
   burned, escalation as "cannot execute".
 - FR8: The command executor is a built-in of the executor registry implementing the
-  contract's mirror interface; a `command` stage resolves to it by the registry; the
-  interactive-mode substitution applies to agent-typed stages only.
+  contract's mirror interface (`describe`, `start`, `poll`); a `command` stage resolves to
+  it through the registry by the dispatch's `COMMAND` arm, which maps the stage type to the
+  built-in's name; `poll` is never answered `pending` — a command round is never pending.
 - FR9: Round boundary checks, attempt persistence, and harvest apply to command rounds
   unchanged — the command's working-copy modifications are the stage product.
 
@@ -126,9 +130,9 @@ layered child-env allowlist, bounded output capture, and an exit-code contract i
 
 ### Non-Functional Cost
 
-- NFR-C1: A command round reports no token usage (empty per-model map — unreported,
-  never fabricated zeros); a pipeline's deterministic stages contribute zero model
-  cost.
+- NFR-C1: A command round reports no token usage — the contract's `Usage.absent()`,
+  provenance `ABSENT` with an empty per-model map (unreported, never fabricated zeros); a
+  pipeline's deterministic stages contribute zero model cost.
 
 ## Operator Experience Criteria
 
@@ -183,13 +187,27 @@ layered child-env allowlist, bounded output capture, and an exit-code contract i
 - `adapters/.../pipeline/` — `ExecutorDto`, `StructuralValidation` (wire token),
   `StageDefinitionMapper`, settings validation for command stages beside
   `AgentSettingsValidator`.
-- `adapters/.../check/CommandProcessRunner.java` — generalized into the shared
-  command-run core reused by the new executor (see design.md, sync surfaces).
-- New `CommandStageExecutor` implementing the contract's `Executor` interface;
-  `bootstrap/.../ExecutorRegistry` — one built-in registration, no new dispatch.
+- `adapters/.../check/CommandProcessRunner.java` (`:adapters`, today package-private) —
+  generalized into the shared command-run core, a public type of `:adapters`, reused by the
+  new executor (see design.md, sync surfaces).
+- New `CommandStageExecutor` in `:adapters:agent` beside `program/`, implementing the
+  contract's `Executor` interface; `adapters/agent/.../program/ProgramStageExecutor` —
+  generalized over an executor factory so one round wrapper serves `program` and the
+  built-in (design D2); `bootstrap/.../ExecutorRegistry` — one built-in entry;
+  `bootstrap/.../ExecutorDispatch` — a `COMMAND` arm mapping the stage type to that entry's
+  name (design D6); the javadocs of `ExecutorRegistry` and `ExecutorDeclaration.Type` brought
+  to what is built.
 - `docs/glossary.md` — the Executor entry gains the `command` type, disambiguated from
   the `command` verify check.
 - No new dependencies; no port-family addition; no tracker or git protocol change.
 - Sequencing after `tighten-spec-contract`: this change's MODIFIED block of `pipeline-config`
   ("Local sanity validation of mechanism and check configs") is layered on that change's text
   and then on `define-executor-contract`'s, both of which must sync first.
+- Sequencing before `migrate-verify-to-executor-contract` (its `shell` built-in is built on
+  this change's shared command-run core) and before `extract-agent-round-runner`: that change
+  dissolves the `RoundTimeout` ↔ `AgentSettingsValidator` pair into the describe settings
+  schema (its design D6) and deletes the type-keyed `agent-cli` arm (its task 5.1a); it
+  therefore inherits two consumers this change adds — the command-settings validation and the
+  command executor's `roundTimeout` resolution — and the `COMMAND` arm of the dispatch, which
+  stays as the type-to-name mapping of the one built-in a stage names by type. That change's
+  artifacts are brought in step through `/opsx:update` once this change is applied.

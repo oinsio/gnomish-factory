@@ -3,13 +3,16 @@
 ## 1. Domain model and manifest validation
 
 - [ ] 1.1 Add `ExecutorType.COMMAND` and extend `StageDefinition.Executor` with an
-  optional command field (blank for agent types); verify with a failing-then-green
-  Spock spec on the record's invariants (FR1, FR2)
-- [ ] 1.2 Rewrite `StageSanityRule`: model required non-blank for `API`/`AGENT_CLI`,
-  located error when present on `COMMAND`; `command` required non-blank on `COMMAND`,
-  located error when present on agent types; judge model rule unchanged; verify with
-  data-driven specs covering all four new error scenarios plus the accepted
-  command-stage case (FR2, UX2)
+  optional command (absent for the other types) carried as a distinct value type — a
+  `CommandLine` record wrapping the non-blank string — not a third `String` beside `model`
+  and `name` (the transposition hazard of `process-invariants.md`); verify with a
+  failing-then-green Spock spec on the record's invariants, and extend the closed-enum
+  feature of `StageDefinitionSpec` with `COMMAND` (FR1, FR2)
+- [ ] 1.2 Rewrite `StageSanityRule`: model required non-blank for `API`/`AGENT_CLI`
+  (`PROGRAM` stays exempt, as built), located error when present on `COMMAND`; `command`
+  required non-blank on `COMMAND`, located error when present on an `api`, `agent-cli` or
+  `program` stage; judge model rule unchanged; verify with data-driven specs covering all
+  four new error scenarios plus the accepted command-stage case (FR2, UX2)
 - [ ] 1.3 Update `ApiExecutorRule`'s message to name `agent-cli`, `program` and `command`
   as the supported types; verify its spec asserts the new message and still rejects
   `api` stages (NG5)
@@ -31,59 +34,66 @@
 ## 3. Engine contract check (no engine change)
 
 - [ ] 3.1 Verify by an engine spec driven with a fake executor returning the command
-  executor's three statuses (`completed`, `failed/quality` with one finding,
-  `failed/infrastructure`) that the engine's existing classifier burns, records and
-  feeds forward exactly as define-executor-contract specifies, and that no source file
-  under `domain/engine` changes in this change (`git diff --stat`) (FR6, FR7, NG6)
+  executor's three statuses (`completed`, `failed/quality` with its reason as the one
+  finding, `failed/infrastructure`) that the engine's existing classifier burns, records
+  and feeds forward exactly as define-executor-contract specifies — the second attempt's
+  request carries the first's finding — and that no source file under `domain/engine`
+  changes in this change (`git diff --stat`), which is also the evidence of design D7: no
+  new durable step (FR6, FR7, NFR-R1, NFR-R2, NG6)
 
 ## 4. Shared command-run core
 
 - [ ] 4.1 Generalize `CommandProcessRunner` into the shared command-run core (command
-  string + env fragment + timeout in; exit code, bounded tail, termination kind out)
-  consumed by `ShellCommandCheckRunner`; verify the extraction is behavior-preserving:
-  every existing `ShellCommandCheckRunner`/`CommandProcessRunner` spec stays green
-  unchanged (design D2)
+  string + env fragment + timeout in; exit code, bounded tail, termination kind out), a
+  public type of `:adapters` consumed by `ShellCommandCheckRunner`; verify the extraction
+  is behavior-preserving: every existing `ShellCommandCheckRunner`/`CommandProcessRunner`
+  spec stays green unchanged (design D2)
+- [ ] 4.2 Generalize `ProgramStageExecutor` (`:adapters:agent`, `program/`) over an executor
+  factory — round environment in, contract `Executor` out — so one round wrapper (open,
+  probe, run, close, denials, `ProgramResultMapping.toEngine`) serves a program and the
+  command built-in; the `program` factory constructs exactly what the wrapper constructed;
+  verify every existing `ProgramStageExecutor` spec stays green unchanged (design D2, the
+  round-wrapper surface; single-owner table)
 
 ## 5. Command stage executor
 
-- [ ] 5.1 Implement `CommandStageExecutor` as a built-in `Executor` of the contract
-  (`describe` with role `transform`, `start`) on the shared core over the round
-  environment: `sh -c` via `TaskExecutionEnvironment.exec`, layered env allowlist, no
-  `GNOMISH_DECISION_FILE`, `roundTimeout` resolved via the shared `RoundTimeout`
-  shapes; verify with specs: exit 0 → `completed`, env composition, decision variable
-  absent, stray decision file ignored (FR4, FR5, NFR-S1, NG1)
-- [ ] 5.2 Implement the status mapping: exit ≠ 0 → `failed/quality` with one finding
-  naming the exit code and the sanitized bounded output tail as details
-  (`FindingsSanitizer`); spawn failure and exits 126/127 → `failed/infrastructure`;
-  timeout → process tree killed, `failed/infrastructure`; verify each with specs
-  including an ANSI-noise output case and a virtual-time timeout case; run the
-  conformance kit against the built-in (FR6, FR7, FR8, NFR-O1, UX1)
-- [ ] 5.3 Verify zero-token telemetry by spec: a command round records an empty
-  per-model token map and empty trace, wall time is recorded, and cumulative task
-  totals are unchanged (NFR-C1)
+- [ ] 5.1 Implement `CommandStageExecutor` in `:adapters:agent` beside `program/` as a
+  built-in `Executor` of the contract (`describe` with role `transform`, `start`, and
+  `poll` answering `failed/infrastructure` — a command round is never pending) on the
+  shared core over the round environment: `sh -c` via `TaskExecutionEnvironment.exec`,
+  layered env allowlist, no `GNOMISH_DECISION_FILE`, `roundTimeout` resolved via the shared
+  `RoundTimeout` shapes; verify with specs: exit 0 → `completed`, env composition, decision
+  variable absent, stray decision file ignored, `poll` never pending (FR4, FR5, NFR-S1, NG1)
+- [ ] 5.2 Implement the status reporting: exit ≠ 0 → `failed/quality` whose `reason` names
+  the exit code and carries the sanitized bounded output tail (`FindingsSanitizer`) — the
+  one finding the contract's mapping (`ProgramResultMapping`, task 4.2) hands the engine;
+  spawn failure and exits 126/127 → `failed/infrastructure`; timeout → process tree
+  killed, `failed/infrastructure`; verify each with specs including an ANSI-noise output
+  case and a virtual-time timeout case; run the conformance kit against the built-in in
+  process through `BuiltInCandidate` (FR6, FR7, FR8, NFR-O1, UX1)
+- [ ] 5.3 Verify zero-token telemetry by spec: a command round reports `Usage.absent()`
+  (provenance `ABSENT`, empty per-model map and empty trace), wall time is recorded, and
+  cumulative task totals are unchanged (NFR-C1)
 
 ## 6. Dispatch and wiring
 
-- [ ] 6.1 Register `CommandStageExecutor` under the built-in name `command` in the
-  `ExecutorRegistry` of define-executor-contract; add no selector arm; verify with
-  specs on the real wiring: a mixed pipeline resolves the command stage to the
-  built-in, interactive mode still substitutes agent stages while the command stage
-  runs its command (FR8, design D6)
-- [ ] 6.2 Reaching the registry entry (carried from D8 of `define-executor-contract`, as built):
-  `ExecutorDispatch` (`:bootstrap`) resolves only a `program` stage through `ExecutorRegistry`,
-  by its `executor.name`, and sends every other stage type to the `agent-cli` arm; and
-  `ExecutorDeclaration.Type` (`domain/pipeline`) holds `PROGRAM` only, its javadoc naming this
-  change as the one where a built-in id joins it. Design D6 states how a `command` stage reaches
-  the `command` entry without a type-keyed arm (the stage type mapped to the built-in name in the
-  dispatch, or a declared built-in id), and the two javadocs are brought to what is built; a spec
-  on the real wiring shows a `command` stage never reaches the agent arm (FR8, D6)
+- [ ] 6.1 Register the `command` built-in as one entry of `ExecutorRegistry` at wiring
+  (`ExecutorRegistry.of` takes it beside the law's declarations), built by the shared round
+  wrapper of task 4.2 over `CommandStageExecutor`; verify with specs on the real wiring: a
+  mixed pipeline resolves the command stage to the built-in while the agent stage still
+  runs through the `agent-cli` arm (FR8, design D6)
+- [ ] 6.2 Add the `COMMAND` arm to `ExecutorDispatch` (`:bootstrap`): `case COMMAND ->
+  registry.resolve(<the built-in's name>)`, the one type-to-name mapping (design D6,
+  single-owner table); `ExecutorDeclaration.Type` keeps `PROGRAM` only; bring its javadoc and
+  `ExecutorRegistry`'s ("add-command-executor registers command here") to what is built; a
+  spec on the real wiring shows a `command` stage never reaches the agent arm (FR8, D6)
 
 ## 7. Integration, docs, and gates
 
 - [ ] 7.1 Add a host-mode and a container-mode integration spec running a pipeline
   with a real command stage (modifies the working copy, then a failing-then-passing
   retry): harvest/attempt commits carry the command's effects, findings reach the
-  next attempt, zero model invocations for the stage (FR9, M1, M2, G2)
+  next attempt, zero model invocations for the stage (FR9, NFR-R1, M1, M2, G2)
 - F82 (carried from `tighten-spec-contract`): the container chain takes `BoxEquipment` —
   `ContainerEnvironments`, `ContainerEnvironmentBuilder` and `ContainerTaskExecutionEnvironment`
   take the installation's one `BoxEquipment` plus the task's own inputs (`BoxGitLink`,

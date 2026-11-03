@@ -16,7 +16,7 @@ over the task working copy. The observed protocol (exit code, captured output) S
 identical in host and container modes, with no mode-specific executor implementation.
 The command's working-copy modifications SHALL be the stage product, under the round
 boundary checks, attempt persistence and harvest unchanged.
-**Implements**: FR4, FR9, G2 of add-command-executor
+**Implements**: FR4, FR9, NFR-R2, G2 of add-command-executor
 
 #### Scenario: Container round speaks the same protocol
 - **WHEN** the same command stage executes once in host mode and once in container mode
@@ -50,11 +50,11 @@ decision protocol is an agent concept.
 
 ### Requirement: Exit-code contract
 The command executor SHALL report the finished process through the executor contract:
-exit `0` is `completed` (the stage's verify chain then runs as usual); any other exit
-code from a started, finished process is `failed/quality` carrying exactly one finding
-that names the exit code, with the bounded, sanitized tail of the command's captured
-output as its details. The executor SHALL decide no class itself beyond this status.
-**Implements**: FR5, FR6, FR7, NFR-O1, UX1 of add-command-executor
+exit `0` is `completed` (the stage's verify chain then runs as usual); any exit code other
+than `0`, `126` and `127` from a started, finished process is `failed/quality`; `126` and
+`127` are `failed/infrastructure`. The executor SHALL decide no class itself beyond this
+status.
+**Implements**: FR5, FR6, FR7 of add-command-executor
 
 #### Scenario: Exit zero completes the round
 - **WHEN** the command exits with status 0
@@ -63,12 +63,7 @@ output as its details. The executor SHALL decide no class itself beyond this sta
 #### Scenario: Non-zero exit is a quality failure with the output tail
 - **WHEN** the command exits with status 1 after printing build errors
 - **THEN** the round is a quality failure whose single finding names exit code 1 and
-  carries the bounded tail of the output as details
-
-#### Scenario: Captured output is sanitized
-- **WHEN** the failing command's output contains ANSI color sequences
-- **THEN** the finding's details contain the text with control sequences stripped and
-  the tail bounded, never raw terminal noise
+  carries the bounded tail of the output
 
 #### Scenario: Unrunnable command is infrastructure
 - **WHEN** the declared command exits 127 (not found) or cannot be spawned at all
@@ -79,6 +74,25 @@ output as its details. The executor SHALL decide no class itself beyond this sta
 - **WHEN** the declared command exits 126 (not executable)
 - **THEN** the round is an infrastructure failure, no attempt is burned, and the task
   escalates as "cannot execute" naming the command
+
+### Requirement: Quality reason is the round's one finding
+A `failed/quality` result of the command executor SHALL carry its `reason` as the round's
+one finding: a text that names the exit code and carries the bounded, sanitized tail of
+the command's captured output. The contract's one status mapping SHALL turn that reason
+into the engine's finding exactly as for a program executor, so the next attempt receives
+it as prior feedback.
+**Implements**: FR6, NFR-R1, NFR-O1, UX1 of add-command-executor
+
+#### Scenario: Flaky command retries with its finding in feedback
+- **WHEN** a command stage's command exits 1 on the first round and 0 on the second
+- **THEN** the second round's request carries the first round's finding as prior feedback,
+  the stage completes with two attempts used, and the verify chain runs after the second
+  round only
+
+#### Scenario: Captured output is sanitized
+- **WHEN** the failing command's output contains ANSI color sequences
+- **THEN** the finding's text contains the output with control sequences stripped and
+  the tail bounded, never raw terminal noise
 
 ### Requirement: Round timeout kills the process tree as infrastructure
 The command round SHALL be bounded by the resolved `roundTimeout` — same accepted
@@ -113,34 +127,39 @@ contract as the agent-cli shapes.
 - **THEN** validation passes and the round uses the declared bound
 
 ### Requirement: Zero-token telemetry
-A command round SHALL report no token usage — an empty per-model map (unreported, never
-fabricated zeros) and an empty tool trace — while its wall time SHALL be measured and
-recorded like any round's. Cumulative task usage totals SHALL be unchanged by command
-rounds.
+A command round SHALL report no token usage — the contract's absent usage (provenance
+`ABSENT`: an empty per-model map, unreported, never fabricated zeros, and an empty tool
+trace) — while its wall time SHALL be measured and recorded like any round's. Cumulative
+task usage totals SHALL be unchanged by command rounds.
 **Implements**: NFR-C1 of add-command-executor
 
 #### Scenario: Command round spends no tokens
 - **WHEN** a command round completes and is recorded
-- **THEN** its record carries an empty token map and the task's cumulative usage totals
-  are unchanged, while the round's wall time is recorded
+- **THEN** its record carries usage of provenance `ABSENT` with an empty token map, the
+  task's cumulative usage totals are unchanged, and the round's wall time is recorded
 
 ### Requirement: Command executor is a built-in of the executor registry
 The command executor SHALL be registered in the executor registry under the built-in name
-`command`, implementing the executor contract's interface (`describe`, `start`), and SHALL
-pass the contract's conformance kit; a `command` stage resolves to it through the registry.
-Interactive-mode executor substitution SHALL apply to agent-typed stages only — a
-`command` stage always runs its declared command for real, in every run mode.
+`command`, implementing the executor contract's interface (`describe`, `start`, `poll`;
+`poll` SHALL answer `failed/infrastructure`, since a command round is never pending), and
+SHALL pass the contract's conformance kit driven in process.
+**Implements**: FR8 of add-command-executor
+
+#### Scenario: Built-in passes the conformance kit
+- **WHEN** the conformance kit runs against the `command` built-in in process
+- **THEN** every applicable case passes and the wire-only cases are reported not applicable
+
+#### Scenario: Poll is never pending
+- **WHEN** the `command` built-in is polled
+- **THEN** it answers `failed/infrastructure`, never `pending`
+
+### Requirement: Dispatch maps the command stage type to the built-in
+The run's dispatch SHALL map the stage type `command` to the built-in's registry name, so a
+`command` stage resolves to the built-in through the registry and never reaches the agent
+arm; a `command` stage SHALL run its declared command for real in every run mode.
 **Implements**: FR8 of add-command-executor
 
 #### Scenario: Mixed pipeline dispatches per stage
 - **WHEN** a pipeline interleaves an `agent-cli` stage and a `command` stage
-- **THEN** each stage's round runs through the executor the registry resolves for it
-
-#### Scenario: Built-in passes the conformance kit
-- **WHEN** the conformance kit runs against the `command` built-in
-- **THEN** every applicable case passes
-
-#### Scenario: Interactive mode does not simulate commands
-- **WHEN** a run starts with interactive executor substitution enabled
-- **THEN** agent-typed stages are substituted as today while the `command` stage still
-  executes its declared command
+- **THEN** each stage's round runs through the executor the registry resolves for it, and
+  the `command` stage's round never reaches the agent arm
