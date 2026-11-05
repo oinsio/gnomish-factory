@@ -43,9 +43,10 @@ public record ExecutorDeclaration(
     }
 
     /**
-     * The kind of a declaration. {@code program} is the only declarable type of this change; a
-     * built-in executor id joins it when the first built-in is registered by name
-     * ({@code add-command-executor}).
+     * The kind of a declaration. {@code program} is the only declarable type: a built-in executor
+     * is not declared in the law. The {@code command} built-in (design D6 of add-command-executor)
+     * is registered at wiring under its own name, and a {@code command} stage reaches it by its
+     * stage type, carrying its command on the stage, so no declaration names it.
      */
     public enum Type {
         /** A program the task's execution environment runs through the executor contract. */

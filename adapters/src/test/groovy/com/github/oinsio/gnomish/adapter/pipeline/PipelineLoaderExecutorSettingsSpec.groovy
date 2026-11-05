@@ -44,7 +44,7 @@ advancement: auto
         outcome instanceof LoadOutcome.Invalid
         (outcome as LoadOutcome.Invalid).errors() == [
             new ConfigError('stages/plan/stage.yaml', 'executor.type',
-            "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'")
+            "api executor is not yet supported; the supported executor types are 'agent-cli', 'program' and 'command'")
         ]
     }
 
@@ -107,7 +107,7 @@ advancement: auto
         outcome instanceof LoadOutcome.Invalid
         (outcome as LoadOutcome.Invalid).errors() == [
             new ConfigError('stages/plan/stage.yaml', 'executor.type',
-            "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'"),
+            "api executor is not yet supported; the supported executor types are 'agent-cli', 'program' and 'command'"),
             new ConfigError('stages/plan/stage.yaml', 'verify[0].settings.maxTurns',
             "malformed 'maxTurns': expected a number")
         ]
@@ -142,6 +142,45 @@ advancement: auto
         shape | settings
         'a string' | 'fast'
         'a list' | '[maxTurns, 5]'
+    }
+
+    // Scenario: pipeline/pipeline-config / Settings key with no value is rejected
+    // UX2 of add-command-executor (design D10): a settings key written with no value is YAML null — a
+    //     located error, never an exception
+    def "an empty #key under #where fails to load with a located error, not an exception"() {
+        given:
+        write('config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 2\n')
+        write('pipeline.yaml', 'stages:\n  - build\n')
+        write('stages/build/instructions.md', 'build it\n')
+        write('stages/build/accept.md', 'criteria\n')
+        write('stages/build/stage.yaml', """\
+purpose: build
+executor:
+  type: agent-cli
+  model: cli-model
+${executorSettings}instructions: stages/build/instructions.md
+verify:
+  - type: judge
+    criteriaFile: stages/build/accept.md
+    model: judge-model
+    votes: 1
+${judgeSettings}advancement: auto
+""")
+
+        when:
+        def outcome = loadTree()
+
+        then:
+        outcome instanceof LoadOutcome.Invalid
+        (outcome as LoadOutcome.Invalid).errors() == [
+            new ConfigError('stages/build/stage.yaml', "${where}.${key}".toString(), "missing value for '${key}'".toString())
+        ]
+
+        where:
+        where | key | executorSettings | judgeSettings
+        'executor.settings' | 'roundTimeout' | '  settings:\n    roundTimeout:\n' | ''
+        'executor.settings' | 'maxTurns' | '  settings:\n    maxTurns:\n' | ''
+        'verify[0].settings' | 'roundTimeout' | '' | '    settings:\n      roundTimeout:\n'
     }
 
     def "the aggregated error list is immutable"() {

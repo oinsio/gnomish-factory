@@ -2,16 +2,6 @@
 
 ## MODIFIED Requirements
 
-Layered on `Local sanity validation of mechanism and check configs` as modified by
-`tighten-spec-contract` and then by `define-executor-contract` (both sequenced before this
-change): tighten-spec-contract cut the body and added the scenarios "Agent settings are checked
-against the executor's schema", "Settings that are not a mapping are rejected" and "External
-check without an identifier is rejected"; define-executor-contract adds the `program` type, the
-model rule's agent-type scope and the scenarios "Program stage names a declared executor",
-"Program stage without a name is rejected" and "Program stage may omit the model"; this text
-adds the `command` type, its `command` arm of the model rule and its three scenarios. All must
-survive the later sync.
-
 ### Requirement: Local sanity validation of mechanism and check configs
 The loader SHALL apply catalog-free sanity rules, needing no live target, to the executor types `api`, `agent-cli`, `program` and `command`. The executor `model` SHALL be present and non-blank for the agent executor types (`api`, `agent-cli`), and `settings` SHALL be a well-formed mapping whose keys and values only the executor's schema checks. The loader SHALL NOT validate target liveness — whether a CI-check name exists, whether a `model` is real, or whether `judge` criteria are gradeable.
 **Implements**: FR11 of load-pipeline-config; FR6 of add-plugin-architecture; FR13 of add-plugin-architecture; UX1 of add-plugin-architecture; FR9, FR10 of define-executor-contract; FR1, FR2, UX2 of add-command-executor
@@ -93,6 +83,12 @@ The loader SHALL apply catalog-free sanity rules, needing no live target, to the
 #### Scenario: Settings that are not a mapping are rejected
 - **WHEN** a stage's `settings` is present but is not a mapping
 - **THEN** validation reports a located error
+
+#### Scenario: Settings key with no value is rejected
+- **WHEN** a stage's executor `settings`, a `judge` check's `settings`, a check's `params` or an
+  executor declaration's `settings` declares a key with no value
+- **THEN** the load fails with a located error naming the file and `<where>.<key>`, before any
+  stage runs
 
 #### Scenario: External check without an identifier is rejected
 - **WHEN** an `external` check's check identifier is absent or blank

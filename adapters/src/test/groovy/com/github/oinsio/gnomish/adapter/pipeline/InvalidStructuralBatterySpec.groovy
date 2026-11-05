@@ -80,7 +80,7 @@ class InvalidStructuralBatterySpec extends Specification implements InvalidFixtu
         then:
         errors == [
             new ConfigError('stages/plan/stage.yaml', 'executor.type', "missing required field 'executor.type'"),
-            new ConfigError('stages/plan/stage.yaml', 'executor.type', "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'"),
+            new ConfigError('stages/plan/stage.yaml', 'executor.type', "api executor is not yet supported; the supported executor types are 'agent-cli', 'program' and 'command'"),
         ]
     }
 
@@ -94,8 +94,8 @@ class InvalidStructuralBatterySpec extends Specification implements InvalidFixtu
 
         then:
         errors == [
-            new ConfigError('stages/plan/stage.yaml', 'executor.type', "unknown executor 'wat'; known executors are api, agent-cli, program"),
-            new ConfigError('stages/plan/stage.yaml', 'executor.type', "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'"),
+            new ConfigError('stages/plan/stage.yaml', 'executor.type', "unknown executor 'wat'; known executors are api, agent-cli, program, command"),
+            new ConfigError('stages/plan/stage.yaml', 'executor.type', "api executor is not yet supported; the supported executor types are 'agent-cli', 'program' and 'command'"),
         ]
     }
 
@@ -113,7 +113,7 @@ class InvalidStructuralBatterySpec extends Specification implements InvalidFixtu
         errors == [
             new ConfigError('stages/plan/stage.yaml', 'executor', "missing required field 'executor'"),
             new ConfigError('stages/plan/stage.yaml', 'executor.model', 'missing required executor model; the model must be pinned in the manifest for every agent executor type (api, agent-cli)'),
-            new ConfigError('stages/plan/stage.yaml', 'executor.type', "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'"),
+            new ConfigError('stages/plan/stage.yaml', 'executor.type', "api executor is not yet supported; the supported executor types are 'agent-cli', 'program' and 'command'"),
         ]
     }
 

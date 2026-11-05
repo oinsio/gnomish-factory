@@ -23,14 +23,20 @@ import org.jspecify.annotations.Nullable;
  * absent key falls back to {@link #DEFAULT}, since an {@code api} stage or a
  * manifest predating the validator must not silently hang a round forever.
  *
- * <p>Implements FR11, FR13, D7 of add-agent-executor.
+ * <p>Public since add-command-executor (design D2): the {@code command} built-in
+ * ({@code adapter.agent.command}) resolves its round bound through this same
+ * class, so the accepted shapes keep one resolver beside their one load-side
+ * judge — the declared pair with {@code AgentSettingsValidator} gains a caller
+ * on each end and no third implementation.
+ *
+ * <p>Implements FR11, FR13, D7 of add-agent-executor; FR3 of add-command-executor.
  */
-final class RoundTimeout {
+public final class RoundTimeout {
 
     private static final String KEY = "roundTimeout";
 
     /** The adapter's fallback budget when {@code roundTimeout} is absent or unparseable. */
-    static final Duration DEFAULT = Duration.ofMinutes(30);
+    public static final Duration DEFAULT = Duration.ofMinutes(30);
 
     private RoundTimeout() {}
 
@@ -41,7 +47,7 @@ final class RoundTimeout {
      *     never null, may be empty
      * @return the resolved timeout budget; never null, never negative
      */
-    static Duration resolve(Map<String, Object> settings) {
+    public static Duration resolve(Map<String, Object> settings) {
         Object raw = settings.get(KEY);
         if (raw instanceof Number number) {
             return Duration.ofSeconds(number.longValue());

@@ -95,8 +95,8 @@ final class SandboxLifecyclePassFactory {
          * caller's extra sink (the daemon's vitals + ledger writers, tasks 6.1/6.2), and returns
          * the tallied summary line. Only the sweep hand-off itself is exempt from mutation (see
          * {@link #sweepAndSummarize}); everything around it, this method's own return value
-         * included, is asserted by {@code SandboxLifecyclePassFactorySpec} with no Docker daemon
-         * involved.
+         * included, is asserted by {@code SandboxLifecyclePassFactorySpec} over a project id that owns
+         * no Docker object, on a reachable daemon (the listing fails closed on an unreachable one).
          */
         @Override
         public String run(Path cloneDir, LivenessVerdict liveness, SweepVerdictListener extraSink) {
@@ -113,9 +113,10 @@ final class SandboxLifecyclePassFactory {
          * no decision, no branch, nothing computed here — followed by handing back the tally the
          * listener kept. The sweep constructs a real {@code
          * com.github.oinsio.gnomish.sandbox.environment.DockerCli}, so the hand-off's observable
-         * effect in a fast, docker-daemon-free unit test is identical to the call never happening:
-         * an empty or unreachable listing emits no verdict, so the returned line reads "nothing to
-         * report" whether or not the sweep ran. Killing a "call removed" mutant here would require
+         * effect in a fast unit test over a project that owns no Docker object is identical to the
+         * call never happening: an empty listing emits no verdict, so the returned line reads
+         * "nothing to report" whether or not the sweep ran (an unreachable daemon is no daemon-free
+         * alternative — the listing fails closed, NFR-R1 of add-serve-sandbox-lifecycle). Killing a "call removed" mutant here would require
          * either mocking the (deliberately package-private, unmockable) {@code DockerCli} or
          * depending on a live daemon's actual state. It exists as its own method so that exactly
          * this hand-off leaves the mutation gate: {@link #run(Path, LivenessVerdict,

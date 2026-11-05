@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor;
 import com.github.oinsio.gnomish.adapter.agent.LoggingAgentProgressListener;
 import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor;
 import com.github.oinsio.gnomish.adapter.agent.RoundScratchDirectory;
+import com.github.oinsio.gnomish.adapter.agent.command.CommandExecutorFactory;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.app.describe.ProgramBounds;
@@ -32,7 +33,7 @@ import org.jspecify.annotations.Nullable;
  * report their rounds' progress through the shared {@link LoggingAgentProgressListener} renderer.
  *
  * <p>Implements FR7, D6, D10 of add-agent-executor; FR2 of remove-interactive-console; FR6 of
- * make-run-headless; FR9, FR10, FR14, FR21 of define-executor-contract.
+ * make-run-headless; FR9, FR10, FR14, FR21 of define-executor-contract; FR8 of add-command-executor.
  */
 final class ExecutorAdapterSelector {
 
@@ -49,8 +50,9 @@ final class ExecutorAdapterSelector {
      * verification found on resume re-verifies its harvested attempt commit without a re-run (FR21,
      * D15) whichever arm ran the interrupted round: the snapshot is the round source's, not the
      * agent's. Every program round is equipped from the run's one {@link
-     * ManualRunAssembly#timeEquipment()}, the same the round source's clock comes from, so a round's
-     * wall time and its environment's readings share one clock.
+     * ManualRunAssembly#timeEquipment()}, the same the round source's clock comes from, and the
+     * registry's {@code command} built-in measures its rounds on that clock too (design D6 of
+     * add-command-executor), so a round's wall time and its environment's readings share one clock.
      *
      * @param assembly the run's assembly; never null
      * @param childEnv the run's child-environment allowlist; never null
@@ -83,8 +85,9 @@ final class ExecutorAdapterSelector {
                 rounds);
         var equipment = new ProgramRoundEquipment(
                 ProgramBounds.DEFAULTS, assembly.time, childEnv.programGrant(), RoundScratchDirectory.HOST_TEMP);
-        StageExecutor dispatch =
-                new ExecutorDispatch(ExecutorRegistry.of(described, definition, law, rounds, equipment), cli);
+        var registry = ExecutorRegistry.of(
+                described, definition, law, rounds, equipment, new CommandExecutorFactory(assembly.time.clock()));
+        StageExecutor dispatch = new ExecutorDispatch(registry, cli);
         StageExecutor executor = sandbox == null
                 ? dispatch
                 : new ResumeVerificationStageExecutor(dispatch, sandbox.rounds(), sandbox.pendingVerification());

@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.check
+package com.github.oinsio.gnomish.adapter.command
 
 import java.nio.charset.StandardCharsets
 import spock.lang.Specification

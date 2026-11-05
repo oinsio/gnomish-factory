@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.check;
+package com.github.oinsio.gnomish.adapter.command;
 
 import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.subprocess.DrainSink;
@@ -9,7 +9,8 @@ import java.util.Deque;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The retention policy of a command check's output tail: the last {@link #MAX_TAIL_LINES} lines,
+ * The retention policy of a command's output tail (a verify check's or a command stage's, design D2
+ * of add-command-executor): the last {@link #MAX_TAIL_LINES} lines,
  * capped at {@link #MAX_TAIL_BYTES} bytes, fed chunk by chunk by the drain that reads the stream
  * (design D6, FR7 of add-manual-run; design D17 of fix-terminal-receipt-convergence).
  *

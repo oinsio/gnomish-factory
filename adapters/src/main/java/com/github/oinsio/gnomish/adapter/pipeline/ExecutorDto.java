@@ -5,10 +5,11 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code executor} block of {@code stage.yaml} — the Mechanism section (D2,
- * D5a): the executor {@code type} ({@code api}/{@code agent-cli}/{@code program}),
- * the pinned {@code model}, opaque {@code settings}, and the {@code name} of the
- * {@code config.yaml} executor declaration the stage runs (FR9 of
- * define-executor-contract).
+ * D5a): the executor {@code type} ({@code api}/{@code agent-cli}/{@code program}/
+ * {@code command}), the pinned {@code model}, opaque {@code settings}, the {@code name} of
+ * the {@code config.yaml} executor declaration the stage runs (FR9 of
+ * define-executor-contract), and the {@code command} a {@code command} stage runs (FR1, FR2
+ * of add-command-executor).
  *
  * <p>Wire shape:
  *
@@ -38,20 +39,34 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR2, FR11 (DTO shape), D2, D5a of load-pipeline-config;
  * FR12–FR14 of add-sandbox-core (the {@code sandbox} field); FR9, FR10 of
- * define-executor-contract (the {@code name} field and the {@code program} type).
+ * define-executor-contract (the {@code name} field and the {@code program} type); FR1, FR2
+ * of add-command-executor (the {@code command} field and the {@code command} type).
  *
  * @param type the raw executor type, or {@code null} when omitted
  * @param model the pinned model, or {@code null} when omitted
  * @param settings the opaque executor settings; {@code null}/absent means none
  * @param sandbox the stage's sandbox declarations; {@code null}/absent means none
  * @param name the executor declaration's name, or {@code null} when omitted
+ * @param command the command a {@code command} stage runs, raw as declared, or {@code null}
+ *     when omitted
  */
 public record ExecutorDto(
         @Nullable String type,
         @Nullable String model,
         @Nullable Map<String, Object> settings,
         @Nullable SandboxDto sandbox,
-        @Nullable String name) {
+        @Nullable String name,
+        @Nullable String command) {
+
+    /** Convenience for construction outside Jackson binding (e.g. tests): no {@code command}. */
+    public ExecutorDto(
+            @Nullable String type,
+            @Nullable String model,
+            @Nullable Map<String, Object> settings,
+            @Nullable SandboxDto sandbox,
+            @Nullable String name) {
+        this(type, model, settings, sandbox, name, null);
+    }
 
     /** Convenience for construction outside Jackson binding (e.g. tests): no executor {@code name}. */
     public ExecutorDto(

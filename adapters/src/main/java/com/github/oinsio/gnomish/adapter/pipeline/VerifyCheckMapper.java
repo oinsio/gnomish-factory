@@ -23,7 +23,7 @@ import org.jspecify.annotations.Nullable;
  * non-positive — timing-range sanity stays a domain concern.
  *
  * <p>Opaque {@code params}/{@code settings} maps flow through as defensive
- * plain-JDK copies (FR11, D5a) via {@link PipelineMapper#copySettings}.
+ * plain-JDK copies (FR11, D5a) via {@link OpaqueSettings#copy}.
  *
  * <p>This mapper also parses the {@code external} check's optional raw
  * {@code timeout-class} string into {@link VerifyCheck.TimeoutClass}: absent
@@ -91,7 +91,8 @@ final class VerifyCheckMapper {
         return switch (dto) {
             case VerifyCheckDto.Builtin builtin ->
                 new VerifyCheck.Builtin(
-                        PipelineMapper.orEmpty(builtin.name()), PipelineMapper.copySettings(builtin.params()));
+                        PipelineMapper.orEmpty(builtin.name()),
+                        OpaqueSettings.copy(manifest, "verify[%d].params".formatted(index), builtin.params(), errors));
             case VerifyCheckDto.Command command ->
                 new VerifyCheck.Command(
                         PipelineMapper.orEmpty(command.command()),
@@ -101,7 +102,7 @@ final class VerifyCheckMapper {
                 new VerifyCheck.Judge(
                         PipelineMapper.orEmpty(judge.criteriaFile()),
                         PipelineMapper.orEmpty(judge.model()),
-                        PipelineMapper.copySettings(judge.settings()),
+                        OpaqueSettings.copy(manifest, "verify[%d].settings".formatted(index), judge.settings(), errors),
                         judge.votes() == null ? 0 : judge.votes());
         };
     }
@@ -116,7 +117,7 @@ final class VerifyCheckMapper {
         return new VerifyCheck.External(
                 PipelineMapper.orEmpty(external.checkId()),
                 mapProvider(external.provider()),
-                PipelineMapper.copySettings(external.params()),
+                OpaqueSettings.copy(manifest, "verify[%d].params".formatted(index), external.params(), errors),
                 interval,
                 timeout,
                 timeoutClass,

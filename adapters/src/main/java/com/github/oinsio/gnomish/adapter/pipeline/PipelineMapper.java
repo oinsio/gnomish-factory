@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.pipeline;
 import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
+import com.github.oinsio.gnomish.domain.pipeline.ExecutorDeclaration;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
@@ -125,15 +126,12 @@ public final class PipelineMapper {
             stages.add(mapStage(entry, defaultLimit, errors));
         }
         TrackerConfig tracker = TrackerConfigMapper.map(config.tracker(), profiles, errors);
+        List<ExecutorDeclaration> executors = ExecutorDeclarations.map(config.executors(), errors);
         if (!errors.isEmpty()) {
             return new Result(null, errors);
         }
         PipelineDefinition definition = new PipelineDefinition(
-                orEmpty(config.schemaVersion()),
-                new AutonomyLimits(defaultLimit),
-                stages,
-                tracker,
-                ExecutorDeclarations.map(config.executors()));
+                orEmpty(config.schemaVersion()), new AutonomyLimits(defaultLimit), stages, tracker, executors);
         return new Result(definition, List.of());
     }
 
@@ -154,16 +152,11 @@ public final class PipelineMapper {
                 orEmpty(dto.purpose()),
                 StageDefinitionMapper.mapInputs(dto.inputs()),
                 StageDefinitionMapper.mapOutputs(dto.outputs()),
-                StageDefinitionMapper.mapExecutor(dto.executor()),
+                StageDefinitionMapper.mapExecutor(manifest, dto.executor(), errors),
                 orEmpty(dto.instructions()),
                 VerifyCheckMapper.mapAll(manifest, dto.verify(), errors),
                 StageDefinitionMapper.resolveLimits(defaultLimit, dto.autonomy()),
                 StageDefinitionMapper.mapAdvancement(dto.advancement()));
-    }
-
-    /** A defensive plain-JDK copy of an opaque settings/params map (FR11, D5a); absent maps to empty. */
-    static Map<String, Object> copySettings(@Nullable Map<String, Object> settings) {
-        return settings == null ? Map.of() : Map.copyOf(settings);
     }
 
     /** A {@code null} wire string becomes blank, so a domain rule (task 4.x) reports it, not an NPE. */

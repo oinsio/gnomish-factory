@@ -103,10 +103,30 @@ class ExecutorDeclarationsSpec extends Specification {
         section.put('acme', new ExecutorDeclarationDto('program', ['acme', null], [maxTurns: 20], ['K'], ['h.example']))
 
         expect:
-        ExecutorDeclarations.map(null) == []
-        ExecutorDeclarations.map(section) == [
+        ExecutorDeclarations.map(null, []) == []
+        ExecutorDeclarations.map(section, []) == [
             new ExecutorDeclaration('lint', ExecutorDeclaration.Type.PROGRAM, [], [:], [], []),
             new ExecutorDeclaration('acme', ExecutorDeclaration.Type.PROGRAM, ['acme', ''], [maxTurns: 20], ['K'], ['h.example'])
         ]
+    }
+
+    // Scenario: pipeline/pipeline-config / Settings key with no value is rejected
+    // UX2 of add-command-executor (design D10): a settings key with no value is a located error, left
+    //     out of the declaration
+    def "a declaration's settings key with no value is a located error, not an exception"() {
+        given:
+        def settings = new LinkedHashMap<String, Object>()
+        settings.put('maxTurns', null)
+        settings.put('mode', 'fast')
+        def errors = []
+
+        when:
+        def mapped = ExecutorDeclarations.map([acme: new ExecutorDeclarationDto('program', ['acme'], settings, null, null)], errors)
+
+        then:
+        errors == [
+            new ConfigError('config.yaml', 'executors.acme.settings.maxTurns', "missing value for 'maxTurns'")
+        ]
+        mapped[0].settings() == [mode: 'fast']
     }
 }

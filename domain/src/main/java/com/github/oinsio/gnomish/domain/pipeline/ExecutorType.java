@@ -5,13 +5,14 @@ package com.github.oinsio.gnomish.domain.pipeline;
  * D5a): {@link #API} drives the ai-provider API directly; {@link #AGENT_CLI}
  * runs an agent CLI as a subprocess in a workspace; {@link #PROGRAM} runs a
  * law-declared executor program through the executor contract, named by the
- * stage's {@code executor.name}. The domain enum is pure —
- * the YAML wire values ({@code api} / {@code agent-cli} / {@code program}) are mapped by the
+ * stage's {@code executor.name}; {@link #COMMAND} runs the stage's declared
+ * {@code executor.command} in the task execution environment. The domain enum is pure —
+ * the YAML wire values ({@code api} / {@code agent-cli} / {@code program} / {@code command}) are mapped by the
  * adapter DTOs (task 5.1), and an unknown wire value is a located structural
  * error there (FR5), never a domain concern.
  *
  * <p>Implements FR2 of load-pipeline-config; FR10 of define-executor-contract
- * (the {@code program} type).
+ * (the {@code program} type); FR1 of add-command-executor (the {@code command} type).
  */
 public enum ExecutorType {
     /** Direct ai-provider API execution. */
@@ -19,5 +20,7 @@ public enum ExecutorType {
     /** Agent CLI subprocess execution in a workspace. */
     AGENT_CLI,
     /** A law-declared executor program, run through the executor contract (FR10 of define-executor-contract). */
-    PROGRAM
+    PROGRAM,
+    /** The stage's declared command, run in the task execution environment (FR1 of add-command-executor). */
+    COMMAND
 }

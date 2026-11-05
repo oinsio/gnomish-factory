@@ -86,8 +86,8 @@ class ProgramStageExecutorSpec extends Specification {
     private ProgramStageExecutor executor(Path program, RoundEnvironmentSource rounds, Map<String, Object> settings = [:]) {
         def described = new DescribedProgram(ProgramFixtures.declaration([program.toString()], settings),
         ProgramFixtures.describe(), ['ACME_API_KEY'])
-        new ProgramStageExecutor(PipelineLaw.ofContent(['instructions.md': 'build it\n']), described, rounds,
-        ProgramFixtures.equipment(stderrParent))
+        new ProgramStageExecutor(new ProgramExecutorFactory(PipelineLaw.ofContent(['instructions.md': 'build it\n']),
+        described, ProgramFixtures.equipment(stderrParent)), rounds)
     }
 
     private RoundEnvironmentSource.Round round(TaskExecutionEnvironment env) {
@@ -192,8 +192,8 @@ class ProgramStageExecutorSpec extends Specification {
         given:
         def rounds = Mock(RoundEnvironmentSource)
         def described = new DescribedProgram(ProgramFixtures.declaration(['unused']), ProgramFixtures.describe(), [])
-        def executor = new ProgramStageExecutor(PipelineLaw.ofContent([:]), described, rounds,
-        ProgramFixtures.equipment(stderrParent, ProgramBounds.DEFAULTS))
+        def executor = new ProgramStageExecutor(new ProgramExecutorFactory(PipelineLaw.ofContent([:]), described,
+        ProgramFixtures.equipment(stderrParent, ProgramBounds.DEFAULTS)), rounds)
 
         when:
         executor.execute(ProgramFixtures.round(workspace))

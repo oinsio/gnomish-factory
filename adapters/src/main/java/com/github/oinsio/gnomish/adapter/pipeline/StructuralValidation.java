@@ -44,15 +44,20 @@ import org.jspecify.annotations.Nullable;
  * (declare needs, {@code requiresFresh}). It is caught here, at the wire, so
  * the mapper never carries a repo-declared binding into the domain.
  *
+ * <p>A Mechanism field declared blank where its declaration is the fault — a {@code model} on a
+ * {@code command} stage, a {@code command} on any other — is {@link BlankMechanismFields}'s, since
+ * the mapping erases it before the domain rule could see it.
+ *
  * <p>Implements FR5 of load-pipeline-config; FR14 of add-sandbox-core (the
- * tighten-only sandbox check).
+ * tighten-only sandbox check); FR1, FR2 of add-command-executor (the {@code command} token and
+ * the blank Mechanism fields).
  */
 public final class StructuralValidation {
 
     private static final String PIPELINE = "pipeline.yaml";
 
-    /** The known executor wire values (the domain {@code ExecutorType} enum). */
-    private static final List<String> EXECUTOR_TYPES = List.of("api", "agent-cli", "program");
+    /** The known executor wire values (the domain {@code ExecutorType} enum); {@link BlankMechanismFields} reads them. */
+    static final List<String> EXECUTOR_TYPES = List.of("api", "agent-cli", "program", "command");
 
     /** The known advancement wire values (the domain {@code AdvancementMode} enum). */
     private static final List<String> ADVANCEMENT_MODES = List.of("auto", "manual");
@@ -93,6 +98,7 @@ public final class StructuralValidation {
         checkInputs(errors, file, stage.inputs());
         checkOutputs(errors, file, stage.outputs());
         checkExecutor(errors, file, stage.executor());
+        BlankMechanismFields.check(errors, file, stage.executor());
         checkSandbox(errors, file, stage.executor());
         requirePresent(errors, file, "instructions", stage.instructions());
         checkAdvancement(errors, file, stage.advancement());
@@ -104,7 +110,8 @@ public final class StructuralValidation {
             return;
         }
         for (int i = 0; i < inputs.size(); i++) {
-            if (inputs.get(i) instanceof ArtifactInputDto.Internal internal && internal.producerOutputId() == null) {
+            if (inputs.get(i) instanceof ArtifactInputDto.Internal(@Nullable String producerOutputId)
+                    && producerOutputId == null) {
                 errors.add(new ConfigError(
                         file, "inputs[%d].producerOutputId".formatted(i), "missing required field 'producerOutputId'"));
             }

@@ -189,11 +189,16 @@ class StageDefinitionSpec extends Specification {
     }
 
     // FR2/D5a: the domain enums are closed and pure — the yaml wire values
-    // ('api'/'agent-cli'/'program', 'auto'/'manual') are the adapter's mapping concern;
-    // PROGRAM is FR10 of define-executor-contract
+    // ('api'/'agent-cli'/'program'/'command', 'auto'/'manual') are the adapter's mapping concern;
+    // PROGRAM is FR10 of define-executor-contract; COMMAND is FR1 of add-command-executor
     def "the executor-type and advancement-mode enums are closed"() {
         expect: 'each enum holds exactly its contract values'
-        ExecutorType.values()*.name() == ['API', 'AGENT_CLI', 'PROGRAM']
+        ExecutorType.values()*.name() == [
+            'API',
+            'AGENT_CLI',
+            'PROGRAM',
+            'COMMAND'
+        ]
         AdvancementMode.values()*.name() == ['AUTO', 'MANUAL']
     }
 

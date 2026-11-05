@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.adapter.agent.command.CommandExecutorFactory;
 import com.github.oinsio.gnomish.adapter.agent.program.DescribedProgram;
+import com.github.oinsio.gnomish.adapter.agent.program.ProgramExecutorFactory;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramStageExecutor;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
@@ -13,22 +15,31 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * The run's executors by name (design D8, D10 of define-executor-contract): the one place a stage's
- * {@code executor.name} is resolved to what runs its rounds. It holds one entry per executor the law
- * declares and the describe preflight described — a {@link ProgramStageExecutor} over the law's
- * declaration, the describe answer the preflight agreed with the law, and the credential names the
- * law grants it — each opening its rounds through the run's one round source, so a program round's
- * token lands in the run's current-round cell exactly as an agent round's does (FR14, FR21). No
- * built-in is registered by name in this change: {@code agent-cli} keeps its type-keyed arm in
- * {@link ExecutorDispatch} until {@code extract-agent-round-runner}, and {@code add-command-executor}
- * registers {@code command} here.
+ * The run's executors by name (design D8, D10 of define-executor-contract; design D6 of
+ * add-command-executor): the one place a stage's executor name is resolved to what runs its rounds.
+ * Every entry is the shared round wrapper, {@link ProgramStageExecutor}, over a round-executor factory,
+ * each opening its rounds through the run's one round source, so a registry round's token lands in the
+ * run's current-round cell exactly as an agent round's does (FR14, FR21). It holds:
  *
- * <p>An entry is a stage executor, not a bare {@code Executor}: a {@code ProgramExecutor} is bound
- * to one round's execution environment (task 7.1), which exists only once the round is open, so the
- * value the registry holds at wiring is what builds that executor in each round. Built once at
- * wiring and immutable (design D12); the run's own thread reads it.
+ * <ul>
+ *   <li>one entry per executor the law declares and the describe preflight described — a {@link
+ *       ProgramExecutorFactory} of the law's declaration, the describe answer the preflight agreed
+ *       with the law, and the credential names the law grants it;
+ *   <li>the {@code command} built-in under its name {@value CommandExecutorFactory#NAME}, a {@link
+ *       CommandExecutorFactory} the wiring hands in beside the declarations. A {@code command} stage
+ *       names no executor; the dispatch maps its type to this name.
+ * </ul>
  *
- * <p>Implements FR9, FR10 of define-executor-contract.
+ * <p>A law that declares an executor under the built-in's name is refused when the registry is built,
+ * so neither entry silently replaces the other. {@code agent-cli} is not an entry: it keeps its
+ * type-keyed arm in {@link ExecutorDispatch} until {@code extract-agent-round-runner}.
+ *
+ * <p>An entry is a stage executor, not a bare {@code Executor}: a contract executor is bound to one
+ * round's execution environment (task 7.1), which exists only once the round is open, so the value
+ * the registry holds at wiring is what builds that executor in each round. Built once at wiring and
+ * immutable (design D12); the run's own thread reads it.
+ *
+ * <p>Implements FR9, FR10 of define-executor-contract; FR8 of add-command-executor.
  */
 final class ExecutorRegistry {
 
@@ -39,24 +50,32 @@ final class ExecutorRegistry {
     }
 
     /**
-     * The registry of one run: every declaration of {@code definition} the preflight described.
+     * The registry of one run: every declaration of {@code definition} the preflight described, and
+     * the {@code command} built-in.
      *
      * @param described what the describe preflight obtained for the run's law; never null
      * @param definition the law the run is frozen from; never null
      * @param law the run's frozen law, which each program round's request is built from; never null
      * @param rounds the run's one round source, the same the agent arm opens its rounds through
      * @param equipment the run's program equipment; never null
+     * @param command the {@code command} built-in's factory, registered under its name; never null
      * @return the registry; never null
+     * @throws IllegalStateException when the law declares an executor under the built-in's name
      */
     static ExecutorRegistry of(
             DescribedLaw described,
             PipelineDefinition definition,
             PipelineLaw law,
             RoundEnvironmentSource rounds,
-            ProgramRoundEquipment equipment) {
+            ProgramRoundEquipment equipment,
+            CommandExecutorFactory command) {
         Map<ExecutorName, StageExecutor> byName = new LinkedHashMap<>();
         for (ExecutorDeclaration declaration : definition.executors()) {
             String name = declaration.name();
+            if (name.equals(command.name())) {
+                throw new IllegalStateException("the law declares an executor named '" + name
+                        + "', the name of the built-in a command stage runs; rename the declaration");
+            }
             // A declaration the preflight did not describe has no answer only on a run that runs no
             // stage (RunDescribe's NoStageRuns medium): no round reaches the registry there.
             described
@@ -64,14 +83,19 @@ final class ExecutorRegistry {
                     .ifPresent(describe -> byName.put(
                             new ExecutorName(name),
                             new ProgramStageExecutor(
-                                    law,
-                                    new DescribedProgram(
-                                            declaration,
-                                            describe,
-                                            described.executors().credentials().of(name)),
-                                    rounds,
-                                    equipment)));
+                                    new ProgramExecutorFactory(
+                                            law,
+                                            new DescribedProgram(
+                                                    declaration,
+                                                    describe,
+                                                    described
+                                                            .executors()
+                                                            .credentials()
+                                                            .of(name)),
+                                            equipment),
+                                    rounds)));
         }
+        byName.put(new ExecutorName(command.name()), new ProgramStageExecutor(command, rounds));
         return new ExecutorRegistry(byName);
     }
 
@@ -87,8 +111,8 @@ final class ExecutorRegistry {
     StageExecutor resolve(ExecutorName name) {
         StageExecutor executor = byName.get(name);
         if (executor == null) {
-            throw new IllegalStateException(
-                    "no executor named '" + name + "' is registered for this run; registered: " + byName.keySet());
+            throw new IllegalStateException("no executor named '" + name + "' is registered for this run; registered: "
+                    + byName.keySet().stream().map(ExecutorName::value).sorted().toList());
         }
         return executor;
     }

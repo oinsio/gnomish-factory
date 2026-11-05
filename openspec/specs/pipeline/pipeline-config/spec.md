@@ -140,8 +140,8 @@ A `schemaVersion` SHALL be declared in `config.yaml` — one version for the who
 - **THEN** validation reports a located error naming `config.yaml`
 
 ### Requirement: Local sanity validation of mechanism and check configs
-The loader SHALL apply catalog-free sanity rules, needing no live target, to the executor types `api`, `agent-cli` and `program`. The executor `model` SHALL be present and non-blank for the agent executor types (`api`, `agent-cli`), and `settings` SHALL be a well-formed mapping whose keys and values only the executor's schema checks. The loader SHALL NOT validate target liveness — whether a CI-check name exists, whether a `model` is real, or whether `judge` criteria are gradeable.
-**Implements**: FR11 of load-pipeline-config; FR6 of add-plugin-architecture; FR13 of add-plugin-architecture; UX1 of add-plugin-architecture; FR9, FR10 of define-executor-contract
+The loader SHALL apply catalog-free sanity rules, needing no live target, to the executor types `api`, `agent-cli`, `program` and `command`. The executor `model` SHALL be present and non-blank for the agent executor types (`api`, `agent-cli`), and `settings` SHALL be a well-formed mapping whose keys and values only the executor's schema checks. The loader SHALL NOT validate target liveness — whether a CI-check name exists, whether a `model` is real, or whether `judge` criteria are gradeable.
+**Implements**: FR11 of load-pipeline-config; FR6 of add-plugin-architecture; FR13 of add-plugin-architecture; UX1 of add-plugin-architecture; FR9, FR10 of define-executor-contract; FR1, FR2, UX2 of add-command-executor
 **Notes**: The model is pinned in the stage manifest so any instance reproduces the stage identically, never left to an executor default.
 **Notes**: Provider existence is in-process knowledge (the discovered check-provider registry), not target liveness.
 
@@ -168,6 +168,23 @@ The loader SHALL apply catalog-free sanity rules, needing no live target, to the
 #### Scenario: Program stage may omit the model
 - **WHEN** a `program` stage declares no `model`
 - **THEN** validation passes; a present `model` is carried to the executor as a setting
+
+#### Scenario: Model on a command stage is rejected
+- **WHEN** a `command` stage declares an `executor.model`
+- **THEN** validation reports a located error naming the stage and the forbidden field
+
+#### Scenario: Command stage requires its command
+- **WHEN** a `command` stage omits `executor.command` or declares it blank
+- **THEN** validation reports a located error naming the stage and the missing field
+
+#### Scenario: Command field on another executor type is rejected
+- **WHEN** an `api`, `agent-cli` or `program` stage declares `executor.command`
+- **THEN** validation reports a located error naming the stage and the forbidden field
+
+#### Scenario: Well-formed command stage is accepted
+- **WHEN** a stage declares `executor: {type: command, command: "./gradlew generateSources"}`
+  and no `model`
+- **THEN** validation passes and the typed model carries the command
 
 #### Scenario: External check timing is sane
 - **WHEN** an `external` check has a non-positive `interval` or `timeout`, or `interval > timeout`
@@ -203,6 +220,12 @@ The loader SHALL apply catalog-free sanity rules, needing no live target, to the
 #### Scenario: Settings that are not a mapping are rejected
 - **WHEN** a stage's `settings` is present but is not a mapping
 - **THEN** validation reports a located error
+
+#### Scenario: Settings key with no value is rejected
+- **WHEN** a stage's executor `settings`, a `judge` check's `settings`, a check's `params` or an
+  executor declaration's `settings` declares a key with no value
+- **THEN** the load fails with a located error naming the file and `<where>.<key>`, before any
+  stage runs
 
 #### Scenario: External check without an identifier is rejected
 - **WHEN** an `external` check's check identifier is absent or blank

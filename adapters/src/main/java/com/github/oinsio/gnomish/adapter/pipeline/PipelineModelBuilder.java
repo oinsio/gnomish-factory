@@ -85,6 +85,7 @@ final class PipelineModelBuilder {
         errors.addAll(PipelineValidator.validate(model, configuredCheckProviders));
         errors.addAll(ReferencedFiles.check(law, model.stages()));
         errors.addAll(AgentSettingsValidator.validate(model));
+        errors.addAll(CommandSettingsValidator.validate(model));
         errors.addAll(ExternalCheckSeamValidator.validate(model.stages(), checkProviders));
         return model;
     }

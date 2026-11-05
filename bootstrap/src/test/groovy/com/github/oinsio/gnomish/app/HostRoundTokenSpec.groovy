@@ -111,4 +111,59 @@ class HostRoundTokenSpec extends Specification implements BareGitRepoFixture, Ap
         and: 'the two tokens differ'
         attempts[0].roundToken != attempts[1].roundToken
     }
+
+    // FR21 of define-executor-contract, FR8 of add-command-executor: a command round opens through
+    // the run's one round source, so the host decoration mints its token exactly as an agent round's
+    def "FR21, FR8: command rounds and agent rounds of one host run carry the tips they opened on, by one rule"() {
+        given:
+        def runner = new GitModeRunner(
+                newAssembly(null, new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8'),
+                testProperties(agentCliBinary: FakeAgentSupport.wrapperFor('plain-round'))),
+                taskGit(), registeredClone, LiveConsoleIO.onStdout())
+
+        when:
+        runner.run(new RunOrder(cloneDir, null, CommandStagePipeline.law(), false),
+                new TaskContext(TASK, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
+                TaskState.atStageStart('build'))
+
+        then: 'two command rounds and one agent round each left their commit on the task branch'
+        def branch = 'refs/heads/' + TaskIdSanitizer.branchName(TASK)
+        def log = gitOutput(cloneDir, 'log', '--format=%H %s', '--reverse', branch).readLines()
+        def commitOf = { String round ->
+            log.find {
+                it.endsWith(' gnomish: round ' + round)
+            }?.substring(0, 40)
+        }
+        def commits = [
+            'build#0',
+            'build#1',
+            'review#0'
+        ].collect(commitOf)
+        commits.every { it != null }
+
+        and: 'every record, read from its own round commit, carries the tip its round opened on: that commit\'s parent'
+        def keys = [
+            ['build', 0],
+            ['build', 1],
+            ['review', 0]
+        ]
+        def attempts = (0..2).collect { i ->
+            (stateAt(commits[i]).attempts as List<Map>).find {
+                it.stage == keys[i][0] && it.round == keys[i][1]
+            }
+        }
+        attempts.every { it != null }
+        attempts*.roundToken == commits.collect {
+            gitOutput(cloneDir, 'rev-parse', it + '^')
+        }
+
+        and: 'the command rounds are the built-in\'s, the agent round the CLI\'s'
+        attempts.collect {
+            (it.usage as List<Map>)*.executor
+        } == [
+            ['command'],
+            ['command'],
+            ['agent-cli']
+        ]
+    }
 }

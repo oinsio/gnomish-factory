@@ -1,46 +1,34 @@
 package com.github.oinsio.gnomish.adapter.check;
 
+import com.github.oinsio.gnomish.adapter.command.CommandRun;
+import com.github.oinsio.gnomish.adapter.command.CommandRunOutcome;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
-import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
-import com.github.oinsio.gnomish.sandbox.StderrPolicy;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.time.Duration;
 import java.time.InstantSource;
-import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Runs {@code sh -c <command>} through a {@link TaskExecutionEnvironment} — the
- * task environment port is the sole process-launch seam (FR4 of
- * add-sandbox-core) — with a {@code GNOMISH_FINDINGS_FILE} env fragment when a
- * path is supplied (FR8, NFR-S1), stderr merged into stdout, and captures the
- * exit code together with a bounded tail of that one chronological stream
- * (design D6, FR7 of add-manual-run). The environment composes the child
- * environment as the layered allowlist (D6, FR9 of add-sandbox-core) — this
- * class contributes only the factory-set findings-file variable and never
- * touches {@link ProcessBuilder}.
+ * The verify {@code command} check's use of the shared command-run core ({@link CommandRun}, design
+ * D2 of add-command-executor): runs the check's command line through a {@link
+ * TaskExecutionEnvironment} — the sole process-launch seam (FR4 of add-sandbox-core) — with a
+ * {@code GNOMISH_FINDINGS_FILE} env fragment when a path is supplied (FR8, NFR-S1), bounded by the
+ * installation's check timeout (design D12, FR12), and reports a bound that fired in the check's
+ * own operator events (NFR-O1). The run mechanics — {@code sh -c}, stderr merged, the process-tree
+ * kill on timeout, the bounded tail drained without parking and joined with the handle's post-exit
+ * bound — are the core's, shared with the {@code command} stage executor; this class keeps only
+ * what is the check's: its findings channel, its timeout, its WARN lines, and the view of the
+ * outcome {@link ShellCommandCheckRunner} classifies.
  *
- * <p>The run is bounded by the installation's check timeout (design D12, FR12):
- * a check that has not exited when it expires has its whole process tree killed
- * and reports {@link ExecHandle.Wait.TimedOut} — a quality failure for the
- * caller to classify, carrying the tail captured so far, rather than a run that
- * hangs until an operator notices. The tail is drained concurrently with the
- * command ({@link BoundedTail}), because a stream read to its end on this thread
- * is precisely what a hung command never lets return; the drain reads the
- * handle's {@link com.github.oinsio.gnomish.subprocess.ChildOutput} without
- * parking and is joined with the handle's post-exit bound, the runner holding no
- * bound of its own (design D17 of fix-terminal-receipt-convergence; D2, D4 of
- * make-pipe-reads-non-parking).
- *
- * <p>Implements FR7, FR8, D6 of add-manual-run; FR4 of add-sandbox-core; FR6,
- * FR12, NFR-O1, D12 of bound-subprocess-commands; FR19 of
- * fix-terminal-receipt-convergence; FR2, FR4 of make-pipe-reads-non-parking.
+ * <p>Implements FR7, FR8, D6 of add-manual-run; FR4 of add-sandbox-core; FR6, FR12, NFR-O1, D12 of
+ * bound-subprocess-commands; FR19 of fix-terminal-receipt-convergence; FR2, FR4 of
+ * make-pipe-reads-non-parking; D2 of add-command-executor.
  */
 final class CommandProcessRunner {
 
@@ -63,11 +51,9 @@ final class CommandProcessRunner {
 
     private static final String FINDINGS_FILE_ENV_VAR = "GNOMISH_FINDINGS_FILE";
 
-    private final String shell;
+    private final CommandRun core;
 
     private final Duration checkTimeout;
-
-    private final InstantSource clock;
 
     /**
      * A runner over {@code shell} bounded by the documented default timeout, measuring on {@code
@@ -84,9 +70,12 @@ final class CommandProcessRunner {
      * @param clock the read-time source for the measured wall time
      */
     CommandProcessRunner(String shell, Duration checkTimeout, InstantSource clock) {
-        this.shell = shell;
+        this(new CommandRun(shell, clock), checkTimeout);
+    }
+
+    private CommandProcessRunner(CommandRun core, Duration checkTimeout) {
+        this.core = core;
         this.checkTimeout = checkTimeout;
-        this.clock = clock;
     }
 
     /**
@@ -97,7 +86,7 @@ final class CommandProcessRunner {
      * @return a runner identical but for the bound; never null
      */
     CommandProcessRunner withCheckTimeout(Duration checkTimeout) {
-        return new CommandProcessRunner(shell, checkTimeout, clock);
+        return new CommandProcessRunner(core, checkTimeout);
     }
 
     /**
@@ -123,27 +112,30 @@ final class CommandProcessRunner {
     @Nullable
     CommandOutcome run(VerifyCheck.Command check, TaskExecutionEnvironment environment, @Nullable String findingsPath) {
         Map<String, String> env = findingsPath == null ? Map.of() : Map.of(FINDINGS_FILE_ENV_VAR, findingsPath);
-        ExecHandle handle;
-        try {
-            handle = environment.exec(new ExecCommand(shellCommand(check), env, null, StderrPolicy.MERGED));
-        } catch (ProcessStartException e) {
-            return null;
-        }
-
-        long startedAt = System.nanoTime();
-        BoundedTail tail = BoundedTail.start(handle.output());
-        ExecHandle.Wait ended = handle.waitForExitOrTimeout(checkTimeout, clock);
-        report(check, ended, Duration.ofNanos(System.nanoTime() - startedAt));
-        // Bounded on every path, by the handle's own post-exit bound (design D17 of
-        // fix-terminal-receipt-convergence): the command is over either way, so the drain reads
-        // what is pending and ends as soon as it sees the exit, even with the pipe still held
-        // (design D2, D4 of make-pipe-reads-non-parking). Only a holder that keeps writing keeps it
-        // open to the bound, and neither a verdict nor a timeout report may wait past that.
-        String outputTail = tail.join(handle);
-        // Only a command that chose its own exit code has one; after a kill the code is the
-        // signal's, which would read as an ordinary red check.
-        int exitCode = ended instanceof ExecHandle.Wait.Exited ? handle.waitForExit() : UNKNOWN_EXIT_CODE;
-        return new CommandOutcome(exitCode, outputTail, ended);
+        return switch (core.run(environment, check.command(), env, checkTimeout)) {
+            case CommandRunOutcome.NotStarted ignored -> null;
+            case CommandRunOutcome.Exited exited ->
+                new CommandOutcome(
+                        exited.exitCode(), exited.outputTail(), new ExecHandle.Wait.Exited(exited.wallTime()));
+            case CommandRunOutcome.TimedOut timedOut -> {
+                log.warn(
+                        OperatorEvent.COMMAND_CHECK_TIMED_OUT.head()
+                                + "command check timed out and its process tree was killed: check={}, elapsed={}, deadline={}",
+                        check.command(),
+                        timedOut.elapsed(),
+                        checkTimeout);
+                yield new CommandOutcome(UNKNOWN_EXIT_CODE, timedOut.outputTail(), new ExecHandle.Wait.TimedOut());
+            }
+            case CommandRunOutcome.Interrupted interrupted -> {
+                log.warn(
+                        OperatorEvent.COMMAND_CHECK_INTERRUPTED.head()
+                                + "command check interrupted and its process tree was killed: check={}, elapsed={}",
+                        check.command(),
+                        interrupted.elapsed());
+                yield new CommandOutcome(
+                        UNKNOWN_EXIT_CODE, interrupted.outputTail(), new ExecHandle.Wait.Interrupted());
+            }
+        };
     }
 
     /**
@@ -153,37 +145,6 @@ final class CommandProcessRunner {
     @Nullable
     CommandOutcome run(VerifyCheck.Command check, TaskExecutionEnvironment environment) {
         return run(check, environment, null);
-    }
-
-    /**
-     * Logs the one WARN a bound that fired owes an operator (NFR-O1, NFR-O2):
-     * which check ended early, how long it ran, and — for a timeout — the
-     * deadline they would raise to give it more. The check's command line is its
-     * id: a stage's verify list addresses its command checks by nothing else.
-     */
-    private void report(VerifyCheck.Command check, ExecHandle.Wait ended, Duration elapsed) {
-        switch (ended) {
-            case ExecHandle.Wait.Exited ignored -> {
-                // A command that answered is silent: a WARN in the log means a bound actually fired.
-            }
-            case ExecHandle.Wait.TimedOut ignored ->
-                log.warn(
-                        OperatorEvent.COMMAND_CHECK_TIMED_OUT.head()
-                                + "command check timed out and its process tree was killed: check={}, elapsed={}, deadline={}",
-                        check.command(),
-                        elapsed,
-                        checkTimeout);
-            case ExecHandle.Wait.Interrupted ignored ->
-                log.warn(
-                        OperatorEvent.COMMAND_CHECK_INTERRUPTED.head()
-                                + "command check interrupted and its process tree was killed: check={}, elapsed={}",
-                        check.command(),
-                        elapsed);
-        }
-    }
-
-    private List<String> shellCommand(VerifyCheck.Command check) {
-        return List.of(shell, "-c", check.command());
     }
 
     /**

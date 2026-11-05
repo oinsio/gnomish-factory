@@ -464,10 +464,16 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   changes the working copy, a command check, an external CI poll, an LLM judge.
   A stage names its executor by type — `api` (direct model calls), `agent-cli`
   (an agent CLI as a subprocess), `program` (an **external executor** named by
-  an **executor declaration**) — or by a **built-in executor**'s id. Every
-  executor implements one Java interface, `Executor` (`describe`, `start`,
-  `poll`). ADR 0020. *Not:* a tracker — trackers keep their in-process plugin
-  interface and are not executors.
+  an **executor declaration**), `command` (a shell command the stage declares
+  as `executor.command`, run as `sh -c` in the task execution environment by the
+  `command` built-in; no model, no agent, no decision protocol) — or by a
+  **built-in executor**'s id. Every executor implements one Java interface,
+  `Executor` (`describe`, `start`, `poll`). ADR 0020. *Not:* a tracker — trackers keep their in-process plugin
+  interface and are not executors. *Not:* the `command` **verify check** — a
+  `command` stage is the stage's Mechanism and produces the work, while a
+  `command` check is Quality Control and only judges it; the two share one
+  command-run core (`CommandRun`, `adapter.command`) and differ in what an exit
+  code means. Type `command` introduced by `add-command-executor`.
 - **Attempt** — one counted try of a stage; only quality failures burn
   attempts, and every attempt is committed to the task branch. Its number
   counts within one visit of a stage and restarts at zero on every reset (an
@@ -477,7 +483,8 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   for this counted unit (a retry is the uncounted repeat of an infrastructure-
   failed check).
 - **Verify check** — one entry of a stage's ordered verification list:
-  built-in declarative, `command`, `external`, or `judge`.
+  built-in declarative, `command`, `external`, or `judge`. *Not:* a stage of
+  executor type `command` — see **Executor**.
 - **Judge** — LLM-as-judge verification via the `JudgeVoter` port: acceptance
   criteria in, structured verdict (`passed`, `findings[]`) out. In a usage
   record each judge vote is a `verdict` **participant usage** entry with its
@@ -533,8 +540,11 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   *Never:* executor usage, judge usage — the role-named slots the list replaced.
 - **Usage provenance** — whether an executor reported its usage: `REPORTED` or
   `ABSENT`. An absent entry carries an empty model map and never renders as
-  zero. Type: `UsageProvenance` (introduced by `define-executor-contract`; ADR
-  0020, decision 9). *Not:* the **provenance** of untrusted text, which names
+  zero. A `REPORTED` entry with an empty model map is a known zero — an executor
+  that mediated no model (a `program` that called none, the `command` built-in);
+  `ABSENT` means the executor could not tell, and leaves the **usage snapshot**
+  incomplete (`add-command-executor`, design D8). Type: `UsageProvenance`
+  (introduced by `define-executor-contract`; ADR 0020, decision 9). *Not:* the **provenance** of untrusted text, which names
   where a piece of text came from.
 - **Usage fold** — the one pure function that sums usage: it folds every
   **participant usage** entry of every round into a **usage snapshot**, and

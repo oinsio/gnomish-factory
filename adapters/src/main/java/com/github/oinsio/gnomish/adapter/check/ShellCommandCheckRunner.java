@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check;
 
+import com.github.oinsio.gnomish.adapter.command.CommandRun;
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
@@ -22,7 +23,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * The real command check runner (design D6): runs {@code check} through a {@link
- * CommandProcessRunner} over the environment acquired from the run's {@link CheckEnvironmentSource}
+ * CommandProcessRunner} — the check's use of the shared command-run core {@link CommandRun}
+ * (design D2 of add-command-executor) — over the environment acquired from the run's {@link CheckEnvironmentSource}
  * (host workspace environment by default; the round's leased box or a fresh box in sandboxed mode)
  * — the task environment port is the sole process-launch seam (FR4 of add-sandbox-core) — then
  * classifies the exit code per the engine's table (FR7, D6): exit 0 is {@link Verdict.Pass} — any
@@ -79,7 +81,7 @@ public record ShellCommandCheckRunner(
      *     composition root's one; never null
      */
     public ShellCommandCheckRunner(InstantSource clock) {
-        this(new CommandProcessRunner("sh", clock), clock, ChildEnvAllowlist.none());
+        this(new CommandProcessRunner(CommandRun.POSIX_SHELL, clock), clock, ChildEnvAllowlist.none());
     }
 
     private ShellCommandCheckRunner(

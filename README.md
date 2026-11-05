@@ -61,7 +61,7 @@ The factory core is a generic engine built on **ports and adapters**:
 |-------------|------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Tracker     | claim tasks, update statuses, post reports                 | GitHub (plus an in-memory reference adapter for tests); Jira and others are future work                                                                                                 |
 | AI provider | call models from different vendors with per-stage settings | Claude, OpenAI, Gemini, Ollama, ...                                                                                                                                                     |
-| Executor    | perform a stage                                            | `api` (direct model call), `agent-cli` (coding agent as subprocess in an isolated working copy), `program` (an external executor in any language, spoken to over the executor contract) |
+| Executor    | perform a stage                                            | `api` (direct model call), `agent-cli` (coding agent as subprocess in an isolated working copy), `program` (an external executor in any language, spoken to over the executor contract), `command` (a declared shell command, no model) |
 
 ## Pipeline stages
 

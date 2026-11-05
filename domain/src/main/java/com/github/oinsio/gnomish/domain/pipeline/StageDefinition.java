@@ -76,7 +76,8 @@ public record StageDefinition(
      * <p>Implements FR2 and carries the FR11 fields of load-pipeline-config;
      * FR12, FR13 of add-sandbox-core (the {@code sandbox} field); FR9, FR10 of
      * define-executor-contract (the {@code name} field, and a {@code model} that a
-     * {@code program} stage may leave blank).
+     * {@code program} stage may leave blank); FR1, FR2 of add-command-executor (the
+     * {@code command} field).
      *
      * @param type the executor kind
      * @param model the model pinned for reproducibility (FR11)
@@ -89,16 +90,33 @@ public record StageDefinition(
      *     when the manifest names none; that it names a declared executor, and
      *     that a {@code program} stage names one, is {@code ExecutorReferenceRule}'s
      *     concern, and its grammar was judged at load
+     * @param command the command a {@code command} stage runs ({@code executor.command},
+     *     FR1, FR2 of add-command-executor), or {@code null} when the manifest declares
+     *     none — absent for every other executor type; that a {@code command} stage
+     *     declares one, and no other type does, is {@code StageSanityRule}'s concern
      */
     public record Executor(
             ExecutorType type,
             String model,
             Map<String, Object> settings,
             Sandbox sandbox,
-            @Nullable String name) {
+            @Nullable String name,
+            @Nullable CommandLine command) {
 
         public Executor {
             settings = Map.copyOf(settings);
+        }
+
+        /**
+         * Convenience constructor for callers that declare no command — every call
+         * site predating add-command-executor keeps compiling unchanged, with
+         * {@link #command()} defaulting to {@code null}.
+         *
+         * <p>Implements FR1, FR2 of add-command-executor.
+         */
+        public Executor(
+                ExecutorType type, String model, Map<String, Object> settings, Sandbox sandbox, @Nullable String name) {
+            this(type, model, settings, sandbox, name, null);
         }
 
         /**
