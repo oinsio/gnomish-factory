@@ -18,10 +18,11 @@ and worktree of this repository is registered under one project,
 `gnomish-factory`, so they share one token and one `project.yaml`.
 
 ```bash
-# 1. A factory jar, copied out of the build tree (see the wrapper for why).
-# `bootstrap-*-plain.jar` beside it (left by `jar`/`build`) has no dependencies: never copy it.
-./gradlew :bootstrap:bootJar
-cp "$(ls bootstrap/build/libs/bootstrap-*.jar | grep -v -- '-plain\.jar$')" .gnomish/factory/gnomish.jar
+# 1. The factory release named by GNOMISH_VERSION in factory/gnomish.env, unpacked
+# beside the wrapper (git-ignored). Verify the archive against the release's SHA256SUMS.
+(cd .gnomish/factory && v=0.1.0 \
+  && gh release download "v$v" -R oinsio/gnomish-factory -p "gnomish-$v.tar.gz" -p SHA256SUMS --clobber \
+  && shasum -a 256 -c --ignore-missing SHA256SUMS && tar -xzf "gnomish-$v.tar.gz")
 
 # 2. Register this clone; repeat `project add` for every further clone or worktree.
 .gnomish/factory/gnomish project add gnomish-factory --dir="$PWD"
@@ -34,15 +35,16 @@ install -m 600 /dev/null ~/.gnomish/projects/gnomish-factory/secrets/GNOMISH_GIT
 .gnomish/factory/gnomish project show gnomish-factory
 ```
 
-Wrapper settings (project name, instance name, jar path) are in
+Wrapper settings (project name, instance name, factory version) are in
 `factory/gnomish.env`; a git-ignored `factory/gnomish.local.env` overrides them
 per machine. Logs and serve state go to `~/.gnomish/projects/gnomish-factory/`,
 one file per instance — give a second clone its own `GNOMISH_INSTANCE_NAME`
 before running two daemons at once.
 
-Refresh `factory/gnomish.jar` deliberately, from a commit you trust: the jar is
-a copy precisely so that a gnome building this repository never rebuilds the
-factory that runs it.
+The factory runs from a published release, never from this repository's build
+tree, so a gnome building this repository never rebuilds the factory that runs
+it. Moving to another release is deliberate: change `GNOMISH_VERSION`, repeat
+step 1 for that version, and do it in every clone that runs the factory.
 
 ## Filing a task
 

@@ -1,5 +1,7 @@
 # Gnomish Factory — local, per-operator files
-gnomish.jar
-gnomish.bak-*.jar
+gnomish-*/
+gnomish-*.tar.gz
+gnomish-*.zip
+SHA256SUMS
 gnomish.local.env
 logs/
