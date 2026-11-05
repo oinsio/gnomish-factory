@@ -12,7 +12,8 @@ import spock.lang.Specification
 /**
  * Process-spawn boundary gate (FR4 of add-sandbox-core: "forbid direct spawning by design"): the
  * gnome-product spawner packages — {@code adapter.agent} (agent-CLI rounds, judge votes) and
- * {@code adapter.check} (command checks) — must run every process through the {@code
+ * {@code adapter.check} (command checks) and {@code adapter.command} (the shared command-run core,
+ * design D2 of add-command-executor) — must run every process through the {@code
  * TaskExecutionEnvironment} port, never {@link ProcessBuilder} directly. Only {@code
  * sandbox.environment} (the host adapter, the sole spawn seam for gnome-product processes) and
  * {@code adapter.git} (factory-side git subprocesses, never gnome output) may touch {@code
@@ -29,7 +30,7 @@ class ProcessSpawnBoundarySpec extends Specification {
     def "FR4: gnome-product spawner packages do not use ProcessBuilder directly"() {
         given: 'the rule forbidding adapter.agent / adapter.check from depending on ProcessBuilder'
         def rule = noClasses()
-                .that().resideInAnyPackage('..adapter.agent..', '..adapter.check..')
+                .that().resideInAnyPackage('..adapter.agent..', '..adapter.check..', '..adapter.command..')
                 .should().dependOnClassesThat().haveFullyQualifiedName('java.lang.ProcessBuilder')
 
         expect: 'the rule holds — those packages route every process through the environment port'

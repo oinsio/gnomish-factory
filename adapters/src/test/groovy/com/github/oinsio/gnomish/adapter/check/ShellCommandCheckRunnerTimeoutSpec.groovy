@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.subprocess.StdinSource
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.time.InstantSource
 import spock.lang.Specification
 import spock.lang.TempDir
 import spock.lang.Timeout
@@ -117,12 +118,16 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
     // Scenario: verification/check-provider-model / A timed-out check is logged with its bound
     @Timeout(30)
     def "NFR-O1: the expiry logs one WARN naming the check, the elapsed time and the configured deadline"() {
-        given:
+        given: 'a real check that never exits, on a runner whose clock is the wall clock its real wait runs on'
         def check = command('while true; do sleep 1; done')
+        // real-time-wiring: the subject is the span of a real process's bounded wait, killed after 300 ms
+        //     of wall time; the runner reads that span on its clock (audit 2026-11-05 of
+        //     add-command-executor, recommendation 6), so the clock is the wall clock the wait spends.
+        def wallClockRunner = new ShellCommandCheckRunner(InstantSource.system()).withCheckTimeout(SHORT_TIMEOUT)
 
         when:
         def events = capture(CommandProcessRunner) {
-            runner.run(check, workspace())
+            wallClockRunner.run(check, workspace())
         }
 
         then: 'one WARN names the check id and the deadline an operator would raise'

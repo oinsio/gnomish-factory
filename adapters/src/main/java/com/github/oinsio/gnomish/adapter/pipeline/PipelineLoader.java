@@ -60,7 +60,9 @@ import java.util.Set;
  *       {@link com.github.oinsio.gnomish.domain.pipeline.PipelineValidator} (pure
  *       semantic rules), {@link ReferencedFiles} (file existence + traversal), and
  *       {@link AgentSettingsValidator}
- *       (agent-cli/judge settings schema, task 9.1 of add-agent-executor), run
+ *       (agent-cli/judge settings schema, task 9.1 of add-agent-executor) with
+ *       {@link CommandSettingsValidator} (command settings schema, FR3 of
+ *       add-command-executor), run
  *       only when a {@link PipelineDefinition} was produced;</li>
  *   <li><b>check-seam</b> — {@link ExternalCheckSeamValidator} (FR6, FR13 of
  *       add-plugin-architecture): each {@code external} check's provider against the

@@ -103,7 +103,7 @@ class ChildOutputOwnerGateSpec extends Specification {
         def starts = [
             'com.github.oinsio.gnomish.subprocess.Drain': ['start', 'capped', 'into'],
             'com.github.oinsio.gnomish.adapter.agent.StreamDrain': ['start'],
-            'com.github.oinsio.gnomish.adapter.check.BoundedTail': ['start'],
+            'com.github.oinsio.gnomish.adapter.command.BoundedTail': ['start'],
             'com.github.oinsio.gnomish.adapter.agent.program.ProgressLines': ['start'],
         ].collectMany { owner, names ->
             Class.forName(owner).declaredMethods.findAll { it.name in names }

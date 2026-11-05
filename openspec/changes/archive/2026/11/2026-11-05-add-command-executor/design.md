@@ -186,7 +186,8 @@ Impact).
 |-----------|---------------------|-------|-----------|------------------------------|-------------|
 | Stage type → executor name for the built-in | `ExecutorDispatch` (`:bootstrap`): the only place a `command` stage's type becomes the registry name `command` | `ExecutorName` | `ExecutorRegistry.resolve` | none pre-exists; no other arm runs a command | the wiring spec of task 6.2: a `command` stage never reaches the agent arm |
 | Contract status → engine result | `ProgramResultMapping.toEngine` (`:adapters:agent`): the one mapping of `Status` + `FailureClass` to `ExecutionResult`, for a program and for the built-in alike | `ExecutionResult` | the shared round wrapper (D2) | a built-in mapping its own statuses — refused at design (D2, rejected alternative) | `ProgramResultMappingSpec` iterates both taxonomies; the round wrapper has one mapping call site |
-| Round wrapper of a registry entry | the generalized `ProgramStageExecutor` (`:adapters:agent`): open, probe, run, close, denials, map — once | `StageExecutor` | `ExecutorRegistry` entries (programs, `command`) | `new ProgramExecutor(...)` inside the wrapper — replaced by the factory | `ProgramStageExecutor`'s existing specs stay green unchanged; `grep "implements StageExecutor"` in `:adapters:agent` lists the one wrapper |
+| Round wrapper of a registry entry | the generalized `ProgramStageExecutor` (`:adapters:agent`): open, probe, run, close, denials, map — once | `StageExecutor` | `ExecutorRegistry` entries (programs, `command`) | `new ProgramExecutor(...)` inside the wrapper — replaced by the factory (`ProgramExecutorFactory`, behind the `RoundExecutorFactory` role interface); exemption: the conformance kit's `ProgramCandidate` builds a bare `ProgramExecutor` — it drives the contract `Executor` in a kit environment with the kit's own requests, opens no round and maps nothing, so it is not a registry entry | `ProgramStageExecutor`'s existing specs stay green unchanged; `ExecutorRegistryOwnerSpec` (`:bootstrap`) pins the constructions: `new ProgramStageExecutor(` is spelled only in `ExecutorRegistry`, `new CommandStageExecutor(` only in `CommandExecutorFactory`, `new CommandExecutorFactory(` only in `ExecutorAdapterSelector` |
+| Copy of an opaque settings or params map | `OpaqueSettings.copy` (`:adapters`, `adapter.pipeline`): the one copy of every opaque map the loader carries into the domain; a key with no value is a located error, never an exception (D10) | `Map<String, Object>` (immutable), errors appended to the loader's `List<ConfigError>` | `StageDefinitionMapper` (executor `settings`), `ExecutorDeclarations` (declaration `settings`), `VerifyCheckMapper` (judge `settings`, built-in `params`, external `params`) | `PipelineMapper.copySettings`, whose `Map.copyOf` threw on a YAML null — removed; no exemption | `OpaqueSettingsSpec`; the loader specs `PipelineLoaderExecutorSettingsSpec`, `PipelineLoaderCommandSettingsSpec`, `ExecutorDeclarationsSpec` |
 
 **D7 — Crash consistency: no new durable steps.** (NFR-R2.) Per `.claude/rules/
 crash-consistency.md`: this change adds no multi-step transition. A command round rides
@@ -194,6 +195,48 @@ the existing round persistence contract (persist → AttemptFinished → next at
 kill during a command round freezes a state the `task-branch-contract` shape set
 already names (unpersisted round → re-executed on resume, NFR-R2). No new kill window,
 no new recovery owner.
+
+**D8 — A command round reports a known zero, not an unknown.** (NFR-C1; user decision
+2026-11-04 on the task 5.3 blocker.) The built-in reports usage with provenance `REPORTED`,
+an empty per-model map, an empty tool trace and the round's wall time, and its describe
+declares `reportsUsage = true`. `ABSENT` means "the executor could not tell"; the built-in
+knows it mediated no model. The engine's fold marks the task's cost incomplete for any
+`ABSENT` entry (`UsageFold`: `complete &= provenance == REPORTED`, D15/NFR-O3 of
+`define-executor-contract`), so `ABSENT` contradicts "totals unchanged". The contract already
+decided the same case for programs: a program that used no model is `REPORTED` with an empty
+map (`ProgramUsage`). The stage-engine scenario "Unreported tokens stay distinguishable from
+zero" is untouched: no per-model zero is written. *Residual:* a model a command calls on its
+own, with its own client and login, is outside the factory's accounting; `ABSENT` would not
+measure it either. *Alternatives rejected:* (a) keep `ABSENT` — every task with a command
+stage would show "cost incomplete: usage not reported" forever, which masks a real agent
+round that lost its usage; (b) the fold skips `ABSENT` entries of named executors — weakens
+NFR-O3 for genuine unknowns and puts a per-executor exception into the engine. *Pickup:*
+NFR-C1 of `migrate-verify-to-executor-contract` says "built-ins report `ABSENT` (no model)",
+the same defect for verdict built-ins; that change adopts this rule before its apply, or
+states why verdict usage is not folded into task totals.
+
+**D9 — A law declaration named after the built-in is refused when the registry is built.**
+(FR8; found by task 6.1, default accepted by the user 2026-11-04.) A law that declares an
+executor named `command` would otherwise share one registry key with the built-in and one
+entry would silently replace the other. `ExecutorRegistry.of` refuses such a law with an error
+that names the declaration and asks for a rename; the built-in's name is read from its one
+spelling (`CommandExecutorFactory.NAME`). *Alternative rejected:* a located error at
+`executors.command` when the law loads — the loader in `:adapters` cannot see `:adapters:agent`,
+so it would need a second spelling of the name, a declared pair kept by hand for one check.
+The cost accepted: the refusal comes when the run is assembled, after the describe preflight,
+not at law load.
+
+**D10 — A settings or params key written with no value is a located load error.** (UX2; found
+during implementation, 2026-11-05 audit.) A key written with no value is YAML `null`, and the
+loader's copy of an opaque map (`Map.copyOf`) threw on it, so a manifest mistake failed the load
+with an exception instead of a located error. The one copy owner, `OpaqueSettings.copy`, reports
+each such key as a `ConfigError` at `<where>.<key>` ("missing value for '<key>'"), in key-name
+order, and leaves it out of the copy; the error aborts the definition, so the incomplete copy never
+reaches a settings schema or a round. It serves all five opaque maps the loader carries: a stage's
+executor `settings`, an executor declaration's `settings` in `config.yaml`, a judge's `settings`,
+and a built-in or external check's `params`. *Alternative rejected:* refuse a null value in the
+command settings only — the same exception stays in the four other maps, and the fix would live
+in a schema validator that runs after the copy that throws.
 
 ## Risks / Trade-offs
 
@@ -214,6 +257,14 @@ no new recovery owner.
 Purely additive: existing pipelines declare no `command` stages and load unchanged.
 No rollback machinery needed — removing a command stage from a manifest restores the
 prior behavior.
+
+The pipeline-config delta MODIFIES `Local sanity validation of mechanism and check configs`
+whole, so the archive replaces the main-spec requirement with the delta's text. The delta is
+written against the main spec as it stands after `tighten-spec-contract` and
+`define-executor-contract` were archived: it carries all thirteen of the requirement's existing
+scenarios unchanged and adds the five of this change (the `command` type and its arm of the
+model rule, and the settings key with no value of D10). A change archived before this one that edits the same requirement makes the delta
+stale; the archive then rebases it on the main spec first.
 
 ## Open Questions
 

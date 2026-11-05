@@ -73,9 +73,10 @@ class ProgramRoundLedgerSpec extends Specification {
         def program = StandIn.link(links.resolve(section), 'run-as')
         def described = new DescribedProgram(ProgramFixtures.declaration([program.toString()]),
         ProgramFixtures.describe(), ['ACME_API_KEY'])
-        def executor = new ProgramStageExecutor(PipelineLaw.ofContent(['instructions.md': 'build it\n']), described,
-        CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()),
-        ProgramFixtures.equipment(stderrParent, ProgramBounds.DEFAULTS, VirtualTimeEquipment.on(clock)))
+        def executor = new ProgramStageExecutor(new ProgramExecutorFactory(
+                        PipelineLaw.ofContent(['instructions.md': 'build it\n']), described,
+                        ProgramFixtures.equipment(stderrParent, ProgramBounds.DEFAULTS, VirtualTimeEquipment.on(clock))),
+                CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()))
         def versions = new DescribedExecutors(
                 new ExecutorVersions([acme: UntrustedText.subprocess('1')]), ExecutorCredentialNames.none())
         def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),

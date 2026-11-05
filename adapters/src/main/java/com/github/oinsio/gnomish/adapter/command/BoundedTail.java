@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.check;
+package com.github.oinsio.gnomish.adapter.command;
 
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.subprocess.ChildOutput;
@@ -7,7 +7,8 @@ import com.github.oinsio.gnomish.subprocess.Drain;
 import java.time.Duration;
 
 /**
- * A command check's merged stdout/stderr stream, read by the one drain ({@link Drain} of {@code
+ * A command's merged stdout/stderr stream (a verify check's or a command stage's, design D2 of
+ * add-command-executor), read by the one drain ({@link Drain} of {@code
  * :subprocess}) while the command still runs, into the bounded tail {@link TailLines} keeps (design
  * D6, FR7 of add-manual-run; design D17 of fix-terminal-receipt-convergence).
  *
@@ -47,7 +48,7 @@ final class BoundedTail {
      */
     static BoundedTail start(ChildOutput output) {
         TailLines lines = new TailLines();
-        return new BoundedTail(Drain.into(output, "check-output-tail", lines), lines);
+        return new BoundedTail(Drain.into(output, "command-output-tail", lines), lines);
     }
 
     /**

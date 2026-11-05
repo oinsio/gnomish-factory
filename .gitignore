@@ -13,6 +13,10 @@ Thumbs.db
 .gradle/
 build/
 !gradle/wrapper/gradle-wrapper.jar
+# A pipeline stage named `build` is source, not Gradle output: without this the
+# e2e-program fixture's stage manifest was never committed, and a fresh clone
+# (CI) failed ProgramStageContainerE2eSpec with "stage 'build' has no manifest".
+!**/.gnomish/stages/build/
 
 # Java
 *.class
@@ -23,3 +27,4 @@ uncommitted-files.md
 
 # Factory-run artifacts of this clone (the factory jar is built, not committed)
 /logs/
+temporary-docs

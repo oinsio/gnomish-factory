@@ -6,9 +6,12 @@ import spock.lang.Specification
 /**
  * StageSanityRule: the pure stage-level local-sanity rule (design D5a/D6,
  * FR11 + the FR7 attempt-limit clause). It applies catalog-free checks that
- * need no live target (NG7): the executor model must be non-blank for EVERY
- * executor type — pinned in the manifest so any instance reproduces the stage
- * identically, never left to an executor default; the resolved attempt limit
+ * need no live target (NG7): the executor model must be non-blank for every
+ * agent executor type (api, agent-cli) — pinned in the manifest so any instance
+ * reproduces the stage identically, never left to an executor default; a
+ * program stage may omit it; a command stage must declare its command and no
+ * model, and no other stage may declare a command (StageMechanismRule, FR2/UX2
+ * of add-command-executor); the resolved attempt limit
  * must be at least 1; an `external` check must have a positive interval, a
  * positive timeout, interval <= timeout, and a non-blank checkId; a `judge`
  * check must pin a non-blank model (same reproducibility rationale as the
@@ -19,9 +22,10 @@ import spock.lang.Specification
  * CI check exists, is target-liveness and deliberately not checked (NG7).
  * Problems are located ConfigErrors naming the stage manifest (NFR-O1, UX2).
  * Error order is deterministic (NFR-R1): stages in pipeline order; within a
- * stage the model error, then the attempt-limit error, then verify-check
+ * stage the model error, then the command error, then the attempt-limit error, then verify-check
  * errors in check-list order and (within a check) field order.
- * Implements FR11 (and the FR7 attempt-limit clause) of load-pipeline-config.
+ * Implements FR11 (and the FR7 attempt-limit clause) of load-pipeline-config;
+ * FR2, UX2 of add-command-executor.
  */
 class StageSanityRuleSpec extends Specification {
 
@@ -43,6 +47,35 @@ class StageSanityRuleSpec extends Specification {
         stage(name, type, model, settings, attemptLimit, [
             new VerifyCheck.Command('./gradlew check')
         ])
+    }
+
+    private static StageDefinition commandStage(String name, ExecutorType type, String model, String command) {
+        new StageDefinition(
+                name, "Purpose of $name",
+                [new ArtifactInput.Source()], [
+                    new ArtifactOutput("$name-out")
+                ],
+                new StageDefinition.Executor(type, model, [:], Sandbox.none(),
+                type == ExecutorType.PROGRAM ? 'acme' : null,
+                command == null ? null : new CommandLine(command)),
+                "stages/$name/instructions.md",
+                [],
+                new AutonomyLimits(1), AdvancementMode.AUTO)
+    }
+
+    private static ConfigError forbiddenCommandModel(String stage) {
+        new ConfigError("stages/$stage/stage.yaml", 'executor.model',
+                'executor model is not allowed on a command stage; a command stage runs its declared command, not a model')
+    }
+
+    private static ConfigError missingCommand(String stage) {
+        new ConfigError("stages/$stage/stage.yaml", 'executor.command',
+                'missing required executor command; a command stage must declare the command it runs')
+    }
+
+    private static ConfigError forbiddenCommand(String stage, String type) {
+        new ConfigError("stages/$stage/stage.yaml", 'executor.command',
+                "executor command is not allowed on a $type stage; only a command stage declares a command" as String)
     }
 
     private static VerifyCheck ext(String checkId, Duration interval, Duration timeout) {
@@ -146,6 +179,79 @@ class StageSanityRuleSpec extends Specification {
         'empty' | '' | ExecutorType.API
         'whitespace-only' | '   ' | ExecutorType.AGENT_CLI
         'tab' | '\t' | ExecutorType.API
+    }
+
+    // FR2, UX2 of add-command-executor: a command stage runs its declared command and pins no model
+    // Scenario: pipeline/pipeline-config / Well-formed command stage is accepted
+    def "a command stage with a command and no model produces no errors"() {
+        expect:
+        StageSanityRule.validate([
+            commandStage('generate', ExecutorType.COMMAND, model, './gradlew generateSources')
+        ]) == []
+
+        where: 'the mapper maps an absent model to blank'
+        model << ['', '   ']
+    }
+
+    // FR2, UX2 of add-command-executor: a model on a command stage would lie about what runs
+    // Scenario: pipeline/pipeline-config / Model on a command stage is rejected
+    def "a model on a command stage is a located error"() {
+        expect:
+        StageSanityRule.validate([
+            commandStage('generate', ExecutorType.COMMAND, 'claude-sonnet-4-5', './gradlew generateSources')
+        ]) == [
+            forbiddenCommandModel('generate')
+        ]
+    }
+
+    // FR2, UX2 of add-command-executor: the command is the command stage's mechanism identity
+    // Scenario: pipeline/pipeline-config / Command stage requires its command
+    def "a command stage without a command is a located error"() {
+        expect:
+        StageSanityRule.validate([
+            commandStage('generate', ExecutorType.COMMAND, '', null)
+        ]) == [missingCommand('generate')]
+    }
+
+    // FR2, UX2 of add-command-executor: only a command stage declares a command
+    // Scenario: pipeline/pipeline-config / Command field on another executor type is rejected
+    def "a command on a #label stage is a located error"() {
+        expect:
+        StageSanityRule.validate([
+            commandStage('plan', type, 'claude-sonnet-4-5', './gradlew check')
+        ]) == [
+            forbiddenCommand('plan', label)
+        ]
+
+        where:
+        label | type
+        'api' | ExecutorType.API
+        'agent-cli' | ExecutorType.AGENT_CLI
+        'program' | ExecutorType.PROGRAM
+    }
+
+    // FR2, UX2 of add-command-executor: both mechanism faults of one command stage are reported,
+    //     model before command
+    def "a command stage with a model and no command reports both, model first"() {
+        expect:
+        StageSanityRule.validate([
+            commandStage('generate', ExecutorType.COMMAND, 'claude-sonnet-4-5', null)
+        ]) == [
+            forbiddenCommandModel('generate'),
+            missingCommand('generate')
+        ]
+    }
+
+    // FR2, UX2 of add-command-executor: an agent stage missing its model and carrying a command
+    //     reports both, model first
+    def "an agent stage with no model and a command reports both, model first"() {
+        expect:
+        StageSanityRule.validate([
+            commandStage('plan', ExecutorType.API, '', './gradlew check')
+        ]) == [
+            missingModel('plan'),
+            forbiddenCommand('plan', 'api')
+        ]
     }
 
     // FR11 delta-spec AND-clause (Q1/D5a): settings present as a mapping are

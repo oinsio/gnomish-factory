@@ -38,8 +38,12 @@ class AgentCoarseReachSpec extends Specification {
 
     private static final String ADAPTER = 'com.github.oinsio.gnomish.adapter.'
 
-    /** The coarse packages this module is declared to reach. */
-    private static final Set<String> ALLOWED_COARSE_PACKAGES = ['law', 'briefing'] as Set
+    /**
+     * The coarse packages this module is declared to reach: the pipeline law, the briefing renderer,
+     * and the shared command-run core ({@code adapter.command}), which the {@code command} built-in
+     * runs its rounds on beside the verify {@code command} check (design D2 of add-command-executor).
+     */
+    private static final Set<String> ALLOWED_COARSE_PACKAGES = ['law', 'briefing', 'command'] as Set
 
     /** The packages this module owns; everything else under {@code ..adapter} is coarse. */
     private static final Set<String> OWN_PACKAGES = ['agent'] as Set

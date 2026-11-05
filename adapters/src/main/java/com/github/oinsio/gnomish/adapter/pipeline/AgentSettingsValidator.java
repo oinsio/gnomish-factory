@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -56,7 +57,8 @@ public final class AgentSettingsValidator {
     private static final String ALLOWED_TOOLS_KEY = "allowedTools";
     private static final String DISALLOWED_TOOLS_KEY = "disallowedTools";
     private static final String MAX_TURNS_KEY = "maxTurns";
-    private static final String ROUND_TIMEOUT_KEY = "roundTimeout";
+    /** The one spelling of the round-bound key on the load side, read by {@link CommandSettingsValidator} too. */
+    static final String ROUND_TIMEOUT_KEY = "roundTimeout";
 
     private static final Set<String> RECOGNIZED_KEYS =
             Set.of(ALLOWED_TOOLS_KEY, DISALLOWED_TOOLS_KEY, MAX_TURNS_KEY, ROUND_TIMEOUT_KEY);
@@ -96,11 +98,11 @@ public final class AgentSettingsValidator {
 
     private static void validateSettings(
             String manifest, String where, Map<String, Object> settings, List<ConfigError> errors) {
-        for (Map.Entry<String, Object> entry : settings.entrySet()) {
+        // Keys in name order: the settings map is unordered (Map.copyOf), the report must not be.
+        for (Map.Entry<String, Object> entry : new TreeMap<>(settings).entrySet()) {
             String key = entry.getKey();
             if (!RECOGNIZED_KEYS.contains(key)) {
-                errors.add(
-                        new ConfigError(manifest, where + "." + key, "unrecognized settings key '%s'".formatted(key)));
+                errors.add(new ConfigError(manifest, where + "." + key, unrecognizedKey(key)));
                 continue;
             }
             String problem = malformationOf(key, entry.getValue());
@@ -116,12 +118,29 @@ public final class AgentSettingsValidator {
             case ALLOWED_TOOLS_KEY, DISALLOWED_TOOLS_KEY ->
                 isStringList(value) ? null : "malformed '%s': expected a list of strings".formatted(key);
             case MAX_TURNS_KEY -> value instanceof Number ? null : "malformed 'maxTurns': expected a number";
-            case ROUND_TIMEOUT_KEY ->
-                isWellFormedRoundTimeout(value)
-                        ? null
-                        : "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string";
+            case ROUND_TIMEOUT_KEY -> roundTimeoutMalformation(value);
             default -> throw new IllegalStateException("unreachable: key already filtered by RECOGNIZED_KEYS");
         };
+    }
+
+    /**
+     * The one message of an unrecognized settings key, shared with {@link CommandSettingsValidator}
+     * so both executor schemas report the error alike (UX2 of add-command-executor).
+     */
+    static String unrecognizedKey(String key) {
+        return "unrecognized settings key '%s'".formatted(key);
+    }
+
+    /**
+     * Returns the malformed-value message for a {@code roundTimeout} value, or {@code null} when
+     * well-formed. The one judge of the accepted shapes on the load side, called by the agent-cli
+     * and judge schemas here and by {@link CommandSettingsValidator} (FR3 of add-command-executor:
+     * the declared pair with {@code RoundTimeout} is reused, not widened).
+     */
+    static @Nullable String roundTimeoutMalformation(@Nullable Object value) {
+        return isWellFormedRoundTimeout(value)
+                ? null
+                : "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string";
     }
 
     private static boolean isStringList(@Nullable Object value) {
@@ -154,7 +173,7 @@ public final class AgentSettingsValidator {
         }
     }
 
-    private static String manifestPath(String stageName) {
+    static String manifestPath(String stageName) {
         return "stages/%s/stage.yaml".formatted(stageName);
     }
 }

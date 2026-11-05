@@ -1,4 +1,4 @@
-# executor/command-executor
+# executor/command-executor Specification
 
 ## Purpose
 
@@ -7,7 +7,7 @@ environment's sole process seam, the exit-code contract, timeout, allowlisted
 environment, bounded sanitized output, and zero-token telemetry — no agent process and
 no decision protocol.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Command rounds run through the task environment
 A `command` stage's round SHALL execute the manifest-declared command via `exec()` of
@@ -127,22 +127,24 @@ contract as the agent-cli shapes.
 - **THEN** validation passes and the round uses the declared bound
 
 ### Requirement: Zero-token telemetry
-A command round SHALL report no token usage — the contract's absent usage (provenance
-`ABSENT`: an empty per-model map, unreported, never fabricated zeros, and an empty tool
-trace) — while its wall time SHALL be measured and recorded like any round's. Cumulative
-task usage totals SHALL be unchanged by command rounds.
+A command round SHALL report a known zero of model use — the contract's usage with
+provenance `REPORTED`, an empty per-model map and an empty tool trace, never `ABSENT`, which
+means the executor could not tell — while its wall time SHALL be measured and recorded like
+any round's. Cumulative task usage totals, cost completeness included, SHALL be unchanged by
+command rounds.
 **Implements**: NFR-C1 of add-command-executor
 
 #### Scenario: Command round spends no tokens
 - **WHEN** a command round completes and is recorded
-- **THEN** its record carries usage of provenance `ABSENT` with an empty token map, the
-  task's cumulative usage totals are unchanged, and the round's wall time is recorded
+- **THEN** its record carries usage of provenance `REPORTED` with an empty token map and an
+  empty tool trace, the task's cumulative usage totals are unchanged with cost completeness
+  included, and the round's wall time is recorded
 
 ### Requirement: Command executor is a built-in of the executor registry
 The command executor SHALL be registered in the executor registry under the built-in name
-`command`, implementing the executor contract's interface (`describe`, `start`, `poll`;
-`poll` SHALL answer `failed/infrastructure`, since a command round is never pending), and
-SHALL pass the contract's conformance kit driven in process.
+`command`, which no law declaration may take, SHALL implement the executor contract's interface
+(`describe`, `start`, `poll`; a poll answers `failed/infrastructure`, a command round is never
+pending), and SHALL pass the contract's conformance kit driven in process.
 **Implements**: FR8 of add-command-executor
 
 #### Scenario: Built-in passes the conformance kit
@@ -152,6 +154,11 @@ SHALL pass the contract's conformance kit driven in process.
 #### Scenario: Poll is never pending
 - **WHEN** the `command` built-in is polled
 - **THEN** it answers `failed/infrastructure`, never `pending`
+
+#### Scenario: A law declaration named after the built-in is refused
+- **WHEN** the law declares an executor named `command`
+- **THEN** the run's registry is not built, and the error names the declaration and asks for a
+  rename
 
 ### Requirement: Dispatch maps the command stage type to the built-in
 The run's dispatch SHALL map the stage type `command` to the built-in's registry name, so a

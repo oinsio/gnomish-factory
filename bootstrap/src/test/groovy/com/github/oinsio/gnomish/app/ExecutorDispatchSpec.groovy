@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.agent.command.CommandExecutorFactory
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
@@ -9,12 +10,14 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.CommandLine
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorDeclaration
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
@@ -28,7 +31,9 @@ import spock.lang.Specification
 /**
  * FR9, FR10 of define-executor-contract (design D8): the run's one stage executor sends a {@code
  * program} stage to the executor its {@code executor.name} resolves to in the {@link ExecutorRegistry}
- * — which opens the round through the run's round source — and every other stage to the agent arm.
+ * — which opens the round through the run's round source — a {@code command} stage to the built-in the
+ * registry holds under its name (FR8 of add-command-executor, design D6), and every other stage to the
+ * agent arm.
  * The program arm is observed by the round it opens, the agent arm by the request it receives.
  */
 class ExecutorDispatchSpec extends Specification {
@@ -56,6 +61,11 @@ class ExecutorDispatchSpec extends Specification {
         'instructions.md', [], new AutonomyLimits(3), AdvancementMode.AUTO)
     }
 
+    private static StageDefinition commandStage(String command) {
+        new StageDefinition('build', 'purpose', [], [], new StageDefinition.Executor(ExecutorType.COMMAND, '', [:], Sandbox.none(), null,
+        new CommandLine(command)), 'instructions.md', [], new AutonomyLimits(3), AdvancementMode.AUTO)
+    }
+
     private static PipelineDefinition definition(String... declared) {
         new PipelineDefinition('1', new AutonomyLimits(3), [
             stage(ExecutorType.PROGRAM, 'acme')
@@ -69,7 +79,8 @@ class ExecutorDispatchSpec extends Specification {
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, VirtualTimeEquipment.create(),
                 TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'))
         def described = new DescribedLaw(LawBinding.workingTree(Path.of('/tmp/law')), answers)
-        new ExecutorDispatch(ExecutorRegistry.of(described, definition(declared), law, rounds, equipment), agent)
+        new ExecutorDispatch(ExecutorRegistry.of(described, definition(declared), law, rounds, equipment,
+                new CommandExecutorFactory(new VirtualClock())), agent)
     }
 
     private static StageExecutor.Request request(StageDefinition stage) {
@@ -121,7 +132,22 @@ class ExecutorDispatchSpec extends Specification {
 
         where:
         answers || registered
-        [acme: ProgramInBox.describe()] || '[acme]'
-        [:] || '[]'
+        [acme: ProgramInBox.describe()] || '[acme, command]'
+        [:] || '[command]'
+    }
+
+    // FR8 of add-command-executor (design D6): the COMMAND arm maps the stage type to the built-in's
+    //     registry name, so the round opens through the run's round source and never reaches the agent
+    def "FR8: a command stage runs the command built-in the registry resolves, through the run's round source, and never the agent"() {
+        given:
+        def build = request(commandStage('./gradlew build'))
+
+        when:
+        dispatch([acme: ProgramInBox.describe()], 'acme').execute(build)
+
+        then:
+        def opened = thrown(Opened)
+        opened.request.is(build)
+        0 * agent._
     }
 }

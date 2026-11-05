@@ -10,12 +10,8 @@ import java.util.List;
  * live target (NG7). Per stage, in manifest section order:
  *
  * <ol>
- *   <li>the executor {@code model} must be non-blank — pinned in the manifest
- *       so any instance reproduces the stage identically, for every agent
- *       executor type ({@code api} and {@code agent-cli} alike), never left to a
- *       CLI default (FR11); a {@code program} stage may omit it, and a present
- *       one is carried to the executor as a setting (FR10 of
- *       define-executor-contract);</li>
+ *   <li>the Mechanism section's executor identity — its {@code model} and
+ *       {@code command} per executor type — by {@link StageMechanismRule};</li>
  *   <li>the resolved attempt limit must be at least 1 (FR7);</li>
  *   <li>each {@code external} check must have a non-blank {@code checkId}, a
  *       positive {@code interval}, a positive {@code timeout}, and
@@ -40,12 +36,13 @@ import java.util.List;
  * (NFR-O1, UX2); verify-check errors are located by the check's index in the
  * stage's {@code verify} list. Nothing is thrown (design D3). Error order is
  * deterministic (NFR-R1): stages in pipeline order; within a stage the model
- * error, then the attempt-limit error, then verify-check errors in check-list
+ * error, then the command error, then the attempt-limit error, then verify-check errors in check-list
  * order and, within a check, field order.
  *
  * <p>Implements FR11 (and the FR7 attempt-limit clause) of load-pipeline-config;
  * FR16 of add-sandbox-core (the external-check pin-path form rule); FR10 of
- * define-executor-contract (the model rule's agent-type scope).
+ * define-executor-contract (the model rule's agent-type scope); FR2, UX2 of
+ * add-command-executor (the command stage's mechanism rules).
  */
 public final class StageSanityRule {
 
@@ -72,14 +69,7 @@ public final class StageSanityRule {
 
     private static void validateStage(StageDefinition stage, List<ConfigError> errors) {
         String manifest = "stages/%s/stage.yaml".formatted(stage.name());
-        if (stage.executor().type() != ExecutorType.PROGRAM
-                && stage.executor().model().isBlank()) {
-            errors.add(
-                    new ConfigError(
-                            manifest,
-                            "executor.model",
-                            "missing required executor model; the model must be pinned in the manifest for every agent executor type (api, agent-cli)"));
-        }
+        StageMechanismRule.validate(manifest, stage.executor(), errors);
         int attemptLimit = stage.limits().attemptLimit();
         if (attemptLimit < 1) {
             errors.add(new ConfigError(

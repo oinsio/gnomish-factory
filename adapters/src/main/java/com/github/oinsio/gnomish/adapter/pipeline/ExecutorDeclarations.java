@@ -29,7 +29,11 @@ final class ExecutorDeclarations {
 
     private static final String CONFIG = "config.yaml";
 
-    /** The declarable type wire values: {@code program} only, until a built-in is registered by name. */
+    /**
+     * The declarable type wire values: {@code program} only. A built-in executor ({@code command},
+     * design D6 of add-command-executor) is registered at wiring and reached by stage type, never
+     * declared.
+     */
     private static final List<String> TYPES = List.of("program");
 
     private ExecutorDeclarations() {}
@@ -52,12 +56,15 @@ final class ExecutorDeclarations {
     /**
      * Maps the section to its domain declarations, in declaration order. Total on any parsed
      * section: a missing field maps to empty, so a shape problem {@link #check} reported never
-     * becomes an exception here.
+     * becomes an exception here; a settings key with no value is a located error appended to
+     * {@code errors} by {@link OpaqueSettings#copy}.
      *
      * @param executors the parsed section, or {@code null} when absent
+     * @param errors the caller's mutable error accumulator
      * @return the declarations; immutable, empty for an absent section
      */
-    static List<ExecutorDeclaration> map(@Nullable Map<String, ExecutorDeclarationDto> executors) {
+    static List<ExecutorDeclaration> map(
+            @Nullable Map<String, ExecutorDeclarationDto> executors, List<ConfigError> errors) {
         if (executors == null) {
             return List.of();
         }
@@ -69,7 +76,7 @@ final class ExecutorDeclarations {
                     name,
                     ExecutorDeclaration.Type.PROGRAM,
                     strings(dto.program()),
-                    PipelineMapper.copySettings(dto.settings()),
+                    OpaqueSettings.copy(CONFIG, "executors." + name + ".settings", dto.settings(), errors),
                     strings(dto.credentials()),
                     strings(dto.egress())));
         });

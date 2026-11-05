@@ -49,7 +49,7 @@ class DrainOwnerGateSpec extends Specification {
         // Design D9 of define-executor-contract: the one bounded capture of an exec, which the describe,
         // a non-streaming program run and the working-copy view take instead of a drain of their own.
         'sandbox/core/src/main/java/com/github/oinsio/gnomish/sandbox/BoundedCapture.java': 'drains the ExecHandle\'s ChildOutput on one capped Drain under the handle\'s bounded wait',
-        'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/BoundedTail.java': 'keeps the tail of the ExecHandle\'s ChildOutput on one Drain',
+        'adapters/src/main/java/com/github/oinsio/gnomish/adapter/command/BoundedTail.java': 'keeps the tail of the ExecHandle\'s ChildOutput on one Drain',
         'sandbox/docker/src/main/java/com/github/oinsio/gnomish/sandbox/environment/ContainerFileChannel.java': 'drains the exec\'s stdout and stderr as ChildOutput on two Drains',
         'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/StreamDrain.java': 'reads lines from the ChildOutput\'s stream view, the owner\'s pull form',
         // Task 7.1 of define-executor-contract: the live progress reader of a streams_progress program run.

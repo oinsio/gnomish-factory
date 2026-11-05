@@ -24,6 +24,7 @@ class ApiExecutorRuleSpec extends Specification {
                 new AutonomyLimits(2), AdvancementMode.AUTO)
     }
 
+    // NG5 of add-command-executor: api stays rejected, and the message names agent-cli, program and command
     def "an api-executor stage yields exactly one located error naming the stage manifest and executor.type"() {
         given:
         def stages = [
@@ -36,7 +37,7 @@ class ApiExecutorRuleSpec extends Specification {
         then:
         errors == [
             new ConfigError('stages/plan/stage.yaml', 'executor.type',
-            "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'")
+            "api executor is not yet supported; the supported executor types are 'agent-cli', 'program' and 'command'")
         ]
     }
 
@@ -58,6 +59,14 @@ class ApiExecutorRuleSpec extends Specification {
         ]) == []
     }
 
+    // FR1, NG5 of add-command-executor: command is a supported executor type; only api is rejected
+    def "a command-executor stage yields no error"() {
+        expect:
+        ApiExecutorRule.validate([
+            stage('gate', ExecutorType.COMMAND)
+        ]) == []
+    }
+
     def "a mixed pipeline reports the error only for the api stage, in pipeline order"() {
         given:
         def stages = [
@@ -72,9 +81,9 @@ class ApiExecutorRuleSpec extends Specification {
         then:
         errors == [
             new ConfigError('stages/plan/stage.yaml', 'executor.type',
-            "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'"),
+            "api executor is not yet supported; the supported executor types are 'agent-cli', 'program' and 'command'"),
             new ConfigError('stages/review/stage.yaml', 'executor.type',
-            "api executor is not yet supported; the supported executor types are 'agent-cli' and 'program'")
+            "api executor is not yet supported; the supported executor types are 'agent-cli', 'program' and 'command'")
         ]
     }
 

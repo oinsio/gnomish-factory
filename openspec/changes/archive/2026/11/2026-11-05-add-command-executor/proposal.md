@@ -130,9 +130,10 @@ layered child-env allowlist, bounded output capture, and an exit-code contract i
 
 ### Non-Functional Cost
 
-- NFR-C1: A command round reports no token usage — the contract's `Usage.absent()`,
-  provenance `ABSENT` with an empty per-model map (unreported, never fabricated zeros); a
-  pipeline's deterministic stages contribute zero model cost.
+- NFR-C1: A command round reports a known zero of model use — provenance `REPORTED` with
+  an empty per-model map and an empty tool trace (no fabricated per-model zeros; `ABSENT`
+  stays reserved for an executor that could not tell) — so a pipeline's deterministic
+  stages contribute zero model cost and leave the task's cost complete (design D8).
 
 ## Operator Experience Criteria
 

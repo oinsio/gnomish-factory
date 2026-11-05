@@ -30,13 +30,21 @@ dependencies {
     // carrier, so the extractor renders through the carrier's own exits and no production source
     // in this module names a contract type any more — the edge is gone rather than unused, which
     // is what the dependency-analysis gate asks for.
+    // add-command-executor (task 5.2) brings it back for the findings funnel itself: the
+    // `command` built-in's quality reason is the round's one finding, so the tail of the command's
+    // output it quotes is stripped and bounded by `FindingsSanitizer` (NFR-O1, UX1). The round specs'
+    // `ExecutorUsage` assertions (finding F86 of tighten-spec-contract) ride this edge since, so the
+    // former test-only declaration is gone.
+    implementation project(':gnomish-plugin-api')
     // The coarse adapter remainder, for the frozen pipeline law and the
     // briefing sections the prompt builders render (D1's "pass 2 decides
     // whether `:adapters:agent` depends on the coarse module or the two move
     // with it" — it depends on it). This is the one sibling edge pass 2 keeps,
     // and `AgentCoarseReachSpec` in this module is what holds it to exactly the
     // two packages named here; the reverse edge is gone, task 10.2 having moved
-    // `AgentSettingsValidator` to the loader's own package.
+    // `AgentSettingsValidator` to the loader's own package. add-command-executor
+    // (design D2) adds a third: the shared command-run core, `adapter.command`,
+    // which the `command` built-in runs its rounds on.
     api project(':adapters')
     // The execution environment a round runs in (task 6.1): the host and fresh
     // judge environment sources construct backends directly. `implementation`,
@@ -86,9 +94,6 @@ dependencies {
     // Shared fakes (FR7, design D8), test scope only — `FakeAgentBinary` and
     // the scenario library the round specs drive instead of a real CLI.
     testImplementation project(':test-fixtures')
-    // The executor result types (`ExecutorUsage`) the round specs assert on, such as the wall
-    // time a telemetry failure keeps (finding F86 of tighten-spec-contract).
-    testImplementation project(':gnomish-plugin-api')
     // Logback's ListAppender backs the specs asserting on log output.
     testImplementation libs.logback.classic
     // The sibling-reach gate (task 10.2, D5/M4): ArchUnit holds this module's
@@ -141,8 +146,9 @@ pitest {
 
 // The one adapter module with a sibling edge, and it is stated here rather than
 // left implicit: `:adapters` is the coarse remainder, not another technology
-// seam, and `AgentCoarseReachSpec` narrows the reach to `adapter.law` and
-// `adapter.briefing` (FR2, M4, design D1).
+// seam, and `AgentCoarseReachSpec` narrows the reach to `adapter.law`,
+// `adapter.briefing` and `adapter.command` (FR2, M4, design D1; design D2 of
+// add-command-executor).
 layering {
     allowedProjects = [
         ':adapters',

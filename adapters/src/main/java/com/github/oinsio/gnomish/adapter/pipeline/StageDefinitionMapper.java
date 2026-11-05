@@ -4,6 +4,8 @@ import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode;
 import com.github.oinsio.gnomish.domain.pipeline.ArtifactInput;
 import com.github.oinsio.gnomish.domain.pipeline.ArtifactOutput;
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits;
+import com.github.oinsio.gnomish.domain.pipeline.CommandLine;
+import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType;
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
@@ -20,7 +22,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Implements FR7, FR11, D2, D5a of load-pipeline-config; FR12, FR13 of
  * add-sandbox-core (sandbox mapping); FR9, FR10 of define-executor-contract (the
- * {@code program} type and the executor {@code name}).
+ * {@code program} type and the executor {@code name}); FR1, FR2 of add-command-executor (the
+ * {@code command} type and the executor {@code command}).
  */
 final class StageDefinitionMapper {
 
@@ -53,16 +56,28 @@ final class StageDefinitionMapper {
         return mapped;
     }
 
-    static StageDefinition.Executor mapExecutor(@Nullable ExecutorDto executor) {
+    static StageDefinition.Executor mapExecutor(
+            String manifest, @Nullable ExecutorDto executor, List<ConfigError> errors) {
         if (executor == null) {
             return new StageDefinition.Executor(ExecutorType.API, "", Map.of());
         }
         return new StageDefinition.Executor(
                 mapExecutorType(executor.type()),
                 PipelineMapper.orEmpty(executor.model()),
-                PipelineMapper.copySettings(executor.settings()),
+                OpaqueSettings.copy(manifest, "executor.settings", executor.settings(), errors),
                 mapSandbox(executor.sandbox()),
-                executor.name());
+                executor.name(),
+                mapCommand(executor.command()));
+    }
+
+    /**
+     * Maps the declared {@code executor.command} into a {@link CommandLine}, verbatim (FR1, FR2 of
+     * add-command-executor). An absent or blank command maps to {@code null}: a blank one names no
+     * command, and its fault is reported once — by the domain rule as a missing command on a
+     * {@code command} stage, by {@link BlankMechanismFields} as a forbidden one on any other type.
+     */
+    private static @Nullable CommandLine mapCommand(@Nullable String command) {
+        return command == null || command.isBlank() ? null : new CommandLine(command);
     }
 
     /**
@@ -84,10 +99,12 @@ final class StageDefinitionMapper {
 
     /** Total on structurally-valid input (task 5.2 guaranteed a known value); absent maps to API. */
     private static ExecutorType mapExecutorType(@Nullable String type) {
-        if ("agent-cli".equals(type)) {
-            return ExecutorType.AGENT_CLI;
-        }
-        return "program".equals(type) ? ExecutorType.PROGRAM : ExecutorType.API;
+        return switch (type) {
+            case "agent-cli" -> ExecutorType.AGENT_CLI;
+            case "program" -> ExecutorType.PROGRAM;
+            case "command" -> ExecutorType.COMMAND;
+            case null, default -> ExecutorType.API;
+        };
     }
 
     /** Total on structurally-valid input (task 5.2 guaranteed a known value); absent maps to AUTO. */
