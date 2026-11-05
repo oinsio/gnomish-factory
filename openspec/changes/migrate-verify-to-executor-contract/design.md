@@ -7,7 +7,7 @@ See proposal.md — Why. Constraints:
 - After `define-executor-contract`: `ExecutorRegistry` (name → `Executor`), `ExecutorResult`
   (status + answer), `ExecutorOutcomeClassifier`, `ResultFileReader`, describe-validated
   settings. Its D10 lists check-side verdict construction (`ShellCommandCheckRunner`,
-  `FilesExistCheckRunner`, `ExternalPolling`, `VerifyOrchestrator:149`) as exemptions that
+  `FilesExistCheckRunner`, `ExternalPolling`, `VerifyOrchestrator:153`) as exemptions that
   expire here.
 - `VerifyOrchestrator` dispatches on the sealed `VerifyCheck` (`Builtin | Command | External |
   Judge`) to three ports; `ExternalPolling` owns interval/timeout/timeout-class and the
@@ -55,7 +55,9 @@ stateless-instance rule. *Alternative rejected:* executor-side waiting (`quality
 **D3 — `scm-status` is a built-in, belongs to the git-remote connection, needs `expected`.**
 (FR4, FR9, NFR-S2.) Reads Checks + Statuses on the attempt SHA (Gitea: statuses), latest per
 context, pending while any expected context is absent/running, SHA verified, back-off on
-rate limit. Its token resolves by the git-remote connection profile, not the tracker's.
+rate limit. Its token resolves by the connection the operator configures for the executor —
+`factory.executors.<name>`, inline or by `connection: <profile>` into `factory.connections` —
+never by the tracker's subsection, so Jira + GitHub needs no GitHub tracker config.
 *Rationale:* "named verdicts on a SHA" is the common contract of every SCM, covering any CI
 without per-CI code; expected contexts are the only cure for "pending forever". *Alternative
 rejected:* folding it into the GitHub tracker adapter — ties CI reading to the issue tracker,
@@ -98,6 +100,34 @@ the key; resume polls it again and the contract returns the ended run's terminal
 (D11), so the verdict lands with no `start`. An executor that breaks D11 (refuses the key) is
 `failed/infrastructure` naming the key: visible, never a silent re-submission. Kill-point specs:
 also kill after a key-rotating poll and after a terminal poll, each resumed by a second instance.
+For a `program` verdict executor the resume of W2–W4 reaches the program through D14.
+
+**D14 — A recorded key is adopted by the resuming instance's program executor.** (FR3, FR11,
+NFR-R1, NFR-R4; closes proposal Q3.) As built by `define-executor-contract`,
+`ProgramExecutor.poll(ExecutorRequest request, PendingKey key)` claims the key from its
+instance's in-memory `PendingRuns` (`PendingRuns.Entry(WorkingCopyView.@Nullable Taken
+before)`, `Entry claim(PendingKey key)`) and refuses, spawning nothing, a key absent there; the
+same entry holds the working-copy view taken before `start`, against which the poll that ends a
+`verdict` run is judged (NFR-S4 of that change). On a second instance that entry does not exist.
+Decision: the resume path of `PendingPoll` hands the key the pending record names to the
+executor of the resumed check before its first poll, and the program executor *adopts* it — it
+takes git's view of its own environment's working copy and enters the key into its `PendingRuns`
+with that view as the entry's `before`. A poll of an adopted key then proceeds as for a key its
+own `start` returned. Invariants: a key enters `PendingRuns` only from a `start` or `poll` result
+of this instance or from the pending record through the resume path, never from the request on
+the wire, so the refusal of an unknown key stays for every other key; the `Executor` port's
+signatures are unchanged. The adopted view is a sound before-view because the resuming
+instance's environment is materialized from the attempt commit the check runs on and nothing of
+the program has run in it yet, so it is the view a `start` in that environment would have taken;
+what the first instance's program changed in its own environment is gone with that environment.
+W3 (superseded key) and W4 (ended run's key) are adopted the same way; the program's own
+retention (D11) answers them. *Alternative rejected — persist the before-view in the pending
+record:* puts a program-adapter detail (git status entries) into the engine's record, and a view
+taken in the first environment would mismatch the second one's fresh checkout, turning every
+resume into a false cannot-verify. *Alternative rejected — accept any key on the wire:* removes
+the unknown-key refusal for every poll, not only the resumed one. The `executor/wire-contract`
+delta MODIFIES "Poll of a program is refused without its preconditions" and "A pending judge is
+judged when it ends", scenario titles kept, each with a scenario for the adopted key.
 
 **D8 — Sync surfaces.** Scout: `grep -rn "Kept in sync with"`, registry, and domain-term
 search for "poll", "verdict", "findings file".
@@ -123,7 +153,7 @@ search for "poll", "verdict", "findings file".
 | Owner                                                                                    | Value (type)                                              | Consumers                                                                                                                                                         | Old way removed                                                                                                                                                                                                                                                                                                                 | Enforced by                                                                                                                                                          |
 |------------------------------------------------------------------------------------------|-----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `PendingPoll` (`domain/engine`)                                                          | `PendingPollRecord` (key, check identity, attempt, since) | `VerifyOrchestrator` (all verdict checks), `StageAttemptLoop` resume path, state mappers; the key-rotation commit (D12) is written by the owner, never by a check | `ExternalPolling` deleted; `GithubCheckExternalClient` run-listing loop reduced to one observation per `poll`                                                                                                                                                                                                                   | parameter type (`PendingKey`, no `String`); kill-point specs D7; grep gate `Thread.sleep\|sleeper.sleep` in `adapters/check` and `adapters/github/check` → zero hits |
-| `VerdictDerivation` (`domain/engine`)                                                    | `Verdict` from `Answer.Verdict` + `Threshold`             | `VerifyOrchestrator`, `JudgeVoting` (judge votes already SARIF-shaped? no — exempt until `extract-agent-round-runner`, named)                                     | `new Verdict.Fail/Pass/CannotVerify(` in `ShellCommandCheckRunner`, `FilesExistCheckRunner`, `ExternalPolling`, `VerifyOrchestrator:149`, `HttpExternalCheckClient`, `GithubCheckExternalClient` deleted; exempt: `JudgeVerdictExtractor`, `JudgeRoundExecution`, `JudgeCriteriaPreflight`, `StateJsonMapper` (deserialization) | grep gate `new Verdict\.` → derivation + state mapper + judge exemptions only; data-driven threshold spec                                                            |
+| `VerdictDerivation` (`domain/engine`)                                                    | `Verdict` from `Answer.Verdict` + `Threshold`             | `VerifyOrchestrator`, `JudgeVoting` (judge votes already SARIF-shaped? no — exempt until `extract-agent-round-runner`, named)                                     | `new Verdict.Fail/Pass/CannotVerify(` in `ShellCommandCheckRunner`, `FilesExistCheckRunner`, `ExternalPolling`, `VerifyOrchestrator:153`, `HttpExternalCheckClient`, `GithubCheckExternalClient` deleted; exempt: `JudgeVerdictExtractor`, `JudgeRoundExecution`, `JudgeCriteriaPreflight`, `StateJsonMapper` (deserialization) | grep gate `new Verdict\.` → derivation + state mapper + judge exemptions only; data-driven threshold spec                                                            |
 | `ExecutorRegistry` (from the contract)                                                   | `Executor` by `ExecutorName`                              | `VerifyOrchestrator` for every check (new), stage dispatch (existing)                                                                                             | `CheckClientDiscovery`, `CheckProviderSeam`, `ProviderDispatchingExternalCheckClient`, `CheckClientConfiguration`, `CheckEquipment` registry fields deleted; `META-INF/services/...CheckClientFactory` entries deleted                                                                                                          | `CheckClientFactory` type gone (compile); `ArchUnit`/grep: no `ServiceLoader.load(` outside tracker and sandbox-binding discovery                                    |
 | `scm-status` built-in                                                                    | `ContextVerdicts` on `AttemptSha`                         | `VerifyOrchestrator` via registry                                                                                                                                 | none (new); identity spec: contexts read equal those the SCM holds for the attempt SHA (`ScmStatusShaPinningSpec`, WireMock)                                                                                                                                                                                                    | `AttemptSha` value type on the read; `expected` non-empty at load                                                                                                    |
 | Credential delivery for verdict executors (`ChildEnvAllowlist` layer, from the contract) | `ExecutorCredentialNames`                                 | `SandboxCheckEnvironmentSource.freshBox`, `HostCheckEnvironmentSource`                                                                                            | `CheckProviderSeam.credentialEnvVars` union deleted; `CheckEquipment.credentialNames` deleted                                                                                                                                                                                                                                   | `ProgramCredentialDeliverySpec` extended with a verdict check: token in fresh box, absent in round box                                                               |
@@ -141,7 +171,8 @@ terminal → poll the same key again → same result), gated by `poll` like the 
 reference executor already answers every poll of its key with the run's answer, so it passes
 unchanged; the misbehaving fake gains a `break-pending-repoll` preset. *Where it lives:* here,
 because this change is the first that persists a key across a kill (W3, W4 of D7);
-`define-executor-contract` is implemented and stays as built, and `extract-agent-round-runner`
+`define-executor-contract` is implemented and stays as built (bar the program-poll refusal
+and the pending judge's before-view, which D14 modifies), and `extract-agent-round-runner`
 reuses the requirement for its K3/K4 windows. ADDED rather than a MODIFIED "Closed status
 taxonomy": the obligation is the poll's, not the status set's, and a MODIFIED here would overlap
 `extract-agent-round-runner`'s MODIFIED of that requirement. *Rationale:* the window between
@@ -162,6 +193,15 @@ first key's (D2), so no second persistence path exists. The rule is subject-neut
 the first key:* an executor that rotates keys (a job requeued under a new id) would be polled by
 a stale handle after every restart. *Alternative rejected — leave it to the transform change:*
 a `verdict` poll has the same window, and two changes ADDing one requirement is a merge conflict.
+
+**D13 — A model-less verdict built-in reports a known zero.** (NFR-C1.) Adopts design D8 of
+`add-command-executor` (user decision 2026-11-04) for the five verdict built-ins: each reports
+usage with provenance `REPORTED` and an empty per-model map, and its describe declares
+`reportsUsage = true`. `UsageFold` marks a task's cost incomplete for any `ABSENT` entry, so
+`ABSENT` from a check that mediates no model would mark every task incomplete. *Alternative
+rejected:* `ABSENT` for built-ins (the earlier NFR-C1 wording) — every task would show "cost
+incomplete" forever and mask a real agent round that lost its usage; D8 of that change already
+rejected it for the `command` built-in on the same grounds.
 
 ## Risks / Trade-offs
 
@@ -186,3 +226,4 @@ a `verdict` poll has the same window, and two changes ADDing one requirement is 
 
 - Threshold vocabulary (proposal Q1) — settled in the spec as `error | warning | note`;
   numeric minimums deferred.
+- Record-driven poll of a `program` executor (proposal Q3) — settled by D14.

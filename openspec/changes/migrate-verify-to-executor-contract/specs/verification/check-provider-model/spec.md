@@ -16,8 +16,9 @@ and law-declared external programs.
 ### Requirement: Each check provider validates its operator subsection
 **Reason**: Connection data moves to the executor declaration's settings and credentials,
 validated by the same describe schema.
-**Migration**: `factory.check.<provider>` keys move under the law's `executors.<name>` or the
-operator's vendor connection profile.
+**Migration**: `factory.check.<provider>` keys move to the operator's `factory.executors.<name>`
+subsection of the built-in executor, inline or by `connection: <profile>`; a law-declared program
+takes its settings and credentials from its declaration.
 
 ### Requirement: Check providers declare their credentials through the SPI
 **Reason**: Credentials are declared by the executor's describe and cross-checked against the

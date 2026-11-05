@@ -36,6 +36,34 @@ A shell exit code SHALL carry no verdict meaning.
 - **WHEN** the command writes `{"findings":[{"message":"x"}]}` to the findings path
 - **THEN** the answer is stored as SARIF with one `error` result and the check fails
 
+### Requirement: Built-in verdict executors report a known zero usage
+A built-in verdict executor that mediates no model SHALL report usage with provenance
+`REPORTED` and an empty per-model map, and its describe SHALL declare `reportsUsage = true`,
+so a task whose checks are built-ins keeps a complete usage fold and no per-model zero is
+written.
+**Implements**: NFR-C1 of migrate-verify-to-executor-contract
+**Notes**: Adopts design D8 of `add-command-executor` for the verdict built-ins (design D13).
+
+#### Scenario: Built-in verdict usage keeps the task cost complete
+- **WHEN** a built-in verdict executor (`files-exist`, `shell`, `scm-status`, `github-actions` or `http`) completes a check
+- **THEN** its usage entry is `REPORTED` with no per-model figure, and the task's usage fold stays complete
+
+### Requirement: A credentialed built-in verdict executor is connected by operator configuration
+A built-in verdict executor that declares credentials SHALL take its endpoint and credential
+names from the operator's `factory.executors.<name>` subsection, inline or by a `connection:`
+reference to a `factory.connections` profile graded at load like any port subsection's; a check
+naming such an executor with no connection configured SHALL be a located load error.
+**Implements**: NFR-S2 of migrate-verify-to-executor-contract
+**Notes**: The tracker's subsection is never read for a verdict executor (design D3).
+
+#### Scenario: Operator connects scm-status with configuration alone
+- **WHEN** the operator declares `factory.executors.scm-status.connection: github-main` and `factory.connections.github-main` names the endpoint and token name
+- **THEN** an `scm-status` check reads statuses from that endpoint with the token resolved through the secrets port, and no tracker subsection is read
+
+#### Scenario: Unconnected credentialed built-in is a located error
+- **WHEN** a check names `github-actions` and no `factory.executors.github-actions` subsection or profile supplies its connection
+- **THEN** loading reports a located error naming the check and the executor
+
 ### Requirement: SCM status reader
 The `scm-status` built-in SHALL read named verdicts on the attempt SHA from the configured SCM —
 GitHub Checks and Commit Statuses, Gitea statuses — SHALL require an `expected` contexts list,

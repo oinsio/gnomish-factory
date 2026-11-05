@@ -35,3 +35,23 @@ A check whose executor describe declares credentials SHALL be a located error wh
 #### Scenario: Same-box with a secret is refused
 - **WHEN** a check names an executor declaring `SONAR_TOKEN` and `verify-in: same-box`
 - **THEN** validation reports a located error naming the check and the credential
+
+## MODIFIED Requirements
+
+### Requirement: Stage model mirrors the stage contract and all verify-check types
+Each `StageDefinition` SHALL represent the stage-contract sections (purpose, input, output, control, mechanism/executor, verify, failure/escalation limits, advancement) and SHALL model the verify checks as two typed variants: an executor check, which every `builtin`, `command`, `external` or `executor:` check maps to and which carries its executor name, its token, its `settings` and the engine-common fields, and the `judge` check.
+**Implements**: FR2 of load-pipeline-config; FR7 of add-plugin-architecture; FR1 of migrate-verify-to-executor-contract
+
+#### Scenario: All four check types are modeled distinctly
+- **WHEN** a stage's `verify` list contains a `builtin`, a `command`, an `external`, and a `judge` check
+- **THEN** the model exposes the first three as executor checks naming `files-exist`, `shell` and the `external` check's executor, each keeping the token it was declared with and its type-specific settings (e.g. `command` carries the executable), and the `judge` as its own variant carrying the acceptance-criteria path and vote count
+- **AND** the ordered position of each check within the stage is preserved
+
+#### Scenario: External check carries provider and opaque params
+- **WHEN** an `external` check declares a `provider` and provider-specific `params`
+- **THEN** the model carries the executor name mapped from `provider` and the `params` as the executor's settings alongside the engine-common `interval`, `timeout`, `timeoutClass`, and `pinPaths`
+- **AND** no new verify-check sealed variant is added
+
+#### Scenario: Unknown check type is rejected
+- **WHEN** a `verify` entry declares a check `type` that is not one of the four known types
+- **THEN** validation reports a located error naming the unknown type

@@ -31,6 +31,10 @@ by the engine and persisted on the branch.
   key it issued pollable until its run ends, and a poll of an ended run's key returns its terminal
   result again; the conformance kit gains a re-poll case, the reference executor and the
   misbehaving fake follow it.
+- **MODIFIED** (wire contract): "Poll of a program is refused without its preconditions" and "A
+  pending judge is judged when it ends" — a key the task's pending record names is adopted by the
+  resuming instance's program executor, so a persisted key resumes a program's poll (Q3, design
+  D14).
 - **ADDED**: verdict derivation from SARIF level against the check's threshold in one engine
   component; the exemptions of `define-executor-contract` D10 for check-side verdict
   construction expire here.
@@ -145,13 +149,17 @@ by the engine and persisted on the branch.
 - NFR-S1: A verdict executor declaring credentials SHALL run in `FRESH_BOX` with its own egress
   allowlist derived from its describe; a `SAME_BOX` declaration on such a check is a located
   load error.
-- NFR-S2: `scm-status` and `github-actions` resolve their token through the secrets port by a
-  name tied to the git-remote connection, not to the tracker.
+- NFR-S2: `scm-status` and `github-actions` resolve their token through the secrets port by the
+  credential name of the connection the operator configures for the executor
+  (`factory.executors.<name>`, inline or by a `factory.connections` profile), never through the
+  tracker's subsection.
 
 ### Non-Functional Cost
 
-- NFR-C1: A verdict executor reports usage with provenance; built-ins report `ABSENT` (no
-  model) and the ledger renders no zero.
+- NFR-C1: A verdict executor reports usage with provenance; a built-in that mediates no model
+  reports `REPORTED` with an empty per-model map and declares `reportsUsage = true` in its
+  describe (design D8 of `add-command-executor`, adopted as D13), so the task's cost stays
+  complete and the ledger renders no per-model zero.
 
 ## Operator Experience Criteria
 
@@ -173,11 +181,10 @@ by the engine and persisted on the branch.
 - Q2: Whether `github-actions` should be folded into `scm-status` once job-log findings can be
   fetched from the check-run output.
 - Q3: How task 4.3a's record-driven poll of a `program` executor reaches the program for a key
-  this instance never issued, a superseded key and an ended run's key (FR3, FR11): the built
-  requirement "Poll of a program is refused without its preconditions" of
-  `define-executor-contract` refuses all three per instance (`PendingRuns`), so design D7 must
-  state the replacement and this change must MODIFY that requirement, keeping its scenario
-  titles, before 4.3a is applied.
+  this instance never issued, a superseded key and an ended run's key (FR3, FR11) — settled by
+  design D14: the resuming instance's program executor adopts the recorded key; the
+  `executor/wire-contract` delta MODIFIES "Poll of a program is refused without its
+  preconditions" and "A pending judge is judged when it ends", scenario titles kept.
 
 ## Capabilities
 
@@ -194,10 +201,19 @@ by the engine and persisted on the branch.
   validated by describe schema.
 - `plugin/plugin-api-contract`: check SPI removed; sample proves the verdict-program path.
 - `executor/wire-contract` (added by `define-executor-contract`): ADDED "A pending key stays
-  pollable until its run ends".
+  pollable until its run ends"; MODIFIED "Poll of a program is refused without its
+  preconditions" and "A pending judge is judged when it ends" (D14).
 - `executor/conformance-kit` (added by `define-executor-contract`): ADDED "Re-poll case pins the
   idempotent poll".
-- `pipeline-config`: check tokens map to executor names; `expected` contexts and threshold.
+- `pipeline-config`: check tokens map to executor names; `expected` contexts and threshold;
+  MODIFIED "Stage model mirrors the stage contract and all verify-check types" (executor check +
+  `judge`).
+- `verification/http-check-provider`: MODIFIED — `http` is a built-in verdict executor resolved
+  from the executor registry.
+- `verification/github-external-check`: MODIFIED "Polling is stateless and takeover-safe" — the
+  persisted pending key is the one poll state; the attempt commit comes with the request.
+- `verification/verification-hardening`: MODIFIED "Pin-check guards external checks" — the guard
+  is a pin decorator over the check's verdict executor, before its first `start`.
 
 ## Impact
 
@@ -208,7 +224,9 @@ by the engine and persisted on the branch.
 - Sequencing: after `define-executor-contract` and `add-command-executor` (shared command core);
   before `extract-agent-round-runner`; the `executor/wire-contract` and `executor/conformance-kit`
   deltas ADD requirements to capabilities `define-executor-contract` adds, so that change archives
-  first; they modify none, so `extract-agent-round-runner`'s MODIFIED "Closed status taxonomy"
+  first; the `executor/wire-contract` delta also MODIFIES two of its requirements ("Poll of a
+  program is refused without its preconditions", "A pending judge is judged when it ends"), none
+  of which `extract-agent-round-runner` modifies, so its MODIFIED "Closed status taxonomy" still
   layers on `define-executor-contract`'s text alone; `bootstrap` `KitCase` and the stand-in
   `executor-run.sh` (a declared pair) gain the re-poll case at both ends; `remove-interactive-console` removes the interactive
   check client independently (its delta on the pin-check requirement precedes ours).

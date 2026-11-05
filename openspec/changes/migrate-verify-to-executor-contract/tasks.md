@@ -20,7 +20,7 @@
   data-driven level × threshold spec; `CannotVerify` on a malformed answer (FR7, D5)
 - [ ] 2.2 Route `VerifyOrchestrator` through it; delete verdict construction in
   `ShellCommandCheckRunner`, `FilesExistCheckRunner`, `ExternalPolling`,
-  `VerifyOrchestrator:149`, `HttpExternalCheckClient`, `GithubCheckExternalClient`
+  `VerifyOrchestrator:153`, `HttpExternalCheckClient`, `GithubCheckExternalClient`
 - [ ] 2.3 Old-way sweep: `grep -rn "new Verdict\." --include=*.java */src/main adapters/*/src/main`
   → hits only in `VerdictDerivation`, `StateJsonMapper` and the judge classes named in D9;
   record the list in the task report (M2)
@@ -43,15 +43,23 @@
   `{"findings":[...]}` to SARIF; specs: legacy file normalized, SARIF passthrough, exit code
   carries no verdict, existing bound/kill specs green (FR5)
 - [ ] 3.3 `github-actions`: move `GithubCheckExternalClient` + fetchers into an `Executor` with
-  `poll`; describe carries token name (git-remote connection), settings schema (former
-  subsection), pin contribution; WireMock specs re-pointed unchanged (FR6, D4)
+  `poll`; describe carries the token name, settings schema (former
+  subsection), pin contribution; its connection (base URL, token name) is read from the
+  operator's `factory.executors.github-actions` subsection, inline or by `connection:` profile
+  (NFR-S2); WireMock specs re-pointed unchanged (FR6, D4)
 - [ ] 3.4 `http`: same for `HttpExternalCheckClient` (conditions, run-context interpolation,
   egress refusal); specs re-pointed (FR6)
 - [ ] 3.5 `scm-status`: new built-in reading GitHub Checks + Statuses and Gitea statuses on the
   attempt SHA; latest-per-context, expected list, SHA verification, rate-limit back-off hint;
-  WireMock specs for each scenario and `ScmStatusShaPinningSpec` (FR4, FR9, NFR-R2, D3, D9)
+  WireMock specs for each scenario and `ScmStatusShaPinningSpec`; its connection from
+  `factory.executors.scm-status`; one feature per scenario of "A credentialed built-in verdict
+  executor is connected by operator configuration", markers included (FR4, FR9, NFR-R2, NFR-S2,
+  D3, D9)
 - [ ] 3.6 Register the five built-ins in `ExecutorRegistry`; conformance kit run against each
-  as a spec (FR1, FR8)
+  as a spec (FR1, FR8); each built-in's describe declares `reportsUsage = true` and its result
+  carries usage `REPORTED` with an empty per-model map; a `UsageFold` spec: a task whose checks
+  are the five built-ins stays `complete`, one feature per scenario of "Built-in verdict
+  executors report a known zero usage", markers included (NFR-C1, D13)
 
 ## 4. Single owner: pending/poll with a durable key
 
@@ -76,14 +84,16 @@
   process spawned, a key its own instance did not issue (`PendingRuns`, in memory per instance),
   and the working-copy view the `verdict` poll is judged against (FR11, NFR-S4 of that change) is
   held in that same entry. A persisted key resumed by a second instance (FR3) therefore reaches a
-  refusal for a `program` verdict check unless this change gives the poll its run from the record;
-  design D7 states how (what the record carries in place of `PendingRuns`, and where the
-  before-view comes from on resume), and the second-instance kill-point spec of 4.3 includes a
-  `program` verdict executor declaring `poll`. The record-driven poll must also reach the program
-  for a superseded key (W3) and for an ended run's key (W4), both of which `PendingRuns` refuses
-  today (FR11, D11); before this task is applied, D7 states the replacement and this change's
-  `executor/wire-contract` delta MODIFIES "Poll of a program is refused without its
-  preconditions" with its scenario titles kept (proposal Q3) (FR3, FR11, NFR-R1)
+  refusal for a `program` verdict check unless this change gives the poll its run from the record.
+  Implement design D14: the resume path of `PendingPoll` hands the recorded key to the resumed
+  check's executor before its first poll, and `ProgramExecutor` adopts it — takes the view of
+  its own environment's working copy and enters the key into `PendingRuns` with that view as
+  `before`; a key enters `PendingRuns` from nowhere else (no wire field). The adopted key covers
+  the record's first key (W2), a superseded key (W3) and an ended run's key (W4) (FR11, D11);
+  the second-instance kill-point spec of 4.3 includes a `program` verdict executor declaring
+  `poll`. Specs: `ProgramPollSpec` keeps its two markers and gains one feature per new scenario
+  of the MODIFIED "Poll of a program is refused without its preconditions" and "A pending judge
+  is judged when it ends", markers included (FR3, FR11, NFR-R1, D14)
 - [ ] 4.4 Old-way sweep: `grep -rn "sleeper.sleep\|Thread.sleep" adapters/src/main/java/.../check
   adapters/github/src/main` → zero hits; `grep -rn "ExternalPolling"` → zero hits (D9)
 - [ ] 4.5 Ledger and MDC: `executor`, `status`, `key` prefix, elapsed/remaining per poll; the
@@ -103,7 +113,8 @@
   `testing.md` "Stand-ins are prepared"); the reference executor passes unchanged (verify:
   its poll of `reference-deferred` answers the run every time); `KitCaseScriptIdentitySpec`
   green; the registry row `KitCase` ↔ `executor-run.sh` in `manual-sync-pairs.md` says thirteen
-  cases; one feature per scenario of the `executor/wire-contract` and `executor/conformance-kit`
+  cases, and so do `KitCase`'s class javadoc, the script's header and the glossary's
+  conformance-kit entry (`twelve` → `thirteen`); one feature per scenario of the `executor/wire-contract` and `executor/conformance-kit`
   deltas, markers included; amend ADR 0020 decision 2 (the 2026-11-01 sentence "pending keys are
   not persisted") with the persisted key, the pollable-until-end rule and the idempotent re-poll
   (FR11, FR12)
@@ -136,7 +147,10 @@
   grep for the removed names → zero (FR8, M4)
 - [ ] 6.2 Rewrite the sample module: a sample verdict program (script, `pending` then `poll`)
   passing the conformance kit; update `docs/guides` adapter author guide and
-  `docs/community-plugins.md` wording (FR8)
+  `docs/community-plugins.md` wording; rewrite `docs/guides/operator-guide-github-actions-check.md`
+  for the `github-actions` verdict executor — no `GithubCheckExternalClient` or
+  `ExternalCheckClient` wording, and its "Base URL config" section names the
+  `factory.executors.github-actions` subsection and its `connection:` reference (FR8, NFR-S2)
 - Spec contract (`tighten-spec-contract`): this change REMOVES the `stage-engine` requirement
   "External check poll loop", two `plugin/plugin-api-contract` requirements and seven
   `verification/check-provider-model` requirements; their 18 scenarios carry 30
@@ -145,7 +159,13 @@
   compiles against the api alone"). In this same change, every marker of a removed scenario goes
   with the test it sits on (or is retargeted to a scenario this change adds), and each exemption
   line naming a removed scenario is deleted, so `checkSpecContract` reports no marker or
-  exemption naming a scenario that no longer exists.
+  exemption naming a scenario that no longer exists. The scenarios of the MODIFIED requirements
+  keep their titles: their markers move with their features to the specs that replace the deleted
+  ones — `HttpCheckProviderSpec`'s to the registry spec of 3.6 or the re-pointed `http` specs of
+  3.4, `VerifyCheckSpec`'s to the mapper and loader specs of 1.1, the stateless-poll markers of
+  the GitHub check specs to the re-pointed WireMock specs of 3.3, and
+  `PinCheckedExternalCheckClientSpec`'s and `HttpCheckClientFactorySpec`'s to the pin-decorator
+  spec of 5.1 — so no kept scenario is left without a marker.
 
 ## 7. Integration
 
