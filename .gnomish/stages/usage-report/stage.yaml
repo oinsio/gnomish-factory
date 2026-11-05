@@ -1,20 +1,18 @@
-purpose: post the task's wall time, tokens and cost per stage, role and model, deliver included, as one comment on its pull request, so the reviewer sees what the change cost
+purpose: post the task's wall time and tokens per stage and per model, deliver included, as one comment on its pull request, so the reviewer sees what the change cost
 inputs:
   - kind: source
   - kind: internal
     producerOutputId: pull-request
-# The whole work is report.sh beside this manifest: it runs `gnomish usage --markdown`, which
-# folds the usage the factory recorded on the task branch and checks it against the tip's
-# totals, and creates or edits one marked comment on the open pull request with that output
-# verbatim. Neither the script nor a gnome counts anything (design D16 of
-# define-executor-contract).
+# The whole work is report.sh beside this manifest: it reads the usage the factory wrote into
+# .gnomish-task/state.json of every round commit on the task branch, and creates or edits one
+# marked comment on the open pull request. No gnome counts anything.
 # The comment goes to the pull request, not the issue: the factory reads every plain comment
 # in the issue thread after its last ack as a human's decision (GithubDecisions), so a
 # report there could be taken for an answer if the task were ever parked again.
 #
-# The script needs git, gh and the factory launcher of the clone the task worktree belongs to
-# (.gnomish/factory/gnomish with its jar), so the stage runs under the host binding only; a box
-# carries no factory. The agent may run only Bash, and the instructions name one script.
+# The script needs only git, jq and gh - no factory jar, which a worktree does not carry - so
+# the stage runs under any binding, box or host. The agent may run only Bash, and the
+# instructions name one script.
 #
 # Until the factory has a command executor (the add-command-executor change), a stage needs
 # an agent round, so the cheapest model runs the one script and stops. Once that change lands,

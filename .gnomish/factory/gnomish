@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Wrapper around a copy of the factory jar (gnomish.jar next to it, git-ignored), for running
-# the factory against this repository itself. Everything that launches the factory lives here
-# in .gnomish/factory/; the rest of .gnomish/ (config.yaml, pipeline.yaml, stages/) is the
-# project's pipeline, which the factory reads itself. Callable from any directory.
+# Wrapper around a Gnomish Factory release unpacked next to it (gnomish-<version>/, git-ignored;
+# the version is GNOMISH_VERSION in gnomish.env), for running the factory against this
+# repository itself. Everything that launches the factory lives here in .gnomish/factory/; the
+# rest of .gnomish/ (config.yaml, pipeline.yaml, stages/) is the project's pipeline, which the
+# factory reads itself. Callable from any directory.
 #
-# The jar is a COPY, not bootstrap/build/libs/: this repository is the factory's own source,
-# so a gnome running `./gradlew build` in an in-place run would otherwise rebuild the jar of
-# the very process that launched it. Refresh the copy deliberately, from a commit you trust:
-#
-#   ./gradlew :bootstrap:bootJar && cp bootstrap/build/libs/bootstrap-*.jar .gnomish/factory/gnomish.jar
+# The factory is a published RELEASE, not bootstrap/build/libs/: this repository is the
+# factory's own source, so a gnome running `./gradlew build` in an in-place run would otherwise
+# rebuild the jar of the very process that launched it. Move to another release deliberately,
+# by changing GNOMISH_VERSION and unpacking that release here (.gnomish/README.md).
 #
 # The factory's settings live in its home, not in this repository: each clone is registered
 # once in project gnomish-factory, and ~/.gnomish/projects/gnomish-factory/project.yaml holds
@@ -67,10 +67,15 @@ if [[ -z "${GNOMISH_PROJECT_NAME:-}" ]]; then
     exit 2
 fi
 
-jar="${GNOMISH_JAR:-$factory_dir/gnomish.jar}"
-if [[ ! -f "$jar" ]]; then
-    echo "gnomish: no factory jar at $jar — build and copy one:" >&2
-    echo "  ./gradlew :bootstrap:bootJar && cp bootstrap/build/libs/bootstrap-*.jar $factory_dir/gnomish.jar" >&2
+if [[ -z "${GNOMISH_VERSION:-}" ]]; then
+    echo "gnomish: GNOMISH_VERSION is not set — it belongs in $factory_dir/gnomish.env" >&2
+    exit 2
+fi
+# The release's own launcher: it checks for Java 25 or newer (JAVA_HOME, else java on PATH) and
+# takes extra JVM options from GNOMISH_JAVA_OPTS.
+launcher="$factory_dir/gnomish-$GNOMISH_VERSION/bin/gnomish"
+if [[ ! -x "$launcher" ]]; then
+    echo "gnomish: $launcher not found — unpack gnomish-$GNOMISH_VERSION.tar.gz from the release page into $factory_dir (.gnomish/README.md, \"One-time setup\")" >&2
     exit 2
 fi
 
@@ -134,7 +139,7 @@ for arg in "$@"; do
     esac
 done
 
-exec "${GNOMISH_JAVA:-java}" -jar "$jar" \
+exec "$launcher" \
     ${dir_default[@]+"${dir_default[@]}"} \
     ${instance_default[@]+"${instance_default[@]}"} \
     "$@"
