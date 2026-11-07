@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
@@ -57,7 +59,7 @@ class HostRoundTokenSpec extends Specification implements BareGitRepoFixture, Ap
     /** One stage whose command check fails on its first run and passes on every later one. */
     private StageDefinition stage() {
         Path marker = tempDir.resolve('checked-once')
-        def check = new VerifyCheck.Command("test -f '${marker}' || { touch '${marker}'; exit 1; }".toString())
+        def check = VerifyChecks.command("test -f '${marker}' || { touch '${marker}'; exit 1; }".toString())
         new StageDefinition(
                 'build', 'purpose', [], [],
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),

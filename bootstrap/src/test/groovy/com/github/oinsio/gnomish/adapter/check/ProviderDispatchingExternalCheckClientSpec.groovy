@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckTokenException
 import com.github.oinsio.gnomish.app.CheckClientContext
@@ -30,8 +32,8 @@ class ProviderDispatchingExternalCheckClientSpec extends Specification {
 
     private static final Map GITHUB_SUBSECTION = [('api-url'): 'https://api.github.com', repo: 'acme/widgets']
 
-    private static VerifyCheck.External check(String checkId, String provider) {
-        new VerifyCheck.External(
+    private static VerifyCheck.Executor check(String checkId, String provider) {
+        VerifyChecks.external(
                 checkId, provider, Duration.ofSeconds(1), Duration.ofSeconds(5), VerifyCheck.TimeoutClass.QUALITY)
     }
 

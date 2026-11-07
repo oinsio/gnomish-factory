@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.check.http.HttpCheckClientFactory
 import com.github.oinsio.gnomish.app.ConnectionProfiles
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
@@ -102,17 +104,17 @@ class HttpCheckProviderSpec extends Specification {
     def "checks of other providers contribute no per-check credential"() {
         given:
         def registry = CheckClientDiscovery.discover()
-        def github = new VerifyCheck.External('ci.yml', 'github', Duration.ofSeconds(1),
+        def github = VerifyChecks.external('ci.yml', 'github', Duration.ofSeconds(1),
                 Duration.ofSeconds(5), VerifyCheck.TimeoutClass.QUALITY)
-        def unknown = new VerifyCheck.External('x', 'nobody-serves-this', Duration.ofSeconds(1),
+        def unknown = VerifyChecks.external('x', 'nobody-serves-this', Duration.ofSeconds(1),
                 Duration.ofSeconds(5), VerifyCheck.TimeoutClass.QUALITY)
 
         expect:
         CheckProviderSeam.checkCredentialEnvVars(pipelineWith(github, unknown), registry).isEmpty()
     }
 
-    private static VerifyCheck.External httpCheck(Map<String, Object> params) {
-        new VerifyCheck.External('quality-gate', HttpCheckClientFactory.PROVIDER, params,
+    private static VerifyCheck.Executor httpCheck(Map<String, Object> params) {
+        VerifyChecks.external('quality-gate', HttpCheckClientFactory.PROVIDER, params,
                 Duration.ofSeconds(1), Duration.ofSeconds(30), VerifyCheck.TimeoutClass.QUALITY, [])
     }
 

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.pipeline.*
 import java.time.Duration
 import spock.lang.Specification
@@ -101,7 +103,7 @@ class PipelineMapperSpec extends Specification implements PipelineMapperFixtureS
         s0.executor() == new StageDefinition.Executor(ExecutorType.API, 'claude-sonnet-4-5', [temperature: 0])
         s0.instructionsRef() == 'stages/plan/instructions.md'
         s0.verify() == [
-            new VerifyCheck.Builtin('files_exist', [paths: ['plan.md']])
+            VerifyChecks.builtin('files_exist', [paths: ['plan.md']])
         ]
         s0.limits() == new AutonomyLimits(3) // no override → config default
         s0.advancement() == AdvancementMode.MANUAL
@@ -116,8 +118,8 @@ class PipelineMapperSpec extends Specification implements PipelineMapperFixtureS
         ]
         s1.executor() == new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-opus-4-1', [:])
         s1.verify() == [
-            new VerifyCheck.Command('./gradlew check'),
-            new VerifyCheck.External(
+            VerifyChecks.command('./gradlew check'),
+            VerifyChecks.external(
             'ci/build', 'github', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY),
             new VerifyCheck.Judge('criteria.md', 'claude-opus-4-1', [maxTokens: 1000], 3),
         ]

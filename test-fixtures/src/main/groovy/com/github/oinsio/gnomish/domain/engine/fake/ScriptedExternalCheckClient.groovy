@@ -21,7 +21,7 @@ class ScriptedExternalCheckClient implements ExternalCheckClient {
     final List<PollStatus> scripted = []
 
     /** Every check polled, in call order, for later assertions. */
-    final List<VerifyCheck.External> calls = []
+    final List<VerifyCheck.Executor> calls = []
 
     /** When non-null, {@code poll} throws this instead of returning a status. */
     RuntimeException toThrow = null
@@ -36,7 +36,7 @@ class ScriptedExternalCheckClient implements ExternalCheckClient {
     }
 
     @Override
-    PollStatus poll(VerifyCheck.External check, Workspace workspace) {
+    PollStatus poll(VerifyCheck.Executor check, Workspace workspace) {
         calls << check
         if (toThrow != null) {
             throw toThrow

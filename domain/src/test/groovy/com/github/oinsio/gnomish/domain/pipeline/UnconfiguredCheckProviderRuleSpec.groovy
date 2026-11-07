@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import java.time.Duration
 import spock.lang.Specification
 
@@ -11,7 +13,7 @@ import spock.lang.Specification
 class UnconfiguredCheckProviderRuleSpec extends Specification {
 
     private static VerifyCheck external(String checkId, String provider) {
-        new VerifyCheck.External(checkId, provider, Duration.ofSeconds(30), Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
+        VerifyChecks.external(checkId, provider, Duration.ofSeconds(30), Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
     }
 
     private static StageDefinition stage(String name, List<VerifyCheck> verify) {
@@ -39,7 +41,7 @@ class UnconfiguredCheckProviderRuleSpec extends Specification {
         ] | ['github'] || []
         'an unconfigured provider is located' | [
             stage('build', [
-                new VerifyCheck.Command('true'),
+                VerifyChecks.command('true'),
                 external('ci', 'github')
             ])
         ] | ['http'] || [
@@ -52,7 +54,7 @@ class UnconfiguredCheckProviderRuleSpec extends Specification {
         ]
         'a pipeline with no external check passes' | [
             stage('build', [
-                new VerifyCheck.Command('true')
+                VerifyChecks.command('true')
             ])
         ] | [] || []
         'two stages report in pipeline order' | [

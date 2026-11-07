@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
@@ -35,8 +37,8 @@ class CheckClientFactorySpec extends Specification {
 
     private final CheckClientFactory factory = new MinimalFactory()
 
-    private static VerifyCheck.External check() {
-        new VerifyCheck.External(
+    private static VerifyCheck.Executor check() {
+        VerifyChecks.external(
                 'ci', 'sample', Duration.ofSeconds(1), Duration.ofSeconds(5), VerifyCheck.TimeoutClass.QUALITY)
     }
 

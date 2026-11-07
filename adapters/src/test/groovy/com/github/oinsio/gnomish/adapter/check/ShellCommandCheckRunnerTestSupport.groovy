@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
@@ -9,7 +11,7 @@ import java.nio.file.Path
 
 /**
  * Shared Spock helpers for {@link ShellCommandCheckRunner} specs: a workspace rooted at the
- * spec's own temp dir, a shell line wrapped as a {@link VerifyCheck.Command}, and capture of a
+ * spec's own temp dir, a shell line wrapped as a {@link VerifyCheck.Executor}, and capture of a
  * logger's events emitted while a closure runs.
  */
 trait ShellCommandCheckRunnerTestSupport {
@@ -20,8 +22,8 @@ trait ShellCommandCheckRunnerTestSupport {
         new DirectoryWorkspace(tempDir)
     }
 
-    static VerifyCheck.Command command(String line) {
-        new VerifyCheck.Command(line)
+    static VerifyCheck.Executor command(String line) {
+        VerifyChecks.command(line)
     }
 
     /**

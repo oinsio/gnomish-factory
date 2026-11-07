@@ -111,8 +111,7 @@ final class VerifyOrchestrator {
 
     /**
      * Dispatches one check by an exhaustive switch over the sealed {@link VerifyCheck}
-     * (design D3): {@link VerifyCheck.Builtin}/{@link VerifyCheck.Command} to their
-     * runners, {@link VerifyCheck.External} to the {@link ExternalPolling} poll loop, and
+     * (design D3): an executor check by its executor name (see {@link #runExecutorCheck}), and
      * {@link VerifyCheck.Judge} to the {@link JudgeVoting} majority loop — whose per-vote
      * token usage is appended to {@code judgePerVote}, from which the run's {@code verdict}
      * participant entries are built (NFR-C1; FR15 of define-executor-contract). The whole dispatch is wrapped so any {@link RuntimeException} a check
@@ -136,9 +135,7 @@ final class VerifyOrchestrator {
             List<Map<String, ModelUsage>> judgePerVote) {
         try {
             return switch (check) {
-                case VerifyCheck.Builtin b -> builtinRunner.run(b, workspace);
-                case VerifyCheck.Command c -> commandRunner.run(c, workspace);
-                case VerifyCheck.External e -> externalPolling.poll(e, workspace);
+                case VerifyCheck.Executor e -> runExecutorCheck(e, workspace);
                 case VerifyCheck.Judge j -> {
                     var result = judgeVoting.vote(j, context, workspace);
                     judgePerVote.addAll(result.perVote());
@@ -152,5 +149,23 @@ final class VerifyOrchestrator {
             // factory-authored reason beside it is minted here to match the field's type.
             return new Verdict.CannotVerify(UntrustedText.factory("check adapter threw"), StackTraces.render(ex));
         }
+    }
+
+    /**
+     * Routes an executor check to the runner that serves its executor until the executor
+     * registry runs every check (task 5.1 of migrate-verify-to-executor-contract): a
+     * polled check to the {@link ExternalPolling} poll loop, {@code files-exist} to the
+     * built-in runner, {@code shell} to the command runner — the dispatch the three
+     * former variants had, so the behavior is unchanged.
+     *
+     * <p>Implements FR1, UX2 of migrate-verify-to-executor-contract.
+     */
+    private Verdict runExecutorCheck(VerifyCheck.Executor check, Workspace workspace) {
+        if (check.polled()) {
+            return externalPolling.poll(check, workspace);
+        }
+        return check.executorName().equals(VerifyCheck.Executor.FILES_EXIST)
+                ? builtinRunner.run(check, workspace)
+                : commandRunner.run(check, workspace);
     }
 }

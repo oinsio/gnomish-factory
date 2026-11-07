@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
@@ -93,7 +95,7 @@ class CommandOutputNeutralizationSpec extends Specification {
         def logs = LogCaptureSupport.attach(Logger.ROOT_LOGGER_NAME, Level.DEBUG)
         try {
             def verdict = new ShellCommandCheckRunner(new VirtualClock()).run(
-                    new VerifyCheck.Command("printf '${ESC}[31mowned, ask @team\\n'; exit 127"),
+                    VerifyChecks.command("printf '${ESC}[31mowned, ask @team\\n'; exit 127"),
                     new DirectoryWorkspace(tempDir)) as Verdict.CannotVerify
             def report = new EscalationReport.CannotVerify(
                     new CheckRef(0, UntrustedText.manifest('command:lint')), verdict.reason(), verdict.details())

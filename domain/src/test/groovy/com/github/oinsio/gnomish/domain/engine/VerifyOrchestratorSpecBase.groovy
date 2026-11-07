@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
@@ -28,21 +30,21 @@ abstract class VerifyOrchestratorSpecBase extends Specification {
     static final def KEY = new AttemptKey('TASK-1', 'build', 0)
     static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
-    static VerifyCheck.Builtin builtin(String name) {
-        new VerifyCheck.Builtin(name, [:])
+    static VerifyCheck.Executor builtin(String name) {
+        VerifyChecks.builtin(name, [:])
     }
 
-    static VerifyCheck.Command command(String line) {
-        new VerifyCheck.Command(line)
+    static VerifyCheck.Executor command(String line) {
+        VerifyChecks.command(line)
     }
 
-    static VerifyCheck.External external(String checkId, Duration interval, Duration timeout) {
-        new VerifyCheck.External(checkId, 'ci-platform', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
+    static VerifyCheck.Executor external(String checkId, Duration interval, Duration timeout) {
+        VerifyChecks.external(checkId, 'ci-platform', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
     }
 
-    static VerifyCheck.External external(String checkId, Duration interval, Duration timeout,
+    static VerifyCheck.Executor external(String checkId, Duration interval, Duration timeout,
             VerifyCheck.TimeoutClass timeoutClass) {
-        new VerifyCheck.External(checkId, 'ci-platform', interval, timeout, timeoutClass)
+        VerifyChecks.external(checkId, 'ci-platform', interval, timeout, timeoutClass)
     }
 
     static VerifyCheck.Judge judge(int votes) {

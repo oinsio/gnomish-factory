@@ -127,10 +127,10 @@ public final class CheckProviderSeam {
         var names = new LinkedHashSet<String>();
         for (StageDefinition stage : definition.stages()) {
             for (VerifyCheck check : stage.verify()) {
-                if (check instanceof VerifyCheck.External external) {
-                    CheckClientFactory factory = registry.get(external.provider());
+                if (check instanceof VerifyCheck.Executor external && external.polled()) {
+                    CheckClientFactory factory = registry.get(external.providerKey());
                     if (factory != null) {
-                        names.addAll(factory.checkCredentialEnvVars(external.params()));
+                        names.addAll(factory.checkCredentialEnvVars(external.settings()));
                     }
                 }
             }

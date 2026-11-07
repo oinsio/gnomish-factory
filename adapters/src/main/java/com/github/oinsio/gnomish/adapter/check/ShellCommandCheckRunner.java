@@ -144,7 +144,7 @@ public record ShellCommandCheckRunner(
     }
 
     @Override
-    public Verdict run(VerifyCheck.Command check, Workspace workspace) {
+    public Verdict run(VerifyCheck.Executor check, Workspace workspace) {
         CheckEnvironmentSource.Acquired acquired;
         try {
             acquired = environments.acquire(check, workspace);
@@ -171,7 +171,7 @@ public record ShellCommandCheckRunner(
                                 + "command check '{}' cannot be verified: the process failed to start",
                         identityOf(check));
                 return new Verdict.CannotVerify(
-                        UntrustedText.manifest("failed to start command: " + check.command()),
+                        UntrustedText.manifest("failed to start command: " + check.checkId()),
                         NoCheckDetails.NO_DETAILS);
             }
 
@@ -187,8 +187,8 @@ public record ShellCommandCheckRunner(
     }
 
     /** The check's log-plane identity: its command, flattened and capped so one check is one line. */
-    private static String identityOf(VerifyCheck.Command check) {
-        return LogText.forLog(check.command(), IDENTITY_CAP_CHARS);
+    private static String identityOf(VerifyCheck.Executor check) {
+        return LogText.forLog(check.checkId(), IDENTITY_CAP_CHARS);
     }
 
     /**

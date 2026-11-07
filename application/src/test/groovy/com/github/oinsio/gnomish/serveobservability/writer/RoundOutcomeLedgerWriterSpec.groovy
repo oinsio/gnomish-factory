@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.DescribedExecutors
@@ -91,7 +93,7 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
                 : new StageDefinition.Executor(ExecutorType.PROGRAM, '', [:], Sandbox.none(), executorName)
         def stage = new StageDefinition('lint', 'purpose', [], [], mechanism,
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ], new AutonomyLimits(3), AdvancementMode.AUTO)
         def clock = new VirtualClock(NOW)
         def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),

@@ -1,18 +1,19 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
-import com.fasterxml.jackson.annotation.JsonSubTypes;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A {@code stage.yaml} {@code verify} entry (D2, D5): one of four variants
- * selected by the explicit {@code type} discriminator — {@code builtin},
- * {@code command}, {@code external}, {@code judge}. Jackson maps the
- * discriminator to the matching record; the adapter later maps these to the
- * sealed domain {@code VerifyCheck} (task 5.3). An unknown {@code type} is a
- * structural error the loader reports (task 5.2, FR5).
+ * A {@code stage.yaml} {@code verify} entry (D2, D5): one of four variants selected by the
+ * explicit {@code type} discriminator — {@code builtin}, {@code command}, {@code external},
+ * {@code judge} — or, with no {@code type}, the explicit {@code executor: <name>} form (FR1 of
+ * migrate-verify-to-executor-contract). {@link VerifyCheckDtoDeserializer} selects the record;
+ * the adapter later maps these to the sealed domain {@code VerifyCheck}. An unknown {@code type},
+ * or an entry with neither a {@code type} nor an {@code executor}, is a structural error the
+ * loader reports (task 5.2, FR5).
  *
  * <p>Opaque {@code params}/{@code settings} are typed {@code Map<String, Object>}
  * so they bind to plain JDK types, never a Jackson {@code JsonNode} (D5a) —
@@ -20,15 +21,13 @@ import org.jspecify.annotations.Nullable;
  * votes) are validator concerns (task 4.4), not the DTO's; timing is carried as
  * raw strings and parsed to {@code Duration} by the mapper (task 5.3).
  *
- * <p>Implements FR2 (DTO shapes), D2, D5, D5a of load-pipeline-config.
+ * <p>Each record opts out of the interface's deserializer ({@code JsonDeserializer.None}), so
+ * binding one does not recurse into the selection.
+ *
+ * <p>Implements FR2 (DTO shapes), D2, D5, D5a of load-pipeline-config; FR1, UX2 of
+ * migrate-verify-to-executor-contract.
  */
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type")
-@JsonSubTypes({
-    @JsonSubTypes.Type(value = VerifyCheckDto.Builtin.class, name = "builtin"),
-    @JsonSubTypes.Type(value = VerifyCheckDto.Command.class, name = "command"),
-    @JsonSubTypes.Type(value = VerifyCheckDto.External.class, name = "external"),
-    @JsonSubTypes.Type(value = VerifyCheckDto.Judge.class, name = "judge")
-})
+@JsonDeserialize(using = VerifyCheckDtoDeserializer.class)
 public sealed interface VerifyCheckDto {
 
     /**
@@ -38,6 +37,7 @@ public sealed interface VerifyCheckDto {
      * @param name the engine check identifier, or {@code null} when omitted
      * @param params the declarative parameters; {@code null}/absent means none
      */
+    @JsonDeserialize(using = JsonDeserializer.None.class)
     record Builtin(@Nullable String name, @Nullable Map<String, Object> params) implements VerifyCheckDto {}
 
     /**
@@ -53,6 +53,7 @@ public sealed interface VerifyCheckDto {
      *     of add-sandbox-core); parsing and the unknown-value error are the
      *     mapper's concern
      */
+    @JsonDeserialize(using = JsonDeserializer.None.class)
     record Command(@Nullable String command, @Nullable String verifyIn) implements VerifyCheckDto {
 
         /** Convenience for construction outside Jackson binding (e.g. tests): no {@code verifyIn}. */
@@ -86,6 +87,7 @@ public sealed interface VerifyCheckDto {
      *     Repo-relative data the loader never reads; lexical form is validated
      *     by {@code StageSanityRule}
      */
+    @JsonDeserialize(using = JsonDeserializer.None.class)
     record External(
             @Nullable String checkId,
             @Nullable String provider,
@@ -121,10 +123,42 @@ public sealed interface VerifyCheckDto {
      * @param votes the vote count, or {@code null} when omitted (a validator
      *     concern, task 4.4)
      */
+    @JsonDeserialize(using = JsonDeserializer.None.class)
     record Judge(
             @Nullable String criteriaFile,
             @Nullable String model,
             @Nullable Map<String, Object> settings,
             @Nullable Integer votes)
+            implements VerifyCheckDto {}
+
+    /**
+     * The explicit {@code executor: <name>} form (FR1 of migrate-verify-to-executor-contract): a
+     * {@code verdict} request to the named executor with its settings and the engine-common
+     * fields. Every field is raw, like the other variants; the mapper parses and defaults them.
+     *
+     * @param executor the executor name, or {@code null} when declared empty
+     * @param checkId the check identifier, or {@code null} when omitted
+     * @param settings the executor's settings; {@code null}/absent means none
+     * @param interval the raw poll-interval string, or {@code null} when omitted
+     * @param timeout the raw poll-timeout string, or {@code null} when omitted
+     * @param timeoutClass the raw timeout-class string, or {@code null} when omitted
+     * @param pinPaths the law-declared pin paths, or {@code null} when none
+     * @param verifyIn the raw freshness knob, or {@code null} when omitted
+     * @param threshold the raw threshold ({@code error}, {@code warning}, {@code note}), or
+     *     {@code null} when omitted (defaults to {@code error})
+     * @param expected the expected context names, or {@code null} when none
+     */
+    @JsonDeserialize(using = JsonDeserializer.None.class)
+    record Executor(
+            @Nullable String executor,
+            @Nullable String checkId,
+            @Nullable Map<String, Object> settings,
+            @Nullable String interval,
+            @Nullable String timeout,
+            @Nullable String timeoutClass,
+            @Nullable List<String> pinPaths,
+            @Nullable String verifyIn,
+            @Nullable String threshold,
+            @Nullable List<String> expected)
             implements VerifyCheckDto {}
 }

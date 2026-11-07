@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
@@ -54,16 +56,16 @@ class ReferenceRunSpec extends Specification {
     static final def SECOND = Duration.ofSeconds(1)
     static final def TIMEOUT = Duration.ofSeconds(60)
 
-    static VerifyCheck.Builtin builtin(String name) {
-        new VerifyCheck.Builtin(name, [:])
+    static VerifyCheck.Executor builtin(String name) {
+        VerifyChecks.builtin(name, [:])
     }
 
-    static VerifyCheck.Command command(String line) {
-        new VerifyCheck.Command(line)
+    static VerifyCheck.Executor command(String line) {
+        VerifyChecks.command(line)
     }
 
-    static VerifyCheck.External external(String checkId) {
-        new VerifyCheck.External(checkId, 'ci-platform', SECOND, TIMEOUT, VerifyCheck.TimeoutClass.QUALITY)
+    static VerifyCheck.Executor external(String checkId) {
+        VerifyChecks.external(checkId, 'ci-platform', SECOND, TIMEOUT, VerifyCheck.TimeoutClass.QUALITY)
     }
 
     static VerifyCheck.Judge judge(int votes) {

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
@@ -91,7 +93,7 @@ class SandboxTransientFilesE2ESpec extends Specification implements BareGitRepoF
         def runner = new ShellCommandCheckRunner(new VirtualClock()).withEnvironments(support.pieces(null).checkEnvironments())
 
         when: 'a command check reports its own findings path as its finding'
-        def verdict = runner.run(new VerifyCheck.Command(
+        def verdict = runner.run(VerifyChecks.command(
                         'printf \'{"findings":[{"message":"%s"}]}\' "$GNOMISH_FINDINGS_FILE" > "$GNOMISH_FINDINGS_FILE"; exit 1'),
                 support.workspace())
 

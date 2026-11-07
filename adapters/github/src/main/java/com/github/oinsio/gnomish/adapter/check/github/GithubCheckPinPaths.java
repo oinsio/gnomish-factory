@@ -34,7 +34,7 @@ final class GithubCheckPinPaths {
      * @param check the external check whose {@code checkId} is the workflow file path (FR1)
      * @return a single-element set containing {@code check.checkId()}; never null or empty
      */
-    static Set<String> contributedBy(VerifyCheck.External check) {
+    static Set<String> contributedBy(VerifyCheck.Executor check) {
         return Set.of(check.checkId());
     }
 }

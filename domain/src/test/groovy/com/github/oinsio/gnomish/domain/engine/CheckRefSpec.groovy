@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
@@ -24,9 +26,9 @@ class CheckRefSpec extends Specification {
 
         where:
         index | check || expectedLabel
-        0 | new VerifyCheck.Builtin('files_exist', [:]) || 'builtin:files_exist'
-        1 | new VerifyCheck.Command('./gradlew test') || 'command:./gradlew test'
-        2 | new VerifyCheck.External('ci/build', 'github', Duration.ofSeconds(10), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) || 'external:github:ci/build'
+        0 | VerifyChecks.builtin('files_exist', [:]) || 'builtin:files_exist'
+        1 | VerifyChecks.command('./gradlew test') || 'command:./gradlew test'
+        2 | VerifyChecks.external('ci/build', 'github', Duration.ofSeconds(10), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) || 'external:github:ci/build'
         3 | new VerifyCheck.Judge('criteria/build.md', 'model-x', [:], 1) || 'judge:criteria/build.md'
     }
 
@@ -36,9 +38,9 @@ class CheckRefSpec extends Specification {
     // Scenario: verification/check-provider-model / Same checkId under two providers stays distinct
     def "of keeps the same checkId under two providers distinct"() {
         given: 'the same checkId declared under two different providers'
-        def onGithub = new VerifyCheck.External('ci/build', 'github', Duration.ofSeconds(10),
+        def onGithub = VerifyChecks.external('ci/build', 'github', Duration.ofSeconds(10),
                 Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
-        def onHttp = new VerifyCheck.External('ci/build', 'http', Duration.ofSeconds(10),
+        def onHttp = VerifyChecks.external('ci/build', 'http', Duration.ofSeconds(10),
                 Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
 
         when: 'each is identified at the same verify-list position'

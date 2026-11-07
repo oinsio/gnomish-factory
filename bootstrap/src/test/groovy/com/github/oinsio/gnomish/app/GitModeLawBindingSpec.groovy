@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
@@ -68,7 +70,7 @@ class GitModeLawBindingSpec extends Specification implements BareGitRepoFixture,
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
                 'instructions.md',
                 [
-                    new VerifyCheck.Builtin('files_exist', [files: ['output.txt']])
+                    VerifyChecks.builtin('files_exist', [files: ['output.txt']])
                 ],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
     }

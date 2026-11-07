@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.take
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -35,7 +37,7 @@ class TrackerTaskSynthesizerSpec extends Specification {
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:]),
                 "stages/${name}/instructions.md" as String,
                 [
-                    new VerifyCheck.Command('./gradlew check')
+                    VerifyChecks.command('./gradlew check')
                 ],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
     }

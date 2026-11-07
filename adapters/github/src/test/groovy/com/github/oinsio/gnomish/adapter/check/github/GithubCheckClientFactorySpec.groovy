@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.github
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.CheckClientFactory
 import com.github.oinsio.gnomish.app.FixedCheckClientContext
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
@@ -100,7 +102,7 @@ class GithubCheckClientFactorySpec extends Specification {
     def "the pin contribution is exactly the checkId workflow file"() {
         given:
         def factory = new GithubCheckClientFactory()
-        def check = new VerifyCheck.External(
+        def check = VerifyChecks.external(
                 '.github/workflows/ci.yml', 'github', Duration.ofSeconds(1), Duration.ofSeconds(5),
                 VerifyCheck.TimeoutClass.QUALITY)
 

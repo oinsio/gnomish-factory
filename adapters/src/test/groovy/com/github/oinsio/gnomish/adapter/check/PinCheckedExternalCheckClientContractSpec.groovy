@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
@@ -32,7 +34,7 @@ class PinCheckedExternalCheckClientContractSpec extends ExternalCheckClientContr
                 ExternalCheckPinContributor.none(),
                 gitObjects,
                 gitObjects.resolveRef('refs/heads/base').orElseThrow())
-        def check = new VerifyCheck.External(
+        def check = VerifyChecks.external(
                 'ci', 'github', Duration.ofSeconds(1), Duration.ofSeconds(10), VerifyCheck.TimeoutClass.QUALITY)
         Optional.of(guarded.poll(check, new FakeWorkspace()))
     }

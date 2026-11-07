@@ -6,7 +6,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 /**
  * The port through which the engine runs one built-in declarative check (e.g.
  * {@code files_exist}, schema validation) without knowing how the check is
- * implemented (design D2): the engine hands over a {@link VerifyCheck.Builtin}
+ * implemented (design D2): the engine hands over a {@link VerifyCheck.Executor}
  * and the opaque {@link Workspace} it operates on, and reads back a {@link
  * Verdict}. The check's name and declarative params are the adapter's concern;
  * the engine only asks for a verdict.
@@ -28,5 +28,5 @@ public interface BuiltinCheckRunner {
      * @param workspace the opaque working copy the check operates on
      * @return the verdict of the check; never null
      */
-    Verdict run(VerifyCheck.Builtin check, Workspace workspace);
+    Verdict run(VerifyCheck.Executor check, Workspace workspace);
 }

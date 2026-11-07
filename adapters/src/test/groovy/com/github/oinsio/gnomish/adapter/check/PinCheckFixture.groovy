@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -38,8 +40,8 @@ trait PinCheckFixture implements GitObjectsFixture {
     }
 
     /** The guarded external check — the CI workflow — with {@code pinPaths} law-declared. */
-    VerifyCheck.External check(List<String> pinPaths) {
-        new VerifyCheck.External(
+    VerifyCheck.Executor check(List<String> pinPaths) {
+        VerifyChecks.external(
                 '.github/workflows/ci.yml', 'github', Duration.ofSeconds(1), Duration.ofSeconds(5),
                 VerifyCheck.TimeoutClass.QUALITY, pinPaths)
     }

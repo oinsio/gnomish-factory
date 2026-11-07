@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -107,8 +109,8 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
                 (List<VerifyCheck>) [
-                    new VerifyCheck.Command(CREDENTIALS_ABSENT, VerifyCheck.VerifyIn.SAME_BOX),
-                    new VerifyCheck.Command(CREDENTIALS_ABSENT, VerifyCheck.VerifyIn.FRESH_BOX),
+                    VerifyChecks.command(CREDENTIALS_ABSENT, VerifyCheck.VerifyIn.SAME_BOX),
+                    VerifyChecks.command(CREDENTIALS_ABSENT, VerifyCheck.VerifyIn.FRESH_BOX),
                 ],
                 new AutonomyLimits(1), AdvancementMode.AUTO)
     }

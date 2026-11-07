@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -17,8 +19,8 @@ trait HttpCheckFixture {
     static final String URL = 'https://ci.example.invalid/api/status'
 
     /** An external check selecting the http provider, with the given per-check params. */
-    VerifyCheck.External check(Map<String, Object> params, String checkId = 'quality-gate') {
-        new VerifyCheck.External(
+    VerifyCheck.Executor check(Map<String, Object> params, String checkId = 'quality-gate') {
+        VerifyChecks.external(
                 checkId, HttpCheckClientFactory.PROVIDER, params, Duration.ofSeconds(1),
                 Duration.ofSeconds(30), VerifyCheck.TimeoutClass.QUALITY, [])
     }

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.briefing.BriefingSections
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.http.HttpCheckClientFactory
@@ -106,7 +108,7 @@ class FindingsFunnelSpec extends Specification {
         SecretsProvider secrets = { name ->
             Optional.empty()
         } as SecretsProvider
-        def check = new VerifyCheck.External('quality-gate', HttpCheckClientFactory.PROVIDER,
+        def check = VerifyChecks.external('quality-gate', HttpCheckClientFactory.PROVIDER,
                 [url: 'https://ci.example.invalid/api/status'], Duration.ofSeconds(1), Duration.ofSeconds(30),
                 VerifyCheck.TimeoutClass.QUALITY, [])
         // The engine's own external poll turns the provider's answer into the verdict, as on a run
@@ -115,7 +117,7 @@ class FindingsFunnelSpec extends Specification {
     }
 
     Verdict commandRuns(String line) {
-        new ShellCommandCheckRunner(new VirtualClock()).run(new VerifyCheck.Command(line), new DirectoryWorkspace(tempDir))
+        new ShellCommandCheckRunner(new VirtualClock()).run(VerifyChecks.command(line), new DirectoryWorkspace(tempDir))
     }
 
     private static CheckResult result(int index, String label, Verdict verdict) {

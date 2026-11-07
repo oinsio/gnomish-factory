@@ -27,7 +27,7 @@ public interface CheckEnvironmentSource {
      *     environment can serve the check — an infrastructure failure the runner maps to
      *     {@code CannotVerify}
      */
-    Acquired acquire(VerifyCheck.Command check, Workspace workspace);
+    Acquired acquire(VerifyCheck.Executor check, Workspace workspace);
 
     /** One check's environment and its release action ({@code close} runs in a finally). */
     interface Acquired extends AutoCloseable {

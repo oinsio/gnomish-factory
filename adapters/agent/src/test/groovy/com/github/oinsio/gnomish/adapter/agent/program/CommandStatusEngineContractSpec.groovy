@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.program
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckRef
@@ -79,7 +81,7 @@ class CommandStatusEngineContractSpec extends Specification {
         new StageDefinition.Executor(ExecutorType.COMMAND, '', [:], Sandbox.none(), null,
         new CommandLine('./gradlew build')),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ], new AutonomyLimits(attemptLimit), AdvancementMode.AUTO)
     }
 

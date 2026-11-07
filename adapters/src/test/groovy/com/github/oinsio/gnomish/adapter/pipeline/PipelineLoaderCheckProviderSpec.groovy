@@ -32,7 +32,7 @@ class PipelineLoaderCheckProviderSpec extends Specification implements PipelineL
 
         then:
         outcome instanceof LoadOutcome.Loaded
-        def external = (outcome as LoadOutcome.Loaded).definition().stages()[1].verify()[1] as VerifyCheck.External
+        def external = (outcome as LoadOutcome.Loaded).definition().stages()[1].verify()[1] as VerifyCheck.Executor
         external.provider() == 'github'
         external.params() == [:]
     }

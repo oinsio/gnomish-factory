@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
@@ -38,7 +40,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         ])
         def stage = stageWith(
                 [
-                    new VerifyCheck.Command('./gradlew test'),
+                    VerifyChecks.command('./gradlew test'),
                     new VerifyCheck.Judge('criteria.md', 'claude-opus', [:], 1)
                 ])
         def request = requestFor(stage, 0, [])
@@ -57,7 +59,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         given:
         def builder = builderWith(['instructions.md': 'Do the thing.'])
         def stage = stageWith([
-            new VerifyCheck.Command('./gradlew test')
+            VerifyChecks.command('./gradlew test')
         ])
 
         when:

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramExecutor
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
@@ -123,7 +125,7 @@ class ProgramCredentialDeliverySpec extends Specification implements BareGitRepo
         def verdict = new ShellCommandCheckRunner(new VirtualClock())
                 .withChildEnv(installation)
                 .withEnvironments(support.pieces(null).checkEnvironments())
-                .run(new VerifyCheck.Command('test -z "${ACME_API_KEY:-}"'), support.workspace())
+                .run(VerifyChecks.command('test -z "${ACME_API_KEY:-}"'), support.workspace())
 
         then: 'it passes only with the key absent from its process'
         verdict instanceof Verdict.Pass

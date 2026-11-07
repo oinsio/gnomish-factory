@@ -22,7 +22,7 @@ class ScriptedBuiltinCheckRunner implements BuiltinCheckRunner {
     final List<Verdict> scripted = []
 
     /** Every check received, in call order, for later assertions. */
-    final List<VerifyCheck.Builtin> calls = []
+    final List<VerifyCheck.Executor> calls = []
 
     /** When non-null, {@code run} throws this instead of returning a verdict. */
     RuntimeException toThrow = null
@@ -40,7 +40,7 @@ class ScriptedBuiltinCheckRunner implements BuiltinCheckRunner {
     }
 
     @Override
-    Verdict run(VerifyCheck.Builtin check, Workspace workspace) {
+    Verdict run(VerifyCheck.Executor check, Workspace workspace) {
         calls << check
         if (toThrow != null) {
             throw toThrow

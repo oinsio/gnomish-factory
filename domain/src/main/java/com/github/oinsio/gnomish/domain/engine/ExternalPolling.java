@@ -10,7 +10,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * The poll loop of one {@link VerifyCheck.External} check, extracted from {@link
+ * The poll loop of one {@link VerifyCheck.Executor} check, extracted from {@link
  * VerifyOrchestrator} so each class stays within the file-size cap. It polls the
  * injected {@link ExternalCheckClient} until the third party decides or the timeout
  * elapses, collapsing the {@link PollStatus} observations into one {@link Verdict}
@@ -21,7 +21,7 @@ import java.util.List;
  * PollStatus.Running} keeps waiting. On {@code Running} the timeout is checked
  * <em>before</em> sleeping: once the equipment has no time {@linkplain TimeEquipment#remaining
  * remaining} until the deadline
- * the loop resolves the check's declared {@link VerifyCheck.External#timeoutClass()}
+ * the loop resolves the check's declared {@link VerifyCheck.Executor#timeoutClass()}
  * — {@link VerifyCheck.TimeoutClass#QUALITY} (the default) returns a quality {@link
  * Verdict.Fail} with a single timeout {@link Finding}, unchanged prior behavior;
  * {@link VerifyCheck.TimeoutClass#INFRASTRUCTURE} returns a {@link
@@ -83,7 +83,7 @@ final class ExternalPolling {
      * @param workspace the opaque working copy the check relates to
      * @return the verdict the poll sequence collapses to
      */
-    Verdict poll(VerifyCheck.External check, Workspace workspace) {
+    Verdict poll(VerifyCheck.Executor check, Workspace workspace) {
         // FR21 of add-sandbox-core: external checks are triggered by the task-branch push, so
         // delivery of the attempt commit is a verified precondition of the loop — an
         // undeliverable commit resolves as CannotVerify (no attempt burned) instead of being
@@ -116,7 +116,7 @@ final class ExternalPolling {
 
     /**
      * Classifies a timed-out external check's verdict per its declared {@link
-     * VerifyCheck.External#timeoutClass()} (design D7): {@link
+     * VerifyCheck.Executor#timeoutClass()} (design D7): {@link
      * VerifyCheck.TimeoutClass#QUALITY} (default) into a quality {@link Verdict.Fail}
      * carrying a single timeout {@link Finding} naming the check id and timeout,
      * burning the attempt (NFR-O1, unchanged prior behavior); {@link
@@ -125,7 +125,7 @@ final class ExternalPolling {
      *
      * <p>Implements FR9 of add-external-check-github-actions.
      */
-    private static Verdict timeoutVerdict(VerifyCheck.External check) {
+    private static Verdict timeoutVerdict(VerifyCheck.Executor check) {
         var message = "external check '" + check.checkId() + "' did not complete within " + check.timeout();
         return switch (check.timeoutClass()) {
             case QUALITY -> new Verdict.Fail(List.of(new Finding(message, null, null)));

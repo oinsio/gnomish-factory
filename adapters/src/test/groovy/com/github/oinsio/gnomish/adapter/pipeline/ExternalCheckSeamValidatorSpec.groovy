@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.CheckParamsValidator
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.ArtifactInput
@@ -32,8 +34,8 @@ class ExternalCheckSeamValidatorSpec extends Specification {
         new AutonomyLimits(3), AdvancementMode.AUTO)
     }
 
-    private static VerifyCheck.External external(String checkId, String provider, Map params = [:]) {
-        new VerifyCheck.External(checkId, provider, params, Duration.ofSeconds(30), Duration.ofMinutes(5),
+    private static VerifyCheck.Executor external(String checkId, String provider, Map params = [:]) {
+        VerifyChecks.external(checkId, provider, params, Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY, [])
     }
 
@@ -97,7 +99,7 @@ class ExternalCheckSeamValidatorSpec extends Specification {
         def errors = ExternalCheckSeamValidator.validate(
                 [
                     stage([
-                        new VerifyCheck.Command('./gradlew test'),
+                        VerifyChecks.command('./gradlew test'),
                         external('gate', 'http', [poll: 'status'])
                     ])
                 ],
@@ -166,8 +168,8 @@ class ExternalCheckSeamValidatorSpec extends Specification {
         expect:
         ExternalCheckSeamValidator.validate([
             stage([
-                new VerifyCheck.Builtin('files_exist', [:]),
-                new VerifyCheck.Command('./gradlew test'),
+                VerifyChecks.builtin('files_exist', [:]),
+                VerifyChecks.command('./gradlew test'),
                 new VerifyCheck.Judge('acceptance.md', 'model-x', [:], 1)
             ])
         ], [:]).isEmpty()

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
@@ -97,8 +99,8 @@ class ThreeProviderPlatformFixture {
     }
 
     /** A SonarQube quality gate: pending on the first poll, OK on the next (FR10's poll loop). */
-    VerifyCheck.External qualityGate() {
-        new VerifyCheck.External(
+    VerifyCheck.Executor qualityGate() {
+        VerifyChecks.external(
                 'quality-gate', 'http',
                 [
                     url: "https://127.0.0.1:${wireMock.httpsPort()}${QUALITY_GATE}?projectKey=widgets".toString(),
@@ -113,8 +115,8 @@ class ThreeProviderPlatformFixture {
      * poll loop keeps waiting until the (deliberately tiny) timeout elapses, so the http provider's
      * timeout really is driven end to end and classified by the check's own {@code timeoutClass}.
      */
-    VerifyCheck.External stuckQualityGate(VerifyCheck.TimeoutClass timeoutClass) {
-        new VerifyCheck.External(
+    VerifyCheck.Executor stuckQualityGate(VerifyCheck.TimeoutClass timeoutClass) {
+        VerifyChecks.external(
                 'stuck-gate', 'http',
                 [
                     url: "https://127.0.0.1:${wireMock.httpsPort()}${STUCK_QUALITY_GATE}".toString(),
@@ -124,8 +126,8 @@ class ThreeProviderPlatformFixture {
                 Duration.ofMillis(20), Duration.ofMillis(120), timeoutClass, [])
     }
 
-    static VerifyCheck.External actionsRun() {
-        new VerifyCheck.External(
+    static VerifyCheck.Executor actionsRun() {
+        VerifyChecks.external(
                 WORKFLOW, 'github', Duration.ofMillis(50), Duration.ofSeconds(30), VerifyCheck.TimeoutClass.QUALITY)
     }
 

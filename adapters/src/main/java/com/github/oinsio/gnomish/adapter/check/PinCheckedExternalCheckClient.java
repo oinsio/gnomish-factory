@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
  * The pin-check guard (FR16, design D10): wraps any {@link ExternalCheckClient} and, on
  * every poll — the check's point of use — verifies that the check's definition files are
  * byte-identical to the base branch before the delegate is contacted. The pin set is the
- * union of the stage law's declared {@link VerifyCheck.External#pinPaths()} and the
+ * union of the stage law's declared {@link VerifyCheck.Executor#pinPaths()} and the
  * {@link ExternalCheckPinContributor}'s adapter contribution; comparison reads both sides
  * as bare git objects in the factory clone ({@link GitObjects}, D11) — the <em>law commit</em>
  * versus the harvested attempt commit carried by the {@link RecordedAttemptCommitWorkspace}.
@@ -95,7 +95,7 @@ public final class PinCheckedExternalCheckClient implements ExternalCheckClient 
     }
 
     @Override
-    public PollStatus poll(VerifyCheck.External check, Workspace workspace) {
+    public PollStatus poll(VerifyCheck.Executor check, Workspace workspace) {
         var pins = new TreeSet<>(check.pinPaths());
         pins.addAll(contributor.pinPaths(check));
         if (pins.isEmpty()) {

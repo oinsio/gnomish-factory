@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.console.DialogConsole
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
@@ -68,7 +70,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         new StageDefinition(name, 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ],
         new AutonomyLimits(1), advancement)
     }

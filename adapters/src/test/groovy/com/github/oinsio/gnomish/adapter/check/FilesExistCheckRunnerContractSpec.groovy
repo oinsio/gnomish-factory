@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.contract.CheckRunnerContract
@@ -29,15 +31,15 @@ class FilesExistCheckRunnerContractSpec extends CheckRunnerContract {
 
     @Override
     protected Optional<Verdict> arrange(CheckRunnerContract.VerdictVariant variant) {
-        VerifyCheck.Builtin check = switch (variant) {
+        VerifyCheck.Executor check = switch (variant) {
                     case CheckRunnerContract.VerdictVariant.PASS -> {
                         Files.writeString(tempDir.resolve('present.txt'), 'ok')
-                        yield new VerifyCheck.Builtin('files_exist', [files: ['present.txt']])
+                        yield VerifyChecks.builtin('files_exist', [files: ['present.txt']])
                     }
                     case CheckRunnerContract.VerdictVariant.FAIL_WITH_FINDINGS ->
-                    new VerifyCheck.Builtin('files_exist', [files: ['missing.txt']])
+                    VerifyChecks.builtin('files_exist', [files: ['missing.txt']])
                     case CheckRunnerContract.VerdictVariant.CANNOT_VERIFY ->
-                    new VerifyCheck.Builtin('files_exist', [:])
+                    VerifyChecks.builtin('files_exist', [:])
                 }
         Optional.of(runner.run(check, workspace()))
     }

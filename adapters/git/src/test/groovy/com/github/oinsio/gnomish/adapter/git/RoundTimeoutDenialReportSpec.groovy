@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
@@ -151,7 +153,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         def stage = new StageDefinition('build', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ],
         new AutonomyLimits(5), AdvancementMode.AUTO)
         new PipelineDefinition('1', new AutonomyLimits(5), [stage])

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.e2e.gitea
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckExternalClient
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
@@ -95,7 +97,7 @@ class GiteaActionsRunnerE2ESpec extends Specification implements BareGitRepoFixt
         and: 'the adapter this change built eventually observes the run passing (real runner, real async delay)'
         def httpClient = new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken())
         def client = new GithubCheckExternalClient(httpClient, GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, new VirtualClock())
-        def check = new VerifyCheck.External(
+        def check = VerifyChecks.external(
                 CHECK_ID, 'github', Duration.ofSeconds(5), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
         def workspace = workspaceAt(headSha)
 

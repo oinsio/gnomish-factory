@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.plugin
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.check.CheckClientDiscovery
 import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam
 import com.github.oinsio.gnomish.adapter.check.ProviderDispatchingExternalCheckClient
@@ -135,7 +137,7 @@ class PluginReadyPortCriterionSpec extends Specification {
 
         when: 'a check selects a provider no discovered jar serves'
         new ProviderDispatchingExternalCheckClient(checks, [:], NO_SECRETS, VirtualTimeEquipment.create())
-        .poll(new VerifyCheck.External('gate', 'nosuchvendor', Duration.ofSeconds(1),
+        .poll(VerifyChecks.external('gate', 'nosuchvendor', Duration.ofSeconds(1),
         Duration.ofSeconds(1), VerifyCheck.TimeoutClass.QUALITY), null)
 
         then:

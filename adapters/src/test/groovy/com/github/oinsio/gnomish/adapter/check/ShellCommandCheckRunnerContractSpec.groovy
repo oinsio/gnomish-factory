@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -34,7 +36,7 @@ class ShellCommandCheckRunnerContractSpec extends CheckRunnerContract {
                     case CheckRunnerContract.VerdictVariant.FAIL_WITH_FINDINGS -> 'echo boom-output; exit 1'
                     case CheckRunnerContract.VerdictVariant.CANNOT_VERIFY -> 'exit 127'
                 }
-        Optional.of(runner.run(new VerifyCheck.Command(commandLine), workspace()))
+        Optional.of(runner.run(VerifyChecks.command(commandLine), workspace()))
     }
 
     @Override

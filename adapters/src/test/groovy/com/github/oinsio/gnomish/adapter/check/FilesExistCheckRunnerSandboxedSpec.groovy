@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.Verdict
@@ -50,7 +52,7 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
     // Scenario: git/git-task-persistence / Every check reads the attempt commit its own way
     def "files present in the attempt commit yield Pass"() {
         given: 'paths that exist in the commit tree — a blob from base, the new blob, and a directory'
-        def check = new VerifyCheck.Builtin('files_exist', [files: [
+        def check = VerifyChecks.builtin('files_exist', [files: [
                 'src/App.java',
                 'docs/report.md',
                 'docs'
@@ -64,7 +66,7 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
     // Scenario: cli/manual-run / Sandboxed check reads the commit, not the box
     def "a file absent from the attempt commit is missing, wherever else it may exist"() {
         given: 'the "Sandboxed check reads the commit, not the box" scenario: existence is the commit tree alone'
-        def check = new VerifyCheck.Builtin('files_exist', [files: [
+        def check = VerifyChecks.builtin('files_exist', [files: [
                 'src/App.java',
                 'uncommitted-residue.txt'
             ]])
@@ -79,7 +81,7 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
 
     def "a path escaping the workspace yields CannotVerify naming the path"() {
         given:
-        def check = new VerifyCheck.Builtin('files_exist', [files: [path]])
+        def check = VerifyChecks.builtin('files_exist', [files: [path]])
 
         when:
         def verdict = runner().run(check, workspace())
@@ -98,7 +100,7 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
 
     def "a sandboxed workspace with no factory-clone reader bound yields CannotVerify"() {
         given: 'the plain host-construction runner, no withAttemptReader rebind'
-        def check = new VerifyCheck.Builtin('files_exist', [files: ['src/App.java']])
+        def check = VerifyChecks.builtin('files_exist', [files: ['src/App.java']])
 
         when:
         def verdict = new FilesExistCheckRunner().run(check, workspace())
@@ -110,7 +112,7 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
 
     def "malformed params still fail before any git read"() {
         given:
-        def check = new VerifyCheck.Builtin('files_exist', [:])
+        def check = VerifyChecks.builtin('files_exist', [:])
 
         expect:
         runner().run(check, workspace()) instanceof Verdict.CannotVerify

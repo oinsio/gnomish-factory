@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
@@ -75,7 +77,7 @@ class EngineRunContractSpec extends Specification {
 
         when:
         def outcome = run([
-            new VerifyCheck.External('ci', 'ci-platform', Duration.ofSeconds(1), Duration.ofSeconds(3), VerifyCheck.TimeoutClass.QUALITY)
+            VerifyChecks.external('ci', 'ci-platform', Duration.ofSeconds(1), Duration.ofSeconds(3), VerifyCheck.TimeoutClass.QUALITY)
         ], 1)
 
         then: 'the round began at the source\'s reading, and the deadline ran out on the same source'
@@ -105,7 +107,7 @@ class EngineRunContractSpec extends Specification {
 
         when:
         run([
-            new VerifyCheck.Builtin('lint', [:])
+            VerifyChecks.builtin('lint', [:])
         ])
 
         then:
@@ -128,7 +130,7 @@ class EngineRunContractSpec extends Specification {
 
         when:
         def outcome = run([
-            new VerifyCheck.Builtin('lint', [:])
+            VerifyChecks.builtin('lint', [:])
         ], 3, persisted)
 
         then: 'each recorded round folded into the running snapshot'

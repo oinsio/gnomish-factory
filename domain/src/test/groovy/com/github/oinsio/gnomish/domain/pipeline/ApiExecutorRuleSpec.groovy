@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import spock.lang.Specification
 
 /**
@@ -19,7 +21,7 @@ class ApiExecutorRuleSpec extends Specification {
                 new StageDefinition.Executor(type, "$name-model", [:]),
                 "stages/$name/instructions.md",
                 [
-                    new VerifyCheck.Command('./gradlew check')
+                    VerifyChecks.command('./gradlew check')
                 ],
                 new AutonomyLimits(2), AdvancementMode.AUTO)
     }

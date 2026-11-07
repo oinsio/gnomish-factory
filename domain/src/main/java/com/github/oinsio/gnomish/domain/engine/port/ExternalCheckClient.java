@@ -7,7 +7,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
  * The port through which the engine performs one poll of an asynchronous
  * third-party verification (e.g. a CI check on the task branch, a SonarQube
  * quality gate) without knowing how the third party is queried (design D2): the
- * engine hands over a {@link VerifyCheck.External} and the opaque {@link
+ * engine hands over a {@link VerifyCheck.Executor} and the opaque {@link
  * Workspace} it relates to, and reads back a single {@link PollStatus}.
  *
  * <p>This port performs a <em>single</em> poll only — the engine owns the poll
@@ -37,5 +37,5 @@ public interface ExternalCheckClient {
      * @param workspace the opaque working copy the check relates to
      * @return the status seen by this single poll; never null
      */
-    PollStatus poll(VerifyCheck.External check, Workspace workspace);
+    PollStatus poll(VerifyCheck.Executor check, Workspace workspace);
 }

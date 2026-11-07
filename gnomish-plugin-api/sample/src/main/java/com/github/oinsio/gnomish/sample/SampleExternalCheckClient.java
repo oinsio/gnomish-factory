@@ -32,7 +32,7 @@ final class SampleExternalCheckClient implements ExternalCheckClient {
     private static final int DETAILS_CAP_CHARS = 4000;
 
     @Override
-    public PollStatus poll(VerifyCheck.External check, Workspace workspace) {
+    public PollStatus poll(VerifyCheck.Executor check, Workspace workspace) {
         if (!(workspace instanceof AttemptCommitWorkspace attemptWorkspace)) {
             return new PollStatus.CannotVerify(
                     UntrustedText.factory("sample check requires a sandboxed-mode workspace"),

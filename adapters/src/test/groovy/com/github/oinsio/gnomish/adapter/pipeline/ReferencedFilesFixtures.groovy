@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
@@ -46,8 +48,8 @@ final class ReferencedFilesFixtures {
     }
 
     /** A non-judge check, used to prove that verify indices count every check, not just judges. */
-    static VerifyCheck.Command command() {
-        new VerifyCheck.Command('true')
+    static VerifyCheck.Executor command() {
+        VerifyChecks.command('true')
     }
 
     /** The located error for an instructions reference that does not exist. */

@@ -84,8 +84,8 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
      * @return the status this single poll observed; never null
      */
     @Override
-    public PollStatus poll(VerifyCheck.External check, Workspace workspace) {
-        HttpCheckParams params = HttpCheckParams.from(check.params());
+    public PollStatus poll(VerifyCheck.Executor check, Workspace workspace) {
+        HttpCheckParams params = HttpCheckParams.from(check.settings());
         HttpRequest request;
         try {
             request = HttpCheckRequest.build(
@@ -156,7 +156,7 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
      * request, so no credential can travel into a committed report (NFR-S1).
      */
     private static Finding failure(
-            VerifyCheck.External check, HttpCheckParams params, String target, HttpCheckExchange.Response response) {
+            VerifyCheck.Executor check, HttpCheckParams params, String target, HttpCheckExchange.Response response) {
         return new Finding(
                 "http check '%s' did not pass: expected %s, got HTTP %d"
                         .formatted(check.checkId(), params.passWhen().describe(), response.status()),

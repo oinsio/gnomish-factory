@@ -7,7 +7,7 @@ import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
  * The port through which the engine runs one command check — an arbitrary
  * executable whose contract is "exit code 0 = pass" — without knowing how the
  * command is spawned (design D2): the engine hands over a {@link
- * VerifyCheck.Command} and the opaque {@link Workspace} it operates on, and reads
+ * VerifyCheck.Executor} and the opaque {@link Workspace} it operates on, and reads
  * back a {@link Verdict}. Turning an exit code and any structured output into a
  * verdict is the adapter's concern; the engine only asks for a verdict.
  *
@@ -29,5 +29,5 @@ public interface CommandCheckRunner {
      * @param workspace the opaque working copy the command operates on
      * @return the verdict of the check; never null
      */
-    Verdict run(VerifyCheck.Command check, Workspace workspace);
+    Verdict run(VerifyCheck.Executor check, Workspace workspace);
 }

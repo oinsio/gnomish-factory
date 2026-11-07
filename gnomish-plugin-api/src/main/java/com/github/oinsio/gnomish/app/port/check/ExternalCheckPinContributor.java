@@ -28,7 +28,7 @@ public interface ExternalCheckPinContributor {
      * @param check the external check about to be polled; never null
      * @return repo-relative paths whose content defines the check for this adapter
      */
-    Set<String> pinPaths(VerifyCheck.External check);
+    Set<String> pinPaths(VerifyCheck.Executor check);
 
     /**
      * The empty contribution of adapters with no repo-borne definition (the default of

@@ -24,6 +24,12 @@ import java.util.TreeSet;
  * thrown (design D3 of load-pipeline-config). Error order is deterministic (NFR-R1): stages in
  * pipeline declaration order, checks in {@code verify} order within a stage.
  *
+ * <p>A check is in scope when it is polled ({@link VerifyCheck.Executor#polled()}), and its
+ * provider is the key the {@code factory.check.*} subtree still knows its executor by ({@link
+ * VerifyCheck.Executor#providerKey()}: {@code github} for {@code github-actions}), so the rule
+ * reads exactly what it read before the tokens became sugar (FR1, UX2 of
+ * migrate-verify-to-executor-contract).
+ *
  * <p>Implements FR3, NFR-O1, D3 of remove-interactive-console.
  */
 public final class UnconfiguredCheckProviderRule {
@@ -47,15 +53,16 @@ public final class UnconfiguredCheckProviderRule {
         for (StageDefinition stage : stages) {
             List<VerifyCheck> checks = stage.verify();
             for (int index = 0; index < checks.size(); index++) {
-                if (checks.get(index) instanceof VerifyCheck.External external
-                        && !configuredProviders.contains(external.provider())) {
+                if (checks.get(index) instanceof VerifyCheck.Executor external
+                        && external.polled()
+                        && !configuredProviders.contains(external.providerKey())) {
                     errors.add(new ConfigError(
                             "stages/%s/stage.yaml".formatted(stage.name()),
                             "verify[%d].provider".formatted(index),
                             "check provider '%s' has no factory.check.%s section in this factory's configuration; configured providers: %s"
                                     .formatted(
-                                            external.provider(),
-                                            external.provider(),
+                                            external.providerKey(),
+                                            external.providerKey(),
                                             new TreeSet<>(configuredProviders))));
                 }
             }

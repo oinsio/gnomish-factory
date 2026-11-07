@@ -25,7 +25,7 @@ class PipelineMapperDurationSpec extends Specification implements PipelineMapper
         ])
 
         when:
-        def check = mappedStage(stage).verify()[0] as VerifyCheck.External
+        def check = mappedStage(stage).verify()[0] as VerifyCheck.Executor
 
         then:
         check.interval() == expectedInterval
@@ -51,7 +51,7 @@ class PipelineMapperDurationSpec extends Specification implements PipelineMapper
 
         then: 'no format error; the absent field becomes zero (never null)'
         result.errors().isEmpty()
-        def check = result.definition().stages()[0].verify()[0] as VerifyCheck.External
+        def check = result.definition().stages()[0].verify()[0] as VerifyCheck.Executor
         check.interval() != null
         check.timeout() != null
         check.interval() == expectedInterval
@@ -124,7 +124,7 @@ class PipelineMapperDurationSpec extends Specification implements PipelineMapper
         ])
 
         when:
-        def check = mappedStage(stage).verify()[0] as VerifyCheck.External
+        def check = mappedStage(stage).verify()[0] as VerifyCheck.Executor
 
         then:
         check.timeoutClass() == VerifyCheck.TimeoutClass.QUALITY
@@ -137,7 +137,7 @@ class PipelineMapperDurationSpec extends Specification implements PipelineMapper
         ])
 
         when:
-        def check = mappedStage(stage).verify()[0] as VerifyCheck.External
+        def check = mappedStage(stage).verify()[0] as VerifyCheck.Executor
 
         then:
         check.timeoutClass() == expected

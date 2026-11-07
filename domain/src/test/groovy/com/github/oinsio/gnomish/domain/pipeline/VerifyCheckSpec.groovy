@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import java.time.Duration
 import spock.lang.Specification
 
@@ -22,9 +24,9 @@ class VerifyCheckSpec extends Specification {
         and: 'its only permitted implementations are the four contract check types'
         VerifyCheck.permittedSubclasses*.name.toSorted() ==
                 [
-                    VerifyCheck.Builtin.name,
-                    VerifyCheck.Command.name,
-                    VerifyCheck.External.name,
+                    VerifyCheck.Executor.name,
+                    VerifyCheck.Executor.name,
+                    VerifyCheck.Executor.name,
                     VerifyCheck.Judge.name
                 ].toSorted()
     }
@@ -32,7 +34,7 @@ class VerifyCheckSpec extends Specification {
     // FR2: a builtin check is an engine check name plus opaque declarative params
     def "Builtin exposes the engine check name and its declarative params"() {
         when: 'a builtin check is modeled with a name and params'
-        VerifyCheck check = new VerifyCheck.Builtin('files_exist', [paths: ['README.md']])
+        VerifyCheck check = VerifyChecks.builtin('files_exist', [paths: ['README.md']])
 
         then: 'the variant exposes exactly the name and params'
         check.name() == 'files_exist'
@@ -42,7 +44,7 @@ class VerifyCheckSpec extends Specification {
     // FR2: params are opaque data, so a param-free builtin check is legal
     def "Builtin accepts empty params"() {
         expect: 'a builtin check with no params carries an empty map'
-        new VerifyCheck.Builtin('workspace_clean', [:]).params().isEmpty()
+        VerifyChecks.builtin('workspace_clean', [:]).params().isEmpty()
     }
 
     // FR2: the model is immutable — defensive copy isolates from the source map
@@ -51,7 +53,7 @@ class VerifyCheckSpec extends Specification {
         Map<String, Object> source = [paths: ['README.md']]
 
         when: 'the check is created and the source map grows afterwards'
-        def check = new VerifyCheck.Builtin('files_exist', source)
+        def check = VerifyChecks.builtin('files_exist', source)
         source.intruder = 'later noise'
 
         then: 'the check still holds only the original params'
@@ -61,7 +63,7 @@ class VerifyCheckSpec extends Specification {
     // FR2: the exposed params map itself cannot be mutated
     def "Builtin's params map is immutable"() {
         given: 'a builtin check'
-        def check = new VerifyCheck.Builtin('files_exist', [paths: []])
+        def check = VerifyChecks.builtin('files_exist', [paths: []])
 
         when: 'a caller tries to put into the exposed map'
         check.params().put('intruder', true)
@@ -74,7 +76,7 @@ class VerifyCheckSpec extends Specification {
     // (contract: exit code 0 = pass — semantics live in the stage engine, not here)
     def "Command exposes the executable command line"() {
         when: 'a command check is modeled'
-        VerifyCheck check = new VerifyCheck.Command('./gradlew check')
+        VerifyCheck check = VerifyChecks.command('./gradlew check')
 
         then: 'the variant exposes exactly the command line'
         check.command() == './gradlew check'
@@ -84,8 +86,8 @@ class VerifyCheckSpec extends Specification {
     // the convenience constructor defaults it to same-box (unchanged behavior)
     def "Command carries verifyIn, defaulting to SAME_BOX"() {
         expect: 'the one-arg form is same-box, the explicit form carries its value'
-        new VerifyCheck.Command('./gradlew test').verifyIn() == VerifyCheck.VerifyIn.SAME_BOX
-        new VerifyCheck.Command('./gradlew test', VerifyCheck.VerifyIn.FRESH_BOX).verifyIn() ==
+        VerifyChecks.command('./gradlew test').verifyIn() == VerifyCheck.VerifyIn.SAME_BOX
+        VerifyChecks.command('./gradlew test', VerifyCheck.VerifyIn.FRESH_BOX).verifyIn() ==
                 VerifyCheck.VerifyIn.FRESH_BOX
     }
 
@@ -98,7 +100,7 @@ class VerifyCheckSpec extends Specification {
     // FR2/FR11: an external check carries its identifier and polling timing
     def "External exposes the check identifier, poll interval and timeout"() {
         when: 'an external check is modeled'
-        VerifyCheck check = new VerifyCheck.External(
+        VerifyCheck check = VerifyChecks.external(
                 'ci/build', 'github', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY)
 
         then: 'the variant exposes exactly the identifier and both durations'
@@ -113,7 +115,7 @@ class VerifyCheckSpec extends Specification {
     // Scenario: pipeline/pipeline-config / External check carries provider and opaque params
     def "External carries its provider and opaque params beside the engine-common fields"() {
         when: 'an external check is modeled with a provider and provider-owned params'
-        VerifyCheck check = new VerifyCheck.External('quality-gate', 'http', [url: 'https://sonar/api', pollKey: 'status'],
+        VerifyCheck check = VerifyChecks.external('quality-gate', 'http', [url: 'https://sonar/api', pollKey: 'status'],
         Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.INFRASTRUCTURE,
         ['sonar-project.properties'])
 
@@ -134,11 +136,11 @@ class VerifyCheckSpec extends Specification {
     // convenience constructor
     def "External params default to empty and hold only plain JDK types"() {
         expect: 'the provider-only form carries no params'
-        new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
+        VerifyChecks.external('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY).params().isEmpty()
 
         and: 'declared params are plain JDK maps, lists and scalars'
-        new VerifyCheck.External('ci', 'http', [headers: [accept: 'application/json'], retries: 2, strict: true],
+        VerifyChecks.external('ci', 'http', [headers: [accept: 'application/json'], retries: 2, strict: true],
         Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY, []).params() ==
         [headers: [accept: 'application/json'], retries: 2, strict: true]
     }
@@ -150,7 +152,7 @@ class VerifyCheckSpec extends Specification {
         def source = [url: 'https://sonar/api']
 
         when: 'the check is created and the source map grows afterwards'
-        def check = new VerifyCheck.External('gate', 'http', source, Duration.ofSeconds(30),
+        def check = VerifyChecks.external('gate', 'http', source, Duration.ofSeconds(30),
                 Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY, [])
         source.intruder = 'later noise'
 
@@ -169,7 +171,7 @@ class VerifyCheckSpec extends Specification {
     // so the load seam can see and report it
     def "External carries its provider verbatim, defaulting nothing"() {
         expect: 'a provider no jar serves is carried untouched for the load seam to report'
-        new VerifyCheck.External('ci', 'nobody-serves-this', Duration.ofSeconds(30), Duration.ofMinutes(5),
+        VerifyChecks.external('ci', 'nobody-serves-this', Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY).provider() == 'nobody-serves-this'
     }
 
@@ -177,9 +179,9 @@ class VerifyCheckSpec extends Specification {
     // paths in declaration order; the convenience constructor defaults to empty
     def "External carries pin paths, defaulting to empty, in declaration order"() {
         expect: 'the four-arg form has no pin paths, the explicit form carries them ordered'
-        new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
+        VerifyChecks.external('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY).pinPaths() == []
-        new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
+        VerifyChecks.external('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY, [
                     '.github/workflows/ci.yml',
                     'analyzer.xml'
@@ -197,7 +199,7 @@ class VerifyCheckSpec extends Specification {
         def source = ['ci.yml']
 
         when: 'the check is created and the source list grows afterwards'
-        def check = new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
+        def check = VerifyChecks.external('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY, source)
         source << 'later-noise'
 
@@ -208,7 +210,7 @@ class VerifyCheckSpec extends Specification {
     // FR16 (add-sandbox-core): the exposed pin-path list itself cannot be mutated
     def "External's pin-path list is immutable"() {
         given: 'an external check with one pin path'
-        def check = new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
+        def check = VerifyChecks.external('ci', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY, ['ci.yml'])
 
         when: 'a caller tries to add into the exposed list'
@@ -223,7 +225,7 @@ class VerifyCheckSpec extends Specification {
     // carry an insane value so the validator can still see and report it
     def "External carries insane timing (#reason) without throwing"() {
         when: 'an external check is modeled with timing that violates FR11'
-        def check = new VerifyCheck.External('ci/build', 'github', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
+        def check = VerifyChecks.external('ci/build', 'github', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
 
         then: 'the record carries the values untouched for the validator to report'
         notThrown(Exception)
@@ -295,11 +297,11 @@ class VerifyCheckSpec extends Specification {
     // content — order preservation itself is the stage's list (task 3.5)
     def "checks with the same fields are equal values"() {
         expect: 'two independently constructed checks with equal fields are equal'
-        new VerifyCheck.Builtin('files_exist', [paths: []]) ==
-        new VerifyCheck.Builtin('files_exist', [paths: []])
-        new VerifyCheck.Command('make test') == new VerifyCheck.Command('make test')
-        new VerifyCheck.External('ci/build', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) ==
-                new VerifyCheck.External('ci/build', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+        VerifyChecks.builtin('files_exist', [paths: []]) ==
+        VerifyChecks.builtin('files_exist', [paths: []])
+        VerifyChecks.command('make test') == VerifyChecks.command('make test')
+        VerifyChecks.external('ci/build', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY) ==
+                VerifyChecks.external('ci/build', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
         new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', [:], 3) ==
         new VerifyCheck.Judge('acceptance.md', 'claude-sonnet-4-5', [:], 3)
     }

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
@@ -76,7 +78,7 @@ class EnginePreflightRecordedStopSpec extends Specification {
             new StageDefinition('build', 'purpose', [], [],
             new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
             'instructions.md', [
-                new VerifyCheck.Builtin('files_exist', [:])
+                VerifyChecks.builtin('files_exist', [:])
             ],
             new AutonomyLimits(attemptLimit), AdvancementMode.AUTO)
         ])

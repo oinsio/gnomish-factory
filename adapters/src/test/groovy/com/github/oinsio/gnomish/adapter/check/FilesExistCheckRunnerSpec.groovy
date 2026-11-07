@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -30,7 +32,7 @@ class FilesExistCheckRunnerSpec extends Specification {
         given: 'two files that exist in the workspace'
         Files.writeString(tempDir.resolve('a.txt'), 'a')
         Files.writeString(tempDir.resolve('b.txt'), 'b')
-        def check = new VerifyCheck.Builtin('files_exist', [files: ['a.txt', 'b.txt']])
+        def check = VerifyChecks.builtin('files_exist', [files: ['a.txt', 'b.txt']])
 
         when:
         def verdict = runner.run(check, workspace())
@@ -43,7 +45,7 @@ class FilesExistCheckRunnerSpec extends Specification {
     def "two of three missing files yields Fail with exactly two findings naming them"() {
         given: 'one existing file and two missing ones configured'
         Files.writeString(tempDir.resolve('present.txt'), 'ok')
-        def check = new VerifyCheck.Builtin(
+        def check = VerifyChecks.builtin(
                 'files_exist',
                 [files: [
                         'present.txt',
@@ -66,7 +68,7 @@ class FilesExistCheckRunnerSpec extends Specification {
 
     def "missing 'files' param yields CannotVerify"() {
         given:
-        def check = new VerifyCheck.Builtin('files_exist', [:])
+        def check = VerifyChecks.builtin('files_exist', [:])
 
         when:
         def verdict = runner.run(check, workspace())
@@ -77,7 +79,7 @@ class FilesExistCheckRunnerSpec extends Specification {
 
     def "wrong-type 'files' param yields CannotVerify"() {
         given:
-        def check = new VerifyCheck.Builtin('files_exist', [files: 'not-a-list'])
+        def check = VerifyChecks.builtin('files_exist', [files: 'not-a-list'])
 
         when:
         def verdict = runner.run(check, workspace())
@@ -88,7 +90,7 @@ class FilesExistCheckRunnerSpec extends Specification {
 
     def "non-string entry in 'files' param yields CannotVerify naming its type"() {
         given:
-        def check = new VerifyCheck.Builtin('files_exist', [files: ['a.txt', 42]])
+        def check = VerifyChecks.builtin('files_exist', [files: ['a.txt', 42]])
 
         when:
         def verdict = runner.run(check, workspace())
@@ -104,7 +106,7 @@ class FilesExistCheckRunnerSpec extends Specification {
         given:
         def files = new ArrayList<>(['a.txt'])
         files.add(null)
-        def check = new VerifyCheck.Builtin('files_exist', [files: files])
+        def check = VerifyChecks.builtin('files_exist', [files: files])
 
         when:
         def verdict = runner.run(check, workspace())
@@ -117,7 +119,7 @@ class FilesExistCheckRunnerSpec extends Specification {
 
     def "a workspace that is not a DirectoryWorkspace yields CannotVerify naming its runtime type"() {
         given: 'the engine-side member-less Workspace marker, not the directory-backed adapter'
-        def check = new VerifyCheck.Builtin('files_exist', [files: ['a.txt']])
+        def check = VerifyChecks.builtin('files_exist', [files: ['a.txt']])
         def opaqueWorkspace = new com.github.oinsio.gnomish.domain.engine.port.Workspace() {}
 
         when:
@@ -132,7 +134,7 @@ class FilesExistCheckRunnerSpec extends Specification {
     // Scenario: cli/manual-run / Workspace escape refused
     def "a path escaping the workspace root yields CannotVerify naming the offending path"() {
         given: 'a configured path that climbs out of the workspace via ..'
-        def check = new VerifyCheck.Builtin('files_exist', [files: ['../secret']])
+        def check = VerifyChecks.builtin('files_exist', [files: ['../secret']])
 
         when:
         def verdict = runner.run(check, workspace())

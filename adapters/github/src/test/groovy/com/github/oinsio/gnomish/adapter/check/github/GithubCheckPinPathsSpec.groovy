@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.github
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.time.Duration
 import spock.lang.Specification
@@ -16,7 +18,7 @@ class GithubCheckPinPathsSpec extends Specification {
 
     def "contributes exactly the checkId workflow file, one path and nothing else"() {
         given:
-        def check = new VerifyCheck.External('.github/workflows/ci.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
+        def check = VerifyChecks.external('.github/workflows/ci.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
 
         when:
         def pinPaths = GithubCheckPinPaths.contributedBy(check)
@@ -27,7 +29,7 @@ class GithubCheckPinPathsSpec extends Specification {
 
     def "a different checkId contributes its own single path, proving the pin follows checkId rather than being hardcoded"() {
         given:
-        def check = new VerifyCheck.External('.github/workflows/lint.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
+        def check = VerifyChecks.external('.github/workflows/lint.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
 
         when:
         def pinPaths = GithubCheckPinPaths.contributedBy(check)

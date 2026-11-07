@@ -71,10 +71,10 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
     }
 
     @Override
-    public Verdict run(VerifyCheck.Builtin check, Workspace workspace) {
+    public Verdict run(VerifyCheck.Executor check, Workspace workspace) {
         List<String> files;
         try {
-            files = readFiles(check.params());
+            files = readFiles(check.settings());
         } catch (MalformedParamsException e) {
             return new Verdict.CannotVerify(UntrustedText.manifest(e.reason()), NoCheckDetails.NO_DETAILS);
         }

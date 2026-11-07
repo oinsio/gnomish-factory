@@ -50,6 +50,6 @@ class PipelineMapperSettingsSpec extends Specification implements PipelineMapper
 
         then: 'executor and builtin params are empty, never null'
         s.executor().settings() == [:]
-        (s.verify()[0] as VerifyCheck.Builtin).params() == [:]
+        (s.verify()[0] as VerifyCheck.Executor).params() == [:]
     }
 }

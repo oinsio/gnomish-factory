@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.take.TakeResult
@@ -39,7 +41,7 @@ class TakeEngineExecutionEscalationSpec extends TakeResumeSpecBase {
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
                 [
-                    new VerifyCheck.Builtin('files_exist', [files: ['missing-file.txt']])
+                    VerifyChecks.builtin('files_exist', [files: ['missing-file.txt']])
                 ],
                 new AutonomyLimits(1), AdvancementMode.AUTO)
         def failingPipeline = new PipelineDefinition('1', new AutonomyLimits(1), [failingStage])

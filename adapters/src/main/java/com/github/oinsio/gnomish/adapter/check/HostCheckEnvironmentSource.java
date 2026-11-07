@@ -24,7 +24,7 @@ import java.time.InstantSource;
 record HostCheckEnvironmentSource(InstantSource clock, ChildEnvAllowlist childEnv) implements CheckEnvironmentSource {
 
     @Override
-    public Acquired acquire(VerifyCheck.Command check, Workspace workspace) {
+    public Acquired acquire(VerifyCheck.Executor check, Workspace workspace) {
         if (!(workspace instanceof DirectoryWorkspace directoryWorkspace)) {
             throw new CheckEnvironmentUnavailableException("command check requires a DirectoryWorkspace, got "
                     + workspace.getClass().getName());

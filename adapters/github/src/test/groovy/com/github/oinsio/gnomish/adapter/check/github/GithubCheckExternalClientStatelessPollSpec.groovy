@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.github
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
@@ -44,8 +46,8 @@ class GithubCheckExternalClientStatelessPollSpec extends Specification {
         wireMock.stop()
     }
 
-    private static VerifyCheck.External sampleCheck() {
-        new VerifyCheck.External('ci.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+    private static VerifyCheck.Executor sampleCheck() {
+        VerifyChecks.external('ci.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
     }
 
     // Through the shared fixture, whose declared return type is the published

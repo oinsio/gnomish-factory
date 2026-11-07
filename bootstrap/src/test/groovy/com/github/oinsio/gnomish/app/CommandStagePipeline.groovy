@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.CommandLine
@@ -49,7 +51,7 @@ final class CommandStagePipeline {
         def build = new StageDefinition('build', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.COMMAND, '', [:], Sandbox.none(), null, new CommandLine(COMMAND)),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [files: [RESULT]])
+            VerifyChecks.builtin('files_exist', [files: [RESULT]])
         ], new AutonomyLimits(3),
         AdvancementMode.AUTO)
         def review = new StageDefinition('review', 'purpose', [], [],

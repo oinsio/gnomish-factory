@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.GREEN_SHA
 import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.LOOPBACK_ALLOWLIST
 import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.QUALITY_GATE
@@ -176,7 +178,7 @@ class ThreeProviderVerifyChainSpec extends Specification {
         orchestrator.verify(checks, CONTEXT, new RecordedAttemptCommitWorkspace(ref), KEY)
     }
 
-    private static VerifyCheck.Command command() {
-        new VerifyCheck.Command('true')
+    private static VerifyCheck.Executor command() {
+        VerifyChecks.command('true')
     }
 }

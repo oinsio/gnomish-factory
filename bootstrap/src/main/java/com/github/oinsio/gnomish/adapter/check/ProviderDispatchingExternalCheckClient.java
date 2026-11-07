@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Routes each {@code external} check to the client of the provider it selects, behind the engine's
  * single unchanged {@link ExternalCheckClient} port (FR3, FR6, design D10 of
  * add-plugin-architecture). Per-check provider selection is wiring, not engine semantics: the
- * engine keeps handing one port a {@link VerifyCheck.External} and reading back one {@link
+ * engine keeps handing one port a {@link VerifyCheck.Executor} and reading back one {@link
  * PollStatus}, and this composite decides whose client answers.
  *
  * <p>The selection is read straight off the check's own {@code provider} field, which the loader
@@ -97,13 +97,13 @@ public final class ProviderDispatchingExternalCheckClient implements ExternalChe
     }
 
     @Override
-    public PollStatus poll(VerifyCheck.External check, Workspace workspace) {
+    public PollStatus poll(VerifyCheck.Executor check, Workspace workspace) {
         return clientFor(check).poll(check, workspace);
     }
 
     /** The memoized client of the check's provider, constructed on first selection (FR3). */
-    private ExternalCheckClient clientFor(VerifyCheck.External check) {
-        String provider = check.provider();
+    private ExternalCheckClient clientFor(VerifyCheck.Executor check) {
+        String provider = check.providerKey();
         return clients.computeIfAbsent(
                 provider,
                 p -> factoryFor(check)
@@ -115,8 +115,8 @@ public final class ProviderDispatchingExternalCheckClient implements ExternalChe
      * The factory of the check's provider, or a failure naming the provider and the discovered set
      * — a manifest can only reach this by naming a provider no jar serves.
      */
-    private CheckClientFactory factoryFor(VerifyCheck.External check) {
-        String provider = check.provider();
+    private CheckClientFactory factoryFor(VerifyCheck.Executor check) {
+        String provider = check.providerKey();
         CheckClientFactory factory = registry.get(provider);
         if (factory == null) {
             throw new IllegalStateException("check '%s' selects check provider '%s', which no discovered jar serves; "

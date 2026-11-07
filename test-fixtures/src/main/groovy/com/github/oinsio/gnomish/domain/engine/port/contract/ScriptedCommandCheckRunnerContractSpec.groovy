@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine.port.contract
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
@@ -35,7 +37,7 @@ class ScriptedCommandCheckRunnerContractSpec extends CheckRunnerContract {
     @Override
     protected Optional<Verdict> arrange(VerdictVariant variant) {
         def runner = ScriptedCommandCheckRunner.fixed(scriptedVerdict(variant))
-        Optional.of(runner.run(new VerifyCheck.Command('./gradlew test'), new FakeWorkspace()))
+        Optional.of(runner.run(VerifyChecks.command('./gradlew test'), new FakeWorkspace()))
     }
 
     @Override

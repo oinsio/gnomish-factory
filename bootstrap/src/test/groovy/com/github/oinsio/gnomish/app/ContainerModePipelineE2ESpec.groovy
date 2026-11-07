@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -88,10 +90,10 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
                 (List<VerifyCheck>) [
-                    new VerifyCheck.Builtin('files_exist', [files: ['output.txt']]),
+                    VerifyChecks.builtin('files_exist', [files: ['output.txt']]),
                     // FR13/UX5: the final gate runs in a fresh box materialized from the attempt
                     // commit — passing proves the branch alone is self-sufficient.
-                    new VerifyCheck.Command('test -f output.txt', VerifyCheck.VerifyIn.FRESH_BOX),
+                    VerifyChecks.command('test -f output.txt', VerifyCheck.VerifyIn.FRESH_BOX),
                 ],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
     }

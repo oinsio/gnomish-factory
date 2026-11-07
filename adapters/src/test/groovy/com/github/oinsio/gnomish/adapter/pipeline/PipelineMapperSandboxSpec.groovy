@@ -36,8 +36,8 @@ class PipelineMapperSandboxSpec extends Specification implements PipelineMapperF
         result.errors().isEmpty()
         def stage = result.definition().stages()[0]
         stage.executor().sandbox() == new Sandbox(['docker-inside'], true)
-        (stage.verify()[0] as VerifyCheck.Command).verifyIn() == VerifyCheck.VerifyIn.FRESH_BOX
-        (stage.verify()[1] as VerifyCheck.External).pinPaths() == ['.github/workflows/ci.yml']
+        (stage.verify()[0] as VerifyCheck.Executor).verifyIn() == VerifyCheck.VerifyIn.FRESH_BOX
+        (stage.verify()[1] as VerifyCheck.Executor).pinPaths() == ['.github/workflows/ci.yml']
     }
 
     // an absent sandbox maps to none(), an absent verify-in to same-box, absent pin paths to empty
@@ -59,8 +59,8 @@ class PipelineMapperSandboxSpec extends Specification implements PipelineMapperF
         result.errors().isEmpty()
         def stage = result.definition().stages()[0]
         stage.executor().sandbox() == Sandbox.none()
-        (stage.verify()[0] as VerifyCheck.Command).verifyIn() == VerifyCheck.VerifyIn.SAME_BOX
-        (stage.verify()[1] as VerifyCheck.External).pinPaths() == []
+        (stage.verify()[0] as VerifyCheck.Executor).verifyIn() == VerifyCheck.VerifyIn.SAME_BOX
+        (stage.verify()[1] as VerifyCheck.Executor).pinPaths() == []
     }
 
     def "an unknown verify-in is a located mapping error"() {

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
@@ -65,7 +67,7 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
         def source = new SandboxCheckEnvironmentSource(leased(env), noFreshBox(), 'gnomish/t')
 
         when:
-        def acquired = source.acquire(new VerifyCheck.Command('true'), new DirectoryWorkspace(tempDir))
+        def acquired = source.acquire(VerifyChecks.command('true'), new DirectoryWorkspace(tempDir))
         acquired.close()
 
         then:
@@ -80,7 +82,7 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
 
         when:
         source.acquire(
-                new VerifyCheck.Command('true', VerifyCheck.VerifyIn.FRESH_BOX),
+                VerifyChecks.command('true', VerifyCheck.VerifyIn.FRESH_BOX),
                 new DirectoryWorkspace(tempDir))
 
         then:
@@ -100,7 +102,7 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
 
         when:
         def acquired = source.acquire(
-                new VerifyCheck.Command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
+                VerifyChecks.command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
 
         then:
         1 * fresh.materialize('gnomish/t', SHA)
@@ -125,7 +127,7 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
                 'gnomish/t')
 
         when:
-        source.acquire(new VerifyCheck.Command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
+        source.acquire(VerifyChecks.command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
 
         then:
         1 * fresh.materialize('gnomish/t', SHA) >> {
@@ -148,7 +150,7 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
                 'gnomish/t')
 
         when:
-        source.acquire(new VerifyCheck.Command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
+        source.acquire(VerifyChecks.command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
 
         then:
         1 * fresh.materialize('gnomish/t', SHA) >> {

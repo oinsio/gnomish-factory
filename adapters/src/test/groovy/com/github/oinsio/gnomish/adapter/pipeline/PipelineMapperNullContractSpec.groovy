@@ -84,7 +84,7 @@ class PipelineMapperNullContractSpec extends Specification implements PipelineMa
             new ArtifactInput.Internal('')
         ]
         s.outputs() == [new ArtifactOutput('')]
-        (s.verify()[0] as VerifyCheck.Builtin).name() == ''
+        (s.verify()[0] as VerifyCheck.Executor).name() == ''
     }
 
     def "maps null command, criteria file and check id to blank strings"() {
@@ -99,8 +99,8 @@ class PipelineMapperNullContractSpec extends Specification implements PipelineMa
         def checks = mappedStage(stage).verify()
 
         then:
-        (checks[0] as VerifyCheck.Command).command() == ''
-        (checks[1] as VerifyCheck.External).checkId() == ''
+        (checks[0] as VerifyCheck.Executor).command() == ''
+        (checks[1] as VerifyCheck.Executor).checkId() == ''
         (checks[2] as VerifyCheck.Judge).criteriaFile() == ''
     }
 

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
@@ -61,7 +63,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def stage = new StageDefinition('build', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ],
         new AutonomyLimits(1), AdvancementMode.MANUAL)
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])

@@ -59,7 +59,7 @@ public final class SandboxCheckEnvironmentSource implements CheckEnvironmentSour
     }
 
     @Override
-    public Acquired acquire(VerifyCheck.Command check, Workspace workspace) {
+    public Acquired acquire(VerifyCheck.Executor check, Workspace workspace) {
         return switch (check.verifyIn()) {
             case SAME_BOX -> leased();
             case FRESH_BOX -> freshBox(workspace);

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.port.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.time.Duration
 import spock.lang.Specification
@@ -14,8 +16,8 @@ import spock.lang.Specification
  */
 class ExternalCheckPinContributorSpec extends Specification {
 
-    private static VerifyCheck.External check(String checkId) {
-        new VerifyCheck.External(checkId, 'sample', Duration.ofSeconds(10), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+    private static VerifyCheck.Executor check(String checkId) {
+        VerifyChecks.external(checkId, 'sample', Duration.ofSeconds(10), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
     }
 
     // FR16: none() is a real contributor, not null — callers union its contribution unconditionally.

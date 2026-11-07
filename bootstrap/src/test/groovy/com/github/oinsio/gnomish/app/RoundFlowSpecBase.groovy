@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
@@ -97,7 +99,7 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
         def stage = new StageDefinition('build', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
         'instructions.md', [
-            new VerifyCheck.Command('make check')
+            VerifyChecks.command('make check')
         ], new AutonomyLimits(attempts), AdvancementMode.AUTO)
         new PipelineDefinition('1.0.0', new AutonomyLimits(attempts), [stage])
     }

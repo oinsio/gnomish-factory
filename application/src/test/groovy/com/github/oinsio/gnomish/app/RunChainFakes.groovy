@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.console.DialogConsole
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
@@ -148,7 +150,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         def stage = new StageDefinition('build', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ],
         new AutonomyLimits(1), AdvancementMode.AUTO)
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])
@@ -163,7 +165,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         def stage = new StageDefinition('startup-only', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ],
         new AutonomyLimits(1), AdvancementMode.AUTO)
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])

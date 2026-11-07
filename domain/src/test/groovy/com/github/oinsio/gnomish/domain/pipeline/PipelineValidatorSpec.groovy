@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import java.time.Duration
 import spock.lang.Specification
 
@@ -31,7 +33,7 @@ class PipelineValidatorSpec extends Specification {
             List<ArtifactOutput> outputs,
             StageDefinition.Executor executor = executor(),
             List<VerifyCheck> verify = [
-                new VerifyCheck.Command('./gradlew check')
+                VerifyChecks.command('./gradlew check')
             ],
             AutonomyLimits limits = new AutonomyLimits(3)) {
         new StageDefinition(
@@ -148,7 +150,7 @@ class PipelineValidatorSpec extends Specification {
                     stage('plan', [new ArtifactInput.Source()], [
                         new ArtifactOutput('plan-out')
                     ], executor(), [
-                        new VerifyCheck.External('ci', 'github', Duration.ofSeconds(30),
+                        VerifyChecks.external('ci', 'github', Duration.ofSeconds(30),
                         Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
                     ])
                 ])

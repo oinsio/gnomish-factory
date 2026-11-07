@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.app.FixedCheckClientContext
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.Finding
@@ -28,7 +30,7 @@ class PluginStandInCheckClientContractSpec extends ExternalCheckClientContract {
             Optional.of('secret')
         } as SecretsProvider, [endpoint: 'https://plugin.example']))
         Optional.of(client.poll(
-                        new VerifyCheck.External(
+                        VerifyChecks.external(
                                 'ci', PluginStandInCheckClientFactory.PROVIDER, Duration.ofSeconds(1),
                                 Duration.ofSeconds(5), VerifyCheck.TimeoutClass.QUALITY),
                         new FakeWorkspace()))

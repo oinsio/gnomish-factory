@@ -110,9 +110,10 @@ final class CommandProcessRunner {
      *     or {@code null} if the process failed to start
      */
     @Nullable
-    CommandOutcome run(VerifyCheck.Command check, TaskExecutionEnvironment environment, @Nullable String findingsPath) {
+    CommandOutcome run(
+            VerifyCheck.Executor check, TaskExecutionEnvironment environment, @Nullable String findingsPath) {
         Map<String, String> env = findingsPath == null ? Map.of() : Map.of(FINDINGS_FILE_ENV_VAR, findingsPath);
-        return switch (core.run(environment, check.command(), env, checkTimeout)) {
+        return switch (core.run(environment, check.checkId(), env, checkTimeout)) {
             case CommandRunOutcome.NotStarted ignored -> null;
             case CommandRunOutcome.Exited exited ->
                 new CommandOutcome(
@@ -121,7 +122,7 @@ final class CommandProcessRunner {
                 log.warn(
                         OperatorEvent.COMMAND_CHECK_TIMED_OUT.head()
                                 + "command check timed out and its process tree was killed: check={}, elapsed={}, deadline={}",
-                        check.command(),
+                        check.checkId(),
                         timedOut.elapsed(),
                         checkTimeout);
                 yield new CommandOutcome(UNKNOWN_EXIT_CODE, timedOut.outputTail(), new ExecHandle.Wait.TimedOut());
@@ -130,7 +131,7 @@ final class CommandProcessRunner {
                 log.warn(
                         OperatorEvent.COMMAND_CHECK_INTERRUPTED.head()
                                 + "command check interrupted and its process tree was killed: check={}, elapsed={}",
-                        check.command(),
+                        check.checkId(),
                         interrupted.elapsed());
                 yield new CommandOutcome(
                         UNKNOWN_EXIT_CODE, interrupted.outputTail(), new ExecHandle.Wait.Interrupted());
@@ -143,7 +144,7 @@ final class CommandProcessRunner {
      * with no {@code GNOMISH_FINDINGS_FILE}.
      */
     @Nullable
-    CommandOutcome run(VerifyCheck.Command check, TaskExecutionEnvironment environment) {
+    CommandOutcome run(VerifyCheck.Executor check, TaskExecutionEnvironment environment) {
         return run(check, environment, null);
     }
 

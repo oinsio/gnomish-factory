@@ -24,7 +24,7 @@ class VerifyCheckMapperSpec extends Specification {
 
         then:
         errors.size() == 1
-        (checks[0] as VerifyCheck.External).timeoutClass() == VerifyCheck.TimeoutClass.QUALITY
+        (checks[0] as VerifyCheck.Executor).timeoutClass() == VerifyCheck.TimeoutClass.QUALITY
     }
 
     // FR13 (add-sandbox-core): an unrecognized verify-in still maps the command
@@ -41,7 +41,7 @@ class VerifyCheckMapperSpec extends Specification {
 
         then:
         errors.size() == 1
-        (checks[0] as VerifyCheck.Command).verifyIn() == VerifyCheck.VerifyIn.SAME_BOX
+        (checks[0] as VerifyCheck.Executor).verifyIn() == VerifyCheck.VerifyIn.SAME_BOX
     }
 
     // FR16 (add-sandbox-core): external pin paths are copied verbatim; a null
@@ -61,8 +61,8 @@ class VerifyCheckMapperSpec extends Specification {
 
         then:
         errors.isEmpty()
-        (withPins[0] as VerifyCheck.External).pinPaths() == ['a.yml', 'b.yml']
-        (without[0] as VerifyCheck.External).pinPaths() == []
+        (withPins[0] as VerifyCheck.Executor).pinPaths() == ['a.yml', 'b.yml']
+        (without[0] as VerifyCheck.Executor).pinPaths() == []
     }
 
     // FR13 (add-plugin-architecture), M4: a manifest written before providers
@@ -81,8 +81,8 @@ class VerifyCheckMapperSpec extends Specification {
 
         then:
         errors.isEmpty()
-        (checks[0] as VerifyCheck.External).provider() == 'github'
-        (checks[0] as VerifyCheck.External).params() == [:]
+        (checks[0] as VerifyCheck.Executor).provider() == 'github'
+        (checks[0] as VerifyCheck.Executor).params() == [:]
     }
 
     // FR7 (add-plugin-architecture): a declared provider is carried verbatim —
@@ -101,7 +101,7 @@ class VerifyCheckMapperSpec extends Specification {
 
         then: 'the mapper never grades the selection; it only records it'
         errors.isEmpty()
-        (checks[0] as VerifyCheck.External).provider() == 'unserved-provider'
-        (checks[0] as VerifyCheck.External).params() == [url: 'https://sonar/api']
+        (checks[0] as VerifyCheck.Executor).provider() == 'unserved-provider'
+        (checks[0] as VerifyCheck.Executor).params() == [url: 'https://sonar/api']
     }
 }

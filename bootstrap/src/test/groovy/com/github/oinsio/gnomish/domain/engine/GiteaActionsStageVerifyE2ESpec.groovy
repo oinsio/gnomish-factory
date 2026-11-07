@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckExternalClient
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
@@ -176,8 +178,8 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
                 new RecordingEventListener())
     }
 
-    private static VerifyCheck.External check() {
-        new VerifyCheck.External(CHECK_ID, 'github', Duration.ofSeconds(5), Duration.ofMinutes(8),
+    private static VerifyCheck.Executor check() {
+        VerifyChecks.external(CHECK_ID, 'github', Duration.ofSeconds(5), Duration.ofMinutes(8),
                 VerifyCheck.TimeoutClass.QUALITY)
     }
 

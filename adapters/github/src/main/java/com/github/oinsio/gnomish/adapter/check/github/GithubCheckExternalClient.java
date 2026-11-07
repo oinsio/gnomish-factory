@@ -63,7 +63,7 @@ public record GithubCheckExternalClient(
      *     CannotVerify, never a silent pass
      */
     @Override
-    public PollStatus poll(VerifyCheck.External check, Workspace workspace) {
+    public PollStatus poll(VerifyCheck.Executor check, Workspace workspace) {
         if (!(workspace instanceof AttemptCommitWorkspace attemptWorkspace)) {
             throw new IllegalArgumentException("GithubCheckExternalClient requires an AttemptCommitWorkspace, got: "
                     + (workspace == null ? "null" : workspace.getClass().getName()));

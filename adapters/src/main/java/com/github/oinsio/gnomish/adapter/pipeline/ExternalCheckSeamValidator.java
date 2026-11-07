@@ -29,6 +29,10 @@ import java.util.Map;
  * <p>Errors are located {@link ConfigError} data in stage-then-check order, never thrown, so they
  * aggregate with every other load problem in the loader's single pass (NFR-R1).
  *
+ * <p>A check is in scope when it is polled ({@code VerifyCheck.Executor#polled()}); it is looked up
+ * by {@code VerifyCheck.Executor#providerKey()}, the key the check SPI still registers its executor
+ * under, until the executor registry replaces it (FR1, UX2 of migrate-verify-to-executor-contract).
+ *
  * <p>Implements FR6, FR13, UX1 of add-plugin-architecture.
  */
 public final class ExternalCheckSeamValidator {
@@ -60,7 +64,7 @@ public final class ExternalCheckSeamValidator {
         String manifest = "stages/%s/stage.yaml".formatted(stage.name());
         List<VerifyCheck> checks = stage.verify();
         for (int index = 0; index < checks.size(); index++) {
-            if (checks.get(index) instanceof VerifyCheck.External external) {
+            if (checks.get(index) instanceof VerifyCheck.Executor external && external.polled()) {
                 validateExternal(manifest, index, external, checkProviders, errors);
             }
         }
@@ -75,18 +79,20 @@ public final class ExternalCheckSeamValidator {
     private static void validateExternal(
             String manifest,
             int index,
-            VerifyCheck.External external,
+            VerifyCheck.Executor external,
             Map<String, CheckParamsValidator> checkProviders,
             List<ConfigError> errors) {
-        CheckParamsValidator validator = checkProviders.get(external.provider());
+        CheckParamsValidator validator = checkProviders.get(external.providerKey());
+        boolean explicit = external.token() == VerifyCheck.Token.EXECUTOR;
         if (validator == null) {
             errors.add(new ConfigError(
                     manifest,
-                    "verify[%d].provider".formatted(index),
+                    "verify[%d].%s".formatted(index, explicit ? "executor" : "provider"),
                     "unknown check provider '%s'; discovered providers: %s"
-                            .formatted(external.provider(), checkProviders.keySet())));
+                            .formatted(external.providerKey(), checkProviders.keySet())));
             return;
         }
-        errors.addAll(validator.validate(manifest, "verify[%d].params".formatted(index), external.params()));
+        errors.addAll(validator.validate(
+                manifest, "verify[%d].%s".formatted(index, explicit ? "settings" : "params"), external.settings()));
     }
 }

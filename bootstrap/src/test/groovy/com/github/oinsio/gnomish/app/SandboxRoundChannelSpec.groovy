@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.agent.FreshJudgeEnvironments
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource
@@ -103,7 +105,7 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
         new SandboxCheckEnvironmentSource(new EnvironmentLease({
             -> box
         }, BRANCH, []), recording, BRANCH)
-        .acquire(new VerifyCheck.Command('make check', VerifyCheck.VerifyIn.FRESH_BOX), workspace)
+        .acquire(VerifyChecks.command('make check', VerifyCheck.VerifyIn.FRESH_BOX), workspace)
 
         then: 'both are pinned at the factory\'s resolution of the harvested tip'
         pins == [harvested, harvested]

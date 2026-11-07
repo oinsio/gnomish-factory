@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.command
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramStageExecutor
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Engine
@@ -89,7 +91,7 @@ final class CommandEngineHarness {
         try {
             new Engine().run(new PipelineDefinition('1', new AutonomyLimits(5), [
                 CommandFixtures.stage(settings, './gradlew build', [
-                    new VerifyCheck.Builtin('files_exist', [:])
+                    VerifyChecks.builtin('files_exist', [:])
                 ])
             ]),
             CommandFixtures.round().context(), initial, new FakeWorkspace(), ports)

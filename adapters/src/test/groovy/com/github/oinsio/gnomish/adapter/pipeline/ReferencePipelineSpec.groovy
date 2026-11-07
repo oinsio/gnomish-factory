@@ -89,7 +89,7 @@ class ReferencePipelineSpec extends Specification {
 
         and: 'a single builtin verify check with its plain-JDK params'
         plan.verify().size() == 1
-        def builtin = plan.verify()[0] as VerifyCheck.Builtin
+        def builtin = plan.verify()[0] as VerifyCheck.Executor
         builtin.name() == 'files_exist'
         builtin.params() == [paths: ['plan.md']]
 
@@ -137,21 +137,21 @@ class ReferencePipelineSpec extends Specification {
 
         expect: 'four checks, each mapped to its own sealed variant with order preserved'
         verify.size() == 4
-        verify[0] instanceof VerifyCheck.Builtin
-        verify[1] instanceof VerifyCheck.Command
-        verify[2] instanceof VerifyCheck.External
+        verify[0] instanceof VerifyCheck.Executor
+        verify[1] instanceof VerifyCheck.Executor
+        verify[2] instanceof VerifyCheck.Executor
         verify[3] instanceof VerifyCheck.Judge
 
         and: 'builtin: name + plain-JDK params'
-        def builtin = verify[0] as VerifyCheck.Builtin
+        def builtin = verify[0] as VerifyCheck.Executor
         builtin.name() == 'files_exist'
         builtin.params() == [paths: ['src']]
 
         and: 'command: the executable command line'
-        (verify[1] as VerifyCheck.Command).command() == './gradlew test'
+        (verify[1] as VerifyCheck.Executor).command() == './gradlew test'
 
         and: 'external: non-blank id and durations parsed from the short forms, interval <= timeout'
-        def external = verify[2] as VerifyCheck.External
+        def external = verify[2] as VerifyCheck.Executor
         external.checkId() == 'ci/build'
         external.interval() == Duration.ofSeconds(30)
         external.timeout() == Duration.ofMinutes(5)
@@ -195,6 +195,6 @@ class ReferencePipelineSpec extends Specification {
 
         and: 'a single command verify check'
         review.verify().size() == 1
-        (review.verify()[0] as VerifyCheck.Command).command() == 'echo reviewed'
+        (review.verify()[0] as VerifyCheck.Executor).command() == 'echo reviewed'
     }
 }

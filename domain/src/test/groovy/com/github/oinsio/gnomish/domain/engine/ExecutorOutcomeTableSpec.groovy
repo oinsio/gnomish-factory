@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
@@ -49,7 +51,7 @@ class ExecutorOutcomeTableSpec extends Specification {
     def run() {
         def stage = new StageDefinition('build', 'purpose', [], [], new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ], new AutonomyLimits(1), AdvancementMode.AUTO)
         def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
                 new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(new VirtualClock()), RoundIdentity.inPlace())

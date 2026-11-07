@@ -84,7 +84,7 @@ class PluginStandInCheckClientFactory implements CheckClientFactory {
 
     @Override
     ExternalCheckPinContributor pinContributor() {
-        { VerifyCheck.External check -> ['stand-in/' + check.checkId()] as Set }
+        { VerifyCheck.Executor check -> ['stand-in/' + check.checkId()] as Set }
     }
 
     /** The stand-in's client: reports whatever status the factory was scripted with. */
@@ -97,7 +97,7 @@ class PluginStandInCheckClientFactory implements CheckClientFactory {
         }
 
         @Override
-        PollStatus poll(VerifyCheck.External check, Workspace workspace) {
+        PollStatus poll(VerifyCheck.Executor check, Workspace workspace) {
             scripted
         }
     }

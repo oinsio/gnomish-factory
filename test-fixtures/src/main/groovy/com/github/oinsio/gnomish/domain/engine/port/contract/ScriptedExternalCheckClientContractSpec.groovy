@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine.port.contract
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
@@ -22,7 +24,7 @@ class ScriptedExternalCheckClientContractSpec extends ExternalCheckClientContrac
     @Override
     protected Optional<PollStatus> arrange(PollVariant variant) {
         def client = new ScriptedExternalCheckClient([scriptedStatus(variant)])
-        def check = new VerifyCheck.External('ci', 'scripted', Duration.ofSeconds(1), Duration.ofSeconds(10), VerifyCheck.TimeoutClass.QUALITY)
+        def check = VerifyChecks.external('ci', 'scripted', Duration.ofSeconds(1), Duration.ofSeconds(10), VerifyCheck.TimeoutClass.QUALITY)
         Optional.of(client.poll(check, new FakeWorkspace()))
     }
 }
