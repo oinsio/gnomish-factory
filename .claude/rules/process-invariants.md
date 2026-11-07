@@ -134,6 +134,13 @@ not started" is a silent no-op.
 
 Modules expose an explicit public API; never import from internal files of a sibling module. (Concrete mechanism depends on the tech stack — to be refined once the stack is chosen.)
 
+## A rule has one owner
+
+A rule's content lives in one file under `.claude/rules/`. A command, a skill, `CLAUDE.md` or
+another rule cites it by file and section name and never restates its content, not even in a
+parenthesis: a restatement is a copy that goes stale when the rule changes (the rule-of-three
+bar, retired 2026-11-06, was spelled in five files).
+
 ## Change naming
 
 Use `kebab-case-descriptive` for change names: `add-tracker-port`, `fix-claim-race`, `refactor-stage-engine`. Never use generic names like `update`, `changes`, `wip`.

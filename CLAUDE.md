@@ -48,7 +48,7 @@ Active changes: `openspec/changes/`. Archived: `openspec/changes/archive/` (immu
 | `crash-consistency.md`  | multi-step transitions        | Kill windows, shapes, recovery owners, ordering checklist  |
 | `lock-scope.md`         | every monitor / lock          | No blocking call under a state lock; three-phase shape, exceptions |
 | `daemon-loops.md`       | every long-lived thread       | `SupervisedLoop` only; exemptions, order/wait/restart policy, the gate |
-| `manual-sync-pairs.md`  | hand-synced implementations   | Declared pairs, sync markers, rule-of-three extraction     |
+| `manual-sync-pairs.md`  | hand-synced implementations   | Preference order, declaration marker, pair registry        |
 | `implementation.md`     | global                        | Single-owner mechanisms: consumer list, old-way sweep, DoD |
 | `verification-scope.md`  | task-by-task implementation   | Per-task checks (named specs, scoped PIT); full `check` once at the end |
 | `spec-mismatch.md`      | code cannot meet the spec     | Five answers before the question; no scenario narrowed as a fix; `/architect` first |

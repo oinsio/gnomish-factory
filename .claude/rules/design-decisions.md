@@ -72,7 +72,7 @@ One decision category is required, not optional. If the change adds a second imp
 of a rule/capability that already exists for another execution mode, layer, or medium — or
 touches either end of a pair declared in `manual-sync-pairs.md` — `design.md` MUST record
 the decision: **shared abstraction or declared pair**, chosen by that rule's preference
-order (a third implementation always extracts the abstraction), with rationale and the
+order, with rationale and the
 rejected alternative. A change with no such surface states it explicitly:
 `Sync surfaces: none — this change adds no parallel implementation and touches no declared
 pair.` Silence is a format violation — the explicit "none" is what makes the question
