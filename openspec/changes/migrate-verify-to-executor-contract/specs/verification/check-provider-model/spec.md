@@ -5,7 +5,8 @@
 ### Requirement: Check port carries a provider discriminator and a discovered registry
 **Reason**: Providers become named executors in the executor registry of
 `define-executor-contract`; discovery by `ServiceLoader` is replaced by built-in registration
-and law-declared external programs.
+and law-declared external programs. The `github-actions` built-in is core's own, outside the
+github vendor bundle, which keeps the tracker only (FR13).
 **Migration**: `provider: github` → executor `github-actions`; `provider: http` → executor
 `http`; a third-party provider becomes an external verdict program.
 
@@ -26,8 +27,8 @@ law, the same mechanism stages use.
 **Migration**: declare the variable names in describe; grant them in the law declaration.
 
 ### Requirement: The check SPI carries the adapter pin-contribution hook
-**Reason**: Pin contribution becomes a describe field (`pinPaths` contributed per check).
-**Migration**: the `github-actions` built-in contributes the workflow file through describe.
+**Reason**: Pin contribution becomes the static describe flag `checkIdIsPinnedPath`; the engine's pin decorator adds the check's `checkId` for every executor declaring it.
+**Migration**: the `github-actions` built-in declares the flag; the workflow file (the `checkId`) stays pinned with no manifest edit.
 
 ### Requirement: Check provider is selected per-check in the stage manifest
 **Reason**: Selection becomes executor-name based (sugar tokens or `executor:`), specified in

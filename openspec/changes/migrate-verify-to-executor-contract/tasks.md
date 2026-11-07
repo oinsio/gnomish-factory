@@ -36,27 +36,50 @@
 
 ## 3. Built-in verdict executors
 
+- [ ] 3.0 Leaf `:httpegress` (FR15, D16): move `EgressAllowlist`, `GuardedHttpCheckExchange`,
+  `JdkHttpCheckExchange`, `EgressRefusedException` out of `:adapters` (`adapter.check.http`) into
+  the new JDK-only leaf, re-point `HttpExternalCheckClient`; architecture spec in `:bootstrap`
+  asserting `HttpClient.newBuilder(` / `newHttpClient(` appear in production code only inside the
+  leaf (allowlist by file, asserted reached); existing egress specs re-pointed
+- [ ] 3.0a Library `:githubapi` (FR14, D15): move the bundle's `adapter.github` package
+  (`GithubHttpClient`, `GithubCredential`, `GithubConditionalRequestCache`, `GithubRateLimit`,
+  `GithubRetryConfig`, exceptions) into the new module depending on `:domain`, `:httpegress`,
+  resilience4j, slf4j — never on `:executor-contract`, `:application` or `:adapters`; build
+  `GithubHttpClient` over the guarded exchange; add `:githubapi` to the bundle's
+  `layering.allowedProjects` with the reason; re-point the tracker's imports; `GithubAdapterBoundarySpec`
+  and `GithubPluginPackagingSpec` green; grep `class GithubHttpClient` → one hit (M6)
 - [ ] 3.1 `files-exist`: wrap `FilesExistCheckRunner` as an `Executor` (describe: role
   `verdict`, settings schema for the path list) emitting SARIF; existing specs re-pointed (FR1)
 - [ ] 3.2 `shell`: build on the shared command-run core from `add-command-executor`; report
   exit as status, read the findings path through `ResultFileReader`, normalize the legacy
   `{"findings":[...]}` to SARIF; specs: legacy file normalized, SARIF passthrough, exit code
   carries no verdict, existing bound/kill specs green (FR5)
-- [ ] 3.3 `github-actions`: move `GithubCheckExternalClient` + fetchers into an `Executor` with
-  `poll`; describe carries the token name, settings schema (former
-  subsection), pin contribution; its connection (base URL, token name) is read from the
-  operator's `factory.executors.github-actions` subsection, inline or by `connection:` profile
-  (NFR-S2); WireMock specs re-pointed unchanged (FR6, D4)
+- [ ] 3.3 `github-actions`: move `GithubCheckExternalClient` + fetchers out of the bundle into the
+  new core-side module `adapters/scm` (depends on `:githubapi`, `:executor-contract`, `:domain`)
+  as an `Executor` with `poll`; describe carries the token name, settings schema (former
+  subsection) and `checkIdIsPinnedPath = true`; its connection (base URL, token name) is read
+  from the operator's `factory.executors.github-actions` subsection, inline or by `connection:`
+  profile (NFR-S2); WireMock specs re-pointed unchanged; the bundle's `adapter.check.github`
+  package and its `META-INF/services` check entry deleted (FR6, FR13, D4, D17)
+- [ ] 3.3a Narrow `GithubPluginAbsenceSpec` (M5): the source gate's regex covers references to
+  the bundle's remaining package (`adapter.tracker.github`) outside `adapters/github/`, not
+  `\bGithub[A-Z]` names; the registry feature asserts the tracker registry loses `github` while
+  `ExecutorRegistry` still resolves `github-actions` and `scm-status` with the bundle hidden;
+  `bootstrap/build.gradle`'s `runtimeOnly` comment restated for the tracker
 - [ ] 3.4 `http`: same for `HttpExternalCheckClient` (conditions, run-context interpolation,
   egress refusal); specs re-pointed (FR6)
-- [ ] 3.5 `scm-status`: new built-in reading GitHub Checks + Statuses and Gitea statuses on the
-  attempt SHA; latest-per-context, expected list, SHA verification, rate-limit back-off hint;
+- [ ] 3.5 `scm-status`: new built-in in `adapters/scm` over `:githubapi`, reading GitHub Checks +
+  Statuses and Gitea statuses on the attempt SHA; latest-per-context, expected list, SHA verification, rate-limit back-off hint;
   WireMock specs for each scenario and `ScmStatusShaPinningSpec`; its connection from
   `factory.executors.scm-status`; one feature per scenario of "A credentialed built-in verdict
   executor is connected by operator configuration", markers included (FR4, FR9, NFR-R2, NFR-S2,
   D3, D9)
-- [ ] 3.6 Register the five built-ins in `ExecutorRegistry`; conformance kit run against each
-  as a spec (FR1, FR8); each built-in's describe declares `reportsUsage = true` and its result
+- [ ] 3.6 Register the five built-ins in `ExecutorRegistry` per D18: the registry's value becomes
+  the contract's `Executor`, stage dispatch wraps into `StageExecutor` at resolution, the
+  built-ins are handed in by `ExecutorAdapterSelector` as typed parameters of `adapters/scm`,
+  `adapters/check` and `adapters/agent`, and the law-declaration refusal covers all six built-in
+  names (`ExecutorRegistryOwnerSpec` extended); conformance kit run against each as a spec (FR1,
+  FR8, FR13); each built-in's describe declares `reportsUsage = true` and its result
   carries usage `REPORTED` with an empty per-model map; a `UsageFold` spec: a task whose checks
   are the five built-ins stays `complete`, one feature per scenario of "Built-in verdict
   executors report a known zero usage", markers included (NFR-C1, D13)
@@ -123,15 +146,25 @@
 
 - [ ] 5.1 `VerifyOrchestrator` resolves each check's executor through `ExecutorRegistry` and
   runs it through `PendingPoll`; `PinCheckedExternalCheckClient` becomes a pin decorator over
-  `Executor` for checks with pin paths; ordered fail-fast specs green (FR1, FR2, D8)
+  `Executor` whose pin set is the law's `pinPaths` ∪ `checkId` when the executor's describe
+  declares `checkIdIsPinnedPath` (D17; `GithubCheckPinPaths` deleted; `PinDecoratorSpec`
+  data-driven over the flag, one feature per scenario of the MODIFIED pin requirements, markers
+  included); ordered fail-fast specs green (FR1, FR2, FR16, D8)
+- [ ] 5.1a Wire contract: add `checkIdIsPinnedPath` (boolean, default false) to the describe
+  schema and `Describe`, with its round-trip spec and the conformance kit reading it; one feature
+  per scenario of the `executor/wire-contract` ADDED requirement "A describe may pin the check's
+  id", markers included (FR16, D17)
 - [ ] 5.2 Remove `BuiltinCheckRunner`, `CommandCheckRunner`, `ExternalCheckClient` from
   `EnginePorts` and the domain ports package; delete `CheckClientDiscovery`,
   `CheckProviderSeam`, `ProviderDispatchingExternalCheckClient`, `CheckClientConfiguration`
   and the `CheckEquipment` registry fields; `ServiceLoader` grep → tracker and sandbox-binding
   discovery only (G1, M1, D9)
-- [ ] 5.3 Fresh-box credential delivery: `SandboxCheckEnvironmentSource.freshBox` takes the
-  executor's declared hosts as the egress set and its credential names as the only
-  credential layer; extend `ProgramCredentialDeliverySpec` with a verdict check (NFR-S1, D6)
+- [ ] 5.3 Fresh-box credential delivery for `program` verdict executors:
+  `SandboxCheckEnvironmentSource.freshBox` takes the executor's declared hosts as the egress set
+  and its credential names as the only credential layer; a credentialed built-in gets no box and
+  no box credential — its token reaches only the in-process client under the `:httpegress`
+  allowlist of its declared hosts; extend `ProgramCredentialDeliverySpec` with a program verdict
+  check and a built-in verdict check (token absent from every box) (NFR-S1, D6, D16)
 - [ ] 5.4 Describe preflight, check use site (carried from NG1 of `define-executor-contract`):
   add the check use site to `DescribeAgreement` — a check needs role `verdict` — so a check
   whose executor's describe lists only `effect` is refused with a located error naming the
@@ -166,6 +199,20 @@
   the GitHub check specs to the re-pointed WireMock specs of 3.3, and
   `PinCheckedExternalCheckClientSpec`'s and `HttpCheckClientFactorySpec`'s to the pin-decorator
   spec of 5.1 — so no kept scenario is left without a marker.
+
+- [ ] 6.3 Plugin specs and docs for the tracker-only bundle (FR13, FR14): deltas
+  `plugin/github-plugin`, `plugin/plugin-discovery`, `plugin/plugin-api-contract` (vendor bundle
+  scenario) as written in `specs/`; `PluginReadyPortCriterionSpec` and `DiscoveredRegistryOnlySpec`
+  restated for the tracker port; glossary: "Vendor bundle" (tracker only), "GitHub API library"
+  (`:githubapi`), "HTTP egress leaf" (`:httpegress`), "Built-in executor" entry gains "named by
+  core; a bundled jar's provider is not a built-in"; `docs/community-plugins.md` and the adapter
+  author guide say the tracker is the pluginizable port
+- [ ] 6.4 Amend ADR 0020 (D4, D16): decision 1 defines a built-in executor as compiled into and
+  named by core and states that "distribution is not mechanism" governs tracker plugins only;
+  the rejected alternative "everything is a process" loses the words "in-process egress control
+  of the HTTP client for the SCM built-ins" in favour of the `:httpegress` allowlist every
+  built-in's HTTP passes (the GitHub client had none before this change); the amendment names
+  the escalation of task #121 (2026-11-06) as provenance
 
 ## 7. Integration
 

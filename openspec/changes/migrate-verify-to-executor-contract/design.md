@@ -63,11 +63,29 @@ without per-CI code; expected contexts are the only cure for "pending forever". 
 rejected:* folding it into the GitHub tracker adapter — ties CI reading to the issue tracker,
 wrong under Jira + GitHub.
 
-**D4 — `github-actions` and `http` move as built-ins with unchanged behavior.** (FR6.) Their
-provider classes become `Executor` implementations in `adapters/github` and `adapters/check`;
-subsection and params validators become describe schemas; pin contribution becomes a
-describe field. *Alternative rejected:* dropping `github-actions` for `scm-status` now —
-job-log findings are not available from check-run output (proposal Q2).
+**D4 — `github-actions` and `http` move as built-ins with unchanged behavior; `github-actions`
+leaves the vendor bundle.** (FR6, FR13; amended 2026-11-06 by the human decision on the
+escalation of task #121, after a decision review under `.claude/rules/spec-mismatch.md`.) The
+`http` provider becomes the `http` built-in in `adapters/check`. The GitHub provider becomes the
+`github-actions` built-in in the new core-side module `adapters/scm`, beside `scm-status` (D3),
+registered by core like `command`; the vendor bundle `adapters/github` keeps the tracker only.
+Subsection and params validators become describe schemas; the pin contribution becomes the
+describe flag of D17. *Why the bundle cannot keep it:* ADR 0020 defines a built-in as compiled
+into and named by core, while the `plugin/github-plugin` capability defined the bundle as
+discovered-only with no privileged shortcut — one component under two incompatible meanings of
+"built-in". The premise behind the bundle's promise, that core knows nothing of GitHub, is
+already given up by D3 (`scm-status` reads GitHub Checks from core) and by
+`add-sandbox-gha-executor` (the sandbox port is first-party). *Alternative rejected — a
+ServiceLoader SPI for executors contributed by the bundle:* reverses ADR 0020 decision 1, makes
+the `Executor` type a published Java surface under japicmp (evolution by signature, which the
+contract exists to avoid), adds a third registry source with a precedence rule, and keeps two
+equivalent contracts (Java and wire) in step by hand. *Alternative rejected — `github-actions` as
+an external reference program:* the best trust posture (Tekton's custom tasks, Terraform's
+single in-process provider), but the sandbox base image carries no JDK and a shell
+reimplementation of job-log parsing is weaker than the client that exists; pickup condition: a
+self-contained distribution of the program (native image or jlink) or a runtime guaranteed by
+the box image contract. *Alternative zero rejected — no `github-actions`, `scm-status` only:*
+job-log findings are not available from check-run output (proposal Q2); revisit when they are.
 
 **D5 — Verdict derivation is one engine component.** (FR7, M2.) `VerdictDerivation(answer,
 threshold) → Verdict` in `domain/engine`; built-ins emit SARIF only; the `shell` built-in
@@ -131,6 +149,10 @@ judged when it ends", scenario titles kept, each with a scenario for the adopted
 
 **D8 — Sync surfaces.** Scout: `grep -rn "Kept in sync with"`, registry, and domain-term
 search for "poll", "verdict", "findings file".
+- *Pairs avoided by extraction (rule of two, `manual-sync-pairs.md`, 2026-11-06):* the GitHub
+  HTTP core, which D4 would have left in the bundle while `github-actions` and `scm-status`
+  needed it in core → one library, D15; the HTTP egress allowlist, which `http` holds in
+  `:adapters` while the GitHub client needs it → one leaf, D16. Neither is a declared pair.
 - *Touched pairs:* none of the registry pairs. `PinCheckedExternalCheckClient` → becomes a
   decorator over `Executor` for checks with pin paths (same single guard, no twin).
 - *Dissolved parallel implementations:* three verdict-construction sites (`ShellCommandCheckRunner`,
@@ -154,9 +176,56 @@ search for "poll", "verdict", "findings file".
 |------------------------------------------------------------------------------------------|-----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `PendingPoll` (`domain/engine`)                                                          | `PendingPollRecord` (key, check identity, attempt, since) | `VerifyOrchestrator` (all verdict checks), `StageAttemptLoop` resume path, state mappers; the key-rotation commit (D12) is written by the owner, never by a check | `ExternalPolling` deleted; `GithubCheckExternalClient` run-listing loop reduced to one observation per `poll`                                                                                                                                                                                                                   | parameter type (`PendingKey`, no `String`); kill-point specs D7; grep gate `Thread.sleep\|sleeper.sleep` in `adapters/check` and `adapters/github/check` → zero hits |
 | `VerdictDerivation` (`domain/engine`)                                                    | `Verdict` from `Answer.Verdict` + `Threshold`             | `VerifyOrchestrator`, `JudgeVoting` (judge votes already SARIF-shaped? no — exempt until `extract-agent-round-runner`, named)                                     | `new Verdict.Fail/Pass/CannotVerify(` in `ShellCommandCheckRunner`, `FilesExistCheckRunner`, `ExternalPolling`, `VerifyOrchestrator:153`, `HttpExternalCheckClient`, `GithubCheckExternalClient` deleted; exempt: `JudgeVerdictExtractor`, `JudgeRoundExecution`, `JudgeCriteriaPreflight`, `StateJsonMapper` (deserialization) | grep gate `new Verdict\.` → derivation + state mapper + judge exemptions only; data-driven threshold spec                                                            |
-| `ExecutorRegistry` (from the contract)                                                   | `Executor` by `ExecutorName`                              | `VerifyOrchestrator` for every check (new), stage dispatch (existing)                                                                                             | `CheckClientDiscovery`, `CheckProviderSeam`, `ProviderDispatchingExternalCheckClient`, `CheckClientConfiguration`, `CheckEquipment` registry fields deleted; `META-INF/services/...CheckClientFactory` entries deleted                                                                                                          | `CheckClientFactory` type gone (compile); `ArchUnit`/grep: no `ServiceLoader.load(` outside tracker and sandbox-binding discovery                                    |
+| `ExecutorRegistry` (from the contract; D18)                                              | `Executor` by `ExecutorName`                              | `VerifyOrchestrator` for every check (new), stage dispatch (existing, wrapping into `StageExecutor` at resolution)                                                 | `CheckClientDiscovery`, `CheckProviderSeam`, `ProviderDispatchingExternalCheckClient`, `CheckClientConfiguration`, `CheckEquipment` registry fields deleted; `META-INF/services/...CheckClientFactory` entries deleted                                                                                                          | `CheckClientFactory` type gone (compile); `ArchUnit`/grep: no `ServiceLoader.load(` outside tracker and sandbox-binding discovery                                    |
 | `scm-status` built-in                                                                    | `ContextVerdicts` on `AttemptSha`                         | `VerifyOrchestrator` via registry                                                                                                                                 | none (new); identity spec: contexts read equal those the SCM holds for the attempt SHA (`ScmStatusShaPinningSpec`, WireMock)                                                                                                                                                                                                    | `AttemptSha` value type on the read; `expected` non-empty at load                                                                                                    |
+| `:githubapi` (D15)                                                                       | the GitHub HTTP core (one client, credential, cache, rate-limit, retry) | the bundle's tracker; `github-actions` and `scm-status` in `adapters/scm`; `add-sandbox-gha-executor` later                                                 | the bundle's `adapter.github` package deleted; `GithubCheckExternalClient`'s own client construction routed through the library                                                                                                                                                                                                  | grep: `class GithubHttpClient` in one module (M6); the bundle's layering allowlist; `GithubPluginAbsenceSpec` narrowed to `adapter.tracker.github` references outside the bundle    |
+| `:httpegress` (D16)                                                                      | `EgressAllowlist`, the guarded exchange                   | `http` built-in, `GithubHttpClient`                                                                                                                               | the `adapter.check.http` egress classes moved, not copied; `GithubHttpClient`'s direct `HttpClient` use replaced by the guarded exchange                                                                                                                                                                                       | architecture spec: `HttpClient.newBuilder(`/`newHttpClient(` only in the leaf (allowlist by file, asserted reached)                                                  |
+| Pin set of a check (D17)                                                                 | law `pinPaths` ∪ `checkId` when `checkIdIsPinnedPath`     | the pin decorator of 5.1                                                                                                                                          | `ExternalCheckPinContributor`, `GithubCheckPinPaths` deleted                                                                                                                                                                                                                                                                     | the describe field is the only per-executor input; `PinDecoratorSpec` data-driven over the flag                                                                      |
 | Credential delivery for verdict executors (`ChildEnvAllowlist` layer, from the contract) | `ExecutorCredentialNames`                                 | `SandboxCheckEnvironmentSource.freshBox`, `HostCheckEnvironmentSource`                                                                                            | `CheckProviderSeam.credentialEnvVars` union deleted; `CheckEquipment.credentialNames` deleted                                                                                                                                                                                                                                   | `ProgramCredentialDeliverySpec` extended with a verdict check: token in fresh box, absent in round box                                                               |
+
+**D15 — The GitHub HTTP core is one library module, `:githubapi`.** (FR14.) The bundle's
+`adapter.github` package — `GithubHttpClient`, `GithubCredential`,
+`GithubConditionalRequestCache`, `GithubRateLimit`, `GithubRetryConfig`, the exceptions — moves
+to a first-party library module that depends on `:domain`, `:httpegress`, resilience4j and
+slf4j, and on nothing of `:executor-contract`, `:application` or `:adapters`. Consumers: the
+bundle's tracker (its layering allowlist gains `:githubapi`), the `adapters/scm` built-ins, and
+`add-sandbox-gha-executor` when it lands. It is not `gnomish-plugin-api`: the api stays free of
+GitHub types (the `github-plugin` scenario "The plugin's private core is not in the public api"
+holds as "not in the api"), and the library is not a compatibility surface for third parties —
+its consumers are first-party, and japicmp does not baseline it. *Alternative rejected — keep
+the core private to the bundle and give the built-in its own client:* a hand-synced pair of some
+550 lines whose third consumer is already named. *Alternative rejected — publish the core
+through `gnomish-plugin-api`:* grows the api by a vendor's HTTP client for no third-party need
+and contradicts the api's thinness requirement.
+
+**D16 — The HTTP egress allowlist is one leaf module, `:httpegress`.** (FR15.) `EgressAllowlist`,
+`GuardedHttpCheckExchange`, `JdkHttpCheckExchange` and `EgressRefusedException` move from
+`:adapters`'s `adapter.check.http` to a JDK-only leaf; the `http` built-in keeps using them,
+and `GithubHttpClient` is built over the guarded exchange, so every in-process HTTP call of a
+built-in verdict executor passes the allowlist of the hosts its describe declares. This closes a
+false premise of `define-executor-contract` D1(b) and ADR 0020, which kept built-ins in process
+for "in-process egress control" the GitHub client did not have. Enforcement: an architecture spec
+asserts that no production class outside the leaf constructs a `java.net.http.HttpClient`
+except the leaf's own exchange (allowlist by file, asserted reached).
+
+**D17 — The pin contribution is a static describe flag.** (FR6, FR16.) `Describe` is one answer
+per executor and cannot name a per-check path, while the former `pinContributor()` added the
+check's `checkId`, which for `github-actions` is the workflow file. The contract gains a boolean
+describe field, `checkIdIsPinnedPath`; the pin decorator of D8 unions the law's `pinPaths` with
+the `checkId` when the flag is set. `github-actions` declares it, the other built-ins do not, a
+program may. *Alternative rejected — law-declared pins only:* every existing pipeline loses the
+workflow pin silently until its author edits the manifest. *Alternative rejected — a per-check
+hook on the mirror interface:* a Java-only member no program can implement, the asymmetry
+D1 of `define-executor-contract` forbids.
+
+**D18 — The registry holds the contract's `Executor`; stage dispatch wraps.** (FR1, FR13.) As
+built by `add-command-executor`, `ExecutorRegistry` holds `StageExecutor` (a round wrapper) and
+takes the `command` factory as a typed parameter. A verdict executor is not a stage round, so
+the registry's value becomes the contract's `Executor` for every name — law-declared programs,
+`command`, and the five verdict built-ins, handed in by `ExecutorAdapterSelector` as typed
+parameters of core-side modules (`adapters/scm`, `adapters/check`, `adapters/agent`) — and stage
+dispatch wraps the resolved `Executor` into its `StageExecutor` at resolution. The refusal of a
+law declaration under a built-in's name covers all six built-in names.
 
 **D10 — Lock scope.** No lock added. `PendingPoll` sleeps on the injected `Sleeper` with
 nothing held, as `ExternalPolling` does today.
@@ -209,6 +278,12 @@ rejected it for the `command` built-in on the same grounds.
   the receipt (crash-consistency rule 7); the ledger logs the re-drive.
 - [`github-actions` and `http` regress during the move] → their existing WireMock specs are
   kept and re-pointed at the built-ins (behavior-preserving extraction).
+- [A GitHub token lives in the factory process for the built-ins] → accepted, the posture the
+  tracker already has (`github-plugin` trust note) and `scm-status` needs regardless; the
+  in-process allowlist of D16 bounds where the client may send it.
+- [Core grows a vendor integration that is costly to extract later (Jenkins' detached plugins)]
+  → accepted with the pickup condition of D4's external-program alternative recorded; the
+  library of D15 keeps the integration in one place to move.
 - [Removing the check SPI breaks an unknown third party] → none registered in
   `docs/community-plugins.md`; the api's major version is bumped per its semver requirement.
 - [`expected` lists go stale as workflows are renamed] → located error at load is impossible

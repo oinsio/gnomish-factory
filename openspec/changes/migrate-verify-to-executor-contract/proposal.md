@@ -46,6 +46,15 @@ by the engine and persisted on the branch.
   removed from `EnginePorts`; `judge` keeps `JudgeVoter` until `extract-agent-round-runner`.
 - **MODIFIED**: a verdict source scoped by branch (code scanning, Sonar) must pin the attempt
   SHA; `absent after timeout` of an expected context is an infrastructure failure.
+- **MODIFIED** (human decision 2026-11-06, escalation of task #121): `github-actions` is a
+  core-side built-in, not a provider of the github vendor bundle; the bundle keeps the tracker
+  only, and the `plugin/github-plugin` and `plugin/plugin-discovery` promises are restated for
+  the tracker port. The GitHub HTTP core the tracker and the built-in share leaves the bundle
+  for a first-party library module, and the HTTP egress allowlist leaves `:adapters` for a leaf
+  both HTTP built-ins and that library use (rule of two, `manual-sync-pairs.md`).
+- **ADDED** (wire contract): a describe field by which an executor declares that a check's
+  `checkId` names a repository file to pin, so the pin set stays computable from a static
+  describe and the law.
 
 ## Goals
 
@@ -106,7 +115,7 @@ by the engine and persisted on the branch.
   normalizing to SARIF; its exit code is reported as status, never as a verdict.
 - FR6: The `github-actions` and `http` built-ins SHALL preserve their current observable
   behavior (workflow-run lookup by commit with job-log findings; status-code probe with
-  conditions) as contract executors with `poll`, including pin contribution.
+  conditions) as contract executors with `poll`, including the pin of the workflow file.
 - FR7: Verdict pass/fail SHALL be derived in one engine component from SARIF levels against
   the check's threshold (default `error`); executors SHALL construct no verdict.
 - FR8: `CheckClientFactory` and its companion types SHALL be removed from
@@ -125,6 +134,21 @@ by the engine and persisted on the branch.
 - FR12: The conformance kit SHALL carry a re-poll case pinning FR11 for any candidate declaring
   `poll`; the reference executor SHALL pass it and the misbehaving fake SHALL have a preset that
   breaks it.
+- FR13: The `github-actions` built-in SHALL be compiled into the factory outside the github
+  vendor bundle and registered by core like every built-in; the vendor bundle SHALL carry the
+  github tracker only, and removing it SHALL disable the github tracker with no core source
+  change while `github-actions` and `scm-status` stay available.
+- FR14: The GitHub HTTP core (client, credential header, conditional-request cache, rate-limit
+  classification, retry, exceptions) SHALL exist once, in a first-party library module that is
+  not `gnomish-plugin-api`, consumed by the vendor bundle's tracker and by the core-side
+  built-ins; no second GitHub HTTP client SHALL exist in the build.
+- FR15: The HTTP egress allowlist and the guarded exchange SHALL exist once, in a leaf module,
+  and every in-process HTTP call of a built-in verdict executor — `http`, `github-actions`,
+  `scm-status` — SHALL go through it.
+- FR16: An executor's describe MAY declare that a check's `checkId` names a repository file to
+  pin; the pin-check guard SHALL union that file with the law-declared pin paths. The
+  `github-actions` built-in SHALL declare it, so the workflow file stays pinned with no manifest
+  edit.
 
 ### Non-Functional Reliability
 
@@ -146,9 +170,11 @@ by the engine and persisted on the branch.
 
 ### Non-Functional Security
 
-- NFR-S1: A verdict executor declaring credentials SHALL run in `FRESH_BOX` with its own egress
-  allowlist derived from its describe; a `SAME_BOX` declaration on such a check is a located
-  load error.
+- NFR-S1: A `program` verdict executor declaring credentials SHALL run in `FRESH_BOX` with its
+  own egress allowlist derived from its describe; a `SAME_BOX` declaration on such a check is a
+  located load error. A built-in verdict executor declaring credentials runs in the factory
+  process under the in-process egress allowlist of its declared hosts (FR15); its token enters
+  no box, round or fresh.
 - NFR-S2: `scm-status` and `github-actions` resolve their token through the secrets port by the
   credential name of the connection the operator configures for the executor
   (`factory.executors.<name>`, inline or by a `factory.connections` profile), never through the
@@ -174,6 +200,11 @@ by the engine and persisted on the branch.
 - M3: The SonarQube-shaped reference verdict program (fake server) passes end to end with a
   kill between `start` and the first poll, resumed by a second instance.
 - M4: `gnomish-plugin-api` contains no check SPI type (grep).
+- M5: `adapters/github` holds no check or verdict code and no HTTP core; with its service
+  registrations hidden the factory starts, the github tracker is absent, `github-actions` and
+  `scm-status` resolve (the narrowed `GithubPluginAbsenceSpec`).
+- M6: exactly one GitHub HTTP client class and one egress allowlist class exist in the build
+  (grep).
 
 ## Open Questions
 
@@ -213,14 +244,37 @@ by the engine and persisted on the branch.
 - `verification/github-external-check`: MODIFIED "Polling is stateless and takeover-safe" — the
   persisted pending key is the one poll state; the attempt commit comes with the request.
 - `verification/verification-hardening`: MODIFIED "Pin-check guards external checks" — the guard
-  is a pin decorator over the check's verdict executor, before its first `start`.
+  is a pin decorator over the check's verdict executor, before its first `start`; the executor's
+  contribution is the `checkId` when its describe declares it (FR16).
+- `verification/github-external-check`: MODIFIED "The adapter contributes its workflow file to
+  the pin set" (through the describe flag) and "Adapter is constructed from factory
+  configuration" (a core built-in connected by `factory.executors.github-actions`).
+- `plugin/github-plugin`: MODIFIED — the bundle is the tracker; the shared HTTP core is a
+  first-party library, not the api and not private to the bundle (FR13, FR14).
+- `plugin/plugin-discovery`: MODIFIED — ServiceLoader discovery and the four-point criterion
+  are stated for the tracker port (FR13).
+- `plugin/plugin-api-contract`: MODIFIED "The first-party vendor bundle satisfies the same
+  constraint" — the bundle may depend on the GitHub library beside the api (FR14).
+- `pipeline-config`: MODIFIED "Local sanity validation of mechanism and check configs" — the
+  unknown-provider and defaulted-provider scenarios are stated against the executor registry.
+- `executor/wire-contract`: ADDED — the describe field of FR16.
 
 ## Impact
 
 - `domain/engine`: `VerifyOrchestrator`, `ExternalPolling`, `EnginePorts`; new `VerdictDerivation`,
-  `PendingPollRecord` in state. `adapters/check`, `adapters/github/check`: become built-ins.
+  `PendingPollRecord` in state. `adapters/check` becomes the `http` built-in; `adapters/github/check`
+  moves out of the bundle into the new core-side module `adapters/scm` with `scm-status`.
+- New modules (design D15, D16): the leaf `:httpegress` (from `:adapters`'s `adapter.check.http`
+  egress classes) and the library `:githubapi` (from the bundle's `adapter.github` package); the
+  bundle's layering allowlist gains `:githubapi`; `add-sandbox-gha-executor` is the library's
+  third consumer and adds no client of its own.
 - `gnomish-plugin-api`: four types removed, sample rewritten. `bootstrap`: `CheckClientDiscovery`,
-  `CheckProviderSeam`, `ProviderDispatchingExternalCheckClient` deleted.
+  `CheckProviderSeam`, `ProviderDispatchingExternalCheckClient` deleted; `GithubPluginAbsenceSpec`
+  narrowed to the bundle's packages.
+- ADR 0020 amended: "built-in executor" defined as compiled into and named by core, the
+  distribution-is-not-mechanism rule stated for tracker plugins only, and the "in-process egress
+  control" premise of its rejected alternative corrected (the GitHub client had no guard before
+  FR15).
 - Sequencing: after `define-executor-contract` and `add-command-executor` (shared command core);
   before `extract-agent-round-runner`; the `executor/wire-contract` and `executor/conformance-kit`
   deltas ADD requirements to capabilities `define-executor-contract` adds, so that change archives

@@ -8,6 +8,22 @@ that let the contract evolve without breaking executors built against an older v
 
 ## ADDED Requirements
 
+### Requirement: A describe may pin the check's id
+An executor's describe MAY declare `checkIdIsPinnedPath` (boolean, default `false`): when
+true, the engine's pin-check guard SHALL add the check's `checkId` — a repository-relative
+path — to the check's pin set before the executor's first `start`. The field is static per
+executor; no per-check pin hook exists on the contract or the mirror interface.
+**Implements**: FR16 of migrate-verify-to-executor-contract
+**Notes**: Layered after `define-executor-contract`; design D17.
+
+#### Scenario: Declared flag pins the check id
+- **WHEN** a check names an executor whose describe declares `checkIdIsPinnedPath: true` and the manifest declares no pin paths
+- **THEN** the pin-check compares the file at `checkId` against the base branch before the first `start`
+
+#### Scenario: Absent flag pins nothing of its own
+- **WHEN** an executor's describe omits the field
+- **THEN** the pin set is exactly the manifest's `pinPaths`, and an older describe without the field validates unchanged
+
 ### Requirement: A pending key stays pollable until its run ends
 An executor whose describe declares `poll` SHALL answer a `poll` of every key it issued for a
 run, from its `start` or from an earlier `poll`, until that run ends; a superseded key SHALL
