@@ -1,10 +1,9 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.gitobjects.GitObjectsFixture
 import com.github.oinsio.gnomish.gitobjects.ObjectId

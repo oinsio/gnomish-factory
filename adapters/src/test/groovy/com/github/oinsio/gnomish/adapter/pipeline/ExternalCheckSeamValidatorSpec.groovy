@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.app.CheckParamsValidator
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.ArtifactInput
@@ -11,6 +9,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import java.time.Duration
 import spock.lang.Specification
 

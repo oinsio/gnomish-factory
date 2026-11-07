@@ -75,6 +75,9 @@ public sealed interface VerifyCheck {
         /** The built-in an {@code external} check without a {@code provider} maps to. */
         public static final String GITHUB_ACTIONS = "github-actions";
 
+        /** The built-in reader of named verdicts on the attempt SHA; it needs {@code expected}. */
+        public static final String SCM_STATUS = "scm-status";
+
         /**
          * The check-provider key the {@code github-actions} executor is still registered
          * under by the bundle's check SPI and keyed by in {@code factory.check.*}, until
@@ -148,19 +151,6 @@ public sealed interface VerifyCheck {
     enum TimeoutClass {
         QUALITY,
         INFRASTRUCTURE
-    }
-
-    /**
-     * The lowest SARIF result level that fails a check under the engine's verdict
-     * derivation (design D5 of migrate-verify-to-executor-contract); {@link #ERROR} is
-     * the default.
-     *
-     * <p>Implements FR7 of migrate-verify-to-executor-contract.
-     */
-    enum Threshold {
-        ERROR,
-        WARNING,
-        NOTE
     }
 
     /**

@@ -46,8 +46,8 @@ describe exit 0
 
 [describe-as]
 # An executor whose describe answers the section of data/executor-describe its per-run link is named
-# after: one preset for every describe a spec needs (version-2, protocol-2, verdict-only, effect-only,
-# effect-and-verdict, no-role, malformed, control-chars, strict-settings, remote-schema, grants,
+# after: one preset for every describe a spec needs (version-2, protocol-2, verdict-only, transform-only,
+# effect-only, effect-and-verdict, no-role, malformed, control-chars, strict-settings, remote-schema, grants,
 # bad-egress), the name its link carries.
 describe result data/executor-describe#@name
 describe exit 0

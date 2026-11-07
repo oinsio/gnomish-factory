@@ -30,6 +30,8 @@ import java.util.Set;
  *       fail-fast before any dialog (FR10, UX2, D6 of add-agent-executor);</li>
  *   <li>{@link ExecutorReferenceRule} — per-stage {@code executor.name} against the
  *       {@code executors:} declarations (FR9, FR10 of define-executor-contract);</li>
+ *   <li>{@link VerdictCheckRule} — per-check {@code scm-status} expected contexts and the
+ *       credentialed check's box (FR4, NFR-S1 of migrate-verify-to-executor-contract);</li>
  *   <li>{@link UnconfiguredCheckProviderRule} — per-check rejection of an
  *       {@code external} check whose provider this factory has no
  *       {@code factory.check} section for (FR3, D3 of remove-interactive-console).</li>
@@ -48,7 +50,8 @@ import java.util.Set;
  * tier additionally implements FR10, UX2, D6 of add-agent-executor; the
  * {@code UnconfiguredCheckProviderRule} tier implements FR3, D3 of
  * remove-interactive-console; the {@code ExecutorReferenceRule} tier implements FR9, FR10 of
- * define-executor-contract.
+ * define-executor-contract; the {@code VerdictCheckRule} tier implements FR4, NFR-S1 of
+ * migrate-verify-to-executor-contract.
  */
 public final class PipelineValidator {
 
@@ -77,6 +80,7 @@ public final class PipelineValidator {
         errors.addAll(StageSanityRule.validate(model.stages()));
         errors.addAll(ApiExecutorRule.validate(model.stages()));
         errors.addAll(ExecutorReferenceRule.validate(model));
+        errors.addAll(VerdictCheckRule.validate(model));
         errors.addAll(UnconfiguredCheckProviderRule.validate(model.stages(), configuredCheckProviders));
         return List.copyOf(errors);
     }

@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.agent.program
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord
 import com.github.oinsio.gnomish.domain.engine.CheckRef
@@ -37,6 +35,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult
 import com.github.oinsio.gnomish.executorcontract.FailureClass
 import com.github.oinsio.gnomish.executorcontract.Status

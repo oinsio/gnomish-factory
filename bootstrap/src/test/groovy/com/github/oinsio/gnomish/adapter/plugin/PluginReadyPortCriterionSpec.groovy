@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.plugin
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.adapter.check.CheckClientDiscovery
 import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam
 import com.github.oinsio.gnomish.adapter.check.ProviderDispatchingExternalCheckClient
@@ -14,6 +12,7 @@ import com.github.oinsio.gnomish.app.TrackerAdapterFactory
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import java.lang.reflect.Modifier
 import java.time.Duration
 import spock.lang.Specification

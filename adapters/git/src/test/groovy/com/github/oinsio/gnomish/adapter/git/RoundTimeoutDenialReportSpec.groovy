@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.git
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.BranchStateResult
@@ -38,6 +36,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.status.json.StatusReportJsonMapper
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path

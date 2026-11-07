@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.app.serve
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
@@ -19,6 +17,7 @@ import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.pipeline.*
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.sandbox.*
 import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
 import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe

@@ -85,6 +85,7 @@ class PipelineValidatorSpec extends Specification {
         'ArtifactGraph' | danglingRefModel() || ArtifactGraphRule.validate(danglingRefModel().stages())
         'StageSanity' | blankModelModel() || StageSanityRule.validate(blankModelModel().stages())
         'UnconfiguredCheckProvider' | externalCheckModel() || UnconfiguredCheckProviderRule.validate(externalCheckModel().stages(), NO_PROVIDERS)
+        'VerdictCheck' | scmStatusWithoutExpectedModel() || VerdictCheckRule.validate(scmStatusWithoutExpectedModel())
     }
 
     // FR3 of remove-interactive-console: the configured set reaches the rule — the same
@@ -151,6 +152,20 @@ class PipelineValidatorSpec extends Specification {
                         new ArtifactOutput('plan-out')
                     ], executor(), [
                         VerifyChecks.external('ci', 'github', Duration.ofSeconds(30),
+                        Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
+                    ])
+                ])
+    }
+
+    /** FR4 of migrate-verify-to-executor-contract: an scm-status check with no expected contexts. */
+    private static PipelineDefinition scmStatusWithoutExpectedModel() {
+        new PipelineDefinition(
+                SchemaVersionRule.SUPPORTED_VERSION, new AutonomyLimits(3),
+                [
+                    stage('plan', [new ArtifactInput.Source()], [
+                        new ArtifactOutput('plan-out')
+                    ], executor(), [
+                        VerifyChecks.external('ci', VerifyCheck.Executor.SCM_STATUS, Duration.ofSeconds(30),
                         Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
                     ])
                 ])

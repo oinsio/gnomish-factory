@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.serveobservability.writer
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.DescribedExecutors
@@ -36,6 +34,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJson

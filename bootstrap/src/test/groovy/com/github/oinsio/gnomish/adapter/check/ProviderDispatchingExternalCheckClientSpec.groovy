@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckTokenException
 import com.github.oinsio.gnomish.app.CheckClientContext
@@ -14,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import java.time.Duration
 import spock.lang.Specification
 

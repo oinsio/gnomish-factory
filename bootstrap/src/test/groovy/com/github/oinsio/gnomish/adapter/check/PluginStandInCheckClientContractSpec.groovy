@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.app.FixedCheckClientContext
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.Finding
@@ -9,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.port.contract.ExternalCheckClientContract
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 

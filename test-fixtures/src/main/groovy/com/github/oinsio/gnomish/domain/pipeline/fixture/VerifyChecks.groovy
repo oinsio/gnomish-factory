@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.pipeline.fixture
 
+import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import java.time.Duration
 
@@ -24,7 +25,7 @@ final class VerifyChecks {
     /** A {@code command} check: the {@code shell} built-in, its command line as the check id. */
     static VerifyCheck.Executor command(String line, VerifyCheck.VerifyIn verifyIn = VerifyCheck.VerifyIn.SAME_BOX) {
         check(VerifyCheck.Token.COMMAND, VerifyCheck.Executor.SHELL, line, [:],
-                Duration.ZERO, Duration.ZERO, VerifyCheck.TimeoutClass.QUALITY, [], verifyIn)
+        Duration.ZERO, Duration.ZERO, VerifyCheck.TimeoutClass.QUALITY, [], verifyIn)
     }
 
     /** An {@code external} check served by {@code executorName}, with settings and pin paths. */
@@ -50,6 +51,6 @@ final class VerifyChecks {
             Map<String, Object> settings, Duration interval, Duration timeout, VerifyCheck.TimeoutClass timeoutClass,
             List<String> pinPaths, VerifyCheck.VerifyIn verifyIn) {
         new VerifyCheck.Executor(token, executorName, checkId, settings, interval, timeout, timeoutClass,
-                pinPaths, verifyIn, VerifyCheck.Threshold.ERROR, [])
+                pinPaths, verifyIn, Threshold.ERROR, [])
     }
 }

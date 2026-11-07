@@ -9,8 +9,10 @@ import com.github.oinsio.gnomish.domain.pipeline.Sandbox;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -65,7 +67,8 @@ import org.jspecify.annotations.Nullable;
  * {@link ExecutorDeclarations}, in declaration order.
  *
  * <p>Implements FR7, FR11, D2, D5a of load-pipeline-config; FR12, FR13 of
- * add-sandbox-core (sandbox mapping); FR9 of define-executor-contract.
+ * add-sandbox-core (sandbox mapping); FR9 of define-executor-contract; NFR-S1 of
+ * migrate-verify-to-executor-contract (the credentialed default verify-in).
  */
 public final class PipelineMapper {
 
@@ -121,12 +124,22 @@ public final class PipelineMapper {
     public static Result map(ConfigDto config, List<StageEntry> entries, ConnectionProfiles profiles) {
         int defaultLimit = attemptDefault(config);
         List<ConfigError> errors = new ArrayList<>();
+        // The declarations are mapped first, since a check's default verify-in depends on whether its
+        // executor is granted credentials; their errors keep their place after the stages' and tracker's.
+        List<ConfigError> executorErrors = new ArrayList<>();
+        List<ExecutorDeclaration> executors = ExecutorDeclarations.map(config.executors(), executorErrors);
+        Set<String> credentialed = new HashSet<>();
+        for (ExecutorDeclaration declaration : executors) {
+            if (!declaration.credentials().isEmpty()) {
+                credentialed.add(declaration.name());
+            }
+        }
         List<StageDefinition> stages = new ArrayList<>();
         for (StageEntry entry : entries) {
-            stages.add(mapStage(entry, defaultLimit, errors));
+            stages.add(mapStage(entry, defaultLimit, credentialed, errors));
         }
         TrackerConfig tracker = TrackerConfigMapper.map(config.tracker(), profiles, errors);
-        List<ExecutorDeclaration> executors = ExecutorDeclarations.map(config.executors(), errors);
+        errors.addAll(executorErrors);
         if (!errors.isEmpty()) {
             return new Result(null, errors);
         }
@@ -144,7 +157,8 @@ public final class PipelineMapper {
         return autonomy.attemptLimit();
     }
 
-    private static StageDefinition mapStage(StageEntry entry, int defaultLimit, List<ConfigError> errors) {
+    private static StageDefinition mapStage(
+            StageEntry entry, int defaultLimit, Set<String> credentialed, List<ConfigError> errors) {
         String manifest = "stages/%s/stage.yaml".formatted(entry.name());
         StageDto dto = entry.dto();
         return new StageDefinition(
@@ -154,7 +168,7 @@ public final class PipelineMapper {
                 StageDefinitionMapper.mapOutputs(dto.outputs()),
                 StageDefinitionMapper.mapExecutor(manifest, dto.executor(), errors),
                 orEmpty(dto.instructions()),
-                VerifyCheckMapper.mapAll(manifest, dto.verify(), errors),
+                VerifyCheckMapper.mapAll(manifest, dto.verify(), credentialed, errors),
                 StageDefinitionMapper.resolveLimits(defaultLimit, dto.autonomy()),
                 StageDefinitionMapper.mapAdvancement(dto.advancement()));
     }

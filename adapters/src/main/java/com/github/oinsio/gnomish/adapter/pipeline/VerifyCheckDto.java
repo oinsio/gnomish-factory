@@ -69,8 +69,9 @@ public sealed interface VerifyCheckDto {
      *
      * @param checkId the external check identifier, or {@code null} when omitted
      * @param provider the check-provider discriminator, or {@code null} when
-     *     omitted — the mapper defaults it to {@code github} and records that
-     *     choice explicitly in the domain model (FR13 of add-plugin-architecture)
+     *     omitted — the mapper defaults it to the {@code github-actions} executor and
+     *     records that choice explicitly in the domain model (FR13 of
+     *     add-plugin-architecture; FR1 of migrate-verify-to-executor-contract)
      * @param params the provider-owned per-check selectors; {@code null}/absent
      *     means none. Opaque here (plain JDK map, D5a): the selected provider's
      *     own validator grades them at the load seam (FR6 of

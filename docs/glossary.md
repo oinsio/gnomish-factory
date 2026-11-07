@@ -461,8 +461,11 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   factory's trusted clone; the gnome cannot edit its own acceptance criteria.
 - **Executor** — any mechanism that does one unit of work for the engine in one
   **executor role**, and speaks the **executor contract**: the agent CLI that
-  changes the working copy, a command check, an external CI poll, an LLM judge.
-  A stage names its executor by type — `api` (direct model calls), `agent-cli`
+  changes the working copy, or a **verdict executor** that a **verify check**
+  names (a file-existence check, a shell command, a CI or SCM status read, an
+  HTTP probe, an external verifier program). The LLM judge is the one
+  verifier not yet an executor: it keeps the `JudgeVoter` port until
+  `extract-agent-round-runner`. A stage names its executor by type — `api` (direct model calls), `agent-cli`
   (an agent CLI as a subprocess), `program` (an **external executor** named by
   an **executor declaration**), `command` (a shell command the stage declares
   as `executor.command`, run as `sh -c` in the task execution environment by the
@@ -471,9 +474,12 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   `Executor` (`describe`, `start`, `poll`). ADR 0020. *Not:* a tracker — trackers keep their in-process plugin
   interface and are not executors. *Not:* the `command` **verify check** — a
   `command` stage is the stage's Mechanism and produces the work, while a
-  `command` check is Quality Control and only judges it; the two share one
-  command-run core (`CommandRun`, `adapter.command`) and differ in what an exit
-  code means. Type `command` introduced by `add-command-executor`.
+  `command` check is Quality Control and only judges it, run by the `shell`
+  **verdict executor**; the two share one command-run core (`CommandRun`,
+  `adapter.command`) and differ in what an exit code means — a `command`
+  stage's exit code is its status, a `shell` check's exit code carries no
+  verdict. Type `command` introduced by `add-command-executor`; checks as
+  executors by `migrate-verify-to-executor-contract` (design D1).
 - **Attempt** — one counted try of a stage; only quality failures burn
   attempts, and every attempt is committed to the task branch. Its number
   counts within one visit of a stage and restarts at zero on every reset (an
@@ -482,8 +488,18 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   token** does. *Never:* retry
   for this counted unit (a retry is the uncounted repeat of an infrastructure-
   failed check).
-- **Verify check** — one entry of a stage's ordered verification list:
-  built-in declarative, `command`, `external`, or `judge`. *Not:* a stage of
+- **Verify check** — one entry of a stage's ordered verification list. Every
+  check but `judge` names a **verdict executor** and is run through the
+  executor contract: the manifest tokens map to built-in executor names —
+  `builtin` to `files-exist`, `command` to `shell`, `external` to the executor
+  its `provider` names (default `github-actions`) — and `executor: <name>`
+  names one directly, a built-in or a law-declared program. Beside the
+  executor's settings a check carries its `interval`, `timeout` and timeout
+  class, its pin paths, `verify-in`, its **verdict threshold** and, for
+  `scm-status`, its **expected contexts**. `judge` stays its own kind, through
+  the `JudgeVoter` port, until `extract-agent-round-runner`. Type:
+  `VerifyCheck` (`Executor` and `Judge`). Checks as executors introduced by
+  `migrate-verify-to-executor-contract` (design D1). *Not:* a stage of
   executor type `command` — see **Executor**.
 - **Judge** — LLM-as-judge verification via the `JudgeVoter` port: acceptance
   criteria in, structured verdict (`passed`, `findings[]`) out. In a usage
@@ -666,14 +682,27 @@ external; the decisions are ADR 0020.
   declared argv with the word `poll` appended, the same request on standard
   input, the key in the variable `GNOMISH_PENDING_KEY`, the result in the file
   `GNOMISH_RESULT_FILE` names. A poll of a program whose describe declares no
-  `poll`, or with a key this executor did not receive from its own `start`, is
-  an infrastructure failure and spawns no process; keys are not persisted, so a
-  poll across factory instances has nothing to resume. In this version a
-  `pending` from a role whose caller cannot poll is an infrastructure failure
-  naming the limitation. Type: `PendingKey`; the keys a run issued are held by
+  `poll`, or with a key this executor neither received from its own `start` or
+  `poll` nor adopted from a pending record, is an infrastructure failure and
+  spawns no process. An executor declaring `poll` keeps every key it issued for
+  a run pollable until the run ends, and a poll of an ended run's key returns
+  that run's terminal status and answer again, never a new run. For a
+  **verdict executor** the engine owns the wait: `PendingPoll` persists the key
+  with the check identity, the attempt and the start time in the task-branch
+  state (the attempt's `pendingPoll` record, type `PendingPollRecord`) in one
+  commit with its register, pushed, before the first `poll`; a key a `poll`
+  replaces is persisted the same way before the next `poll`. Resume on any
+  instance polls the recorded key and never calls `start` again; a `program`
+  executor adopts a recorded key it never issued, and only over a working copy
+  unchanged against its `HEAD`. The key is capped in size; an oversized key is
+  cannot-verify. A `pending` from a role whose caller cannot poll (`transform`,
+  until `extract-agent-round-runner`) is an infrastructure failure naming the
+  limitation. Type: `PendingKey`; the keys a run issued or adopted are held by
   `PendingRuns`. Introduced by `define-executor-contract` (design D2, D3, D4,
-  D6); ADR 0020, decisions 2 and 4. *Not:* a **continuation key**, which
-  resumes after an answer rather than waiting on an unfinished run.
+  D6); ADR 0020, decisions 2 and 4; persisted, rotated, retained and adopted
+  by `migrate-verify-to-executor-contract` (design D2, D7, D11, D12, D14).
+  *Not:* a **continuation key**, which resumes after an answer rather than
+  waiting on an unfinished run.
 - **Continuation key** — the optional key a `decision-request` answer carries,
   returned to the executor in the next request's `continuation` once the
   decision is answered, so the executor can pick up where it asked. Opaque to
@@ -728,12 +757,53 @@ external; the decisions are ADR 0020.
   misbehaving fake breaks exactly one of the kit's twelve named cases; there is
   no `break-cancel`. Introduced by `define-executor-contract` (design D18). *Not:* a shipped artefact — executor
   authors run the kit against their own program.
-- **SCM-status reader** — forward reference: the planned built-in executor in
-  the `verdict` role that reads the status checks the SCM reports for the task
-  branch (the work of today's `external` check), added by the follow-up
-  `migrate-verify-to-executor-contract`, which also retires
-  `CheckClientFactory` and wires the **pending key** into the poll loop (NG1 of
-  `define-executor-contract`). Not built yet.
+- **Verdict executor** — an executor run in role `verdict` for a **verify
+  check**: a built-in (`files-exist`, `shell`, `github-actions`, `http`,
+  `scm-status`) or a law-declared `program` whose describe lists `verdict`; a
+  check naming an executor without that role is a located load error. It
+  reports a **status** and a SARIF answer only and constructs no verdict: pass
+  or fail is derived by one engine component, `VerdictDerivation`, from the
+  answer's result levels against the check's **verdict threshold**, and a
+  shell exit code carries no verdict meaning. A malformed answer is
+  cannot-verify. A verdict executor declaring `poll` may answer `pending`; the
+  engine then owns the wait through the **pending key**. A `program` verdict
+  executor declaring credentials runs in a fresh box whose egress allowlist is
+  derived from its describe, and `verify-in: same-box` on such a check is a
+  located load error; a credentialed built-in runs in the factory process under
+  the in-process egress allowlist of its declared hosts, and its token enters
+  no box. A built-in that mediates no model reports usage `REPORTED` with an
+  empty model map. Introduced by `migrate-verify-to-executor-contract` (design
+  D1, D5, D6, D13). *Not:* the **judge**, which keeps the `JudgeVoter` port
+  until `extract-agent-round-runner`.
+- **Verdict threshold** — the lowest SARIF result level that fails a **verify
+  check** under the engine's verdict derivation: `error` (the default),
+  `warning` or `note`. A result at or above it fails the check; one below it is
+  kept as a finding and does not fail it. Declared per check as `threshold`.
+  Type: `Threshold`. Introduced by `migrate-verify-to-executor-contract`
+  (design D5).
+- **SCM-status reader** — the built-in **verdict executor** `scm-status`: it
+  reads the named verdicts the SCM holds for the attempt SHA — GitHub Checks
+  and Commit Statuses, Gitea statuses — so any CI that publishes statuses to
+  the SCM is covered with no per-CI code. It takes the latest verdict per
+  context, verifies the reported SHA equals the attempt SHA, answers `pending`
+  while any of the check's **expected contexts** is absent or running, backs
+  off on a rate-limit answer, and fails with a finding per failed context. Its
+  connection is the one the operator configures for the executor
+  (`factory.check.scm-status`, inline or by a `factory.connections` profile),
+  its token resolved through the secrets port, never through the tracker's
+  subsection. Compiled into core in `adapters/scm` beside `github-actions`,
+  outside the github vendor bundle. Introduced by
+  `migrate-verify-to-executor-contract` (design D3, D4). *Not:* the
+  `github-actions` built-in, which reads workflow runs by commit and their job
+  logs.
+- **Expected contexts** — the non-empty list of context names an `scm-status`
+  check declares as `expected`: the verdicts it waits for on the attempt SHA. A
+  missing or empty list is a located load error. An expected context still
+  absent when the poll times out is an infrastructure failure whatever the
+  check's timeout class, and the finding and log line name every context still
+  absent. Names live in the CI, so a renamed workflow is caught only by that
+  timeout, never at load. Introduced by `migrate-verify-to-executor-contract`
+  (design D3; FR4, UX1).
 
 ## Base ref resolution
 

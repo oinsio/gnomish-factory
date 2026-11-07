@@ -10,6 +10,9 @@
 [verdict-only]
 {"protocolVersion":1,"version":"1","roles":["verdict"],"capabilities":[],"settingsSchema":{},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
 
+[transform-only]
+{"protocolVersion":1,"version":"1","roles":["transform"],"capabilities":[],"settingsSchema":{},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
+
 [malformed]
 {"protocolVersion":1,"version":"1","roles":
 

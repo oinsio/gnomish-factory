@@ -135,6 +135,20 @@ project [glossary](glossary.md).
 | 35 | Forging an external check's status with a token                                                                                                 | poll platform-authored verdicts (the workflow run's conclusion), not check-run statuses; no tokens in the box                                                                                                      | core  |
 | 36 | Gigabytes of findings/logs as a resource attack on the factory                                                                                  | size limit at read/poll time, only the tail is kept                                                                                                                                                                | core  |
 
+**External verifiers are executors (the process rule).** A third-party verifier — a
+SonarQube-class scanner, any CI reader the factory does not ship — is a **verdict executor**:
+a program declared in the law and spawned only through the task execution environment, spoken
+to over the executor contract's JSON, never Java code loaded into the factory process (ADR
+0020, decision 1). The in-process check SPI (`CheckClientFactory`) is removed, so no
+third-party verifier code runs inside the factory process. A `program` verdict executor that
+declares credentials runs in a fresh box whose egress allowlist is derived from its describe —
+`verify-in: same-box` on such a check is a load error — and the built-in verdict executors
+that hold a token (`github-actions`, `scm-status`) run in the factory process under the
+in-process egress allowlist of their declared hosts, their token entering no box. Rows 32–36
+apply to every verdict executor alike: its findings reach the one findings funnel as SARIF, and
+pass or fail is derived by the engine, never declared by the executor. Introduced by
+`migrate-verify-to-executor-contract` (design D1, D4, D6).
+
 ## Cross-cutting principles
 
 - **Filesystem isolation and network isolation only work together** — each one

@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.lease.LivenessVerdict
@@ -15,6 +13,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
 import com.github.oinsio.gnomish.sandbox.BindingNames

@@ -1,9 +1,8 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.FakeProcess

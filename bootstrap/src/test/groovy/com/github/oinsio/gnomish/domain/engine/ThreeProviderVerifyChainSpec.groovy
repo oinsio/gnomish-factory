@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.domain.engine
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.GREEN_SHA
 import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.LOOPBACK_ALLOWLIST
 import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.QUALITY_GATE
@@ -22,6 +20,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Shared

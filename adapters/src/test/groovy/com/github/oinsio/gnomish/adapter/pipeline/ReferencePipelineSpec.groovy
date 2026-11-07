@@ -90,8 +90,8 @@ class ReferencePipelineSpec extends Specification {
         and: 'a single builtin verify check with its plain-JDK params'
         plan.verify().size() == 1
         def builtin = plan.verify()[0] as VerifyCheck.Executor
-        builtin.name() == 'files_exist'
-        builtin.params() == [paths: ['plan.md']]
+        builtin.checkId() == 'files_exist'
+        builtin.settings() == [paths: ['plan.md']]
 
         and: 'the stage override wins over the config default (FR7)'
         plan.limits().attemptLimit() == 5
@@ -135,20 +135,38 @@ class ReferencePipelineSpec extends Specification {
         given:
         def verify = model.stages()[1].verify()
 
-        expect: 'four checks, each mapped to its own sealed variant with order preserved'
+        expect: 'four checks with order preserved: three executor checks and the judge (FR1 of migrate-verify-to-executor-contract)'
         verify.size() == 4
         verify[0] instanceof VerifyCheck.Executor
         verify[1] instanceof VerifyCheck.Executor
         verify[2] instanceof VerifyCheck.Executor
         verify[3] instanceof VerifyCheck.Judge
 
-        and: 'builtin: name + plain-JDK params'
-        def builtin = verify[0] as VerifyCheck.Executor
-        builtin.name() == 'files_exist'
-        builtin.params() == [paths: ['src']]
+        and: 'each executor check names its executor and keeps the token it was declared with'
+        verify.take(3).collect { VerifyCheck.Executor c ->
+            [c.token(), c.executorName()]
+        } == [
+            [
+                VerifyCheck.Token.BUILTIN,
+                'files-exist'
+            ],
+            [
+                VerifyCheck.Token.COMMAND,
+                'shell'
+            ],
+            [
+                VerifyCheck.Token.EXTERNAL,
+                'github-actions'
+            ]
+        ]
 
-        and: 'command: the executable command line'
-        (verify[1] as VerifyCheck.Executor).command() == './gradlew test'
+        and: 'builtin: its name as the check id, its plain-JDK params as the settings'
+        def builtin = verify[0] as VerifyCheck.Executor
+        builtin.checkId() == 'files_exist'
+        builtin.settings() == [paths: ['src']]
+
+        and: 'command: the executable command line as the check id'
+        (verify[1] as VerifyCheck.Executor).checkId() == './gradlew test'
 
         and: 'external: non-blank id and durations parsed from the short forms, interval <= timeout'
         def external = verify[2] as VerifyCheck.Executor
@@ -156,9 +174,9 @@ class ReferencePipelineSpec extends Specification {
         external.interval() == Duration.ofSeconds(30)
         external.timeout() == Duration.ofMinutes(5)
 
-        and: 'a fixture predating providers still resolves to github, with no params (FR13, M4)'
-        external.provider() == 'github'
-        external.params() == [:]
+        and: 'a fixture predating providers still resolves to github-actions, with no settings (FR13, M4)'
+        external.executorName() == 'github-actions'
+        external.settings() == [:]
 
         and: 'judge: criteria file, pinned model, opaque settings, odd vote count >= 1'
         def judge = verify[3] as VerifyCheck.Judge
@@ -195,6 +213,6 @@ class ReferencePipelineSpec extends Specification {
 
         and: 'a single command verify check'
         review.verify().size() == 1
-        (review.verify()[0] as VerifyCheck.Executor).command() == 'echo reviewed'
+        (review.verify()[0] as VerifyCheck.Executor).checkId() == 'echo reviewed'
     }
 }

@@ -58,10 +58,8 @@ final class VerifyCheckDtoDeserializer extends StdDeserializer<VerifyCheckDto> {
 
     private static InvalidTypeIdException typeIdError(
             JsonParser parser, DeserializationContext context, @Nullable String typeId) {
+        // StructuralParse composes the located message from the type id alone; this text is never read.
         return InvalidTypeIdException.from(
-                parser,
-                typeId == null ? "missing verify check type" : "unknown verify check type",
-                context.constructType(VerifyCheckDto.class),
-                typeId);
+                parser, "missing or unknown verify check type", context.constructType(VerifyCheckDto.class), typeId);
     }
 }

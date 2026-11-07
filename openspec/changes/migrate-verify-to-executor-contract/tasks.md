@@ -2,21 +2,21 @@
 
 ## 1. Manifest and model
 
-- [ ] 1.1 Collapse `VerifyCheck.Builtin/Command/External` into one `VerifyCheck.Executor`
+- [x] 1.1 Collapse `VerifyCheck.Builtin/Command/External` into one `VerifyCheck.Executor`
   record (executorName, checkId, settings, interval, timeout, timeoutClass, pinPaths,
   verifyIn, threshold, expected) beside `Judge`; map the three tokens to built-in names in
   `VerifyCheckMapper`; specs: legacy manifest loads unchanged, explicit `executor:` form,
   default `external` → `github-actions` (FR1, UX2)
-- [ ] 1.2 Loader rules: executor must declare role `verdict`; `scm-status` requires non-empty
+- [x] 1.2 Loader rules: executor must declare role `verdict`; `scm-status` requires non-empty
   `expected`; `threshold` enum with round-trip spec; credentialed executor + `same-box` is a
   located error and `fresh-box` is the default for it (FR1, FR4, NFR-S1, NFR-R3)
-- [ ] 1.3 Glossary: entries for verdict executor, pending key, expected contexts, SCM-status
+- [x] 1.3 Glossary: entries for verdict executor, pending key, expected contexts, SCM-status
   reader (replace the forward reference); update "Verify check" and "Executor" entries;
   threat registry note that external verifiers are executors (process rule)
 
 ## 2. Single owner: verdict derivation
 
-- [ ] 2.1 Implement `VerdictDerivation(answer, threshold)` in `domain/engine` with the
+- [x] 2.1 Implement `VerdictDerivation(answer, threshold)` in `domain/engine` with the
   data-driven level × threshold spec; `CannotVerify` on a malformed answer (FR7, D5)
 - [ ] 2.2 Route `VerifyOrchestrator` through it; delete verdict construction in
   `ShellCommandCheckRunner`, `FilesExistCheckRunner`, `ExternalPolling`,

@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.domain.engine
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.adapter.check.github.GithubCheckExternalClient
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
@@ -18,6 +16,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.e2e.gitea.GiteaActionsRunnerFixture
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture

@@ -49,7 +49,7 @@ class E2eFixtureLoadSpec extends Specification {
         expect:
         verify.size() == 3
         verify[0] instanceof VerifyCheck.Executor
-        (verify[0] as VerifyCheck.Executor).name() == 'files_exist'
+        (verify[0] as VerifyCheck.Executor).checkId() == 'files_exist'
         verify[1] instanceof VerifyCheck.Executor
         verify[2] instanceof VerifyCheck.Judge
         (verify[2] as VerifyCheck.Judge).votes() == 1
@@ -67,7 +67,7 @@ class E2eFixtureLoadSpec extends Specification {
         def verify = (outcome as LoadOutcome.Loaded).definition().stages()[0].verify()
         verify.size() == 1
         verify[0] instanceof VerifyCheck.Executor
-        (verify[0] as VerifyCheck.Executor).provider() == 'github'
+        (verify[0] as VerifyCheck.Executor).executorName() == 'github-actions'
     }
 
     def "FR3: the unconfigured-provider fixture is refused, located at its check's provider"() {

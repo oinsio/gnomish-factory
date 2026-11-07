@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.app.console.DialogConsole
 import com.github.oinsio.gnomish.app.lease.ClaimBeat
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
@@ -23,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.*
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.*
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path

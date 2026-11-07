@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramExecutor
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
@@ -19,6 +17,7 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.executorcontract.Describe
 import com.github.oinsio.gnomish.executorcontract.Status
 import com.github.oinsio.gnomish.sandbox.AdapterBinding

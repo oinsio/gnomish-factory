@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import static com.github.oinsio.gnomish.adapter.pipeline.ReferencedFilesFixtures.command
 import static com.github.oinsio.gnomish.adapter.pipeline.ReferencedFilesFixtures.judge
 import static com.github.oinsio.gnomish.adapter.pipeline.ReferencedFilesFixtures.missingCriteria
@@ -10,6 +8,7 @@ import static com.github.oinsio.gnomish.adapter.pipeline.ReferencedFilesFixtures
 
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration

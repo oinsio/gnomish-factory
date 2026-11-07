@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.agent.FreshJudgeEnvironments
 import com.github.oinsio.gnomish.adapter.check.SandboxCheckEnvironmentSource
@@ -12,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
@@ -73,7 +72,7 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
         def line = lines[0].formattedMessage
         lines[0].level == Level.WARN
         line.contains('forged')
-        !line.contains('\n') && !line.contains(' ') && !line.contains('\u001B')
+        !line.contains('\n') && !line.contains('\u2029') && !line.contains('\u001B')
         line.length() < 1_000
     }
 

@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorDeclaration;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
+import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.sandbox.ProgramCredentialGrant;
@@ -18,14 +19,14 @@ import java.util.stream.Collectors;
  * each executor speaks the factory's protocol version, its declaration's settings satisfy the
  * schema its describe declares, as each stage sends them ({@link SettingsAgreement}), its credentials and egress hosts agree
  * with its describe ({@link GrantAgreement}), and it serves the role each use site
- * needs — a stage needs {@code transform}; the law has no role field, the use site implies it. A
- * describe that lists only {@code effect} is refused with that role named as reserved (NG4). A
- * check would need {@code verdict}, but no check names an executor until
- * {@code migrate-verify-to-executor-contract} (NG1) gives the verify list that reference; that change
- * adds the check use site here. Each disagreement is a located {@link ConfigError}, as a law error
- * found at load is. Pure.
+ * needs — a stage needs {@code transform}, a verify check {@code verdict} (FR1 of
+ * migrate-verify-to-executor-contract); the law has no role field, the use site implies it. A
+ * describe that lists only {@code effect} is refused with that role named as reserved (NG4). Only a
+ * described executor is judged: a check naming a built-in has no answer here. Each disagreement is a
+ * located {@link ConfigError}, as a law error found at load is. Pure.
  *
- * <p>Implements FR1, FR4, FR9, FR13, NFR-S1, UX1, NG4 of define-executor-contract.
+ * <p>Implements FR1, FR4, FR9, FR13, NFR-S1, UX1, NG4 of define-executor-contract; FR1 of
+ * migrate-verify-to-executor-contract.
  */
 final class DescribeAgreement {
 
@@ -66,19 +67,49 @@ final class DescribeAgreement {
             }
         }
         for (StageDefinition stage : definition.stages()) {
-            String name = stage.executor().name();
-            if (name == null) {
-                continue;
-            }
-            Describe describe = answers.get(name);
-            if (describe != null && !describe.roles().contains(Role.TRANSFORM)) {
-                errors.add(new ConfigError(
-                        "stages/%s/stage.yaml".formatted(stage.name()),
-                        "executor.name",
-                        unserved(name, "stage '%s'".formatted(stage.name()), Role.TRANSFORM, describe)));
-            }
+            stageErrors(stage, answers, errors);
+            checkErrors(stage, answers, errors);
         }
         return List.copyOf(errors);
+    }
+
+    /** The stage use site: a stage naming a described executor needs it to serve {@code transform}. */
+    private static void stageErrors(StageDefinition stage, Map<String, Describe> answers, List<ConfigError> errors) {
+        String name = stage.executor().name();
+        if (name == null) {
+            return;
+        }
+        Describe describe = answers.get(name);
+        if (describe != null && !describe.roles().contains(Role.TRANSFORM)) {
+            errors.add(new ConfigError(
+                    "stages/%s/stage.yaml".formatted(stage.name()),
+                    "executor.name",
+                    unserved(name, "stage '%s'".formatted(stage.name()), Role.TRANSFORM, describe)));
+        }
+    }
+
+    /**
+     * The check use site: each executor check of {@code stage} whose executor was described must serve
+     * {@code verdict}; the error is located at the field that names the executor.
+     */
+    private static void checkErrors(StageDefinition stage, Map<String, Describe> answers, List<ConfigError> errors) {
+        List<VerifyCheck> checks = stage.verify();
+        for (int index = 0; index < checks.size(); index++) {
+            if (checks.get(index) instanceof VerifyCheck.Executor check) {
+                Describe describe = answers.get(check.executorName());
+                if (describe != null && !describe.roles().contains(Role.VERDICT)) {
+                    String field = check.token() == VerifyCheck.Token.EXTERNAL ? "provider" : "executor";
+                    errors.add(new ConfigError(
+                            "stages/%s/stage.yaml".formatted(stage.name()),
+                            "verify[%d].%s".formatted(index, field),
+                            unserved(
+                                    check.executorName(),
+                                    "check '%s' of stage '%s'".formatted(check.checkId(), stage.name()),
+                                    Role.VERDICT,
+                                    describe)));
+                }
+            }
+        }
     }
 
     /**

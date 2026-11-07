@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
@@ -11,7 +9,9 @@ import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import spock.lang.Specification
@@ -52,6 +52,31 @@ class ExecutorPromptBuilderSpec extends Specification {
         prompt.contains('./gradlew test')
         prompt.contains('criteria.md')
         prompt.contains('The output must be idempotent.')
+    }
+
+    // FR1, UX2 of migrate-verify-to-executor-contract: each executor check reads in the verify
+    // plan as it was declared — by its token, the explicit form by its executor name
+    def "FR2: the verify plan describes every executor check by the token it was declared with"() {
+        given:
+        def builder = builderWith(['instructions.md': 'Do the thing.'])
+        def stage = stageWith([
+            VerifyChecks.builtin('files_exist', [paths: ['a']]),
+            VerifyChecks.command('./gradlew test'),
+            VerifyChecks.external('ci/build', 'github-actions', java.time.Duration.ofSeconds(30),
+            java.time.Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY),
+            new VerifyCheck.Executor(VerifyCheck.Token.EXECUTOR, 'sonarqube', 'gate', [:], java.time.Duration.ZERO,
+            java.time.Duration.ZERO, VerifyCheck.TimeoutClass.QUALITY, [], VerifyCheck.VerifyIn.SAME_BOX,
+            Threshold.ERROR, [])
+        ])
+
+        when:
+        def prompt = builder.build(requestFor(stage, 0, []))
+
+        then:
+        prompt.contains('- builtin: files_exist {paths=[a]}\n')
+        prompt.contains('- command: ./gradlew test\n')
+        prompt.contains('- external: ci/build\n')
+        prompt.contains('- executor sonarqube: gate\n')
     }
 
     // Scenario: executor/agent-executor / Rework preamble on retry only

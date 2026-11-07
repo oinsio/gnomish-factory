@@ -1,8 +1,7 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.domain.pipeline.*
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import java.time.Duration
 import spock.lang.Specification
 
@@ -120,7 +119,7 @@ class PipelineMapperSpec extends Specification implements PipelineMapperFixtureS
         s1.verify() == [
             VerifyChecks.command('./gradlew check'),
             VerifyChecks.external(
-            'ci/build', 'github', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY),
+            'ci/build', 'github-actions', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY),
             new VerifyCheck.Judge('criteria.md', 'claude-opus-4-1', [maxTokens: 1000], 3),
         ]
         s1.limits() == new AutonomyLimits(5) // override wins

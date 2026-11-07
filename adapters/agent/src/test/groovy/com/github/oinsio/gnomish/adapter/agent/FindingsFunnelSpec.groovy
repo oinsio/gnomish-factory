@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.agent
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.adapter.briefing.BriefingSections
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.http.HttpCheckClientFactory
@@ -18,6 +16,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration

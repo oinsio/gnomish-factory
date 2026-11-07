@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.check.github
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
@@ -14,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.engine.port.contract.ExternalCheckClientContract
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.tomakehurst.wiremock.WireMockServer
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig

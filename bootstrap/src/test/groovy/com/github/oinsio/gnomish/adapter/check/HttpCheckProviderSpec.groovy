@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.check
 
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
-
 import com.github.oinsio.gnomish.adapter.check.http.HttpCheckClientFactory
 import com.github.oinsio.gnomish.app.ConnectionProfiles
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
@@ -11,6 +9,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import java.time.Duration
 import spock.lang.Specification
 
