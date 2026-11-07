@@ -249,10 +249,11 @@ by the engine and persisted on the branch.
 - `verification/github-external-check`: MODIFIED "The adapter contributes its workflow file to
   the pin set" (through the describe flag) and "Adapter is constructed from factory
   configuration" (a core built-in connected by `factory.executors.github-actions`).
-- `plugin/github-plugin`: MODIFIED — the bundle is the tracker; the shared HTTP core is a
-  first-party library, not the api and not private to the bundle (FR13, FR14).
-- `plugin/plugin-discovery`: MODIFIED — ServiceLoader discovery and the four-point criterion
-  are stated for the tracker port (FR13).
+- `plugin/github-plugin`: MODIFIED, ADDED — the bundle is the tracker; the shared HTTP core is a
+  first-party library, not the api and not private to the bundle; core's built-ins do not depend
+  on the bundle (FR13, FR14).
+- `plugin/plugin-discovery`: MODIFIED, ADDED — ServiceLoader discovery and the four-point
+  criterion are stated for the tracker port; the check port is outside the criterion (FR13).
 - `plugin/plugin-api-contract`: MODIFIED "The first-party vendor bundle satisfies the same
   constraint" — the bundle may depend on the GitHub library beside the api (FR14).
 - `pipeline-config`: MODIFIED "Local sanity validation of mechanism and check configs" — the

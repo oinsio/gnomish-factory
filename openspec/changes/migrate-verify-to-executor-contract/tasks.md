@@ -202,8 +202,12 @@
 
 - [ ] 6.3 Plugin specs and docs for the tracker-only bundle (FR13, FR14): deltas
   `plugin/github-plugin`, `plugin/plugin-discovery`, `plugin/plugin-api-contract` (vendor bundle
-  scenario) as written in `specs/`; `PluginReadyPortCriterionSpec` and `DiscoveredRegistryOnlySpec`
-  restated for the tracker port; glossary: "Vendor bundle" (tracker only), "GitHub API library"
+  scenario) as written in `specs/`, one feature per scenario of their ADDED requirements, markers
+  included; `PluginReadyPortCriterionSpec` and `DiscoveredRegistryOnlySpec`
+  restated for the tracker port; the marker of "Different vendors serve different ports"
+  (`VendorConnectionProfileSpec:93`, which constructs `GithubCheckClientFactory`) moves to a
+  feature resolving the github tracker from its registry and `scm-status` from the executor
+  registry; glossary: "Vendor bundle" (tracker only), "GitHub API library"
   (`:githubapi`), "HTTP egress leaf" (`:httpegress`), "Built-in executor" entry gains "named by
   core; a bundled jar's provider is not a built-in"; `docs/community-plugins.md` and the adapter
   author guide say the tracker is the pluginizable port

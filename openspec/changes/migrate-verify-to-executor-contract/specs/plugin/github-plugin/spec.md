@@ -5,14 +5,9 @@
 ### Requirement: GitHub is extracted into a discovered plugin over a private core
 The GitHub tracker adapter SHALL be packaged into a discovered plugin jar — the
 vendor bundle — that exposes only its SPI factory and validator through
-`META-INF/services`. The GitHub HTTP core (client, credential header,
-conditional-request cache, rate-limit classification, retry) SHALL live in one
-first-party library module that is NOT part of `gnomish-plugin-api`, consumed by
-the bundle's tracker and by the core-side `github-actions` and `scm-status`
-verdict built-ins alike; no second GitHub HTTP client SHALL exist. The check
-adapter is no longer a provider of the bundle: `github-actions` is a built-in
-verdict executor compiled into the factory (the `verification/verdict-executors`
-capability).
+`META-INF/services`. The check adapter is no longer a provider of the bundle:
+`github-actions` is a built-in verdict executor compiled into the factory (the
+`verification/verdict-executors` capability).
 **Implements**: FR12 of add-plugin-architecture; FR13, FR14 of migrate-verify-to-executor-contract
 
 #### Scenario: GitHub is discovered like any third-party plugin
@@ -31,17 +26,13 @@ The default distribution SHALL be core plus a bundled github plugin jar, and the
 factory SHALL load that bundled github jar through exactly the same discovery path
 a third-party plugin would use — there SHALL be no privileged built-in shortcut.
 Removing the github jar SHALL disable the github tracker with no core source
-change while the factory still starts; the `github-actions` and `scm-status`
-built-ins are core's own and stay available. The rule "distribution is not
-mechanism" governs the tracker port; a built-in executor is compiled into and
-named by core and is not a bundled provider (ADR 0020).
+change while the factory still starts.
 **Implements**: FR12 of add-plugin-architecture; FR13 of migrate-verify-to-executor-contract
 
 #### Scenario: Removing the github jar cleanly disables github providers
 - **WHEN** the github plugin jar is removed from the distribution
-- **THEN** the factory still starts, the github tracker provider is absent, the
-  executor registry still resolves `github-actions` and `scm-status`, and no core
-  source needed to change
+- **THEN** the factory still starts, the github tracker provider is absent, and no
+  core source needed to change
 
 #### Scenario: inmemory stays in core as the reference adapter
 - **WHEN** the github plugin is absent
@@ -61,3 +52,29 @@ set made observable at startup (the plugin-discovery capability).
 - **THEN** the tracker port is discovered, verdict executors are built-ins or
   programs over the executor contract, and the sandbox port stays first-party with
   no `ServiceLoader` discovery of third-party backends
+
+## ADDED Requirements
+
+### Requirement: One first-party GitHub HTTP core serves the tracker and the built-ins
+The GitHub HTTP core (client, credential header, conditional-request cache,
+rate-limit classification, retry) SHALL live in one first-party library module
+that is NOT part of `gnomish-plugin-api`, consumed by the bundle's tracker and by
+the core-side `github-actions` and `scm-status` verdict built-ins alike; no second
+GitHub HTTP client SHALL exist.
+**Implements**: FR14 of migrate-verify-to-executor-contract
+
+#### Scenario: One GitHub HTTP client serves every GitHub consumer
+- **WHEN** the production code is searched for GitHub HTTP client classes
+- **THEN** exactly one exists, in the first-party GitHub library, and the bundle's
+  tracker and the `github-actions` and `scm-status` built-ins all use it
+
+### Requirement: Core's built-in executors do not depend on the vendor bundle
+The `github-actions` and `scm-status` built-ins SHALL be core's own and SHALL stay
+available when the github jar is removed. The rule "distribution is not mechanism"
+governs the tracker port; a built-in executor is compiled into and named by core
+and is not a bundled provider (ADR 0020).
+**Implements**: FR13 of migrate-verify-to-executor-contract
+
+#### Scenario: Removing the github jar keeps the core built-ins
+- **WHEN** the github plugin jar is removed from the distribution
+- **THEN** the executor registry still resolves `github-actions` and `scm-status`

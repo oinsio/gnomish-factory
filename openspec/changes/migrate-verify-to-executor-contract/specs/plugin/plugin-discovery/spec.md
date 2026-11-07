@@ -22,15 +22,33 @@ providers — they differ only in packaging (which jar carries the
 - **THEN** no `Map.of(...)` literal maps a discriminator to a provider factory —
   every registry is populated by `ServiceLoader`
 
+### Requirement: Registries are per-port and selection is by discriminator, independent per port
+Discovery SHALL produce one registry per port, keyed by that port's
+discriminator, and provider selection SHALL be resolved independently for each
+port. Mixing vendors across ports — for example a github tracker with checks
+verified against a gitlab remote by a verdict executor — SHALL be a supported
+configuration, and any discovered provider that no configuration selects SHALL
+stay dormant (constructed lazily or not exercised).
+**Implements**: FR3 of add-plugin-architecture; FR13 of migrate-verify-to-executor-contract
+
+#### Scenario: Different vendors serve different ports
+- **WHEN** the tracker discriminator selects `github` and a check names the
+  `scm-status` executor or a law-declared program against a gitlab remote
+- **THEN** the tracker port resolves the github factory from its registry and the
+  check resolves its verdict executor from the executor registry, with no
+  interference
+
+#### Scenario: Dormant providers are not exercised
+- **WHEN** a discovered provider's discriminator is selected by no configuration
+- **THEN** the factory neither fails nor performs that provider's work; it simply
+  stays available for a future selection
+
 ### Requirement: A port is plugin-ready by a four-point criterion
 The change SHALL define and apply, independently per port, a four-point
 "plugin-ready" criterion: (a) an SPI factory exposing a `type()` / `provider()`
 discriminator, (b) a `ServiceLoader`-backed registry, (c) a config subsection
 plus a per-provider SPI validator, and (d) discriminator-based selection. The
-tracker port SHALL satisfy all four points. The check port left the criterion when
-checks became verdict executors: a built-in is named by core and an external one
-is a law-declared program speaking the executor contract, so no SPI factory,
-discovered registry or per-provider validator exists for it.
+tracker port SHALL satisfy all four points.
 **Implements**: FR4 of add-plugin-architecture; FR13 of migrate-verify-to-executor-contract
 
 #### Scenario: Tracker and check ports each meet all four points
@@ -38,5 +56,17 @@ discovered registry or per-provider validator exists for it.
 - **THEN** it exposes a discriminator-bearing SPI factory, a `ServiceLoader`
   registry, a config subsection with a per-provider validator, and
   discriminator-based selection
-- **AND** the check port is assessed as not pluginizable by this criterion, its
-  extension point being the executor contract
+
+## ADDED Requirements
+
+### Requirement: The check port is outside the plugin-ready criterion
+The check port SHALL NOT be pluginized by the four-point criterion: it left the
+criterion when checks became verdict executors — a built-in is named by core and an
+external one is a law-declared program speaking the executor contract — so no SPI
+factory, discovered registry or per-provider validator SHALL exist for it.
+**Implements**: FR13 of migrate-verify-to-executor-contract
+
+#### Scenario: The check port is assessed as not pluginizable
+- **WHEN** the check port is assessed against the four-point criterion
+- **THEN** it is assessed as not pluginizable by this criterion, its extension
+  point being the executor contract
