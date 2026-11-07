@@ -177,7 +177,7 @@ by the engine and persisted on the branch.
   no box, round or fresh.
 - NFR-S2: `scm-status` and `github-actions` resolve their token through the secrets port by the
   credential name of the connection the operator configures for the executor
-  (`factory.executors.<name>`, inline or by a `factory.connections` profile), never through the
+  (`factory.check.<name>`, inline or by a `factory.connections` profile), never through the
   tracker's subsection.
 
 ### Non-Functional Cost
@@ -213,7 +213,8 @@ by the engine and persisted on the branch.
   fetched from the check-run output.
 - Q3: How task 4.3a's record-driven poll of a `program` executor reaches the program for a key
   this instance never issued, a superseded key and an ended run's key (FR3, FR11) — settled by
-  design D14: the resuming instance's program executor adopts the recorded key; the
+  design D14: the resuming instance's program executor adopts the recorded key, only over an
+  unchanged working copy; the
   `executor/wire-contract` delta MODIFIES "Poll of a program is refused without its
   preconditions" and "A pending judge is judged when it ends", scenario titles kept.
 
@@ -232,7 +233,8 @@ by the engine and persisted on the branch.
   validated by describe schema.
 - `plugin/plugin-api-contract`: check SPI removed; sample proves the verdict-program path.
 - `executor/wire-contract` (added by `define-executor-contract`): ADDED "A pending key stays
-  pollable until its run ends"; MODIFIED "Poll of a program is refused without its
+  pollable until its run ends" and "A recorded key is adopted only over an unchanged working
+  copy"; MODIFIED "Poll of a program is refused without its
   preconditions" and "A pending judge is judged when it ends" (D14).
 - `executor/conformance-kit` (added by `define-executor-contract`): ADDED "Re-poll case pins the
   idempotent poll".
@@ -248,7 +250,7 @@ by the engine and persisted on the branch.
   contribution is the `checkId` when its describe declares it (FR16).
 - `verification/github-external-check`: MODIFIED "The adapter contributes its workflow file to
   the pin set" (through the describe flag) and "Adapter is constructed from factory
-  configuration" (a core built-in connected by `factory.executors.github-actions`).
+  configuration" (a core built-in connected by `factory.check.github-actions`).
 - `plugin/github-plugin`: MODIFIED, ADDED — the bundle is the tracker; the shared HTTP core is a
   first-party library, not the api and not private to the bundle; core's built-ins do not depend
   on the bundle (FR13, FR14).

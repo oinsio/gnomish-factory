@@ -50,18 +50,18 @@ written.
 
 ### Requirement: A credentialed built-in verdict executor is connected by operator configuration
 A built-in verdict executor that declares credentials SHALL take its endpoint and credential
-names from the operator's `factory.executors.<name>` subsection, inline or by a `connection:`
+names from the operator's `factory.check.<executor-name>` subsection, inline or by a `connection:`
 reference to a `factory.connections` profile graded at load like any port subsection's; a check
 naming such an executor with no connection configured SHALL be a located load error.
 **Implements**: NFR-S2 of migrate-verify-to-executor-contract
 **Notes**: The tracker's subsection is never read for a verdict executor (design D3).
 
 #### Scenario: Operator connects scm-status with configuration alone
-- **WHEN** the operator declares `factory.executors.scm-status.connection: github-main` and `factory.connections.github-main` names the endpoint and token name
+- **WHEN** the operator declares `factory.check.scm-status.connection: github-main` and `factory.connections.github-main` names the endpoint and token name
 - **THEN** an `scm-status` check reads statuses from that endpoint with the token resolved through the secrets port, and no tracker subsection is read
 
 #### Scenario: Unconnected credentialed built-in is a located error
-- **WHEN** a check names `github-actions` and no `factory.executors.github-actions` subsection or profile supplies its connection
+- **WHEN** a check names `github-actions` and no `factory.check.github-actions` subsection or profile supplies its connection
 - **THEN** loading reports a located error naming the check and the executor
 
 ### Requirement: SCM status reader

@@ -58,7 +58,7 @@
   new core-side module `adapters/scm` (depends on `:githubapi`, `:executor-contract`, `:domain`)
   as an `Executor` with `poll`; describe carries the token name, settings schema (former
   subsection) and `checkIdIsPinnedPath = true`; its connection (base URL, token name) is read
-  from the operator's `factory.executors.github-actions` subsection, inline or by `connection:`
+  from the operator's `factory.check.github-actions` subsection, inline or by `connection:`
   profile (NFR-S2); WireMock specs re-pointed unchanged; the bundle's `adapter.check.github`
   package and its `META-INF/services` check entry deleted (FR6, FR13, D4, D17)
 - [ ] 3.3a Narrow `GithubPluginAbsenceSpec` (M5): the source gate's regex covers references to
@@ -71,7 +71,7 @@
 - [ ] 3.5 `scm-status`: new built-in in `adapters/scm` over `:githubapi`, reading GitHub Checks +
   Statuses and Gitea statuses on the attempt SHA; latest-per-context, expected list, SHA verification, rate-limit back-off hint;
   WireMock specs for each scenario and `ScmStatusShaPinningSpec`; its connection from
-  `factory.executors.scm-status`; one feature per scenario of "A credentialed built-in verdict
+  `factory.check.scm-status`; one feature per scenario of "A credentialed built-in verdict
   executor is connected by operator configuration", markers included (FR4, FR9, NFR-R2, NFR-S2,
   D3, D9)
 - [ ] 3.6 Register the five built-ins in `ExecutorRegistry` per D18: the registry's value becomes
@@ -108,15 +108,21 @@
   and the working-copy view the `verdict` poll is judged against (FR11, NFR-S4 of that change) is
   held in that same entry. A persisted key resumed by a second instance (FR3) therefore reaches a
   refusal for a `program` verdict check unless this change gives the poll its run from the record.
-  Implement design D14: the resume path of `PendingPoll` hands the recorded key to the resumed
-  check's executor before its first poll, and `ProgramExecutor` adopts it — takes the view of
-  its own environment's working copy and enters the key into `PendingRuns` with that view as
-  `before`; a key enters `PendingRuns` from nowhere else (no wire field). The adopted key covers
+  Implement design D14: `StageExecutor.Request` gains `@Nullable PendingTurn pending`
+  (`PendingTurn(String key, Origin origin)`, `Origin { ISSUED, RECORDED }`, `domain/engine/port`),
+  `PendingPoll` sets `RECORDED` on the resume path only; the application-side wrapper of D18
+  dispatches none → `start`, `ISSUED` → `poll`, `RECORDED` → `PendingAdoption.adopt(request,
+  key)` (new role interface in `app/port/check`) then `poll`; `ProgramExecutor` implements
+  `PendingAdoption` — takes the view of its own environment's working copy, refuses with
+  `failed/infrastructure` naming the key and the changed paths when the view shows any change
+  against `HEAD`, otherwise enters the key into `PendingRuns` with that view as `before`; a key
+  enters `PendingRuns` from nowhere else (no wire field), and `Executor` is unchanged. The adopted key covers
   the record's first key (W2), a superseded key (W3) and an ended run's key (W4) (FR11, D11);
   the second-instance kill-point spec of 4.3 includes a `program` verdict executor declaring
   `poll`. Specs: `ProgramPollSpec` keeps its two markers and gains one feature per new scenario
   of the MODIFIED "Poll of a program is refused without its preconditions" and "A pending judge
-  is judged when it ends", markers included (FR3, FR11, NFR-R1, D14)
+  is judged when it ends" and of the ADDED "A recorded key is adopted only over an unchanged
+  working copy" (a host worktree with leftovers), markers included (FR3, FR11, NFR-R1, D14)
 - [ ] 4.4 Old-way sweep: `grep -rn "sleeper.sleep\|Thread.sleep" adapters/src/main/java/.../check
   adapters/github/src/main` → zero hits; `grep -rn "ExternalPolling"` → zero hits (D9)
 - [ ] 4.5 Ledger and MDC: `executor`, `status`, `key` prefix, elapsed/remaining per poll; the
@@ -177,13 +183,19 @@
 - [ ] 6.1 Remove `CheckClientFactory`, `CheckParamsValidator`, `CheckSubsectionValidator`,
   `ExternalCheckPinContributor`, `AttemptCommitWorkspace`, `CheckRunContext` from
   `gnomish-plugin-api`; bump its major version and re-baseline the surface per its spec;
-  grep for the removed names → zero (FR8, M4)
+  grep for the removed names → zero; in
+  `config/spec-contract-exemptions/plugin-plugin-api-contract.txt` rewrite the lines of
+  "api artifact excludes application and bootstrap internals" (the sample compiles against the
+  tracker port, the tracker SPI factory, `SecretsProvider`, `TrackerSubsectionValidator` and
+  `FindingsSanitizer`; no `AttemptCommitWorkspace`, no "both SPI factories") and "A third party
+  compiles against a single declared dependency" (the sample tracker adapter only); the sample
+  verdict program's own dependency-freedom is pinned by the kit feature of 6.2 (FR8, M4)
 - [ ] 6.2 Rewrite the sample module: a sample verdict program (script, `pending` then `poll`)
   passing the conformance kit; update `docs/guides` adapter author guide and
   `docs/community-plugins.md` wording; rewrite `docs/guides/operator-guide-github-actions-check.md`
   for the `github-actions` verdict executor — no `GithubCheckExternalClient` or
   `ExternalCheckClient` wording, and its "Base URL config" section names the
-  `factory.executors.github-actions` subsection and its `connection:` reference (FR8, NFR-S2)
+  `factory.check.github-actions` subsection and its `connection:` reference (FR8, NFR-S2)
 - Spec contract (`tighten-spec-contract`): this change REMOVES the `stage-engine` requirement
   "External check poll loop", two `plugin/plugin-api-contract` requirements and seven
   `verification/check-provider-model` requirements; their 18 scenarios carry 30
@@ -198,7 +210,10 @@
   3.4, `VerifyCheckSpec`'s to the mapper and loader specs of 1.1, the stateless-poll markers of
   the GitHub check specs to the re-pointed WireMock specs of 3.3, and
   `PinCheckedExternalCheckClientSpec`'s and `HttpCheckClientFactorySpec`'s to the pin-decorator
-  spec of 5.1 — so no kept scenario is left without a marker.
+  spec of 5.1, and the four markers of "The SPI factories bear their declared members" in
+  `CheckClientFactorySpec` to a feature asserting the tracker factory's members and the absence
+  of any check SPI type from the api jar, beside the one `ApiCompatibilityGateSpec:64` keeps over
+  the re-baselined `SHIPPED_SPI` of 6.1 — so no kept scenario is left without a marker.
 
 - [ ] 6.3 Plugin specs and docs for the tracker-only bundle (FR13, FR14): deltas
   `plugin/github-plugin`, `plugin/plugin-discovery`, `plugin/plugin-api-contract` (vendor bundle

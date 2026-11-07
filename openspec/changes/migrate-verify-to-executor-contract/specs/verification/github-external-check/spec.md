@@ -35,7 +35,7 @@ it, so the workflow stays pinned with no manifest edit and no per-check hook.
 ### Requirement: Adapter is constructed from factory configuration
 The factory SHALL construct the `github-actions` built-in verdict executor from
 operator configuration: the platform base URL and a token resolved by name through
-`SecretsProvider`, read from the `factory.executors.github-actions` subsection,
+`SecretsProvider`, read from the `factory.check.github-actions` subsection,
 inline or by a `connection:` profile; the engine resolves it from the executor
 registry behind the pin-check guard, so an operator enables it with
 configuration alone, no code changes, and removing the vendor bundle does not

@@ -45,6 +45,17 @@ and answer again, unchanged, and SHALL NOT start the run anew.
 - **WHEN** a candidate refuses, or answers differently, a re-poll of a key whose run ended
 - **THEN** the conformance kit's re-poll case fails naming the key, and the engine reads the refusal as `failed/infrastructure` naming the key, never as a new `start`
 
+### Requirement: A recorded key is adopted only over an unchanged working copy
+An executor that adopts a key from the task's pending record on resume SHALL first take git's view
+of its working copy; a view showing any change against the working copy's `HEAD` SHALL make the
+poll `failed/infrastructure` naming the key and the changed paths, with no process spawned.
+**Implements**: FR3, FR11 of migrate-verify-to-executor-contract
+**Notes**: A host resume may reuse the task worktree a killed check program wrote into (design D14).
+
+#### Scenario: Adoption over a changed working copy is refused
+- **WHEN** a resuming instance is handed a recorded key and its working copy holds a change against `HEAD`
+- **THEN** the result is `failed/infrastructure` naming the key and the changed paths, no process is spawned, and the check resolves as cannot-verify
+
 ## MODIFIED Requirements
 
 ### Requirement: Poll of a program is refused without its preconditions

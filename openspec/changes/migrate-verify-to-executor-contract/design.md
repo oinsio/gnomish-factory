@@ -56,8 +56,15 @@ stateless-instance rule. *Alternative rejected:* executor-side waiting (`quality
 (FR4, FR9, NFR-S2.) Reads Checks + Statuses on the attempt SHA (Gitea: statuses), latest per
 context, pending while any expected context is absent/running, SHA verified, back-off on
 rate limit. Its token resolves by the connection the operator configures for the executor —
-`factory.executors.<name>`, inline or by `connection: <profile>` into `factory.connections` —
-never by the tracker's subsection, so Jira + GitHub needs no GitHub tracker config.
+`factory.check.<name>`, the operator subtree that today holds `factory.check.<provider>`, now
+keyed by the built-in executor's name, inline or by `connection: <profile>` into
+`factory.connections` — never by the tracker's subsection, so Jira + GitHub needs no GitHub
+tracker config. An operator subsection under `factory.executors.<name>` was rejected: NFR-S3 of
+`define-executor-contract` makes every `executors` key in operator configuration an unknown-key
+error (main spec `pipeline/pipeline-config`, "Executor declared in operator config is ignored";
+`OperatorConfigExecutorsSpec.groovy:36,55`), and only the law declares executors. The
+`factory.check.*` subtree keeps its declared level (`operator/operator-configuration`, "A plugin
+subtree takes its root's level") and carries a connection, never a declaration.
 *Rationale:* "named verdicts on a SHA" is the common contract of every SCM, covering any CI
 without per-CI code; expected contexts are the only cure for "pending forever". *Alternative
 rejected:* folding it into the GitHub tracker adapter — ties CI reading to the issue tracker,
@@ -133,19 +140,53 @@ takes git's view of its own environment's working copy and enters the key into i
 with that view as the entry's `before`. A poll of an adopted key then proceeds as for a key its
 own `start` returned. Invariants: a key enters `PendingRuns` only from a `start` or `poll` result
 of this instance or from the pending record through the resume path, never from the request on
-the wire, so the refusal of an unknown key stays for every other key; the `Executor` port's
-signatures are unchanged. The adopted view is a sound before-view because the resuming
-instance's environment is materialized from the attempt commit the check runs on and nothing of
-the program has run in it yet, so it is the view a `start` in that environment would have taken;
-what the first instance's program changed in its own environment is gone with that environment.
+the wire, so the refusal of an unknown key stays for every other key.
+
+*The call path and the signatures it changes.* The engine reaches a verdict executor only
+through `StageExecutor.execute(Request)` (G1: `EnginePorts` keeps `StageExecutor` and
+`JudgeVoter`), so a poll is a `StageExecutor.Request` that carries a turn:
+`@Nullable PendingTurn pending`, with `record PendingTurn(String key, Origin origin)` and
+`enum Origin { ISSUED, RECORDED }` in `domain/engine/port`. No turn is a `start`; `ISSUED` marks
+a key this run's own `start` or `poll` returned; `RECORDED` marks the key `PendingPoll` read from
+the pending record on resume, set by that path only. The application-side wrapper that D18
+builds around the resolved `Executor` dispatches the turn: none → `start(request)`; `ISSUED` →
+`poll(request, key)`; `RECORDED` → `adopt(request, key)` when the executor implements the role
+interface `PendingAdoption` (`app/port/check`: `void adopt(ExecutorRequest request, PendingKey
+key)`), then `poll(request, key)`. `ProgramExecutor` implements `PendingAdoption`; the five
+built-ins do not, since their key names a run the remote holds and every instance can poll it.
+The `Executor` interface of `:executor-contract` is unchanged: adoption is a Java-side concern
+of the in-process program adapter, never a contract operation a program sees — the reason D17
+keeps Java-only members off the mirror interface.
+
+*The premise, per medium.* The adopted view is a sound before-view only where nothing of the
+first instance's program is left in the resuming working copy. Verified: a `fresh-box` check
+materializes a new box from the attempt commit (`SandboxCheckEnvironmentSource.java:85-93`), so
+the premise holds there. It does not hold in general on the host: `HostCheckEnvironmentSource`
+runs the check in the task's own working copy (`HostCheckEnvironmentSource.java:28-34`, the
+`DirectoryWorkspace` root), not in a checkout made for it. A resume on another clone gets a new
+worktree from `git worktree add` at the branch (`TaskWorktreeManager.java:105`), clean; a resume
+on the same clone reuses the worktree, whose leftovers `WorktreeSalvage` either commits as the
+interrupted round's work (`WorktreeSalvage.java:13-25`) or, under `--discard-work`, resets
+(`WorktreeSalvage.java:105-111`). A `same-box` check runs in the leased round box
+(`SandboxCheckEnvironmentSource.java:69-70`); what a resuming instance's lease holds was not
+verified. So adoption carries a guard rather than relying on the premise: **a key is adopted only
+when the view taken at adoption shows no change against the working copy's `HEAD`; any change
+refuses the poll as `failed/infrastructure` naming the key and the changed paths, with no
+process spawned** — a cannot-verify the operator sees, never a verdict judged against a view that
+already holds the first run's writes. The guard does not see writes a salvage commit already
+moved into `HEAD`: that a salvage commits a killed check program's writes as round work is a
+property of `WorktreeSalvage` that today's `command` checks share, recorded under Open Questions
+as a finding outside this change.
 W3 (superseded key) and W4 (ended run's key) are adopted the same way; the program's own
 retention (D11) answers them. *Alternative rejected — persist the before-view in the pending
 record:* puts a program-adapter detail (git status entries) into the engine's record, and a view
-taken in the first environment would mismatch the second one's fresh checkout, turning every
+taken in the first environment would mismatch the second one's working copy, turning every
 resume into a false cannot-verify. *Alternative rejected — accept any key on the wire:* removes
-the unknown-key refusal for every poll, not only the resumed one. The `executor/wire-contract`
+the unknown-key refusal for every poll, not only the resumed one. *Alternative rejected — an
+`adopt` member on `Executor`:* a Java-only member no program can implement (D17). The `executor/wire-contract`
 delta MODIFIES "Poll of a program is refused without its preconditions" and "A pending judge is
-judged when it ends", scenario titles kept, each with a scenario for the adopted key.
+judged when it ends", scenario titles kept, each with a scenario for the adopted key, and ADDS
+"A recorded key is adopted only over an unchanged working copy" for the guard.
 
 **D8 — Sync surfaces.** Scout: `grep -rn "Kept in sync with"`, registry, and domain-term
 search for "poll", "verdict", "findings file".
@@ -302,3 +343,11 @@ rejected it for the `command` built-in on the same grounds.
 - Threshold vocabulary (proposal Q1) — settled in the spec as `error | warning | note`;
   numeric minimums deferred.
 - Record-driven poll of a `program` executor (proposal Q3) — settled by D14.
+- Salvage of a killed check program's writes (finding, outside this change; D14): on a host
+  resume in the same clone, `WorktreeSalvage` commits whatever a check program killed mid-run
+  left in the task worktree as the interrupted round's work (`WorktreeSalvage.java:13-25`) —
+  true of today's `command` checks as of a `program` verdict executor, so this change neither
+  causes nor widens it. Pickup condition: the change that next touches `WorktreeSalvage` or the
+  host check environment (`HostCheckEnvironmentSource`) decides whether a kill inside verify
+  discards rather than salvages; until then D14's guard keeps an adopted key from being judged
+  over uncommitted leftovers.

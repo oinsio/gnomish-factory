@@ -16,20 +16,21 @@ Check authoring is proven by the kit, not by compiling a factory against `gnomis
 
 ### Requirement: Thin plugin-api contract module
 A `gnomish-plugin-api` module SHALL contain exactly the third-party contract
-surface — port interfaces, the tracker and check SPI factories with their
-validator, credential-declaration and pin-contribution members,
-`SecretsProvider`, SPI validator interfaces, the `AttemptCommitWorkspace`
-workspace-capability interface, and the `FindingsSanitizer` contract utility —
-and nothing from `application` or `bootstrap` internals.
+surface — port interfaces, the tracker SPI factory with its validator and
+credential-declaration members, `SecretsProvider`, the tracker's SPI validator
+interfaces, and the `FindingsSanitizer` contract utility — and nothing from
+`application` or `bootstrap` internals. It SHALL carry no check SPI: a verdict
+check is an executor program, authored against the executor contract.
 **Implements**: FR4 of split-into-modules; FR5, FR12, FR15, FR17 of add-plugin-architecture; FR1, FR2 of close-plugin-api-compilability-gap; FR3, FR8 of split-logtext-leaves; FR4 of type-untrusted-text; FR14 of migrate-verify-to-executor-contract
 **Notes**: The untrusted-text primitives the findings sanitizer delegates to stay in the JDK-only `untrustedtext` leaf, which this module declares itself and resolves alongside its own artifact, so the single declared dependency contract is unchanged.
 
 #### Scenario: api artifact excludes application and bootstrap internals
 - **WHEN** dependency-analysis inspects the `gnomish-plugin-api` artifact
 - **THEN** it contains zero imports from `application` or `bootstrap` internals
-- **AND** it exposes the port interfaces, the tracker and check SPI factories,
-  `SecretsProvider`, validator SPIs, `AttemptCommitWorkspace`, and
-  `FindingsSanitizer`
+- **AND** it exposes the port interfaces, the tracker SPI factory,
+  `SecretsProvider`, the tracker's validator SPIs and `FindingsSanitizer`, and
+  no check SPI factory, check validator, pin-contribution hook or
+  `AttemptCommitWorkspace`
 
 #### Scenario: A third party compiles against a single declared dependency
 - **WHEN** a third-party adapter is compiled with `gnomish-plugin-api` as its
@@ -38,9 +39,8 @@ and nothing from `application` or `bootstrap` internals.
   jar the domain's own emitters use)
 - **THEN** it can implement the tracker port and its SPI factory without
   needing `application` or `bootstrap`
-- **AND** an external-check implementation can read the attempt-commit sha of
-  the round under verification through `AttemptCommitWorkspace` and sanitize
-  its findings through `FindingsSanitizer` using only that dependency
+- **AND** a verdict program reads the attempt commit under verification from
+  its executor request with no factory dependency at all
 - **AND** a tracker implementation mints the snapshot's title and body as
   tracker-provenance untrusted text using only that dependency
 
@@ -58,10 +58,8 @@ and nothing from `application` or `bootstrap` internals.
 - **WHEN** the contract's SPI factories are inspected
 - **THEN** the tracker SPI factory bears `type()`, `subsectionValidator()`, and
   the connection-aware credential declaration
-- **AND** the check SPI factory `CheckClientFactory` bears `CheckParamsValidator`,
-  the `ExternalCheckPinContributor` hook, its subsection validator, and both
-  halves of its credential declaration — from the configured connection and,
-  for a provider whose targets are per-check, from a check's own params
+- **AND** the contract holds no other SPI factory: a check's settings schema,
+  credentials and pin contribution are declared by the executor's describe
 
 ## REMOVED Requirements
 
