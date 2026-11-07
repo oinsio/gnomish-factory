@@ -19,6 +19,12 @@ import spock.lang.Specification
  * value's own kinds side by side (a cache column of one round's figure) is display, not a sum of
  * usage, and is not gated.
  *
+ * <p>One stage script is exempt for now: the factory that runs this repository is a published
+ * release (the {@code .gnomish/README.md} setup, {@code GNOMISH_VERSION}), and v0.1.0 has no
+ * {@code usage --markdown}, so {@code report.sh} still folds the recorded usage itself. The row is
+ * asserted reached and still matching: once the script posts what {@code gnomish usage --markdown}
+ * prints, the row fails here and is deleted with the script's fold.
+ *
  * <p>FR17, NFR-O3, G5, M5 of define-executor-contract.
  */
 class UsageFoldOwnerBoundarySpec extends Specification {
@@ -28,7 +34,7 @@ class UsageFoldOwnerBoundarySpec extends Specification {
     private static final String AGGREGATOR = DASHBOARD + 'LedgerAggregator.java'
 
     /** The reasons an exemption may give; one that gives none of them is a finding. */
-    static final List<String> REASONS = ['dashboard: ']
+    static final List<String> REASONS = ['dashboard: ', 'release: ']
 
     private static final String DAY_VIEW = 'dashboard: the day view adds the ledger lines\' own tokensByModel, ' +
     'snapshots the fold already produced, over JSON with no domain types (the one exemption D10 names)'
@@ -59,9 +65,15 @@ class UsageFoldOwnerBoundarySpec extends Specification {
             allowed: [(AGGREGATOR): DAY_VIEW]],
     ]
 
+    private static final String REPORT_SCRIPT = '.gnomish/stages/usage-report/report.sh'
+
+    private static final String RELEASE_WITHOUT_USAGE_COMMAND = 'release: the factory runs from the v0.1.0 ' +
+    'release, which has no `usage --markdown`; the script folds the recorded usage until GNOMISH_VERSION ' +
+    'names a release that ships the command'
+
     private static final Map STAGE_RULE = [name: 'a jq reduce over tokens',
         pattern: /\breduce\b[^\n]*(?i:token|bymodel)/,
-        allowed: [:]]
+        allowed: [(REPORT_SCRIPT): RELEASE_WITHOUT_USAGE_COMMAND]]
 
     // FR17, G5: each sum lives only in the owner and its named exemptions, each reached and still matching
     def "FR17, G5: #rule.name lives only in its allowlisted files"() {
@@ -84,8 +96,8 @@ class UsageFoldOwnerBoundarySpec extends Specification {
         rule << RULES
     }
 
-    // G5, M5, M6: the stage scripts carry no jq aggregation of tokens; report.sh posts what
-    //     gnomish usage --markdown prints (design D16)
+    // G5, M5, M6: the stage scripts carry no jq aggregation of tokens; report.sh will post what
+    //     gnomish usage --markdown prints (design D16) once the release the repository runs ships it
     def "G5, M5, M6: no script under .gnomish/stages reduces tokens with jq"() {
         given:
         def scripts = stageScripts()
@@ -93,9 +105,14 @@ class UsageFoldOwnerBoundarySpec extends Specification {
         expect: 'the scan reached the stage scripts'
         scripts.size() >= 10
 
-        scripts.containsKey('.gnomish/stages/usage-report/report.sh')
+        scripts.containsKey(REPORT_SCRIPT)
 
-        and: 'no script matches'
+        and: 'the exempt script is reached and still folds, so the row is deleted with the fold'
+        STAGE_RULE.allowed.keySet().findAll {
+            !scripts.containsKey(it) || !matches(STAGE_RULE, scripts[it])
+        }.toList() == []
+
+        and: 'no other script matches'
         offenders(STAGE_RULE, scripts) == []
     }
 
