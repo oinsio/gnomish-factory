@@ -88,8 +88,7 @@ Check the new/modified files (from the diff) against `.claude/rules/`:
 - `manual-sync-pairs.md`: for every diff file that carries a `Kept in sync with` marker or
   appears in the rule's registry, verify the counterpart changed too — or the report states
   why no mirrored change is needed. A new file reimplementing a rule that already exists in
-  another mode/layer must either share an abstraction or declare the pair at both ends; a
-  third implementation of the same rule must extract the abstraction.
+  another mode/layer is judged by that rule's preference order.
 - `testing.md`: every new `@DoNotMutate` / `excludedClasses` / `excludedTestClasses` entry has
   a written rationale meeting the rule's bar; specs are Spock, one capability per spec file.
 - `logging.md` (where present; otherwise apply the same checks directly): new/modified log

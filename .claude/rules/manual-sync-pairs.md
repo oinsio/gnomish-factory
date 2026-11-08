@@ -19,11 +19,27 @@ memory is where divergence bugs are born.
 ## Preference order
 
 1. **Shared abstraction** — one implementation, two strategies
-   (`ResumeMechanics<B>` is the in-repo model). Required at the latest when a
-   *third* implementation of the same rule appears (rule of three).
-2. **Declared pair** — both ends carry the marker (below). Acceptable when
-   the abstraction is premature or the duplication is deliberate decoupling.
+   (`ResumeMechanics<B>` is the in-repo model). Required as soon as a *second*
+   implementation of the same rule is needed (rule of two): the change that adds the
+   second consumer extracts the shared part in the same change, into a module both
+   consumers can reach — a new leaf when none exists yet.
+2. **Declared pair** — both ends carry the marker (below). Acceptable only when the two
+   ends share no classpath by design (a build script and a Java class, a POSIX stand-in
+   and a Groovy fake, two modules whose compile edge the layering gate forbids) — and then
+   the row names the barrier. "The abstraction is premature" is not a reason: a pair kept
+   in step by hand costs every later change a mirrored edit and an audit question, and
+   the second divergence is found in production.
 3. **Undeclared pair** — not acceptable. An audit finding.
+
+Until 2026-11-06 the bar was the rule of three (a third implementation forced the
+extraction). It was lowered after the GitHub HTTP core question of
+`migrate-verify-to-executor-contract`: the tracker plugin's private client and the
+`github-actions` built-in would have become a declared pair of some 550 lines — token header,
+conditional-request cache, rate-limit classifier, retry — waiting for a third consumer that
+`add-sandbox-gha-executor` already names. Jenkins' detached plugins and Kubernetes' in-tree
+cloud providers are the record of what a duplicate left in place costs when it is finally
+moved: a permanent compatibility shim. The pairs in the registry below predate the rule and
+leave by the same preference order as their rows are next touched.
 
 ## Declaration marker
 

@@ -33,8 +33,8 @@ following additional constraints injected into the execution:
    contain a decision (D-number) answering, based on the scout's findings:
    - which existing pairs the change touches, and that mirrored edits are in scope;
    - for any new parallel implementation: **shared abstraction or declared pair**, decided
-     by the preference order in `manual-sync-pairs.md` (third implementation → abstraction,
-     no exception), with rationale and the rejected alternative;
+     by the preference order in `manual-sync-pairs.md`, with rationale and the rejected
+     alternative;
    - or the explicit line `Sync surfaces: none — this change adds no parallel
      implementation and touches no declared pair.` An absent answer is a format violation —
      silence is not an acceptable "none".
