@@ -19,8 +19,10 @@ import org.slf4j.LoggerFactory;
  * channel by the executor contract's one {@link ResultFileReader} (FR6 of define-executor-contract),
  * capped at {@link ResultFileReader#FINDINGS_FILE_CAP_BYTES} with every text field minted as
  * subprocess text, and the outcome becomes validated {@link Finding}s — or {@code null}, so the
- * caller falls back to its synthetic finding (NFR-R2: the exit-code verdict always stands, never
- * degraded to CannotVerify by a broken reporter). Absent or blank content degrades silently;
+ * caller answers without them: a red command falls back to its synthetic finding, a green one to
+ * an empty answer (NFR-R2: a broken reporter never degrades the answer to CannotVerify). The file
+ * is read whatever the exit code but 126/127 (D5 second amendment of
+ * migrate-verify-to-executor-contract). Absent or blank content degrades silently;
  * malformed content — not JSON, a missing {@code findings} array, an entry with a blank or
  * missing {@code message} — degrades with a WARN naming the check (FR5 of
  * harden-logging-observability); a file cut at the cap parses as what its first bytes are.
@@ -54,20 +56,6 @@ final class CheckFindings {
     }
 
     /**
-     * Notes, at DEBUG, that the channel carried content although the command exited 0 (Pass): the
-     * content is ignored per FR8. DEBUG, not WARN (FR12 of harden-logging-observability): writing
-     * findings unconditionally is the check author's habit, not a degradation of this run.
-     */
-    static void noteIgnoredOnPass(String checkIdentity, ReadResult<FindingsFile> read) {
-        if (hasContent(read)) {
-            log.debug(
-                    "GNOMISH_FINDINGS_FILE of check '{}' has content but the command exited 0 (Pass);"
-                            + " ignoring it per FR8",
-                    checkIdentity);
-        }
-    }
-
-    /**
      * The validated, non-empty findings the channel carried, or {@code null} when it carried none
      * worth using.
      *
@@ -94,7 +82,7 @@ final class CheckFindings {
         }
         log.warn(
                 OperatorEvent.FINDINGS_FILE_MALFORMED.head()
-                        + "GNOMISH_FINDINGS_FILE of check '{}' is malformed ({}); using synthetic finding",
+                        + "GNOMISH_FINDINGS_FILE of check '{}' is malformed ({}); its findings are not used",
                 checkIdentity,
                 read.reason().forLog());
         return null;
@@ -105,7 +93,7 @@ final class CheckFindings {
             log.warn(
                     OperatorEvent.FINDINGS_FILE_MISSING_ARRAY.head()
                             + "GNOMISH_FINDINGS_FILE of check '{}' is malformed: missing 'findings' array;"
-                            + " using synthetic finding",
+                            + " its findings are not used",
                     checkIdentity);
             return null;
         }
@@ -115,23 +103,13 @@ final class CheckFindings {
                 log.warn(
                         OperatorEvent.FINDINGS_FILE_BLANK_ENTRY.head()
                                 + "GNOMISH_FINDINGS_FILE of check '{}' is malformed: an entry has a blank/missing"
-                                + " 'message'; using synthetic finding",
+                                + " 'message'; its findings are not used",
                         checkIdentity);
                 return null;
             }
             findings.add(new Finding(entry.message().raw(), rawOrNull(entry.location()), rawOrNull(entry.details())));
         }
         return findings;
-    }
-
-    private static boolean hasContent(ReadResult<FindingsFile> read) {
-        return switch (read) {
-            case ReadResult.Absent<FindingsFile> absent -> false;
-            case ReadResult.Truncated<FindingsFile> truncated -> true;
-            case ReadResult.Parsed<FindingsFile> parsed -> true;
-            case ReadResult.Malformed<FindingsFile> malformed ->
-                !malformed.content().isBlank();
-        };
     }
 
     private static @Nullable String rawOrNull(@Nullable UntrustedText text) {

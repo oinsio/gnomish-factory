@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.httpegress.HttpCheckExchange
 import java.net.http.HttpRequest
 import java.time.Duration
 

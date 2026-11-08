@@ -1,0 +1,38 @@
+// Build script for the `:httpegress` module (FR15, design D16 of
+// migrate-verify-to-executor-contract): the factory's one HTTP egress owner — the allowlist of
+// hosts an in-process HTTP call may reach (scheme, host and address-class rules), the guarded
+// exchange that re-judges every redirect hop against it, and the one JDK `HttpClient` the
+// factory's production code constructs. A request in, a bounded response or a refusal out.
+//
+// The module deliberately depends on NOTHING — no factory module, no Spring, no Jackson, no
+// logging API. Like `:gittransfer`, whose template this file follows, the emptiness is a
+// *security* property rather than a tidiness one (NFR-S2 of add-plugin-architecture; FR15 of
+// migrate-verify-to-executor-contract): an allowlist with nothing in it is what constructively
+// guarantees the egress policy can know nothing of trackers, secrets providers or configuration
+// formats, so the only things a caller can vary are the allowlist entries and the request. It is
+// also load-bearing for the layering: the `http` built-in in `:adapters` and the first-party GitHub
+// HTTP core reach this leaf from different modules, so any dependency added here would be pushed
+// into both. There is no production-scope declaration below because there is nothing to declare,
+// and the layering gate proves it stays that way.
+//
+// What stays outside: composing a request from a manifest, resolving its credential and judging
+// the verdict (`HttpExternalCheckClient` in `:adapters`), and logging a refusal, which needs the
+// logging API this leaf does not carry, are the callers'.
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and the PIT mutation
+// gate all come from the convention plugins.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach — no internal
+    // project at all — is stated below.
+    id 'layering-conventions'
+}
+
+description = 'HTTP egress owner: the host allowlist, the guarded exchange, the one JDK HTTP client.'
+
+// `:httpegress` reaches no other project at all — the same gate `:gittransfer`,
+// `:untrustedtext` and `:subprocess` carry, here for the reason stated above: the empty
+// allowlist is the constructive half of the egress policy's security property.
+layering {
+    allowedProjects = []
+}

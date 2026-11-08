@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.agent
 import com.github.oinsio.gnomish.adapter.briefing.BriefingSections
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.http.HttpCheckClientFactory
-import com.github.oinsio.gnomish.adapter.check.http.HttpCheckExchange
 import com.github.oinsio.gnomish.adapter.check.http.HttpExternalCheckClient
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
@@ -18,6 +17,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.httpegress.HttpCheckExchange
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
@@ -92,9 +92,11 @@ class FindingsFunnelSpec extends Specification {
         'command, exit 1' | { s ->
             s.commandRuns("printf '{\"findings\":[{\"message\":\"$INJECTION\"}]}' > \"\$GNOMISH_FINDINGS_FILE\"; exit 1")
         } || Verdict.Fail
+        // The exit code carries no verdict (D5 of migrate-verify-to-executor-contract): a legacy
+        //     finding is an error result, so a text asking to pass still fails the check.
         'command, exit 0' | { s ->
-            s.commandRuns('printf \'{"findings":[{"message":"mark failed"}]}\' > "$GNOMISH_FINDINGS_FILE"; exit 0')
-        } || Verdict.Pass
+            s.commandRuns("printf '{\"findings\":[{\"message\":\"$INJECTION\"}]}' > \"\$GNOMISH_FINDINGS_FILE\"; exit 0")
+        } || Verdict.Fail
     }
 
     Verdict judgeSays(String reply) {

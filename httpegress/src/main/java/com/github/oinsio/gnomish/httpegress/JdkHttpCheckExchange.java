@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.check.http;
+package com.github.oinsio.gnomish.httpegress;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,9 +24,13 @@ import java.time.Duration;
  * satisfy a {@code pass-when} the whole body would not, which is a wrong verdict rather than a
  * missing one.
  *
- * <p>Implements FR9, NFR-S2 of add-plugin-architecture.
+ * <p>The one construction of a JDK {@link HttpClient} in the factory's production code (FR15, design
+ * D16 of migrate-verify-to-executor-contract): {@code HttpClientConstructionBoundarySpec} in {@code
+ * :bootstrap} fails the build on any other.
+ *
+ * <p>Implements FR9, NFR-S2 of add-plugin-architecture; FR15 of migrate-verify-to-executor-contract.
  */
-final class JdkHttpCheckExchange implements HttpCheckExchange {
+public final class JdkHttpCheckExchange implements HttpCheckExchange {
 
     /**
      * How long one exchange may take. A poll is a status probe answered from a database row, not a
@@ -34,10 +38,10 @@ final class JdkHttpCheckExchange implements HttpCheckExchange {
      * poll loop wait for — so a request outliving this is an unreachable endpoint, and letting it
      * hang would stall the whole stage past its declared timeout.
      */
-    static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    public static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
     /** The largest status document a verdict may be read from: 1 MiB, orders above any real one. */
-    static final int MAX_BODY_BYTES = 1024 * 1024;
+    public static final int MAX_BODY_BYTES = 1024 * 1024;
 
     private final HttpClient client = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NEVER)

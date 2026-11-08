@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.check.http;
+package com.github.oinsio.gnomish.httpegress;
 
 import java.net.Inet4Address;
 import java.net.Inet6Address;

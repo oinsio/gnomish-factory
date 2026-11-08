@@ -94,6 +94,7 @@ dependencies {
     // Shared fakes (FR7, design D8), test scope only — `FakeAgentBinary` and
     // the scenario library the round specs drive instead of a real CLI.
     testImplementation project(':test-fixtures')
+    testImplementation project(':httpegress') // FindingsFunnelSpec scripts the `http` exchange (D16)
     // Logback's ListAppender backs the specs asserting on log output.
     testImplementation libs.logback.classic
     // The sibling-reach gate (task 10.2, D5/M4): ArchUnit holds this module's
@@ -170,6 +171,8 @@ layering {
         // runs git under its invocation policy, `GitInvocation`.
         ':gittransfer',
         ':gnomish-plugin-api',
+        // FR15, D16 of migrate-verify-to-executor-contract: via `:adapters`, whose `http` client takes it.
+        ':httpegress',
         // The dependency-free logging-support leaf (design D5/D10 of
         // harden-logging-observability): this module's own sources name `LogText` at every
         // agent-text log site.

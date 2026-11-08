@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.check.http;
+package com.github.oinsio.gnomish.httpegress;
 
 import java.net.InetAddress;
 import java.net.URI;
@@ -28,34 +28,35 @@ import org.jspecify.annotations.Nullable;
  * <p>An unset or empty allowlist permits nothing. Configuring the provider is enabling it; deciding
  * where it may call is a separate, explicit act.
  *
- * <p>Implements NFR-S2, UX2 of add-plugin-architecture.
+ * <p>Implements NFR-S2, UX2 of add-plugin-architecture; FR15 of migrate-verify-to-executor-contract
+ * (moved into this leaf by design D16).
  */
-final class EgressAllowlist {
+public final class EgressAllowlist {
 
     /** The one key of the {@code factory.check.http} operator subsection. */
-    static final String ALLOWLIST_KEY = "allowlist";
+    public static final String ALLOWLIST_KEY = "allowlist";
 
     /** The only permitted scheme: an http check sends a credential and reads a verdict. */
-    static final String SCHEME = "https";
+    public static final String SCHEME = "https";
 
     /** The wildcard form an entry may take: {@code *.example.com} matches any subdomain of it. */
-    static final String WILDCARD_PREFIX = "*.";
+    public static final String WILDCARD_PREFIX = "*.";
 
     private final List<String> entries;
     private final HostResolver resolver;
 
-    EgressAllowlist(List<String> entries, HostResolver resolver) {
+    public EgressAllowlist(List<String> entries, HostResolver resolver) {
         this.entries = entries.stream().map(EgressAllowlist::normalize).toList();
         this.resolver = resolver;
     }
 
     /** The allowlist an operator subsection declares, over the platform name service. */
-    static EgressAllowlist from(Map<String, Object> subsection) {
+    public static EgressAllowlist from(Map<String, Object> subsection) {
         return new EgressAllowlist(entriesOf(subsection), HostResolver.system());
     }
 
     /** The declared entries of a subsection, as text; anything else in it is a config error. */
-    static List<String> entriesOf(Map<String, Object> subsection) {
+    public static List<String> entriesOf(Map<String, Object> subsection) {
         if (!(subsection.get(ALLOWLIST_KEY) instanceof List<?> declared)) {
             return List.of();
         }
@@ -68,8 +69,7 @@ final class EgressAllowlist {
      * @param target the absolute URL of the hop about to be requested; never null
      * @return the refusal, or {@code null} when the target is permitted
      */
-    @Nullable
-    EgressRefusal refuse(URI target) {
+    public @Nullable EgressRefusal refuse(URI target) {
         if (!SCHEME.equalsIgnoreCase(target.getScheme())) {
             return new EgressRefusal(
                     EgressRefusal.Reason.SCHEME,

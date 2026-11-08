@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.check.http;
+package com.github.oinsio.gnomish.httpegress;
 
 /**
  * Why one http target was refused before a connection to it was attempted (NFR-S2, UX2, design D5 of
@@ -7,16 +7,16 @@ package com.github.oinsio.gnomish.adapter.check.http;
  * both readings need the same three facts: which target, which rule, and the concrete detail (the
  * blocked address class, the scheme that was written).
  *
- * <p>A plain final class rather than a record, for the reason {@link HttpCheckCondition} carries in
- * full: PIT cannot redefine a record's bytecode in an already-loaded class, so mutations of a record
+ * <p>A plain final class rather than a record, for the reason the {@code http} built-in's {@code HttpCheckCondition}
+ * carries in full: PIT cannot redefine a record's bytecode in an already-loaded class, so mutations of a record
  * accessor come back RUN_ERROR and drop the type out of the mutation gate (hcoles/pitest#1285).
  *
  * <p>Implements NFR-S2, UX2 of add-plugin-architecture.
  */
-final class EgressRefusal {
+public final class EgressRefusal {
 
     /** The rule that refused the target — the three refusal classes UX2 names. */
-    enum Reason {
+    public enum Reason {
 
         /** The target is not {@code https}: an http check may not send a credential in the clear. */
         SCHEME("scheme"),
@@ -42,7 +42,7 @@ final class EgressRefusal {
             this.label = label;
         }
 
-        String label() {
+        public String label() {
             return label;
         }
     }
@@ -51,26 +51,26 @@ final class EgressRefusal {
     private final String target;
     private final String detail;
 
-    EgressRefusal(Reason reason, String target, String detail) {
+    public EgressRefusal(Reason reason, String target, String detail) {
         this.reason = reason;
         this.target = target;
         this.detail = detail;
     }
 
-    Reason reason() {
+    public Reason reason() {
         return reason;
     }
 
-    String target() {
+    public String target() {
         return target;
     }
 
-    String detail() {
+    public String detail() {
         return detail;
     }
 
     /** The operator-facing sentence: the target, the rule that refused it, and why (UX2). */
-    String describe() {
+    public String describe() {
         return "http check target '%s' refused by the factory egress allowlist (%s): %s"
                 .formatted(target, reason.label(), detail);
     }

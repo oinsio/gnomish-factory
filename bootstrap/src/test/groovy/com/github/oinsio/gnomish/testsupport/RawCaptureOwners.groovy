@@ -92,7 +92,7 @@ class RawCaptureOwners {
             'TRACKER (transport): body is parsed into the issue detail whose labels drive the write',
         ],
         [
-            'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/http/JdkHttpCheckExchange.java',
+            'httpegress/src/main/java/com/github/oinsio/gnomish/httpegress/JdkHttpCheckExchange.java',
             'MANIFEST/check (transport): streams the body under a byte cap into the check exchange; HttpExternalCheckClient matches it against the manifest\'s patterns and excerpts it through the carrier',
         ],
         // --- document file reads ---

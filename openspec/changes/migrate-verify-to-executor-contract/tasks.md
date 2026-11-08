@@ -21,7 +21,7 @@
 - [x] 2.2 Route `VerifyOrchestrator` through it; delete verdict construction in
   `ShellCommandCheckRunner`, `FilesExistCheckRunner`, `ExternalPolling`,
   `VerifyOrchestrator:153`, `HttpExternalCheckClient`, `GithubCheckExternalClient`
-- [ ] 2.2a A pass keeps its below-threshold findings (FR7, D5 as amended): `Verdict.Pass(runUrl,
+- [x] 2.2a A pass keeps its below-threshold findings (FR7, D5 as amended): `Verdict.Pass(runUrl,
   findings)` with the list defensively copied; `VerdictDerivation` fills it with every result
   below the threshold, in the order written; `StateJsonMapper` writes and reads the existing
   `findings` field for `"pass"` (round-trip spec over a pass with warnings; `StateCheckDto` and
@@ -39,7 +39,7 @@
 - [x] 2.3 Old-way sweep: `grep -rn "new Verdict\." --include=*.java */src/main adapters/*/src/main`
   → hits only in `VerdictDerivation`, `StateJsonMapper` and the judge classes named in D9;
   record the list in the task report (M2)
-- [ ] 2.4 Outcome-classifier gate (carried from D10 of `define-executor-contract`): that change's
+- [x] 2.4 Outcome-classifier gate (carried from D10 of `define-executor-contract`): that change's
   `OutcomeClassifierOwnerSpec` (`:bootstrap`) allowlists every `new Verdict.CannotVerify(` site
   under the pickup `migrate-verify-to-executor-contract: check-side verdict construction`. Delete
   the rows of the classes 2.2 routes (`ShellCommandCheckRunner`, `FilesExistCheckRunner`,
@@ -51,7 +51,7 @@
 
 ## 3. Built-in verdict executors
 
-- [ ] 3.0 Leaf `:httpegress` (FR15, D16): move `EgressAllowlist`, `GuardedHttpCheckExchange`,
+- [x] 3.0 Leaf `:httpegress` (FR15, D16): move `EgressAllowlist`, `GuardedHttpCheckExchange`,
   `JdkHttpCheckExchange`, `EgressRefusedException` out of `:adapters` (`adapter.check.http`) into
   the new JDK-only leaf, re-point `HttpExternalCheckClient`; architecture spec in `:bootstrap`
   asserting `HttpClient.newBuilder(` / `newHttpClient(` appear in production code only inside the

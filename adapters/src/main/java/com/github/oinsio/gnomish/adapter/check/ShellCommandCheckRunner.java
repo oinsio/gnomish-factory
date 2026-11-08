@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.check;
 import com.github.oinsio.gnomish.adapter.command.CommandRun;
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource;
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.domain.engine.ResultLevel;
 import com.github.oinsio.gnomish.domain.engine.VerdictAnswer;
 import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
@@ -27,8 +28,10 @@ import org.slf4j.LoggerFactory;
  * (design D2 of add-command-executor) — over the environment acquired from the run's {@link CheckEnvironmentSource}
  * (host workspace environment by default; the round's leased box or a fresh box in sandboxed mode)
  * — the task environment port is the sole process-launch seam (FR4 of add-sandbox-core) — then
- * reports the exit code as the check's answer (FR7, D6): exit 0 is an empty {@link
- * VerdictAnswer.Sarif} answer — any findings content is ignored with a logged note (FR8); exit
+ * reports the exit code as the check's answer (FR7, D6): exit 0 is a {@link VerdictAnswer.Sarif}
+ * answer carrying the findings {@link CheckFindings} read from the channel as {@code error}
+ * results, empty when the channel is absent, empty or malformed (D5 second amendment of
+ * migrate-verify-to-executor-contract: the file is read whatever the exit code); exit
  * 126/127 (shell convention for "not executable" / "not found") is a {@link
  * VerdictAnswer.InfrastructureFailure}, honoring the same classification a missing binary would
  * get, and the findings channel plays no role; any other non-zero exit is a {@link
@@ -216,8 +219,10 @@ public record ShellCommandCheckRunner(
     }
 
     /**
-     * Reports a completed run's exit code as its answer (FR7, D6): 0 is an empty SARIF answer —
-     * findings content is ignored with a note (FR8); 126/127 are the
+     * Reports a completed run's exit code as its answer (FR7, D6): 0 is a SARIF answer whose
+     * results are the findings the command wrote, normalized to {@code error} (the legacy file has
+     * no level), and empty when it wrote none worth using (D5 second amendment of
+     * migrate-verify-to-executor-contract); 126/127 are the
      * shell's "not executable" / "not found" conventions and are treated as infrastructure
      * failures, the findings channel playing no role; any other non-zero exit is a quality
      * failure carrying either the structured findings the command wrote, or one synthetic
@@ -230,8 +235,8 @@ public record ShellCommandCheckRunner(
             ReadResult<CheckFindings.FindingsFile> findingsRead) {
         int exitCode = outcome.exitCode();
         if (exitCode == 0) {
-            CheckFindings.noteIgnoredOnPass(checkIdentity, findingsRead);
-            return new VerdictAnswer.Sarif(List.of());
+            List<Finding> reported = CheckFindings.findings(checkIdentity, findingsRead);
+            return new VerdictAnswer.Sarif(reported == null ? List.of() : asErrors(reported));
         }
         if (exitCode == 126 || exitCode == 127) {
             // The reason is the factory's own sentence about an exit code, quoting nothing the
@@ -244,5 +249,12 @@ public record ShellCommandCheckRunner(
         Finding syntheticFinding = new Finding("command exited with status " + exitCode, null, outcome.outputTail());
         List<Finding> parsed = CheckFindings.findings(checkIdentity, findingsRead);
         return new VerdictAnswer.QualityFailure(parsed != null ? parsed : List.of(syntheticFinding));
+    }
+
+    /** The legacy findings as SARIF results: the legacy file names no level, so each is an error. */
+    private static List<VerdictAnswer.Result> asErrors(List<Finding> findings) {
+        return findings.stream()
+                .map(finding -> new VerdictAnswer.Result(ResultLevel.ERROR, finding))
+                .toList();
     }
 }

@@ -144,7 +144,7 @@ class TimeTypeSurfaceSpec extends Specification {
             '.system' in TimeSourceOwnerBoundarySpec.realTimeLiterals(source)
         }.keySet() == [
             ROOT + 'ManualRunConfiguration.java',
-            'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/http/EgressAllowlist.java',
+            'httpegress/src/main/java/com/github/oinsio/gnomish/httpegress/EgressAllowlist.java',
         ] as Set
     }
 

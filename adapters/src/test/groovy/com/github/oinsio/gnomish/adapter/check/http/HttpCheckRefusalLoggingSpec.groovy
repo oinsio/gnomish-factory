@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
+import com.github.oinsio.gnomish.httpegress.EgressRefusal
+import com.github.oinsio.gnomish.httpegress.EgressRefusedException
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification

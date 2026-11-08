@@ -29,6 +29,9 @@ class InPlaceWorkspaceHygieneSpec extends Specification implements AppAssemblyFi
     // Scenario: cli/manual-run / No runner artifacts in the workspace
     def "FR1, NFR-S1: an in-place run with findings-writing command checks adds only the gnome's file to the workspace"() {
         given: 'a one-stage pipeline whose two command checks each write a findings file'
+        // The files carry no findings: the file is read whatever the exit code (D5 second
+        //     amendment of migrate-verify-to-executor-contract), and a legacy finding is an error
+        //     that would fail the check. The subject is where the file lives, not what it says.
         write(projectRoot, 'config.yaml', 'schemaVersion: "1"\nautonomy:\n  attemptLimit: 3\n')
         write(projectRoot, 'pipeline.yaml', 'stages:\n  - build\n')
         write(projectRoot, 'stages/build/stage.yaml', '''\
@@ -39,9 +42,9 @@ executor:
 instructions: stages/build/instructions.md
 verify:
   - type: command
-    command: printf '{"findings":[{"message":"lint note"}]}' > "$GNOMISH_FINDINGS_FILE"
+    command: printf '{"findings":[]}' > "$GNOMISH_FINDINGS_FILE"
   - type: command
-    command: printf '{"findings":[{"message":"test note"}]}' > "$GNOMISH_FINDINGS_FILE"
+    command: printf '{"findings":[]}' > "$GNOMISH_FINDINGS_FILE"
 advancement: auto
 ''')
         write(projectRoot, 'stages/build/instructions.md', 'build it\n')

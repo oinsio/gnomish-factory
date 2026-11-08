@@ -112,6 +112,15 @@ include 'gitobjects'
 // trackers, containers, or configuration formats, and any edge added here would be pushed
 // into both consumers (NFR-S1, NFR-S2).
 include 'gittransfer'
+// The HTTP egress leaf (FR15, design D16 of migrate-verify-to-executor-contract): the one
+// allowlist every in-process HTTP call of a built-in verdict executor passes — the scheme, host
+// and address-class rules judged on every hop — the guarded exchange that applies it hop by hop,
+// and the one JDK client construction under it. A leaf because its consumers sit apart: the `http`
+// built-in in `:adapters` and the first-party GitHub HTTP core, which every SCM built-in and the
+// vendor bundle's tracker share. JDK-only for `:gittransfer`'s security reason: an empty allowlist
+// is what constructively guarantees the egress policy can know nothing of trackers, credentials'
+// sources or configuration formats, and any edge added here would land in every consumer.
+include 'httpegress'
 // The base-resolution leaf (FR10, design D2 of add-base-ref-resolution): the pure
 // policy that decides which ref a new task branch starts from — the allowed-base
 // pattern grammar, the per-task designator's validation against it, the source

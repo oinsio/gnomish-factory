@@ -3,6 +3,8 @@ package com.github.oinsio.gnomish.adapter.check.http
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.PollStatus
+import com.github.oinsio.gnomish.httpegress.EgressRefusal
+import com.github.oinsio.gnomish.httpegress.EgressRefusedException
 import com.github.oinsio.gnomish.untrustedtext.Provenance
 import spock.lang.Specification
 

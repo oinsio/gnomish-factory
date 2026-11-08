@@ -1,9 +1,15 @@
 package com.github.oinsio.gnomish.adapter.check
 
+import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
+import com.github.oinsio.gnomish.domain.engine.Finding
+import com.github.oinsio.gnomish.domain.engine.ResultLevel
+import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
+import com.github.oinsio.gnomish.domain.engine.VerdictDerivation
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
+import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
@@ -15,7 +21,8 @@ import spock.lang.TempDir
 
 /**
  * FR7, FR8, NFR-R2, NFR-S1, D6 of add-manual-run: the real command runner classifies a
- * completed command run: exit 0 &rarr; Pass (a findings file is ignored with a warning); exit
+ * completed command run: exit 0 &rarr; Pass, unless the findings file it wrote names a finding
+ * (read whatever the exit code, D5 second amendment of migrate-verify-to-executor-contract); exit
  * 126/127 &rarr; CannotVerify (shell convention for not-executable / not-found, the findings
  * file plays no role); any other non-zero exit &rarr; Fail with either the structured findings
  * the command wrote, or one synthetic finding carrying the output tail if none were written or
@@ -258,35 +265,51 @@ exit 1''')
         fail.findings()[0].details().contains('boom-output')
     }
 
-    // FR12 of harden-logging-observability: a check that writes findings unconditionally is its
-    //     author's habit, not a degradation of this run — noted at DEBUG, not warned about.
-    // Scenario: cli/manual-run / A findings file on a green check is ignored
-    def "a findings file with content on exit 0 is ignored - verdict stays Pass, and it is noted"() {
-        given: 'a command that exits 0 but still writes findings-shaped content'
+    // FR7 of migrate-verify-to-executor-contract (D5 second amendment): the findings file is read
+    //     whatever the exit code, and a legacy file names no level, so its findings are error
+    //     results that fail a green command. The warning half of verdict-executors / "A findings
+    //     file on a green command is read" needs the SARIF passthrough of task 3.2, which adds the
+    //     scenario marker here.
+    def "a legacy findings file on exit 0 is read: its findings are error results and fail the check"() {
+        given: 'a command that exits 0 but writes one legacy finding'
         def check = command('''cat > "$GNOMISH_FINDINGS_FILE" <<'EOF'
-{"findings":[{"message":"should be ignored"}]}
+{"findings":[{"message":"reported on green","location":"src/A.java:3"}]}
 EOF
 exit 0''')
 
         when:
-        VerdictAnswer verdict = null
+        def answer = runner.run(check, workspace())
+
+        then: 'the answer carries the finding as an error result'
+        answer instanceof VerdictAnswer.Sarif
+        def results = (answer as VerdictAnswer.Sarif).results()
+        results.size() == 1
+        results[0].level() == ResultLevel.ERROR
+        results[0].finding() == new Finding('reported on green', 'src/A.java:3', null)
+
+        and: 'the derived verdict fails with exactly that finding'
+        VerdictDerivation.derive(answer, Threshold.ERROR) == new Verdict.Fail([results[0].finding()])
+    }
+
+    // NFR-R2 of add-manual-run, FR5 of harden-logging-observability: a broken reporter on a green
+    //     command is warned about, naming the check, and the green answer stands without findings.
+    def "a malformed findings file on exit 0 is warned about and the answer stays an empty pass"() {
+        given:
+        def check = command('''echo 'not json' > "$GNOMISH_FINDINGS_FILE"; exit 0''')
+
+        when:
+        VerdictAnswer answer = null
         def events = capture(CheckFindings) {
-            verdict = runner.run(check, workspace())
+            answer = runner.run(check, workspace())
         }
 
         then:
-        verdict == new VerdictAnswer.Sarif([])
+        answer == new VerdictAnswer.Sarif([])
         events.any {
-            it.formattedMessage.contains('has content but the command exited 0')
+            it.level == Level.WARN &&
+            it.formattedMessage.startsWith(OperatorEvent.FINDINGS_FILE_MALFORMED.head()) &&
+            it.formattedMessage.contains('not json')
         }
-
-        and: 'FR5 of harden-logging-observability: the note names the check that wrote the channel'
-        events.any {
-            it.formattedMessage.contains('should be ignored')
-        }
-
-        and: 'the multi-line command reaches the line as one line (FR6)'
-        events.every { !it.formattedMessage.contains('\n') }
     }
 
     def "exit 0 with no findings file content logs no warning"() {
@@ -301,9 +324,7 @@ exit 0''')
 
         then:
         verdict == new VerdictAnswer.Sarif([])
-        events.every {
-            !it.formattedMessage.contains('has content but the command exited 0')
-        }
+        events.empty
     }
 
     // FR1, NFR-S3 of add-sandbox-core (task 7.3): the findings path lives in the environment's

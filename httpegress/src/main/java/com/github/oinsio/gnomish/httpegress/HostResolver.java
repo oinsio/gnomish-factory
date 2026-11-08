@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.check.http;
+package com.github.oinsio.gnomish.httpegress;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -16,7 +16,7 @@ import java.util.List;
  * <p>Implements NFR-S2 of add-plugin-architecture.
  */
 @FunctionalInterface
-interface HostResolver {
+public interface HostResolver {
 
     /**
      * Resolves a host to every address it names.

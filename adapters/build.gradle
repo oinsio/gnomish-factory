@@ -66,6 +66,12 @@ dependencies {
     // public surface.
     api project(':baseref')
 
+    // The HTTP egress leaf (FR15, design D16 of migrate-verify-to-executor-contract): the `http`
+    // built-in sends every request through its guarded exchange and its allowlist. `api`, not
+    // `implementation`: `HttpExternalCheckClient` takes the leaf's `HttpCheckExchange` on its
+    // public constructor.
+    api project(':httpegress')
+
     // The executor contract (FR6, design D10 of define-executor-contract): a command check's
     // findings file is read through the contract's one result reader. Method bodies and a
     // package-private signature only.
@@ -135,6 +141,10 @@ layering {
         // walks the transitive graph, so the reach is listed where it arrives.
         ':gittransfer',
         ':gnomish-plugin-api',
+        // The dependency-free HTTP egress leaf (FR15, design D16 of
+        // migrate-verify-to-executor-contract), declared above: the `http` built-in's every
+        // request passes its guarded exchange.
+        ':httpegress',
         // The dependency-free logging-support leaf (design D5/D10 of
         // harden-logging-observability): the check runners sanitize their log lines through it.
         ':logtext',

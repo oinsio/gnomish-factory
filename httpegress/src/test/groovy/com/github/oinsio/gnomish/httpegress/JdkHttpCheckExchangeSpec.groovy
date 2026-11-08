@@ -1,6 +1,5 @@
-package com.github.oinsio.gnomish.adapter.check.http
+package com.github.oinsio.gnomish.httpegress
 
-import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
 import java.net.http.HttpRequest
@@ -8,12 +7,14 @@ import java.nio.charset.StandardCharsets
 import spock.lang.Specification
 
 /**
- * FR9, FR11 of add-plugin-architecture: the production exchange over a real socket. An in-JVM
+ * FR9, NFR-S2 of add-plugin-architecture: the production exchange over a real socket. An in-JVM
  * {@link HttpServer} stands in for the third-party service, so the one seam that actually opens a
- * connection — request composition, credential header, status and body — is exercised end to end
- * without a container or a network dependency.
+ * connection — status, body, the body bound and the unfollowed redirect — is exercised end to end
+ * without a container or a network dependency. The {@code http} built-in's whole client over this
+ * exchange is {@code HttpExternalCheckClientLiveSpec} in {@code :adapters} (FR15, design D16 of
+ * migrate-verify-to-executor-contract).
  */
-class JdkHttpCheckExchangeSpec extends Specification implements HttpCheckFixture {
+class JdkHttpCheckExchangeSpec extends Specification {
 
     HttpServer server
 
@@ -48,42 +49,6 @@ class JdkHttpCheckExchangeSpec extends Specification implements HttpCheckFixture
         then:
         response.status() == 200
         response.body() == '{"status":"OK"}'
-    }
-
-    // FR9, FR10, FR11: the whole provider over a real socket — the credential reaches the endpoint
-    //     as a header, and the declared pass_when decides the verdict.
-    def "an authorized http check passes against a live endpoint"() {
-        given:
-        def client = new HttpExternalCheckClient(
-                new JdkHttpCheckExchange(), providing([SONAR_TOKEN: 's3cret']))
-        def params = [
-            url: url(),
-            auth: [credential: 'SONAR_TOKEN'],
-            ('pass-when'): [('json-path'): '$.status', equals: 'OK']
-        ]
-
-        when:
-        def status = client.poll(check(params), null)
-
-        then:
-        status instanceof PollStatus.Pass
-        seenAuthorization == ['Bearer s3cret']
-    }
-
-    // FR10: an unreachable target is infrastructure, not quality — the exchange's own IOException
-    //     path, reached by pointing at a port nothing listens on.
-    def "an unreachable endpoint raises, and the client classifies it as CannotVerify"() {
-        given:
-        def client = new HttpExternalCheckClient(new JdkHttpCheckExchange(), providing([:]))
-        def deadPort = server.address.port
-        server.stop(0)
-        server = null
-
-        when:
-        def status = client.poll(check([url: "http://127.0.0.1:${deadPort}/status" as String]), null)
-
-        then:
-        status instanceof PollStatus.CannotVerify
     }
 
     // NFR-S2: the response size is bounded, and an oversized body is refused rather than truncated —

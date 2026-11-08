@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.check.http;
+package com.github.oinsio.gnomish.httpegress;
 
 import java.io.IOException;
 import java.net.URI;
@@ -25,23 +25,25 @@ import org.jspecify.annotations.Nullable;
  * JdkHttpCheckExchange#REQUEST_TIMEOUT} and the hops are bounded by {@link #MAX_REDIRECTS}, so an
  * exchange cannot outlive {@link #MAX_TOTAL_DURATION}.
  *
- * <p>Implements NFR-S2 of add-plugin-architecture.
+ * <p>Implements NFR-S2 of add-plugin-architecture; FR15 of migrate-verify-to-executor-contract
+ * (moved into this leaf by design D16).
  */
-final class GuardedHttpCheckExchange implements HttpCheckExchange {
+public final class GuardedHttpCheckExchange implements HttpCheckExchange {
 
     /**
      * How many redirects one exchange may follow. A status endpoint that needs a fourth hop is
      * misconfigured, and an unbounded chain is a way to keep the factory busy.
      */
-    static final int MAX_REDIRECTS = 3;
+    public static final int MAX_REDIRECTS = 3;
 
     /** The bound the per-hop timeout and the hop bound together imply. */
-    static final Duration MAX_TOTAL_DURATION = JdkHttpCheckExchange.REQUEST_TIMEOUT.multipliedBy(MAX_REDIRECTS + 1L);
+    public static final Duration MAX_TOTAL_DURATION =
+            JdkHttpCheckExchange.REQUEST_TIMEOUT.multipliedBy(MAX_REDIRECTS + 1L);
 
     private final HttpCheckExchange delegate;
     private final EgressAllowlist allowlist;
 
-    GuardedHttpCheckExchange(HttpCheckExchange delegate, EgressAllowlist allowlist) {
+    public GuardedHttpCheckExchange(HttpCheckExchange delegate, EgressAllowlist allowlist) {
         this.delegate = delegate;
         this.allowlist = allowlist;
     }

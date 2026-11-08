@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.check.http;
+package com.github.oinsio.gnomish.httpegress;
 
 import java.io.IOException;
 import java.net.http.HttpRequest;
@@ -6,7 +6,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The one seam through which the {@code http} check provider reaches the network — a single
- * request/response exchange, so {@link HttpExternalCheckClient}'s verdict logic is exercised over
+ * request/response exchange, so the {@code http} built-in's {@code HttpExternalCheckClient} verdict logic is exercised over
  * scripted responses instead of a live endpoint, and so the factory-side egress guard has exactly
  * one place to sit (NFR-S2, design D5 of add-plugin-architecture).
  *

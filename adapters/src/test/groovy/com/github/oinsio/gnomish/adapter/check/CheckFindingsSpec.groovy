@@ -174,30 +174,4 @@ class CheckFindingsSpec extends Specification {
         cleanup:
         logs.detach()
     }
-
-    def "content on a passing check is noted at DEBUG, and nothing is noted for an empty channel"() {
-        given:
-        def logs = LogCaptureSupport.attach(CheckFindings, Level.DEBUG)
-
-        when:
-        CheckFindings.noteIgnoredOnPass(CHECK, CheckFindings.read(holding(content), PATH))
-        def noted = logs.list.any {
-            it.formattedMessage.contains('has content but the command exited 0')
-        }
-
-        then:
-        noted == expected
-
-        cleanup:
-        logs.detach()
-
-        where:
-        content | expected
-        '{"findings":[]}' | true
-        'not json' | true
-        '{"x":"' + ('y' * 300_000) + '"}' | true
-        '' | false
-        '   ' | false
-        null | false
-    }
 }

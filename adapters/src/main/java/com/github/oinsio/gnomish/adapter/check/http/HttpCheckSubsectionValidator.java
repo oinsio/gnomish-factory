@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.check.http;
 
 import com.github.oinsio.gnomish.app.CheckSubsectionValidator;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
+import com.github.oinsio.gnomish.httpegress.EgressAllowlist;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

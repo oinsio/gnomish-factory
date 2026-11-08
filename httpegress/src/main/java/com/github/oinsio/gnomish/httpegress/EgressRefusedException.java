@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.check.http;
+package com.github.oinsio.gnomish.httpegress;
 
 import java.io.IOException;
 import java.io.Serial;
@@ -7,7 +7,7 @@ import java.io.Serial;
  * Raised instead of performing an exchange the {@link EgressAllowlist} refuses (NFR-S2, UX2 of
  * add-plugin-architecture). It extends {@link IOException} deliberately: a refusal is the network
  * seam declining to reach a target, so every caller that already handles "the exchange could not be
- * completed" keeps working — {@link HttpExternalCheckClient} classifies it as {@code CannotVerify},
+ * completed" keeps working — the {@code http} built-in's {@code HttpExternalCheckClient} classifies it as {@code CannotVerify},
  * an infrastructure failure that burns no stage attempt, since a blocked target says nothing about
  * the artifact under verification.
  *
@@ -16,19 +16,19 @@ import java.io.Serial;
  *
  * <p>Implements NFR-S2, UX2 of add-plugin-architecture.
  */
-final class EgressRefusedException extends IOException {
+public final class EgressRefusedException extends IOException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
     private final transient EgressRefusal refusal;
 
-    EgressRefusedException(EgressRefusal refusal) {
+    public EgressRefusedException(EgressRefusal refusal) {
         super(refusal.describe());
         this.refusal = refusal;
     }
 
-    EgressRefusal refusal() {
+    public EgressRefusal refusal() {
         return refusal;
     }
 }

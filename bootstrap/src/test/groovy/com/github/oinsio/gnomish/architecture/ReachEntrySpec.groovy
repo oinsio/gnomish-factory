@@ -16,14 +16,18 @@ class ReachEntrySpec extends Specification {
         ':untrustedtext',
         ':operatorevent',
         ':operatorconfig',
-        ':gittransfer'
+        ':gittransfer',
+        ':httpegress'
     ]
 
     /**
      * The declared edges a transitive leaf may arrive through; {@code :gitobjects} carries
-     * {@code :gittransfer} to {@code :application} (FR1 of own-git-invocation-policy).
+     * {@code :gittransfer} to {@code :application} (FR1 of own-git-invocation-policy), and
+     * {@code :adapters} carries {@code :httpegress} to {@code :adapters:agent} (FR15, design D16 of
+     * migrate-verify-to-executor-contract).
      */
     private static final List<String> CARRIERS = [
+        ':adapters',
         ':domain',
         ':gnomish-plugin-api',
         ':application',
