@@ -21,6 +21,18 @@
 - [ ] 2.2 Route `VerifyOrchestrator` through it; delete verdict construction in
   `ShellCommandCheckRunner`, `FilesExistCheckRunner`, `ExternalPolling`,
   `VerifyOrchestrator:153`, `HttpExternalCheckClient`, `GithubCheckExternalClient`
+- [ ] 2.2a A pass keeps its below-threshold findings (FR7, D5 as amended): `Verdict.Pass(runUrl,
+  findings)` with the list defensively copied; `VerdictDerivation` fills it with every result
+  below the threshold, in the order written; `StateJsonMapper` writes and reads the existing
+  `findings` field for `"pass"` (round-trip spec over a pass with warnings; `StateCheckDto` and
+  `CheckDto` javadoc updated); `AttemptMapper` and `UsageReportJsonMapper` carry the list;
+  `CheckFindings.noteIgnoredOnPass` deleted. Spec: a pass with findings feeds no retry (`RoundExecution`
+  filters by `Fail`, FR4 of `add-stage-engine`). Scenarios "Warnings pass under the default
+  threshold" and "A pass keeps its findings across the state file"
+- [ ] 2.2b The same for the judge (second instance of the class, D5 as amended): `JudgeVerdictExtractor`
+  returns `Pass` with the parsed `findings` of a `"passed": true` verdict under the same strict
+  schema as a failed one (a malformed array stays `CannotVerify`); scenario "A judge pass keeps
+  its findings". The judge classes stay exempt from the derivation gate (D9, NG1)
 - [ ] 2.3 Old-way sweep: `grep -rn "new Verdict\." --include=*.java */src/main adapters/*/src/main`
   → hits only in `VerdictDerivation`, `StateJsonMapper` and the judge classes named in D9;
   record the list in the task report (M2)

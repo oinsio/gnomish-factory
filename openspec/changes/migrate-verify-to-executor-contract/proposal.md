@@ -117,7 +117,8 @@ by the engine and persisted on the branch.
   behavior (workflow-run lookup by commit with job-log findings; status-code probe with
   conditions) as contract executors with `poll`, including the pin of the workflow file.
 - FR7: Verdict pass/fail SHALL be derived in one engine component from SARIF levels against
-  the check's threshold (default `error`); executors SHALL construct no verdict.
+  the check's threshold (default `error`); executors SHALL construct no verdict; a pass SHALL
+  carry the results below the threshold as its findings, recorded like a failure's.
 - FR8: `CheckClientFactory` and its companion types SHALL be removed from
   `gnomish-plugin-api`; the api's sample module SHALL ship a verdict program that passes the
   conformance kit instead of a Java factory.

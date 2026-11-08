@@ -36,6 +36,22 @@ A shell exit code SHALL carry no verdict meaning.
 - **WHEN** the command writes `{"findings":[{"message":"x"}]}` to the findings path
 - **THEN** the answer is stored as SARIF with one `error` result and the check fails
 
+### Requirement: A pass keeps its below-threshold findings
+A passing verdict SHALL carry every result below the check's threshold as a finding, in the order
+written, and every writer of a check result — the state file, `status --json`, the usage report —
+SHALL record a pass's findings exactly as it records a failure's. A pass's findings SHALL feed
+no later attempt: retry feedback stays the failed checks of prior attempts.
+**Implements**: FR7 of migrate-verify-to-executor-contract
+**Notes**: Design D5 as amended; the findings-less pass of `add-stage-engine` FR4 and `add-manual-run` FR8 rested on the exit code being the verdict, which D5 removed.
+
+#### Scenario: A pass keeps its findings across the state file
+- **WHEN** a check passes with two `warning` results and the attempt record is written to the task branch and read back
+- **THEN** the read verdict is a pass carrying the same two findings in the same order, and the next attempt's feedback does not mention them
+
+#### Scenario: A judge pass keeps its findings
+- **WHEN** the judge's final message carries `{"passed": true, "findings": ["x"]}`
+- **THEN** the vote is a pass carrying the finding `x`, and a malformed `findings` array still makes the vote `CannotVerify`
+
 ### Requirement: Built-in verdict executors report a known zero usage
 A built-in verdict executor that mediates no model SHALL report usage with provenance
 `REPORTED` and an empty per-model map, and its describe SHALL declare `reportsUsage = true`,
