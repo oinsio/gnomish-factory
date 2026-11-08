@@ -56,13 +56,42 @@
   the new JDK-only leaf, re-point `HttpExternalCheckClient`; architecture spec in `:bootstrap`
   asserting `HttpClient.newBuilder(` / `newHttpClient(` appear in production code only inside the
   leaf (allowlist by file, asserted reached); existing egress specs re-pointed
-- [ ] 3.0a Library `:githubapi` (FR14, D15): move the bundle's `adapter.github` package
-  (`GithubHttpClient`, `GithubCredential`, `GithubConditionalRequestCache`, `GithubRateLimit`,
-  `GithubRetryConfig`, exceptions) into the new module depending on `:domain`, `:httpegress`,
-  resilience4j, slf4j — never on `:executor-contract`, `:application` or `:adapters`; build
-  `GithubHttpClient` over the guarded exchange; add `:githubapi` to the bundle's
-  `layering.allowedProjects` with the reason; re-point the tracker's imports; `GithubAdapterBoundarySpec`
-  and `GithubPluginPackagingSpec` green; grep `class GithubHttpClient` → one hit (M6)
+- [ ] 3.0a Library `:githubapi` (FR14, D15; narrowed 2026-11-08 by the decision on this task's
+  escalation, D16 as amended): move the bundle's `adapter.github` package (`GithubHttpClient`,
+  `GithubCredential`, `GithubConditionalRequestCache`, `GithubRateLimit`, `GithubRetryConfig`,
+  exceptions) into the new module depending on `:domain`, `:httpegress`, resilience4j, slf4j —
+  never on `:executor-contract`, `:application` or `:adapters` — with **unchanged behavior**:
+  the client keeps its own `HttpClient` for this task, and the `PENDING` row of
+  `HttpClientConstructionBoundarySpec` is retargeted to the class's new path with 3.0b named as
+  the task that deletes it; add `:githubapi` to the bundle's `layering.allowedProjects` with the
+  reason; re-point the tracker's imports; `GithubAdapterBoundarySpec` and
+  `GithubPluginPackagingSpec` green; grep `class GithubHttpClient` → one hit (M6)
+- [ ] 3.0b Egress admission by the author of the URL (FR15, FR17, NFR-R5, UX4; D16 as amended
+  2026-11-08). Precondition: `/review-artifacts migrate-verify-to-executor-contract D16` run and
+  its findings resolved (`design-decisions.md`, "A decision added during implementation is
+  reviewed before its task runs"). In `:httpegress`: the exchange's `Response` carries the
+  headers; a second admission source beside the manifest-target allowlist — an operator
+  connection admitted by its configured URL's scheme and host plus declared redirect hosts,
+  judged at load and refusing as a located error — with the address-class judgement, the hop
+  bound and the cross-host header strip shared by both; the hop rule by status (`301`/`302`/`303`
+  → `GET` without body, `307`/`308` keep method and body); body bound, request timeout and the
+  refusal's configuration key as parameters of the consumer's exchange, with a bounded-tail read.
+  In `:githubapi`: `GithubHttpClient` built over the guarded exchange (its `HttpClient`,
+  `Redirect.NORMAL` and virtual-thread executor deleted; the `PENDING` row deleted; every request
+  carries the core's timeout), a refusal classified apart from transport (no retry, no outage
+  signal, the error names the key), the job log read as a bounded tail, the core's own response
+  bound. Consumers: `http` built-in (manifest target; findings still render status and body
+  only), the bundle's tracker and `GithubCheckClientFactory` (operator connection from `api-url`).
+  Old-way sweep: `HttpClient.newBuilder\|Redirect.NORMAL\|factory.check.http.allowlist` in
+  production code → leaf only, the key only where the http check builds its allowlist. Specs:
+  one feature per scenario of the five ADDED requirements of
+  `verification/factory-egress-allowlist`, markers included; `EgressAdmissionByAuthorSpec` (the
+  identity spec of the D9 row, over the real exchange and a local server);
+  `GithubRefusalClassificationSpec`; the ~75 WireMock and Gitea specs of the GitHub client green
+  with no test-only switch; `HttpClientConstructionBoundarySpec` with an empty `PENDING`.
+  Docs: glossary entries **manifest target**, **operator connection**, **declared redirect
+  hosts** (and the verdict-executor entry's "in-process egress allowlist of its declared hosts"
+  restated); `docs/guides/operator-guide-github-actions-check.md` gains `redirect-hosts`
 - [ ] 3.1 `files-exist`: wrap `FilesExistCheckRunner` as an `Executor` (describe: role
   `verdict`, settings schema for the path list) emitting SARIF; existing specs re-pointed (FR1)
 - [ ] 3.2 `shell`: build on the shared command-run core from `add-command-executor`; report
@@ -87,7 +116,12 @@
   as an `Executor` with `poll`; describe carries the token name, settings schema (former
   subsection) and `checkIdIsPinnedPath = true`; its connection (base URL, token name) is read
   from the operator's `factory.check.github-actions` subsection, inline or by `connection:`
-  profile (NFR-S2); WireMock specs re-pointed unchanged; the bundle's `adapter.check.github`
+  profile (NFR-S2); its describe declares the default redirect hosts
+  `results-receiver.actions.githubusercontent.com` and `*.blob.core.windows.net`, and the
+  connection's optional `redirect-hosts` list names an enterprise store (FR17, D16 as amended;
+  the two scenarios of "A built-in declares the redirect hosts its platform answers with" and
+  the restated "A built-in's HTTP call outside its declared hosts is refused", markers included);
+  WireMock specs re-pointed unchanged; the bundle's `adapter.check.github`
   package and its `META-INF/services` check entry deleted (FR6, FR13, D4, D17)
 - [ ] 3.3a Narrow `GithubPluginAbsenceSpec` (M5): the source gate's regex covers references to
   the bundle's remaining package (`adapter.tracker.github`) outside `adapters/github/`, not
@@ -99,7 +133,8 @@
 - [ ] 3.5 `scm-status`: new built-in in `adapters/scm` over `:githubapi`, reading GitHub Checks +
   Statuses and Gitea statuses on the attempt SHA; latest-per-context, expected list, SHA verification, rate-limit back-off hint;
   WireMock specs for each scenario and `ScmStatusShaPinningSpec`; its connection from
-  `factory.check.scm-status`; one feature per scenario of "A credentialed built-in verdict
+  `factory.check.scm-status`, admitted as an operator connection with an optional
+  `redirect-hosts` list and no default redirect host (FR17); one feature per scenario of "A credentialed built-in verdict
   executor is connected by operator configuration", markers included (FR4, FR9, NFR-R2, NFR-S2,
   D3, D9)
 - [ ] 3.6 Register the five built-ins in `ExecutorRegistry` per D18: the registry's value becomes

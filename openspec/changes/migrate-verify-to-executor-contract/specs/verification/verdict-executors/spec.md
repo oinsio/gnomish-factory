@@ -175,8 +175,9 @@ The `github-actions` and `scm-status` built-ins SHALL be compiled into the facto
 registered by core like every built-in, outside the github vendor bundle; the bundle SHALL
 carry the github tracker only. Both built-ins and the bundle's tracker SHALL use the one
 first-party GitHub HTTP core, and every in-process HTTP call of a built-in verdict executor
-SHALL pass the one HTTP egress allowlist of its declared hosts.
-**Implements**: FR13, FR14, FR15 of migrate-verify-to-executor-contract
+SHALL pass the one HTTP egress guard, admitted by its operator connection and the redirect
+hosts it declares.
+**Implements**: FR13, FR14, FR15, FR17 of migrate-verify-to-executor-contract
 **Notes**: Human decision of 2026-11-06 on the escalation of task #121 (design D4, D15, D16); the `plugin/github-plugin` capability is restated for the tracker.
 
 #### Scenario: Removing the vendor bundle keeps the SCM built-ins
@@ -184,17 +185,16 @@ SHALL pass the one HTTP egress allowlist of its declared hosts.
 - **THEN** both checks resolve from the executor registry and run, while the github tracker is unavailable
 
 #### Scenario: A built-in's HTTP call outside its declared hosts is refused
-- **WHEN** the `github-actions` built-in is configured with a base URL outside the hosts its describe declares
-- **THEN** the call is refused by the egress allowlist before any connection and the check is `failed/infrastructure` naming the host
+- **WHEN** the platform answers a `github-actions` call with a redirect to a host that neither the built-in's declared redirect hosts nor its connection's `redirect-hosts` name
+- **THEN** the hop is refused by the egress guard before any connection and the check is `failed/infrastructure` naming the host and the connection's key
 
 ### Requirement: Credentialed verdict executors run in a fresh box
 A `program` verdict executor whose describe declares credentials SHALL run in `FRESH_BOX` with
 an egress allowlist derived from its declared hosts; a `SAME_BOX` declaration on such a check
-SHALL be a located load error. A built-in verdict executor whose describe declares credentials
-runs in the factory process under the in-process egress allowlist of its declared hosts; its
-token SHALL enter no box, round or fresh, and its `verify-in` value SHALL not move its HTTP
-call.
-**Implements**: NFR-S1, FR15 of migrate-verify-to-executor-contract
+SHALL be a located load error. A credentialed built-in runs in the factory process under the
+in-process egress guard (its operator connection and declared redirect hosts); its token SHALL
+enter no box, and its `verify-in` value SHALL not move its HTTP call.
+**Implements**: NFR-S1, FR15, FR17 of migrate-verify-to-executor-contract
 
 #### Scenario: Secret never enters the gnome's box
 - **WHEN** a check names an executor declaring `SONAR_TOKEN`

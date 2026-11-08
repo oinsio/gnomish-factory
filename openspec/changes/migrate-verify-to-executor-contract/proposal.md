@@ -52,6 +52,14 @@ by the engine and persisted on the branch.
   the tracker port. The GitHub HTTP core the tracker and the built-in share leaves the bundle
   for a first-party library module, and the HTTP egress allowlist leaves `:adapters` for a leaf
   both HTTP built-ins and that library use (rule of two, `manual-sync-pairs.md`).
+- **MODIFIED** (human decision 2026-11-08, escalation of task 3.0a of #121): egress admission
+  follows the author of the URL. A target a stage manifest names is admitted by the operator
+  allowlist alone, https only; an operator-configured connection (tracker, verdict built-in,
+  webhook) is admitted by its own configuration plus the redirect hosts it declares; the
+  address-class and redirect rules apply to both; the body bound, timeout and refusal key are
+  the consumer's; a refusal is a configuration fault, never a retried outage. The one
+  `factory-egress-allowlist` scenario of this change that forbade a base URL outside the describe
+  is restated for redirect hosts (design D16 as amended).
 - **ADDED** (wire contract): a describe field by which an executor declares that a check's
   `checkId` names a repository file to pin, so the pin set stays computable from a static
   describe and the law.
@@ -80,6 +88,11 @@ by the engine and persisted on the branch.
   wire obligation (FR11), and relies on task 4.3a for a `program` poll resumable by another
   instance (human decisions 2026-11-02).
 - NG6: changing the manifest grammar beyond the executor-name form; the four type tokens stay.
+- NG7: pinning the address the egress guard judged to the socket the JDK client opens (the
+  name is resolved twice, by the guard and by the client; a rebinding in between is the known
+  window). `java.net.http.HttpClient` exposes no resolver hook. Pickup condition: the change
+  that replaces the JDK client in the egress leaf with one exposing the connect address, or that
+  routes the factory's own calls through a proxy, closes the window or re-defers it.
 
 ## Users & Scenarios
 
@@ -143,9 +156,17 @@ by the engine and persisted on the branch.
   classification, retry, exceptions) SHALL exist once, in a first-party library module that is
   not `gnomish-plugin-api`, consumed by the vendor bundle's tracker and by the core-side
   built-ins; no second GitHub HTTP client SHALL exist in the build.
-- FR15: The HTTP egress allowlist and the guarded exchange SHALL exist once, in a leaf module,
-  and every in-process HTTP call of a built-in verdict executor — `http`, `github-actions`,
-  `scm-status` — SHALL go through it.
+- FR15: The HTTP egress guard — the allowlist and the guarded exchange — SHALL exist once, in a
+  leaf module, and every in-process HTTP call of the factory with a credential attached — the
+  `http`, `github-actions` and `scm-status` built-ins and the GitHub tracker — SHALL go through
+  it, with the address-class and redirect rules applied to every hop whoever authored the URL.
+- FR17 (human decision 2026-11-08, escalation of task 3.0a of #121): an HTTP call on an
+  operator-configured connection — the tracker's `api-url`, a verdict built-in's connection, a
+  GHES or Gitea endpoint — SHALL be admitted by that configuration itself (its scheme and host,
+  plus the redirect hosts the executor declares or the connection names), judged at load, so no
+  second list repeats the host; a target a stage manifest names SHALL stay governed by the
+  operator allowlist alone. The response bound, the request timeout and the configuration key a
+  refusal names SHALL be the calling consumer's.
 - FR16: An executor's describe MAY declare that a check's `checkId` names a repository file to
   pin; the pin-check guard SHALL union that file with the law-declared pin paths. The
   `github-actions` built-in SHALL declare it, so the workflow file stays pinned with no manifest
@@ -163,6 +184,8 @@ by the engine and persisted on the branch.
   a terminal `poll` and before the verdict was recorded, each resume by polling the persisted key
   with no second `start` (FR10, FR11; design D7 windows W3, W4); kill-point specs cover both,
   each resumed by a second instance.
+- NFR-R5: A refusal of the egress guard SHALL be retried by no consumer and SHALL raise no
+  remote-outage signal: it is a configuration fault, reported once with the key it judged.
 
 ### Non-Functional Observability
 
@@ -174,8 +197,9 @@ by the engine and persisted on the branch.
 - NFR-S1: A `program` verdict executor declaring credentials SHALL run in `FRESH_BOX` with its
   own egress allowlist derived from its describe; a `SAME_BOX` declaration on such a check is a
   located load error. A built-in verdict executor declaring credentials runs in the factory
-  process under the in-process egress allowlist of its declared hosts (FR15); its token enters
-  no box, round or fresh.
+  process under the in-process egress guard, admitted by its operator connection and its
+  declared redirect hosts (FR15, FR17); its token enters no box, round or fresh, and a redirect
+  to another host carries it no further.
 - NFR-S2: `scm-status` and `github-actions` resolve their token through the secrets port by the
   credential name of the connection the operator configures for the executor
   (`factory.check.<name>`, inline or by a `factory.connections` profile), never through the
@@ -193,6 +217,9 @@ by the engine and persisted on the branch.
 - UX1: An `scm-status` check that times out names every expected context still absent.
 - UX2: Existing pipelines with `builtin`/`command`/`external` checks load with no manifest edit.
 - UX3: The ledger shows a resumed poll as `resumed key=<prefix>` on the instance that took it.
+- UX4: An egress refusal names the configuration key of the consumer whose URL it judged
+  (`tracker.github.api-url`, `factory.check.github-actions`, `factory.check.http.allowlist`),
+  never another consumer's key.
 
 ## Success Metrics
 
@@ -244,6 +271,11 @@ by the engine and persisted on the branch.
   `judge`).
 - `verification/http-check-provider`: MODIFIED — `http` is a built-in verdict executor resolved
   from the executor registry.
+- `verification/factory-egress-allowlist`: ADDED "Egress admission follows the author of the
+  URL", "The guarded exchange serves every factory HTTP consumer", "A redirect hop keeps the
+  request's meaning", "An egress refusal is a configuration fault", "A built-in declares the
+  redirect hosts its platform answers with" (FR15, FR17, NFR-R5, UX4). `add-stage-finished-event`
+  ADDs a distinct requirement to the same capability; no MODIFIED header overlaps.
 - `verification/github-external-check`: MODIFIED "Polling is stateless and takeover-safe" — the
   persisted pending key is the one poll state; the attempt commit comes with the request.
 - `verification/verification-hardening`: MODIFIED "Pin-check guards external checks" — the guard
@@ -276,7 +308,10 @@ by the engine and persisted on the branch.
 - New modules (design D15, D16): the leaf `:httpegress` (from `:adapters`'s `adapter.check.http`
   egress classes) and the library `:githubapi` (from the bundle's `adapter.github` package); the
   bundle's layering allowlist gains `:githubapi`; `add-sandbox-gha-executor` is the library's
-  third consumer and adds no client of its own.
+  third consumer and adds no client of its own. The leaf exposes the operator-connection
+  admission (design D16 as amended), which the webhook notifier of `add-stage-finished-event`
+  takes in place of the "notification-side guard equivalent to the http check's" its D7 planned;
+  that change revises D7 when it is next updated, this one adds no second guard.
 - `gnomish-plugin-api`: four types removed, sample rewritten. `bootstrap`: `CheckClientDiscovery`,
   `CheckProviderSeam`, `ProviderDispatchingExternalCheckClient` deleted; `GithubPluginAbsenceSpec`
   narrowed to the bundle's packages.

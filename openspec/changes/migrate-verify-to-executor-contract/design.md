@@ -273,7 +273,7 @@ search for "poll", "verdict", "findings file".
 | `ExecutorRegistry` (from the contract; D18)                                              | `Executor` by `ExecutorName`                              | `VerifyOrchestrator` for every check (new), stage dispatch (existing, wrapping into `StageExecutor` at resolution)                                                 | `CheckClientDiscovery`, `CheckProviderSeam`, `ProviderDispatchingExternalCheckClient`, `CheckClientConfiguration`, `CheckEquipment` registry fields deleted; `META-INF/services/...CheckClientFactory` entries deleted                                                                                                          | `CheckClientFactory` type gone (compile); `ArchUnit`/grep: no `ServiceLoader.load(` outside tracker and sandbox-binding discovery                                    |
 | `scm-status` built-in                                                                    | `ContextVerdicts` on `AttemptSha`                         | `VerifyOrchestrator` via registry                                                                                                                                 | none (new); identity spec: contexts read equal those the SCM holds for the attempt SHA (`ScmStatusShaPinningSpec`, WireMock)                                                                                                                                                                                                    | `AttemptSha` value type on the read; `expected` non-empty at load                                                                                                    |
 | `:githubapi` (D15)                                                                       | the GitHub HTTP core (one client, credential, cache, rate-limit, retry) | the bundle's tracker; `github-actions` and `scm-status` in `adapters/scm`; `add-sandbox-gha-executor` later                                                 | the bundle's `adapter.github` package deleted; `GithubCheckExternalClient`'s own client construction routed through the library                                                                                                                                                                                                  | grep: `class GithubHttpClient` in one module (M6); the bundle's layering allowlist; `GithubPluginAbsenceSpec` narrowed to `adapter.tracker.github` references outside the bundle    |
-| `:httpegress` (D16)                                                                      | `EgressAllowlist`, the guarded exchange                   | `http` built-in, `GithubHttpClient`                                                                                                                               | the `adapter.check.http` egress classes moved, not copied; `GithubHttpClient`'s direct `HttpClient` use replaced by the guarded exchange                                                                                                                                                                                       | architecture spec: `HttpClient.newBuilder(`/`newHttpClient(` only in the leaf (allowlist by file, asserted reached)                                                  |
+| `:httpegress` (D16 as amended 2026-11-08)                                                | egress admission: the manifest-target allowlist and the operator-connection admission (configured URL + declared redirect hosts), the guarded exchange with per-consumer bound, timeout and refusal key | `http` built-in (manifest target); `GithubHttpClient` in `:githubapi` for the bundle's tracker, `github-actions` and `scm-status` (operator connection); the webhook notifier of `add-stage-finished-event` (operator connection, when it lands); `add-sandbox-gha-executor` through the library | the `adapter.check.http` egress classes moved, not copied; `GithubHttpClient`'s direct `HttpClient` use and its `Redirect.NORMAL` replaced by the guarded exchange; the hardcoded `factory.check.http.allowlist` in the refusal text replaced by the consumer's key | architecture spec `HttpClientConstructionBoundarySpec`: `HttpClient.newBuilder(`/`newHttpClient(` only in the leaf (allowlist by file, asserted reached, pending row deleted by 3.0b); identity spec `EgressAdmissionByAuthorSpec` on the real exchange over a local server: an operator connection on `http://localhost` admitted, the same host as a manifest target refused, a cross-host hop carrying no `Authorization`; `GithubRefusalClassificationSpec`: a refusal makes no retry and no outage signal |
 | Pin set of a check (D17)                                                                 | law `pinPaths` ∪ `checkId` when `checkIdIsPinnedPath`     | the pin decorator of 5.1                                                                                                                                          | `ExternalCheckPinContributor`, `GithubCheckPinPaths` deleted                                                                                                                                                                                                                                                                     | the describe field is the only per-executor input; `PinDecoratorSpec` data-driven over the flag                                                                      |
 | Credential delivery for verdict executors (`ChildEnvAllowlist` layer, from the contract) | `ExecutorCredentialNames`                                 | `SandboxCheckEnvironmentSource.freshBox`, `HostCheckEnvironmentSource`                                                                                            | `CheckProviderSeam.credentialEnvVars` union deleted; `CheckEquipment.credentialNames` deleted                                                                                                                                                                                                                                   | `ProgramCredentialDeliverySpec` extended with a verdict check: token in fresh box, absent in round box                                                               |
 
@@ -292,15 +292,106 @@ the core private to the bundle and give the built-in its own client:* a hand-syn
 through `gnomish-plugin-api`:* grows the api by a vendor's HTTP client for no third-party need
 and contradicts the api's thinness requirement.
 
-**D16 — The HTTP egress allowlist is one leaf module, `:httpegress`.** (FR15.) `EgressAllowlist`,
-`GuardedHttpCheckExchange`, `JdkHttpCheckExchange` and `EgressRefusedException` move from
-`:adapters`'s `adapter.check.http` to a JDK-only leaf; the `http` built-in keeps using them,
-and `GithubHttpClient` is built over the guarded exchange, so every in-process HTTP call of a
-built-in verdict executor passes the allowlist of the hosts its describe declares. This closes a
-false premise of `define-executor-contract` D1(b) and ADR 0020, which kept built-ins in process
-for "in-process egress control" the GitHub client did not have. Enforcement: an architecture spec
-asserts that no production class outside the leaf constructs a `java.net.http.HttpClient`
-except the leaf's own exchange (allowlist by file, asserted reached).
+**D16 — The HTTP egress allowlist is one leaf module, `:httpegress`, and egress admission
+follows the author of the URL.** (FR15, FR17, NFR-R5, UX4; amended 2026-11-08 by the human
+decision on the escalation of task 3.0a of #121, after a decision review under
+`.claude/rules/spec-mismatch.md`.) `EgressAllowlist`, `GuardedHttpCheckExchange`,
+`JdkHttpCheckExchange` and `EgressRefusedException` move from `:adapters`'s `adapter.check.http`
+to a JDK-only leaf (task 3.0, done). The first wording — "`GithubHttpClient` is built over the
+guarded exchange, so every call passes the allowlist of the hosts its describe declares" — was
+written for one consumer's contract and cannot be met by the second: the premises below were
+verified on the task branch. The decision is restated as follows.
+
+*Two authors of a URL, two admission sources, one guard.* The rules of `EgressAllowlist`
+(`EgressAllowlist.java:22-27`: https only, a host from a separate operator list, no blocked
+address class) were designed for a **manifest target**: a URL the stage manifest names, written
+by whoever commits to the repository, the gnome included. The GitHub client's URLs are
+**operator connections**: `tracker.github.api-url` (`GithubTrackerAdapterFactorySupport.java:67`),
+`factory.check.github.api-url` (`GithubCheckClientFactory.java:83`), and the webhook URL of
+`add-stage-finished-event` (its D7 already states "the operator's URL is its implicit allowlist
+entry"). The operator who typed the URL has consented to its host and scheme; asking for the same
+host in a second list is a duplicate, and refusing `http://gitea.internal:3000` is wrong. So the
+leaf exposes two admission sources: the **manifest-target allowlist** (unchanged: the operator
+list, https only) and the **operator-connection admission** (the configured URL's scheme and host,
+judged once at load as a located load error when refused, plus the **declared redirect hosts**
+of the consumer). Both share the rules that are about the network, not the author: the
+address-class judgement on every hop, the redirect and total-time bounds, and the cross-host
+hop carrying no header forward.
+
+*Per consumer, not per leaf.* The body bound, the request timeout and the key named by a refusal
+are the consumer's. Premises: the exchange's response is `Response(int status, String body,
+@Nullable String location)` (`HttpCheckExchange.java:40`), no other header, while the GitHub
+core reads `ETag` (`GithubConditionalRequestCache.java:81`), `x-ratelimit-remaining` /
+`retry-after` (`GithubRateLimit.java:26-27`) and `X-Accepted-GitHub-Permissions`
+(`GithubLabelProvisioner.java:53,92`); the exchange refuses a body over 1 MiB
+(`JdkHttpCheckExchange.java:44`, right for a status document a verdict is read from), while the
+GitHub core reads comment threads and issue listings at `per_page=100` with no pagination
+(`GithubCommentThread.java:32`, `GithubFeedQuery.java:79`; a comment body is up to 65 k
+characters) and downloads a whole job log for a 4000-character tail
+(`GithubWorkflowJobsFetcher.java:40,77-86`); the refusal text names
+`factory.check.http.allowlist` whoever called (`EgressAllowlist.java:87`); and a GitHub request
+carries no timeout today (`GithubHttpClient.java:72`, connect only; the exchange's 30 s applies
+only to a request that sets it, `HttpCheckRequest.java:37`). So the response carries the headers
+(the `http` built-in's findings keep rendering status and body only), the bound and the timeout
+are parameters of the consumer's exchange, a consumer may read a body as a bounded tail, and the
+refusal names the consumer's configuration key.
+
+*A hop keeps the request's meaning.* `GuardedHttpCheckExchange.hopTo`
+(`GuardedHttpCheckExchange.java:117-127`) keeps the method and sends no body on every 3xx; the
+JDK's `Redirect.NORMAL`, which the GitHub client uses today (`GithubHttpClient.java:74`), turns
+`POST` into `GET` on 301/302/303 and keeps method and body on 307/308 (JDK-8232625). GitHub
+answers 301 for a transferred repository, so D4's "unchanged behavior" needs the hop rule by
+status. The cross-host strip of headers is already the JDK's own behaviour: measured 2026-11-08
+on macOS with JDK 25.0.3+9 and 27.0.1, a `302` to another host arrived with no `Authorization`
+and no `Cookie`; the leaf keeps that property explicitly, so the token never reaches the log
+store. GitHub's job-log download answers `302` to a storage host (documented; the self-hosted
+runner domain list names `results-receiver.actions.githubusercontent.com` and
+`*.blob.core.windows.net` for logs and artifacts), which no earlier artifact named; on GHES the
+store is the operator's own. So the `github-actions` built-in's describe declares the two
+github.com storage hosts as its default redirect hosts, and the connection's `redirect-hosts`
+key names the operator's store.
+
+*A refusal is a configuration fault, not an outage.* `EgressRefusedException extends IOException`
+(`EgressRefusedException.java:19`); `GithubHttpClient.doSend` wraps every `IOException` into
+`GithubHttpUncheckedIOException` (`GithubHttpClient.java:142`), the class `GithubRetryConfig`
+retries four times with backoff (`GithubRetryConfig.java:62`), and the exhausted budget leaves as
+`GithubHttpException`, the tracker's transport-failure path. Routed as is, a refused host would
+be four attempts and an outage. So the GitHub core classifies a refusal apart from transport:
+no retry, no outage signal, the error names the consumer's key (NFR-R5, UX4); and the operator
+connection is judged at load, so a misconfigured host never reaches a call.
+
+*Test posture dissolves.* About 75 specs drive the GitHub client against WireMock or a Gitea
+container on `http://localhost`. Under this decision their configured `api-url` is an operator
+connection and is admitted by construction; no test-only switch enters production code. A
+manifest target on `http` stays refused (main spec, "Plain http is refused").
+
+*Accepted limitation.* The allowlist resolves a name and judges its addresses
+(`EgressAllowlist.java:96-110`); the JDK client resolves again at connect, and
+`java.net.http.HttpClient` has no resolver hook, so the address cannot be pinned (the window the
+SSRF literature closes by passing the judged address to the socket). Recorded here; pickup
+condition in proposal NG7.
+
+*Current signatures the decision changes:* `HttpCheckExchange.Response(int status, String body,
+@Nullable String location)`; `GuardedHttpCheckExchange(HttpCheckExchange delegate, EgressAllowlist
+allowlist)`; `EgressAllowlist(List<String> entries, HostResolver resolver)` and
+`EgressAllowlist.from(Map<String, Object> subsection)`; `JdkHttpCheckExchange()` with the
+constants `REQUEST_TIMEOUT` and `MAX_BODY_BYTES`; `GithubHttpClient(String apiUrl, String token)`
+and the package-private `GithubHttpClient(String apiUrl, String token, RetryConfig retryConfig)`;
+`EgressRefusedException(EgressRefusal refusal) extends IOException`.
+
+*Alternative zero — no guard on operator connections (the escalation's option B):* the tracker
+and `scm-status` keep a raw client; the leaf guards the `http` built-in only. Rejected: FR15's duty
+for the credentialed GitHub calls is left with nobody, the construction gate keeps a permanent
+pending row, and the webhook of `add-stage-finished-event` would become a second copy of the
+rules (`manual-sync-pairs.md`, rule of two). *Alternative rejected — one allowlist, a test switch
+(option A as first worded):* generalizes the exchange but keeps one admission source, so the
+operator lists its own `api-url` twice, GHES and Gitea need an operator rule the scenario
+forbade, and loopback `http` needs a switch in production code for the specs. *Alternative
+rejected — move the package now and defer the guard to 3.3/3.5 (option C):* defers exactly what
+FR15 was introduced for and lands the same five premises in 3.3. Enforcement unchanged: the
+architecture spec `HttpClientConstructionBoundarySpec` asserts that no production class outside
+the leaf constructs a `java.net.http.HttpClient` (allowlist by file, asserted reached); its
+pending row for `GithubHttpClient` is retargeted to `:githubapi` by task 3.0a and deleted by 3.0b.
 
 **D17 — The pin contribution is a static describe flag.** (FR6, FR16.) `Describe` is one answer
 per executor and cannot name a per-check path, while the former `pinContributor()` added the
@@ -374,7 +465,16 @@ rejected it for the `command` built-in on the same grounds.
   kept and re-pointed at the built-ins (behavior-preserving extraction).
 - [A GitHub token lives in the factory process for the built-ins] → accepted, the posture the
   tracker already has (`github-plugin` trust note) and `scm-status` needs regardless; the
-  in-process allowlist of D16 bounds where the client may send it.
+  in-process guard of D16 bounds where the client may send it, and a cross-host redirect hop
+  carries no header, so the token never reaches a log store.
+- [The exchange's body bound refuses a long comment thread or a big job log] → the bound is the
+  consumer's (D16 as amended): the GitHub core declares its own, and reads a job log as a
+  bounded tail; a bound still exists, so no consumer reads an unbounded body.
+- [A GitHub request has no timeout today and a hung read holds a slot] → closed by the move:
+  every request through the guarded exchange carries the consumer's timeout (D16 as amended).
+- [An egress refusal is retried and reported as an outage] → the GitHub core classifies the
+  refusal apart from transport (D16 as amended, NFR-R5); the operator connection is judged at
+  load, so a misconfigured host fails startup, not a call.
 - [Core grows a vendor integration that is costly to extract later (Jenkins' detached plugins)]
   → accepted with the pickup condition of D4's external-program alternative recorded; the
   library of D15 keeps the integration in one place to move.
