@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.adapter.check.github.GithubCheckExternalClient
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.ThreadSleeper
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
@@ -20,6 +19,7 @@ import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.e2e.gitea.GiteaActionsRunnerFixture
 import com.github.oinsio.gnomish.e2e.gitea.GiteaAvailability
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path

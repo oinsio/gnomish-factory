@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.github
+package com.github.oinsio.gnomish.githubapi
 
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder

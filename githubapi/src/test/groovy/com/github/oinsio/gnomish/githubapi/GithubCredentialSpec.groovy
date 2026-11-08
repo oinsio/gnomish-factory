@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.github
+package com.github.oinsio.gnomish.githubapi
 
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import spock.lang.Specification
@@ -57,5 +57,34 @@ class GithubCredentialSpec extends Specification {
         expect:
         GithubCredential.validateName([:], FILE, WHERE).isEmpty()
         GithubCredential.validateName([credential: 'GNOMISH_GH_MAIN'], FILE, WHERE).isEmpty()
+    }
+
+    // NFR-S1 of add-plugin-architecture: both github providers name their credential and never carry
+    //     one, so every credential-shaped key — under any spelling — is its own located error.
+    def "every credential-shaped key in a subsection is a located error naming the environment variable"() {
+        when:
+        def errors = GithubCredential.rejectTokenKeys(
+                [token: 'x', ('api-token'): 'y', apiToken: 'z', ('access_TOKEN'): 'w', ('api-url'): 'u'],
+                FILE, WHERE, 'config.yaml', DEFAULT_NAME)
+
+        then: 'one error per token-shaped key, the ordinary key untouched'
+        errors*.where() as Set == [
+            'factory.check.github.token',
+            'factory.check.github.api-token',
+            'factory.check.github.apiToken',
+            'factory.check.github.access_TOKEN'
+        ] as Set
+        errors.find {
+            it.where() == 'factory.check.github.token'
+        } == new ConfigError(FILE,
+        'factory.check.github.token',
+        "'token' must not appear in config.yaml; GNOMISH_GITHUB_TOKEN is read from the environment only")
+    }
+
+    // NFR-S1 of add-plugin-architecture: a subsection that names its credential properly is clean.
+    def "a subsection with no credential-shaped key reports nothing"() {
+        expect:
+        GithubCredential.rejectTokenKeys([credential: 'GNOMISH_GH_MAIN', ('api-url'): 'u'],
+        FILE, WHERE, 'config.yaml', DEFAULT_NAME).isEmpty()
     }
 }

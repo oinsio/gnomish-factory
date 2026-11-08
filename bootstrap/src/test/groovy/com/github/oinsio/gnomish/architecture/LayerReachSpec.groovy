@@ -31,7 +31,6 @@ class LayerReachSpec extends Specification {
     /** The packages of each vertical adapter module; none may reach another's. */
     private static final Map<String, List<String>> VERTICAL_PACKAGES = [
         ':adapters:github': [
-            "${ROOT}.adapter.github..",
             "${ROOT}.adapter.tracker.github..",
             "${ROOT}.adapter.check.github.."
         ]*.toString(),

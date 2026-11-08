@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.TaskSnapshot;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTask;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState;
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
 import java.util.Optional;

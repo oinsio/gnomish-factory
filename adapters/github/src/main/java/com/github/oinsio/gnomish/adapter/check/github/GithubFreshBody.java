@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache;
 
 /**
  * The single owner of "conditional-request result to payload body" for the Actions check

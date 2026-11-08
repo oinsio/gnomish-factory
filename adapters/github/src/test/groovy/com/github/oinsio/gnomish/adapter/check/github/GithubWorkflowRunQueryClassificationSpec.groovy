@@ -4,8 +4,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
-import com.github.oinsio.gnomish.adapter.github.GithubFastRetryConfig
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache
+import com.github.oinsio.gnomish.githubapi.GithubFastRetryConfig
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder
 import spock.lang.Specification

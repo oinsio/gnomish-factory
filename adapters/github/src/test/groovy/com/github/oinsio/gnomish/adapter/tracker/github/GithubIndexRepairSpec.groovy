@@ -9,7 +9,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
@@ -19,6 +18,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock

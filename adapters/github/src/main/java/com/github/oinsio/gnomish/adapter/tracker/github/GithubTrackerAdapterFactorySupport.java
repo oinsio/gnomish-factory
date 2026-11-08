@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubCredential;
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
+import com.github.oinsio.gnomish.githubapi.GithubCredential;
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient;
 import java.util.List;
 import java.util.Map;
 

@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.github
+package com.github.oinsio.gnomish.githubapi
 
 import java.net.http.HttpHeaders
 import java.net.http.HttpResponse

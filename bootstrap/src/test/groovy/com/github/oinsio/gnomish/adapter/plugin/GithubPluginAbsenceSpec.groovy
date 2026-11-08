@@ -34,6 +34,14 @@ class GithubPluginAbsenceSpec extends Specification {
     /** The bundle's own directory, the one place these references belong. */
     private static final String BUNDLE_DIR = 'adapters/github/'
 
+    /**
+     * The first-party GitHub HTTP core (FR14, design D15 of migrate-verify-to-executor-contract),
+     * moved out of the bundle by task 3.0a: its own {@code Github*} types are not the bundle's, and
+     * it names nothing of the bundle (its layering allowlist reaches {@code :domain} only). Task
+     * 3.3a narrows the reference pattern to the bundle's remaining package, which retires this.
+     */
+    private static final String LIBRARY_DIR = 'githubapi/'
+
     @Shared
     ClassLoader withoutGithub = GithubArtifact.hiddenFrom(getClass().classLoader)
 
@@ -82,7 +90,7 @@ class GithubPluginAbsenceSpec extends Specification {
     def "no production source outside the bundle names a github type"() {
         given:
         def sources = RepoSourceTree.productionSources {
-            !it.startsWith(BUNDLE_DIR)
+            !it.startsWith(BUNDLE_DIR) && !it.startsWith(LIBRARY_DIR)
         }
 
         expect: 'the scan really reached the source tree'

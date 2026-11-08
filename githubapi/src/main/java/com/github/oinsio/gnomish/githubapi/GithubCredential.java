@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.github;
+package com.github.oinsio.gnomish.githubapi;
 
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import java.util.ArrayList;

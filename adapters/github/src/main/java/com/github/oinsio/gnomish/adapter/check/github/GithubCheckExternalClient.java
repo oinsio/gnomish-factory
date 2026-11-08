@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.adapter.check.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.port.check.AttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.PollStatus;
 import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache;
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import java.time.InstantSource;
 

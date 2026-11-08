@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubHttpException;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException;
+import com.github.oinsio.gnomish.githubapi.GithubHttpException;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**

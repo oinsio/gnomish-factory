@@ -5,10 +5,10 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
  * remove a stale claim (list the thread for the pre-action version re-check,
  * POST the {@code stale-claim-removed} boundary marker, or DELETE the dead claim
  * comment) returns a non-2xx response that is not a tolerated {@code 404}. This
- * includes a persistent 5xx: {@link com.github.oinsio.gnomish.adapter.github.GithubHttpClient}
+ * includes a persistent 5xx: {@link com.github.oinsio.gnomish.githubapi.GithubHttpClient}
  * retries it and, once the budget is exhausted, returns it as a non-2xx the removal throws on
  * here. A network/transport failure is different — it surfaces earlier as an
- * infrastructure {@link com.github.oinsio.gnomish.adapter.github.GithubHttpException}, never
+ * infrastructure {@link com.github.oinsio.gnomish.githubapi.GithubHttpException}, never
  * this exception. A version
  * mismatch is a safe no-op ({@code RemoveStaleClaimResult.Mismatch}), also never
  * this exception.

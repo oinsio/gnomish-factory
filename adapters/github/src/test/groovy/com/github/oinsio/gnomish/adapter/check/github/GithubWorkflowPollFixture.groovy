@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.check.github
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
-import com.github.oinsio.gnomish.adapter.github.GithubFastRetryConfig
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache
+import com.github.oinsio.gnomish.githubapi.GithubFastRetryConfig
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import java.time.Duration
 import java.time.Instant

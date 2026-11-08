@@ -91,6 +91,7 @@ dependencies {
     // Test scope: shared fakes and port-contract suites (FR7, design D8), the github bundle.
     testImplementation project(':test-fixtures')
     testImplementation project(':adapters:github')
+    testImplementation project(':githubapi') // the GitHub HTTP core the outage/Gitea specs use (D15)
     testImplementation project(':baseref')
     // Production scope since type-untrusted-text: the composition root's own sources name the
     // carrier, so the edge is no longer test-only — the architecture gates that name `TextSafety`,
@@ -162,12 +163,10 @@ dependencies {
     testImplementation libs.wiremock
 }
 
-// The one module allowed to reach the adapters (FR2, design D3) — that is what makes it
-// the composition root. The set is still stated rather than left open, so `:test-fixtures` never
-// lands on a production classpath (FR7); `:baseref` and `:logtext` arrive transitively, and so do
-// the JDK-only leafs: `:operatorevent` via `:domain`, `:untrustedtext` via `:logtext` (FR11, D9 of
-// split-logtext-leaves), `:httpegress` via `:adapters` (FR15, D16 of
-// migrate-verify-to-executor-contract). No source here names them; the gate walks the graph.
+// The one module allowed to reach the adapters (FR2, design D3): the composition root. The set is
+// stated so `:test-fixtures` never lands on a production classpath (FR7). Transitive, named by no
+// source here: `:baseref`, `:logtext`, `:operatorevent` (`:domain`), `:untrustedtext` (`:logtext`),
+// `:httpegress` (`:adapters`), `:githubapi` (`:adapters:github`): D16, D15 of migrate-verify-to-executor-contract.
 layering {
     allowedProjects = [
         ':adapters',
@@ -179,6 +178,7 @@ layering {
         ':baseref',
         ':domain',
         ':executor-contract',
+        ':githubapi',
         ':gitobjects',
         // The git-transfer owner leaf (design D1 of own-git-transfer-argv): transitive via
         // `:adapters:git` (every fetch) and `:sandbox:docker` (the seed clone). The

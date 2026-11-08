@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.github
+package com.github.oinsio.gnomish.githubapi
 
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
@@ -15,6 +15,10 @@ import java.net.http.HttpResponse
  * codes are retried. {@code fastClient(String)} extends the same policy to specs outside this
  * package, which cannot reach the package-private {@code GithubHttpClient} test constructor.
  *
+ * <p>Published through this module's {@code testFixtures} source set (task 3.0a of
+ * migrate-verify-to-executor-contract): the vendor bundle's tracker and check specs, in another
+ * module, take the same seam rather than a copy of it.
+ *
  * <p>Both policies fix maxAttempts at 4, matching production. A spec that needs a different
  * attempt budget builds its own {@link RetryConfig} rather than parameterising these.
  */
@@ -23,9 +27,9 @@ class GithubFastRetryConfig {
     /**
      * A client on the package-private {@code GithubHttpClient} test seam, wired with {@link
      * #withRateLimiting()} — 4 attempts, 10ms interval, production's result predicate. Lives here
-     * because the seam is package-private: specs in sibling packages (the {@code
-     * adapter.check.github} workflow specs) can only reach it through a helper that shares
-     * {@code GithubHttpClient}'s package.
+     * because the seam is package-private: specs in other packages (the vendor bundle's
+     * {@code adapter.tracker.github} and {@code adapter.check.github} specs) can only reach it
+     * through a helper that shares {@code GithubHttpClient}'s package.
      *
      * <p>The token is fixed at {@code 'tok'}: a spec that asserts on the token value itself (token
      * hygiene) needs its own client, not this seam.
@@ -38,7 +42,7 @@ class GithubFastRetryConfig {
      * Same package-private test seam as {@link #fastClient(String)}, for a spec that needs its
      * own {@link RetryConfig} shape (a different {@code maxAttempts} or predicate) rather than
      * {@link #withRateLimiting()} — the seam being package-private is the only reason a spec
-     * outside {@code adapter.github} cannot build the client itself.
+     * outside {@code githubapi} cannot build the client itself.
      */
     static GithubHttpClient fastClient(String baseUrl, RetryConfig retryConfig) {
         new GithubHttpClient(baseUrl, 'tok', retryConfig)

@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.github
+package com.github.oinsio.gnomish.githubapi
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo

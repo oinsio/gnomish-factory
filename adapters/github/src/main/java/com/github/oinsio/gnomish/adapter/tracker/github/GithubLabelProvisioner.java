@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -79,7 +79,7 @@ public record GithubLabelProvisioner(GithubHttpClient httpClient) {
      * with the code {@link #provision} refuses with: the read-only probe of the tracker binding
      * (FR3 of add-doctor-command, design D7). Infrastructure failures are not a verdict: the
      * client's retry policy (5xx, 429, rate limit — never a 401) runs, and its exhaustion leaves as
-     * the client's {@link com.github.oinsio.gnomish.adapter.github.GithubHttpException}, as it
+     * the client's {@link com.github.oinsio.gnomish.githubapi.GithubHttpException}, as it
      * does from {@code provision}.
      */
     public GithubLabelAssessment assess(String owner, String repo, List<GithubLabelDef> labelDefs) {

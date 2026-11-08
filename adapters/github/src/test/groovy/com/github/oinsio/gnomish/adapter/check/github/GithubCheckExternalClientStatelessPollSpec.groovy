@@ -4,13 +4,13 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.check.AttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient
 import com.github.tomakehurst.wiremock.WireMockServer
 import java.time.Duration
 import spock.lang.Specification

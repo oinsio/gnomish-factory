@@ -121,6 +121,12 @@ include 'gittransfer'
 // is what constructively guarantees the egress policy can know nothing of trackers, credentials'
 // sources or configuration formats, and any edge added here would land in every consumer.
 include 'httpegress'
+// The first-party GitHub HTTP core (FR14, design D15 of migrate-verify-to-executor-contract): the
+// one GitHub client, its credential rules, conditional-request cache, rate-limit classification
+// and retry, formerly the vendor bundle's internal `adapter.github` package. A library because its
+// consumers sit on both sides of the plugin line — the bundle's tracker and the core-side GitHub
+// built-ins — and it is not the plugin api, which stays free of GitHub types.
+include 'githubapi'
 // The base-resolution leaf (FR10, design D2 of add-base-ref-resolution): the pure
 // policy that decides which ref a new task branch starts from — the allowed-base
 // pattern grammar, the per-task designator's validation against it, the source
@@ -163,10 +169,9 @@ include 'application'
 // module overhead would exceed the benefit — and the parent of the modules that
 // left it.
 include 'adapters'
-// The GitHub vendor bundle (task 10.1, FR10): the shared HTTP core plus the
-// tracker and external-check realizations written against it, in one module
-// because D1 keeps the core an internal package of the bundle rather than a
-// third build unit.
+// The GitHub vendor bundle (task 10.1, FR10): the tracker and external-check
+// realizations, written against the `:githubapi` HTTP core (which left the bundle
+// under design D15 of migrate-verify-to-executor-contract).
 include 'adapters:github'
 // The two technology seams (task 10.2, FR10): the git-subprocess adapter, D1's
 // largest, and the agent-CLI executor. `:adapters:git` is a leaf; `:adapters:agent`

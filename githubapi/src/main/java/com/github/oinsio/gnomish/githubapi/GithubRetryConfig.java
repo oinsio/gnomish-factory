@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.github;
+package com.github.oinsio.gnomish.githubapi;
 
 import io.github.resilience4j.core.IntervalFunction;
 import io.github.resilience4j.retry.RetryConfig;

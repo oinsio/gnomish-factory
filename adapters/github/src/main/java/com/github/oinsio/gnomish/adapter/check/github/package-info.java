@@ -3,7 +3,7 @@
  * (design D1-D3 of add-external-check-github-actions): queries workflow runs
  * of the attempt commit and selects the run matching a check's {@code
  * checkId} workflow file, latest attempt winning. Built on the shared,
- * tracker-agnostic plumbing in {@link com.github.oinsio.gnomish.adapter.github}
+ * tracker-agnostic plumbing of {@link com.github.oinsio.gnomish.githubapi}
  * (design D4).
  *
  * <p>Implements FR1, FR5 of add-external-check-github-actions.

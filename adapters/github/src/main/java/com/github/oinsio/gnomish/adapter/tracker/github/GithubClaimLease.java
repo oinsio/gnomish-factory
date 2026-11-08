@@ -3,12 +3,12 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
-import com.github.oinsio.gnomish.adapter.github.GithubHttpException;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient;
+import com.github.oinsio.gnomish.githubapi.GithubHttpException;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -166,7 +166,7 @@ public final class GithubClaimLease {
      * Runs the verify-read (step 3, design D13); on an infrastructure
      * failure ({@link GithubHttpException} or {@link GithubClaimException})
      * best-effort deletes {@code ownCommentId} first, then rethrows. An interrupted read ({@link
-     * com.github.oinsio.gnomish.adapter.github.GithubCallInterruptedException}) skips the delete,
+     * com.github.oinsio.gnomish.githubapi.GithubCallInterruptedException}) skips the delete,
      * which would fail at once on the set interrupt: the comment is resolved away by the next
      * reader, as any undeleted claim is (FR11 of fix-operator-blockers, design D8).
      */

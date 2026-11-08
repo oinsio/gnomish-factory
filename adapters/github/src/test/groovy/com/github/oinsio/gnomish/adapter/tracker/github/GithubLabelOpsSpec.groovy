@@ -8,7 +8,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.put
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction

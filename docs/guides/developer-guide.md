@@ -34,7 +34,7 @@ flowchart TB
     sandboxcore --> domain
 ```
 
-The diagram shows the layers, not every edge. Notable specifics: `:adapters:github` is the strictest adapter — it sees only `:gnomish-plugin-api` and `:domain`, never `:application`; `:sandbox:docker` realizes the `:sandbox:core` port and is also consumed by the other adapter modules for environment wiring; `:bootstrap`, as the composition root, additionally reaches every lower layer directly. The exact permitted edge set is not this picture — it is declared per module and enforced (see below).
+The diagram shows the layers, not every edge. Notable specifics: `:adapters:github` is the strictest adapter — it sees only `:gnomish-plugin-api`, `:domain` and the `:githubapi` HTTP core, never `:application`; `:sandbox:docker` realizes the `:sandbox:core` port and is also consumed by the other adapter modules for environment wiring; `:bootstrap`, as the composition root, additionally reaches every lower layer directly. The exact permitted edge set is not this picture — it is declared per module and enforced (see below).
 
 | Module                | Holds                                                                                                                                                                                              |
 |-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -45,7 +45,8 @@ The diagram shows the layers, not every edge. Notable specifics: `:adapters:gith
 | `:sandbox:core`       | the execution-environment port, capability passport and reconciliation                                                                                                                             |
 | `:sandbox:docker`     | the docker-CLI and host backends behind that port                                                                                                                                                  |
 | `:application`        | the use cases (`run`, `take`, `serve`, `status`, `usage`, `board`, `dashboard`) and the ports they drive adapters through                                                                          |
-| `:adapters:github`    | the GitHub vendor bundle: tracker and external-check clients over one shared HTTP core                                                                                                             |
+| `:adapters:github`    | the GitHub vendor bundle: tracker and external-check clients over the `:githubapi` core                                                                                                            |
+| `:githubapi`          | the first-party GitHub HTTP core: client, credential rules, conditional-request cache, rate limit, retry — shared by the bundle and core's GitHub built-ins, not part of the plugin api           |
 | `:adapters:git`       | the git-subprocess adapter: task repository, attempt persistence, state-file mappers                                                                                                               |
 | `:adapters:agent`     | the agent-CLI executor and judge voter                                                                                                                                                             |
 | `:adapters`           | the coarse remainder: console, `.gnomish/` loader, check runners, secrets, pipeline law, the in-memory reference tracker                                                                           |
