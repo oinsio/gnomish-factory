@@ -92,7 +92,12 @@ by the engine and persisted on the branch.
   name is resolved twice, by the guard and by the client; a rebinding in between is the known
   window). `java.net.http.HttpClient` exposes no resolver hook. Pickup condition: the change
   that replaces the JDK client in the egress leaf with one exposing the connect address, or that
-  routes the factory's own calls through a proxy, closes the window or re-defers it.
+  routes the factory's own calls through a proxy, closes the window or re-defers it. The window
+  is named beside the decision in design D16 as the residual risk of admitting a host by name.
+- NG8: pinning a port in an egress entry (`host:port`). The box guard admits by host and no
+  consumer needs a port today; the grammar leaves the form unparsed. Pickup condition: a
+  consumer whose connection must be bounded to one port of a host, or the first operator report
+  of a shared host where only one port is the operator's.
 
 ## Users & Scenarios
 
@@ -160,13 +165,21 @@ by the engine and persisted on the branch.
   leaf module, and every in-process HTTP call of the factory with a credential attached — the
   `http`, `github-actions` and `scm-status` built-ins and the GitHub tracker — SHALL go through
   it, with the address-class and redirect rules applied to every hop whoever authored the URL.
-- FR17 (human decision 2026-11-08, escalation of task 3.0a of #121): an HTTP call on an
-  operator-configured connection — the tracker's `api-url`, a verdict built-in's connection, a
-  GHES or Gitea endpoint — SHALL be admitted by that configuration itself (its scheme and host,
-  plus the redirect hosts the executor declares or the connection names), judged at load, so no
-  second list repeats the host; a target a stage manifest names SHALL stay governed by the
-  operator allowlist alone. The response bound, the request timeout and the configuration key a
-  refusal names SHALL be the calling consumer's.
+- FR17 (human decisions 2026-11-08 and 2026-11-09 on the escalation of task 3.0a of #121): a
+  host is admitted by the medium its URL comes from. A host an operator file names — a
+  `factory.check.<name>` subsection, a `factory.connections.<name>` profile, the operator egress
+  block — is granted; a host the law tree names — a stage manifest's http target, an inline
+  `tracker.github.api-url`, an `executors.<name>.egress` entry — is a request, admitted only by an
+  operator grant or by the vendor default the adapter's describe declares, and a request nobody
+  grants SHALL be a located load error naming the ways to grant it. One entry grammar SHALL
+  serve every egress list; one operator block, `factory.egress` with the scopes `sandbox` and
+  `in-process`, SHALL replace `factory.sandbox.egress-allowlist` and `factory.check.http.allowlist`
+  as removed keys; a connection MAY carry its own `egress` list. The address-class judgement SHALL
+  run at connect on the resolved addresses of every hop whoever authored the URL, waived only by an
+  operator entry naming the class or the literal address, never for a cloud-metadata address; load
+  SHALL resolve no name. A redirect target SHALL be judged as an egress target against the same
+  admitted set, with no separate redirect-host list. The response bound, the request timeout and
+  the configuration key a refusal names SHALL be the calling consumer's.
 - FR16: An executor's describe MAY declare that a check's `checkId` names a repository file to
   pin; the pin-check guard SHALL union that file with the law-declared pin paths. The
   `github-actions` built-in SHALL declare it, so the workflow file stays pinned with no manifest
@@ -197,9 +210,11 @@ by the engine and persisted on the branch.
 - NFR-S1: A `program` verdict executor declaring credentials SHALL run in `FRESH_BOX` with its
   own egress allowlist derived from its describe; a `SAME_BOX` declaration on such a check is a
   located load error. A built-in verdict executor declaring credentials runs in the factory
-  process under the in-process egress guard, admitted by its operator connection and its
-  declared redirect hosts (FR15, FR17); its token enters no box, round or fresh, and a redirect
-  to another host carries it no further.
+  process under the in-process egress guard, admitted by its operator connection, the
+  connection's `egress` list and its describe's `egress` (FR15, FR17); its token enters no box,
+  round or fresh, and a cross-host redirect hop drops the credential deny-set
+  (`Authorization`, `Cookie`, `Host`, `Origin`, `Referer`, `Proxy-Authorization`,
+  `WWW-Authenticate`) while every other header travels.
 - NFR-S2: `scm-status` and `github-actions` resolve their token through the secrets port by the
   credential name of the connection the operator configures for the executor
   (`factory.check.<name>`, inline or by a `factory.connections` profile), never through the
@@ -271,11 +286,19 @@ by the engine and persisted on the branch.
   `judge`).
 - `verification/http-check-provider`: MODIFIED — `http` is a built-in verdict executor resolved
   from the executor registry.
-- `verification/factory-egress-allowlist`: ADDED "Egress admission follows the author of the
-  URL", "The guarded exchange serves every factory HTTP consumer", "A redirect hop keeps the
-  request's meaning", "An egress refusal is a configuration fault", "A built-in declares the
-  redirect hosts its platform answers with" (FR15, FR17, NFR-R5, UX4). `add-stage-finished-event`
-  ADDs a distinct requirement to the same capability; no MODIFIED header overlaps.
+- `verification/factory-egress-allowlist`: MODIFIED "The http check is governed by an
+  operator-owned egress allowlist" (the list is the `in-process` scope of the operator egress
+  block); ADDED "Egress admission follows the medium of the URL", "One grammar for every egress
+  entry", "The guarded exchange serves every factory HTTP consumer", "A redirect target is an
+  egress target", "A redirect hop keeps the request's meaning", "An egress refusal is a
+  configuration fault" (FR15, FR17, NFR-R5, UX4). `add-stage-finished-event` ADDs a distinct
+  requirement to the same capability; no MODIFIED header overlaps.
+- `operator/operator-configuration`: MODIFIED "Every key declares where it may be set" (the
+  boundary key is `factory.egress.sandbox`); ADDED "The operator egress block replaces the two
+  allowlist keys" (FR17).
+- `sandbox/sandbox-egress`: MODIFIED "Default-deny allowlist owned by the operator" (the list
+  is `factory.egress.sandbox`, parsed by the one grammar) (FR17).
+- `operator/vendor-connection-profile`: ADDED "A profile may grant egress hosts" (FR17).
 - `verification/github-external-check`: MODIFIED "Polling is stateless and takeover-safe" — the
   persisted pending key is the one poll state; the attempt commit comes with the request.
 - `verification/verification-hardening`: MODIFIED "Pin-check guards external checks" — the guard
