@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.ExternalPolling
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.VerdictDerivation
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
@@ -110,13 +111,17 @@ class FindingsFunnelSpec extends Specification {
         def check = VerifyChecks.external('quality-gate', HttpCheckClientFactory.PROVIDER,
                 [url: 'https://ci.example.invalid/api/status'], Duration.ofSeconds(1), Duration.ofSeconds(30),
                 VerifyCheck.TimeoutClass.QUALITY, [])
-        // The engine's own external poll turns the provider's answer into the verdict, as on a run
-        new ExternalPolling(new HttpExternalCheckClient(exchange, secrets), AttemptDelivery.assumedDelivered(),
-                VirtualTimeEquipment.create()).poll(check, new DirectoryWorkspace(tempDir))
+        // The engine's own external poll turns the provider's answer into the check's answer, and
+        // the engine's derivation turns that into the verdict, as on a run
+        VerdictDerivation.derive(new ExternalPolling(new HttpExternalCheckClient(exchange, secrets),
+                AttemptDelivery.assumedDelivered(), VirtualTimeEquipment.create()).poll(check, new DirectoryWorkspace(tempDir)),
+                check.threshold())
     }
 
     Verdict commandRuns(String line) {
-        new ShellCommandCheckRunner(new VirtualClock()).run(VerifyChecks.command(line), new DirectoryWorkspace(tempDir))
+        def check = VerifyChecks.command(line)
+        VerdictDerivation.derive(
+                new ShellCommandCheckRunner(new VirtualClock()).run(check, new DirectoryWorkspace(tempDir)), check.threshold())
     }
 
     private static CheckResult result(int index, String label, Verdict verdict) {

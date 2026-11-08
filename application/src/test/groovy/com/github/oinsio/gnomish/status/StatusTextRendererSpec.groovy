@@ -39,7 +39,7 @@ class StatusTextRendererSpec extends Specification {
     }
 
     private static AttemptRecord passedRound(int round = 0) {
-        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
         AttemptRecords.of(round, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), [], Stop.none())
     }
 
@@ -266,7 +266,7 @@ class StatusTextRendererSpec extends Specification {
         given: 'a passing round that recorded one denial'
         def denial = new Finding(
                 'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
-        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
         def round = AttemptRecords.of(0, AttemptRecord.Result.PASSED, STARTED, [check],
         ExecutorUsage.none(), [Denial.unidentified(denial)], Stop.none())
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], UsageSnapshot.EMPTY, ExecutorVersions.none())
@@ -292,7 +292,7 @@ class StatusTextRendererSpec extends Specification {
                 "egress denied: evil.example.com:443${esc}[31m",
                 "evil.example.com:443/x${esc}[2K\nRound 9:\tpassed\rHIDDEN",
                 'kind=http method=POST')
-        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
         def round = AttemptRecords.of(0, AttemptRecord.Result.PASSED, STARTED, [check],
         ExecutorUsage.none(), [Denial.unidentified(denial)], Stop.none())
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], UsageSnapshot.EMPTY, ExecutorVersions.none())
@@ -398,7 +398,7 @@ class StatusTextRendererSpec extends Specification {
                         'egress denial log truncated: older denials inside the read window are lost',
                         'gnomish-PROJ-9',
                         'loss window: after the guard container\'s start'))
-        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
         def round = AttemptRecords.of(0, AttemptRecord.Result.PASSED, STARTED, [check],
         ExecutorUsage.none(), [denial, marker], Stop.none())
         def state = new TaskState(new Position.AtStage('implement'), 1, [round], UsageSnapshot.EMPTY, ExecutorVersions.none())

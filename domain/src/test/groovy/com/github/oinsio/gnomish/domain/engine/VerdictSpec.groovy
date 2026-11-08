@@ -11,15 +11,34 @@ import spock.lang.Specification
  */
 class VerdictSpec extends Specification {
 
-    // FR4: Pass carries only the optional run URL — two passes with the same URL are the same value
+    // FR4: Pass carries the optional run URL and its findings — two passes alike in both are the same value
     def "Pass instances are value-equal"() {
         expect: 'two independently constructed passes are equal'
-        new Verdict.Pass() == new Verdict.Pass()
+        new Verdict.Pass(null, []) == new Verdict.Pass(null, [])
 
-        and: 'the no-arg pass is the null-URL pass (NFR-O2 of add-sandbox-core)'
-        new Verdict.Pass() == new Verdict.Pass(null)
-        new Verdict.Pass('https://ci.example/runs/1') == new Verdict.Pass('https://ci.example/runs/1')
-        new Verdict.Pass('https://ci.example/runs/1') != new Verdict.Pass()
+        and: 'the run URL and the findings take part in equality (NFR-O2 of add-sandbox-core; FR7)'
+        new Verdict.Pass('https://ci.example/runs/1', []) == new Verdict.Pass('https://ci.example/runs/1', [])
+        new Verdict.Pass('https://ci.example/runs/1', []) != new Verdict.Pass(null, [])
+        new Verdict.Pass(null, [new Finding('w', null, null)]) != new Verdict.Pass(null, [])
+    }
+
+    // FR7 of migrate-verify-to-executor-contract (D5 as amended): a pass's findings are copied and unmodifiable
+    def "a Pass is inert once constructed"() {
+        given:
+        def findings = [new Finding('w', null, null)]
+        def pass = new Verdict.Pass(null, findings)
+
+        when: 'the caller edits its list afterwards'
+        findings << new Finding('later', null, null)
+
+        then: 'the pass keeps what it was given'
+        pass.findings()*.message() == ['w']
+
+        when: 'the exposed list is edited'
+        pass.findings().add(new Finding('x', null, null))
+
+        then:
+        thrown(UnsupportedOperationException)
     }
 
     // FR4: Fail exposes its findings exactly as constructed
@@ -113,7 +132,7 @@ class VerdictSpec extends Specification {
 
         where:
         verdict || expected
-        new Verdict.Pass() || 'pass'
+        new Verdict.Pass(null, []) || 'pass'
         new Verdict.Fail([]) || 'fail'
         new Verdict.CannotVerify(UntrustedText.subprocess('r'), UntrustedText.subprocess('')) || 'cannot-verify'
     }

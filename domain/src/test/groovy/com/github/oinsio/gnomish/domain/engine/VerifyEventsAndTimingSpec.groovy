@@ -15,7 +15,7 @@ class VerifyEventsAndTimingSpec extends VerifyOrchestratorSpecBase {
     // FR2: a CheckStarted/CheckFinished pair is emitted per executed check, matching its CheckRef
     def "emits a CheckStarted and CheckFinished pair per executed check"() {
         given: 'a passing builtin followed by a failing command'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
         def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Fail([])])
         def checks = [
             builtin('files_exist'),
@@ -44,7 +44,7 @@ class VerifyEventsAndTimingSpec extends VerifyOrchestratorSpecBase {
     def "emits no events for a check that never runs"() {
         given: 'a failing first check that stops the chain'
         def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Fail([])])
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass()])
+        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
         def checks = [
             builtin('files_exist'),
             command('./gradlew test')
@@ -62,7 +62,7 @@ class VerifyEventsAndTimingSpec extends VerifyOrchestratorSpecBase {
     // FR2: each CheckResult captures a non-null clock-measured duration
     def "captures a per-check duration from the injected clock"() {
         given: 'a clock that does not advance during a passing check'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
         def commandRunner = new ScriptedCommandCheckRunner()
         def checks = [builtin('files_exist')]
 

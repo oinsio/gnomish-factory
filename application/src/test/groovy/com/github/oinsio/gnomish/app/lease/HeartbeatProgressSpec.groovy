@@ -125,7 +125,7 @@ class HeartbeatProgressSpec extends Specification {
     }
 
     private static CheckResult passResult() {
-        new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+        new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
     }
 
     private static ToolTrace trace(String stage, int attempt) {

@@ -38,8 +38,8 @@ class StatusRunUrlLineSpec extends Specification {
     def "NFR-O2: only a passing check that carried a run URL gets a line, on either plane"() {
         given: 'a round with a URL-carrying pass, a pass without a URL, and a failure'
         def record = round([
-            check('builtin:files_exist', new Verdict.Pass()),
-            check('external:ci', new Verdict.Pass(RUN_URL)),
+            check('builtin:files_exist', new Verdict.Pass(null, [])),
+            check('external:ci', new Verdict.Pass(RUN_URL, [])),
             check('command:test', new Verdict.Fail([
                 new Finding('red', null, null)
             ]))
@@ -57,7 +57,7 @@ class StatusRunUrlLineSpec extends Specification {
     def "NFR-O2: a round whose checks carried no run URL renders no run line"() {
         expect:
         StatusLineFormatter.runUrlLines(round([
-            check('builtin:files_exist', new Verdict.Pass())
+            check('builtin:files_exist', new Verdict.Pass(null, []))
         ]), ReportPlane.COMMENT).isEmpty()
     }
 
@@ -65,7 +65,7 @@ class StatusRunUrlLineSpec extends Specification {
         given: 'a URL crafted with a line break, a terminal escape, a mention and an issue reference'
         def esc = new String(Character.toChars(0x1B))
         def record = round([
-            check('external:ci', new Verdict.Pass("https://ci.example/@team/#123${esc}[31m\nfake: row"))
+            check('external:ci', new Verdict.Pass("https://ci.example/@team/#123${esc}[31m\nfake: row", []))
         ])
 
         expect:
@@ -82,7 +82,7 @@ class StatusRunUrlLineSpec extends Specification {
         def report = new StatusReport('PROJ-1', UntrustedText.tracker('Fix'), UntrustedText.tracker('body'),
                 new Position.PipelineEnd(), 1, [
                     round([
-                        check('external:ci', new Verdict.Pass(RUN_URL))
+                        check('external:ci', new Verdict.Pass(RUN_URL, []))
                     ])
                 ], [], null,
                 UsageSnapshot.EMPTY, null, null)

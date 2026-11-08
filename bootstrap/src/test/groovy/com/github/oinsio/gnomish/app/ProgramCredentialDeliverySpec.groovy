@@ -13,7 +13,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -127,7 +127,7 @@ class ProgramCredentialDeliverySpec extends Specification implements BareGitRepo
                 .run(VerifyChecks.command('test -z "${ACME_API_KEY:-}"'), support.workspace())
 
         then: 'it passes only with the key absent from its process'
-        verdict instanceof Verdict.Pass
+        verdict == new VerdictAnswer.Sarif([])
 
         and: 'FR10: the box guard admits the law\'s executor egress host beside the operator\'s'
         Files.readString(Path.of(System.getProperty('java.io.tmpdir'), 'gnomish-guard', taskId, 'allowlist.json')) ==

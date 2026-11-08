@@ -1,7 +1,8 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
-import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.ResultLevel
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import java.nio.file.Files
@@ -37,7 +38,7 @@ class FilesExistCheckRunnerSpec extends Specification {
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Pass
+        verdict == new VerdictAnswer.Sarif([])
     }
 
     // Scenario: cli/manual-run / Missing files enumerated
@@ -56,10 +57,13 @@ class FilesExistCheckRunnerSpec extends Specification {
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Fail
-        def fail = (Verdict.Fail) verdict
-        fail.findings().size() == 2
-        fail.findings()*.location() as Set == [
+        verdict instanceof VerdictAnswer.Sarif
+        def results = (verdict as VerdictAnswer.Sarif).results()
+        results*.level() == [
+            ResultLevel.ERROR,
+            ResultLevel.ERROR
+        ]
+        results*.finding()*.location() as Set == [
             'missing-one.txt',
             'missing-two.txt'
         ] as Set
@@ -73,7 +77,7 @@ class FilesExistCheckRunnerSpec extends Specification {
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.CannotVerify
+        verdict instanceof VerdictAnswer.InfrastructureFailure
     }
 
     def "wrong-type 'files' param yields CannotVerify"() {
@@ -84,7 +88,7 @@ class FilesExistCheckRunnerSpec extends Specification {
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.CannotVerify
+        verdict instanceof VerdictAnswer.InfrastructureFailure
     }
 
     def "non-string entry in 'files' param yields CannotVerify naming its type"() {
@@ -95,8 +99,8 @@ class FilesExistCheckRunnerSpec extends Specification {
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.CannotVerify
-        def cannotVerify = verdict as Verdict.CannotVerify
+        verdict instanceof VerdictAnswer.InfrastructureFailure
+        def cannotVerify = verdict as VerdictAnswer.InfrastructureFailure
         cannotVerify.reason().contains('Integer')
         !cannotVerify.reason().contains('null')
     }
@@ -111,8 +115,8 @@ class FilesExistCheckRunnerSpec extends Specification {
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.CannotVerify
-        def cannotVerify = verdict as Verdict.CannotVerify
+        verdict instanceof VerdictAnswer.InfrastructureFailure
+        def cannotVerify = verdict as VerdictAnswer.InfrastructureFailure
         cannotVerify.reason().contains('null')
     }
 
@@ -125,8 +129,8 @@ class FilesExistCheckRunnerSpec extends Specification {
         def verdict = runner.run(check, opaqueWorkspace)
 
         then: 'no existence check can be trusted without a real root, so the runner cannot verify'
-        verdict instanceof Verdict.CannotVerify
-        def cannotVerify = (Verdict.CannotVerify) verdict
+        verdict instanceof VerdictAnswer.InfrastructureFailure
+        def cannotVerify = (VerdictAnswer.InfrastructureFailure) verdict
         cannotVerify.reason().contains('DirectoryWorkspace')
     }
 
@@ -139,8 +143,8 @@ class FilesExistCheckRunnerSpec extends Specification {
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.CannotVerify
-        def cannotVerify = (Verdict.CannotVerify) verdict
+        verdict instanceof VerdictAnswer.InfrastructureFailure
+        def cannotVerify = (VerdictAnswer.InfrastructureFailure) verdict
         cannotVerify.reason().contains('../secret')
     }
 }

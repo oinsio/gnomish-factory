@@ -15,8 +15,8 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
     // FR2: an all-Pass chain runs every check in strict manifest order, one result each
     def "runs every check in manifest order when all pass"() {
         given: 'a builtin then a command check, both scripted to pass'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass()])
+        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
+        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
         def checks = [
             builtin('files_exist'),
             command('./gradlew test')
@@ -45,7 +45,7 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
     def "stops at the first non-Pass check and never invokes later checks"() {
         given: 'a builtin that fails, then a command that would pass if reached'
         def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Fail([])])
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass()])
+        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
         def checks = [
             builtin('files_exist'),
             command('./gradlew test')
@@ -67,7 +67,7 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
     // FR2: a CannotVerify verdict also stops the chain (any non-Pass breaks)
     def "stops the chain on a CannotVerify verdict too"() {
         given: 'a command that cannot verify, then a builtin that would pass'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
         def commandRunner = new ScriptedCommandCheckRunner([
             new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess(''))
         ])

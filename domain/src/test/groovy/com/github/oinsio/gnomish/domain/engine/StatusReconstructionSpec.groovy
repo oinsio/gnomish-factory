@@ -22,7 +22,7 @@ class StatusReconstructionSpec extends StatusReconstructionSpecBase {
         given: 'a single AUTO stage whose check fails once (burns an attempt) then passes'
         def stageDef = stage('build', AdvancementMode.AUTO, [builtin('files_exist')])
         builtinRunner.scripted << fail('nope')
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         def usage0 = usage(120, 34)
         def usage1 = usage(90, 12)
         executor.scripted << completed('build', 0, usage0)
@@ -60,7 +60,7 @@ class StatusReconstructionSpec extends StatusReconstructionSpecBase {
 
         and: 'NFR-O2: per-round check verdicts rebuilt from CheckFinished match — Fail then Pass'
         view.roundCheckResults[0]*.verdict() == [fail('nope')]
-        view.roundCheckResults[1]*.verdict() == [new Verdict.Pass()]
+        view.roundCheckResults[1]*.verdict() == [new Verdict.Pass(null, [])]
 
         and: 'NFR-O2: per-round executor usage rebuilt from ExecutionFinished matches what was fed'
         view.roundUsages == [usage0, usage1]
@@ -81,7 +81,7 @@ class StatusReconstructionSpec extends StatusReconstructionSpecBase {
         given: 'a single AUTO stage that fails once then passes — two keyed rounds'
         def stageDef = stage('build', AdvancementMode.AUTO, [builtin('files_exist')])
         builtinRunner.scripted << fail('nope')
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed('build', 0, ExecutorUsage.none())
         executor.scripted << completed('build', 1, ExecutorUsage.none())
 

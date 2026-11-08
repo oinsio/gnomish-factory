@@ -220,7 +220,13 @@ public final class StateJsonMapper {
         return switch (check.verdict()) {
             case Verdict.Pass pass ->
                 new StateCheckDto(
-                        check.checkRef().label().raw(), "pass", List.of(), durationMillis, null, null, pass.runUrl());
+                        check.checkRef().label().raw(),
+                        "pass",
+                        StateFindingMapper.toDtos(pass.findings()),
+                        durationMillis,
+                        null,
+                        null,
+                        pass.runUrl());
             case Verdict.Fail fail ->
                 new StateCheckDto(
                         check.checkRef().label().raw(),
@@ -248,7 +254,7 @@ public final class StateJsonMapper {
         CheckRef ref = new CheckRef(0, UntrustedText.branchDocument(dto.ref()));
         Verdict verdict =
                 switch (dto.verdict()) {
-                    case "pass" -> new Verdict.Pass(dto.runUrl());
+                    case "pass" -> new Verdict.Pass(dto.runUrl(), StateFindingMapper.fromDtos(dto.findings()));
                     case "fail" -> new Verdict.Fail(StateFindingMapper.fromDtos(dto.findings()));
                     case "cannotVerify" ->
                         // The branch-document re-mint (design D3): what this reader lifts out of

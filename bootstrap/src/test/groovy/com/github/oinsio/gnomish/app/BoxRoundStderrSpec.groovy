@@ -49,7 +49,7 @@ class BoxRoundStderrSpec extends RoundFlowSpecBase {
         logs = LogCaptureSupport.attach(SCRATCH_LOGGER, Level.DEBUG)
 
         when:
-        def outcome = run(pipeline(3), observedBox(), 'chatty-stderr', ScriptedCommandCheckRunner.fixed(new Verdict.Pass(null)))
+        def outcome = run(pipeline(3), observedBox(), 'chatty-stderr', ScriptedCommandCheckRunner.fixed(new Verdict.Pass(null, [])))
 
         then:
         outcome instanceof TaskOutcome.Completed

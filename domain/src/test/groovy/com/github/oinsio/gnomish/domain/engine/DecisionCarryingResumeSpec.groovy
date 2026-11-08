@@ -95,7 +95,7 @@ class DecisionCarryingResumeSpec extends Specification {
         def decisions = [older, middle, appended]
         def context = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), decisions)
         def stageDef = stage('build', 5, [builtin('files_exist')])
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed()
 
         when: 'the run resumes from a state positioned AT the recorded stage'
@@ -145,7 +145,7 @@ class DecisionCarryingResumeSpec extends Specification {
         exhaustedExecutor.requests.isEmpty()
 
         when: 'the caller instead supplies a state with the counter reset below the limit'
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed()
         def resumed = new Engine().run(pipeline(stageDef), context,
                 TaskState.atStageStart('build'), WORKSPACE, ports())
@@ -165,7 +165,7 @@ class DecisionCarryingResumeSpec extends Specification {
         def context = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [decision])
         def judge = new VerifyCheck.Judge('criteria.md', 'judge-model', [:], 1)
         def stageDef = stage('review', 5, [judge])
-        judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.Pass(), [:])
+        judgeVoter.scripted << new JudgeVoter.Vote(new Verdict.Pass(null, []), [:])
         executor.scripted << completed()
 
         when: 'the run resumes at the recorded stage'

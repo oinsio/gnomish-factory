@@ -193,8 +193,13 @@ class StateJsonMapperSpec extends Specification {
 
         where:
         verdict | expectedVerdict | expectedFindings | expectedReason | expectedDetails | expectedRunUrl
-        new Verdict.Pass() | "pass" | [] | null | null | null
-        new Verdict.Pass("https://ci.example/runs/42") | "pass" | [] | null | null | "https://ci.example/runs/42"
+        new Verdict.Pass(null, []) | "pass" | [] | null | null | null
+        new Verdict.Pass("https://ci.example/runs/42", []) | "pass" | [] | null | null | "https://ci.example/runs/42"
+        new Verdict.Pass(null, [
+            new Finding("unused import", "A.java:3", null)
+        ]) | "pass" | [
+            new StateFindingDto("unused import", "A.java:3", null)
+        ] | null | null | null
         new Verdict.Fail([
             new Finding("bad", "file.txt:12", "trace")
         ]) | "fail" | [
@@ -217,7 +222,7 @@ class StateJsonMapperSpec extends Specification {
             Participants.verdict('agent-cli', 0, Unpriced.of(tokens)),
             Participants.verdict('agent-cli', 1, [:])
         ]
-        def check1 = new CheckResult(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), new Verdict.Pass(), Duration.ofMillis(200))
+        def check1 = new CheckResult(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), new Verdict.Pass(null, []), Duration.ofMillis(200))
         def check2 = new CheckResult(
                 new CheckRef(0, UntrustedText.manifest("judge:acceptance.md")),
                 new Verdict.Fail([
@@ -547,7 +552,7 @@ class StateJsonMapperSpec extends Specification {
         given: 'a passing round whose environment denied one egress attempt'
         def denial = new Finding(
                 "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
-        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), new Verdict.Pass(), Duration.ofMillis(9))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("command:./gradlew test")), new Verdict.Pass(null, []), Duration.ofMillis(9))
         def record = AttemptRecords.of(
                 0,
                 AttemptRecord.Result.PASSED,

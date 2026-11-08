@@ -26,18 +26,27 @@ public sealed interface Verdict {
      * run that decided an external check (NFR-O2 of add-sandbox-core): the verdict
      * is the recorded check result's payload, so a URL here reaches the tracker
      * report through the same channel a failing check's findings travel. {@code
-     * runUrl} is {@code null} for every check kind with no platform run to point at
-     * — the no-arg constructor keeps the plain "it passed" verdict for them.
+     * runUrl} is {@code null} for every check kind with no platform run to point at.
      *
-     * <p>Implements FR4 of add-stage-engine; NFR-O2 of add-sandbox-core.
+     * <p>A pass keeps the results its answer carried below the check's threshold as {@code
+     * findings}, in the order written (design D5 as amended of migrate-verify-to-executor-contract):
+     * the state file, {@code status --json} and the usage report record them as they record a
+     * failure's, while the retry feedback never carries them — it collects only the non-pass
+     * results of prior attempts (FR4 of add-stage-engine). The canonical constructor is the only
+     * form: a pass with nothing to report spells the empty list, so no writer can drop the list by
+     * picking a shorter constructor.
+     *
+     * <p>Implements FR4 of add-stage-engine; NFR-O2 of add-sandbox-core; FR7 of
+     * migrate-verify-to-executor-contract.
      *
      * @param runUrl the authoritative platform run's URL, or {@code null} if none
+     * @param findings the results below the threshold; defensively copied, unmodifiable, possibly
+     *     empty
      */
-    record Pass(@Nullable String runUrl) implements Verdict {
+    record Pass(@Nullable String runUrl, List<Finding> findings) implements Verdict {
 
-        /** A pass with no platform run to point at. */
-        public Pass() {
-            this(null);
+        public Pass {
+            findings = List.copyOf(findings);
         }
     }
 

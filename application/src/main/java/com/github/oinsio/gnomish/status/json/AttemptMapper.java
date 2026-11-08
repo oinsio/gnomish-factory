@@ -95,10 +95,22 @@ final class AttemptMapper {
         return switch (check.verdict()) {
             case Verdict.Pass pass ->
                 new CheckDto(
-                        check.checkRef().label().raw(), "pass", List.of(), durationMillis, null, null, pass.runUrl());
+                        check.checkRef().label().raw(),
+                        "pass",
+                        toFindings(pass.findings()),
+                        durationMillis,
+                        null,
+                        null,
+                        pass.runUrl());
             case Verdict.Fail fail ->
                 new CheckDto(
-                        check.checkRef().label().raw(), "fail", toFindings(fail), durationMillis, null, null, null);
+                        check.checkRef().label().raw(),
+                        "fail",
+                        toFindings(fail.findings()),
+                        durationMillis,
+                        null,
+                        null,
+                        null);
             case Verdict.CannotVerify cannotVerify ->
                 new CheckDto(
                         check.checkRef().label().raw(),
@@ -111,12 +123,8 @@ final class AttemptMapper {
         };
     }
 
-    private static List<FindingDto> toFindings(Verdict.Fail fail) {
-        return toFindings(fail.findings());
-    }
-
     /**
-     * The one finding shape the contract uses, shared by a failed check's findings, an
+     * The one finding shape the contract uses, shared by a check's findings (a pass's below-threshold ones included), an
      * attempt's denials, and a {@code cannotExecute} escalation's denials — a denial
      * reads exactly like any other finding, so a reviewer needs to know nothing about
      * guard logs to read one (FR4, UX1 of fix-denial-report-attachment; FR2 of

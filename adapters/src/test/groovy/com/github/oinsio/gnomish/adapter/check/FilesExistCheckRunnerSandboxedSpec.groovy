@@ -2,7 +2,8 @@ package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
-import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.ResultLevel
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.gitobjects.CommitRequest
@@ -58,7 +59,7 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
             ]])
 
         expect:
-        runner().run(check, workspace()) instanceof Verdict.Pass
+        runner().run(check, workspace()) == new VerdictAnswer.Sarif([])
     }
 
     // Scenario: git/git-task-persistence / Verification judges the attempt commit
@@ -74,8 +75,9 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
         def verdict = runner().run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Fail
-        ((Verdict.Fail) verdict).findings()*.location() == ['uncommitted-residue.txt']
+        verdict instanceof VerdictAnswer.Sarif
+        (verdict as VerdictAnswer.Sarif).results()*.level() == [ResultLevel.ERROR]
+        (verdict as VerdictAnswer.Sarif).results()*.finding()*.location() == ['uncommitted-residue.txt']
     }
 
     def "a path escaping the workspace yields CannotVerify naming the path"() {
@@ -86,8 +88,8 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
         def verdict = runner().run(check, workspace())
 
         then:
-        verdict instanceof Verdict.CannotVerify
-        ((Verdict.CannotVerify) verdict).reason().contains(path)
+        verdict instanceof VerdictAnswer.InfrastructureFailure
+        ((VerdictAnswer.InfrastructureFailure) verdict).reason().contains(path)
 
         where:
         path << [
@@ -105,8 +107,8 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
         def verdict = new FilesExistCheckRunner().run(check, workspace())
 
         then:
-        verdict instanceof Verdict.CannotVerify
-        ((Verdict.CannotVerify) verdict).reason().contains('no factory-clone reader')
+        verdict instanceof VerdictAnswer.InfrastructureFailure
+        ((VerdictAnswer.InfrastructureFailure) verdict).reason().contains('no factory-clone reader')
     }
 
     def "malformed params still fail before any git read"() {
@@ -114,6 +116,6 @@ class FilesExistCheckRunnerSandboxedSpec extends Specification implements GitObj
         def check = VerifyChecks.builtin('files_exist', [:])
 
         expect:
-        runner().run(check, workspace()) instanceof Verdict.CannotVerify
+        runner().run(check, workspace()) instanceof VerdictAnswer.InfrastructureFailure
     }
 }

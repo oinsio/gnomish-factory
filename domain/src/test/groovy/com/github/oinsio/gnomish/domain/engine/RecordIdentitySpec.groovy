@@ -42,7 +42,7 @@ class RecordIdentitySpec extends EventEmissionSpecBase {
         given:
         def identity = new TokenSequence([FIRST])
         executor.scripted << completed()
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         new Engine().run(pipeline(stage('build', 3, [builtin('files_exist')]), stage('review', 3, [])),
@@ -63,7 +63,7 @@ class RecordIdentitySpec extends EventEmissionSpecBase {
         given:
         def identity = new TokenSequence([FIRST, SECOND])
         executor.scripted << completed(0) << completed(1)
-        builtinRunner.scripted << fail('red') << new Verdict.Pass()
+        builtinRunner.scripted << fail('red') << new Verdict.Pass(null, [])
 
         when:
         new Engine().run(pipeline(stage('build', 3, [builtin('files_exist')])),
@@ -80,7 +80,7 @@ class RecordIdentitySpec extends EventEmissionSpecBase {
     def "FR21: an in-place run records its rounds with no token"() {
         given:
         executor.scripted << completed()
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         new Engine().run(pipeline(stage('build', 3, [builtin('files_exist')])),

@@ -34,7 +34,7 @@ class RoundExecutorEventSpec extends EventEmissionSpecBase {
 
     EngineEvent.ExecutionFinished finishedOf(StageDefinition stage, DescribedExecutors described) {
         executor.scripted << completed()
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         new Engine().run(pipeline(stage), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports(described))
         def finished = listener.events.findAll {
             it instanceof EngineEvent.ExecutionFinished

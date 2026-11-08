@@ -77,6 +77,6 @@ class HostModeRoundSpec extends RoundFlowSpecBase {
     }
 
     private TaskOutcome run(Path worktree, FactoryProperties agent) {
-        runHost(pipeline(3), worktree, agent, ScriptedCommandCheckRunner.fixed(new Verdict.Pass(null)))
+        runHost(pipeline(3), worktree, agent, ScriptedCommandCheckRunner.fixed(new Verdict.Pass(null, [])))
     }
 }

@@ -225,6 +225,6 @@ class DecisionNeededSpec extends Specification {
         executor.requests.size() == 2
         def feedback = executor.requests[1].feedback()
         feedback.size() == 1
-        feedback[0].verdict().is(failA)
+        feedback[0].verdict() == failA
     }
 }

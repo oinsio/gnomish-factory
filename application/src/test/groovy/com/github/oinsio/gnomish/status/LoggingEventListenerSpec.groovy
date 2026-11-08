@@ -112,7 +112,7 @@ class LoggingEventListenerSpec extends Specification {
     def "CheckFinished logs one INFO line"() {
         given:
         def listener = new LoggingEventListener()
-        def result = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+        def result = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
 
         when:
         def events = capture {
@@ -187,7 +187,7 @@ class LoggingEventListenerSpec extends Specification {
         given:
         def listener = new LoggingEventListener()
         def check = new CheckRef(0, UntrustedText.manifest('command:./gradlew test\n2026-01-01 ERROR forged record'))
-        def result = new CheckResult(check, new Verdict.Pass(), Duration.ofMillis(3))
+        def result = new CheckResult(check, new Verdict.Pass(null, []), Duration.ofMillis(3))
 
         when:
         def events = capture {

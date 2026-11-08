@@ -123,7 +123,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def denial = Denial.unidentified(new Finding(
                         'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST'))
         def check = new CheckResult(
-                new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+                new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
         def attempt = AttemptRecords.of(
                 0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-16T14:35:10Z'),
                 [check], ExecutorUsage.none(), [denial], Stop.none())

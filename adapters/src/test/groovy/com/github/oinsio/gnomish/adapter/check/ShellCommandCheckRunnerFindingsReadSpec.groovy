@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
-import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
@@ -102,8 +102,8 @@ class ShellCommandCheckRunnerFindingsReadSpec extends Specification implements S
 
         then: 'the shutdown resolves as infrastructure, not as a thrown read failure'
         failure == null
-        verdict instanceof Verdict.CannotVerify
-        (verdict as Verdict.CannotVerify).reason().forLog().toLowerCase().contains('interrupted')
+        verdict instanceof VerdictAnswer.InfrastructureFailure
+        (verdict as VerdictAnswer.InfrastructureFailure).reason().forLog().toLowerCase().contains('interrupted')
 
         and: 'no findings read was attempted at all'
         environments.every { it.reads.isEmpty() }
@@ -118,8 +118,8 @@ class ShellCommandCheckRunnerFindingsReadSpec extends Specification implements S
         def verdict = runner(Duration.ofMillis(300)).run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Fail
-        (verdict as Verdict.Fail).findings()[0].message().contains('timed out')
+        verdict instanceof VerdictAnswer.QualityFailure
+        (verdict as VerdictAnswer.QualityFailure).findings()[0].message().contains('timed out')
 
         and:
         environments.every { it.reads.isEmpty() }
@@ -130,7 +130,7 @@ class ShellCommandCheckRunnerFindingsReadSpec extends Specification implements S
         def verdict = runner(Duration.ofSeconds(30)).run(command('exit 3'), workspace())
 
         then:
-        verdict instanceof Verdict.Fail
+        verdict instanceof VerdictAnswer.QualityFailure
         environments.any { !it.reads.isEmpty() }
     }
 }

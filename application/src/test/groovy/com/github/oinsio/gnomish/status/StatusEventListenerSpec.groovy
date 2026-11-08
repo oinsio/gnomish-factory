@@ -40,7 +40,7 @@ class StatusEventListenerSpec extends Specification {
     }
 
     private static CheckResult passingCheck() {
-        new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+        new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
     }
 
     // FR10, FR11, D7 of add-manual-run; FR6 of make-run-headless: at an attempt boundary the fold

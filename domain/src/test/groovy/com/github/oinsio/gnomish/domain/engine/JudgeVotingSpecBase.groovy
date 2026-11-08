@@ -23,7 +23,11 @@ abstract class JudgeVotingSpecBase extends Specification {
     }
 
     static JudgeVoter.Vote pass(Map<String, TokenUsage> tokensByModel = [:]) {
-        new JudgeVoter.Vote(new Verdict.Pass(), Unpriced.of(tokensByModel))
+        pass([], tokensByModel)
+    }
+
+    static JudgeVoter.Vote pass(List<Finding> findings, Map<String, TokenUsage> tokensByModel = [:]) {
+        new JudgeVoter.Vote(new Verdict.Pass(null, findings), Unpriced.of(tokensByModel))
     }
 
     static JudgeVoter.Vote fail(List<Finding> findings, Map<String, TokenUsage> tokensByModel = [:]) {

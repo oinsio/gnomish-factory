@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.domain.engine.port.contract.CheckRunnerContract
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
@@ -29,7 +30,7 @@ class FilesExistCheckRunnerContractSpec extends CheckRunnerContract {
     }
 
     @Override
-    protected Optional<Verdict> arrange(CheckRunnerContract.VerdictVariant variant) {
+    protected Optional<VerdictAnswer> arrange(CheckRunnerContract.VerdictVariant variant) {
         VerifyCheck.Executor check = switch (variant) {
                     case CheckRunnerContract.VerdictVariant.PASS -> {
                         Files.writeString(tempDir.resolve('present.txt'), 'ok')

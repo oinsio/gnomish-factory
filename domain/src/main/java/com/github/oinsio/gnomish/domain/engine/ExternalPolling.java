@@ -13,19 +13,22 @@ import java.util.List;
  * The poll loop of one {@link VerifyCheck.Executor} check, extracted from {@link
  * VerifyOrchestrator} so each class stays within the file-size cap. It polls the
  * injected {@link ExternalCheckClient} until the third party decides or the timeout
- * elapses, collapsing the {@link PollStatus} observations into one {@link Verdict}
- * (design D2, D8).
+ * elapses, collapsing the {@link PollStatus} observations into one {@link VerdictAnswer}
+ * (design D2, D8); the verdict is derived from it by {@link VerdictDerivation}, never
+ * here (D5, D9 of migrate-verify-to-executor-contract).
  *
  * <p>The {@code deadline} is {@code clock.instant() + timeout} captured once at entry. A
- * decided poll maps straight through to the matching {@link Verdict}; {@link
+ * decided poll maps straight through to the matching answer — a pass to an empty {@link
+ * VerdictAnswer.Sarif}, a fail to a {@link VerdictAnswer.QualityFailure} with its
+ * findings, a cannot-verify to a {@link VerdictAnswer.InfrastructureFailure}; {@link
  * PollStatus.Running} keeps waiting. On {@code Running} the timeout is checked
  * <em>before</em> sleeping: once the equipment has no time {@linkplain TimeEquipment#remaining
  * remaining} until the deadline
  * the loop resolves the check's declared {@link VerifyCheck.Executor#timeoutClass()}
- * — {@link VerifyCheck.TimeoutClass#QUALITY} (the default) returns a quality {@link
- * Verdict.Fail} with a single timeout {@link Finding}, unchanged prior behavior;
- * {@link VerifyCheck.TimeoutClass#INFRASTRUCTURE} returns a {@link
- * Verdict.CannotVerify} naming the elapsed timeout instead, so the stage escalates
+ * — {@link VerifyCheck.TimeoutClass#QUALITY} (the default) returns a {@link
+ * VerdictAnswer.QualityFailure} with a single timeout {@link Finding}, unchanged prior
+ * behavior; {@link VerifyCheck.TimeoutClass#INFRASTRUCTURE} returns a {@link
+ * VerdictAnswer.InfrastructureFailure} naming the elapsed timeout instead, so the stage escalates
  * without burning an attempt (FR9). Otherwise the loop sleeps the interval on the
  * equipment's sleeper and polls again. Checking before sleeping keeps the loop
  * deterministic (NFR-R3).
@@ -34,12 +37,13 @@ import java.util.List;
  * and no mutable state, so one instance drives concurrent external checks safely — all
  * loop state is local to {@link #poll} (NFR-R1).
  *
- * <p>A decided {@link PollStatus.Pass} maps through with its platform run URL intact,
+ * <p>A decided {@link PollStatus.Pass} maps through with its platform run URL intact on the answer,
  * so the recorded check result carries the link a green external check is audited by
  * (NFR-O2 of add-sandbox-core).
  *
  * <p>Implements FR3, NFR-R3 of add-stage-engine; FR9 of
- * add-external-check-github-actions; NFR-O2 of add-sandbox-core.
+ * add-external-check-github-actions; NFR-O2 of add-sandbox-core; FR7 of
+ * migrate-verify-to-executor-contract.
  */
 final class ExternalPolling {
 
@@ -67,12 +71,12 @@ final class ExternalPolling {
 
     /**
      * Polls {@code check} until it decides or its timeout elapses, collapsing the poll
-     * sequence into one {@link Verdict}. The deadline is {@code clock.instant() +
+     * sequence into one {@link VerdictAnswer}. The deadline is {@code clock.instant() +
      * check.timeout()} captured once at entry; a {@link PollStatus.Running} that never
      * resolves times out once no time remains until the deadline,
      * classified per {@code check.timeoutClass()}: {@link VerifyCheck.TimeoutClass#QUALITY}
-     * (default) into a quality {@link Verdict.Fail}, {@link
-     * VerifyCheck.TimeoutClass#INFRASTRUCTURE} into a {@link Verdict.CannotVerify} (FR9).
+     * (default) into a {@link VerdictAnswer.QualityFailure}, {@link
+     * VerifyCheck.TimeoutClass#INFRASTRUCTURE} into a {@link VerdictAnswer.InfrastructureFailure} (FR9).
      * The timeout is checked before sleeping so virtual time never overshoots (NFR-R3);
      * all loop state is local.
      *
@@ -81,32 +85,32 @@ final class ExternalPolling {
      *
      * @param check the external check to poll, carrying its interval, timeout and id
      * @param workspace the opaque working copy the check relates to
-     * @return the verdict the poll sequence collapses to
+     * @return the answer the poll sequence collapses to
      */
-    Verdict poll(VerifyCheck.Executor check, Workspace workspace) {
+    VerdictAnswer poll(VerifyCheck.Executor check, Workspace workspace) {
         // FR21 of add-sandbox-core: external checks are triggered by the task-branch push, so
         // delivery of the attempt commit is a verified precondition of the loop — an
         // undeliverable commit resolves as CannotVerify (no attempt burned) instead of being
         // left to expire as a poll-timeout quality failure.
         if (attemptDelivery.ensureDelivered(workspace)
                 instanceof AttemptDelivery.Outcome.Undeliverable(UntrustedText reason, UntrustedText details)) {
-            return new Verdict.CannotVerify(reason, details);
+            return new VerdictAnswer.InfrastructureFailure(reason, details);
         }
         Instant deadline = time.clock().instant().plus(check.timeout());
         while (true) {
             switch (externalClient.poll(check, workspace)) {
                 case PollStatus.Pass pass -> {
-                    return new Verdict.Pass(pass.runUrl());
+                    return new VerdictAnswer.Sarif(List.of(), pass.runUrl());
                 }
                 case PollStatus.Fail f -> {
-                    return new Verdict.Fail(f.findings());
+                    return new VerdictAnswer.QualityFailure(f.findings());
                 }
                 case PollStatus.CannotVerify cv -> {
-                    return new Verdict.CannotVerify(cv.reason(), cv.details());
+                    return new VerdictAnswer.InfrastructureFailure(cv.reason(), cv.details());
                 }
                 case PollStatus.Running ignored -> {
                     if (time.remaining(deadline).isZero()) {
-                        return timeoutVerdict(check);
+                        return timeoutAnswer(check);
                     }
                     time.sleeper().sleep(check.interval());
                 }
@@ -115,27 +119,28 @@ final class ExternalPolling {
     }
 
     /**
-     * Classifies a timed-out external check's verdict per its declared {@link
+     * Classifies a timed-out external check's answer per its declared {@link
      * VerifyCheck.Executor#timeoutClass()} (design D7): {@link
-     * VerifyCheck.TimeoutClass#QUALITY} (default) into a quality {@link Verdict.Fail}
+     * VerifyCheck.TimeoutClass#QUALITY} (default) into a {@link VerdictAnswer.QualityFailure}
      * carrying a single timeout {@link Finding} naming the check id and timeout,
      * burning the attempt (NFR-O1, unchanged prior behavior); {@link
-     * VerifyCheck.TimeoutClass#INFRASTRUCTURE} into a {@link Verdict.CannotVerify}
+     * VerifyCheck.TimeoutClass#INFRASTRUCTURE} into a {@link VerdictAnswer.InfrastructureFailure}
      * naming the same elapsed timeout, escalating without burning an attempt.
      *
      * <p>Implements FR9 of add-external-check-github-actions.
      */
-    private static Verdict timeoutVerdict(VerifyCheck.Executor check) {
+    private static VerdictAnswer timeoutAnswer(VerifyCheck.Executor check) {
         var message = "external check '" + check.checkId() + "' did not complete within " + check.timeout();
         return switch (check.timeoutClass()) {
-            case QUALITY -> new Verdict.Fail(List.of(new Finding(message, null, null)));
+            case QUALITY -> new VerdictAnswer.QualityFailure(List.of(new Finding(message, null, null)));
             // MANIFEST, not FACTORY: the sentence interpolates the check id raw, and a capture
             // quoted raw keeps the capture's family (design D1 of type-untrusted-text). The detail
             // is the empty carrier: a timeout is the absence of an answer, so nothing was captured,
             // and every renderer prints reason and details in turn — handing the one sentence to
             // both fields would show the operator the same line twice (design D3, "the empty
             // details of a verdict that captured nothing" is FACTORY).
-            case INFRASTRUCTURE -> new Verdict.CannotVerify(UntrustedText.manifest(message), UntrustedText.factory(""));
+            case INFRASTRUCTURE ->
+                new VerdictAnswer.InfrastructureFailure(UntrustedText.manifest(message), UntrustedText.factory(""));
         };
     }
 }

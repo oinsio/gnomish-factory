@@ -43,7 +43,7 @@ class ResumeAbortedRoundSpec extends ResumeMatrixSpecBase {
         when: 'a NEW run resumes from the last durably persisted state; round 1 now passes'
         def resumeExecutor = new ScriptedExecutor([completed()])
         def resumeBuiltin = new ScriptedBuiltinCheckRunner()
-        resumeBuiltin.scripted << new Verdict.Pass()
+        resumeBuiltin.scripted << new Verdict.Pass(null, [])
         def resumed = new Engine().run(pipeline(stageDef), CONTEXT, lastPersisted, WORKSPACE,
                 freshPorts(resumeExecutor, resumeBuiltin, new InMemoryAttemptPersistence(), new RecordingEventListener()))
 

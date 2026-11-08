@@ -92,7 +92,7 @@ class ExecutorReportedFailureSpec extends Specification {
         given: 'attempt 1 reports failed/quality with one finding; attempt 2 completes and its check passes'
         executor.scripted << failed(ExecutionResult.FailureClass.QUALITY, 0)
         executor.scripted << ExecutionResult.completed(ExecutorUsage.none(), trace(1), [])
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         def outcome = run(3)

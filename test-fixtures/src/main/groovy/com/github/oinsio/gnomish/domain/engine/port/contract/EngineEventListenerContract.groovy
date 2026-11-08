@@ -70,7 +70,7 @@ abstract class EngineEventListenerContract extends Specification implements Port
             new EngineEvent.ExecutionFinished(key, Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()),
             new EngineEvent.CheckStarted(key, new CheckRef(0, UntrustedText.manifest('files_exist'))),
             new EngineEvent.CheckFinished(key,
-            new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(), Duration.ZERO)),
+            new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(null, []), Duration.ZERO)),
             new EngineEvent.AttemptFinished(key, state, trace),
             new EngineEvent.TaskFinished('TASK-1', new TaskOutcome.Completed(state)),
         ]

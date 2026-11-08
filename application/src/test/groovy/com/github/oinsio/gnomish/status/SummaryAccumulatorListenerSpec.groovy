@@ -154,7 +154,7 @@ class SummaryAccumulatorListenerSpec extends Specification {
         listener.onEvent(new EngineEvent.AttemptStarted(key))
         listener.onEvent(new EngineEvent.CheckStarted(key, new CheckRef(0, UntrustedText.manifest('files_exist'))))
         listener.onEvent(new EngineEvent.CheckFinished(key,
-                new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(), Duration.ZERO)))
+                new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(null, []), Duration.ZERO)))
         listener.onEvent(new EngineEvent.ExecutionFinished(key, Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()))
         listener.onEvent(new EngineEvent.AttemptFinished(key, state(), new ToolTrace(key, [])))
         listener.onEvent(new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Completed(state())))

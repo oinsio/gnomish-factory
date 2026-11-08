@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
+import com.github.oinsio.gnomish.domain.pipeline.Threshold;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -41,7 +42,7 @@ final class RoundRecords {
      */
     static RoundOutcome.Judged qualityFailed(
             RecordedRound round, StageDefinition stage, ExecutionResult result, AttemptAccounting.BurnAttempt burn) {
-        var verdict = new Verdict.Fail(burn.findings());
+        var verdict = VerdictDerivation.derive(new VerdictAnswer.QualityFailure(burn.findings()), Threshold.DEFAULT);
         var ref = new CheckRef(0, UntrustedText.manifest(EXECUTOR_LABEL_PREFIX + stage.name()));
         var record = round.record(
                 AttemptRecord.Result.QUALITY_FAILURE,
@@ -103,7 +104,7 @@ final class RoundRecords {
     static Verdict overallVerdict(VerificationResult verification) {
         var results = verification.results();
         if (results.isEmpty()) {
-            return new Verdict.Pass();
+            return VerdictDerivation.derive(new VerdictAnswer.Sarif(List.of()), Threshold.DEFAULT);
         }
         return results.getLast().verdict();
     }

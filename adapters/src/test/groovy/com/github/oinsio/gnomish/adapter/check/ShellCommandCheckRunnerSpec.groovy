@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
-import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
@@ -37,7 +37,7 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Pass
+        verdict == new VerdictAnswer.Sarif([])
     }
 
     // Scenario: cli/manual-run / Red check carries feedback
@@ -49,8 +49,8 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
+        verdict instanceof VerdictAnswer.QualityFailure
+        def fail = verdict as VerdictAnswer.QualityFailure
         fail.findings().size() == 1
         fail.findings()[0].message().contains('1')
         fail.findings()[0].details().contains('boom-output')
@@ -64,8 +64,8 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.CannotVerify
-        def cannotVerify = verdict as Verdict.CannotVerify
+        verdict instanceof VerdictAnswer.InfrastructureFailure
+        def cannotVerify = verdict as VerdictAnswer.InfrastructureFailure
         cannotVerify.reason().forLog().contains('126')
 
         and: 'the sentence is the factory\'s own — what the command printed is nowhere in it (design D3)'
@@ -82,8 +82,8 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.CannotVerify
-        def cannotVerify = verdict as Verdict.CannotVerify
+        verdict instanceof VerdictAnswer.InfrastructureFailure
+        def cannotVerify = verdict as VerdictAnswer.InfrastructureFailure
         cannotVerify.reason().forLog().contains('127')
 
         and: 'the sentence is the factory\'s own — what the command printed is nowhere in it (design D3)'
@@ -100,7 +100,7 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         def verdict = runner.run(check, opaqueWorkspace)
 
         then:
-        verdict instanceof Verdict.CannotVerify
+        verdict instanceof VerdictAnswer.InfrastructureFailure
     }
 
     def "a shell start failure is caught and yields CannotVerify"() {
@@ -109,13 +109,13 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         def check = command('pwd')
 
         when:
-        Verdict verdict = null
+        VerdictAnswer verdict = null
         def events = capture(ShellCommandCheckRunner) {
             verdict = failingRunner.run(check, workspace())
         }
 
         then:
-        verdict instanceof Verdict.CannotVerify
+        verdict instanceof VerdictAnswer.InfrastructureFailure
 
         and: 'FR5 of harden-logging-observability: the degradation names the check it happened to'
         def warning = events.find { it.level.levelStr == 'WARN' }
@@ -136,13 +136,13 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         def check = command('pwd')
 
         when:
-        Verdict verdict = null
+        VerdictAnswer verdict = null
         def events = capture(ShellCommandCheckRunner) {
             verdict = runner.withEnvironments(unavailable).run(check, workspace())
         }
 
         then:
-        verdict instanceof Verdict.CannotVerify
+        verdict instanceof VerdictAnswer.InfrastructureFailure
 
         and:
         def warning = events.find { it.level.levelStr == 'WARN' }
@@ -164,8 +164,8 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         def verdict = runner.run(check, workspace())
 
         then: 'the synthetic finding carries the output tail, which contains the echoed path'
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
+        verdict instanceof VerdictAnswer.QualityFailure
+        def fail = verdict as VerdictAnswer.QualityFailure
         def path = fail.findings()[0].details().trim()
         !path.isEmpty()
         !path.startsWith(tempDir.toRealPath().toString())
@@ -183,8 +183,8 @@ exit 1''')
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
+        verdict instanceof VerdictAnswer.QualityFailure
+        def fail = verdict as VerdictAnswer.QualityFailure
         fail.findings().size() == 2
         fail.findings()[0].message() == 'first problem'
         fail.findings()[0].location() == 'a.txt:1'
@@ -202,8 +202,8 @@ exit 1''')
         def verdict = runner.run(check, workspace())
 
         then: 'the verdict is Fail, not CannotVerify - a broken reporter never masks a red check'
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
+        verdict instanceof VerdictAnswer.QualityFailure
+        def fail = verdict as VerdictAnswer.QualityFailure
         fail.findings().size() == 1
         fail.findings()[0].message().contains('1')
         fail.findings()[0].details().contains('boom-output')
@@ -220,8 +220,8 @@ exit 1''')
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
+        verdict instanceof VerdictAnswer.QualityFailure
+        def fail = verdict as VerdictAnswer.QualityFailure
         fail.findings().size() == 1
         fail.findings()[0].message().contains('1')
         fail.findings()[0].details().contains('boom-output')
@@ -238,8 +238,8 @@ exit 1''')
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
+        verdict instanceof VerdictAnswer.QualityFailure
+        def fail = verdict as VerdictAnswer.QualityFailure
         fail.findings().size() == 1
         fail.findings()[0].message().contains('1')
     }
@@ -252,8 +252,8 @@ exit 1''')
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
+        verdict instanceof VerdictAnswer.QualityFailure
+        def fail = verdict as VerdictAnswer.QualityFailure
         fail.findings().size() == 1
         fail.findings()[0].details().contains('boom-output')
     }
@@ -269,13 +269,13 @@ EOF
 exit 0''')
 
         when:
-        Verdict verdict = null
+        VerdictAnswer verdict = null
         def events = capture(CheckFindings) {
             verdict = runner.run(check, workspace())
         }
 
         then:
-        verdict instanceof Verdict.Pass
+        verdict == new VerdictAnswer.Sarif([])
         events.any {
             it.formattedMessage.contains('has content but the command exited 0')
         }
@@ -294,13 +294,13 @@ exit 0''')
         def check = command('exit 0')
 
         when:
-        Verdict verdict = null
+        VerdictAnswer verdict = null
         def events = capture(CheckFindings) {
             verdict = runner.run(check, workspace())
         }
 
         then:
-        verdict instanceof Verdict.Pass
+        verdict == new VerdictAnswer.Sarif([])
         events.every {
             !it.formattedMessage.contains('has content but the command exited 0')
         }
@@ -338,8 +338,8 @@ exit 0''')
         def verdict = credentialAwareRunner.run(check, workspace())
 
         then: 'the credential name is absent, an untouched base name still reaches the check'
-        verdict instanceof Verdict.Fail
-        def details = (verdict as Verdict.Fail).findings()[0].details()
+        verdict instanceof VerdictAnswer.QualityFailure
+        def details = (verdict as VerdictAnswer.QualityFailure).findings()[0].details()
         details.readLines().contains('HOME=absent')
         details.readLines().contains('USER=present')
     }
@@ -355,8 +355,8 @@ exit 0''')
         def verdict = runner.withChildEnv(TestChildEnvironment.hostAllowlist()).run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Fail
-        (verdict as Verdict.Fail).findings()[0].details().readLines().contains('HOME=present')
+        verdict instanceof VerdictAnswer.QualityFailure
+        (verdict as VerdictAnswer.QualityFailure).findings()[0].details().readLines().contains('HOME=present')
     }
 
     // FR9, M3 of add-sandbox-core (task 7.2): a check's process environment holds ONLY the
@@ -387,8 +387,8 @@ exit 0''')
         def verdict = runner.withChildEnv(TestChildEnvironment.hostAllowlist()).run(check, workspace())
 
         then: 'every observed name is allowlisted or shell-internal'
-        verdict instanceof Verdict.Fail
-        def names = (verdict as Verdict.Fail).findings()[0].details().readLines().findAll {
+        verdict instanceof VerdictAnswer.QualityFailure
+        def names = (verdict as VerdictAnswer.QualityFailure).findings()[0].details().readLines().findAll {
             !it.isEmpty()
         } as Set
         def allowed = (HostTaskExecutionEnvironment.BASE_ENV_NAMES as Set) + ['GNOMISH_FINDINGS_FILE'] + shellSelfSet

@@ -143,13 +143,13 @@ class QualityFailureSpec extends Specification {
         and: 'attempt 1 (round 1) feedback carries only attempt 0\'s failed check result'
         def feedback1 = executor.requests[1].feedback()
         feedback1.size() == 1
-        feedback1[0].verdict().is(failA)
+        feedback1[0].verdict() == failA
 
         and: 'attempt 2 (round 2) feedback carries the failed check results of BOTH attempts 0 and 1, in round order'
         def feedback2 = executor.requests[2].feedback()
         feedback2.size() == 2
-        feedback2[0].verdict().is(failA)
-        feedback2[1].verdict().is(failB)
+        feedback2[0].verdict() == failA
+        feedback2[1].verdict() == failB
 
         and: 'two quality failures were burned; the CannotVerify round is recorded but unburned'
         def finalState = outcome.finalState()

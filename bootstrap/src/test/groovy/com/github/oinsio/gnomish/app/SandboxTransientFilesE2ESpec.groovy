@@ -9,7 +9,7 @@ import com.github.oinsio.gnomish.baseref.BaseRule
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -97,8 +97,8 @@ class SandboxTransientFilesE2ESpec extends Specification implements BareGitRepoF
                 support.workspace())
 
         then: 'the runner read the findings back from inside the box'
-        verdict instanceof Verdict.Fail
-        def findingsPath = (verdict as Verdict.Fail).findings()[0].message()
+        verdict instanceof VerdictAnswer.QualityFailure
+        def findingsPath = (verdict as VerdictAnswer.QualityFailure).findings()[0].message()
         findingsPath.startsWith(box.scratchRoot() + '/')
 
         and: 'no such file exists on the factory side: not at that path, not in the temp directory, not in the clone'

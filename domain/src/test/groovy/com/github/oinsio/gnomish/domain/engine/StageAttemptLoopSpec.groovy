@@ -201,7 +201,7 @@ class StageAttemptLoopSpec extends Specification {
 
         where:
         begin | verdict || expectedResult
-        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Pass() || AttemptRecord.Result.PASSED
+        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Pass(null, []) || AttemptRecord.Result.PASSED
         Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Fail([]) || AttemptRecord.Result.QUALITY_FAILURE
         Instant.parse('2026-07-16T14:00:00Z') | new Verdict.CannotVerify(UntrustedText.subprocess('x'), UntrustedText.subprocess('y')) || AttemptRecord.Result.CANNOT_VERIFY
     }
@@ -250,7 +250,7 @@ class StageAttemptLoopSpec extends Specification {
         executor.scripted << completed(ExecutorUsage.none())
         builtinRunner.scripted << new Verdict.Fail([])
         builtinRunner.scripted << new Verdict.Fail([])
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         // each round advances the clock one minute during its verification, so each round begins later
         builtinRunner.onRun = { check, workspace ->
             clock.advance(Duration.ofMinutes(1))

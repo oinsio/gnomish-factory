@@ -46,7 +46,7 @@ class CommandRoundUsageSpec extends Specification {
         def process = CannedCommandHandle.exited(0, 'BUILD SUCCESSFUL\n')
         process.onWaitReturn { harness.clock.advance(Duration.ofSeconds(3)) }
         harness.processes << process
-        harness.builtinRunner.scripted << new Verdict.Pass()
+        harness.builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         def outcome = harness.run([:], arriving())

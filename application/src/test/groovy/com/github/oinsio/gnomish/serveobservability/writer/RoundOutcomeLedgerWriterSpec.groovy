@@ -113,7 +113,7 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
         def described = new DescribedExecutors(
                 new ExecutorVersions(['lint-bot': UntrustedText.subprocess('2.3.1')]), com.github.oinsio.gnomish.domain.engine.ExecutorCredentialNames.none())
         executor.scripted << result(new ExecutionResult.Completed(), 0)
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         runLintStage(described, 'lint-bot')

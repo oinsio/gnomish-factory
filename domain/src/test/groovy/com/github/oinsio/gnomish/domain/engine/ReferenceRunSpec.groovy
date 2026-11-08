@@ -154,18 +154,18 @@ class ReferenceRunSpec extends Specification {
             completed('ci'),
             completed('review')
         ])
-        def builtin2 = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        def builtin2 = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
         def command2 = new ScriptedCommandCheckRunner([
             fail('tests red'),
-            new Verdict.Pass()
+            new Verdict.Pass(null, [])
         ])
         def external2 = new ScriptedExternalCheckClient([
             new PollStatus.Running(),
             new PollStatus.Pass()
         ])
         def judge2 = new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.Pass(), [:]),
-            new JudgeVoter.Vote(new Verdict.Pass(), [:])
+            new JudgeVoter.Vote(new Verdict.Pass(null, []), [:]),
+            new JudgeVoter.Vote(new Verdict.Pass(null, []), [:])
         ])
         def persistence2 = new InMemoryAttemptPersistence()
         def clock2 = new VirtualClock()

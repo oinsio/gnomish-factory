@@ -175,7 +175,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * that keeps a whole-run scenario a unit spec. The persistence the caller assembled with is
      * passed straight through, so the run's own revocation-checking wrapper still applies.
      */
-    RunAssembly assemblyRunning(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass(),
+    RunAssembly assemblyRunning(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass(null, []),
             List hostGitPushAttached = []) {
         def time = VirtualTimeEquipment.create()
         // A hand-written fake rather than a Spock Stub: mock creation is only legal inside a
@@ -235,7 +235,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * specs that assert WHICH tree a resumed run binds its law from.
      */
     RunAssembly assemblyRunningLoop(ScriptedExecutor executor, ScriptedConsoleIO io = new ScriptedConsoleIO(),
-            Verdict verdict = new Verdict.Pass(), List hostGitPushAttached = [], List lawBindings = []) {
+            Verdict verdict = new Verdict.Pass(null, []), List hostGitPushAttached = [], List lawBindings = []) {
         def time = VirtualTimeEquipment.create()
         def console = new DialogConsole(io)
         def self = null

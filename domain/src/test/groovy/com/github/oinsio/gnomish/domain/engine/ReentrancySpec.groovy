@@ -83,7 +83,7 @@ class ReentrancySpec extends Specification {
     Run newRun(String taskId, CyclicBarrier barrier) {
         def run = new Run(taskId: taskId)
         run.executor = new ScriptedExecutor([completed(taskId)])
-        run.builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        run.builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
         if (barrier != null) {
             run.builtinRunner.onRun = { check, workspace ->
                 barrier.await(5, TimeUnit.SECONDS)

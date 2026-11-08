@@ -95,6 +95,30 @@ class UsageReportJsonMapperSpec extends Specification {
         tree.get('totals').get('through').asText() == AttemptRecords.TOKEN.commit()
     }
 
+    // FR7 of migrate-verify-to-executor-contract (D5 as amended): the usage report records a pass's findings as a failure's
+    def "FR7: a passing check's findings are carried in order"() {
+        given:
+        def pass = new Verdict.Pass(null, [
+            new Finding('w1', 'A.java:1', null),
+            new Finding('w2', null, 'detail')
+        ])
+        def attempt = AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-18T09:00:00Z'),
+                [
+                    new CheckResult(new CheckRef(0, UntrustedText.manifest('lint')), pass, Duration.ofMillis(5))
+                ],
+                ExecutorUsage.none(), [], Stop.none())
+
+        when:
+        def tree = reader.readTree(mapper.serialize('PROJ-1', [new UsageRow(attempt)], UsageFold.foldAll([attempt])))
+
+        then:
+        def check = tree.get('rows')[0].get('checks')[0]
+        check.get('verdict').asText() == 'pass'
+        check.get('findings')*.get('message')*.asText() == ['w1', 'w2']
+        check.get('findings')[0].get('location').asText() == 'A.java:1'
+        check.get('findings')[1].get('details').asText() == 'detail'
+    }
+
     def "FR14: an empty history serializes an empty rows array and the empty snapshot"() {
         when:
         def json = mapper.serialize('PROJ-2', [], UsageSnapshot.EMPTY)

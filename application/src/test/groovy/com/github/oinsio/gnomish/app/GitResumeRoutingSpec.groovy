@@ -119,7 +119,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         } as UnaryOperator<RoundEnvironmentSource>
         def runner = new GitResumeRunner(
                 assemblyRunningLoop(executor, unreadableConsole(),
-                new Verdict.Pass(), attached),
+                new Verdict.Pass(null, []), attached),
                 new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), registeredClone, 'taskId')
 
         when:
@@ -135,7 +135,7 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     List lawBindings = []
 
     /** Resumes PROJ-1 with the given {@code --decision} ({@code null} for none) over a console that is never read. */
-    private String resume(String decision = null, boolean discardWork = false, Verdict verdict = new Verdict.Pass()) {
+    private String resume(String decision = null, boolean discardWork = false, Verdict verdict = new Verdict.Pass(null, [])) {
         console = unreadableConsole()
         def runner = new GitResumeRunner(assemblyRunningLoop(executor, console, verdict, [], lawBindings),
         new TaskGit(store, branches, worktrees, new ClaimEpochBook()), registeredClone, 'taskId')

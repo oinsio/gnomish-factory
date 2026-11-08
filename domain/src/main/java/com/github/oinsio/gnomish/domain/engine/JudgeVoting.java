@@ -69,9 +69,11 @@ final class JudgeVoting {
      * threaded through (FR7); every cast vote's token map — possibly empty — is
      * appended to the running {@code perVote} accounting (NFR-C1, design D4). The
      * tally is an exhaustive switch over the
-     * sealed {@link Verdict}: a {@link Verdict.Pass} counts toward the pass total, a
-     * {@link Verdict.Fail} counts toward the fail total and its findings join the
-     * aggregate, and a {@link Verdict.CannotVerify} short-circuits the whole check to
+     * sealed {@link Verdict}: a {@link Verdict.Pass} counts toward the pass total and its
+     * findings join the pass aggregate, a {@link Verdict.Fail} counts toward the fail total
+     * and its findings join the fail aggregate — each in vote order, and the returned
+     * verdict carries only its own side's aggregate (FR7, D5 as amended of
+     * migrate-verify-to-executor-contract) — and a {@link Verdict.CannotVerify} short-circuits the whole check to
      * that verdict at once (task 4.5). The moment either total reaches {@code
      * majority} ({@code votes/2 + 1}) the matching verdict is returned and no further
      * vote is cast (NFR-C1). The loop only falls through for an even {@code votes}
@@ -89,30 +91,34 @@ final class JudgeVoting {
     Result vote(VerifyCheck.Judge check, TaskContext context, Workspace workspace) {
         int majority = check.votes() / 2 + 1;
         var perVote = new ArrayList<Map<String, ModelUsage>>();
-        var aggregated = new ArrayList<Finding>();
+        var passFindings = new ArrayList<Finding>();
+        var failFindings = new ArrayList<Finding>();
         int pass = 0;
         int fail = 0;
         for (int cast = 0; cast < check.votes(); cast++) {
             JudgeVoter.Vote vote = judgeVoter.vote(check, context, workspace);
             perVote.add(vote.byModel());
             switch (vote.verdict()) {
-                case Verdict.Pass ignored -> pass++;
+                case Verdict.Pass p -> {
+                    pass++;
+                    passFindings.addAll(p.findings());
+                }
                 case Verdict.Fail f -> {
                     fail++;
-                    aggregated.addAll(f.findings());
+                    failFindings.addAll(f.findings());
                 }
                 case Verdict.CannotVerify cv -> {
                     return new Result(cv, perVote);
                 }
             }
             if (pass >= majority) {
-                return new Result(new Verdict.Pass(), perVote);
+                return new Result(new Verdict.Pass(null, passFindings), perVote);
             }
             if (fail >= majority) {
-                return new Result(new Verdict.Fail(aggregated), perVote);
+                return new Result(new Verdict.Fail(failFindings), perVote);
             }
         }
-        Verdict verdict = pass >= fail ? new Verdict.Pass() : new Verdict.Fail(aggregated);
+        Verdict verdict = pass >= fail ? new Verdict.Pass(null, passFindings) : new Verdict.Fail(failFindings);
         return new Result(verdict, perVote);
     }
 }

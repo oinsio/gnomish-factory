@@ -5,7 +5,8 @@ import com.github.oinsio.gnomish.adapter.pipeline.PathSafety;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.Finding;
-import com.github.oinsio.gnomish.domain.engine.Verdict;
+import com.github.oinsio.gnomish.domain.engine.ResultLevel;
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer;
 import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
@@ -23,10 +24,13 @@ import org.jspecify.annotations.Nullable;
 /**
  * The real {@code files_exist} built-in check runner (design D2): checks that
  * every literal workspace-relative path in the {@code files} param exists,
- * collecting one {@link Finding} per missing path. Malformed params or a
- * path resolving outside the workspace root never reach an existence check —
- * they yield {@link Verdict.CannotVerify} instead, since no verdict about the
- * artifact's quality can be trusted from an unsafe or unparseable input.
+ * answering one {@code error} SARIF result per missing path (D5 of
+ * migrate-verify-to-executor-contract: the runner answers, the engine's {@code
+ * VerdictDerivation} derives the verdict against the check's threshold). Malformed
+ * params or a path resolving outside the workspace root never reach an existence
+ * check — they yield a {@link VerdictAnswer.InfrastructureFailure} instead, since no
+ * verdict about the artifact's quality can be trusted from an unsafe or unparseable
+ * input.
  *
  * <p>Two legs, one runner for every environment adapter (FR21, D15 of
  * add-sandbox-core): over a {@link DirectoryWorkspace} (host modes) existence
@@ -37,7 +41,8 @@ import org.jspecify.annotations.Nullable;
  * per run through {@link #withAttemptReader}; the sandbox integration pass
  * wires it alongside the workspace itself.
  *
- * <p>Implements FR6 of add-manual-run; FR21, D15 of add-sandbox-core.
+ * <p>Implements FR6 of add-manual-run; FR21, D15 of add-sandbox-core; FR7 of
+ * migrate-verify-to-executor-contract.
  *
  * <p>A plain class, not a record: PIT's JVMTI-based hot-swap mutation testing refuses record
  * bytecode changes (hcoles/pitest#1285) — a record shape here would turn nearly every mutation of
@@ -71,12 +76,13 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
     }
 
     @Override
-    public Verdict run(VerifyCheck.Executor check, Workspace workspace) {
+    public VerdictAnswer run(VerifyCheck.Executor check, Workspace workspace) {
         List<String> files;
         try {
             files = readFiles(check.settings());
         } catch (MalformedParamsException e) {
-            return new Verdict.CannotVerify(UntrustedText.manifest(e.reason()), NoCheckDetails.NO_DETAILS);
+            return new VerdictAnswer.InfrastructureFailure(
+                    UntrustedText.manifest(e.reason()), NoCheckDetails.NO_DETAILS);
         }
 
         if (workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace) {
@@ -91,7 +97,7 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
         for (String file : files) {
             PathSafety.Resolution resolution = PathSafety.resolveWithinRoot(root, file);
             if (resolution instanceof PathSafety.Escapes(String ref)) {
-                return new Verdict.CannotVerify(
+                return new VerdictAnswer.InfrastructureFailure(
                         UntrustedText.manifest("files_exist path escapes the workspace: " + ref),
                         NoCheckDetails.NO_DETAILS);
             }
@@ -101,7 +107,7 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
             }
         }
 
-        return findings.isEmpty() ? new Verdict.Pass() : new Verdict.Fail(findings);
+        return answerOf(findings);
     }
 
     /**
@@ -111,9 +117,9 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
      * tree-path validation (absolute, {@code ..}, {@code .git}) is the sandboxed twin of the
      * host leg's workspace-escape refusal.
      */
-    private Verdict runAgainstAttemptCommit(List<String> files, RecordedAttemptCommitWorkspace workspace) {
+    private VerdictAnswer runAgainstAttemptCommit(List<String> files, RecordedAttemptCommitWorkspace workspace) {
         if (attemptReader == null) {
-            return new Verdict.CannotVerify(
+            return new VerdictAnswer.InfrastructureFailure(
                     UntrustedText.factory("files_exist has no factory-clone reader bound for the sandboxed workspace"),
                     NoCheckDetails.NO_DETAILS);
         }
@@ -125,16 +131,28 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
                     findings.add(new Finding("missing file: " + file, file, null));
                 }
             } catch (InvalidTreePathException e) {
-                return new Verdict.CannotVerify(
+                return new VerdictAnswer.InfrastructureFailure(
                         UntrustedText.manifest("files_exist path escapes the workspace: " + file),
                         NoCheckDetails.NO_DETAILS);
             }
         }
-        return findings.isEmpty() ? new Verdict.Pass() : new Verdict.Fail(findings);
+        return answerOf(findings);
     }
 
     /**
-     * Builds the {@link Verdict.CannotVerify} for a non-{@link DirectoryWorkspace}
+     * The answer of an existence check: one {@code error} result per missing path, in the order
+     * the {@code files} param lists them — none when every path exists.
+     */
+    private static VerdictAnswer answerOf(List<Finding> missing) {
+        List<VerdictAnswer.Result> results = new ArrayList<>(missing.size());
+        for (Finding finding : missing) {
+            results.add(new VerdictAnswer.Result(ResultLevel.ERROR, finding));
+        }
+        return new VerdictAnswer.Sarif(results);
+    }
+
+    /**
+     * Builds the infrastructure failure for a non-{@link DirectoryWorkspace}
      * argument, naming the workspace's actual runtime type.
      *
      * <p>PIT M4 documented exception (build.gradle has the full rationale):
@@ -146,8 +164,8 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
      * under the 100% mutation gate.
      */
     @DoNotMutate
-    private static Verdict opaqueWorkspaceVerdict(Workspace workspace) {
-        return new Verdict.CannotVerify(
+    private static VerdictAnswer opaqueWorkspaceVerdict(Workspace workspace) {
+        return new VerdictAnswer.InfrastructureFailure(
                 UntrustedText.factory("files_exist requires a DirectoryWorkspace, got "
                         + workspace.getClass().getName()),
                 NoCheckDetails.NO_DETAILS);

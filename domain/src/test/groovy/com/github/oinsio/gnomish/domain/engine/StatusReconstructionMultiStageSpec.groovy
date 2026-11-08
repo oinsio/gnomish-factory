@@ -21,8 +21,8 @@ class StatusReconstructionMultiStageSpec extends StatusReconstructionSpecBase {
         given: 'two AUTO stages, each passing after one round, so history resets between them'
         def stage1 = stage('build', AdvancementMode.AUTO, [builtin('build_check')])
         def stage2 = stage('test', AdvancementMode.AUTO, [builtin('test_check')])
-        builtinRunner.scripted << new Verdict.Pass()
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed('build', 0, usage(10, 1))
         executor.scripted << completed('test', 0, usage(20, 2))
 
@@ -66,8 +66,8 @@ class StatusReconstructionMultiStageSpec extends StatusReconstructionSpecBase {
         truth.attempts().isEmpty()
 
         and: 'NFR-O2: each stage\'s check verdict and executor usage rebuild independently'
-        view.roundCheckResults[0]*.verdict() == [new Verdict.Pass()]
-        view.roundCheckResults[1]*.verdict() == [new Verdict.Pass()]
+        view.roundCheckResults[0]*.verdict() == [new Verdict.Pass(null, [])]
+        view.roundCheckResults[1]*.verdict() == [new Verdict.Pass(null, [])]
         view.roundUsages == [usage(10, 1), usage(20, 2)]
     }
 }

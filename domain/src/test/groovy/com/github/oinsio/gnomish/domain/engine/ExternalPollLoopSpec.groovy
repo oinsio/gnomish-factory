@@ -66,7 +66,7 @@ class ExternalPollLoopSpec extends VerifyOrchestratorSpecBase {
                 .verify([check], CONTEXT, WORKSPACE, KEY)
 
         then:
-        result.results[0].verdict == new Verdict.Pass('https://ci.example/runs/42')
+        result.results[0].verdict == new Verdict.Pass('https://ci.example/runs/42', [])
     }
 
     // Scenario: git/git-task-persistence / An undeliverable attempt commit fails an external check as infrastructure

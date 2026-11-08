@@ -74,7 +74,7 @@ class ExecutorOutcomeTableSpec extends Specification {
     def "#row: attempts burned #burned, rounds recorded #recorded, outcome #outcomeKind"() {
         given: 'the executor produces the row once; a completed round passes its one check'
         executor.scripted << input
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         def outcome = run()

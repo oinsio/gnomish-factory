@@ -53,7 +53,7 @@ class CommandRoundEngineSpec extends Specification {
     def "FR6, UX1: an exit 1 after build errors burns the attempt with one finding naming exit code 1 and carrying the tail"() {
         given: 'the first round fails the build; the second passes, and so does its check'
         harness.processes << CannedCommandHandle.exited(1, 'Foo.java:3: error: cannot find symbol\nBUILD FAILED\n') << CannedCommandHandle.exited(0)
-        harness.builtinRunner.scripted << new Verdict.Pass()
+        harness.builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         def outcome = run()

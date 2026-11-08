@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.pipeline.Threshold;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.ArrayList;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The one place a verify check's {@link Verdict} is derived from what its executor answered (design
@@ -14,9 +15,14 @@ import java.util.List;
  * <ul>
  *   <li>A {@link VerdictAnswer.Sarif} answer fails when any result {@linkplain
  *       ResultLevel#reaches reaches} the threshold; the failure carries every result as a finding,
- *       in the order written, the ones below the threshold included. It passes otherwise.
+ *       in the order written, the ones below the threshold included. It passes otherwise, carrying
+ *       the answer's platform run URL and every result as a finding, in the order written — all
+ *       of them below the threshold (design D5 as amended).
  *   <li>A {@link VerdictAnswer.Malformed} answer is {@link Verdict.CannotVerify}, never a pass: the
  *       reason names the malformed answer and the details quote what the reading refused.
+ *   <li>A {@link VerdictAnswer.QualityFailure} is {@link Verdict.Fail} with its findings, and a
+ *       {@link VerdictAnswer.InfrastructureFailure} is {@link Verdict.CannotVerify} with its reason
+ *       and details, under every threshold: a failed status has no levels to judge.
  * </ul>
  *
  * <p>Implements FR7 of migrate-verify-to-executor-contract.
@@ -34,19 +40,22 @@ public final class VerdictDerivation {
      */
     public static Verdict derive(VerdictAnswer answer, Threshold threshold) {
         return switch (answer) {
-            case VerdictAnswer.Sarif(var results) -> judge(results, threshold);
+            case VerdictAnswer.Sarif(var results, var runUrl) -> judge(results, threshold, runUrl);
             case VerdictAnswer.Malformed(var reason) ->
                 new Verdict.CannotVerify(UntrustedText.factory("the verdict answer is malformed"), reason);
+            case VerdictAnswer.QualityFailure(var findings) -> new Verdict.Fail(findings);
+            case VerdictAnswer.InfrastructureFailure(var reason, var details) ->
+                new Verdict.CannotVerify(reason, details);
         };
     }
 
-    private static Verdict judge(List<VerdictAnswer.Result> results, Threshold threshold) {
+    private static Verdict judge(List<VerdictAnswer.Result> results, Threshold threshold, @Nullable String runUrl) {
         boolean fails = false;
         List<Finding> findings = new ArrayList<>(results.size());
         for (VerdictAnswer.Result result : results) {
             fails |= result.level().reaches(threshold);
             findings.add(result.finding());
         }
-        return fails ? new Verdict.Fail(findings) : new Verdict.Pass();
+        return fails ? new Verdict.Fail(findings) : new Verdict.Pass(runUrl, findings);
     }
 }

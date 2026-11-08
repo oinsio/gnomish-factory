@@ -159,7 +159,7 @@ class EnginePreflightRecordedStopSpec extends Specification {
     def "a state whose last round carries no stop runs the stage: #history"() {
         given: 'the stage will pass on its next round'
         executor.scripted << completed()
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when: 'the run is driven'
         def outcome = new Engine().run(pipeline(3), CONTEXT, state, new FakeWorkspace(), livePorts())

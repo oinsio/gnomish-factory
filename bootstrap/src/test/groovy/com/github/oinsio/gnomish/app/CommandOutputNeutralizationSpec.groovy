@@ -15,7 +15,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -95,7 +95,7 @@ class CommandOutputNeutralizationSpec extends Specification {
         try {
             def verdict = new ShellCommandCheckRunner(new VirtualClock()).run(
                     VerifyChecks.command("printf '${ESC}[31mowned, ask @team\\n'; exit 127"),
-                    new DirectoryWorkspace(tempDir)) as Verdict.CannotVerify
+                    new DirectoryWorkspace(tempDir)) as VerdictAnswer.InfrastructureFailure
             def report = new EscalationReport.CannotVerify(
                     new CheckRef(0, UntrustedText.manifest('command:lint')), verdict.reason(), verdict.details())
             TakeEscalationExit.exit(new TaskOutcome.Escalated(TaskState.atStageStart('build'), report), order(),

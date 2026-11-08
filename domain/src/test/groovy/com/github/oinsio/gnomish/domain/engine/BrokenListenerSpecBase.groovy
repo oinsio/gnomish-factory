@@ -73,7 +73,7 @@ abstract class BrokenListenerSpecBase extends Specification {
     // the control run script the same sequence into their own fresh fakes.
     protected static void scriptFailThenPass(ScriptedExecutor executor, ScriptedBuiltinCheckRunner builtinRunner) {
         builtinRunner.scripted << fail('nope')
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed(0)
         executor.scripted << completed(1)
     }

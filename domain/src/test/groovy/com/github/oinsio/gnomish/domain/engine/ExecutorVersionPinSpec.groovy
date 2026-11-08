@@ -83,7 +83,7 @@ class ExecutorVersionPinSpec extends Specification {
     void passes(int rounds) {
         rounds.times {
             executor.scripted << ExecutionResult.completed(ExecutorUsage.none(), TRACE, [])
-            builtinRunner.scripted << new Verdict.Pass()
+            builtinRunner.scripted << new Verdict.Pass(null, [])
         }
     }
 

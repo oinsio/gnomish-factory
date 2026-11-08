@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
+import com.github.oinsio.gnomish.domain.pipeline.Threshold;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
@@ -23,12 +24,16 @@ import org.slf4j.LoggerFactory;
  * verdict is dispatched by an exhaustive switch over the sealed {@link VerifyCheck}
  * (design D3): a new variant fails to compile. A thin chain driver: the external poll
  * loop and judge majority loop live in the {@link ExternalPolling} / {@link JudgeVoting}
- * collaborators it delegates to.
+ * collaborators it delegates to. An executor check's runner answers a {@link VerdictAnswer},
+ * and the verdict is derived from it by {@link VerdictDerivation} against the check's
+ * threshold — the one place a check's verdict is decided (design D5, D9 of
+ * migrate-verify-to-executor-contract).
  *
  * <p>Package-private and reentrant: it holds only its immutable injected collaborators
  * and no mutable state, so one instance drives concurrent verifications safely (NFR-R1).
  *
- * <p>Implements FR2, FR3, FR4, FR7, NFR-R3, NFR-O1 of add-stage-engine; FR5 of split-logtext-leaves.
+ * <p>Implements FR2, FR3, FR4, FR7, NFR-R3, NFR-O1 of add-stage-engine; FR5 of split-logtext-leaves;
+ * FR7 of migrate-verify-to-executor-contract.
  */
 final class VerifyOrchestrator {
 
@@ -116,7 +121,8 @@ final class VerifyOrchestrator {
      * token usage is appended to {@code judgePerVote}, from which the run's {@code verdict}
      * participant entries are built (NFR-C1; FR15 of define-executor-contract). The whole dispatch is wrapped so any {@link RuntimeException} a check
      * adapter throws is caught, logged at ERROR at the point of capture, and turned into a
-     * {@link Verdict.CannotVerify} carrying the full stack trace in its details (FR4,
+     * {@link VerdictAnswer.InfrastructureFailure} carrying the full stack trace in its details,
+     * which the derivation reads as {@link Verdict.CannotVerify} (FR4,
      * NFR-O1) — a check that could not run is an infrastructure failure, not a quality
      * one. No {@code default} arm, so a new variant fails to compile.
      *
@@ -147,7 +153,12 @@ final class VerifyOrchestrator {
             // The trace quotes whatever the failing adapter captured — a command's stderr, a
             // daemon's refusal — so `StackTraces.render` hands it over carried (design D4); the
             // factory-authored reason beside it is minted here to match the field's type.
-            return new Verdict.CannotVerify(UntrustedText.factory("check adapter threw"), StackTraces.render(ex));
+            // A failed status has no levels to judge, so the threshold plays no role: the default
+            // stands in for a judge check, which declares none.
+            return VerdictDerivation.derive(
+                    new VerdictAnswer.InfrastructureFailure(
+                            UntrustedText.factory("check adapter threw"), StackTraces.render(ex)),
+                    Threshold.DEFAULT);
         }
     }
 
@@ -156,11 +167,16 @@ final class VerifyOrchestrator {
      * registry runs every check (task 5.1 of migrate-verify-to-executor-contract): a
      * polled check to the {@link ExternalPolling} poll loop, {@code files-exist} to the
      * built-in runner, {@code shell} to the command runner — the dispatch the three
-     * former variants had, so the behavior is unchanged.
+     * former variants had, so the behavior is unchanged. The runner's answer is judged
+     * against the check's threshold by {@link VerdictDerivation} (D5).
      *
-     * <p>Implements FR1, UX2 of migrate-verify-to-executor-contract.
+     * <p>Implements FR1, FR7, UX2 of migrate-verify-to-executor-contract.
      */
     private Verdict runExecutorCheck(VerifyCheck.Executor check, Workspace workspace) {
+        return VerdictDerivation.derive(answerOf(check, workspace), check.threshold());
+    }
+
+    private VerdictAnswer answerOf(VerifyCheck.Executor check, Workspace workspace) {
         if (check.polled()) {
             return externalPolling.poll(check, workspace);
         }

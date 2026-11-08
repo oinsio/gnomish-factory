@@ -80,7 +80,7 @@ class MdcEventListenerSpec extends Specification {
     def "CheckFinished sets stage and attempt from the key"() {
         given:
         def listener = new MdcEventListener()
-        def result = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+        def result = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
 
         when:
         listener.onEvent(new EngineEvent.CheckFinished(key(4, 'build'), result))

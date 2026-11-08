@@ -84,7 +84,7 @@ class DenialIsolationSpec extends Specification {
     // Scenario: sandbox/sandbox-egress / Denied exfiltration attempt reaches the report on a passing attempt
     def "FR2: a denied round with all-pass checks records PASSED and keeps the denial"() {
         given: 'a passing check and a round whose environment recorded one denial'
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed([DENIAL])
 
         when:
@@ -103,7 +103,7 @@ class DenialIsolationSpec extends Specification {
     // UX2: a quiet round reports an empty list, never a fabricated entry
     def "UX2: a round with no denials records an empty list"() {
         given:
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed([])
 
         when:
@@ -145,7 +145,7 @@ class DenialIsolationSpec extends Specification {
         builtinRunner.scripted << new Verdict.Fail([
             new Finding('the real check finding', null, null)
         ])
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed([DENIAL])
         executor.scripted << completed([])
 
@@ -171,7 +171,7 @@ class DenialIsolationSpec extends Specification {
         builtinRunner.scripted << new Verdict.Fail([
             new Finding('the real check finding', null, null)
         ])
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed([marker])
         executor.scripted << completed([marker])
 

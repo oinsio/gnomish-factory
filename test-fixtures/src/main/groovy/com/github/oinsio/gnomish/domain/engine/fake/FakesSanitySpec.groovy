@@ -86,7 +86,7 @@ class FakesSanitySpec extends Specification {
     def "a scripted runner runs its onRun side effect mid-call before returning"() {
         given: 'a command runner whose onRun advances a shared clock'
         def clock = new VirtualClock()
-        def runner = new ScriptedCommandCheckRunner([new Verdict.Pass()])
+        def runner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
         runner.onRun = { check, ws -> clock.advance(Duration.ofSeconds(7)) }
 
         when: 'it is run'
@@ -121,7 +121,7 @@ class FakesSanitySpec extends Specification {
     def "ScriptedJudgeVoter returns a vote sequence, counts votes and records the context"() {
         given: 'a voter scripted with two votes'
         def voter = new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.Pass(), Unpriced.of(['model-a': new TokenUsage(1, 2, 0, 0)])),
+            new JudgeVoter.Vote(new Verdict.Pass(null, []), Unpriced.of(['model-a': new TokenUsage(1, 2, 0, 0)])),
             new JudgeVoter.Vote(new Verdict.Fail([]), [:]),
         ])
 

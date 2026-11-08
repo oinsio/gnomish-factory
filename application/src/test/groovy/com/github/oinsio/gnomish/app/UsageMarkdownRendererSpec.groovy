@@ -50,7 +50,7 @@ class UsageMarkdownRendererSpec extends Specification {
     }
 
     private static CheckResult check(long seconds) {
-        new CheckResult(new CheckRef(0, UntrustedText.manifest('tests')), new Verdict.Pass(), Duration.ofSeconds(seconds))
+        new CheckResult(new CheckRef(0, UntrustedText.manifest('tests')), new Verdict.Pass(null, []), Duration.ofSeconds(seconds))
     }
 
     /** implement: round 0 failed, round 1 passed under two judge votes (one unpriced); review: one round. */

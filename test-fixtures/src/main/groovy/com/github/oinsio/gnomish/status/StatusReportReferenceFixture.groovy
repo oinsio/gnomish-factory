@@ -78,7 +78,7 @@ final class StatusReportReferenceFixture {
 
     /** One quality-failure attempt (a passing and a failing check) plus the task totals. */
     static TaskState referenceTaskState() {
-        def passCheck = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+        def passCheck = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
         def failFinding = new Finding('command exited with 1', null, '…output tail…')
         def failCheck = new CheckResult(
                 new CheckRef(1, UntrustedText.manifest('command:./gradlew test')), new Verdict.Fail([failFinding]), Duration.ofMillis(41250))

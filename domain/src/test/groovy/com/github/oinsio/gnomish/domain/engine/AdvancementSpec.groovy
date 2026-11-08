@@ -108,8 +108,8 @@ class AdvancementSpec extends Specification {
         given: 'two auto stages, each with its own passing builtin check so both are observed'
         def stage1 = stage('build', AdvancementMode.AUTO, [builtin('build_check')])
         def stage2 = stage('test', AdvancementMode.AUTO, [builtin('test_check')])
-        builtinRunner.scripted << new Verdict.Pass()
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed(usage(5, 100, 20))
         executor.scripted << completed(usage(3, 40, 10))
 

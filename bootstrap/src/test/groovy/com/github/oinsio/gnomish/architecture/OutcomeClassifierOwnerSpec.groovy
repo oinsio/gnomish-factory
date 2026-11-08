@@ -16,8 +16,9 @@ import spock.lang.Specification
  *       the value from what was already decided (the wire, a recorded stop) and decide nothing;
  *   <li>a pattern read of an {@code ExecutionResult} status variant ({@code case}, {@code instanceof},
  *       a cast, an import of the nested type): the classifier only;
- *   <li>{@code Verdict.CannotVerify}: the exemptions D10 names, each tagged with the pickup that
- *       removes it, so the list cannot grow without a named follow-up;
+ *   <li>{@code Verdict.CannotVerify}: its owner {@code VerdictDerivation} (D9 of
+ *       migrate-verify-to-executor-contract) and the exemptions D10 names, each tagged with the
+ *       pickup that removes it, so the list cannot grow without a named follow-up;
  *   <li>{@code ExecutorFailure}: nowhere — task 7.4 deleted it, and the rule keeps a revival out.
  * </ul>
  * Every allowlisted file is asserted reached and still matching, so a pickup that removes a
@@ -31,9 +32,17 @@ class OutcomeClassifierOwnerSpec extends Specification {
 
     private static final String ENGINE = 'domain/src/main/java/com/github/oinsio/gnomish/domain/engine/'
     private static final String STATE = 'adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/state/'
-    private static final String CHECK = 'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/'
     private static final String AGENT = 'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/'
     private static final String CLASSIFIER = ENGINE + 'ExecutorOutcomeClassifier.java'
+
+    /**
+     * The one owner of a check's verdict (design D5, D9 of migrate-verify-to-executor-contract): it
+     * builds the {@code CannotVerify} of a malformed answer and of a failed/infrastructure status.
+     */
+    private static final String DERIVATION = ENGINE + 'VerdictDerivation.java'
+
+    /** The owners of their rows; every other exemption names its pickup. */
+    private static final List<String> OWNERS = [CLASSIFIER, DERIVATION]
 
     /** Test doubles script outcomes on purpose; they classify nothing the engine reads. */
     private static final String FIXTURES = "test-fixtures/"
@@ -42,10 +51,10 @@ class OutcomeClassifierOwnerSpec extends Specification {
     static final List<String> PICKUPS = [
         'dto: ',
         'record: ',
-        'migrate-verify-to-executor-contract: ',
+        'extract-agent-round-runner: ',
     ]
 
-    private static final String VERIFY = 'migrate-verify-to-executor-contract: check-side verdict construction'
+    private static final String JUDGE = 'extract-agent-round-runner: the judge builds its own verdict (D9, NG1)'
 
     static final List<Map> RULES = [
         [name: 'escalation the classifier decides',
@@ -78,14 +87,13 @@ class OutcomeClassifierOwnerSpec extends Specification {
             pattern: /\bnew\s+Verdict\s*\.\s*CannotVerify\s*\(/,
             imported: /import\s+com\.github\.oinsio\.gnomish\.domain\.engine\.Verdict\.(CannotVerify|\*)\s*;/,
             bare: /\bnew\s+CannotVerify\s*\(/,
+            // Task 2.2 of migrate-verify-to-executor-contract routed ShellCommandCheckRunner,
+            //     FilesExistCheckRunner, ExternalPolling and VerifyOrchestrator through the owner.
             allowed: [
-                (CHECK + 'ShellCommandCheckRunner.java'): VERIFY,
-                (CHECK + 'FilesExistCheckRunner.java') : VERIFY,
-                (ENGINE + 'ExternalPolling.java') : VERIFY,
-                (ENGINE + 'VerifyOrchestrator.java') : VERIFY,
-                (AGENT + 'JudgeVerdictExtractor.java') : VERIFY,
-                (AGENT + 'JudgeCriteriaPreflight.java') : VERIFY,
-                (AGENT + 'JudgeCannotVerify.java') : VERIFY,
+                (DERIVATION) : 'the owner',
+                (AGENT + 'JudgeVerdictExtractor.java') : JUDGE,
+                (AGENT + 'JudgeCriteriaPreflight.java') : JUDGE,
+                (AGENT + 'JudgeCannotVerify.java') : JUDGE,
                 (STATE + 'StateJsonMapper.java') : 'dto: a recorded check verdict rebuilt from state.json',
             ]],
         [name: 'thrown executor failure',
@@ -120,7 +128,7 @@ class OutcomeClassifierOwnerSpec extends Specification {
         expect:
         RULES.collectMany { rule ->
             rule.allowed.findAll { path, reason ->
-                path != CLASSIFIER && !PICKUPS.any { reason.startsWith(it) }
+                !OWNERS.contains(path) && !PICKUPS.any { reason.startsWith(it) }
             }.keySet() as List
         } == []
     }

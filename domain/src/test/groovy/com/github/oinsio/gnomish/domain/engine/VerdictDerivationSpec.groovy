@@ -23,7 +23,7 @@ class VerdictDerivationSpec extends Specification {
         def verdict = VerdictDerivation.derive(answer, threshold)
 
         then:
-        verdict == (fails ? new Verdict.Fail([finding]) : new Verdict.Pass())
+        verdict == (fails ? new Verdict.Fail([finding]) : new Verdict.Pass(null, [finding]))
 
         where:
         level | threshold || fails
@@ -62,22 +62,43 @@ class VerdictDerivationSpec extends Specification {
     // FR7: an answer with no results passes under every threshold
     def "FR7: an empty SARIF answer passes under threshold #threshold"() {
         expect:
-        VerdictDerivation.derive(new VerdictAnswer.Sarif([]), threshold) == new Verdict.Pass()
+        VerdictDerivation.derive(new VerdictAnswer.Sarif([]), threshold) == new Verdict.Pass(null, [])
 
         where:
         threshold << Threshold.values()
     }
 
-    // FR7: warnings alone do not fail the default threshold
-    def "FR7: an answer carrying only warnings passes under the default threshold"() {
+    // FR7: warnings alone do not fail the default threshold, and the pass records them as findings
+    // Scenario: verification/verdict-executors / Warnings pass under the default threshold
+    def "FR7: an answer carrying only warnings passes under the default threshold with the warnings as findings"() {
         given:
         def answer = new VerdictAnswer.Sarif([
             result(ResultLevel.WARNING, 'w1'),
             result(ResultLevel.WARNING, 'w2'),
-        ])
+        ], 'https://ci.example/runs/5')
 
         expect:
-        VerdictDerivation.derive(answer, Threshold.DEFAULT) == new Verdict.Pass()
+        VerdictDerivation.derive(answer, Threshold.DEFAULT) == new Verdict.Pass('https://ci.example/runs/5', [
+            new Finding('w1', null, null),
+            new Finding('w2', null, null)
+        ])
+    }
+
+    // FR7 (D5 as amended): a pass carries every result below the threshold, in the order written
+    def "FR7: a passing answer carries every below-threshold result as a finding in the order written"() {
+        given:
+        def answer = new VerdictAnswer.Sarif([
+            result(ResultLevel.WARNING, 'w'),
+            result(ResultLevel.NONE, 'x'),
+            result(ResultLevel.NOTE, 'n'),
+        ])
+
+        when:
+        def verdict = VerdictDerivation.derive(answer, Threshold.ERROR)
+
+        then:
+        verdict instanceof Verdict.Pass
+        (verdict as Verdict.Pass).findings()*.message() == ['w', 'x', 'n']
     }
 
     // Scenario: verification/verdict-executors / Legacy findings file is normalized
@@ -151,7 +172,7 @@ class VerdictDerivationSpec extends Specification {
 
         then:
         answer.results().size() == 1
-        VerdictDerivation.derive(answer, Threshold.ERROR) == new Verdict.Pass()
+        VerdictDerivation.derive(answer, Threshold.ERROR) == new Verdict.Pass(null, [new Finding('n', null, null)])
     }
 
     private static VerdictAnswer.Result result(ResultLevel level, String message) {

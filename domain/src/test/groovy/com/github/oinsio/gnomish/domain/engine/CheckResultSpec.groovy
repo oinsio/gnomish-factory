@@ -15,7 +15,7 @@ class CheckResultSpec extends Specification {
     def "exposes checkRef, verdict and duration as constructed"() {
         given: 'a check reference and a verdict'
         def ref = new CheckRef(0, UntrustedText.manifest('builtin:files_exist'))
-        def verdict = new Verdict.Pass()
+        def verdict = new Verdict.Pass(null, [])
         def duration = Duration.ofMillis(250)
 
         when: 'a CheckResult is created'
@@ -40,7 +40,7 @@ class CheckResultSpec extends Specification {
 
         where:
         verdict << [
-            new Verdict.Pass(),
+            new Verdict.Pass(null, []),
             new Verdict.Fail([
                 new Finding('boom', null, null)
             ]),
@@ -51,7 +51,7 @@ class CheckResultSpec extends Specification {
     // FR4: a zero duration is valid — a check may take no measurable time
     def "accepts a zero duration"() {
         when: 'a CheckResult is created with a zero duration'
-        def result = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:x')), new Verdict.Pass(), Duration.ZERO)
+        def result = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:x')), new Verdict.Pass(null, []), Duration.ZERO)
 
         then: 'the zero duration is exposed as constructed'
         result.duration() == Duration.ZERO
@@ -60,7 +60,7 @@ class CheckResultSpec extends Specification {
     // FR4: a duration cannot be negative — a negative duration is rejected
     def "rejects a negative duration with the component named"() {
         when: 'a CheckResult is created with a negative duration'
-        new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:x')), new Verdict.Pass(), negative)
+        new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:x')), new Verdict.Pass(null, []), negative)
 
         then: 'construction fails and the message names the duration'
         def failure = thrown(IllegalArgumentException)
@@ -79,11 +79,11 @@ class CheckResultSpec extends Specification {
         def ref = new CheckRef(0, UntrustedText.manifest('builtin:x'))
 
         expect: 'they are equal'
-        new CheckResult(ref, new Verdict.Pass(), Duration.ofMillis(5)) ==
-                new CheckResult(ref, new Verdict.Pass(), Duration.ofMillis(5))
+        new CheckResult(ref, new Verdict.Pass(null, []), Duration.ofMillis(5)) ==
+        new CheckResult(ref, new Verdict.Pass(null, []), Duration.ofMillis(5))
 
         and: 'a differing duration makes them unequal'
-        new CheckResult(ref, new Verdict.Pass(), Duration.ofMillis(5)) !=
-                new CheckResult(ref, new Verdict.Pass(), Duration.ofMillis(6))
+        new CheckResult(ref, new Verdict.Pass(null, []), Duration.ofMillis(5)) !=
+        new CheckResult(ref, new Verdict.Pass(null, []), Duration.ofMillis(6))
     }
 }

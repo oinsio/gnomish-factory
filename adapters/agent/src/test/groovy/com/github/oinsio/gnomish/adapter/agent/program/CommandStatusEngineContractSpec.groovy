@@ -103,7 +103,7 @@ class CommandStatusEngineContractSpec extends Specification {
     def "FR6, NG6: a completed command round runs the verify chain and the stage completes"() {
         given:
         executor.scripted << round(0, Status.COMPLETED)
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         def outcome = run(3)
@@ -125,7 +125,7 @@ class CommandStatusEngineContractSpec extends Specification {
         given: 'attempt 1 exits non-zero (failed/quality); attempt 2 completes and its check passes'
         executor.scripted << round(0, Status.FAILED, FailureClass.QUALITY, QUALITY_REASON)
         executor.scripted << round(1, Status.COMPLETED)
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         def outcome = run(3)

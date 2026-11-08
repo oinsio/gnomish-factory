@@ -22,8 +22,8 @@ class VerifyJudgeDispatchSpec extends VerifyOrchestratorSpecBase {
     def "dispatches a Judge to the judge voting loop and passes its majority verdict through"() {
         given: 'a judge voter passing a 3-vote check on the first majority (Pass, Pass)'
         def judgeVoter = new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.Pass(), [:]),
-            new JudgeVoter.Vote(new Verdict.Pass(), [:])
+            new JudgeVoter.Vote(new Verdict.Pass(null, []), [:]),
+            new JudgeVoter.Vote(new Verdict.Pass(null, []), [:])
         ])
 
         when: 'the single judge check is verified'
@@ -43,7 +43,7 @@ class VerifyJudgeDispatchSpec extends VerifyOrchestratorSpecBase {
         def judgeVoter = new ScriptedJudgeVoter([
             new JudgeVoter.Vote(new Verdict.Fail([]), Unpriced.of(first)),
             new JudgeVoter.Vote(new Verdict.Fail([]), [:]),
-            new JudgeVoter.Vote(new Verdict.Pass(), Unpriced.of(['model-a': new TokenUsage(1, 2, 0, 0)]))
+            new JudgeVoter.Vote(new Verdict.Pass(null, []), Unpriced.of(['model-a': new TokenUsage(1, 2, 0, 0)]))
         ])
 
         when: 'the judge check is verified to its Fail majority'
@@ -70,7 +70,7 @@ class VerifyJudgeDispatchSpec extends VerifyOrchestratorSpecBase {
             new Decision('ship it', 'build', 'alice', java.time.Instant.EPOCH)
         ])
         def judgeVoter = new ScriptedJudgeVoter([
-            new JudgeVoter.Vote(new Verdict.Pass(), [:])
+            new JudgeVoter.Vote(new Verdict.Pass(null, []), [:])
         ])
 
         when: 'the judge check is verified'

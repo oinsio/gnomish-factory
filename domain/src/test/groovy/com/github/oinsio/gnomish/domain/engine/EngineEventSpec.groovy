@@ -22,7 +22,7 @@ class EngineEventSpec extends Specification {
     }
 
     private static CheckResult sampleCheckResult() {
-        new CheckResult(sampleCheckRef(), new Verdict.Pass(), Duration.ofMillis(5))
+        new CheckResult(sampleCheckRef(), new Verdict.Pass(null, []), Duration.ofMillis(5))
     }
 
     private static TaskState sampleState() {

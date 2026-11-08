@@ -97,7 +97,7 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
             rounds
         } as UnaryOperator<RoundEnvironmentSource>
         def runner = new GitModeRunner(
-                assemblyRunningLoop(executor, new ScriptedConsoleIO(), new Verdict.Pass(), attached),
+                assemblyRunningLoop(executor, new ScriptedConsoleIO(), new Verdict.Pass(null, []), attached),
                 new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), registeredClone, liveConsole())
 
         when:

@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
-import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
@@ -54,8 +54,8 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         def verdict = fakeRunner.run(command('the-hung-check'), workspace())
 
         then: 'a quality failure, not a hang and not an infrastructure verdict'
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
+        verdict instanceof VerdictAnswer.QualityFailure
+        def fail = verdict as VerdictAnswer.QualityFailure
         fail.findings().size() == 1
         fail.findings()[0].message().toLowerCase().contains('timed out')
         fail.findings()[0].details().contains('hung-output')
@@ -91,7 +91,7 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         def verdict = treeKillRunner.run(check, workspace())
 
         then: 'the descendant recorded its pid and is no longer alive once the check resolves'
-        verdict instanceof Verdict.Fail
+        verdict instanceof VerdictAnswer.QualityFailure
         def childPid = recordedPid(pidFile)
         !ProcessHandle.of(childPid).map { it.isAlive() }.orElse(false)
     }
@@ -168,8 +168,8 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         }
 
         then: 'the shutdown never burns a stage attempt on a verdict nobody established'
-        verdict instanceof Verdict.CannotVerify
-        (verdict as Verdict.CannotVerify).reason().forLog().toLowerCase().contains('interrupted')
+        verdict instanceof VerdictAnswer.InfrastructureFailure
+        (verdict as VerdictAnswer.InfrastructureFailure).reason().forLog().toLowerCase().contains('interrupted')
 
         and: 'NFR-O2: the WARN names interruption, not a deadline the check never reached'
         def warnings = events.findAll { it.level.toString() == 'WARN' }
@@ -188,8 +188,8 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         def verdict = runner.run(check, workspace())
 
         then:
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
+        verdict instanceof VerdictAnswer.QualityFailure
+        def fail = verdict as VerdictAnswer.QualityFailure
         fail.findings()[0].message().contains('3')
         fail.findings()[0].details().contains('fine-output')
     }
@@ -199,6 +199,6 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         def verdict = runner.run(command('exit 0'), workspace())
 
         then:
-        verdict instanceof Verdict.Pass
+        verdict == new VerdictAnswer.Sarif([])
     }
 }

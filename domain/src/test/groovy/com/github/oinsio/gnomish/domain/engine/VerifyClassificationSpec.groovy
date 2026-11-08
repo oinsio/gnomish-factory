@@ -93,7 +93,7 @@ class VerifyClassificationSpec extends VerifyOrchestratorSpecBase {
     static final PollStatus RUNNING = new PollStatus.Running()
 
     static JudgeVoter.Vote passVote() {
-        new JudgeVoter.Vote(new Verdict.Pass(), [:])
+        new JudgeVoter.Vote(new Verdict.Pass(null, []), [:])
     }
 
     static JudgeVoter.Vote failVote() {

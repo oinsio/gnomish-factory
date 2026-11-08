@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.adapter.check;
 import com.github.oinsio.gnomish.adapter.command.CommandRun;
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource;
 import com.github.oinsio.gnomish.domain.engine.Finding;
-import com.github.oinsio.gnomish.domain.engine.Verdict;
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer;
 import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
@@ -27,15 +27,18 @@ import org.slf4j.LoggerFactory;
  * (design D2 of add-command-executor) — over the environment acquired from the run's {@link CheckEnvironmentSource}
  * (host workspace environment by default; the round's leased box or a fresh box in sandboxed mode)
  * — the task environment port is the sole process-launch seam (FR4 of add-sandbox-core) — then
- * classifies the exit code per the engine's table (FR7, D6): exit 0 is {@link Verdict.Pass} — any
- * findings content is ignored with a logged warning (FR8); exit 126/127 (shell convention for
- * "not executable" / "not found") is {@link Verdict.CannotVerify} — an infrastructure failure,
- * honoring the same classification a missing binary would get, and the findings channel plays no
- * role; any other non-zero exit is {@link Verdict.Fail} carrying either the findings {@link
- * CheckFindings} read from the channel (if present and well-formed) or one synthetic {@link
- * Finding} built from the output tail (if the content is absent, empty, or malformed — NFR-R2: the
- * exit-code verdict always stands). A process start failure (a null {@link
- * CommandProcessRunner#run} result) is also {@link Verdict.CannotVerify}.
+ * reports the exit code as the check's answer (FR7, D6): exit 0 is an empty {@link
+ * VerdictAnswer.Sarif} answer — any findings content is ignored with a logged note (FR8); exit
+ * 126/127 (shell convention for "not executable" / "not found") is a {@link
+ * VerdictAnswer.InfrastructureFailure}, honoring the same classification a missing binary would
+ * get, and the findings channel plays no role; any other non-zero exit is a {@link
+ * VerdictAnswer.QualityFailure} carrying either the findings {@link CheckFindings} read from the
+ * channel (if present and well-formed) or one synthetic {@link Finding} built from the output tail
+ * (if the content is absent, empty, or malformed — NFR-R2: the exit-code failure always stands). A
+ * process start failure (a null {@link CommandProcessRunner#run} result) is also an infrastructure
+ * failure. The runner constructs no verdict: the engine's {@code VerdictDerivation} derives it from
+ * the answer (D5, D9 of migrate-verify-to-executor-contract); the exit code stops carrying a verdict
+ * when the {@code shell} built-in reports SARIF (task 3.2, FR5).
  *
  * <p>The findings channel follows FR1/NFR-S3 of add-sandbox-core: the path is allocated in the
  * environment's scratch area (outside the working copy, inside the environment boundary), handed
@@ -50,10 +53,12 @@ import org.slf4j.LoggerFactory;
  * <p>Both infrastructure exits that happen before any exit code exists — the environment the
  * check needs cannot be served, and the process refuses to start — carry a WARN naming the check
  * (FR5 of harden-logging-observability): they hand the engine a {@code CannotVerify} that looks,
- * from the escalation report alone, exactly like an endpoint that was merely slow.
+ * from the escalation report alone, exactly like an endpoint that was merely slow — the derived
+ * {@code CannotVerify}.
  *
  * <p>Implements FR7, FR8, NFR-R2, NFR-S1, D6 of add-manual-run; FR1, FR4, FR9, NFR-S3 of
- * add-sandbox-core; FR5 of harden-logging-observability; FR6 of define-executor-contract.
+ * add-sandbox-core; FR5 of harden-logging-observability; FR6 of define-executor-contract; FR7 of
+ * migrate-verify-to-executor-contract.
  */
 public record ShellCommandCheckRunner(
         CommandProcessRunner processRunner,
@@ -144,7 +149,7 @@ public record ShellCommandCheckRunner(
     }
 
     @Override
-    public Verdict run(VerifyCheck.Executor check, Workspace workspace) {
+    public VerdictAnswer run(VerifyCheck.Executor check, Workspace workspace) {
         CheckEnvironmentSource.Acquired acquired;
         try {
             acquired = environments.acquire(check, workspace);
@@ -154,7 +159,7 @@ public record ShellCommandCheckRunner(
                             + "command check '{}' cannot be verified: no environment to run it in",
                     identityOf(check),
                     e);
-            return new Verdict.CannotVerify(
+            return new VerdictAnswer.InfrastructureFailure(
                     UntrustedText.subprocess(e.getMessage() != null ? e.getMessage() : e.toString()),
                     NoCheckDetails.NO_DETAILS);
         }
@@ -165,12 +170,12 @@ public record ShellCommandCheckRunner(
             if (outcome == null) {
                 // throwable-not-subject: the runner reports a failed start as a null outcome, so
                 //     there is no throwable to attach here — the cause was logged where it was
-                //     caught, and this line is the decision that turns it into CannotVerify.
+                //     caught, and this line is the decision that turns it into an infrastructure failure.
                 log.warn(
                         OperatorEvent.COMMAND_CHECK_PROCESS_START_FAILED.head()
                                 + "command check '{}' cannot be verified: the process failed to start",
                         identityOf(check));
-                return new Verdict.CannotVerify(
+                return new VerdictAnswer.InfrastructureFailure(
                         UntrustedText.manifest("failed to start command: " + check.checkId()),
                         NoCheckDetails.NO_DETAILS);
             }
@@ -200,44 +205,44 @@ public record ShellCommandCheckRunner(
      * half-written by construction. An interrupted check is infrastructure: the factory was shut
      * down mid-check, and nothing about the work is known.
      */
-    private static Verdict unfinished(CommandProcessRunner.CommandOutcome outcome) {
+    private static VerdictAnswer unfinished(CommandProcessRunner.CommandOutcome outcome) {
         if (outcome.termination() instanceof ExecHandle.Wait.TimedOut) {
-            return new Verdict.Fail(List.of(new Finding(
+            return new VerdictAnswer.QualityFailure(List.of(new Finding(
                     "command timed out before it exited and its process tree was killed", null, outcome.outputTail())));
         }
-        return new Verdict.CannotVerify(
+        return new VerdictAnswer.InfrastructureFailure(
                 UntrustedText.factory("command run was interrupted before a verdict existed"),
                 UntrustedText.subprocess(outcome.outputTail()));
     }
 
     /**
-     * Classifies a completed run's exit code per the engine's Pass/Fail/CannotVerify table (FR7,
-     * D6): 0 is a pass — findings content is ignored with a warning (FR8); 126/127 are the
+     * Reports a completed run's exit code as its answer (FR7, D6): 0 is an empty SARIF answer —
+     * findings content is ignored with a note (FR8); 126/127 are the
      * shell's "not executable" / "not found" conventions and are treated as infrastructure
      * failures, the findings channel playing no role; any other non-zero exit is a quality
      * failure carrying either the structured findings the command wrote, or one synthetic
      * finding built from the output tail if none were written or they were malformed (FR8,
      * NFR-R2).
      */
-    private static Verdict classify(
+    private static VerdictAnswer classify(
             String checkIdentity,
             CommandProcessRunner.CommandOutcome outcome,
             ReadResult<CheckFindings.FindingsFile> findingsRead) {
         int exitCode = outcome.exitCode();
         if (exitCode == 0) {
             CheckFindings.noteIgnoredOnPass(checkIdentity, findingsRead);
-            return new Verdict.Pass();
+            return new VerdictAnswer.Sarif(List.of());
         }
         if (exitCode == 126 || exitCode == 127) {
             // The reason is the factory's own sentence about an exit code, quoting nothing the
             // command printed — its family is FACTORY, not the family of the tail beside it
             // (design D3 of type-untrusted-text).
             String reason = exitCode == 126 ? "command not executable (exit 126)" : "command not found (exit 127)";
-            return new Verdict.CannotVerify(
+            return new VerdictAnswer.InfrastructureFailure(
                     UntrustedText.factory(reason), UntrustedText.subprocess(outcome.outputTail()));
         }
         Finding syntheticFinding = new Finding("command exited with status " + exitCode, null, outcome.outputTail());
         List<Finding> parsed = CheckFindings.findings(checkIdentity, findingsRead);
-        return new Verdict.Fail(parsed != null ? parsed : List.of(syntheticFinding));
+        return new VerdictAnswer.QualityFailure(parsed != null ? parsed : List.of(syntheticFinding));
     }
 }

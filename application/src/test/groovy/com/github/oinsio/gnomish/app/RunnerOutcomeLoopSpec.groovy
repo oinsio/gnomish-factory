@@ -217,8 +217,8 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
 
         when:
         def outcome = loop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports(executor, [
-            new Verdict.Pass(),
-            new Verdict.Pass()
+            new Verdict.Pass(null, []),
+            new Verdict.Pass(null, [])
         ]), RETURN_PATH)
 
         then: 'only the checkpointed stage ran'
@@ -236,7 +236,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
         ])
 
         expect:
-        loop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports(new ScriptedExecutor([completed()]), [new Verdict.Pass()]), RETURN_PATH) instanceof TaskOutcome.Completed
+        loop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(), ports(new ScriptedExecutor([completed()]), [new Verdict.Pass(null, [])]), RETURN_PATH) instanceof TaskOutcome.Completed
     }
 
     // Scenario: cli/manual-run / Persistence failure is Aborted
@@ -252,7 +252,7 @@ class RunnerOutcomeLoopSpec extends Specification implements StdoutCaptureFixtur
 
         when:
         loop.run(pipeline, CONTEXT, STATE, new FakeWorkspace(),
-                ports(executor, [new Verdict.Pass()], new InMemoryAttemptPersistence(failOnCall: 1)), RETURN_PATH)
+                ports(executor, [new Verdict.Pass(null, [])], new InMemoryAttemptPersistence(failOnCall: 1)), RETURN_PATH)
 
         then:
         thrown(AbortedException)

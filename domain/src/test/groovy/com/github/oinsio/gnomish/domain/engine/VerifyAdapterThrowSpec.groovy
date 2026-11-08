@@ -25,7 +25,7 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         given: 'a builtin runner set to throw, then a command that would pass if reached'
         def builtinRunner = new ScriptedBuiltinCheckRunner()
         builtinRunner.toThrow = new IllegalStateException('builtin adapter kaboom')
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass()])
+        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
         def checks = [
             builtin('files_exist'),
             command('./gradlew test')
@@ -49,7 +49,7 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
     // FR4, NFR-O1: a command adapter throwing is caught into a CannotVerify with its trace
     def "catches a throwing command adapter into a CannotVerify carrying its stack trace"() {
         given: 'a command runner set to throw, then a builtin that would pass if reached'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
         def commandRunner = new ScriptedCommandCheckRunner()
         commandRunner.toThrow = new RuntimeException('command adapter kaboom')
         def checks = [
@@ -77,7 +77,7 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         given: 'an external client set to throw from poll, then a builtin that would pass'
         def externalClient = new ScriptedExternalCheckClient()
         externalClient.toThrow = new IllegalStateException('external adapter kaboom')
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
         def commandRunner = new ScriptedCommandCheckRunner()
         def checks = [
             external('ci/build', Duration.ofSeconds(1), Duration.ofSeconds(3)),
@@ -105,7 +105,7 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         given: 'a judge voter set to throw, then a builtin that would pass if reached'
         def judgeVoter = new ScriptedJudgeVoter()
         judgeVoter.toThrow = new RuntimeException('judge adapter kaboom')
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
         def commandRunner = new ScriptedCommandCheckRunner()
         def checks = [
             judge(3),

@@ -7,16 +7,17 @@ import java.time.Duration
 
 /**
  * VerifyOrchestrator builtin/command dispatch, task 4.1 — a Builtin dispatches to the
- * builtin runner and a Command to the command runner (never the other), each passing its
- * verdict through verbatim and receiving the chain's workspace unchanged; per-check
+ * builtin runner and a Command to the command runner (never the other), each runner's answer
+ * deriving to the verdict it scripted (through VerdictDerivation, FR7 of
+ * migrate-verify-to-executor-contract) and each receiving the chain's workspace unchanged; per-check
  * durations are measured from the injected clock across each runner call (FR3). Implements
  * FR3 of add-stage-engine.
  */
 class BuiltinCommandDispatchSpec extends VerifyOrchestratorSpecBase {
 
     // FR3: a Builtin dispatches to the builtin runner (never the command runner) and its
-    //      exact returned verdict is what the CheckResult carries
-    def "dispatches a Builtin to the builtin runner and passes its verdict through verbatim"() {
+    //      answer derives to the verdict the CheckResult carries
+    def "dispatches a Builtin to the builtin runner and records the verdict its answer derives to"() {
         given: 'a builtin runner returning a specific Fail verdict, and an untouched command runner'
         def verdict = new Verdict.Fail([
             new Finding('boom', null, null)
@@ -32,13 +33,13 @@ class BuiltinCommandDispatchSpec extends VerifyOrchestratorSpecBase {
         builtinRunner.calls == [check]
         commandRunner.calls.isEmpty()
 
-        and: 'the CheckResult carries the very verdict the runner returned'
-        result.results[0].verdict().is(verdict)
+        and: 'the CheckResult carries the verdict the runner answered'
+        result.results[0].verdict() == verdict
     }
 
     // FR3: a Command dispatches to the command runner (never the builtin runner) and its
-    //      exact returned verdict is what the CheckResult carries
-    def "dispatches a Command to the command runner and passes its verdict through verbatim"() {
+    //      answer derives to the verdict the CheckResult carries
+    def "dispatches a Command to the command runner and records the verdict its answer derives to"() {
         given: 'a command runner returning a specific CannotVerify, and an untouched builtin runner'
         def verdict = new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('trace'))
         def builtinRunner = new ScriptedBuiltinCheckRunner()
@@ -52,17 +53,17 @@ class BuiltinCommandDispatchSpec extends VerifyOrchestratorSpecBase {
         commandRunner.calls == [check]
         builtinRunner.calls.isEmpty()
 
-        and: 'the CheckResult carries the very verdict the runner returned'
-        result.results[0].verdict().is(verdict)
+        and: 'the CheckResult carries the verdict the runner answered'
+        result.results[0].verdict() == verdict
     }
 
     // FR3: each runner receives the workspace the chain was given, threaded through unchanged
     def "passes the workspace through to whichever runner the check dispatches to"() {
         given: 'a passing builtin then a passing command, each recording its workspace'
         def seen = []
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
         builtinRunner.onRun = { check, ws -> seen << ws }
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass()])
+        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
         commandRunner.onRun = { check, ws -> seen << ws }
         def checks = [
             builtin('files_exist'),
@@ -80,7 +81,7 @@ class BuiltinCommandDispatchSpec extends VerifyOrchestratorSpecBase {
     // FR3: a builtin check's duration is measured from the injected clock across its runner call
     def "captures a builtin check duration measured across the runner call"() {
         given: 'a builtin runner whose call advances the clock by a known amount'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
         builtinRunner.onRun = { check, ws ->
             clock.advance(Duration.ofSeconds(5))
         }
@@ -97,7 +98,7 @@ class BuiltinCommandDispatchSpec extends VerifyOrchestratorSpecBase {
     def "captures a command check duration measured across the runner call"() {
         given: 'a command runner whose call advances the clock by a known amount'
         def builtinRunner = new ScriptedBuiltinCheckRunner()
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass()])
+        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
         commandRunner.onRun = { check, ws ->
             clock.advance(Duration.ofMillis(250))
         }
@@ -112,11 +113,11 @@ class BuiltinCommandDispatchSpec extends VerifyOrchestratorSpecBase {
     // FR3: per-check durations are independent — each is measured around only its own runner call
     def "measures each check's duration independently across its own runner call"() {
         given: 'a builtin advancing 2s then a command advancing 3s'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
         builtinRunner.onRun = { check, ws ->
             clock.advance(Duration.ofSeconds(2))
         }
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass()])
+        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
         commandRunner.onRun = { check, ws ->
             clock.advance(Duration.ofSeconds(3))
         }

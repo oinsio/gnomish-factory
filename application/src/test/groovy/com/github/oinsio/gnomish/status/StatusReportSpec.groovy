@@ -35,7 +35,7 @@ class StatusReportSpec extends Specification {
     }
 
     private static AttemptRecord passedRound() {
-        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
         AttemptRecords.of(0, AttemptRecord.Result.PASSED, STARTED, [check], ExecutorUsage.none(), [], Stop.none())
     }
 

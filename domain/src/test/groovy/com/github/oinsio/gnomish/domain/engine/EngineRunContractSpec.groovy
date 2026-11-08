@@ -99,7 +99,7 @@ class EngineRunContractSpec extends Specification {
     def "an invariant the engine's own logic breaks propagates out of the run instead of becoming an outcome"() {
         given: 'a check during which the instant source steps back, so the engine computes a negative duration'
         executor.scripted << completed(0, ExecutorUsage.none())
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         builtinRunner.onRun = { check, workspace ->
             clock.advance(Duration.ofSeconds(-5))
         }
@@ -124,7 +124,7 @@ class EngineRunContractSpec extends Specification {
         def persisted = new TaskState(new Position.AtStage('build'), 0, [], Snapshots.executed(['model-a': new TokenUsage(1000, 0, 0, 0)]), ExecutorVersions.none())
         builtinRunner.scripted << new Verdict.Fail([
             new Finding('red', null, null)
-        ]) << new Verdict.Pass()
+        ]) << new Verdict.Pass(null, [])
         executor.scripted << completed(0, usage(2, 50)) << completed(1, usage(3, 20))
 
         when:

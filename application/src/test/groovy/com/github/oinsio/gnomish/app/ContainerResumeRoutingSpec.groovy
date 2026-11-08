@@ -77,7 +77,7 @@ class ContainerResumeRoutingSpec extends Specification implements RunChainFakes 
     /** Resumes PROJ-1 with the given {@code --decision} ({@code null} for none). */
     private String resume(String decision = null, boolean discardWork = false) {
         def runner = new ContainerResumeRunner(
-                assemblyRunningLoop(executor, console, new Verdict.Pass(), [], lawBindings),
+                assemblyRunningLoop(executor, console, new Verdict.Pass(null, []), [], lawBindings),
                 new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), new ClaimEpochBook()),
                 'taskId', { _c, _t, _s, _def, _cred ->
                     support

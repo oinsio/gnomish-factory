@@ -79,7 +79,7 @@ abstract class HostResumeReplicationSpecBase extends Specification implements Ru
     }
 
     /** The real routing chain over the ports above; {@code verdict} decides whether a run parks. */
-    TakeDispositionResume chain(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass()) {
+    TakeDispositionResume chain(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass(null, [])) {
         def git = git()
         def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor, verdict), git, tracker, registeredClone))
         def mechanics = new HostResumeMechanics(runner, git, registeredClone, completingPipeline())

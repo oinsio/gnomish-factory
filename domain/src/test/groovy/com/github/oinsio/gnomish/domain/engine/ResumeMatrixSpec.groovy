@@ -29,8 +29,8 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         def stage3 = stage('review', AdvancementMode.AUTO, 3, [builtin('review_check')])
         def executor = new ScriptedExecutor([completed(), completed()])
         def builtin = new ScriptedBuiltinCheckRunner()
-        builtin.scripted << new Verdict.Pass()
-        builtin.scripted << new Verdict.Pass()
+        builtin.scripted << new Verdict.Pass(null, [])
+        builtin.scripted << new Verdict.Pass(null, [])
 
         when: 'the run starts from a state positioned at stage2 (stage1 already done in an earlier run)'
         def outcome = new Engine().run(pipeline(stage1, stage2, stage3), CONTEXT,
@@ -78,7 +78,7 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         when: 'a NEW run resumes from that persisted mid-retry state and its check now passes'
         def resumeExecutor = new ScriptedExecutor([completed()])
         def resumeBuiltin = new ScriptedBuiltinCheckRunner()
-        resumeBuiltin.scripted << new Verdict.Pass()
+        resumeBuiltin.scripted << new Verdict.Pass(null, [])
         def resumed = new Engine().run(pipeline(stageDef), CONTEXT, resumeState, WORKSPACE,
                 freshPorts(resumeExecutor, resumeBuiltin, new InMemoryAttemptPersistence(), new RecordingEventListener()))
 
@@ -88,8 +88,8 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         and: 'that first request carries the failed check results of BOTH prior attempts, in order'
         def feedback = resumeExecutor.requests[0].feedback()
         feedback.size() == 2
-        feedback[0].verdict().is(failA)
-        feedback[1].verdict().is(failB)
+        feedback[0].verdict() == failA
+        feedback[1].verdict() == failB
 
         and: 'the now-passing round advances the pipeline to completion'
         resumed instanceof TaskOutcome.Completed
@@ -172,7 +172,7 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         when: 'a NEW run resumes from the history a continuation reset, and its check now passes'
         def resumeExecutor = new ScriptedExecutor([completed()])
         def resumeBuiltin = new ScriptedBuiltinCheckRunner()
-        resumeBuiltin.scripted << new Verdict.Pass()
+        resumeBuiltin.scripted << new Verdict.Pass(null, [])
         def resumed = new Engine().run(pipeline(stageDef), CONTEXT, resumeState.resetAttempts(), WORKSPACE,
                 freshPorts(resumeExecutor, resumeBuiltin, new InMemoryAttemptPersistence(), new RecordingEventListener()))
 

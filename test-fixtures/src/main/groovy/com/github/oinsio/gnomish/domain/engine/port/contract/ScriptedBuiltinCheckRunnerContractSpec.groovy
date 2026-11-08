@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine.port.contract
 
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
@@ -23,7 +24,7 @@ class ScriptedBuiltinCheckRunnerContractSpec extends CheckRunnerContract {
 
     private static Verdict scriptedVerdict(VerdictVariant variant) {
         return switch (variant) {
-                    case VerdictVariant.PASS -> new Verdict.Pass()
+                    case VerdictVariant.PASS -> new Verdict.Pass(null, [])
                     case VerdictVariant.FAIL_WITH_FINDINGS ->
                     new Verdict.Fail([
                         new Finding('a file is missing', 'src/Foo.java', null)
@@ -34,7 +35,7 @@ class ScriptedBuiltinCheckRunnerContractSpec extends CheckRunnerContract {
     }
 
     @Override
-    protected Optional<Verdict> arrange(VerdictVariant variant) {
+    protected Optional<VerdictAnswer> arrange(VerdictVariant variant) {
         def runner = ScriptedBuiltinCheckRunner.fixed(scriptedVerdict(variant))
         Optional.of(runner.run(VerifyChecks.builtin('files_exist', [:]), new FakeWorkspace()))
     }

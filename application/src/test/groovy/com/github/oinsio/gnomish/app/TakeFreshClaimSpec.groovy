@@ -86,7 +86,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         when:
         new TakeFreshClaim(slotWiring(
-                        assemblyRunning(new ScriptedExecutor([completedRound()]), new Verdict.Pass(), attached), git, tracker, registeredClone)).claim(
+                        assemblyRunning(new ScriptedExecutor([completedRound()]), new Verdict.Pass(null, []), attached), git, tracker, registeredClone)).claim(
                 takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)))
 
         then:
