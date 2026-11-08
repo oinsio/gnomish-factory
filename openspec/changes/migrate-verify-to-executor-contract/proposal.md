@@ -262,6 +262,11 @@ by the engine and persisted on the branch.
 - `pipeline-config`: MODIFIED "Local sanity validation of mechanism and check configs" — the
   unknown-provider and defaulted-provider scenarios are stated against the executor registry.
 - `executor/wire-contract`: ADDED — the describe field of FR16.
+- `cli/manual-run`: REMOVED "Command check runner" and "Findings-JSON wire format" — the shell
+  check's exit code is status, never a verdict (FR5, design D5 as amended 2026-11-08); their kept
+  duties are ADDED to `verification/verdict-executors` in the derived form ("The shell executor
+  runs the command in the task environment", "The shell executor reads its findings path
+  whatever the exit code"), and task 3.2 moves the eight scenario markers.
 
 ## Impact
 

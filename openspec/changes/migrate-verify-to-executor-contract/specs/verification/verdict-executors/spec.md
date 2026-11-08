@@ -52,6 +52,59 @@ no later attempt: retry feedback stays the failed checks of prior attempts.
 - **WHEN** the judge's final message carries `{"passed": true, "findings": ["x"]}`
 - **THEN** the vote is a pass carrying the finding `x`, and a malformed `findings` array still makes the vote `CannotVerify`
 
+### Requirement: The shell executor runs the command in the task environment
+The `shell` executor SHALL run the manifest command via `sh -c` through `exec()` of the bound
+task environment, with the working copy as working directory, stderr merged into stdout and a
+bounded output tail (~200 lines / 10 KB) retained. The exit code SHALL be reported as status,
+never as a verdict: 126 and 127 are `failed`/`infrastructure`; any other non-zero exit with no
+valid result written SHALL yield one `error` result carrying the output tail.
+**Implements**: FR5 of migrate-verify-to-executor-contract
+**Notes**: Former "Command check runner" of `cli/manual-run` (FR7 of add-manual-run; FR11, NFR-S1 of add-claim-heartbeat; FR4, FR9 of add-sandbox-core), restated in the derived form by D5 as amended 2026-11-08.
+**Notes**: The check's allowlist is the execution-environment capability's layered one: adapter base set, operator passthrough, factory-set variables.
+
+#### Scenario: A red command without a findings file carries its output tail
+- **WHEN** the command exits 1 and wrote no findings file
+- **THEN** the answer holds one `error` result whose details contain the output tail, and the check fails
+
+#### Scenario: A missing binary is an infrastructure failure
+- **WHEN** the command exits 127
+- **THEN** the status is `failed`/`infrastructure` and the derived verdict is `CannotVerify`, honoring the engine's classification table
+
+#### Scenario: No factory variable leaks into a shell check
+- **WHEN** a shell check runs while `GNOMISH_GITHUB_TOKEN` and unrelated host variables are set in the factory environment
+- **THEN** the check's process environment contains only the allowlisted variables
+
+#### Scenario: A shell check inherits no factory variable implicitly
+- **WHEN** a variable is set in the factory process and is in none of the allowlist's layers
+- **THEN** it is absent from the check's environment, so a tracker credential cannot reach a check by construction
+
+### Requirement: The shell executor reads its findings path whatever the exit code
+Before starting the command, the `shell` executor SHALL allocate a findings-file path in the
+environment's scratch area — outside the working copy, inside the bound task environment — and
+pass it as `GNOMISH_FINDINGS_FILE`. After exit it SHALL read the file through `ResultFileReader`
+on every exit code but 126 and 127: a SARIF file is the answer, a valid legacy
+`{"findings":[...]}` file is normalized to `error` results, and either replaces the synthetic
+result.
+**Implements**: FR5 of migrate-verify-to-executor-contract
+**Notes**: Former "Findings-JSON wire format" of `cli/manual-run` (FR8, NFR-R2 of add-manual-run; FR1, FR4 of add-sandbox-core); its drop of the file on exit 0 contradicted "A pass keeps its below-threshold findings" and is gone.
+
+#### Scenario: Structured findings replace the synthetic result
+- **WHEN** the command exits 1 and wrote two valid legacy findings
+- **THEN** the check fails with exactly those two findings and no synthetic one
+
+#### Scenario: A broken reporter cannot mask a red command
+- **WHEN** the command exits 1 and the findings file is unparseable
+- **THEN** the check fails (not `CannotVerify`) with the synthetic tail result
+
+#### Scenario: A malformed findings file is logged
+- **WHEN** the command exits 1 and the findings file is malformed
+- **THEN** a warning is logged and the synthetic tail result stands
+
+#### Scenario: A findings file on a green command is read
+- **WHEN** the command exits 0 and wrote a file with one `warning` result
+- **THEN** the check passes carrying that finding
+- **AND** the same file with one `error` result fails the check
+
 ### Requirement: Built-in verdict executors report a known zero usage
 A built-in verdict executor that mediates no model SHALL report usage with provenance
 `REPORTED` and an empty per-model map, and its describe SHALL declare `reportsUsage = true`,

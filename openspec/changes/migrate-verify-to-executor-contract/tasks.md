@@ -28,7 +28,10 @@
   `CheckDto` javadoc updated); `AttemptMapper` and `UsageReportJsonMapper` carry the list;
   `CheckFindings.noteIgnoredOnPass` deleted. Spec: a pass with findings feeds no retry (`RoundExecution`
   filters by `Fail`, FR4 of `add-stage-engine`). Scenarios "Warnings pass under the default
-  threshold" and "A pass keeps its findings across the state file"
+  threshold" and "A pass keeps its findings across the state file". The exit-0 drop is released
+  by the `cli/manual-run` delta (REMOVED "Findings-JSON wire format", D5 second amendment): the
+  feature under the marker `cli/manual-run / A findings file on a green check is ignored` is
+  rewritten to `verification/verdict-executors / A findings file on a green command is read`
 - [x] 2.2b The same for the judge (second instance of the class, D5 as amended): `JudgeVerdictExtractor`
   returns `Pass` with the parsed `findings` of a `"passed": true` verdict under the same strict
   schema as a failed one (a malformed array stays `CannotVerify`); scenario "A judge pass keeps
@@ -42,9 +45,9 @@
   the rows of the classes 2.2 routes (`ShellCommandCheckRunner`, `FilesExistCheckRunner`,
   `ExternalPolling`, `VerifyOrchestrator`); the judge rows (`JudgeVerdictExtractor`,
   `JudgeCriteriaPreflight`, `JudgeCannotVerify`) stay exempt until `extract-agent-round-runner`
-  (D9, NG1), so retag them with that pickup and add it to the spec's `PICKUPS`; add
-  `JudgeCannotVerify` to D9's exempt list beside the other judge classes; no row keeps this
-  change's name (M2)
+  (D9, NG1), so retag them with that pickup and add it to the spec's `PICKUPS`; D9's exempt
+  list already names `JudgeCannotVerify` beside the other judge classes (folded 2026-11-08); no
+  row keeps this change's name (M2)
 
 ## 3. Built-in verdict executors
 
@@ -64,8 +67,21 @@
   `verdict`, settings schema for the path list) emitting SARIF; existing specs re-pointed (FR1)
 - [ ] 3.2 `shell`: build on the shared command-run core from `add-command-executor`; report
   exit as status, read the findings path through `ResultFileReader`, normalize the legacy
-  `{"findings":[...]}` to SARIF; specs: legacy file normalized, SARIF passthrough, exit code
-  carries no verdict, existing bound/kill specs green (FR5)
+  `{"findings":[...]}` to SARIF; the file is read on every exit code but 126/127 (D5 second
+  amendment); specs: legacy file normalized, SARIF passthrough, exit code carries no verdict,
+  existing bound/kill specs green (FR5). Move the eight markers of the REMOVED `cli/manual-run`
+  requirements in `ShellCommandCheckRunnerSpec` and `CheckFindingsSpec` to the new titles under
+  `verification/verdict-executors`: "Red check carries feedback" → "A red command without a
+  findings file carries its output tail"; "Missing binary is infrastructure" → "A missing binary
+  is an infrastructure failure"; "No factory variable leaks into a check" → "No factory variable
+  leaks into a shell check"; "A check inherits no factory variable implicitly" → "A shell check
+  inherits no factory variable implicitly"; "Structured findings win" → "Structured findings
+  replace the synthetic result"; "Broken reporter cannot mask a red check" → "A broken reporter
+  cannot mask a red command"; "A malformed findings file is logged" → same title; "A findings
+  file on a green check is ignored" → "A findings file on a green command is read" (if 2.2a did
+  not already). `grep -rn "Scenario: cli/manual-run / \(Red check\|Missing binary\|Structured
+  findings\|Broken reporter\|A malformed findings\|A findings file on a green\|No factory
+  variable\|A check inherits\)"` → zero hits; `checkSpecContract --changes` green
 - [ ] 3.3 `github-actions`: move `GithubCheckExternalClient` + fetchers out of the bundle into the
   new core-side module `adapters/scm` (depends on `:githubapi`, `:executor-contract`, `:domain`)
   as an `Executor` with `poll`; describe carries the token name, settings schema (former
