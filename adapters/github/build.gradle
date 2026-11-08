@@ -1,12 +1,11 @@
 // Build script for the `:adapters:github` module (FR10, design D1/D2 of
-// split-into-modules, pass 2): the GitHub vendor bundle. One module holds all
-// three GitHub packages — `adapter.github` (the shared HTTP core: client, retry
-// config, rate-limit accounting, conditional-request cache), `adapter.tracker
-// .github` (the `Tracker` port realization) and `adapter.check.github` (the
-// `ExternalCheckClient` realization over Actions) — because D1 makes the shared
-// core an INTERNAL package of the vendor bundle rather than a module of its own:
-// splitting it out would buy a third build unit and publish plumbing that only
-// these two adapters may use.
+// split-into-modules, pass 2): the GitHub vendor bundle. One module holds the
+// two GitHub port realizations — `adapter.tracker.github` (the `Tracker` port)
+// and `adapter.check.github` (the `ExternalCheckClient` over Actions). The
+// shared HTTP core they are written against was D1's internal `adapter.github`
+// package; it left for the first-party library `:githubapi` (FR14, design D15
+// of migrate-verify-to-executor-contract), because the core-side GitHub
+// built-ins need the same client and a second one would be a hand-synced pair.
 //
 // The two sibling realizations still must not reach into each other; that line
 // is drawn inside this module by `GithubAdapterBoundarySpec`, which predates the
@@ -70,6 +69,11 @@ dependencies {
     // `implementation`: the carrier sits on a public accessor, so it travels on this module's
     // own surface — which is what the dependency-analysis gate establishes.
     api project(':untrustedtext')
+    // The first-party GitHub HTTP core (FR14, design D15 of
+    // migrate-verify-to-executor-contract): client, credential rules, conditional-request
+    // cache, rate-limit classification and retry, which this bundle's two realizations are
+    // written against. `api`: the client and the cache sit on public constructors here.
+    api project(':githubapi')
 
     implementation libs.slf4j.api
 
@@ -82,16 +86,12 @@ dependencies {
     implementation libs.jackson.databind
     implementation libs.jackson.core
 
-    // Retry for the HTTP client core (NFR-R2 of add-tracker-port):
-    // infrastructure failures of tracker calls are retried. `resilience4j-core`
-    // is declared directly because `GithubRetryConfig` names `IntervalFunction`
-    // itself.
-    implementation libs.resilience4j.retry
-    implementation libs.resilience4j.core
-
     // Shared fakes and the tracker / external-check port-contract suites (FR7,
     // design D8), test scope only.
     testImplementation project(':test-fixtures')
+    // The core's fast-retry seam and mid-request interrupt helper, shared with
+    // `:githubapi`'s own specs (task 3.0a of migrate-verify-to-executor-contract).
+    testImplementation testFixtures(project(':githubapi'))
     // WireMock for the tracker/check HTTP contract specs, in-JVM — no Docker
     // (.claude/rules/testing.md). The pinned Jetty 11 line and its accepted-risk
     // advisories are documented in the root build script and osv-scanner.toml.
@@ -99,6 +99,14 @@ dependencies {
     testImplementation enforcedPlatform(libs.jetty.bom)
     // Logback's ListAppender backs the specs asserting on log output.
     testImplementation libs.logback.classic
+    // Retry for the HTTP client core (NFR-R2 of add-tracker-port) lives with the
+    // core in `:githubapi`; the specs here build their own fast retry policies.
+    // Declared last on purpose: declared ahead of the fixture and WireMock edges,
+    // the resolution fetched the POM of slf4j-api 1.7.30 (resilience4j's own,
+    // evicted request), which the dependency-verification metadata does not
+    // carry, and every compile of this build failed verification.
+    testImplementation libs.resilience4j.retry
+    testImplementation libs.resilience4j.core
 }
 
 // PIT exclusions documented for THIS module (task 8.1: each module carries its
@@ -148,5 +156,11 @@ layering {
         // over it, and now declared directly — this module mints the tracker family and names
         // the carrier on `ParsedMarker`'s own accessor.
         ':untrustedtext',
+        // The first-party GitHub HTTP core (FR14, design D15 of
+        // migrate-verify-to-executor-contract): the bundle's tracker is written against its
+        // client, cache, rate-limit and retry, which left this bundle's `adapter.github` package
+        // for a library the core-side GitHub built-ins share. Not the plugin api, and not a
+        // sibling adapter: the library depends on `:domain` only.
+        ':githubapi',
     ]
 }

@@ -11,8 +11,9 @@ import spock.lang.Specification
 /**
  * GitHub adapter boundary gate (design D4 of add-external-check-github-actions): {@code
  * adapter.tracker.github} and {@code adapter.check.github} are siblings that both depend on the
- * shared plumbing in {@code adapter.github} (HTTP client, retry config, conditional-request
- * cache) but must never depend on each other's internals — each is a distinct port
+ * shared plumbing of the {@code :githubapi} library (HTTP client, retry config, conditional-request
+ * cache; design D15 of migrate-verify-to-executor-contract) but must never depend on each other's
+ * internals — each is a distinct port
  * implementation (Tracker vs. ExternalCheckClient) and the module-boundary rule
  * (.claude/rules/process-invariants.md) forbids sibling-internal imports. Until now this held by
  * convention only; this spec makes it a compiled gate. Violations fail {@code ./gradlew check}

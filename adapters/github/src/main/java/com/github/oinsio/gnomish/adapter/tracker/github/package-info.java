@@ -10,11 +10,11 @@
  * (config subsection validation, task 4.2); {@link
  * com.github.oinsio.gnomish.adapter.tracker.github.GithubTaskId} (canonical id
  * build/parse, task 4.3); the shared HTTP core ({@link
- * com.github.oinsio.gnomish.adapter.github.GithubHttpClient}, its retry
- * policy {@link com.github.oinsio.gnomish.adapter.github.GithubRetryConfig},
+ * com.github.oinsio.gnomish.githubapi.GithubHttpClient}, its retry
+ * policy {@link com.github.oinsio.gnomish.githubapi.GithubRetryConfig},
  * and the ETag conditional-request cache {@link
- * com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache},
- * task 4.4-4.5) was extracted into {@link com.github.oinsio.gnomish.adapter.github}
+ * com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache},
+ * task 4.4-4.5) was extracted into the package now the {@link com.github.oinsio.gnomish.githubapi} library
  * as tracker-agnostic plumbing (task 2.1 of
  * add-external-check-github-actions); {@link
  * com.github.oinsio.gnomish.adapter.tracker.github.GithubLabelOps} (point

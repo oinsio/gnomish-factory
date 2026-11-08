@@ -1,9 +1,6 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
 import com.github.oinsio.gnomish.DoNotMutate;
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
-import com.github.oinsio.gnomish.adapter.github.GithubCredential;
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.TrackerAdapterContext;
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
@@ -13,6 +10,9 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerReadVerdict;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache;
+import com.github.oinsio.gnomish.githubapi.GithubCredential;
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient;
 import java.time.InstantSource;
 import java.util.List;
 import java.util.Map;

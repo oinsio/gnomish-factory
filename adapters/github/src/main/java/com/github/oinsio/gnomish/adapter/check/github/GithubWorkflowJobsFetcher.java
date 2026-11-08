@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.check.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.app.findings.FindingsSanitizer;
 import com.github.oinsio.gnomish.domain.engine.Finding;
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;

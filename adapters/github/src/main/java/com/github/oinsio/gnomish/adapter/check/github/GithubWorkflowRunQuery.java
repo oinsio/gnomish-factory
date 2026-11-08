@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;

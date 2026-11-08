@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.github;
+package com.github.oinsio.gnomish.githubapi;
 
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -63,7 +63,7 @@ public final class GithubConditionalRequestCache {
      * {@code ETag}) clears the entry instead. Caching only successful bodies
      * keeps {@link NotModified} an unambiguous "the resource is still there and
      * unchanged" signal for callers that key behavior on the status code (e.g.
-     * {@link com.github.oinsio.gnomish.adapter.tracker.github.GithubTaskFetcher} distinguishing a {@code 404} from a
+     * {@code GithubTaskFetcher} (vendor bundle) distinguishing a {@code 404} from a
      * live issue).
      */
     public ConditionalResult get(HttpRequest.Builder requestBuilder, String cacheKey) {

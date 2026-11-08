@@ -31,7 +31,7 @@ class HttpClientConstructionBoundarySpec extends Specification {
      * no longer constructs a client fails the reach assertion, so it cannot outlive its reason.
      */
     private static final Map<String, String> PENDING = [
-        ('adapters/github/src/main/java/com/github/oinsio/gnomish/adapter/github/GithubHttpClient.java'): 'the GitHub HTTP core, until task 3.0a of migrate-verify-to-executor-contract moves it into :githubapi over the guarded exchange and deletes this row',
+        ('githubapi/src/main/java/com/github/oinsio/gnomish/githubapi/GithubHttpClient.java'): 'the GitHub HTTP core, moved into :githubapi with its own client unchanged by task 3.0a of migrate-verify-to-executor-contract; task 3.0b builds it over the guarded exchange and deletes this row',
     ]
 
     static final String CONSTRUCTION = /\bHttpClient\s*\.\s*(newBuilder|newHttpClient)\s*\(|\bnewHttpClient\s*\(|\bextends\s+(java\.net\.http\.)?HttpClient\b/

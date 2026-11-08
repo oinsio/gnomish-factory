@@ -3,10 +3,10 @@ package com.github.oinsio.gnomish.adapter.tracker.github;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion;
 import com.github.oinsio.gnomish.app.port.tracker.HeartbeatResult;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
@@ -30,7 +30,7 @@ import java.util.Optional;
  * listing (the issue itself is gone — the strongest form of a lost claim). Both a network failure and a
  * persistent 5xx are retried inside {@link GithubHttpClient} (NFR-R2), but they surface
  * differently once retries are exhausted: a network failure propagates as an
- * infrastructure {@link com.github.oinsio.gnomish.adapter.github.GithubHttpException},
+ * infrastructure {@link com.github.oinsio.gnomish.githubapi.GithubHttpException},
  * whereas an exhausted 5xx is returned as a
  * non-2xx response and — like any other non-404, non-2xx status — throws a {@link
  * GithubHeartbeatException} from the failing step. Either way the beat throws rather

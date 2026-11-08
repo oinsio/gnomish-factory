@@ -50,9 +50,9 @@ class RawCaptureOwners {
             'sandbox/docker/src/main/java/com/github/oinsio/gnomish/sandbox/environment/HostChannelFiles.java',
             'mechanics: reads a host channel file under a byte cap and answers bytes; the caller that turns a channel file into prose mints at its own edge, as its container-mode twin ContainerFileChannel does',
         ],
-        // --- HTTP response bodies: the github bundle and the http check transport ---
+        // --- HTTP response bodies: the GitHub HTTP core and bundle, and the http check transport ---
         [
-            'adapters/github/src/main/java/com/github/oinsio/gnomish/adapter/github/GithubConditionalRequestCache.java',
+            'githubapi/src/main/java/com/github/oinsio/gnomish/githubapi/GithubConditionalRequestCache.java',
             'TRACKER (transport): holds the body as the cached/fresh envelope the tracker parsers read; the mint is at GithubTaskFetcher and GithubMarker, per D3',
         ],
         [

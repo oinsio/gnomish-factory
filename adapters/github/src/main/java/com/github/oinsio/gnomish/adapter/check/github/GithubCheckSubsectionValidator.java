@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.check.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubCredential;
 import com.github.oinsio.gnomish.app.CheckSubsectionValidator;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
+import com.github.oinsio.gnomish.githubapi.GithubCredential;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

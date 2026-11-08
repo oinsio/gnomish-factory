@@ -26,7 +26,7 @@ import java.util.List;
  * GithubDecisions} (collectDecisions/acknowledgeDecision). This class holds
  * no HTTP or business logic of its own: every method is a one-line forward
  * to the collaborator that already implements it, wired once at
- * construction with the shared {@link com.github.oinsio.gnomish.adapter.github.GithubHttpClient}/label
+ * construction with the shared {@link com.github.oinsio.gnomish.githubapi.GithubHttpClient}/label
  * names/{@code
  * instanceId} every collaborator needs.
  *
@@ -41,7 +41,7 @@ import java.util.List;
  * only a subset of these) and pass them here; this record takes the
  * collaborators directly rather than re-deriving them, so construction order
  * and shared instances (e.g. one {@link
- * com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache} across
+ * com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache} across
  * polls, NFR-P1) stay the caller's responsibility.
  *
  * @param feedQuery implements {@code listReady}

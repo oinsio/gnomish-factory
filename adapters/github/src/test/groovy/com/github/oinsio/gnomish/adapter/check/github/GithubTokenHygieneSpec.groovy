@@ -4,10 +4,10 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor
 import com.github.tomakehurst.wiremock.WireMockServer
 import io.github.resilience4j.core.IntervalFunction
@@ -23,7 +23,7 @@ import spock.lang.Specification
  * fails with {@link PollStatus.CannotVerify} never lets the raw token value — sent only as the
  * {@code Authorization: Bearer <token>} header by {@link GithubHttpClient#send} — reach the
  * {@code reason()}/{@code details()} strings the tracker report renders. Both {@link
- * com.github.oinsio.gnomish.adapter.github.GithubHttpException} and {@link
+ * com.github.oinsio.gnomish.githubapi.GithubHttpException} and {@link
  * GithubWorkflowRunInfrastructureException} build their messages from the request URI or the
  * response status code only, never from the request object itself, so this is a regression proof
  * rather than a fix.

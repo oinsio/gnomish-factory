@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubHttpException;
 import com.github.oinsio.gnomish.domain.engine.PollStatus;
+import com.github.oinsio.gnomish.githubapi.GithubHttpException;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.PrintWriter;
@@ -42,14 +42,14 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>An interrupted runs query is none of the three: it is the stop of the polling thread, not a
  * platform that could not answer, so {@code poll} deliberately does not catch {@link
- * com.github.oinsio.gnomish.adapter.github.GithubCallInterruptedException} and writes no outcome
+ * com.github.oinsio.gnomish.githubapi.GithubCallInterruptedException} and writes no outcome
  * line for it. Classifying it as cannot-verify would escalate the task as an infrastructure failure
  * blaming a reachable GitHub, and the polling loop's sleeper swallows interrupts, so nothing else
  * would end the loop; propagating ends the slot through the engine's shutdown-caused
  * classification instead (FR11 of fix-operator-blockers, design D8).
  *
  * <p>Resilience4j retrying of the underlying HTTP call already happens one layer down, inside
- * {@link com.github.oinsio.gnomish.adapter.github.GithubHttpClient#send}: this class adds no
+ * {@link com.github.oinsio.gnomish.githubapi.GithubHttpClient#send}: this class adds no
  * second retry layer, it only classifies what the shared plumbing hands back — a successful
  * result, or one of the three failure signals above (NFR-R1).
  *
@@ -95,7 +95,7 @@ public final class GithubWorkflowRunPoll {
      *     succeeds; {@link PollStatus.CannotVerify} when it could not be answered — either an
      *     infrastructure failure (network error, persistent 5xx, or rate limiting) or a
      *     client-side rejection (401/403/404, a misconfiguration) — never null
-     * @throws com.github.oinsio.gnomish.adapter.github.GithubCallInterruptedException if the
+     * @throws com.github.oinsio.gnomish.githubapi.GithubCallInterruptedException if the
      *     polling thread is interrupted while the query waits on GitHub (FR11 of
      *     fix-operator-blockers)
      */

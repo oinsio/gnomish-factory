@@ -6,9 +6,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.github.GithubCallInterruptedException
-import com.github.oinsio.gnomish.adapter.github.InterruptMidRequest
 import com.github.oinsio.gnomish.domain.engine.PollStatus
+import com.github.oinsio.gnomish.githubapi.GithubCallInterruptedException
+import com.github.oinsio.gnomish.githubapi.InterruptMidRequest
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
 import spock.lang.Specification

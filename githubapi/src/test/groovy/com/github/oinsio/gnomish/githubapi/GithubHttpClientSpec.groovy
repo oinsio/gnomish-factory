@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.github
+package com.github.oinsio.gnomish.githubapi
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
@@ -37,6 +37,14 @@ class GithubHttpClientSpec extends Specification {
 
     def cleanup() {
         wireMock.stop()
+    }
+
+    // Design D7 of add-tracker-port: the configured base is exposed as given, for callers that
+    //     decide default-host omission from it (the tracker's task identity).
+    def "exposes the configured API URL"() {
+        expect:
+        new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+                .apiUrl() == wireMock.baseUrl()
     }
 
     def "sends the Authorization header as Bearer <token>"() {

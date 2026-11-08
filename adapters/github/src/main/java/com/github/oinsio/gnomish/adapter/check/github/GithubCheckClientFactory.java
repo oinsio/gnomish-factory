@@ -1,13 +1,13 @@
 package com.github.oinsio.gnomish.adapter.check.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubCredential;
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.CheckClientContext;
 import com.github.oinsio.gnomish.app.CheckClientFactory;
 import com.github.oinsio.gnomish.app.CheckParamsValidator;
 import com.github.oinsio.gnomish.app.CheckSubsectionValidator;
 import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
+import com.github.oinsio.gnomish.githubapi.GithubCredential;
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;

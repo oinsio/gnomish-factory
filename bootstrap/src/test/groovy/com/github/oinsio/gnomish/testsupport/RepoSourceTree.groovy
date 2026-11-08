@@ -45,12 +45,15 @@ class RepoSourceTree {
     /**
      * Every test source of the build, optionally narrowed by a relative-path predicate. The log
      * contract gate (FR16) needs it: "a code no test source names" is a whole-tree question about
-     * the test tree, the mirror of the production scan above.
+     * the test tree, the mirror of the production scan above. A module's {@code testFixtures}
+     * source set (Gradle's {@code java-test-fixtures}; {@code :githubapi}, task 3.0a of
+     * migrate-verify-to-executor-contract) is test code shared across modules, so it is scanned too:
+     * the marker {@code /src/test} matches both {@code src/test/} and {@code src/testFixtures/}.
      */
     static List<File> testSources(Predicate<String> extraFilter = {
                 true
             }) {
-        sources('/src/test/', extraFilter)
+        sources('/src/test', extraFilter)
     }
 
     /**

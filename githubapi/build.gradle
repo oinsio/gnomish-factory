@@ -1,0 +1,78 @@
+// Build script for the `:githubapi` module (FR14, design D15 of
+// migrate-verify-to-executor-contract): the first-party GitHub HTTP core — one client with its
+// auth header and Resilience4j retry, the credential-name rules of a GitHub connection, the ETag
+// conditional-request cache and the rate-limit classification. It used to be the vendor bundle's
+// internal `adapter.github` package; it is a library of its own because its consumers sit on both
+// sides of the plugin line — the bundle's tracker and the core-side GitHub built-ins — and a
+// second client for the second side would be a hand-synced pair (D15, "Alternative rejected").
+//
+// It is neither `gnomish-plugin-api` (the api stays free of GitHub types) nor a compatibility
+// surface for third parties: its consumers are first-party, and no japicmp baseline covers it.
+//
+// Task 3.0a moved the core with unchanged behaviour: the client still builds its own JDK
+// `HttpClient`. Task 3.0b builds it over the guarded exchange of `:httpegress`, adds that edge,
+// and deletes the `PENDING` row of `HttpClientConstructionBoundarySpec` that names this module.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach is stated below.
+    id 'layering-conventions'
+    // The specs' fast-retry seam and the mid-request interrupt helper are shared with the vendor
+    // bundle's tracker and check specs, which sit in another module; one copy, published here.
+    id 'java-test-fixtures'
+}
+
+description = 'First-party GitHub HTTP core: client, credential, conditional-request cache, rate limit, retry.'
+
+dependencies {
+    // Version management only (no artifacts): slf4j-api and logback are BOM-pinned in this project
+    // rather than versioned in the catalog, so every module that uses them imports the same
+    // platform (design D3 of add-project-skeleton).
+    implementation platform(libs.spring.boot.dependencies)
+
+    // `GithubCredential` validates a connection's credential name into the loader's `ConfigError`.
+    // `api`: the type is on the public signature of `validateName` / `rejectTokenKeys`.
+    api project(':domain')
+
+    implementation libs.slf4j.api
+
+    // Retry for the HTTP client core (NFR-R2 of add-tracker-port). `resilience4j-core` is declared
+    // directly because `GithubRetryConfig` names `IntervalFunction` itself.
+    implementation libs.resilience4j.retry
+    implementation libs.resilience4j.core
+
+    // The fast-retry seam builds a `RetryConfig`; the interrupt helper drives a `WireMockServer`.
+    // The pinned Jetty 11 line and its accepted-risk advisories are documented in the root build
+    // script and osv-scanner.toml.
+    // The same version management for the fixtures' own classpath, which does not extend the
+    // main `implementation`: WireMock's transitive HTTP stack takes the project's pinned versions.
+    testFixturesImplementation platform(libs.spring.boot.dependencies)
+    testFixturesApi libs.resilience4j.retry
+    testFixturesImplementation libs.resilience4j.core
+    testFixturesApi libs.wiremock
+    testFixturesImplementation enforcedPlatform(libs.jetty.bom)
+    testFixturesCompileOnly libs.jspecify
+    // The fixtures are Groovy, like the specs that use them; `InterruptMidRequest.run` takes a `Closure`.
+    testFixturesApi libs.groovy
+
+    // `LogCaptureSupport` for the retry-visibility spec.
+    testImplementation project(':test-fixtures')
+    // WireMock for the client's HTTP contract specs, in-JVM — no Docker (.claude/rules/testing.md).
+    testImplementation libs.wiremock
+    testImplementation enforcedPlatform(libs.jetty.bom)
+    testImplementation libs.logback.classic
+}
+
+// The core reaches the domain value model and, through it, the two JDK-only leafs the domain
+// carries (`:operatorevent`, `:untrustedtext`). Never `:executor-contract`, `:application` or any
+// adapter module (D15): the library sits below both of its consumers.
+layering {
+    allowedProjects = [
+        ':domain',
+        // The operator-event catalog leaf: transitive via `:domain`, whose engine emitters take
+        // their head from it. No source here names it.
+        ':operatorevent',
+        // The untrusted-text leaf: transitive via `:domain`, whose value model names the carrier.
+        // No source here names it.
+        ':untrustedtext',
+    ]
+}

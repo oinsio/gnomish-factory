@@ -1,4 +1,4 @@
-package com.github.oinsio.gnomish.adapter.github;
+package com.github.oinsio.gnomish.githubapi;
 
 import java.net.http.HttpResponse;
 
@@ -9,8 +9,8 @@ import java.net.http.HttpResponse;
  * x-ratelimit-remaining: 0}, a secondary-limit rejection carries a {@code Retry-After} header
  * instead. Neither header appears on an ordinary permission-denied {@code 403}, so their presence
  * distinguishes a rate limit — an infrastructure failure — from a genuine business-outcome
- * {@code 403} that must not be retried or classified as {@link
- * com.github.oinsio.gnomish.adapter.check.github.GithubWorkflowRunInfrastructureException}.
+ * {@code 403} that must not be retried or classified as {@code
+ * GithubWorkflowRunInfrastructureException} (vendor bundle).
  *
  * <p>Implements NFR-R1 of add-external-check-github-actions.
  */
