@@ -1304,7 +1304,7 @@
   container mode, kill between `start` and the key commit, resumed by a second packaged jar
   instance (M3)
 - [x] 7.2 `./gradlew check` with PIT; sweep report for D9 rows; recommend a commit message
-- [ ] 7.3 Archive-time step (a delta carries no Purpose): when `/opsx:archive` merges
+- [x] 7.3 Archive-time step (a delta carries no Purpose): when `/opsx:archive` merges
   `verification/factory-egress-allowlist`, restate its Purpose (main `spec.md:5`, today "outbound
   calls made by the built-in http check", "the sole defence") as the guard of every credentialed
   in-process HTTP call of the factory, admitting by the medium of the URL (D16), with the banned
