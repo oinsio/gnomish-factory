@@ -207,7 +207,7 @@ class InstanceHeartbeatSpec extends Specification {
     // FR1, D3: the beat loop sleeps the interval before each tick and stops once no claim is held.
     //     Driven SYNCHRONOUSLY on the test thread (held seeded, worker never started) with a sleeper
     //     that records each interval — a first beat that loses the claim drains the held set so the
-    //     loop terminates by data (mirroring the synchronous ExternalPolling loop spec). A mutant that
+    //     loop terminates by data (mirroring the synchronous pending-poll wait spec). A mutant that
     //     drops the sleep leaves an empty record; a mutant that inverts the stop decision stops one
     //     tick too early; a mutant that drops the beat never drains and is caught by the safety bound —
     //     each fails deterministically here rather than hanging a background-thread test.

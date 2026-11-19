@@ -31,15 +31,27 @@ import spock.lang.Specification
  */
 class ApiCompatibilityGateSpec extends Specification {
 
-    /** The SPI types this change ships; a baseline without them is not this change's surface. */
+    /**
+     * The SPI types the baseline ships; a baseline without them is not this surface. Since task 6.1
+     * of migrate-verify-to-executor-contract the tracker SPI is the whole of it: the check SPI left
+     * the api, and the attempt-commit workspace moved to {@code :domain}.
+     */
     private static final List<String> SHIPPED_SPI = [
+        'com/github/oinsio/gnomish/app/ConnectionProfiles.class',
+        'com/github/oinsio/gnomish/app/TrackerAdapterContext.class',
+        'com/github/oinsio/gnomish/app/TrackerAdapterFactory.class',
+        'com/github/oinsio/gnomish/app/TrackerSubsectionValidator.class'
+    ]
+
+    /** The check SPI the api carried until task 6.1; the re-baselined surface holds none of it. */
+    private static final List<String> REMOVED_CHECK_SPI = [
+        'com/github/oinsio/gnomish/app/CheckClientContext.class',
         'com/github/oinsio/gnomish/app/CheckClientFactory.class',
         'com/github/oinsio/gnomish/app/CheckParamsValidator.class',
-        'com/github/oinsio/gnomish/app/CheckSubsectionValidator.class',
         'com/github/oinsio/gnomish/app/CheckRunContext.class',
-        'com/github/oinsio/gnomish/app/ConnectionProfiles.class',
-        'com/github/oinsio/gnomish/app/TrackerAdapterFactory.class',
-        'com/github/oinsio/gnomish/app/TrackerSubsectionValidator.class',
+        'com/github/oinsio/gnomish/app/CheckSubsectionValidator.class',
+        'com/github/oinsio/gnomish/app/port/check/AttemptCommitWorkspace.class',
+        'com/github/oinsio/gnomish/app/port/check/ExternalCheckClient.class',
         'com/github/oinsio/gnomish/app/port/check/ExternalCheckPinContributor.class'
     ]
 
@@ -77,6 +89,9 @@ class ApiCompatibilityGateSpec extends Specification {
 
         then:
         SHIPPED_SPI.every { entries.contains(it) }
+
+        and: 'no check SPI type survives the re-baseline (task 6.1 of migrate-verify-to-executor-contract)'
+        REMOVED_CHECK_SPI.every { !entries.contains(it) }
     }
 
     // M5, FR8 of add-functional-api-gate-test: the module really is under the convention that

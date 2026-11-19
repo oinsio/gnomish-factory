@@ -87,20 +87,27 @@ final class StageAttemptLoop {
      * <p>Implements FR4, FR5, FR6, FR8, FR10, FR11, FR13 of add-stage-engine; FR1 of
      * fix-denial-attribution-durability.
      *
+     * <p>Two views of one state ride each round (D21 item 12 of migrate-verify-to-executor-contract):
+     * the last persisted state, which the round's pending writes carry unchanged but for their
+     * entries, and its {@link Engine#resumedFrom} view, which numbers the round and records it. They
+     * differ only on a stage's first round after a pass, whose persisted state still holds the
+     * previous stage's passing round.
+     *
      * @param context the task's identity and human decisions; never null
-     * @param state the recorded state this stage resumes from; never null
+     * @param state the last persisted state this stage resumes from; never null
      * @param workspace the opaque working copy the rounds operate on; never null
      * @param stage the resolved stage these rounds run; never null
      * @return the stage's result — {@link StageResult.Passed} to advance or a {@link
      *     StageResult.Terminal} to return; never null
      */
     StageResult run(TaskContext context, TaskState state, Workspace workspace, StageDefinition stage) {
-        var current = state;
+        var persisted = state;
         while (true) {
+            var current = Engine.resumedFrom(persisted);
             var startedAt = clock.instant();
             journal.started(new AttemptKey(
                     context.taskId(), stage.name(), current.attempts().size()));
-            switch (roundExecution.execute(context, current, workspace, stage, startedAt)) {
+            switch (roundExecution.execute(context, persisted, workspace, stage, startedAt)) {
                 case RoundOutcome.Judged verified -> {
                     var newState = newState(current, verified, stage);
                     var aborted = journal.commit(context.taskId(), newState, verified.key(), verified.trace());
@@ -111,7 +118,7 @@ final class StageAttemptLoop {
                     if (routed != null) {
                         return routed;
                     }
-                    current = newState;
+                    persisted = newState;
                 }
                 case RoundOutcome.Stopped stopped -> {
                     var newState = current.recordUnburnedRound(stopped.record(), described.ranBy(stage));

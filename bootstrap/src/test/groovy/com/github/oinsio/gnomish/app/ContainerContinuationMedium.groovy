@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.BestEffortClosingPush
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
@@ -29,8 +28,6 @@ import com.github.oinsio.gnomish.domain.engine.EnginePorts
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -85,7 +82,7 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
     private final Path origin
     private final GitProcessRunner runner = new GitProcessRunner()
     private final ScriptedSandboxDocker docker = new ScriptedSandboxDocker()
-    private final SandboxProperties sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+    private final SandboxProperties sandbox = new SandboxProperties('gnomish/img', null, null, null, [], false, null, null, null, null)
 
     ContainerContinuationMedium(Path root) {
         this.root = Files.createDirectories(root)
@@ -128,8 +125,9 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
                 new EnvironmentAttemptPersistence(box, runner, cloneDir, objects, rounds, ClaimEpochSource.NONE),
                 new BestEffortClosingPush(runner), cloneDir)
         def clock = new VirtualClock()
-        def ports = new EnginePorts(executor, new FilesExistCheckRunner(), new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
+        // The engine's check rounds through the run's check dispatch, as the run assembly routes them
+        // (task 4.2f of migrate-verify-to-executor-contract).
+        def ports = new EnginePorts(CheckDispatchFixture.routed(executor, definition, cloneDir), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
                 VirtualTimeEquipment.on(clock), source.identity())
         def outcome = new Engine().run(definition, context(taskId), first,
                 new DirectoryWorkspace(Files.createTempDirectory(root, 'workspace')), ports)

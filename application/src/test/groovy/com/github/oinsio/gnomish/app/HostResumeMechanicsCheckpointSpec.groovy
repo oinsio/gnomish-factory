@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.CheckpointApprovalRefusedException
 import com.github.oinsio.gnomish.app.port.ResumedWriteRefusedException
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -17,7 +18,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 
 /**
@@ -43,7 +43,7 @@ class HostResumeMechanicsCheckpointSpec extends Specification implements RunChai
     }
 
     private HostResumeMechanics mechanics() {
-        def git = new TaskGit(store, Stub(TaskBranchGit), Stub(TaskWorktreeGit), UnaryOperator.identity(),
+        def git = new TaskGit(store, Stub(TaskBranchGit), Stub(TaskWorktreeGit), HostGitRounds.NONE,
                 resumingBaseRefGit(), new ClaimEpochBook())
         def runner = new TakeResumeRunner(slotWiring([timeEquipment: {
                 -> VirtualTimeEquipment.create()

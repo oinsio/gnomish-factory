@@ -16,7 +16,8 @@ class KitCaseScriptIdentitySpec extends Specification {
 
     private final List<String> script = StandIn.library().resolve('steps/executor-run.sh').toFile().readLines()
 
-    // FR12, M4: the header lists exactly the kit's twelve cases, in its order
+    // FR12, M4; FR12 of migrate-verify-to-executor-contract: the header lists exactly the kit's thirteen
+    //     cases, in its order
     def "FR12, M4: the script's header lists the kit's cases in the kit's order"() {
         given: 'the indented case lines between the list head and the line naming any other name'
         int head = script.findIndexOf { it.contains('KitCase.java') }
@@ -27,7 +28,7 @@ class KitCaseScriptIdentitySpec extends Specification {
 
         expect:
         head> 0 && end> head
-        KIT.size() == 12
+        KIT.size() == 13
         listed == KIT
     }
 

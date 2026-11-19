@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import io.github.resilience4j.core.IntervalFunction
@@ -73,7 +74,7 @@ class GithubContractTracker {
                 .dynamicPort()
                 .extensions(new FixtureGithubTransformer(registry)))
         wireMock.start()
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'contract-test-token', fastRetryConfig())
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'contract-test-token', fastRetryConfig())
         def cache = new GithubConditionalRequestCache(httpClient)
         def labelOps = new GithubLabelOps(httpClient)
         def realTracker = new GithubTracker(

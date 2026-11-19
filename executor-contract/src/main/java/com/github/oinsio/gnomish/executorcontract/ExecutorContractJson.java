@@ -1,12 +1,15 @@
 package com.github.oinsio.gnomish.executorcontract;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.github.oinsio.gnomish.pendingkey.PendingKey;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Map;
 
@@ -35,10 +38,17 @@ import java.util.Map;
  * ResultFileReader} names that family, so such a field read through this reader directly fails
  * the read (FR6, NFR-S2). Written, a carrier is the JSON string it was read from.
  *
+ * <p><strong>A pending key is written as its value.</strong> The {@link PendingKey} of the
+ * dependency-free {@code :pendingkey} leaf carries no JSON binding, so this binding registers its
+ * serializer: a key is the bare JSON string of its value. No deserializer is registered — a result's
+ * key is read from the written string by {@link ResultReading}, the one reader that judges it
+ * (design D20 of migrate-verify-to-executor-contract).
+ *
  * <p>The reader and writer are immutable; the mapper behind them is never handed out, so no caller
  * can reconfigure the binding for another.
  *
- * <p>Implements FR4, FR6, NFR-R3, NFR-S2 of define-executor-contract.
+ * <p>Implements FR4, FR6, NFR-R3, NFR-S2 of define-executor-contract; FR2 of
+ * migrate-verify-to-executor-contract.
  */
 public final class ExecutorContractJson {
 
@@ -48,7 +58,10 @@ public final class ExecutorContractJson {
             .addModule(new SimpleModule("untrusted-text")
                     .addDeserializer(UntrustedText.class, new UntrustedTextDeserializer())
                     .addSerializer(UntrustedText.class, new UntrustedTextSerializer()))
+            .addModule(new SimpleModule("pending-key").addSerializer(PendingKey.class, new PendingKeySerializer()))
             .build();
+
+    private static final TypeReference<Map<String, Object>> VALUES = new TypeReference<>() {};
 
     private static final ObjectReader READER = MAPPER.reader();
 
@@ -84,5 +97,31 @@ public final class ExecutorContractJson {
      */
     public static ObjectNode settingsTree(Map<String, ?> settings) {
         return MAPPER.valueToTree(settings);
+    }
+
+    /**
+     * The inverse of {@link #settingsTree}: a request's settings tree as the plain JDK values a
+     * built-in executor reads them as — maps, lists, strings, numbers, booleans and {@code null} —
+     * so an in-process built-in reads its settings as the law loader mapped them (design D18 of
+     * migrate-verify-to-executor-contract).
+     *
+     * @param settings a request's settings tree; never null
+     * @return the settings as plain values, a fresh map; never null
+     */
+    public static Map<String, Object> settingsValues(ObjectNode settings) {
+        return MAPPER.convertValue(settings, VALUES);
+    }
+
+    /**
+     * An answer as the JSON document a result carries in its answer slot ({@link
+     * ExecutorResult#answer()}), written by the contract's one answer writer — the document an
+     * external executor would have written, so an in-process built-in's answer is read back by
+     * {@link Answer#read} exactly as a program's is (FR1 of migrate-verify-to-executor-contract).
+     *
+     * @param answer the answer; never null
+     * @return the answer document, a fresh tree; never null
+     */
+    public static JsonNode answerTree(Answer answer) {
+        return MAPPER.valueToTree(answer);
     }
 }

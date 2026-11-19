@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence;
@@ -10,7 +9,8 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.GitTaskBackend;
 import com.github.oinsio.gnomish.adapter.git.GitVersionCheck;
 import com.github.oinsio.gnomish.adapter.git.HooksPathLeftover;
-import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds;
+import com.github.oinsio.gnomish.adapter.pipeline.CheckSettingsValidator;
+import com.github.oinsio.gnomish.adapter.pipeline.ConnectionAdmission;
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishDirPipelineSource;
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
@@ -22,7 +22,9 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.workspace.WorkspaceFactory;
 import com.github.oinsio.gnomish.app.project.FactoryHome;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
+import com.github.oinsio.gnomish.domain.egress.EndpointDeclaration;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
+import com.github.oinsio.gnomish.httpegress.OperatorEgress;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.time.InstantSource;
 import java.util.Map;
@@ -164,18 +166,10 @@ public class ManualRunConfiguration {
         // claiming commands wrap their resolved tracker with the record their own writers read —
         // and no second book can reach the writers, since their constructors are package-private.
         // FR5, FR6 of add-base-ref-resolution: the bundle's base-ref capability runs under the
-        // same production git infrastructure retry.
-        return GitTaskBackend.taskGit(
-                gitProcessRunner,
-                retry,
-                instantSource,
-                // The mid-round push decoration (FR1, design D3 of wire-host-mid-round-push),
-                // built in exactly this one place: git-mode host control flows attach it via
-                // RunAssembly.withHostGitPush, and the selector applies it to the host rounds.
-                // The operator is stateless; per-task state (the shared poll suppressor) lives
-                // in the MidRoundPushRounds instance each application creates.
-                rounds -> new MidRoundPushRounds(rounds, gitProcessRunner, instantSource),
-                claimEpochBook);
+        // same production git infrastructure retry. The host-git decoration (design D3 of
+        // wire-host-mid-round-push; D22 of migrate-verify-to-executor-contract) is built inside,
+        // over the same book: the host snapshot stamps the tenure the other writers stamp.
+        return GitTaskBackend.taskGit(gitProcessRunner, retry, instantSource, claimEpochBook);
     }
 
     /**
@@ -185,33 +179,34 @@ public class ManualRunConfiguration {
      * malformed {@code tracker.<type>} subsection stays a located load error (FR17 of
      * add-tracker-port) without any command having to thread that registry down to the loader.
      *
-     * <p>The discovered check providers' params validators are closed over the same way (FR6, FR13
-     * of add-plugin-architecture), so an {@code external} check naming an undiscovered provider —
-     * or a served one with malformed {@code params} — is a located load error in manual run exactly
-     * as in every other mode (design D10).
+     * <p>The built-ins' params validators are closed over the same way (FR6, FR13 of
+     * add-plugin-architecture), so a check with malformed settings is a located load error in manual
+     * run exactly as in every other mode (design D10).
      *
      * <p>The operator's named connection profiles ride along for the third cross-source reason
      * (FR16, design D8/D12): {@code factory.connections} is operator configuration while the
      * subsection referencing one is repo-side, so only this root sees both — an undefined {@code
      * connection: <name>} is therefore a located load error rather than a mid-{@code take} failure.
      *
-     * <p>The providers this instance has a {@code factory.check.<provider>} section for are the
-     * fourth (FR3, design D3 of remove-interactive-console): read through the same {@link
-     * CheckProviderSeam#resolve} the check client is built from, so the load refuses exactly the
-     * {@code external} checks no client could be built for — before any branch, worktree or
-     * dialog exists, on {@code run}, {@code take} and {@code serve} alike.
+     * <p>The adapters' endpoint declarations and the operator's {@code factory.egress.in-process}
+     * scope are the fourth (FR17, design D16 of migrate-verify-to-executor-contract): with the
+     * profiles they admit the tracker's URL at load by the medium it was written in, so a host the
+     * law requests and no operator grants is a located load error before any call.
      */
     @Bean
     public PipelineSource pipelineSource(
             Map<String, TrackerSubsectionValidator> trackerSubsectionValidatorRegistry,
-            Map<String, CheckParamsValidator> checkParamsValidatorRegistry,
+            Map<String, EndpointDeclaration> trackerEndpointRegistry,
+            Map<String, CheckSettingsValidator> checkParamsValidatorRegistry,
             FactoryProperties factoryProperties) {
         ConnectionProfiles profiles = ConnectionProfiles.of(factoryProperties.connections());
         return new GnomishDirPipelineSource(
                 trackerSubsectionValidatorRegistry,
                 checkParamsValidatorRegistry,
-                CheckProviderSeam.resolve(factoryProperties.check(), profiles).keySet(),
-                profiles);
+                new ConnectionAdmission(
+                        profiles,
+                        trackerEndpointRegistry,
+                        new OperatorEgress(factoryProperties.egress().inProcess())));
     }
 
     /**
@@ -301,26 +296,22 @@ public class ManualRunConfiguration {
 
     /**
      * The installation's check equipment (design D11 and the {@code CheckEquipment} row of
-     * collapse-composition-roots): the two built-in check runners, the discovered check-client
-     * registry, the credential seam and the time equipment every check provider is handed on its
-     * context (design D21 of supervise-daemon-loops-and-embed-dashboard), which every run's check
-     * ports are built from.
+     * collapse-composition-roots): the two in-process check runners, the operator's built-in check
+     * subsections and the credential seam, which every run's built-in registry entries are built
+     * from. The subsections are graded here, once, so a malformed {@code factory.check.<built-in>}
+     * stops startup with every located problem (FR4 of add-plugin-architecture; task 5.2 of
+     * migrate-verify-to-executor-contract).
      */
     @Bean
     public CheckEquipment checkEquipment(
             FilesExistCheckRunner filesExistCheckRunner,
             ShellCommandCheckRunner shellCommandCheckRunner,
-            Map<String, CheckClientFactory> checkClientRegistry,
             SecretsProvider secretsProvider,
-            FactoryProperties factoryProperties,
-            TimeEquipment timeEquipment) {
-        return new CheckEquipment(
-                filesExistCheckRunner,
-                shellCommandCheckRunner,
-                checkClientRegistry,
-                secretsProvider,
-                factoryProperties,
-                timeEquipment);
+            FactoryProperties factoryProperties) {
+        var checks =
+                new CheckEquipment(filesExistCheckRunner, shellCommandCheckRunner, secretsProvider, factoryProperties);
+        checks.subsections().requireValid();
+        return checks;
     }
 
     /**

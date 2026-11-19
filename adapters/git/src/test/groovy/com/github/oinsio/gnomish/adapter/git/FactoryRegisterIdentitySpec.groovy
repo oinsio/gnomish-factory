@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.RegisteredCloneFixture
 import com.github.oinsio.gnomish.app.port.TrackerWrite
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -152,7 +153,7 @@ class FactoryRegisterIdentitySpec extends Specification implements LifecyclePush
         given: 'a task created through the host store, worked in the worktree the store checked it out in'
         createTask(lifecycle('host'))
         def worktree = hostWorktree()
-        def persistence = new GitAttemptPersistence(git, worktree, TASK_ID, ClaimEpochSource.NONE)
+        def persistence = HostRoundPersistence.over(git, worktree, TASK_ID, ClaimEpochSource.NONE)
 
         when: 'a round closes over gnome work'
         Files.writeString(worktree.resolve('work.txt'), 'gnome work')
@@ -183,7 +184,7 @@ class FactoryRegisterIdentitySpec extends Specification implements LifecyclePush
 
         when: 'the gnome half of the round closes: the snapshot is admitted and registered in the clone, not yet pushed'
         box.workingCopy.resolve('work.txt').toFile().text = 'gnome work'
-        def snapshot = new EnvironmentRoundSnapshot(box, git, cloneDir, rounds).snapshot(TASK_ID, 'implement', 0)
+        def snapshot = new EnvironmentRoundSnapshot(box, git, cloneDir, rounds).snapshot(TASK_ID, 'implement', 0, RoundClose.VERIFIABLE)
         def registeredSnapshot = at(cloneDir, REGISTER)
         def originAtSnapshot = at(origin, REGISTER)
 

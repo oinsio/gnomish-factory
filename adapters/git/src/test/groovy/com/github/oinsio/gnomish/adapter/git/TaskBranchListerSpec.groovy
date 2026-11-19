@@ -84,7 +84,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, 
         def trace = new ToolTrace(new AttemptKey(taskId, stage, 0), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
-        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
+        HostRoundPersistence.over(runner, worktree, taskId, ClaimEpochSource.NONE)
                 .persist(taskId, RoundStates.withRound(state, trace.key()), trace)
         registerTip(registeredClone.clonePath(), taskId)
     }
@@ -95,7 +95,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, 
         def state = TaskState.atStageStart(stage).recordQualityFailure(AttemptRecords.of(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
                         ExecutorUsage.none(), [], Stop.none()), ExecutorVersions.none())
-        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state,
+        HostRoundPersistence.over(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, state,
                 new ToolTrace(new AttemptKey(taskId, stage, 0), []))
         registerTip(registeredClone.clonePath(), taskId)
     }
@@ -123,7 +123,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, 
         given:
         createTaskAtHead(registeredClone, 'PROJ-1')
         def state = new TaskState(new Position.AwaitingApproval('release'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
-        new GitAttemptPersistence(runner, worktreeFor(registeredClone, 'PROJ-1'), 'PROJ-1', ClaimEpochSource.NONE)
+        HostRoundPersistence.over(runner, worktreeFor(registeredClone, 'PROJ-1'), 'PROJ-1', ClaimEpochSource.NONE)
                 .persist('PROJ-1', RoundStates.withRound(state, new AttemptKey('PROJ-1', 'release', 0)),
                 new ToolTrace(new AttemptKey('PROJ-1', 'release', 0), []))
 
@@ -151,7 +151,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, 
         def seed = register(seedRepo)
         // Task REMOTE-ONLY: created and pushed from the seed clone, never checked out locally by the observer.
         createTaskAtHead(seed, 'REMOTE-ONLY')
-        new GitAttemptPersistence(runner, worktreeFor(seed, 'REMOTE-ONLY'), 'REMOTE-ONLY', ClaimEpochSource.NONE)
+        HostRoundPersistence.over(runner, worktreeFor(seed, 'REMOTE-ONLY'), 'REMOTE-ONLY', ClaimEpochSource.NONE)
                 .persist('REMOTE-ONLY', RoundStates.recorded(new ToolTrace(new AttemptKey('REMOTE-ONLY', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]).key()),
@@ -163,7 +163,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, 
 
         // Task BOTH: pushed from the seed clone too, so origin carries it.
         createTaskAtHead(seed, 'BOTH')
-        new GitAttemptPersistence(runner, worktreeFor(seed, 'BOTH'), 'BOTH', ClaimEpochSource.NONE)
+        HostRoundPersistence.over(runner, worktreeFor(seed, 'BOTH'), 'BOTH', ClaimEpochSource.NONE)
                 .persist('BOTH', RoundStates.recorded(new ToolTrace(new AttemptKey('BOTH', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]).key()),
@@ -185,7 +185,7 @@ class TaskBranchListerSpec extends Specification implements BareGitRepoFixture, 
         // BOTH also gets a local branch in the observer clone, at a further-along stage than origin.
         createTaskAtHead(observer, 'BOTH')
         def state = new TaskState(new Position.AtStage('verify'), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
-        new GitAttemptPersistence(runner, worktreeFor(observer, 'BOTH'), 'BOTH', ClaimEpochSource.NONE)
+        HostRoundPersistence.over(runner, worktreeFor(observer, 'BOTH'), 'BOTH', ClaimEpochSource.NONE)
                 .persist('BOTH', RoundStates.withRound(state, new AttemptKey('BOTH', 'verify', 0)),
                 new ToolTrace(new AttemptKey('BOTH', 'verify', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:05:00Z'), Duration.ofMillis(50))

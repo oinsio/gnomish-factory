@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.nio.file.Path
 
 /**
  * A kill-point world whose pickup is a real {@code take}: the medium's own lifecycle writer and
@@ -50,11 +51,17 @@ class TakeKillPointWorld extends KillPointWorld {
     /** The medium's take entries over this world's own bundle: the seeding instance's. */
     KillPointTakeRoutes.Entries routes
 
+    /** The seeding instance's own bundle: its writers stamp from {@link #epochs}. */
+    TaskGit ownGit
+
     /** The second instance's bundle, whose tenure book its claim fills and its writers stamp from. */
     TaskGit secondGit
 
     /** The medium's take entries over {@link #secondGit}. */
     KillPointTakeRoutes.Entries secondRoutes
+
+    /** {@code (Path) -> Path}, host only: moves {@link #SECOND} onto its own clone of origin under the directory (D21). */
+    Closure<Path> secondOnAnotherClone
 
     /** {@code () -> int}: agent rounds the engine started in this world, pickups included. */
     Closure<Integer> agentRounds

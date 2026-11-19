@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.adapter.github
 
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerAdapterFactory
-import com.github.oinsio.gnomish.app.CheckClientFactory
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
 import java.lang.reflect.Modifier
@@ -13,9 +11,11 @@ import spock.lang.Specification
  * design D7 of add-plugin-architecture, github-plugin capability; FR14, design D15 of
  * migrate-verify-to-executor-contract).
  *
- * <p>Two claims, both about what leaves this jar. First, the jar exports exactly two things — the
- * tracker SPI factory and the check SPI factory — through {@code META-INF/services}, each
- * instantiable the way {@code ServiceLoader} instantiates one; no class of the HTTP core the bundle
+ * <p>Two claims, both about what leaves this jar. First, the jar exports exactly one thing — the
+ * tracker SPI factory — through {@code META-INF/services}, instantiable the way {@code
+ * ServiceLoader} instantiates one, and registers no check provider: the GitHub Actions check left
+ * the bundle for core as the {@code github-actions} built-in (FR13, design D4 of
+ * migrate-verify-to-executor-contract); no class of the HTTP core the bundle
  * is written against — the {@code :githubapi} library (client, retry config, rate-limit accounting,
  * conditional-request cache), the bundle's own {@code adapter.github} package until task 3.0a of
  * migrate-verify-to-executor-contract — is registered as a service. Second, that core does not
@@ -27,7 +27,13 @@ import spock.lang.Specification
  */
 class GithubPluginPackagingSpec extends Specification {
 
-    /** The GitHub HTTP core the two adapters here are written against: exported by this jar to nobody. */
+    /**
+     * The check SPI factory type, retired by task 6.1 of migrate-verify-to-executor-contract: a
+     * registration under its name would be a stale provider no loader reads.
+     */
+    private static final String RETIRED_CHECK_SPI = 'com.github.oinsio.gnomish.app.CheckClientFactory'
+
+    /** The GitHub HTTP core the tracker here is written against: exported by this jar to nobody. */
     private static final String PRIVATE_CORE_PACKAGE = 'com.github.oinsio.gnomish.githubapi'
 
     // FR12: "the plugin SHALL expose only its SPI factories and validators through
@@ -42,7 +48,20 @@ class GithubPluginPackagingSpec extends Specification {
         where:
         spi | expected
         TrackerAdapterFactory | GithubTrackerAdapterFactory
-        CheckClientFactory | GithubCheckClientFactory
+    }
+
+    // FR13 of migrate-verify-to-executor-contract: the check provider is core's own, so the bundle
+    //     carries no check-provider registration at all
+    // Scenario: plugin/github-plugin / GitHub is discovered like any third-party plugin
+    def "the jar registers no check provider"() {
+        given: 'the prefix every resource of this bundle shares: its jar, or its build output tree'
+        def bundle = GithubTrackerAdapterFactory.protectionDomain.codeSource.location.toString()
+                .replaceFirst('/build/.*', '/build/')
+
+        expect:
+        getClass().classLoader.getResources('META-INF/services/' + RETIRED_CHECK_SPI).toList().findAll {
+            it.toString().startsWith(bundle)
+        } == []
     }
 
     // FR12, FR2: a registered class must be loadable by ServiceLoader exactly as a third-party
@@ -57,10 +76,7 @@ class GithubPluginPackagingSpec extends Specification {
         registered.every { Modifier.isPublic(it.getConstructor().modifiers) }
 
         where:
-        spi << [
-            TrackerAdapterFactory,
-            CheckClientFactory
-        ]
+        spi << [TrackerAdapterFactory]
     }
 
     // FR12: the shared HTTP core is no provider of the bundle. Registering one would export it
@@ -68,7 +84,7 @@ class GithubPluginPackagingSpec extends Specification {
     //     SPI list, not "whatever the bundle happens to contain".
     def "no private-core type is registered as a service"() {
         given:
-        def registered = serviceEntries(TrackerAdapterFactory) + serviceEntries(CheckClientFactory)
+        def registered = serviceEntries(TrackerAdapterFactory)
 
         expect: 'the core exists as a package, and no entry names anything inside it'
         GithubHttpClient.name.startsWith(PRIVATE_CORE_PACKAGE)
@@ -93,10 +109,7 @@ class GithubPluginPackagingSpec extends Specification {
         exported.every { it.package.name != PRIVATE_CORE_PACKAGE }
 
         where:
-        factory << [
-            GithubTrackerAdapterFactory,
-            GithubCheckClientFactory
-        ]
+        factory << [GithubTrackerAdapterFactory]
     }
 
     /** The class names a {@code META-INF/services} file registers, comments and blanks dropped. */

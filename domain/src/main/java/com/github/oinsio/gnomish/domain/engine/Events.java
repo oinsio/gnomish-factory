@@ -10,7 +10,8 @@ import org.slf4j.LoggerFactory;
  * logging any {@link RuntimeException} the listener throws so a broken listener never breaks
  * a run: the event stream is observability, never an effect (design D7, FR12). Every capture
  * point that emits an event — {@link Engine} (the run bookends), {@link RoundExecution} (the
- * per-round {@code ExecutionFinished}), {@link VerifyOrchestrator} (the per-check events) and
+ * per-round {@code ExecutionFinished}), {@link VerifyOrchestrator} (the per-check events), {@link PendingPoll} (a pending check's polls
+ * and timeout) and
  * {@link AttemptJournal} (the attempt events) — routes through this one helper rather than
  * duplicating the swallow-and-log plumbing, mirroring {@link StackTraces}.
  *

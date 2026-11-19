@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.workspace.fake
 
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 
@@ -23,7 +24,7 @@ final class ClosedRounds {
     static CurrentRound at(String sha) {
         def rounds = new CurrentRound()
         rounds.open(TOKEN)
-        rounds.snapshotted(sha)
+        rounds.snapshotted(sha, RoundClose.VERIFIABLE)
         rounds
     }
 }

@@ -16,7 +16,12 @@ import org.jspecify.annotations.Nullable;
  * refused exactly like the literal address, and so is a redirect into one, because every hop is
  * judged here.
  *
- * <p>Implements NFR-S2 of add-plugin-architecture.
+ * <p>The labels of the two classes an operator may grant by a class word — {@link
+ * EgressEntries#LOOPBACK} and {@link EgressEntries#PRIVATE} — and the private-class judgement are
+ * taken from the grammar's owner, so a refusal names the class in the word that would grant it and
+ * the class word is spelled in one place ({@code EgressGrammarOwnerSpec}).
+ *
+ * <p>Implements NFR-S2 of add-plugin-architecture; FR17 of migrate-verify-to-executor-contract.
  */
 final class BlockedAddressClass {
 
@@ -36,7 +41,7 @@ final class BlockedAddressClass {
             return "cloud-metadata";
         }
         if (address.isLoopbackAddress()) {
-            return "loopback";
+            return EgressEntries.LOOPBACK;
         }
         if (address.isLinkLocalAddress()) {
             return "link-local";
@@ -47,8 +52,8 @@ final class BlockedAddressClass {
         if (address.isMulticastAddress()) {
             return "multicast";
         }
-        if (address instanceof Inet4Address && address.isSiteLocalAddress()) {
-            return "private (RFC1918)";
+        if (address instanceof Inet4Address && EgressEntries.isPrivate(address)) {
+            return EgressEntries.PRIVATE + " (RFC1918)";
         }
         return ipv6Internal(address);
     }
@@ -57,6 +62,7 @@ final class BlockedAddressClass {
      * The IPv6 ranges that mean the same as RFC1918 but that the JDK's own predicates miss: unique
      * local addresses ({@code fc00::/7}), which {@link InetAddress#isSiteLocalAddress()} does not
      * report — it answers for the deprecated {@code fec0::/10} site-local range, covered here too.
+     * The unique-local judgement is the private class's ({@link EgressEntries#isPrivate}).
      */
     private static @Nullable String ipv6Internal(InetAddress address) {
         if (!(address instanceof Inet6Address)) {
@@ -65,7 +71,6 @@ final class BlockedAddressClass {
         if (address.isSiteLocalAddress()) {
             return "site-local (IPv6)";
         }
-        int first = address.getAddress()[0] & 0xff;
-        return (first & 0xfe) == 0xfc ? "unique-local (IPv6)" : null;
+        return EgressEntries.isPrivate(address) ? "unique-local (IPv6)" : null;
     }
 }

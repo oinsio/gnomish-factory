@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
@@ -257,7 +258,7 @@ class GithubIndexRepairSpec extends Specification {
     }
 
     private GithubIndexRepair newRepair() {
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', fastRetryConfig())
         new GithubIndexRepair(httpClient, new GithubLabelOps(httpClient),
                 new GithubMarkerWriter(new GithubCommentUpsert(httpClient), ClaimEpochSource.NONE, 'gnomish-reaper', new VirtualClock()),
                 LABELS, new VirtualClock())

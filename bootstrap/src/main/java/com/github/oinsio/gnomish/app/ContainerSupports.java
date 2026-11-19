@@ -8,12 +8,11 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode;
-import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
  * The <em>container supports</em>: the installation's container-mode equipment — the check
- * providers, the factory and sandbox settings, the root's execution-mode selector, the process's
+ * equipment, the factory and sandbox settings, the root's execution-mode selector, the process's
  * tenure record and the root's time equipment — and the constructions made from it (design D10 of
  * collapse-composition-roots). {@code gnomish run} and {@code take}/{@code serve} build the same
  * container support, differing only in the ownership label it stamps: {@link #manualSupport()}
@@ -35,9 +34,9 @@ import org.springframework.stereotype.Component;
 @Component
 public final class ContainerSupports {
 
-    private final Map<String, CheckClientFactory> checkClientRegistry;
     // The installation's check equipment, asked only for the installation child-environment
-    // allowlist: it holds the secrets port, which this class never sees (NFR-S1; NFR-S3 of
+    // allowlist and the built-ins' subsections: it holds the secrets port, which this class never sees (NFR-S1; NFR-S3
+    // of
     // tighten-spec-contract).
     private final CheckEquipment checks;
     private final FactoryProperties factoryProperties;
@@ -47,7 +46,6 @@ public final class ContainerSupports {
     private final TimeEquipment time;
 
     /**
-     * @param checkClientRegistry the discovered check providers; never null
      * @param checks the installation's check equipment, which builds each mode's child-environment
      *     allowlist over the secrets port; never null
      * @param factoryProperties the installation config; never null
@@ -59,14 +57,12 @@ public final class ContainerSupports {
      * @param time the root's one time equipment, handed to the support factory; never null
      */
     ContainerSupports(
-            Map<String, CheckClientFactory> checkClientRegistry,
             CheckEquipment checks,
             FactoryProperties factoryProperties,
             SandboxProperties sandboxProperties,
             SandboxModeSelector modeSelector,
             TaskGit git,
             TimeEquipment time) {
-        this.checkClientRegistry = checkClientRegistry;
         this.checks = checks;
         this.factoryProperties = factoryProperties;
         this.sandboxProperties = sandboxProperties;
@@ -99,11 +95,11 @@ public final class ContainerSupports {
     }
 
     /**
-     * The support factory closing over {@code mode}, over the check providers' own credential
-     * declarations (FR17, design D11 of add-plugin-architecture): a profile-resolved credential
-     * name reaches the container's scrub set exactly as an inline one does (FR16, FR17, design
-     * D8/D11), since the subsections are resolved against {@code factory.connections} before the
-     * providers are asked what they name — by the check equipment, which also binds the
+     * The support factory closing over {@code mode}, over the built-ins' credential names (FR17,
+     * design D11 of add-plugin-architecture): a profile-resolved credential name reaches the
+     * container's scrub set exactly as an inline one does (FR16, FR17, design D8/D11), since the
+     * subsections are resolved against {@code factory.connections} before the names are read — by
+     * the check equipment's {@link BuiltInCheckSubsections}, the equipment also binding the
      * allowlist's values to the secrets port (NFR-S3 of tighten-spec-contract). The installation's box equipment and the sandbox
      * lifecycle pass are built here once for the mode, by the record's installation constructor
      * on the root's time equipment, and shared by every run of it (design D12 of
@@ -112,7 +108,7 @@ public final class ContainerSupports {
     private ContainerSupportFactory supportFactory(OwnershipMode mode) {
         return new ContainerRunSupportFactory(
                 checks.installationChildEnv(sandboxProperties.envPassthrough()),
-                checkClientRegistry,
+                checks.subsections(),
                 mode,
                 epochs,
                 sandboxProperties,

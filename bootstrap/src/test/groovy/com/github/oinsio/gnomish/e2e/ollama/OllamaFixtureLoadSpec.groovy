@@ -30,7 +30,7 @@ class OllamaFixtureLoadSpec extends Specification {
     PipelineDefinition model
 
     def setupSpec() {
-        def outcome = PipelineLoader.load(OllamaFixture.gnomishDir(), [:], [:], [] as Set)
+        def outcome = PipelineLoader.load(OllamaFixture.gnomishDir(), [:], [:])
         assert outcome instanceof LoadOutcome.Loaded
         model = (outcome as LoadOutcome.Loaded).definition()
     }

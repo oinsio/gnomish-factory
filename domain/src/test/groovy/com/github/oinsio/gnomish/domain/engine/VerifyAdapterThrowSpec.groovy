@@ -1,10 +1,9 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import ch.qos.logback.classic.Level
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.time.Duration
@@ -23,16 +22,16 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
     // Scenario: pipeline/stage-engine / Stack trace reaches the report
     def "catches a throwing builtin adapter into a CannotVerify carrying its stack trace"() {
         given: 'a builtin runner set to throw, then a command that would pass if reached'
-        def builtinRunner = new ScriptedBuiltinCheckRunner()
+        def builtinRunner = new ScriptedCheckRounds()
         builtinRunner.toThrow = new IllegalStateException('builtin adapter kaboom')
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
+        def commandRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
         def checks = [
             builtin('files_exist'),
             command('./gradlew test')
         ]
 
         when: 'the chain is verified'
-        def result = orchestrator(builtinRunner, commandRunner).verify(checks, CONTEXT, WORKSPACE, KEY)
+        def result = orchestrator(builtinRunner, commandRunner).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'the check is a CannotVerify whose details hold the thrown stack trace'
         result.results.size() == 1
@@ -49,8 +48,8 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
     // FR4, NFR-O1: a command adapter throwing is caught into a CannotVerify with its trace
     def "catches a throwing command adapter into a CannotVerify carrying its stack trace"() {
         given: 'a command runner set to throw, then a builtin that would pass if reached'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
-        def commandRunner = new ScriptedCommandCheckRunner()
+        def builtinRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
+        def commandRunner = new ScriptedCheckRounds()
         commandRunner.toThrow = new RuntimeException('command adapter kaboom')
         def checks = [
             command('./gradlew test'),
@@ -58,7 +57,7 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         ]
 
         when: 'the chain is verified'
-        def result = orchestrator(builtinRunner, commandRunner).verify(checks, CONTEXT, WORKSPACE, KEY)
+        def result = orchestrator(builtinRunner, commandRunner).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'the check is a CannotVerify whose details hold the thrown stack trace'
         result.results.size() == 1
@@ -75,10 +74,10 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
     //     CannotVerify with its stack trace
     def "catches a throwing external adapter into a CannotVerify carrying its stack trace"() {
         given: 'an external client set to throw from poll, then a builtin that would pass'
-        def externalClient = new ScriptedExternalCheckClient()
+        def externalClient = new ScriptedCheckRounds()
         externalClient.toThrow = new IllegalStateException('external adapter kaboom')
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
-        def commandRunner = new ScriptedCommandCheckRunner()
+        def builtinRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
+        def commandRunner = new ScriptedCheckRounds()
         def checks = [
             external('ci/build', Duration.ofSeconds(1), Duration.ofSeconds(3)),
             builtin('files_exist')
@@ -86,7 +85,7 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
 
         when: 'the chain is verified'
         def result = orchestrator(builtinRunner, commandRunner, externalClient)
-                .verify(checks, CONTEXT, WORKSPACE, KEY)
+                .verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'the check is a CannotVerify whose details hold the thrown stack trace'
         result.results.size() == 1
@@ -105,8 +104,8 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         given: 'a judge voter set to throw, then a builtin that would pass if reached'
         def judgeVoter = new ScriptedJudgeVoter()
         judgeVoter.toThrow = new RuntimeException('judge adapter kaboom')
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
-        def commandRunner = new ScriptedCommandCheckRunner()
+        def builtinRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
+        def commandRunner = new ScriptedCheckRounds()
         def checks = [
             judge(3),
             builtin('files_exist')
@@ -114,7 +113,7 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
 
         when: 'the chain is verified'
         def result = orchestrator(builtinRunner, commandRunner,
-                new ScriptedExternalCheckClient(), judgeVoter).verify(checks, CONTEXT, WORKSPACE, KEY)
+                new ScriptedCheckRounds(), judgeVoter).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'the check is a CannotVerify whose details hold the thrown stack trace'
         result.results.size() == 1
@@ -136,11 +135,11 @@ class VerifyAdapterThrowSpec extends VerifyOrchestratorSpecBase {
         def logs = LogCaptureSupport.attach(VerifyOrchestrator)
 
         and: 'a builtin runner set to throw'
-        def builtinRunner = new ScriptedBuiltinCheckRunner()
+        def builtinRunner = new ScriptedCheckRounds()
         builtinRunner.toThrow = new IllegalStateException('builtin adapter kaboom')
 
         when: 'the chain is verified'
-        orchestrator(builtinRunner, new ScriptedCommandCheckRunner()).verify([builtin('files_exist')], CONTEXT, WORKSPACE, KEY)
+        orchestrator(builtinRunner, new ScriptedCheckRounds()).verify(VerifyingStages.of([builtin('files_exist')]), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'exactly one ERROR line was logged, naming the adapter throw'
         def errors = logs.list.findAll { it.level == Level.ERROR }

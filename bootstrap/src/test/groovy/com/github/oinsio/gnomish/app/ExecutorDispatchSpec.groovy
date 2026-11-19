@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.agent.command.CommandExecutorFactory
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
@@ -77,10 +77,10 @@ class ExecutorDispatchSpec extends Specification {
 
     private ExecutorDispatch dispatch(Map answers, String... declared) {
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, VirtualTimeEquipment.create(),
-                TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'))
+                TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'), LastRegisteredCommit.NONE)
         def described = new DescribedLaw(LawBinding.workingTree(Path.of('/tmp/law')), answers)
-        new ExecutorDispatch(ExecutorRegistry.of(described, definition(declared), law, rounds, equipment,
-                new CommandExecutorFactory(new VirtualClock())), agent)
+        new ExecutorDispatch(ExecutorRegistry.of(described, definition(declared), law, equipment,
+                BuiltInEntriesFixture.of(new VirtualClock()), null), rounds, agent)
     }
 
     private static StageExecutor.Request request(StageDefinition stage) {

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.executorcontract
 import static com.github.oinsio.gnomish.executorcontract.WireJson.t
 
 import com.fasterxml.jackson.databind.node.NullNode
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import spock.lang.Specification
 
 /**
@@ -62,6 +63,24 @@ class ExecutorResultReadSpec extends Specification {
 
         expect:
         read(WireJson.writeValueAsString([status: 'pending', pendingKey: key])).pendingKey() == new PendingKey(key)
+    }
+
+    def "FR2: a pending key written through the contract's binding is the bare JSON string and reads back equal"() {
+        given: 'the leaf type carries no JSON binding; the contract registers its serializer (design D20)'
+        def key = new PendingKey('build-8812/ключ')
+        def result = new ExecutorResult(Status.PENDING, null, key, null, null, Usage.absent(), [])
+
+        when:
+        def written = WireJson.writeValueAsString(result)
+
+        then:
+        WireJson.readTree(written).get('pendingKey').isTextual()
+        WireJson.readTree(written).get('pendingKey').textValue() == 'build-8812/ключ'
+        WireJson.writeValueAsString(key) == '"build-8812/ключ"'
+
+        and: 'read back through ResultReading, the one reader that constructs the key'
+        read(written).pendingKey() == key
+        read(written) == result
     }
 
     def "FR2: a known status reads as itself, keeping its own reason, and a stray field of another status is dropped"() {

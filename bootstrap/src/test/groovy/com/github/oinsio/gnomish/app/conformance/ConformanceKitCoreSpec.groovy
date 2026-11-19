@@ -4,10 +4,10 @@ import static com.github.oinsio.gnomish.app.conformance.KitSubjectDouble.*
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.executorcontract.Capability
-import com.github.oinsio.gnomish.executorcontract.PendingKey
 import com.github.oinsio.gnomish.executorcontract.Role
 import com.github.oinsio.gnomish.executorcontract.SettingsSchema
 import com.github.oinsio.gnomish.executorcontract.Status
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import java.time.Duration
 import spock.lang.Specification
 
@@ -45,18 +45,24 @@ class ConformanceKitCoreSpec extends Specification {
         }
         asked(subject) == 'transform:start:transform verdict:start:verdict decision:start:decision unknown-role:start:effect ' +
                 'oversized-output:start:transform stderr-noise:start:transform non-json-stdout:start:transform ' +
-                'pending-poll:start:transform pending-poll:poll:transform unknown-request-fields:start:transform ' +
+                'pending-poll:start:transform pending-poll:poll:transform pending-repoll:start:transform ' +
+                'pending-repoll:poll:transform pending-repoll:poll:transform unknown-request-fields:start:transform ' +
                 'malformed-answer:start:decision'
         subject.asked.every {
-            it.request.workspace().path() == "/w/${it.kase.word()}".toString()
+            it.request.workspace().path() == (it.op == 'poll' ? "/w/poll/${it.kase.word()}" : "/w/${it.kase.word()}").toString()
         }
         subject.asked.collect {
             it.request.settings().toString()
         }.toSet() == ['{}', '{"defer":true}'] as Set
         subject.asked.findAll {
             it.request.settings().size() > 0
-        }*.kase.unique() == [KitCase.PENDING_POLL]
-        subject.asked.find { it.op == 'poll' }.key == new PendingKey('k1')
+        }*.kase.unique() == [
+            KitCase.PENDING_POLL,
+            KitCase.PENDING_REPOLL
+        ]
+        subject.asked.findAll {
+            it.op == 'poll'
+        }*.key == [new PendingKey('k1')] * 3
         subject.asked.find {
             it.kase == KitCase.DECISION
         }.request.roleInputs().options() == CaseJudgement.OPTIONS
@@ -120,6 +126,8 @@ class ConformanceKitCoreSpec extends Specification {
         none.lines().contains('n/a  malformed-answer: the describe lists no role decision')
         none.lines().contains('n/a  pending-poll: the describe lists no role transform, verdict or decision')
         noPoll.lines().contains('n/a  pending-poll: the describe declares no poll capability')
+        none.lines().contains('n/a  pending-repoll: the describe lists no role transform, verdict or decision')
+        noPoll.lines().contains('n/a  pending-repoll: the describe declares no poll capability')
     }
 
     def "FR12, FR24: a refused describe answer reaches no run; describe says '#describeLine', settings-schema '#settingsLine'"() {

@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check.http;
 
-import com.github.oinsio.gnomish.app.CheckParamsValidator;
+import com.github.oinsio.gnomish.adapter.pipeline.CheckSettingsValidator;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -28,7 +28,7 @@ import java.util.TreeSet;
  *
  * <p>Implements FR6, FR10, FR11, NFR-S1 of add-plugin-architecture.
  */
-public final class HttpCheckParamsValidator implements CheckParamsValidator {
+public final class HttpCheckParamsValidator implements CheckSettingsValidator {
 
     /** Read-shaped methods only: a verification check observes a result, it does not create one. */
     private static final Set<String> METHODS = Set.of("GET", "HEAD", "POST");

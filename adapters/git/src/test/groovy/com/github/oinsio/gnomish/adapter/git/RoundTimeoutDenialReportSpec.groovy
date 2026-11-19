@@ -18,13 +18,12 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -129,7 +128,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
     /** What the agent adapter reports for a round killed on its timeout: failed/infrastructure with its denials. */
     private static ExecutionResult killed(String reason, List<Denial> denials) {
         new ExecutionResult(
-                new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, UntrustedText.subprocess(reason), []),
+                new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, UntrustedText.subprocess(reason), [], null),
                 null, ExecutorUsage.none(), new ToolTrace(new AttemptKey(TASK_ID, 'build', 0), []), denials)
     }
 
@@ -137,8 +136,7 @@ class RoundTimeoutDenialReportSpec extends Specification implements BareGitRepoF
         def executor = new ScriptedExecutor([reported])
         def clock = new VirtualClock()
         def ports = new EnginePorts(
-                executor, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), new RecordingEventListener(),
+                CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), new RecordingEventListener(),
                 new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
         new Engine().run(
                 pipeline(), context, TaskState.atStageStart('build'), new FakeWorkspace(), ports) as TaskOutcome

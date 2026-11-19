@@ -10,11 +10,13 @@ import org.jspecify.annotations.Nullable;
  * How the SARIF log of a verdict answer becomes an {@link Answer.Verdict}: version {@value
  * Answer.Verdict#SARIF_VERSION}, each run's {@code tool.driver.name} and {@code results[]}, and of
  * each result its {@code ruleId}, {@code level} (absent means warning), {@code message.text} and the
- * first location's {@code physicalLocation}. Every other SARIF property is ignored. A log that
+ * first location's {@code physicalLocation}, and its {@code properties.details} when that is a string
+ * — a details property of another type is a third-party tool's own and is ignored, never malformed
+ * (design D19 of migrate-verify-to-executor-contract). Every other SARIF property is ignored. A log that
  * lacks what the engine reads, or names a level SARIF does not define, is refused: it is not SARIF
  * the contract can judge, and a verdict that cannot be judged is never a pass.
  *
- * <p>Implements FR3, NFR-S2 of define-executor-contract.
+ * <p>Implements FR3, NFR-S2 of define-executor-contract; FR5 of migrate-verify-to-executor-contract.
  */
 final class SarifReader {
 
@@ -59,7 +61,12 @@ final class SarifReader {
                 level,
                 message,
                 uri,
-                startLine(physical.path("region").path("startLine")));
+                startLine(physical.path("region").path("startLine")),
+                details(result.path("properties").path("details"), texts));
+    }
+
+    private static @Nullable UntrustedText details(JsonNode details, WrittenTexts texts) {
+        return details.isTextual() ? texts.mint(details.asText()) : null;
     }
 
     private static @Nullable Integer startLine(JsonNode line) {

@@ -1,12 +1,13 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
+import com.github.oinsio.gnomish.sandbox.SandboxEgress;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.nio.file.Path;
 
 /**
  * The installation's box equipment, one value (design D12 of tighten-spec-contract, finding F82):
  * what the installation decides about every box before any task exists — the docker subprocess
- * seam, the operator sandbox config, the box timing, the guard config root, the ownership mode and
+ * seam, the operator sandbox config and egress grant, the box timing, the guard config root, the ownership mode and
  * the image contract check every box image must pass (design D3 of add-sandbox-base-image).
  * {@link ContainerEnvironmentFactory} builds it once; {@link ContainerEnvironments}, {@link
  * ContainerEnvironmentBuilder} and {@link ContainerTaskExecutionEnvironment} take it whole beside
@@ -22,8 +23,10 @@ import java.nio.file.Path;
  * add-sandbox-base-image.
  *
  * @param docker the docker subprocess seam every box of the installation runs on; never null
- * @param sandbox the operator sandbox config: image, runtime, limits, guard image, allowlist;
- *     never null
+ * @param sandbox the operator sandbox config: image, runtime, limits, guard image; never null
+ * @param egress the operator's grant to every box, {@code factory.egress.sandbox} (design D16 of
+ *     migrate-verify-to-executor-contract), which the guard admits and the self-check dials; never
+ *     null
  * @param timing the exec clock, the self-check pause and the docker command bound; never null
  * @param guardConfigRoot the factory-private directory guard configs render under (per
  *     environment key), never inside a working copy or scratch area; never null
@@ -35,6 +38,7 @@ import java.nio.file.Path;
 record BoxEquipment(
         DockerCli docker,
         SandboxProperties sandbox,
+        SandboxEgress egress,
         BoxTiming timing,
         Path guardConfigRoot,
         OwnershipMode ownershipMode,

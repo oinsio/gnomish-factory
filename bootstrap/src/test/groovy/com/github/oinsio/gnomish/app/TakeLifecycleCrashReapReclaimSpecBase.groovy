@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.*
+import com.github.oinsio.gnomish.adapter.git.HostRoundPersistence
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.tracker.ClaimResult
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
@@ -176,7 +177,7 @@ abstract class TakeLifecycleCrashReapReclaimSpecBase extends Specification imple
         // The round is recorded in state.json's own attempt history, not only as a tool trace: the
         // history is what makes the tip InProgress rather than Created, so a state written without
         // it would leave this scenario resuming a branch that records no round at all.
-        new GitAttemptPersistence(gitRunner, worktree, TASK_ID, book).persist(
+        HostRoundPersistence.over(gitRunner, worktree, TASK_ID, book).persist(
                 TASK_ID,
                 TaskState.atStageStart('build').recordUnburnedRound(AttemptRecords.of(
                         0, AttemptRecord.Result.CANNOT_VERIFY, Instant.parse('2026-07-18T09:00:00Z'), [],

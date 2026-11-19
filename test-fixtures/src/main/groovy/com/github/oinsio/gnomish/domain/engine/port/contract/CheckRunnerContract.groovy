@@ -8,11 +8,12 @@ import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import spock.lang.Specification
 
 /**
- * Shared abstract port contract for the two synchronous check runners —
- * {@link com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner} and
- * {@link com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner} — which
- * differ only in the {@code VerifyCheck} variant they accept but share the
- * {@link VerdictAnswer} return shape and every obligation the engine depends on. A
+ * Shared abstract contract for the answer a synchronous check yields to the engine: the
+ * {@code files-exist} built-in's ({@code FilesExistExecutorVerdictContractSpec}) and the {@code
+ * shell} built-in's ({@code ShellExecutorVerdictContractSpec}), each read from its executor contract
+ * result through the one contract → domain mapping — engine ports until task 5.2 of
+ * migrate-verify-to-executor-contract removed the ports — which differ only in the check they
+ * accept but share every obligation the engine depends on. A
  * concrete subclass binds its runner through the {@link #arrange} seam, which both
  * builds the runner for a target verdict AND runs the check against a workspace,
  * returning the produced {@link VerdictAnswer}; an unproducible variant returns

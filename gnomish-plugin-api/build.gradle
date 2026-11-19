@@ -1,16 +1,15 @@
 // Build script for the `:gnomish-plugin-api` module (FR4, FR5, design D4/D10 of
-// split-into-modules): the third-party contract surface a plugin is written
-// against — the `Tracker` port and its DTO family, `SecretsProvider`, the
-// `TrackerAdapterFactory` SPI with `TrackerSubsectionValidator`, and (task 2.2 of
-// add-plugin-architecture) the `CheckClientFactory` SPI with
-// `CheckParamsValidator`, `CheckSubsectionValidator` and the
-// `ExternalCheckPinContributor` hook it exposes, plus (FR1/FR2 of
-// close-plugin-api-compilability-gap) the two pieces a check plugin needs at
-// compile time: the `AttemptCommitWorkspace` workspace-capability interface and
-// the `FindingsSanitizer` contract utility.
+// split-into-modules): the third-party contract surface a plugin is written against — the `Tracker`
+// port and its DTO family, `SecretsProvider`, the `TrackerAdapterFactory` SPI with
+// `TrackerSubsectionValidator`, and the `FindingsSanitizer` contract utility (FR2 of
+// close-plugin-api-compilability-gap). The check SPI (`CheckClientFactory` and its validators, run
+// context and pin hook, task 2.2 of add-plugin-architecture) left with task 6.1 of
+// migrate-verify-to-executor-contract: a verdict check is an executor program authored against the
+// executor contract, and `AttemptCommitWorkspace` moved to `:domain`, where the SCM built-ins read
+// it (FR14, D18).
 //
-// Nothing else belongs here. `application` and `bootstrap` internals are out by
-// definition (M3); implementations live in the adapter modules.
+// Nothing else belongs here. `application` and `bootstrap` internals are out by definition (M3);
+// implementations live in the adapter modules.
 plugins {
     // `published-api-conventions` = library conventions + `maven-publish`
     // (sources and javadoc jars for UX3), the real-semver assertion, and the
@@ -32,6 +31,15 @@ plugins {
 // growth — the `AttemptCommitWorkspace` interface and the `FindingsSanitizer` utility; then the
 // `TrackerAdapterFactory.probeRead` default method and its `TrackerReadVerdict`. No pre-existing
 // type changed, so no pre-1.0 version bump is owed and `japicmpApiGate` stays green.
+//
+// D16 and D20 of migrate-verify-to-executor-contract: 0.14.0 -> 0.15.0, the thirteenth BREAKING
+// move — `TrackerConfig` carries the admitted tracker endpoint; `TrackerAdapterFactory.endpoint()`,
+// `ConnectionProfiles.endpoint`, `domain.egress` and GF188/GF189 added (D16); the pending key of
+// `ExecutionResult.Pending` and `PendingTurn` retyped to the `:pendingkey` leaf's `PendingKey`, which
+// joins the published jar graph (D20); `AttemptRecord` gained the `pendingPoll` component and
+// `PendingPollRecord` was added (D7 as amended, task 4.1); the check SPI was removed and
+// `AttemptCommitWorkspace` moved to `:domain` (FR14, D16, D18, task 6.1 — absorbed into this same
+// bump, no second one); `compat-baseline/` regenerated over the five jars.
 //
 // D4, D11, D13, D14 of define-executor-contract: 0.13.0 -> 0.14.0, the twelfth BREAKING move — the
 // engine's result, usage and state shapes (README, "Versioning"); `compat-baseline/` regenerated.
@@ -135,23 +143,14 @@ plugins {
 // which removes their old canonical constructors. Pre-1.0, a breaking change is
 // a MINOR bump; `compat-baseline/` was regenerated in the same commit so a
 // reviewer sees the break and the bump that accepts it in one diff.
-version = '0.14.0'
+version = '0.15.0'
 
-description = 'Third-party contract surface: tracker/secrets ports, the tracker and check SPI factories with their validators, the attempt-commit workspace capability and the findings sanitizer.'
+description = 'Third-party contract surface: tracker/secrets ports, the tracker SPI factory with its validator, and the findings sanitizer.'
 
 dependencies {
-    // `api`, not `implementation` (design D4, UX3): the ports' own signatures
-    // are typed in `:domain` value types — TrackerConfig, ConfigError, Clock,
-    // and (through the check/workspace ports the adapters also implement)
-    // Finding, PollStatus, VerifyCheck. Exposing `:domain` transitively is what
-    // lets a third party compile against ONE declared dependency.
-    //
-    // The check-side ports (`ExternalCheckClient`, `Workspace`) deliberately
-    // stay in `:domain` rather than moving here as design D4 sketched: the
-    // engine consumes them from inside `:domain`, so relocating them would make
-    // `:domain` depend on this module and close the layering cycle FR2 forbids.
-    // They reach a third party through this same transitive edge, so the
-    // "single declared dependency" contract is unaffected.
+    // `api`, not `implementation` (design D4, UX3): the ports' own signatures are typed in
+    // `:domain` value types — TrackerConfig, ConfigError, ClaimEpoch, the egress records. Exposing
+    // `:domain` transitively is what lets a third party compile against ONE declared dependency.
     api project(':domain')
 
     // `api` since task 6.3 of type-untrusted-text, `implementation` before it: the leaf was
@@ -167,16 +166,14 @@ dependencies {
     testImplementation project(':test-fixtures')
 }
 
-// M3 / FR4: the published contract must carry nothing from `application` or
-// `bootstrap`. The dependency-analysis gate (settings.gradle) already fails this
-// module if it *uses* a type it has not declared, so the declared project set IS
-// the used project set; `verifyModuleLayering` pins that set to what the FR2
-// layering allows, transitively. Anything from an upper layer would have to
-// appear here first, and does not.
+// M3 / FR4: the published contract must carry nothing from `application` or `bootstrap`. The
+// dependency-analysis gate (settings.gradle) already fails this module if it *uses* a type it has
+// not declared, so the declared project set IS the used project set; `verifyModuleLayering` pins
+// that set to what the FR2 layering allows, transitively. Anything from an upper layer would have
+// to appear here first, and does not.
 //
-// Task 5.2 replaced this module's own `verifyApiContractSurface` with the shared
-// gate: same assertion, same failure mode, now stated the same way by every
-// module instead of once here.
+// Task 5.2 replaced this module's own `verifyApiContractSurface` with the shared gate: same
+// assertion, same failure mode, now stated the same way by every module instead of once here.
 layering {
     allowedProjects = [
         ':domain',
@@ -185,11 +182,13 @@ layering {
         // source in this module names it; the layering gate walks the transitive graph, so the
         // reach is listed where it arrives.
         ':operatorevent',
-        // The untrusted-text leaf (FR3, FR11, design D9 of split-logtext-leaves): declared
-        // directly above, because `FindingsSanitizer` names it — and, since FR4 of
-        // type-untrusted-text, because `TaskSnapshot` and `AbortRecord` carry it on the
-        // published surface, which is why the declaration is `api` rather than
-        // `implementation`.
+        // The pending-key leaf (D20 of migrate-verify-to-executor-contract): transitive via `:domain`,
+        // whose `api` edge puts it on the published jar graph. No source in this module names it.
+        ':pendingkey',
+        // The untrusted-text leaf (FR3, FR11, design D9 of split-logtext-leaves): declared directly
+        // above, because `FindingsSanitizer` names it — and, since FR4 of type-untrusted-text,
+        // because `TaskSnapshot` and `AbortRecord` carry it on the published surface, which is why
+        // the declaration is `api` rather than `implementation`.
         ':untrustedtext',
     ]
 }

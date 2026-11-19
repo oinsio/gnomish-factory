@@ -1,17 +1,19 @@
 package com.github.oinsio.gnomish.adapter.agent.program;
 
+import com.github.oinsio.gnomish.app.port.agent.RoundClose;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.Denial;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
-import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
-import com.github.oinsio.gnomish.executorcontract.Answer;
-import com.github.oinsio.gnomish.executorcontract.AnswerReading;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
 import com.github.oinsio.gnomish.executorcontract.FailureClass;
+import com.github.oinsio.gnomish.executorcontract.PendingState;
+import com.github.oinsio.gnomish.executorcontract.Role;
+import com.github.oinsio.gnomish.executorcontract.Status;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -19,27 +21,31 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The one mapping of a contract result onto the engine's result shape (FR2, FR7, FR10 of
- * define-executor-contract; design D4): the status and failure class one to one, by exhaustive
- * switches over both contract enums — which, with {@code ProgramResultMappingSpec}'s {@code
- * values()} features over both enums, is the identity the declared pair {@code ExecutionResult}
- * (domain) ↔ {@code Status} + {@code FailureClass} (contract) rests on — the answer through the
- * contract's one answer reading, the usage with its provenance and cost ({@link ProgramUsage}),
- * and the denials: the environment's, then the ones the executor reported. The adapter reports the
- * status only; what a class means for the attempt is the engine's classifier's to decide.
+ * define-executor-contract; design D4; design D18, D19 of migrate-verify-to-executor-contract), for a
+ * check round and a transform round alike: the status, the failure class and the pending state one
+ * to one, by exhaustive switches over the three contract enums — which, with {@code
+ * ProgramResultMappingSpec}'s {@code values()} features over them, is the identity the declared pair
+ * {@code ExecutionResult} (domain) ↔ {@code Status} + {@code FailureClass} + {@code PendingState}
+ * (contract) rests on — the answer through the contract's one answer reading, the usage ({@link
+ * ProgramUsage}), and the denials: the environment's, then the executor's. What a class means for the
+ * attempt is the engine's classifier's to decide; how the round closes is this mapping's ({@link
+ * #closeOf}).
  *
- * <p>A {@code transform} round takes one answer kind, a decision request; an answer the contract
- * reads as malformed, and a well-formed answer of another kind, are each {@code
- * failed/infrastructure} naming it (FR6: never a pass). An executor's {@code failed/quality} reason
- * becomes the round's one finding, so it joins the next attempt's feedback; a failed result with no
- * reason is named by the factory.
+ * <p>The answer a completed round takes follows its role, and is {@link ProgramCompletedAnswer}'s.
  *
- * <p>An {@link UntrustedExit}: the domain {@link Finding} holds plain text, so the executor's reason
- * and denial texts leave their carriers here as written — the {@code CheckFindings} precedent.
+ * <p>A failed result keeps its {@code details} apart from its reason; a {@code failed/quality}
+ * reason becomes the round's one finding, so it joins the next attempt's feedback; a failed result
+ * with no reason is named by the factory. A pending result keeps its key (the {@code :pendingkey}
+ * leaf's type, design D20 of migrate-verify-to-executor-contract), wait hint, state and texts.
  *
- * <p>Implements FR2, FR3, FR6, FR7, FR10, NFR-O1 of define-executor-contract.
+ * <p>An {@link UntrustedExit}: the domain {@link Finding} holds plain text, so the executor's texts
+ * leave their carriers here as written — the {@code CheckFindings} precedent.
+ *
+ * <p>Implements FR2, FR3, FR6, FR7, FR10, NFR-O1 of define-executor-contract; FR1, FR2, FR5 of
+ * migrate-verify-to-executor-contract.
  */
 @UntrustedExit
-final class ProgramResultMapping {
+public final class ProgramResultMapping {
 
     private ProgramResultMapping() {}
 
@@ -47,13 +53,14 @@ final class ProgramResultMapping {
      * The engine's result of a round.
      *
      * @param executor the executor's name; never blank
+     * @param role the role the round was requested in; never null
      * @param key the round's attempt key, for its (empty) tool trace; never null
      * @param result the contract result the run produced; never null
      * @param environmentDenials the environment's denials of the round; never null
      * @return the engine's result; never null
      */
-    static ExecutionResult toEngine(
-            String executor, AttemptKey key, ExecutorResult result, List<Denial> environmentDenials) {
+    public static ExecutionResult toEngine(
+            String executor, Role role, AttemptKey key, ExecutorResult result, List<Denial> environmentDenials) {
         List<Denial> denials = new ArrayList<>(environmentDenials);
         for (var reported : result.denials()) {
             denials.add(Denial.unidentified(new Finding(
@@ -62,17 +69,26 @@ final class ProgramResultMapping {
         var usage = ProgramUsage.toEngine(result.usage());
         var trace = new ToolTrace(key, List.of());
         return switch (result.status()) {
-            case COMPLETED -> completed(executor, result, usage, trace, denials);
+            case COMPLETED -> ProgramCompletedAnswer.toEngine(executor, role, result, usage, trace, denials);
             case FAILED -> new ExecutionResult(failed(executor, result), null, usage, trace, denials);
-            case PENDING ->
-                new ExecutionResult(
-                        new ExecutionResult.Pending(
-                                Objects.requireNonNull(result.pendingKey()).value()),
-                        null,
-                        usage,
-                        trace,
-                        denials);
+            case PENDING -> new ExecutionResult(pending(result), null, usage, trace, denials);
         };
+    }
+
+    /**
+     * How the round closes (D22): verifiable exactly when {@code result} maps to {@code completed} —
+     * decided from the contract result before it is mapped, by the same {@link
+     * ProgramCompletedAnswer#refusal} the mapping refuses a completed answer by, so the close never reads the engine's status (G4 of
+     * define-executor-contract, human decision 2026-11-12).
+     *
+     * @param role the role the round was requested in; never null
+     * @param result the contract result the run produced; never null
+     * @return the round's close; never null
+     */
+    public static RoundClose closeOf(Role role, ExecutorResult result) {
+        return result.status() == Status.COMPLETED && ProgramCompletedAnswer.refusal(role, result) == null
+                ? RoundClose.VERIFIABLE
+                : RoundClose.UNVERIFIABLE;
     }
 
     /** The engine's failure class of a contract class, one to one. */
@@ -84,23 +100,16 @@ final class ProgramResultMapping {
         };
     }
 
-    private static ExecutionResult completed(
-            String executor, ExecutorResult result, ExecutorUsage usage, ToolTrace trace, List<Denial> denials) {
-        if (result.answer() == null) {
-            return ExecutionResult.completed(usage, trace, denials);
+    /** The engine's pending state of a contract state, one to one; an absent state is running. */
+    static com.github.oinsio.gnomish.domain.engine.PendingState stateOf(@Nullable PendingState state) {
+        if (state == null) {
+            return com.github.oinsio.gnomish.domain.engine.PendingState.RUNNING;
         }
-        AnswerReading reading = Answer.read(result.answer(), UntrustedText::subprocess);
-        if (reading instanceof AnswerReading.Parsed(Answer.DecisionRequest request)) {
-            return ExecutionResult.decisionNeeded(request.question(), request.options(), usage, trace, denials);
-        }
-        String why = reading instanceof AnswerReading.Malformed(var reason)
-                ? "a malformed answer: " + reason.excerpt(512)
-                : "an answer of a kind a transform run does not take";
-        var failed = new ExecutionResult.Failed(
-                ExecutionResult.FailureClass.INFRASTRUCTURE,
-                UntrustedText.factory("program executor '" + executor + "' completed with " + why),
-                List.of());
-        return new ExecutionResult(failed, null, usage, trace, denials);
+        return switch (state) {
+            case RUNNING -> com.github.oinsio.gnomish.domain.engine.PendingState.RUNNING;
+            case UNREPORTED -> com.github.oinsio.gnomish.domain.engine.PendingState.UNREPORTED;
+            case UNOBSERVED -> com.github.oinsio.gnomish.domain.engine.PendingState.UNOBSERVED;
+        };
     }
 
     private static ExecutionResult.Failed failed(String executor, ExecutorResult result) {
@@ -110,9 +119,21 @@ final class ProgramResultMapping {
                 ? UntrustedText.factory("program executor '" + executor + "' reported failed/" + contractClass.wire()
                         + " with no reason")
                 : reported;
-        List<Finding> findings =
-                contractClass == FailureClass.QUALITY ? List.of(new Finding(reason.raw(), null, null)) : List.of();
-        return new ExecutionResult.Failed(classOf(contractClass), reason, findings);
+        @Nullable UntrustedText details = result.details();
+        List<Finding> findings = contractClass == FailureClass.QUALITY
+                ? List.of(new Finding(reason.raw(), null, rawOrNull(details)))
+                : List.of();
+        return new ExecutionResult.Failed(classOf(contractClass), reason, findings, details);
+    }
+
+    private static ExecutionResult.Pending pending(ExecutorResult result) {
+        @Nullable Long hint = result.pollAfterMillis();
+        return new ExecutionResult.Pending(
+                Objects.requireNonNull(result.pendingKey()),
+                hint == null ? null : Duration.ofMillis(hint),
+                stateOf(result.pendingState()),
+                result.reason(),
+                result.details());
     }
 
     private static @Nullable String rawOrNull(@Nullable UntrustedText text) {

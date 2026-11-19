@@ -104,7 +104,7 @@ class ProgramDispatchContainerE2ESpec extends Specification implements BareGitRe
     def "FR9, FR10: in container mode a mixed pipeline runs its program stage through the program executor and its agent stage through the agent"() {
         given: 'a container-mode runner over the fake-agent sandbox image, and acme the box shell'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        def sandbox = new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(

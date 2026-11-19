@@ -10,10 +10,10 @@ import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult
 import com.github.oinsio.gnomish.executorcontract.FailureClass
-import com.github.oinsio.gnomish.executorcontract.PendingKey
 import com.github.oinsio.gnomish.executorcontract.Role
 import com.github.oinsio.gnomish.executorcontract.Status
 import com.github.oinsio.gnomish.executorcontract.Usage
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
@@ -24,9 +24,11 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
  * <p>Well behaved, it describes protocol 1, the three live roles and {@code poll}; answers {@code
  * transform} completed, {@code verdict} an empty SARIF log, {@code decision} a choice of the first
  * offered option; refuses a role it does not list ({@code failed}/infrastructure); and goes pending
- * by construction — a start in a working copy named {@code pending-poll} answers {@code pending} with
- * the key {@link #PENDING_KEY}, whatever the settings, and its poll answers the role. A poll with a key
- * it did not issue is refused.
+ * by construction — a start in a working copy named {@code pending-poll} or {@code pending-repoll}
+ * answers {@code pending} with the key {@link #PENDING_KEY}, whatever the settings, and every poll of
+ * that key, a re-poll of the ended run included, answers the role. A poll with a key it did not issue
+ * is refused. Broken for {@code pending-repoll}, it forgets the run its first poll ended: a later poll
+ * in that working copy is refused, as the stand-in fake's is.
  *
  * <p>{@link #breaking} gives the misbehaving variant: told the name of one conformance case, it breaks
  * that case only, recognising it as the stand-in fake does, by the request's workspace path ending in
@@ -49,6 +51,7 @@ class InProcessExecutorDouble implements Executor {
         'decision',
         'unknown-role',
         'pending-poll',
+        'pending-repoll',
         'malformed-answer'
     ]
 
@@ -93,14 +96,17 @@ class InProcessExecutorDouble implements Executor {
         }
         ObjectNode schema = tree(broken == 'settings-schema' ? REMOTE_SCHEMA : '{"type":"object"}') as ObjectNode
         new Describe(1, UntrustedText.subprocess('1'), roles, [Capability.POLL], schema, [], [], null, [],
-        EnforcementLevel.PROMPT_ONLY, false)
+        EnforcementLevel.PROMPT_ONLY, false, false)
     }
 
     @Override
     ExecutorResult start(ExecutorRequest request) {
         asked << [op: 'start', request: request]
         String kase = caseOf(request)
-        if (kase == 'pending-poll') {
+        if (kase in [
+                    'pending-poll',
+                    'pending-repoll'
+                ]) {
             return new ExecutorResult(Status.PENDING, null, new PendingKey(PENDING_KEY), null, null, Usage.absent(), [])
         }
         answer(request, kase)
@@ -109,7 +115,7 @@ class InProcessExecutorDouble implements Executor {
     @Override
     ExecutorResult poll(ExecutorRequest request, PendingKey key) {
         asked << [op: 'poll', request: request, key: key]
-        if (key != new PendingKey(PENDING_KEY) || broken == 'pending-poll') {
+        if (key != new PendingKey(PENDING_KEY) || (broken == 'pending-poll' && caseOf(request) == 'pending-poll') || forgotten(request)) {
             return failed("no pending run has the key '${key.value()}'")
         }
         answer(request, null)
@@ -133,6 +139,13 @@ class InProcessExecutorDouble implements Executor {
             default:
                 return breaks && kase == 'unknown-role' ? completed(null) : failed('the request names no role this executor answers')
         }
+    }
+
+    /** Whether this is the broken re-poll double, asked again in the re-poll case after its first poll. */
+    private boolean forgotten(ExecutorRequest request) {
+        broken == 'pending-repoll' && caseOf(request) == 'pending-repoll' && asked.count {
+            it.op == 'poll' && caseOf(it.request as ExecutorRequest) == 'pending-repoll'
+        } > 1
     }
 
     private static String caseOf(ExecutorRequest request) {

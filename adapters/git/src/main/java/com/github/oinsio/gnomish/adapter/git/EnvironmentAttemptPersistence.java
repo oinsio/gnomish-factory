@@ -52,33 +52,29 @@ import java.util.List;
  * path. This is a strict port: any failure to durably commit throws, never
  * returns.
  *
- * <p>Kept in sync with {@link GitAttemptPersistence}: both must close a round
- * with the same durable sequence — {@code state.json} and the round's trace file
- * written first, then one commit stamped with the claim epoch that carries both,
- * so neither medium can leave a branch on which a round's state landed without
- * its trace (or the other way round) — judge the gnome's range with the one
- * {@link GnomeRangeInspection} before it becomes part of the round, keep the
- * factory-owned paths of the round commit the factory's own (here the in-box
- * commit stages exactly the two files and the admission refuses any other owned
- * path; there the worktree is restored from the register before staging), and
- * land the round commit with its register in one ref transaction, carried to
- * origin by one atomic push (design D13, D18 of tighten-spec-contract). The
- * denial cursor this class commits inside {@code state.json} ({@link
- * EnvironmentRoundDocuments}) is deliberately environment-side only and is not
- * part of the synchronized invariant: host mode has no egress guard, so there is
- * no denial source to mirror. Nor is the round's decision carve-out: host mode's
- * request never enters the working copy, so its inspection permits no path.
+ * <p>{@link #persistPending} lands an open round's pending commit in the box ({@link
+ * InBoxPendingCommit}; design D21 of migrate-verify-to-executor-contract) on the round's last
+ * registered commit, and moves that commit in the cell; the state commit then sits on it.
  *
- * <p>Kill windows (crash-consistency rule). The durable step is the admission's
- * ref transaction: the in-box commit and the quarantine are scratch until the
- * branch and the register move to the state commit together, and the push to
- * origin is a later step owned by {@link PushBestEffortAttemptPersistence}. A
- * kill before the transaction — during the {@code putFile} writes, the in-box
- * commit, the harvest or the checks — freezes "round not closed": the branch and
- * the register still name the snapshot, and the next pickup resumes the
- * interrupted verification from it. A kill after the transaction but before the
- * push freezes "round closed locally, not pushed", converged by the next push of
- * this branch.
+ * <p>Kept in sync with {@link GitAttemptPersistence}: both must close a round with the same durable
+ * sequence — {@code state.json} and the round's trace written first, then one commit stamped with
+ * the claim epoch carrying both — judge the gnome's range with the one {@link GnomeRangeInspection},
+ * keep the factory-owned paths of the round commit the factory's own (here the in-box commit stages
+ * exactly the two files and the admission refuses any other owned path; there the worktree is
+ * restored from the register before staging), land the round commit with its register in one ref
+ * transaction carried to origin by one atomic push (design D13, D18 of tighten-spec-contract); and
+ * write the pending commit alike: exactly {@code state.json}, its tree the registered commit's with
+ * that one blob replaced, its only parent the registered commit (here through a private index in the
+ * box; there from objects), its register in the same transaction, its subject from {@link
+ * PendingWrite} (design D21). The denial cursor ({@link EnvironmentRoundDocuments}) and the round's
+ * decision carve-out are environment-side only: the host has no denial source, and its request never
+ * enters the working copy.
+ *
+ * <p>Kill windows (crash-consistency rule). The durable step of both writes is the admission's
+ * ref transaction; the push is {@link PushBestEffortAttemptPersistence}'s. A kill before it freezes
+ * "round not closed": the register still names the round's last registered commit, and the next
+ * pickup resumes the interrupted verification from it. A kill after it, before the push, freezes
+ * "closed locally, not pushed", converged by the next push of this branch.
  *
  * <p>Implements FR21, FR22, FR23 of add-sandbox-core; FR13 of
  * harden-logging-observability; FR13, FR15 of make-checkpoint-gate-durable; FR13,
@@ -88,9 +84,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
 
     private static final String STATE_PATH = EnvelopePaths.STATE_JSON_PATH;
 
-    // Paths and the commit message travel as positional args ($1-$3), never string-interpolated
-    // into the script, so neither can carry a shell metacharacter that alters the command —
-    // the same defense-in-depth pattern ContainerFileChannel uses for factory-authored content.
+    // Paths and the message travel as positional args ($1-$3), never interpolated into the script.
     private static final String COMMIT_SCRIPT = "git add -- \"$1\" \"$2\" && git -c core.hooksPath= commit -m \"$3\"";
 
     private final TaskExecutionEnvironment environment;
@@ -99,6 +93,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
     private final HarvestedStateCommitCheck stateCommitCheck;
     private final EnvironmentRoundDocuments documents;
     private final ClaimEpochSource epochs;
+    private final InBoxPendingCommit pendingCommit;
 
     /**
      * @param environment the task's bound environment; state files and the state commit cross it
@@ -124,6 +119,7 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         this.stateCommitCheck = new HarvestedStateCommitCheck(gitObjects);
         this.documents = new EnvironmentRoundDocuments(environment);
         this.epochs = epochs;
+        this.pendingCommit = new InBoxPendingCommit(environment, runner, cloneDir, gitObjects, epochs);
     }
 
     @Override
@@ -135,8 +131,10 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         String snapshot = round.attemptCommit();
 
         // The token is the tip the round opened on: the name of the one permitted decision file,
-        // one value recorded once (FR13, FR15). An admitted snapshot passes without a move.
-        judged(taskId, key, admission.admit(taskId, snapshot, AdmissionRule.snapshot(key, round.token())));
+        // one value recorded once (FR13, FR15). An admitted snapshot passes without a move; one the
+        // close's admission did not move is judged by the subject the step chose for it (D22).
+        String subject = RoundSnapshot.subject(key, round.token(), round.close());
+        judged(taskId, key, admission.admit(taskId, snapshot, AdmissionRule.snapshot(key, round.token(), subject)));
 
         byte[] stateBytes = documents.state(taskId, key, state);
         byte[] traceBytes = EnvironmentRoundDocuments.trace(trace);
@@ -148,9 +146,10 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
         environment.harvest();
 
         // A fresh observation of the harvest, judged against the record before the branch moves: the
-        // state commit must sit on the round's own snapshot and carry exactly what was written.
+        // state commit must sit on the round's last registered commit and carry exactly what was
+        // written (design D21 of migrate-verify-to-executor-contract).
         String stateCommit = admission.quarantined(taskId);
-        stateCommitCheck.verify(taskId, stateCommit, snapshot, tracePath, stateBytes, traceBytes);
+        stateCommitCheck.verify(taskId, stateCommit, round.registered(), tracePath, stateBytes, traceBytes);
         judged(
                 taskId,
                 key,
@@ -158,6 +157,17 @@ public final class EnvironmentAttemptPersistence implements AttemptPersistence {
                         taskId,
                         stateCommit,
                         AdmissionRule.state(key, AttemptPersistence.roundOf(state), round.token(), tracePath)));
+    }
+
+    /**
+     * @throws GitPersistFailedException if the round has no snapshot, or a step failed
+     * @throws RoundBoundaryViolationException if the harvested pending commit is not the factory's
+     */
+    @Override
+    public void persistPending(String taskId, TaskState state) {
+        PendingWrite write = PendingWrite.of(taskId, state);
+        ClosedRound round = rounds.snapshot().orElseThrow(write::noSnapshot);
+        rounds.pendingRegistered(pendingCommit.land(write, state, round));
     }
 
     /** The admission's verdict as this port's outcome: a violation, or the infrastructure path. */

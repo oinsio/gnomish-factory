@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
 import com.github.oinsio.gnomish.githubapi.GithubHttpException
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
@@ -65,7 +66,7 @@ class GithubClaimLeaseSpec extends Specification {
 
     private GithubClaimLease newLease(String readyLabel = 'gnomish:ready',
             String workingLabel = 'gnomish:working') {
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', fastRetryConfig())
         def labelOps = new GithubLabelOps(httpClient)
         new GithubClaimLease(httpClient, labelOps, readyLabel, workingLabel, new VirtualClock())
     }

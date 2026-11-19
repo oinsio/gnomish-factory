@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
-import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
+import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
@@ -88,12 +88,12 @@ class ShellCommandCheckRunnerFindingsReadSpec extends Specification implements S
         def runner = runner(Duration.ofSeconds(30))
 
         when:
-        def verdict = null
+        def outcome = null
         def failure = null
         def worker = Thread.start {
             Thread.currentThread().interrupt()
             try {
-                verdict = runner.run(check, workspace())
+                outcome = runner.probe(check, workspace())
             } catch (Throwable t) {
                 failure = t
             }
@@ -102,8 +102,8 @@ class ShellCommandCheckRunnerFindingsReadSpec extends Specification implements S
 
         then: 'the shutdown resolves as infrastructure, not as a thrown read failure'
         failure == null
-        verdict instanceof VerdictAnswer.InfrastructureFailure
-        (verdict as VerdictAnswer.InfrastructureFailure).reason().forLog().toLowerCase().contains('interrupted')
+        outcome instanceof ShellOutcome.Unanswerable
+        (outcome as ShellOutcome.Unanswerable).reason().forLog().toLowerCase().contains('interrupted')
 
         and: 'no findings read was attempted at all'
         environments.every { it.reads.isEmpty() }
@@ -115,11 +115,10 @@ class ShellCommandCheckRunnerFindingsReadSpec extends Specification implements S
         def check = command('echo hung-output; echo not-json > "$GNOMISH_FINDINGS_FILE"; while true; do sleep 1; done')
 
         when:
-        def verdict = runner(Duration.ofMillis(300)).run(check, workspace())
+        def outcome = runner(Duration.ofMillis(300)).probe(check, workspace())
 
         then:
-        verdict instanceof VerdictAnswer.QualityFailure
-        (verdict as VerdictAnswer.QualityFailure).findings()[0].message().contains('timed out')
+        outcome instanceof ShellOutcome.TimedOut
 
         and:
         environments.every { it.reads.isEmpty() }
@@ -127,10 +126,27 @@ class ShellCommandCheckRunnerFindingsReadSpec extends Specification implements S
 
     def "NFR-R2: a check that chose its own exit code still reads the findings channel"() {
         when:
-        def verdict = runner(Duration.ofSeconds(30)).run(command('exit 3'), workspace())
+        def outcome = runner(Duration.ofSeconds(30)).probe(command('exit 3'), workspace())
 
         then:
-        verdict instanceof VerdictAnswer.QualityFailure
+        derived(outcome) instanceof Verdict.Fail
         environments.any { !it.reads.isEmpty() }
+    }
+
+    // FR5 of migrate-verify-to-executor-contract (D5 second amendment): the file is read on every
+    //     exit code but 126 and 127, which are no answer at all.
+    def "FR5: exit #code does not read the findings file a command wrote"() {
+        given:
+        def check = command('echo \'{"findings":[{"message":"x"}]}\' > "$GNOMISH_FINDINGS_FILE"; exit ' + code)
+
+        when:
+        def outcome = runner(Duration.ofSeconds(30)).probe(check, workspace())
+
+        then:
+        outcome instanceof ShellOutcome.Unanswerable
+        environments.every { it.reads.isEmpty() }
+
+        where:
+        code << [126, 127]
     }
 }

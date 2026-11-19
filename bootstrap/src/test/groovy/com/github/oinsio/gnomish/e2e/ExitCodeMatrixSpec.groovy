@@ -134,12 +134,15 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
         (result.stdout() + result.stderr()).contains('instructions.md')
     }
 
-    // FR3, NFR-O1, D5 of remove-interactive-console: an `external` check on a provider this
-    //     factory has no `factory.check.<provider>` section for is a load failure — exit 3, the
-    //     located error naming the section to write, and no stage ever started.
+    // FR3, NFR-O1, D5 of remove-interactive-console; D18 of migrate-verify-to-executor-contract
+    //     ("Where a refusal at run assembly goes"): an `external` check on the github-actions
+    //     built-in with no `factory.check.github-actions` connection is refused once, when the run's
+    //     law is described — exit 3 as an invalid law, the located error naming the stage manifest,
+    //     the check and the executor, and no stage ever started.
     // Scenario: cli/manual-run / Unconfigured check provider rejected before any dialog
-    def "unconfigured check provider exits 3 before any dialog"() {
-        given: 'a fixture whose one stage declares an external check on github, with no factory.check.github'
+    // Scenario: verification/verdict-executors / Unconnected credentialed built-in is a located error
+    def "an unconnected credentialed built-in exits 3 before any dialog"() {
+        given: 'a fixture whose one stage declares an external check on github-actions, with no factory.check.github-actions'
         Path root = E2eFixture.unconfiguredProviderRoot()
 
         when:
@@ -155,11 +158,12 @@ class ExitCodeMatrixSpec extends AbstractE2eProcessSpec {
         then: 'FR3: pipeline-load-failure exit code'
         result.exitCode() == 3
 
-        and: 'NFR-O1: the located error names the stage manifest, the field and the missing section'
+        and: 'NFR-O1: the located error names the stage manifest, the check, the executor and the missing key'
         def output = result.stdout() + result.stderr()
         output.contains('stages/work/stage.yaml')
-        output.contains('verify[0].provider')
-        output.contains("check provider 'github' has no factory.check.github section")
+        output.contains('verify[0]')
+        output.contains("check 'ci/build' names executor 'github-actions'")
+        output.contains('factory.check.github-actions.api-url is required')
 
         and: 'no stage ran and no operator prompt was printed'
         !output.contains("Stage '")

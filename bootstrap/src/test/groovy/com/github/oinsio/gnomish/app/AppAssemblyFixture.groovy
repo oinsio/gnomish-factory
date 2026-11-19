@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitVersionCheck
@@ -101,15 +100,13 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 new CheckEquipment(
                         new FilesExistCheckRunner(),
                         new ShellCommandCheckRunner(timeEquipment.clock()),
-                        [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()],
                         // An empty factory home of its own: no secrets folder, so every secret resolves from
                         // the environment exactly as before the folders existed (FR8 of add-project-registry).
                         new EnvFileSecretsProvider(FactoryHome.at(Files.createTempDirectory('no-secrets-home')), null),
-                        factoryProperties,
-                        timeEquipment),
+                        factoryProperties),
                 timeEquipment,
                 factoryProperties,
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                 // The root's host workspace realization, through its own bean method (F119).
                 new ManualRunConfiguration().workspaceFactory())
                 // FR13, D14 of add-base-ref-resolution: production wiring (TakeCommand/ServeCommand)
@@ -169,7 +166,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
             Path clonePath,
             Path homeDir,
             SandboxProperties sandboxProperties = new SandboxProperties(
-                    null, null, null, null, null, null, false, null, null, null, null),
+                    null, null, null, null, null, false, null, null, null, null),
             // Host binding, explicitly: container is the default (D13 of add-sandbox-core),
             // and most specs sharing this fixture prove the host git-mode path.
             BindingProperties bindingProperties = new BindingProperties('host', [:]),
@@ -247,7 +244,6 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
         // The error console the composition root binds to System.err (FR6 of
         // harden-untrusted-text-sinks); the specs that assert on it redirect that stream.
         def errorConsole = LiveConsoleIO.onStderr()
-        def checkClientRegistry = [(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()]
         // The root's one secrets port, as its secretsProvider bean builds it, over a factory home of
         // its own with no secrets folder: every value — a check credential, and every child
         // environment's base set, passthrough and AI seam (NFR-S3 of tighten-spec-contract) —
@@ -266,10 +262,8 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
                 new CheckEquipment(
                         new FilesExistCheckRunner(),
                         new ShellCommandCheckRunner(instantSource),
-                        checkClientRegistry,
                         secrets,
-                        factoryProperties,
-                        timeEquipment),
+                        factoryProperties),
                 timeEquipment,
                 factoryProperties,
                 sandboxProperties,
@@ -280,7 +274,7 @@ trait AppAssemblyFixture implements FactoryPropertiesFixture {
         // supports take it and the graph's one time equipment, as the context wires them.
         def modeSelector = new SandboxBindingConfiguration().sandboxModeSelector(
                 bindingProperties, sandboxProperties, DiscoveredBindings.real(), runtimeProbe)
-        def containerSupports = new ContainerSupports(checkClientRegistry, assembly.checks, factoryProperties, sandboxProperties,
+        def containerSupports = new ContainerSupports(assembly.checks, factoryProperties, sandboxProperties,
                 modeSelector, git, timeEquipment)
         def trackerWiring = new TrackerWiring(trackerAdapterRegistry, MapSecretsProvider.NONE, TrackerValidatorStub.plainSource(), timeEquipment)
         // The process's one preconditions owner, through its own bean method, which serve's startup

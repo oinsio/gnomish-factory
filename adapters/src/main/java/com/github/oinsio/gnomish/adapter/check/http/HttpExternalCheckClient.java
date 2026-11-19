@@ -1,78 +1,83 @@
 package com.github.oinsio.gnomish.adapter.check.http;
 
 import com.github.oinsio.gnomish.adapter.check.NoCheckDetails;
-import com.github.oinsio.gnomish.app.CheckRunContext;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
+import com.github.oinsio.gnomish.domain.egress.EgressRefusal;
+import com.github.oinsio.gnomish.domain.egress.EgressRefusedException;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.PollStatus;
-import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
-import com.github.oinsio.gnomish.httpegress.EgressRefusal;
-import com.github.oinsio.gnomish.httpegress.EgressRefusedException;
+import com.github.oinsio.gnomish.httpegress.EgressAllowlist;
+import com.github.oinsio.gnomish.httpegress.ExchangeLimitException;
+import com.github.oinsio.gnomish.httpegress.GuardedHttpCheckExchange;
 import com.github.oinsio.gnomish.httpegress.HttpCheckExchange;
+import com.github.oinsio.gnomish.httpegress.JdkHttpCheckExchange;
+import com.github.oinsio.gnomish.httpegress.OperatorEgress;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.io.IOException;
 import java.net.http.HttpRequest;
 import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The generic {@link ExternalCheckClient} of the built-in {@code http} provider: one poll is one
- * request, and the verdict is read off the response by the check's own declared conditions (FR9,
- * FR10, design D4 of add-plugin-architecture).
+ * The judgement of the built-in {@code http} check: one poll is one request, and the verdict is
+ * read off the response by the check's own declared conditions (FR9, FR10, design D4 of
+ * add-plugin-architecture). {@link #probe} judges once; {@link #poll} renders the {@link
+ * PollStatus} as it stands (no engine port since task 5.2 of migrate-verify-to-executor-contract) and {@link HttpExecutor} renders it as the executor contract's result
+ * (FR6 of migrate-verify-to-executor-contract), so the two differ only in their medium.
  *
- * <p>The poll loop is the engine's, unchanged. This client only classifies a single observation:
- * {@code pending-when} matching means "not terminal yet" ({@link PollStatus.Running}), which is what
- * makes the engine poll again at the check's {@code interval} and classify a {@code timeout} by the
- * check's own {@code timeoutClass}; a check declaring no {@code pending-when} therefore reaches a
- * verdict on its first response — a one-shot probe, which is a degenerate poll rather than a second
- * code path.
+ * <p>{@code pending-when} matching means "not terminal yet" ({@link PollStatus.Running}); it is
+ * asked before the pass question, so a service reporting "still running" with a non-2xx status is
+ * not a failure. A check declaring no {@code pending-when} is a one-shot probe. Status only decides
+ * a pass.
  *
- * <p>The pending question is asked before the pass question deliberately: a service that reports
- * "still running" with a non-2xx status (a 202, a 404 for a not-yet-created report) would otherwise
- * be a failure on its first poll. Status only decides a pass.
+ * <p>An exchange that cannot be completed — an unreachable or unknown host (design D16, the outcome
+ * classes: transport, never a refusal), an outrun bound, an interrupt — a credential that will not
+ * resolve, a {@code ${...}} reference this run cannot supply (NFR-S2), and a target the egress guard
+ * refuses are {@link PollStatus.CannotVerify}, an infrastructure failure, never a quality {@link
+ * PollStatus.Fail}. A refusal is logged here, where it becomes a verdict, through {@link LogText},
+ * since its sentence quotes a redirect target a remote server chose (FR5 of
+ * harden-logging-observability). Stateless across polls (NFR-R2 of add-external-check-github-actions).
  *
- * <p>An exchange that cannot be completed, or a credential that will not resolve, is {@link
- * PollStatus.CannotVerify} — an infrastructure failure that burns no stage attempt — never a
- * quality {@link PollStatus.Fail}: the endpoint being unreachable says nothing about the artifact.
- *
- * <p>Stateless across polls: no response, verdict, or resolved secret is retained, so two instances
- * polling the same check observe the same thing and either may resume the other's task (NFR-R2 of
- * add-external-check-github-actions, kept as a port-wide property).
- *
- * <p>A refusal is the one degradation the operator cannot read off the endpoint: the request never
- * left the factory, so nothing on the other side records it. Both refusal classes — a target the
- * allowlist rejects and a redirect chain that outran its bound — are logged here, at the layer that
- * turns them into a verdict, so the fault has exactly one line (FR5 of
- * harden-logging-observability). The refusal's own sentence names a redirect target chosen by a
- * remote server, so it goes through {@link LogText} like any other text from outside.
- *
- * <p>Implements FR9, FR10, FR11 of add-plugin-architecture; FR5 of harden-logging-observability.
- *
- * <p>Two ways a poll can fail before the network: a credential that will not resolve, and a {@code
- * ${...}} reference this run cannot supply (NFR-S2). Both are {@code CannotVerify} naming what was
- * missing — never a silent substitution, since a URL built from a missing value observes the wrong
- * thing. A target the egress allowlist refuses arrives the same way, from the guarded exchange.
+ * <p>Implements FR9, FR10, FR11 of add-plugin-architecture; FR5 of harden-logging-observability;
+ * FR6, FR17 of migrate-verify-to-executor-contract.
  *
  * @param exchange the single network seam; the egress guard sits here (NFR-S2)
  * @param secrets the seam a check's named credential resolves through at request time (FR11)
  * @param runContext the run's allowlisted interpolation values (NFR-S2); {@link
- *     CheckRunContext#none()} outside a run, which makes any interpolating check fail closed
+ *     HttpRunContext#none()} outside a run, which makes any interpolating check fail closed
  */
-public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvider secrets, CheckRunContext runContext)
-        implements ExternalCheckClient {
+public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvider secrets, HttpRunContext runContext) {
 
     private static final Logger log = LoggerFactory.getLogger(HttpExternalCheckClient.class);
 
     /** A client for a run that supplies no variables — every non-interpolating check is unaffected. */
     public HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvider secrets) {
-        this(exchange, secrets, CheckRunContext.none());
+        this(exchange, secrets, HttpRunContext.none());
+    }
+
+    /**
+     * The client every production path builds: the JDK exchange guarded by the operator's {@code
+     * factory.egress.in-process} scope, the {@code http} built-in's one admitted set (FR17, design
+     * D16 of migrate-verify-to-executor-contract) — the substituted target of every poll, a templated
+     * host included, is judged there at connect, before any socket.
+     *
+     * @param inProcess the operator's {@code in-process} scope; never null
+     * @param secrets the seam a check's named credential resolves through; never null
+     * @param runContext the run's allowlisted interpolation values; never null
+     * @return the guarded client; never null
+     */
+    public static HttpExternalCheckClient guarded(
+            OperatorEgress inProcess, SecretsProvider secrets, HttpRunContext runContext) {
+        var exchange = new GuardedHttpCheckExchange(new JdkHttpCheckExchange(), EgressAllowlist.of(inProcess));
+        return new HttpExternalCheckClient(exchange, secrets, runContext);
     }
 
     /** How much of a failing response's body travels into the findings, so a report stays readable. */
@@ -82,13 +87,23 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
      * Polls the check's endpoint once and classifies what came back.
      *
      * @param check the external check to poll; its {@code params} carry the whole target
-     * @param workspace unused — an http target is addressed by the manifest, not by the working
-     *     copy; the parameter stays because it is the engine's port signature
+     * @param workspace the check's working copy, the attempt commit's source; may be null
      * @return the status this single poll observed; never null
      */
-    @Override
     public PollStatus poll(VerifyCheck.Executor check, Workspace workspace) {
-        HttpCheckParams params = HttpCheckParams.from(check.settings());
+        return probe(check.checkId(), check.settings(), workspace);
+    }
+
+    /**
+     * Sends the check's request once and judges the response, the one judgement both renderings share.
+     *
+     * @param checkId the check's identity, for the finding and the refusal line; never null
+     * @param settings the check's settings, graded at load; never null
+     * @param workspace the check's working copy, carrying the attempt commit; may be null
+     * @return the status this single poll observed; never null
+     */
+    PollStatus probe(String checkId, Map<String, Object> settings, @Nullable Workspace workspace) {
+        HttpCheckParams params = HttpCheckParams.from(settings);
         HttpRequest request;
         try {
             request = HttpCheckRequest.build(
@@ -107,7 +122,7 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
             log.warn(
                     OperatorEvent.HTTP_CHECK_REFUSED_BY_EGRESS.head()
                             + "http check '{}' refused before the request left the factory: {}",
-                    check.checkId(),
+                    checkId,
                     LogText.forLog(refusal.describe()));
             // describe() interpolates the manifest's target raw, so it keeps that family; the
             // label is a constant the guard's own enum owns, so it is factory prose (design D3
@@ -115,7 +130,9 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
             return new PollStatus.CannotVerify(
                     UntrustedText.manifest(refusal.describe()),
                     UntrustedText.factory(refusal.reason().label()));
-        } catch (IOException e) {
+        } catch (ExchangeLimitException | IOException e) {
+            // FR15, design D16 (the outcome classes): an outrun bound names the limit, an unknown host
+            // is transport — infrastructure, never advice to grant a host.
             return cannotVerify(target, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -128,16 +145,14 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
         if (isSuccess(response.status()) && params.passWhen().matches(response.body())) {
             return new PollStatus.Pass(target);
         }
-        return new PollStatus.Fail(List.of(failure(check, params, target, response)));
+        return new PollStatus.Fail(List.of(failure(checkId, params, target, response)));
     }
 
     /**
      * The attempt commit of the round under verification, or {@code null} when the workspace carries
-     * none — a manual run over a plain directory, or a round not yet closed by a snapshot. Absent, a
-     * check interpolating {@code ${attempt.commit}} fails closed rather than addressing whatever a
-     * placeholder would.
+     * none (a plain directory, a round not yet closed): a check interpolating it then fails closed.
      */
-    private static @Nullable String attemptCommit(Workspace workspace) {
+    private static @Nullable String attemptCommit(@Nullable Workspace workspace) {
         if (!(workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace)) {
             return null;
         }
@@ -154,25 +169,22 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
     }
 
     /**
-     * The finding a failing check feeds back into the next stage attempt: what was expected, what
-     * came back, and an excerpt of the body so an author can see why — the response only, never the
-     * request, so no credential can travel into a committed report (NFR-S1).
+     * The finding a failing check feeds back: what was expected, what came back and a body excerpt —
+     * the response only, never the request, so no credential travels into a report (NFR-S1).
      */
     private static Finding failure(
-            VerifyCheck.Executor check, HttpCheckParams params, String target, HttpCheckExchange.Response response) {
+            String checkId, HttpCheckParams params, String target, HttpCheckExchange.Response response) {
         return new Finding(
                 "http check '%s' did not pass: expected %s, got HTTP %d"
-                        .formatted(check.checkId(), params.passWhen().describe(), response.status()),
+                        .formatted(checkId, params.passWhen().describe(), response.status()),
                 target,
                 excerpt(response.body()));
     }
 
     /** A CannotVerify naming the endpoint and preserving the cause as details (NFR-O1). */
     private static PollStatus.CannotVerify cannotVerify(String target, Exception cause) {
-        // The fold re-mints (design D5 of type-untrusted-text): the failure's message quotes the
-        // endpoint the manifest named and how it answered, so it keeps that family — the same one
-        // the reason beside it takes. Not TRACKER: the task tracker is a different port, and this
-        // path never touches it.
+        // The fold re-mints (design D5 of type-untrusted-text): the message quotes the endpoint the
+        // manifest named and how it answered, so it keeps that family, as the reason beside it does.
         UntrustedText detail = UntrustedText.manifest(cause.getClass().getName() + ": " + cause.getMessage());
         return new PollStatus.CannotVerify(UntrustedText.manifest("http check could not reach " + target), detail);
     }

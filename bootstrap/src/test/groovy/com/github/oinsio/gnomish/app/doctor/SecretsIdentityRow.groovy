@@ -18,6 +18,7 @@ import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import java.nio.file.Files
 import java.nio.file.Path
@@ -63,6 +64,7 @@ final class SecretsIdentityRow {
         } as Function<String, String>)
         def registry = [github: new GithubTrackerAdapterFactory()]
         def config = new TrackerConfig('github', 3, ['api-url': apiUrl, repo: 'acme/widgets'])
+        .withEndpoint(GithubTestEndpoints.loopback(URI.create(apiUrl)))
         def base = DoctorSpecSupport.definition()
         def definition = new PipelineDefinition(base.schemaVersion(), base.defaultLimits(), base.stages(), config)
 

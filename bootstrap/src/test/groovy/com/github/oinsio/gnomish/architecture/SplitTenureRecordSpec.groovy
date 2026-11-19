@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.architecture
 
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import java.nio.file.Files
 import java.nio.file.Path
@@ -61,7 +62,7 @@ import com.github.oinsio.gnomish.app.lease.EpochRecordingTracker;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import java.time.InstantSource;
-import java.util.function.UnaryOperator;
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds;
 '''
 
     /** The production shape: one book, handed to the assembly, travels in the bundle the tracker is wrapped with. */
@@ -71,7 +72,7 @@ import java.util.function.UnaryOperator;
 final class Assembly {
     static Tracker assemble(GitProcessRunner runner, GitInfrastructureRetry retry, InstantSource clock, Tracker adapter) {
         ClaimEpochBook one = new ClaimEpochBook();
-        TaskGit git = GitTaskBackend.taskGit(runner, retry, clock, UnaryOperator.identity(), one);
+        TaskGit git = GitTaskBackend.taskGit(runner, retry, clock, HostGitRounds.NONE, one);
         return new EpochRecordingTracker(adapter, git.epochs());
     }
 }

@@ -115,7 +115,7 @@ class ExecutorReferenceRuleSpec extends Specification {
         expect:
         PipelineValidator.validate(pipeline([
             stage('lint', ExecutorType.PROGRAM, 'acme')
-        ], []), [] as Set)
+        ], []))
         .any { it.where() == 'executor.name' }
     }
 }

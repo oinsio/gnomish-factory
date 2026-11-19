@@ -84,6 +84,29 @@ class TrackerWiringSpec extends Specification {
         book.epochFor('PROJ-1').orElse(null) == new ClaimEpoch(7)
     }
 
+    // FR3 of add-plugin-architecture: a discovered provider no configuration selects stays dormant —
+    //     resolving the selected type neither fails nor asks the other provider for anything
+    //     (task 5.2 of migrate-verify-to-executor-contract: the tracker is the one discovered port).
+    // Scenario: plugin/plugin-discovery / Dormant providers are not exercised
+    def "a discovered provider the configuration does not select is never exercised"() {
+        given:
+        def selected = Mock(TrackerAdapterFactory)
+        def dormant = Mock(TrackerAdapterFactory)
+        def instanceId = InstanceId.generate('gnomish-factory')
+
+        when:
+        def wiring = wiring([github: selected, jira: dormant])
+        def factory = wiring.resolveFactory(GITHUB)
+        wiring.resolveTracker(factory, GITHUB, instanceId, new ClaimEpochBook())
+
+        then: 'the selected provider builds the adapter'
+        factory.is(selected)
+        1 * selected.create(_) >> Mock(Tracker)
+
+        and: 'the dormant one is asked nothing at all'
+        0 * dormant._
+    }
+
     def "resolveFactory returns the factory registered for the configured type"() {
         given:
         def factory = Mock(TrackerAdapterFactory)

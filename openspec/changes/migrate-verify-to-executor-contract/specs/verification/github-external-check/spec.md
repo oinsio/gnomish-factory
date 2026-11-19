@@ -3,11 +3,11 @@
 ## MODIFIED Requirements
 
 ### Requirement: Polling is stateless and takeover-safe
-A poll SHALL depend only on the check declaration, the attempt commit the engine delivers with
-the verdict request and the pending key the engine persisted; no other poll state SHALL be
-persisted, so any factory instance can resume polling after a crash or takeover and observe the
-same runs. The executor SHALL read the attempt commit from the request the engine hands it,
-never from a workspace type of its own.
+A poll SHALL depend only on the check declaration, the attempt commit the engine binds the check
+to and the pending key the engine persisted; no other poll state SHALL be persisted, so any
+factory instance can resume polling after a crash or takeover and observe the same runs. The
+executor SHALL read the attempt commit from the engine's attempt-commit workspace handle that
+the engine's request carries and the check is bound with, never from a workspace type of its own.
 **Implements**: NFR-R2 of add-external-check-github-actions; FR26 of add-sandbox-core; FR2, FR3, FR6 of migrate-verify-to-executor-contract
 
 #### Scenario: Another instance resumes mid-poll
@@ -15,8 +15,8 @@ never from a workspace type of its own.
 - **THEN** the new instance polls the same attempt commit with the persisted key and reaches the same verdict with no other state handed over
 
 #### Scenario: The adapter consumes the engine workspace type
-- **WHEN** the stage engine invokes the `github-actions` verdict executor with a request carrying the attempt commit of the round under verification
-- **THEN** the executor reads the attempt commit from that request and polls runs of exactly that commit
+- **WHEN** the stage engine invokes the `github-actions` verdict executor with a request whose workspace handle names the attempt commit of the round under verification
+- **THEN** the executor reads the attempt commit from that handle and polls runs of exactly that commit
 
 ### Requirement: The adapter contributes its workflow file to the pin set
 The pin set checked by the pin-check guard SHALL be the union of the

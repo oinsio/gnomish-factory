@@ -137,7 +137,7 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
 
         and: 'a container-mode runner passing through only the two probe names, over the credential-capturing agent'
         def image = FakeAgentSandboxImage.ensureBuiltCapturingCredentials()
-        def sandbox = new SandboxProperties(image, null, null, null, [], [
+        def sandbox = new SandboxProperties(image, null, null, null, [
             PRESENT_PASSTHROUGH,
             ABSENT_PASSTHROUGH
         ], false,

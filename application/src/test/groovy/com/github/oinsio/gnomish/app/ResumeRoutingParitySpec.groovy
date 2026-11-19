@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
@@ -34,7 +35,6 @@ import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -120,7 +120,7 @@ class ResumeRoutingParitySpec extends Specification implements RunChainFakes {
         def worktree = Files.createDirectories(tempDir.resolve('worktrees').resolve('PROJ-1'))
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> Stub(TaskLifecycleStore)
-            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
             readRecordedState(_, _) >> Optional.of(RECORDED)
             readTaskRecord(_, _) >> Optional.ofNullable(record)
         }
@@ -128,7 +128,7 @@ class ResumeRoutingParitySpec extends Specification implements RunChainFakes {
             ensureWorktree(_, _) >> worktree
             salvage(_) >> Stub(WorktreeSalvager)
         }
-        def git = new TaskGit(store, branches(), worktrees, UnaryOperator.identity(), resumingBaseRefGit(), new ClaimEpochBook())
+        def git = new TaskGit(store, branches(), worktrees, HostGitRounds.NONE, resumingBaseRefGit(), new ClaimEpochBook())
         def clone = RegisteredCloneFixture.unregistered(tempDir.resolve('home'), CLONE_DIR)
         def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor), git, tracker, clone))
         def mechanics = new HostResumeMechanics(runner, git, clone, completingPipeline())
@@ -152,13 +152,13 @@ class ResumeRoutingParitySpec extends Specification implements RunChainFakes {
             taskRepository() >> Stub(TaskLifecycleStore)
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
             pendingVerification() >> Optional.empty()
         }
-        def git = new TaskGit(Stub(TaskStoreGit), branches(), Stub(TaskWorktreeGit), UnaryOperator.identity(),
+        def git = new TaskGit(Stub(TaskStoreGit), branches(), Stub(TaskWorktreeGit), HostGitRounds.NONE,
                 resumingBaseRefGit(), new ClaimEpochBook())
         def selector = new SandboxModeSelector(new BindingProperties(null, [:]),
-        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+        new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
         AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()), {
             -> false
         } as ContainerRuntimeProbe)

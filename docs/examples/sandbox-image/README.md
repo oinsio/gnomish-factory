@@ -180,7 +180,7 @@ The image bakes the stock agent CLI and no credential. The agent logs in with
 or `ANTHROPIC_API_KEY`, set in the **factory's** environment: the factory hands
 it to every agent round and judge vote in the box, and to nothing else, with no
 `env-passthrough` entry. Add `api.anthropic.com` to
-`factory.sandbox.egress-allowlist` in the project file. Nothing in the image wraps the `claude`
+`factory.egress.sandbox` in the project file. Nothing in the image wraps the `claude`
 binary — the factory passes the permission mode and the MCP exclusion itself.
 See [Agent authentication in the
 box](../../guides/operator-guide-sandbox.md#agent-authentication-in-the-box).

@@ -56,7 +56,7 @@ class DeliveredBranchReaderSpec extends Specification implements BareGitRepoFixt
     /** Persists one real round via GitAttemptPersistence so state.json exists, as a live task would. */
     private void persistOneRound(String taskId, TaskState state) {
         def worktree = registeredClone.worktrees().resolve(taskId)
-        def persistence = new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
+        def persistence = HostRoundPersistence.over(runner, worktree, taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 0),
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))

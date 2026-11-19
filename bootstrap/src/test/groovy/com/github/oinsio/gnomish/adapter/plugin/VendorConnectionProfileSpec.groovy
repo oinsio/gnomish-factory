@@ -1,14 +1,20 @@
 package com.github.oinsio.gnomish.adapter.plugin
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.check.CheckClientConfiguration
-import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineLoader
+import com.github.oinsio.gnomish.adapter.scm.builtin.ScmBuiltIns
+import com.github.oinsio.gnomish.adapter.scm.status.ScmStatusExecutor
 import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterConfiguration
+import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterDiscovery
 import com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerAdapterFactory
+import com.github.oinsio.gnomish.app.BuiltInCheckSubsections
 import com.github.oinsio.gnomish.app.ConnectionProfiles
+import com.github.oinsio.gnomish.app.ScmBuiltInRegistry
+import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
+import com.github.oinsio.gnomish.domain.engine.CheckRef
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
+import com.github.oinsio.gnomish.executorcontract.ExecutorName
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Files
 import java.nio.file.Path
@@ -19,15 +25,17 @@ import spock.lang.TempDir
  * Named per-vendor connection profiles across the two ports one vendor serves (FR16, FR17, UX3,
  * design D8/D11 of add-plugin-architecture, `vendor-connection-profile` capability).
  *
- * <p>The ergonomic claim of D8 is narrow and testable: a github tracker and github checks share ONE
+ * <p>The ergonomic claim of D8 is narrow and testable: a github tracker and the {@code
+ * github-actions} built-in's checks share ONE
  * {@code factory.connections.<name>} definition, so the endpoint and the credential name exist once
  * and cannot drift — while each port still selects its provider independently, and a config mixing
  * vendors is unaffected. The security claim of D11 rides along: a name a profile supplies is
  * configuration data no compile-time constant can see, and it must reach the child-environment
  * scrub / never-allowlist set all the same.
  *
- * <p>Both real registries are built by discovery here, and both real github factories answer, so
- * this is the assembled path an operator gets — not a hand-built stand-in of it.
+ * <p>The tracker registry is built by discovery here and the check side is read by its one owner,
+ * {@link BuiltInCheckSubsections} (task 5.2 of migrate-verify-to-executor-contract), so this is the
+ * assembled path an operator gets — not a hand-built stand-in of it.
  */
 class VendorConnectionProfileSpec extends Specification {
 
@@ -43,9 +51,13 @@ class VendorConnectionProfileSpec extends Specification {
         [(PROFILE): [('api-url'): API_URL, credential: RENAMED_CREDENTIAL]]
     }
 
-    /** The check port's subsection: the shared connection by name, plus its own per-port key. */
+    /** The built-in's subsection: the shared connection by name, plus its own per-port key. */
     private static Map checkSubsection() {
-        [github: [connection: PROFILE, repo: 'acme/widgets']]
+        [('github-actions'): [connection: PROFILE, repo: 'acme/widgets']]
+    }
+
+    private static BuiltInCheckSubsections subsections(FactoryProperties properties) {
+        new BuiltInCheckSubsections(properties.check(), ConnectionProfiles.of(properties.connections()))
     }
 
     private static FactoryProperties propertiesWithProfile(Map check = checkSubsection()) {
@@ -70,8 +82,8 @@ tracker:
         def profiles = ConnectionProfiles.of(properties.connections())
 
         when: 'the tracker loads through the assembled loader and the check subsections resolve'
-        def outcome = PipelineLoader.load(gnomishRoot, trackerValidators(), [:], [] as Set, profiles)
-        def checkResolved = CheckProviderSeam.resolve(properties.check(), profiles)['github']
+        def outcome = PipelineLoader.load(gnomishRoot, trackerValidators(), [:], profiles)
+        def checkResolved = profiles.resolve(properties.check()['github-actions'])
 
         then: 'the tracker config carries the profile endpoint, not the reference'
         outcome instanceof LoadOutcome.Loaded
@@ -80,31 +92,63 @@ tracker:
         trackerConfig.subsection()['repo'] == 'acme/widgets'
         !trackerConfig.subsection().containsKey('connection')
 
-        and: 'the check provider is handed the very same connection data'
+        and: 'the built-in is handed the very same connection data'
         checkResolved['api-url'] == API_URL
 
-        and: 'both ports declare the one credential the profile names — no vendor constant in sight'
+        and: 'both ports read the one credential the profile names — no vendor constant in sight'
         new GithubTrackerAdapterFactory().credentialEnvVars(trackerConfig) == [RENAMED_CREDENTIAL]
-        new GithubCheckClientFactory().credentialEnvVars(checkResolved) == [RENAMED_CREDENTIAL]
+        ScmBuiltIns.credential('github-actions', checkResolved) == RENAMED_CREDENTIAL
     }
 
     // FR16, "Mixed-vendor configuration is unaffected": sharing is opt-in per subsection. A second
     //     provider configured inline alongside the profile-referencing one is valid and untouched.
-    // Scenario: plugin/plugin-discovery / Different vendors serve different ports
     // Scenario: operator/vendor-connection-profile / Mixed-vendor configuration is unaffected
     def "a mixed-vendor configuration still works"() {
-        given: 'github by profile, the built-in http provider inline with its own allowlist'
-        def check = checkSubsection() + [http: [allowlist: ['sonar.example.com']]]
+        given: 'github-actions by profile, scm-status against a gitea remote inline, http empty by definition'
+        def check = checkSubsection() + [('scm-status'): [('api-url'): 'https://gitea.acme.test/api/v1', repo: 'acme/widgets'],
+            http: [:]]
         def properties = propertiesWithProfile(check)
+        def profiles = ConnectionProfiles.of(properties.connections())
+
+        expect: 'startup accepts every subsection, each built-in resolving its own connection independently'
+        subsections(properties).validate() == []
+        profiles.resolve(properties.check()['github-actions'])['api-url'] == API_URL
+        profiles.resolve(properties.check()['scm-status'])['api-url'] == 'https://gitea.acme.test/api/v1'
+        profiles.resolve(properties.check()['http']) == [:]
+    }
+
+    // FR3 of add-plugin-architecture, FR13 of migrate-verify-to-executor-contract: each port selects
+    //     on its own. The tracker resolves github from the discovered tracker registry; the check
+    //     names scm-status, a core built-in, against a non-GitHub remote (the run's loopback
+    //     connection, standing in for a gitlab host) and resolves it from the executor registry —
+    //     which reads no service registration, so neither choice can reach the other.
+    // Scenario: plugin/plugin-discovery / Different vendors serve different ports
+    def "the github tracker and an scm-status check resolve from their own registries without interference"() {
+        given:
+        def trackers = TrackerAdapterDiscovery.discover(getClass().classLoader)
+        def executors = ScmBuiltInRegistry.assemble()
+        def check = ScmBuiltInRegistry.check(BuiltInExecutors.SCM_STATUS)
 
         when:
-        def registry = new CheckClientConfiguration().checkClientRegistry(properties)
-        def resolved = CheckProviderSeam.resolve(properties.check(), ConnectionProfiles.of(properties.connections()))
+        def tracker = trackers['github']
+        def entry = executors.resolve(new ExecutorName(BuiltInExecutors.SCM_STATUS))
 
-        then: 'startup accepts both, each port resolving its own connection independently'
-        registry.keySet().containsAll(['github', 'http'])
-        resolved['github']['api-url'] == API_URL
-        resolved['http'] == [allowlist: ['sonar.example.com']]
+        then: 'the tracker port answers with the github factory, by its own discriminator'
+        tracker instanceof GithubTrackerAdapterFactory
+        tracker.type() == 'github'
+
+        and: 'the check answers with the core built-in, bound to its own remote, not GitHub\'s'
+        entry.executor(check, CheckRef.of(0, check), AttemptCommitWorkspaces.at('abc')) instanceof ScmStatusExecutor
+        entry.describe().egress() == ['127.0.0.1']
+
+        and: 'neither registry knows the other port\'s name'
+        !trackers.containsKey(BuiltInExecutors.SCM_STATUS)
+
+        when:
+        executors.resolve(new ExecutorName('github'))
+
+        then:
+        thrown(IllegalStateException)
     }
 
     // FR16, "Undefined profile name is a located error": on the repo side the mistake is a load
@@ -122,7 +166,7 @@ tracker:
 
         when:
         def outcome = PipelineLoader.load(
-                gnomishRoot, trackerValidators(), [:], [] as Set, ConnectionProfiles.of(profileConfig()))
+                gnomishRoot, trackerValidators(), [:], ConnectionProfiles.of(profileConfig()))
 
         then:
         outcome instanceof LoadOutcome.Invalid
@@ -138,13 +182,13 @@ tracker:
     //     message — the check port's twin of the load error above.
     def "an undefined profile reference in a check subsection fails startup"() {
         when:
-        new CheckClientConfiguration()
-                .checkClientRegistry(new FactoryProperties(null, null, null,
-                [github: [connection: 'does-not-exist', repo: 'acme/widgets']], profileConfig()))
+        subsections(new FactoryProperties(null, null, null,
+                [('github-actions'): [connection: 'does-not-exist', repo: 'acme/widgets']], profileConfig()))
+                .requireValid()
 
         then:
         def e = thrown(IllegalStateException)
-        e.message.contains('factory.check.github.connection')
+        e.message.contains('factory.check.github-actions.connection')
         e.message.contains("undefined connection profile 'does-not-exist'")
     }
 
@@ -153,14 +197,14 @@ tracker:
     // Scenario: verification/github-external-check / An inline key the profile also defines is a load error
     def "declaring both the reference and an inline profile key fails startup"() {
         when:
-        new CheckClientConfiguration()
-                .checkClientRegistry(new FactoryProperties(null, null, null,
-                [github: [connection: PROFILE, ('api-url'): 'https://ghe.acme.test', repo: 'acme/widgets']],
+        subsections(new FactoryProperties(null, null, null,
+                [('github-actions'): [connection: PROFILE, ('api-url'): 'https://ghe.acme.test', repo: 'acme/widgets']],
                 profileConfig()))
+                .requireValid()
 
         then:
         def e = thrown(IllegalStateException)
-        e.message.contains('factory.check.github.api-url')
+        e.message.contains('factory.check.github-actions.api-url')
         e.message.contains('declare exactly one form')
     }
 
@@ -182,7 +226,7 @@ tracker:
 
         when:
         def outcome = PipelineLoader.load(
-                gnomishRoot, trackerValidators(), [:], [] as Set, ConnectionProfiles.of(profileConfig()))
+                gnomishRoot, trackerValidators(), [:], ConnectionProfiles.of(profileConfig()))
 
         then: 'the error is located at the overlapping key, naming the profile it conflicts with'
         outcome instanceof LoadOutcome.Invalid
@@ -195,21 +239,18 @@ tracker:
     }
 
     // FR17, "Renamed credential in a profile is still scrubbed": the profile-supplied name enters
-    //     the run's declared-credential set through the SPI, so passthrough refuses it exactly as it
-    //     refuses a vendor's default constant — no core source names either.
+    //     the run's declared-credential set through the built-ins' one owner, so passthrough refuses
+    //     it exactly as it refuses a built-in's default name.
     // Scenario: tracker/github-tracker / The declared credential name keeps the token out of every allowlist
     // Scenario: verification/github-external-check / A profile-supplied token name cannot be allowlisted
     // Scenario: operator/vendor-connection-profile / Renamed credential in a profile is still scrubbed
     def "a profile-renamed credential cannot be admitted into the passthrough allowlist"() {
         given:
-        def properties = propertiesWithProfile()
-        def registry = new CheckClientConfiguration().checkClientRegistry(properties)
-        def declared = CheckProviderSeam.credentialEnvVars(
-                CheckProviderSeam.resolve(properties.check(), ConnectionProfiles.of(properties.connections())),
-                registry)
+        def declared = subsections(propertiesWithProfile()).credentialNames()
 
-        expect: 'the declared set follows the profile, not the provider constant'
-        declared == [RENAMED_CREDENTIAL]
+        expect: 'the declared set follows the profile, not the built-in\'s default name'
+        declared.contains(RENAMED_CREDENTIAL)
+        !declared.contains('GNOMISH_GITHUB_ACTIONS_TOKEN')
 
         and: 'and it is scrubbed from a composed child environment even when a layer carries it'
         !TestChildEnvironment.hostAllowlist([], declared)

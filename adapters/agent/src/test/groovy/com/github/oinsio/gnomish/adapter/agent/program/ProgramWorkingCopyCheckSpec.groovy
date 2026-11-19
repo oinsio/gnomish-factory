@@ -80,7 +80,7 @@ class ProgramWorkingCopyCheckSpec extends Specification implements LocalGitRepoF
     private ExecutorResult start(String edit, ExecutorRequest request) {
         Path link = StandIn.link(Files.createDirectories(links.resolve("run-${UUID.randomUUID()}")).resolve(edit), 'edit-as')
         new ProgramExecutor(ProgramFixtures.declaration([link.toString()]), ProgramFixtures.describe(), [],
-        environment, ProgramFixtures.equipment(stderrParent)).start(request)
+        environment, ProgramFixtures.equipment(stderrParent), PendingScope.unscoped(new PendingRuns())).start(request)
     }
 
     // Scenario: executor/wire-contract / Judge that wrote a file is refused

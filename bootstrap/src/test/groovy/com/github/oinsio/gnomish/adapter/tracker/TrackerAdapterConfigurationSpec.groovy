@@ -104,7 +104,7 @@ advancement: auto
         when:
         def configuration = new TrackerAdapterConfiguration()
         def registry = configuration.trackerSubsectionValidatorRegistry(configuration.trackerAdapterRegistry())
-        def outcome = PipelineLoader.load(gnomishRoot, registry, [:], [] as Set)
+        def outcome = PipelineLoader.load(gnomishRoot, registry, [:])
 
         then: 'one Invalid outcome carries both the bad-color adapter error and the core error'
         outcome instanceof LoadOutcome.Invalid
@@ -121,5 +121,23 @@ advancement: auto
         Path target = gnomishRoot.resolve(relative)
         Files.createDirectories(target.parent)
         Files.writeString(target, text)
+    }
+
+    // FR17 of migrate-verify-to-executor-contract, design D16: each discovered adapter names its HTTP
+    //     endpoint through the SPI, derived into a registry keyed like the validators; the test
+    //     fixtures' copy of the GitHub declaration is pinned to the bundle's own
+    // Scenario: plugin/plugin-api-contract / The SPI factories bear their declared members
+    def "the endpoint registry carries the GitHub adapter's declaration, and none for the in-memory one"() {
+        given:
+        def configuration = new TrackerAdapterConfiguration()
+
+        when:
+        def endpoints = configuration.trackerEndpointRegistry(configuration.trackerAdapterRegistry())
+
+        then:
+        com.github.oinsio.gnomish.app.TrackerAdapterFactory.getMethod('endpoint').returnType == Optional
+        endpoints == [github: new com.github.oinsio.gnomish.domain.egress.EndpointDeclaration('api-url', 'api.github.com')]
+        endpoints.github == com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub.githubEndpoint()
+        !endpoints.containsKey('inmemory')
     }
 }

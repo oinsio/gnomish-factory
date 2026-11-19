@@ -67,7 +67,11 @@ class ConfigLevelCoverageSpec extends Specification {
         } as Set
 
         then: 'the tracker backoff and the sandbox limits records were visited'
-        nested*.simpleName.toSet() == ['Tracker', 'ResourceLimits'] as Set
+        nested*.simpleName.toSet() == [
+            'Tracker',
+            'EgressProperties',
+            'ResourceLimits'
+        ] as Set
     }
 
     private static List<String> violationsIn(Class<?> record) {

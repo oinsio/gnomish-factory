@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -24,7 +24,7 @@ class ResumeAbortedRoundSpec extends ResumeMatrixSpecBase {
     def "a resume from the last persisted state re-executes the unpersisted round"() {
         given: 'a high-limit stage that fails on round 0 then cannot verify on round 1, persist aborting on round 1'
         def stageDef = stage('build', AdvancementMode.AUTO, 9, [builtin('files_exist')])
-        def priorBuiltin = new ScriptedBuiltinCheckRunner()
+        def priorBuiltin = new ScriptedCheckRounds()
         priorBuiltin.scripted << fail('findingA')
         priorBuiltin.scripted << new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
         def priorPersistence = new InMemoryAttemptPersistence()
@@ -42,7 +42,7 @@ class ResumeAbortedRoundSpec extends ResumeMatrixSpecBase {
 
         when: 'a NEW run resumes from the last durably persisted state; round 1 now passes'
         def resumeExecutor = new ScriptedExecutor([completed()])
-        def resumeBuiltin = new ScriptedBuiltinCheckRunner()
+        def resumeBuiltin = new ScriptedCheckRounds()
         resumeBuiltin.scripted << new Verdict.Pass(null, [])
         def resumed = new Engine().run(pipeline(stageDef), CONTEXT, lastPersisted, WORKSPACE,
                 freshPorts(resumeExecutor, resumeBuiltin, new InMemoryAttemptPersistence(), new RecordingEventListener()))

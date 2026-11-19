@@ -67,11 +67,14 @@ clones:
 factory:
   sandbox:
     image: widgets-sandbox:1                 # sandbox-boundary: only here
-    egress-allowlist:
-      - api.anthropic.com
-      - repo.maven.apache.org
     env-passthrough:
       - GH_TOKEN
+  egress:
+    sandbox:                                 # sandbox-boundary: what a box may reach
+      - api.anthropic.com
+      - repo.maven.apache.org
+    in-process:                              # project: what the factory process may reach
+      - sonar.example.com
   bindings:
     default: container                       # or host, for a trusted environment
   git-network-timeout: 10m                   # any level: overrides factory.yaml
@@ -83,21 +86,48 @@ the command line (`--factory.<key>=<value>`). Every key has a declared level —
 host-only, project-only, anywhere, or **sandbox-boundary** — and a key in a
 place its level forbids stops startup. The sandbox-boundary keys
 (`factory.bindings.*`, `factory.sandbox.image`,
-`factory.sandbox.egress-allowlist`, `factory.sandbox.env-passthrough`) are read
+`factory.egress.sandbox`, `factory.sandbox.env-passthrough`) are read
 from the project file and nowhere else, the command line included, so a
 project's whole sandbox boundary is in one file. `gnomish project show` prints
 each key's level and where its value came from. The policy is
 [ADR 0011](../adr/0011-operator-configuration-levels.md).
 
+**The egress block.** Every host the factory or a box may reach beyond its own
+connections is listed in one block, `factory.egress`, with two scopes:
+`sandbox` (sandbox-boundary, project file only) is what every box may reach, and
+`in-process` (project level) is what the factory process itself may reach — the
+targets of `http` checks, for example. Each entry is one *egress entry*: an exact
+host (`sonar.example.com`); a wildcard `*.example.com`, which matches every
+subdomain at any depth and never `example.com` itself; an IP literal; a CIDR
+block (`10.20.0.0/16`); or one of the class words `loopback` and `private`
+(RFC 1918 and IPv6 unique-local), which grant a host whose every address lies in
+that class. A port is never part of an entry. The `sandbox` scope takes only
+exact hosts, IP literals and wildcards — the box's guard matches names and
+resolves nothing — so a CIDR block or a class word there stops startup naming
+its line. No entry lifts the block on the cloud-metadata address
+`169.254.169.254`.
+
+The block replaces two older lists, now **removed keys**: startup stops naming
+the line and the scope to move the list to. Migrating moves each list, unchanged,
+under its new key:
+
+- `factory.sandbox.egress-allowlist` → `factory.egress.sandbox`
+- `factory.check.http.allowlist` → `factory.egress.in-process`
+
+The `http` check's own subsection, `factory.check.http`, takes no keys any more.
+
 **What stops startup.** A misplaced key, an unknown or misspelled key (removed
-keys such as `factory.agent-cli-env-passthrough` included), any `FACTORY_*`
-environment variable, and a configuration file writable by group or others. The
+keys such as `factory.agent-cli-env-passthrough` included), a removed key that
+names its replacement (`factory.sandbox.egress-allowlist`,
+`factory.check.http.allowlist`), an egress entry its scope cannot take, any
+`FACTORY_*` environment variable, and a configuration file writable by group or
+others. The
 factory lists every problem at once, each with its file and line and the fix,
 and exits with code 2 before touching the tracker, a branch or a box:
 
 ```
 gnomish did not start: 1 configuration problem (fix every line, then run the command again)
-  - factory.sandbox.egress-allowlist is not allowed here — found in /home/op/.gnomish/factory.yaml:4 — it is a sandbox-boundary key, read only from a project's own file — move it to /home/op/.gnomish/projects/<name>/project.yaml (registered: widgets)
+  - factory.egress.sandbox is not allowed here — found in /home/op/.gnomish/factory.yaml:4 — it is a sandbox-boundary key, read only from a project's own file — move it to /home/op/.gnomish/projects/<name>/project.yaml (registered: widgets)
 ```
 
 **Secrets.** A secret named `N` (for example `GNOMISH_GITHUB_TOKEN`) is read
@@ -196,6 +226,42 @@ flowchart LR
    the core loader understands; everything under `github:` is validated by the
    GitHub adapter itself. An absent `tracker` section is valid — `take` is
    simply unavailable and `run` is unaffected.
+
+   **Who may name the tracker's host.** This file is the target repository's,
+   written by whoever commits to it, while the tracker's token is yours — so an
+   `api-url` written here is a *request*, and the factory calls it only when your
+   operator files grant the host. `https://api.github.com` needs no grant (a
+   GitHub token is for GitHub). A GitHub Enterprise or Gitea host needs one of
+   two grants, and without either the load stops at `tracker.github.api-url`
+   naming both:
+
+   - an entry in your project file's egress block, `factory.egress.in-process`
+     (see [the egress block](#setting-up-a-project)) — an exact host, a
+     wildcard, or a class word such as `private` for a host on your network (a
+     host granted only by a class word is judged when it is first called, on the
+     addresses it resolves to); or
+   - a named connection profile, referenced from here as `connection: <name>`,
+     whose `api-url` names the host (or whose `egress` list does):
+
+     ```yaml
+     # ~/.gnomish/projects/<name>/project.yaml
+     factory:
+       connections:
+         ghe:
+           api-url: https://ghe.example.com/api/v3
+     ```
+
+   An inline `api-url` naming the same host as a profile, with no `connection:`
+   reference, is still the repository's request. A URL written here is `https`
+   only: plain `http` is accepted for a loopback host granted by the `loopback`
+   class word (a local test platform) and nowhere else, so a commit cannot move
+   your token to cleartext. Every call — and every redirect it follows — is
+   judged against the same grants at connect: a redirect to a host nobody
+   granted, or into a blocked address class, is refused before the connection.
+   A refused tracker call is a configuration fault, not an outage: under
+   `serve` it opens the `EGRESS` condition (below, and
+   [operator-guide-serve.md](operator-guide-serve.md#daemon-conditions-the-remote-outage-gate-and-the-operator-preconditions-ux6-ux4)),
+   `take` and `run` exit 8, and nothing retries it.
 
    The two heartbeat keys are **protocol constants shared by every instance** of
    the project — they live only in this file, never in anything the gnome can

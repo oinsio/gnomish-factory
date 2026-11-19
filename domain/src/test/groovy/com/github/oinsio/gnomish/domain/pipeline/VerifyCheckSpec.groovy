@@ -148,8 +148,8 @@ class VerifyCheckSpec extends Specification {
         Duration.ofMinutes(10) | Duration.ofMinutes(5) | 'interval above timeout'
     }
 
-    // FR1, UX2: until the executor registry runs every check (task 5.1), the engine polls every
-    // external check and every check naming an executor other than the two in-process built-ins
+    // FR1, UX2: every external check and every check naming an executor other than the two
+    // in-process built-ins is polled, and so carries the polled timing rules
     def "a check is polled when #reason"() {
         expect:
         new VerifyCheck.Executor(token, name, 'id', [:], Duration.ZERO, Duration.ZERO,
@@ -165,20 +165,6 @@ class VerifyCheckSpec extends Specification {
         VerifyCheck.Token.EXECUTOR | 'files-exist' | false | 'an executor form names files-exist'
         VerifyCheck.Token.EXECUTOR | 'shell' | false | 'an executor form names shell'
         VerifyCheck.Token.EXECUTOR | 'sonarqube' | true | 'an executor form names any other executor'
-    }
-
-    // FR1, UX2: the provider registry and the factory.check.* subtree still know the
-    // github-actions built-in by its former provider key, every other executor by its name
-    def "the provider key of #name is #key"() {
-        expect:
-        VerifyChecks.external('ci', name, Duration.ofSeconds(30), Duration.ofMinutes(5),
-                VerifyCheck.TimeoutClass.QUALITY).providerKey() == key
-
-        where:
-        name | key
-        'github-actions' | 'github'
-        'http' | 'http'
-        'github' | 'github'
     }
 
     // FR2/FR11: a judge check carries its acceptance criteria, model pin,

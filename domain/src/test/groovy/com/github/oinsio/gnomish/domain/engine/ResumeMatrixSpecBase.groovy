@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -60,11 +59,10 @@ abstract class ResumeMatrixSpecBase extends Specification {
     }
 
     /** A fresh port bundle with independent fakes, so each run in a scenario is isolated. */
-    static EnginePorts freshPorts(ScriptedExecutor executor, ScriptedBuiltinCheckRunner builtin,
+    static EnginePorts freshPorts(ScriptedExecutor executor, ScriptedCheckRounds builtin,
             InMemoryAttemptPersistence persistence, RecordingEventListener listener) {
         def clock = new VirtualClock()
-        new EnginePorts(executor, builtin, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence,
+        new EnginePorts(CheckRouting.of(executor, builtin, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), listener, persistence,
                 VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 }

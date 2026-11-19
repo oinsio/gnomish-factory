@@ -36,11 +36,13 @@ check is an executor program, authored against the executor contract.
 - **WHEN** a third-party adapter is compiled with `gnomish-plugin-api` as its
   only declared dependency (the `domain` and `untrustedtext` types the ports
   and the sanitizer reference arrive transitively, as does the `operatorevent`
-  jar the domain's own emitters use)
+  jar the domain's own emitters use and the `pendingkey` jar whose key the
+  domain's pending results carry)
 - **THEN** it can implement the tracker port and its SPI factory without
   needing `application` or `bootstrap`
-- **AND** a verdict program reads the attempt commit under verification from
-  its executor request with no factory dependency at all
+- **AND** a verdict program reads the attempt commit under verification as
+  `HEAD` of the working copy its executor request names, with no factory
+  dependency at all
 - **AND** a tracker implementation mints the snapshot's title and body as
   tracker-provenance untrusted text using only that dependency
 
@@ -56,10 +58,32 @@ check is an executor program, authored against the executor contract.
 
 #### Scenario: The SPI factories bear their declared members
 - **WHEN** the contract's SPI factories are inspected
-- **THEN** the tracker SPI factory bears `type()`, `subsectionValidator()`, and
-  the connection-aware credential declaration
+- **THEN** the tracker SPI factory bears `type()`, `subsectionValidator()`,
+  the connection-aware credential declaration, and `endpoint()`, which names the
+  subsection key holding its HTTP endpoint and its vendor default host
 - **AND** the contract holds no other SPI factory: a check's settings schema,
   credentials and pin contribution are declared by the executor's describe
+
+### Requirement: The published jar graph is the compatibility baseline
+The published project jar graph of `gnomish-plugin-api` — and with it the
+committed compatibility baseline — SHALL be `gnomish-plugin-api`, `domain`,
+the `untrustedtext` leaf this module declares, and every JDK-only leaf
+`domain` reaches (today `operatorevent` and `pendingkey`); a change to that set SHALL be
+re-baselined in the same change even when no signature moves, and the build
+SHALL fail while the committed baseline differs from that set.
+**Implements**: FR4 of split-into-modules; FR5, FR12, FR15, FR17 of add-plugin-architecture; FR1, FR2 of close-plugin-api-compilability-gap; FR3, FR8 of split-logtext-leaves; FR4 of type-untrusted-text; FR4 of tighten-spec-contract; FR2 of migrate-verify-to-executor-contract
+**Notes**: The version bump that goes with a set change is a review obligation: nothing compares the version across changes, so a re-baseline at an unchanged version passes the build.
+
+#### Scenario: The baseline covers the published jar set
+- **WHEN** the compatibility baseline of `gnomish-plugin-api` is generated
+- **THEN** it covers the `gnomish-plugin-api`, `domain`, `untrustedtext`,
+  `operatorevent`, and `pendingkey` jars
+
+#### Scenario: A jar-set change is re-baselined with a version bump
+- **WHEN** a jar joins or leaves the published set and no signature moves
+- **THEN** the build fails until the baseline is regenerated in the same
+  change; the api version is bumped beside it, which review checks — a
+  re-baseline at an unchanged version passes the build
 
 ## REMOVED Requirements
 
@@ -68,6 +92,7 @@ check is an executor program, authored against the executor contract.
 **Migration**: the sample verdict program and `gnomish executor verify` replace it.
 
 ### Requirement: Attempt-commit workspace readable through the contract
-**Reason**: The attempt commit travels in the executor request; no Java workspace type is
-needed by a program.
-**Migration**: read `workspace.attemptCommit` from the request on stdin.
+**Reason**: A verdict program runs in a working copy materialized at the attempt commit; no
+Java workspace type is needed by a program.
+**Migration**: read `HEAD` of the working copy the request's `workspace.path` names
+(`git rev-parse HEAD`).

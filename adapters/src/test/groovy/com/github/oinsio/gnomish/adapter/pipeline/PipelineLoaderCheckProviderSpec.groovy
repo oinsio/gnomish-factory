@@ -40,7 +40,8 @@ class PipelineLoaderCheckProviderSpec extends Specification implements PipelineL
         external.settings() == [:]
     }
 
-    // Scenario: pipeline/pipeline-config / Unknown provider is a located load error
+    // The check-SPI seam's half of the case, until tasks 5.2/6.1 remove the seam; the registry names
+    //     half and the scenario's marker are PipelineLoaderExecutorNamesSpec's.
     def "an external check naming an undiscovered provider is a located error aggregated with the rest"() {
         given: 'a valid tree whose build stage selects sonar, and whose plan stage pins no judge model'
         writeValidTree()

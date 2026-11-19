@@ -26,13 +26,12 @@ class HttpClientConstructionBoundarySpec extends Specification {
     private static final String OWNER = 'httpegress/src/main/java/com/github/oinsio/gnomish/httpegress/JdkHttpCheckExchange.java'
 
     /**
-     * Files outside the leaf that still construct a client, each with the task that removes it.
-     * The list empties when the GitHub HTTP core moves over the guarded exchange; a row whose file
-     * no longer constructs a client fails the reach assertion, so it cannot outlive its reason.
+     * Files outside the leaf that still construct a client, each with the task that removes it — empty
+     * since task 3.0c of migrate-verify-to-executor-contract built the GitHub HTTP core over the
+     * guarded exchange. A row whose file no longer constructs a client fails the reach assertion, so
+     * a future row cannot outlive its reason.
      */
-    private static final Map<String, String> PENDING = [
-        ('githubapi/src/main/java/com/github/oinsio/gnomish/githubapi/GithubHttpClient.java'): 'the GitHub HTTP core, moved into :githubapi with its own client unchanged by task 3.0a of migrate-verify-to-executor-contract; task 3.0b builds it over the guarded exchange and deletes this row',
-    ]
+    private static final Map<String, String> PENDING = [:]
 
     static final String CONSTRUCTION = /\bHttpClient\s*\.\s*(newBuilder|newHttpClient)\s*\(|\bnewHttpClient\s*\(|\bextends\s+(java\.net\.http\.)?HttpClient\b/
 

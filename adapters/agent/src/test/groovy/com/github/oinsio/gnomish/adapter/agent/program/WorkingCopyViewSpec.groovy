@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.program
 
+import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.gittransfer.GitInvocation
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
@@ -35,7 +36,7 @@ class WorkingCopyViewSpec extends Specification {
         def environment = new HostTaskExecutionEnvironment(workspace, new VirtualClock(), ChildEnvAllowlist.none(), launch)
         environment.materialize('gnomish/TASK-7', null)
         try {
-            new WorkingCopyCheck(environment, bound, new VirtualClock()).view()
+            new WorkingCopyCheck(environment, bound, new VirtualClock(), LastRegisteredCommit.NONE).view()
         } finally {
             environment.dispose()
         }

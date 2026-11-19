@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.serveobservability.json;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * The JSON contract's {@code roundOutcome} ledger line (NFR-O2, UX3 of define-executor-contract):
  * one per executor round, naming the executor, the role and the status in the words of {@code
@@ -15,6 +17,10 @@ package com.github.oinsio.gnomish.serveobservability.json;
  * @param executor {@code <name>@<version>}, or {@code <name>} for an executor with no describe
  * @param role the round's role token
  * @param status {@code <status>[/<class>]}
+ * @param check the check's index in the stage's {@code verify} list; null for a stage round
+ *     (migrate-verify-to-executor-contract, NFR-O1)
+ * @param resumedKey the prefix of the key a resumed check's wait was taken up with; null otherwise
+ *     (migrate-verify-to-executor-contract, UX3)
  */
 public record RoundOutcomeLineDto(
         int version,
@@ -26,4 +32,6 @@ public record RoundOutcomeLineDto(
         int attempt,
         String executor,
         String role,
-        String status) {}
+        String status,
+        @Nullable Integer check,
+        @Nullable String resumedKey) {}

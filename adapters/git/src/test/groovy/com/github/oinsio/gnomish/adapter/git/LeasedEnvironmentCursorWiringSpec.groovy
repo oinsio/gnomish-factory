@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -68,7 +69,7 @@ class LeasedEnvironmentCursorWiringSpec extends Specification implements BareGit
 
     private void closeRound(int round) {
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work ' + round
-        snapshotStep.snapshot(TASK, 'implement', round)
+        snapshotStep.snapshot(TASK, 'implement', round, RoundClose.VERIFIABLE)
         persistence.persist(TASK, RoundStates.recorded(new ToolTrace(
                         new AttemptKey(TASK, 'implement', round),
                         [

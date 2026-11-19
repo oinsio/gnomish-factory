@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
 import com.github.oinsio.gnomish.domain.engine.PollStatus
-import com.github.oinsio.gnomish.domain.engine.port.contract.ExternalCheckClientContract
+import com.github.oinsio.gnomish.domain.engine.port.contract.CheckPollContract
 
 /**
  * FR3, FR9 of add-plugin-architecture: the built-in http provider is one provider among the
@@ -9,7 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.port.contract.ExternalCheckClient
  * external-check adapter passes, over the same four {@link PollStatus} variants the engine's poll
  * loop switches on (FR14 of add-manual-run, metric M2).
  */
-class HttpExternalCheckClientContractSpec extends ExternalCheckClientContract implements HttpCheckFixture {
+class HttpCheckPollContractSpec extends CheckPollContract implements HttpCheckFixture {
 
     @Override
     protected Optional<PollStatus> arrange(PollVariant variant) {

@@ -23,23 +23,38 @@ import java.util.Optional;
  * <p>The constructor is package-private: in production only the assembly's describe step builds
  * one ({@code DescribedLawOwnerSpec} in {@code :bootstrap} pins the one file that does).
  *
- * <p>Implements FR4, FR9, FR13 of define-executor-contract.
+ * <p>Implements FR4, FR9, FR13 of define-executor-contract; FR13 of migrate-verify-to-executor-contract.
  */
 public final class DescribedLaw implements LawDescription {
 
     private final LawBinding binding;
     private final Map<String, Describe> answers;
     private final DescribedExecutors executors;
+    private final Map<String, AdmittedConnection> connections;
 
     /**
+     * A described law whose checks name no credentialed built-in.
+     *
      * @param binding which repository and tree the law is frozen from; never null
      * @param answers the describe answer of every described executor, by its law name; never null,
      *     empty when the law declares no executor or the run runs no stage
      */
     DescribedLaw(LawBinding binding, Map<String, Describe> answers) {
+        this(binding, answers, Map.of());
+    }
+
+    /**
+     * @param binding which repository and tree the law is frozen from; never null
+     * @param answers the describe answer of every described executor, by its law name; never null,
+     *     empty when the law declares no executor or the run runs no stage
+     * @param connections the admitted connection of every credentialed built-in the law's checks
+     *     name, by the built-in's name (design D18 of migrate-verify-to-executor-contract); never null
+     */
+    DescribedLaw(LawBinding binding, Map<String, Describe> answers, Map<String, AdmittedConnection> connections) {
         this.binding = Objects.requireNonNull(binding, "binding");
         this.answers = Collections.unmodifiableMap(new LinkedHashMap<>(answers));
         this.executors = DescribeOutcome.Described.executorsOf(this.answers);
+        this.connections = Map.copyOf(connections);
     }
 
     /** Which repository and tree the law is frozen from. */
@@ -60,5 +75,15 @@ public final class DescribedLaw implements LawDescription {
      */
     public Optional<Describe> answerOf(String name) {
         return Optional.ofNullable(answers.get(name));
+    }
+
+    /**
+     * The connection run assembly admitted for the credentialed built-in {@code name}.
+     *
+     * @param name the built-in's name; never null
+     * @return its admitted connection; empty when the law's checks do not name it
+     */
+    public Optional<AdmittedConnection> connectionOf(String name) {
+        return Optional.ofNullable(connections.get(name));
     }
 }

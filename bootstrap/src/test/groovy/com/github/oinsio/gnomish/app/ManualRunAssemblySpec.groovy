@@ -88,10 +88,12 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
                 new RunOrder(workspaceDir, null, definition(), false), context('task-1'),
                 initialState(), new InMemoryAttemptPersistence(), [], new DescribedLaw(LawBinding.workingTree(workspaceDir), [:]))
 
-        // The stage executor is the name-keyed dispatch (task 7.3 of define-executor-contract), whose
-        // agent arm the next feature shows to be the CLI executor by the rounds that reach the renderer.
+        // The port is the check-round route (task 4.2f of migrate-verify-to-executor-contract), whose
+        // stage chain in place is the name-keyed dispatch (task 7.3 of define-executor-contract); the
+        // next feature shows its agent arm to be the CLI executor by the rounds that reach the renderer.
+        // Assertion by effect: CheckRoundRouteSpec and ExecutorAdapterSelectorSpec route the requests.
         then:
-        run.ports().executor().class == ExecutorDispatch
+        run.ports().executor().class == CheckRoundRoute
         run.ports().judgeVoter().class == CliJudgeVoter
     }
 

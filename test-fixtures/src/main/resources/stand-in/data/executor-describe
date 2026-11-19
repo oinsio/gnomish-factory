@@ -45,3 +45,9 @@
 
 [break-settings-schema]
 {"protocolVersion":1,"version":"1","roles":["transform","verdict","decision"],"capabilities":["poll"],"settingsSchema":{"$ref":"https://schemas.example/reference-settings.json"},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
+
+[pin-flag-string]
+{"protocolVersion":1,"version":"1","roles":["verdict"],"capabilities":[],"settingsSchema":{},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false,"checkIdIsPinnedPath":"yes"}
+
+[verdict-poll]
+{"protocolVersion":1,"version":"1","roles":["verdict"],"capabilities":["poll"],"settingsSchema":{"type":"object","properties":{"defer":{"type":"boolean"}}},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent.program
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
@@ -87,7 +88,7 @@ class ProgramStageExecutorSpec extends Specification {
         def described = new DescribedProgram(ProgramFixtures.declaration([program.toString()], settings),
         ProgramFixtures.describe(), ['ACME_API_KEY'])
         new ProgramStageExecutor(new ProgramExecutorFactory(PipelineLaw.ofContent(['instructions.md': 'build it\n']),
-        described, ProgramFixtures.equipment(stderrParent)), rounds)
+        described, ProgramFixtures.equipment(stderrParent), new PendingRuns()), rounds)
     }
 
     private RoundEnvironmentSource.Round round(TaskExecutionEnvironment env) {
@@ -109,13 +110,41 @@ class ProgramStageExecutorSpec extends Specification {
 
         then:
         1 * rounds.openRound(_) >> round
-        1 * round.closeRound()
+        1 * round.closeRound(RoundClose.VERIFIABLE)
         1 * round.readDecision() >> Optional.empty()
         0 * round.discard()
         result.status() instanceof ExecutionResult.Completed
         result.denials() == [EGRESS]
         result.usage().byModel().keySet() == ['acme-model-1'] as Set
         environment.probes == 2
+    }
+
+    // FR19 of migrate-verify-to-executor-contract (design D22): the close names the one mapping's
+    // judgement, made before it — a round its program did not complete closes unverifiable, so its
+    // snapshot is never resumed as an interrupted verification; the denials still join the result
+    def "FR19: a round whose program answered #answer closes #close, its denials still attached"() {
+        given:
+        def environment = new GuardedEnvironment(delegate: host, denials: [EGRESS])
+        def round = round(environment)
+        def rounds = Stub(RoundEnvironmentSource) {
+            openRound(_) >> round
+        }
+        def program = StandIn.link(links.resolve(answer), 'run-as')
+
+        when:
+        def result = executor(program, rounds).execute(ProgramFixtures.round(workspace))
+
+        then:
+        1 * round.closeRound(close)
+        0 * round.closeRound(_)
+        result.denials().first() == EGRESS
+        result.status().class.simpleName == status
+
+        where:
+        answer | close | status
+        'completed' | RoundClose.VERIFIABLE | 'Completed'
+        'quality' | RoundClose.UNVERIFIABLE | 'Failed'
+        'limit' | RoundClose.UNVERIFIABLE | 'Failed'
     }
 
     // FR9 (task 7.1, obligation 4), FR4: the request carries the one merge of the settings, the model and the prior findings
@@ -159,7 +188,7 @@ class ProgramStageExecutorSpec extends Specification {
 
         then:
         1 * round.discard()
-        0 * round.closeRound()
+        0 * round.closeRound(RoundClose.VERIFIABLE)
         def failed = result.status() as ExecutionResult.Failed
         failed.failureClass() == ExecutionResult.FailureClass.INFRASTRUCTURE
         failed.reason().contains('egress guard is not running')
@@ -193,7 +222,7 @@ class ProgramStageExecutorSpec extends Specification {
         def rounds = Mock(RoundEnvironmentSource)
         def described = new DescribedProgram(ProgramFixtures.declaration(['unused']), ProgramFixtures.describe(), [])
         def executor = new ProgramStageExecutor(new ProgramExecutorFactory(PipelineLaw.ofContent([:]), described,
-        ProgramFixtures.equipment(stderrParent, ProgramBounds.DEFAULTS)), rounds)
+        ProgramFixtures.equipment(stderrParent, ProgramBounds.DEFAULTS), new PendingRuns()), rounds)
 
         when:
         executor.execute(ProgramFixtures.round(workspace))

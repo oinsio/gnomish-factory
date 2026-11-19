@@ -1,9 +1,10 @@
 package com.github.oinsio.gnomish.app.workspace
 
-import com.github.oinsio.gnomish.app.port.check.AttemptCommitWorkspace
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.RoundToken
+import com.github.oinsio.gnomish.domain.engine.port.AttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import spock.lang.Specification
 
@@ -13,8 +14,8 @@ import spock.lang.Specification
  * consumer holding one workspace for the whole run always reads the CURRENT round's attempt
  * commit — the closed round's (FR13 of make-checkpoint-gate-durable, design D10).
  *
- * FR1 of close-plugin-api-compilability-gap: the same reads go through the published
- * {@link AttemptCommitWorkspace} contract, which is all a third-party check ever sees of this
+ * FR1 of close-plugin-api-compilability-gap: the same reads go through the {@code :domain}
+ * {@link AttemptCommitWorkspace} capability, which is all a built-in check ever sees of this
  * record.
  *
  * Added by task 8.7 of split-into-modules (design D13(c)).
@@ -66,12 +67,11 @@ class RecordedAttemptCommitWorkspaceSpec extends Specification {
     }
 
     private static void nextRound(CurrentRound rounds, String sha) {
-        reopened(rounds).snapshotted(sha)
+        reopened(rounds).snapshotted(sha, RoundClose.VERIFIABLE)
     }
 
     // FR1 of close-plugin-api-compilability-gap: what a check client actually does — it receives
     // an opaque Workspace and narrows it to the API type, never to this record.
-    // Scenario: plugin/plugin-api-contract / External check learns the commit it verifies via the api type
     def "a check narrowing the engine's workspace to the api type reads the round's sha"() {
         given:
         def ref = ClosedRounds.at('sha-one')
@@ -92,7 +92,6 @@ class RecordedAttemptCommitWorkspaceSpec extends Specification {
 
     // FR1: the protocol error is part of the published contract, not an implementation detail the
     // narrowing hides.
-    // Scenario: plugin/plugin-api-contract / Reading the sha before any snapshot is a protocol error
     def "reading through the api type before any snapshot is a protocol error"() {
         given:
         AttemptCommitWorkspace narrowed = new RecordedAttemptCommitWorkspace(new CurrentRound())

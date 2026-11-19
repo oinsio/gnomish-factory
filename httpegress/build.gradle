@@ -4,16 +4,17 @@
 // exchange that re-judges every redirect hop against it, and the one JDK `HttpClient` the
 // factory's production code constructs. A request in, a bounded response or a refusal out.
 //
-// The module deliberately depends on NOTHING — no factory module, no Spring, no Jackson, no
-// logging API. Like `:gittransfer`, whose template this file follows, the emptiness is a
-// *security* property rather than a tidiness one (NFR-S2 of add-plugin-architecture; FR15 of
-// migrate-verify-to-executor-contract): an allowlist with nothing in it is what constructively
-// guarantees the egress policy can know nothing of trackers, secrets providers or configuration
-// formats, so the only things a caller can vary are the allowlist entries and the request. It is
-// also load-bearing for the layering: the `http` built-in in `:adapters` and the first-party GitHub
-// HTTP core reach this leaf from different modules, so any dependency added here would be pushed
-// into both. There is no production-scope declaration below because there is nothing to declare,
-// and the layering gate proves it stays that way.
+// The module depends on `:domain` and on nothing else — no other factory module, no Spring, no
+// Jackson, no logging API, no external library. The one edge carries the egress values it admits
+// and refuses with (`EgressMedium`, `ConnectionEndpoint`, `AdmittedEndpoint`, the refusal type, in
+// `domain.egress`; design D16 of migrate-verify-to-executor-contract as amended 2026-11-09): every
+// consumer of the leaf already reaches `:domain`, so the edge adds no reach to any of them. The
+// narrowness is otherwise the *security* property `:gittransfer` has (NFR-S2 of
+// add-plugin-architecture; FR15 of migrate-verify-to-executor-contract): the egress guard can be
+// handed no tracker, secrets provider or configuration format, so the only things a caller can vary
+// are the admitted set and the request. It is also load-bearing for the layering: the `http`
+// built-in in `:adapters` and the first-party GitHub HTTP core reach this leaf from different
+// modules, so any dependency added here would be pushed into both.
 //
 // What stays outside: composing a request from a manifest, resolving its credential and judging
 // the verdict (`HttpExternalCheckClient` in `:adapters`), and logging a refusal, which needs the
@@ -23,16 +24,28 @@
 // gate all come from the convention plugins.
 plugins {
     id 'library-conventions'
-    // The FR2 direction gate of split-into-modules; the permitted reach — no internal
-    // project at all — is stated below.
+    // The FR2 direction gate of split-into-modules; the permitted reach is stated below.
     id 'layering-conventions'
 }
 
-description = 'HTTP egress owner: the host allowlist, the guarded exchange, the one JDK HTTP client.'
+description = 'HTTP egress owner: admission by medium, the guarded exchange, the one JDK HTTP client.'
 
-// `:httpegress` reaches no other project at all — the same gate `:gittransfer`,
-// `:untrustedtext` and `:subprocess` carry, here for the reason stated above: the empty
-// allowlist is the constructive half of the egress policy's security property.
+dependencies {
+    // `api`: `EgressAdmission.admit` takes and returns the `domain.egress` values on its signature.
+    api project(':domain')
+}
+
+// `:httpegress` reaches the domain and, through it, the two JDK-only leafs the domain carries; no
+// other project (design D16 as amended 2026-11-09; module-layering scenario "The egress module
+// depends only on the domain").
 layering {
-    allowedProjects = []
+    allowedProjects = [
+        ':domain',
+        // The operator-event catalog leaf: transitive via `:domain`. No source here names it.
+        ':operatorevent',
+        // The pending-key leaf (design D20): transitive via `:domain`. No source here names it.
+        ':pendingkey',
+        // The untrusted-text leaf: transitive via `:domain`. No source here names it.
+        ':untrustedtext',
+    ]
 }

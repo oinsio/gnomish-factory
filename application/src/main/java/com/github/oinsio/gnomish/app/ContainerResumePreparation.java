@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunSupport;
 import com.github.oinsio.gnomish.domain.engine.Position;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -18,44 +19,42 @@ import org.jspecify.annotations.Nullable;
  * argument rather than equipment held across calls.
  *
  * <p>Implements FR18 of make-checkpoint-gate-durable; FR6, FR21 of add-sandbox-core; NFR-R4 of
- * add-serve-sandbox-lifecycle.
+ * add-serve-sandbox-lifecycle; FR19 of migrate-verify-to-executor-contract.
  */
 final class ContainerResumePreparation {
 
     private ContainerResumePreparation() {}
 
     /**
-     * Prepares the box in three steps, in order. First the snapshot check: a snapshot commit
-     * unrecorded in {@code state.json} is an interrupted verification (FR21 of add-sandbox-core) —
-     * the round is complete on the branch. Then, under {@code --discard-work}, whatever environment
-     * survives is disposed so the next materialize seeds a fresh clone at the recorded tip;
-     * otherwise the box is reattached for the stage of the position (start a stopped box, recreate
-     * over a surviving volume, or seed a fresh clone) so both the salvage and same-box verification
-     * of a pending snapshot have a live box. Last, only when no snapshot is pending, the
-     * interrupted round's uncommitted leftovers are salvaged in-box — never over a finished round.
+     * Prepares the box in three steps, in order. First the snapshot check: a registered snapshot or
+     * pending commit is an interrupted verification (FR21 of add-sandbox-core) — the round is
+     * complete on the branch. Then, under {@code --discard-work}, whatever environment survives is
+     * disposed so the next materialize seeds a fresh clone at the recorded tip; otherwise the box is
+     * reattached for the stage of the position (start a stopped box, recreate over a surviving
+     * volume, or seed a fresh clone) so both the salvage and same-box verification of a pending
+     * snapshot have a live box. Last, the leftovers are settled by {@link NoSalvageOverVerification},
+     * which salvages them in-box only when the register names no interrupted verification.
      *
      * @param support the sandbox run support bound to the task's branch; never null
      * @param discardWork {@code true} for {@code --discard-work}
      * @param position the recorded position the resume starts from; never null
      * @param taskId the task whose leftovers a salvage commits
-     * @return the pending verification the drive re-verifies, or {@code null} when the tip is not
-     *     a snapshot commit
+     * @return the pending verification the drive re-verifies, or {@code null} when the register
+     *     names none
      */
     static @Nullable PendingVerification prepare(
             SandboxRunSupport support, boolean discardWork, Position position, String taskId) {
-        PendingVerification pending = support.pendingVerification().orElse(null);
+        Optional<PendingVerification> registered = support.pendingVerification();
         if (discardWork) {
             support.disposeExistingEnvironment();
-            return pending;
+            return registered.orElse(null);
         }
         String stage = stageToReattach(position);
-        if (stage != null) {
-            support.reattachFor(stage);
-            if (pending == null) {
-                support.salvageLeftovers(taskId);
-            }
+        if (stage == null) {
+            return registered.orElse(null);
         }
-        return pending;
+        support.reattachFor(stage);
+        return NoSalvageOverVerification.inBox(support, registered, taskId);
     }
 
     /**

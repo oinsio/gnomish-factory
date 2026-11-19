@@ -65,6 +65,7 @@ public final class OperatorSources {
             for (String key : ((EnumerablePropertySource<?>) part).getPropertyNames()) {
                 if (key.startsWith(PREFIX)) {
                     violations.key(where, key, location(part, key));
+                    violations.value(key, values.get(key), location(part, key));
                     block.put(key, values.get(key));
                 } else if (!owned.test(key)) {
                     violations.foreign(key, location(part, key), holds);
@@ -91,6 +92,7 @@ public final class OperatorSources {
                     }
                 } else if (key.startsWith(PREFIX)) {
                     violations.key(sourceOf(source), key, location(source, key));
+                    violations.value(key, source.getProperty(key), location(source, key));
                 }
             }
         }

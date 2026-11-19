@@ -63,7 +63,7 @@ class StateDirectoryWritersSpec extends Specification implements BareGitRepoFixt
         def calls = (0..<toolCalls).collect {
             new ToolCall(it, "tool-${it}", Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(10))
         }
-        new GitAttemptPersistence(runner, worktree(), TASK, ClaimEpochSource.NONE)
+        HostRoundPersistence.over(runner, worktree(), TASK, ClaimEpochSource.NONE)
                 .persist(TASK, RoundStates.withRound(state, new AttemptKey(TASK, 'implement', round)),
                 new ToolTrace(new AttemptKey(TASK, 'implement', round), calls))
     }

@@ -80,7 +80,7 @@ class StatusEventListenerSpec extends Specification {
             new EngineEvent.AttemptStarted(key()),
             new EngineEvent.ExecutionFinished(key(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()),
             new EngineEvent.CheckStarted(key(), new CheckRef(0, UntrustedText.manifest('builtin:files_exist'))),
-            new EngineEvent.CheckFinished(key(), passingCheck()),
+            new EngineEvent.CheckFinished(key(), passingCheck(), null),
             new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Completed(TaskState.atStageStart('review'))),
             new EngineEvent.TaskFinished(TASK_ID, new TaskOutcome.Paused(TaskState.atStageStart('review'), 'implement')),
             new EngineEvent.TaskFinished(TASK_ID,

@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
-import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.EnvironmentAttemptPersistence
@@ -11,7 +10,6 @@ import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.LocalBoxEnvironment
-import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
@@ -25,9 +23,9 @@ import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.EnginePorts
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -64,7 +62,8 @@ import spock.lang.TempDir
  * clone, in-box commits, harvest; no daemon) seen through an {@link ObservedBox}, or whatever a
  * spec hands the lease. Host: the executor's host round source over a git worktree of the factory
  * clone, and {@link GitAttemptPersistence}. The model is {@code ContainerContinuationMedium}; the
- * checks are scripted, the rounds and their commits are real. Claimless, as a {@code run} is.
+ * check rounds are the ones a spec hands in — scripted, or the run's check dispatch — the rounds and
+ * their commits are real. Claimless, as a {@code run} is.
  */
 abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFixture {
 
@@ -105,7 +104,7 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
 
     /** Runs the pipeline to its outcome, the fake agent playing {@code scenario} in {@code box}. */
     TaskOutcome run(PipelineDefinition definition, TaskExecutionEnvironment box, String scenario,
-            ScriptedCommandCheckRunner checks) {
+            ScriptedCheckRounds checks) {
         def lease = new EnvironmentLease({ -> box }, BRANCH, [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), definition.stages())
         ])
@@ -126,20 +125,25 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
 
     /** Runs the pipeline in host mode over {@code worktree}, the agent being {@code agent}'s binary. */
     TaskOutcome runHost(PipelineDefinition definition, Path worktree, FactoryProperties agent,
-            ScriptedCommandCheckRunner checks) {
+            StageExecutor checks) {
         def clock = new VirtualClock()
-        // The git-mode host wiring: the host round source under the decoration that mints the tokens.
-        def rounds = new MidRoundPushRounds(CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()), runner, clock)
-        def executor = new CliStageExecutor(agent, clock, { e -> } as AgentProgressListener, TestChildEnvironment.hostAllowlist(), LAW,
-        rounds)
-        engine(definition, executor, new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE), checks, worktree,
+        // The git-mode host wiring through its production owner (testing.md, "Fixtures assemble
+        // through production owners"): the bundle's host-git decoration mints the tokens over the
+        // host round source and snapshots a completed round outside the executor, as the run
+        // assembly wires it (design D22 of migrate-verify-to-executor-contract). One cell per run,
+        // shared by the round source, the snapshot and the persistence.
+        def cell = new CurrentRound()
+        def hostGit = TaskGitFixture.real(runner).midRoundPush()
+        def rounds = hostGit.decorate(CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()), cell)
+        def executor = hostGit.snapshotting(new CliStageExecutor(agent, clock, { e -> } as AgentProgressListener,
+        TestChildEnvironment.hostAllowlist(), LAW, rounds), cell)
+        engine(definition, executor, new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE, cell, clock), checks, worktree,
                 rounds.identity())
     }
 
     private static TaskOutcome engine(PipelineDefinition definition, StageExecutor executor,
-            AttemptPersistence persistence, ScriptedCommandCheckRunner checks, Path workspace, RoundIdentity identity) {
-        def ports = new EnginePorts(executor, new FilesExistCheckRunner(), checks, new ScriptedExternalCheckClient(),
-                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(new VirtualClock()), identity)
+            AttemptPersistence persistence, StageExecutor checks, Path workspace, RoundIdentity identity) {
+        def ports = new EnginePorts(CheckRouting.of(executor, checks), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(new VirtualClock()), identity)
         new Engine().run(definition, FakeAgentSupport.defaultTaskContext(), TaskState.atStageStart('build'),
                 new DirectoryWorkspace(workspace), ports)
     }

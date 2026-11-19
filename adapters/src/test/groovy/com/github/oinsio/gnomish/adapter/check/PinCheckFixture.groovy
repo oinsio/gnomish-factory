@@ -11,10 +11,10 @@ import java.nio.file.Path
 import java.time.Duration
 
 /**
- * Shared scaffolding for the {@link PinCheckedExternalCheckClient} specs (FR16, D10, NFR-C1 of
- * add-sandbox-core): a real bare repository seeded with the pinned definition files, the
- * attempt-commit workspace shape and the guarded check manifest every pin scenario hands the
- * guard.
+ * Shared scaffolding for the {@link PinCheck} specs (FR16, D10, NFR-C1 of add-sandbox-core; D17 of
+ * migrate-verify-to-executor-contract): a real bare repository seeded with the pinned definition
+ * files, the attempt-commit workspace shape and the guarded check manifest every pin scenario hands
+ * the pin decorator.
  *
  * <p>Test fixture; not production code, never PIT-mutated.
  */

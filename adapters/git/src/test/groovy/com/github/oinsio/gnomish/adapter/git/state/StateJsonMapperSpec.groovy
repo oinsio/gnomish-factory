@@ -390,7 +390,7 @@ class StateJsonMapperSpec extends Specification {
         given:
         def mapper = TaskStateJson.mapper()
         def dto = new StateJsonDto(1, new StatePositionDto.AtStage("atStage", "implement"), 0, [],
-        new UsageSnapshotDto([:], new UsageCostDto(BigDecimal.ZERO, [:], true), 0, null), null, null)
+        new UsageSnapshotDto([:], new UsageCostDto(BigDecimal.ZERO, [:], true), 0, null), null, null, null)
 
         when:
         def json = mapper.writeValueAsString(dto)

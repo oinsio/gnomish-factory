@@ -68,6 +68,22 @@ GitHub HTTP client SHALL exist.
 - **THEN** exactly one exists, in the first-party GitHub library, and the bundle's
   tracker and the `github-actions` and `scm-status` built-ins all use it
 
+### Requirement: The GitHub core waits out a rate limit it was told about
+The GitHub HTTP core SHALL judge a rate limit, a `403` with GitHub's signal or a `429`, and its
+pause in one place: `retry-after`, else the rate-limit reset against the response's `Date`, else
+60 seconds. It SHALL NOT re-send a rate-limited request before its pause, and SHALL return a
+response whose pause exceeds its retry ceiling of 8 seconds to the caller at once, with the pause.
+**Implements**: NFR-R2 of migrate-verify-to-executor-contract
+**Notes**: GitHub asks clients not to repeat a request before the pause and warns that an integration that keeps going may be banned (design D19).
+
+#### Scenario: A long rate-limit pause is returned, not retried
+- **WHEN** GitHub answers a request with a rate limit whose pause is longer than 8 seconds
+- **THEN** the core makes no further attempt and the caller receives the response with that pause
+
+#### Scenario: A short rate-limit pause is retried after it
+- **WHEN** GitHub answers with `retry-after: 2` and then with success
+- **THEN** the core re-sends the request no sooner than 2 seconds later and returns the success
+
 ### Requirement: Core's built-in executors do not depend on the vendor bundle
 The `github-actions` and `scm-status` built-ins SHALL be core's own and SHALL stay
 available when the github jar is removed. The rule "distribution is not mechanism"

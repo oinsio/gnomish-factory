@@ -40,6 +40,7 @@ class PreconditionConditionLogSpec extends Specification {
         DaemonConditionKind.CLONE_REF_FORMAT | OperatorEvent.CONDITION_CLONE_REF_FORMAT_OPENED
         DaemonConditionKind.IMAGE_CONTRACT | OperatorEvent.CONDITION_IMAGE_CONTRACT_OPENED
         DaemonConditionKind.BOX_GIT_FLOOR | OperatorEvent.CONDITION_BOX_GIT_FLOOR_OPENED
+        DaemonConditionKind.EGRESS | OperatorEvent.CONDITION_EGRESS_OPENED
     }
 
     def "NFR-O2: the sustained-open ERROR carries its kind's own code, the threshold and the last cause: #kind"() {
@@ -66,6 +67,7 @@ class PreconditionConditionLogSpec extends Specification {
         DaemonConditionKind.CLONE_REF_FORMAT | OperatorEvent.CONDITION_CLONE_REF_FORMAT_SUSTAINED_OPEN
         DaemonConditionKind.IMAGE_CONTRACT | OperatorEvent.CONDITION_IMAGE_CONTRACT_SUSTAINED_OPEN
         DaemonConditionKind.BOX_GIT_FLOOR | OperatorEvent.CONDITION_BOX_GIT_FLOOR_SUSTAINED_OPEN
+        DaemonConditionKind.EGRESS | OperatorEvent.CONDITION_EGRESS_SUSTAINED_OPEN
     }
 
     def "NFR-O2: every failed probe is DEBUG, whatever repeat form it took"() {

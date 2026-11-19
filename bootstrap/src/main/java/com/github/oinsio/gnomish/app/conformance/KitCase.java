@@ -5,8 +5,9 @@ import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The twelve cases of the conformance kit (FR12, M4 of define-executor-contract; design D18, D19),
- * in the order the kit runs and reports them. Each case's name is the word its report line and its
+ * The thirteen cases of the conformance kit (FR12, M4 of define-executor-contract; design D18, D19;
+ * the re-poll case FR12 of migrate-verify-to-executor-contract, design D11), in the order the kit runs
+ * and reports them. Each case's name is the word its report line and its
  * scratch working copy carry: the misbehaving fake breaks a case by the request's workspace path
  * ending in {@code /<name>}.
  *
@@ -15,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  * these, the kit owning them ({@code KitCaseScriptIdentitySpec} reads both). No shared classpath: the
  * script is a POSIX stand-in of the test library.
  *
- * <p>Implements FR12, M4 of define-executor-contract.
+ * <p>Implements FR12, M4 of define-executor-contract; FR11, FR12 of migrate-verify-to-executor-contract.
  */
 @NullMarked
 public enum KitCase {
@@ -39,6 +40,11 @@ public enum KitCase {
     NON_JSON_STDOUT("non-json-stdout", null),
     /** A start under the pending settings returns {@code pending}, and its poll ends the run. */
     PENDING_POLL("pending-poll", null),
+    /**
+     * A start under the pending settings returns {@code pending}, its key is polled to a terminal
+     * status, and a re-poll of the key that ended the run answers that run again, alike.
+     */
+    PENDING_REPOLL("pending-repoll", null),
     /** A request carrying a field the contract does not define is answered as without it. */
     UNKNOWN_REQUEST_FIELDS("unknown-request-fields", null),
     /** A {@code decision} start's answer is well-formed. */
@@ -68,6 +74,16 @@ public enum KitCase {
      */
     public @Nullable Role role() {
         return role;
+    }
+
+    /**
+     * Whether the case starts under the pending settings and polls the run it starts, and so applies
+     * only to a candidate whose describe declares {@code poll}.
+     *
+     * @return {@code true} for the pending case and the re-poll case
+     */
+    public boolean pending() {
+        return this == PENDING_POLL || this == PENDING_REPOLL;
     }
 
     /**

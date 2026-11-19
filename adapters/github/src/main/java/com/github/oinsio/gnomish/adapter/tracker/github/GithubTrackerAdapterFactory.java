@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerReadVerdict;
+import com.github.oinsio.gnomish.domain.egress.EndpointDeclaration;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.githubapi.GithubCredential;
@@ -57,6 +58,15 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     @Override
     public String type() {
         return TYPE;
+    }
+
+    /**
+     * {@code tracker.github.api-url} on GitHub's own API host (FR17, design D16 of
+     * migrate-verify-to-executor-contract): a GitHub token is for GitHub, so that host needs no grant.
+     */
+    @Override
+    public Optional<EndpointDeclaration> endpoint() {
+        return Optional.of(new EndpointDeclaration("api-url", "api.github.com"));
     }
 
     /**
@@ -109,7 +119,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         GithubLabelDef needsHumanLabel = labels.needsHuman();
         GithubLabelDef deliveredLabel = labels.delivered();
 
-        var httpClient = GithubTrackerAdapterFactorySupport.httpClientFor(subsection, token);
+        var httpClient = GithubTrackerAdapterFactorySupport.httpClientFor(config, token);
         var cache = new GithubConditionalRequestCache(httpClient);
         var labelOps = new GithubLabelOps(httpClient);
         // One renderer for every GithubMarkerKind (FR11): every structural comment this adapter
@@ -174,7 +184,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
     Optional<String> refuseForeignRef(TrackerConfig config, TaskRef ref, String token) {
         Map<String, Object> subsection = config.subsection();
         GithubRepoRef repoRef = GithubTrackerAdapterFactorySupport.requireRepoRef(subsection);
-        var check = new GithubForeignRepoCheck(GithubTrackerAdapterFactorySupport.httpClientFor(subsection, token));
+        var check = new GithubForeignRepoCheck(GithubTrackerAdapterFactorySupport.httpClientFor(config, token));
         try {
             check.verify(GithubTaskId.parse(ref.id()), repoRef.owner(), repoRef.repo());
             return Optional.empty();
@@ -208,8 +218,7 @@ public final class GithubTrackerAdapterFactory implements TrackerAdapterFactory 
         String token = GithubTrackerAdapterFactorySupport.requireToken(secrets, config);
         Map<String, Object> subsection = config.subsection();
         GithubRepoRef repoRef = GithubTrackerAdapterFactorySupport.requireRepoRef(subsection);
-        var provisioner =
-                new GithubLabelProvisioner(GithubTrackerAdapterFactorySupport.httpClientFor(subsection, token));
+        var provisioner = new GithubLabelProvisioner(GithubTrackerAdapterFactorySupport.httpClientFor(config, token));
         return provisioner
                 .assess(
                         repoRef.owner(),

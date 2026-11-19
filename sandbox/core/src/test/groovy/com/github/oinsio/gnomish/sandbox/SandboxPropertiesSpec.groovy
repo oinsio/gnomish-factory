@@ -18,41 +18,41 @@ class SandboxPropertiesSpec extends Specification {
     // FR3: image is optional — a host-only install sets none and it stays null
     def "image is null when unset and exposed unchanged when set"() {
         expect: 'unset image stays null (host-only install)'
-        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null).image() == null
+        new SandboxProperties(null, null, null, null, null, false, null, null, null, null).image() == null
 
         and: 'a configured image is exposed unchanged'
-        new SandboxProperties('ghcr.io/acme/box:1', null, null, null, null, null, false, null, null, null, null).image() == 'ghcr.io/acme/box:1'
+        new SandboxProperties('ghcr.io/acme/box:1', null, null, null, null, false, null, null, null, null).image() == 'ghcr.io/acme/box:1'
     }
 
     // D2: runtime defaults to runc when unset
     def "runtime defaults to runc when unset"() {
         expect: 'the unset runtime resolves to the design D2 default'
-        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null).runtime() == 'runc'
+        new SandboxProperties(null, null, null, null, null, false, null, null, null, null).runtime() == 'runc'
     }
 
     // D2: an explicit runtime overrides the default
     def "runtime of an explicit value is exposed unchanged"() {
         expect: 'the accessor returns exactly the configured runtime'
-        new SandboxProperties(null, 'sysbox-runc', null, null, null, null, false, null, null, null, null).runtime() == 'sysbox-runc'
+        new SandboxProperties(null, 'sysbox-runc', null, null, null, false, null, null, null, null).runtime() == 'sysbox-runc'
     }
 
     // D4: the guard image defaults to the pinned-major official mitmproxy image when unset
     def "guard image defaults to the pinned official image when unset"() {
         expect: 'the unset guard image resolves to the design D4 default'
-        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null).guardImage() == 'mitmproxy/mitmproxy:12'
+        new SandboxProperties(null, null, null, null, null, false, null, null, null, null).guardImage() == 'mitmproxy/mitmproxy:12'
     }
 
     // D4: an explicit guard image (e.g. a private mirror) overrides the default
     def "guard image of an explicit value is exposed unchanged"() {
         expect: 'the accessor returns exactly the configured guard image'
-        new SandboxProperties(null, null, 'mirror.local/mitmproxy:12', null, null, null, false, null, null, null, null).guardImage() ==
+        new SandboxProperties(null, null, 'mirror.local/mitmproxy:12', null, null, false, null, null, null, null).guardImage() ==
                 'mirror.local/mitmproxy:12'
     }
 
     // D2/D4: a blank string knob is a configuration mistake, rejected with its property name
     def "blank #property value is rejected with the property name in the message"() {
         when: 'a properties record is built with a blank value for the knob'
-        new SandboxProperties(null, runtime, guardImage, null, null, null, false, null, null, null, null)
+        new SandboxProperties(null, runtime, guardImage, null, null, false, null, null, null, null)
 
         then: 'construction fails and the message names the property'
         def failure = thrown(IllegalArgumentException)
@@ -69,7 +69,7 @@ class SandboxPropertiesSpec extends Specification {
     // FR10: limits default to the documented set when unset
     def "limits default to the documented set when unset"() {
         expect: 'the unset limits component resolves to ResourceLimits.defaults()'
-        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null).limits() == ResourceLimits.defaults()
+        new SandboxProperties(null, null, null, null, null, false, null, null, null, null).limits() == ResourceLimits.defaults()
     }
 
     // FR10: explicit limits are exposed unchanged
@@ -78,22 +78,16 @@ class SandboxPropertiesSpec extends Specification {
         def limits = new ResourceLimits('4', '8g', 1024L, '50g')
 
         expect: 'the accessor returns exactly that set'
-        new SandboxProperties(null, null, null, limits, null, null, false, null, null, null, null).limits() == limits
-    }
-
-    // FR7: the egress allowlist defaults to empty (default-deny with nothing allowed)
-    def "egress allowlist defaults to empty when unset"() {
-        expect: 'the unset allowlist is empty'
-        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null).egressAllowlist() == []
+        new SandboxProperties(null, null, null, limits, null, false, null, null, null, null).limits() == limits
     }
 
     // FR9: the env passthrough list defaults to empty when unset
     def "env passthrough defaults to empty when unset"() {
         expect: 'the unset passthrough list is empty'
-        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null).envPassthrough() == []
+        new SandboxProperties(null, null, null, null, null, false, null, null, null, null).envPassthrough() == []
     }
 
-    // FR7/FR9: the list knobs are defensively copied and exposed immutable
+    // FR9: the list knob is defensively copied and exposed immutable
     def "#knob is defensively copied and exposed immutable"() {
         given: 'a mutable source list'
         def source = ['first']
@@ -113,13 +107,8 @@ class SandboxPropertiesSpec extends Specification {
 
         where:
         knob | build | accessor
-        'egressAllowlist' | {
-            new SandboxProperties(null, null, null, null, it, null, false, null, null, null, null)
-        } | {
-            it.egressAllowlist()
-        }
         'envPassthrough' | {
-            new SandboxProperties(null, null, null, null, null, it, false, null, null, null, null)
+            new SandboxProperties(null, null, null, null, it, false, null, null, null, null)
         } | {
             it.envPassthrough()
         }
@@ -129,17 +118,17 @@ class SandboxPropertiesSpec extends Specification {
     // host relying on the derived origin-URL digest leaves it unset
     def "projectId is null when unset and exposed unchanged when set"() {
         expect: 'unset projectId stays null (ProjectIdentity then derives it)'
-        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null).projectId() == null
+        new SandboxProperties(null, null, null, null, null, false, null, null, null, null).projectId() == null
 
         and: 'an explicit override is exposed unchanged'
-        new SandboxProperties(null, null, null, null, null, null, false, 'acme-widgets', null, null, null).projectId() ==
+        new SandboxProperties(null, null, null, null, null, false, 'acme-widgets', null, null, null).projectId() ==
                 'acme-widgets'
     }
 
     // design D5: a blank override is a configuration mistake, rejected with its property name
     def "blank projectId is rejected with the property name in the message"() {
         when:
-        new SandboxProperties(null, null, null, null, null, null, false, projectId, null, null, null)
+        new SandboxProperties(null, null, null, null, null, false, projectId, null, null, null)
 
         then:
         def failure = thrown(IllegalArgumentException)
@@ -152,7 +141,7 @@ class SandboxPropertiesSpec extends Specification {
     // add-serve-sandbox-lifecycle UX4: the three sweep-lifecycle thresholds default when unset
     def "sweep-lifecycle thresholds default when unset"() {
         given:
-        def props = new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null)
+        def props = new SandboxProperties(null, null, null, null, null, false, null, null, null, null)
 
         expect:
         props.minimumAge() == Duration.ofMinutes(2)
@@ -162,7 +151,7 @@ class SandboxPropertiesSpec extends Specification {
 
     def "sweep-lifecycle thresholds of explicit values are exposed unchanged"() {
         given:
-        def props = new SandboxProperties(null, null, null, null, null, null, false, null,
+        def props = new SandboxProperties(null, null, null, null, null, false, null,
                 Duration.ofMinutes(5), Duration.ofDays(3), Duration.ofHours(12))
 
         expect:
@@ -173,7 +162,7 @@ class SandboxPropertiesSpec extends Specification {
 
     def "a non-positive sweep-lifecycle threshold is rejected naming the property"() {
         when:
-        new SandboxProperties(null, null, null, null, null, null, false, null, minimumAge, keptReapAge, manualAge)
+        new SandboxProperties(null, null, null, null, null, false, null, minimumAge, keptReapAge, manualAge)
 
         then:
         def failure = thrown(IllegalArgumentException)

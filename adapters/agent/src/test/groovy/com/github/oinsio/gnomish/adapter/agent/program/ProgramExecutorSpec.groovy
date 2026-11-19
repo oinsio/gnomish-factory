@@ -50,7 +50,7 @@ class ProgramExecutorSpec extends Specification {
 
     private ExecutorResult start(Path program) {
         new ProgramExecutor(ProgramFixtures.declaration([program.toString()]), ProgramFixtures.describe(),
-        ['ACME_API_KEY'], environment, ProgramFixtures.equipment(stderrParent))
+        ['ACME_API_KEY'], environment, ProgramFixtures.equipment(stderrParent), PendingScope.unscoped(new PendingRuns()))
         .start(ProgramFixtures.request())
     }
 
@@ -188,6 +188,6 @@ class ProgramExecutorSpec extends Specification {
 
         expect:
         new ProgramExecutor(ProgramFixtures.declaration(['unused']), described, [], environment,
-        ProgramFixtures.equipment(stderrParent)).describe().is(described)
+        ProgramFixtures.equipment(stderrParent), PendingScope.unscoped(new PendingRuns())).describe().is(described)
     }
 }

@@ -53,7 +53,7 @@ class GithubConditionalRequestCacheEvictionSpec extends Specification {
                 .willReturn(aResponse().withStatus(200).withHeader('ETag', '"pinned"').withBody('fresh')))
         wireMock.stubFor(get(urlEqualTo('/r/0')).withHeader('If-None-Match', equalTo('"pinned"')).atPriority(1)
                 .willReturn(aResponse().withStatus(304)))
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', fastRetryConfig())
         def cache = new GithubConditionalRequestCache(httpClient)
 
         and: 'the cache is filled to exactly its bound, key r/0 being the eldest'

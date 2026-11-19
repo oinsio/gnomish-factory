@@ -36,7 +36,19 @@ import org.slf4j.LoggerFactory;
  * round is not replayed, no attempt is burned (FR15, NFR-R4 of make-checkpoint-gate-durable, design
  * D10). A pending verification without a request resumes as {@code Completed}, as before.
  *
- * <p>Implements FR21 of add-sandbox-core; FR13, FR15 of make-checkpoint-gate-durable.
+ * <p>A registered pending commit above the snapshot (design D21 of
+ * migrate-verify-to-executor-contract) resumes the same way: the restored round's checks judge the
+ * snapshot, its close sits on the pending commit, and the round's pending entries reach the verify
+ * chain on the state the pickup read at the register — this decorator stays the one owner that skips
+ * the executor.
+ *
+ * <p>It wraps the stage chain of both branch modes (design D22 of
+ * migrate-verify-to-executor-contract): the container's, and the git-mode host's over the run's one
+ * cell, above the host snapshot step so a resumed round is not snapshotted again. A host snapshot
+ * never carries a decision request (the host snapshots completed rounds only), so it re-verifies.
+ *
+ * <p>Implements FR21 of add-sandbox-core; FR13, FR15 of make-checkpoint-gate-durable;
+ * FR3, FR19, FR20 of migrate-verify-to-executor-contract.
  */
 public final class ResumeVerificationStageExecutor implements StageExecutor {
 

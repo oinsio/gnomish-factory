@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
-import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Path
 import spock.lang.Specification
@@ -9,9 +8,9 @@ import spock.lang.TempDir
 
 /**
  * FR13, NFR-R1 of add-sandbox-core: an unavailable check environment (a failed fresh-box
- * materialization surfacing as {@link CheckEnvironmentUnavailableException}) classifies as
- * {@link VerdictAnswer.InfrastructureFailure} — an infrastructure failure, no stage attempt burned — and the
- * verdict's reason carries the exception's message verbatim, so the escalation report names the
+ * materialization surfacing as {@link CheckEnvironmentUnavailableException}) is judged
+ * {@link ShellOutcome.Unanswerable} — which {@link ShellExecutor} answers {@code failed/infrastructure},
+ * no stage attempt burned — and its reason carries the exception's message verbatim, so the escalation report names the
  * actual cause rather than a wrapped or generic string.
  */
 class ShellCommandCheckRunnerEnvironmentUnavailableSpec extends Specification implements ShellCommandCheckRunnerTestSupport {
@@ -28,10 +27,10 @@ class ShellCommandCheckRunnerEnvironmentUnavailableSpec extends Specification im
         def runner = new ShellCommandCheckRunner(new VirtualClock()).withEnvironments(source)
 
         when:
-        def verdict = runner.run(command('true'), workspace())
+        def outcome = runner.probe(command('true'), workspace())
 
         then:
-        verdict instanceof VerdictAnswer.InfrastructureFailure
-        (verdict as VerdictAnswer.InfrastructureFailure).reason().forLog() == 'fresh-box environment could not be materialized: boom'
+        outcome instanceof ShellOutcome.Unanswerable
+        (outcome as ShellOutcome.Unanswerable).reason().forLog() == 'fresh-box environment could not be materialized: boom'
     }
 }

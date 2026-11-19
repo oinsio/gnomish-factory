@@ -168,7 +168,10 @@ public interface SandboxRunSupport {
 
     /**
      * Runs the tracker-take revocation salvage protocol (FR15 of add-tracker-port; FR1 of
-     * add-serve-sandbox-lifecycle): commits any uncommitted round leftovers in-box, then
+     * add-serve-sandbox-lifecycle): settles the uncommitted round leftovers through the one
+     * no-salvage rule ({@code NoSalvageOverVerification}: committed in-box, or kept in the box, out of
+     * every commit, when the register names a snapshot or a pending commit whose verification the
+     * revocation interrupted — design D22 of migrate-verify-to-executor-contract), then
      * best-effort pushes the task branch with its factory register, which a harvested salvage
      * commit moved (design D13 of tighten-spec-contract) — the sandboxed equivalent of {@code
      * TaskSalvage#salvage} followed by {@code TaskBranchGit#pushClosingBestEffort}, folded into one
@@ -178,6 +181,8 @@ public interface SandboxRunSupport {
      * nothing.
      *
      * @param taskId the task being salvaged, for error context; never blank
+     * @return {@code true} when the register named an interrupted verification, so nothing was
+     *     salvaged
      */
-    void revocationSalvageAndPush(String taskId);
+    boolean revocationSalvageAndPush(String taskId);
 }

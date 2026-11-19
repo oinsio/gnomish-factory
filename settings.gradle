@@ -89,6 +89,11 @@ include 'untrustedtext'
 // the domain and the published plugin contract both reach it, so any edge added here would
 // land in both.
 include 'operatorevent'
+// The pending-key leaf (FR2, FR3, design D20 of migrate-verify-to-executor-contract): the one owner
+// of the key a pending executor run is polled with, its type and its rule. A leaf because both sides
+// of the executor port carry it — `:domain`, which may reach JDK-only leafs only, and
+// `:executor-contract` — and dependency-free for `:operatorevent`'s reason.
+include 'pendingkey'
 // The operator-configuration level leaf (FR6, design D4 of add-project-registry): the
 // `@ConfigLevel(Level)` annotation every `@ConfigurationProperties` record component carries,
 // declaring where the `factory.*` key it binds may be set. A leaf because the annotated records
@@ -169,10 +174,14 @@ include 'application'
 // module overhead would exceed the benefit — and the parent of the modules that
 // left it.
 include 'adapters'
-// The GitHub vendor bundle (task 10.1, FR10): the tracker and external-check
-// realizations, written against the `:githubapi` HTTP core (which left the bundle
-// under design D15 of migrate-verify-to-executor-contract).
+// The GitHub vendor bundle (task 10.1, FR10): the tracker realization, written
+// against the `:githubapi` HTTP core (which left the bundle under design D15 of
+// migrate-verify-to-executor-contract).
 include 'adapters:github'
+// The core-side SCM built-ins (FR13, design D4 of migrate-verify-to-executor-contract):
+// the `github-actions` verdict executor, which left the vendor bundle, beside `scm-status`,
+// both over the `:githubapi` HTTP core and connected by one operator connection reader.
+include 'adapters:scm'
 // The two technology seams (task 10.2, FR10): the git-subprocess adapter, D1's
 // largest, and the agent-CLI executor. `:adapters:git` is a leaf; `:adapters:agent`
 // is the one module that depends on the coarse remainder, for the frozen

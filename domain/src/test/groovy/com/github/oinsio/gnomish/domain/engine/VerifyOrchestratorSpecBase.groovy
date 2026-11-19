@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
+import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -21,7 +21,9 @@ import spock.lang.Specification
  * runs a stage attempt's ordered verify list, emits a CheckStarted/CheckFinished pair per
  * executed check, times each against the injected Clock, and stops at the first non-Pass
  * check. This base holds the common check builders, port fakes and orchestrator factory the
- * per-concern chain specs share. Implements FR2, FR3 of add-stage-engine.
+ * per-concern chain specs share: every executor check is a check round on the engine's port,
+ * answered by the scripted check rounds of its executor's name (task 4.2f of
+ * migrate-verify-to-executor-contract). Implements FR2, FR3 of add-stage-engine.
  */
 abstract class VerifyOrchestratorSpecBase extends Specification {
 
@@ -53,14 +55,16 @@ abstract class VerifyOrchestratorSpecBase extends Specification {
     def listener = new RecordingEventListener()
     def clock = new VirtualClock()
     def sleeper = new VirtualSleeper(clock)
+    def persistence = new InMemoryAttemptPersistence()
 
-    VerifyOrchestrator orchestrator(ScriptedBuiltinCheckRunner builtinRunner,
-            ScriptedCommandCheckRunner commandRunner,
-            ScriptedExternalCheckClient externalClient = new ScriptedExternalCheckClient(),
+    VerifyOrchestrator orchestrator(ScriptedCheckRounds builtinRunner,
+            ScriptedCheckRounds commandRunner,
+            ScriptedCheckRounds externalClient = new ScriptedCheckRounds(),
             ScriptedJudgeVoter judgeVoter = new ScriptedJudgeVoter(),
             AttemptDelivery attemptDelivery = AttemptDelivery.assumedDelivered()) {
-        new VerifyOrchestrator(builtinRunner, commandRunner,
-                new ExternalPolling(externalClient, attemptDelivery, VirtualTimeEquipment.on(clock, sleeper)),
+        def rounds = CheckRouting.byExecutor(builtinRunner, commandRunner, externalClient)
+        new VerifyOrchestrator(new PendingPoll(rounds, persistence, attemptDelivery, VirtualTimeEquipment.on(clock, sleeper),
+                listener),
                 new JudgeVoting(judgeVoter), clock, listener)
     }
 }

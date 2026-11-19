@@ -62,7 +62,7 @@ abstract class ClaimlessDeliveredCleanupWorld extends Specification implements R
     protected ClaimlessDeliveredCleanup containerCleanup() {
         def selector = new SandboxModeSelector(
                 new BindingProperties(null, [:]),
-                new SandboxProperties('an-image', null, null, null, [], [], false, null, null, null, null),
+                new SandboxProperties('an-image', null, null, null, [], false, null, null, null, null),
                 AdapterBindingRegistry.ratified([containerProvider()], BindingTrustTable.firstParty()),
                 { -> true } as ContainerRuntimeProbe)
         def containers = new ContainerTakeSupport(selector, { Path cloneDir, String taskId, List<Segment> segments, definition, List<String> creds ->

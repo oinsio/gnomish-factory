@@ -6,9 +6,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
-import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner
-import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
@@ -36,9 +33,6 @@ class EnginePreflightGateSpec extends Specification {
     static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
     def executor = throwing(StageExecutor)
-    def builtinRunner = throwing(BuiltinCheckRunner)
-    def commandRunner = throwing(CommandCheckRunner)
-    def externalClient = throwing(ExternalCheckClient)
     def judgeVoter = throwing(JudgeVoter)
     def persistence = throwing(AttemptPersistence)
     def clock = throwing(InstantSource)
@@ -56,7 +50,7 @@ class EnginePreflightGateSpec extends Specification {
     }
 
     EnginePorts ports() {
-        new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter, listener,
+        new EnginePorts(executor, judgeVoter, listener,
                 persistence, VirtualTimeEquipment.on(clock, sleeper), delivery, DescribedExecutors.none(), RoundIdentity.inPlace())
     }
 

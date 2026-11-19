@@ -6,13 +6,13 @@ import java.util.function.Function;
 
 /**
  * Indexes one {@code ServiceLoader} pass into a discriminator-keyed registry, shared by every port's
- * discovery pass ({@code TrackerAdapterDiscovery}, {@code CheckClientDiscovery}) so the fail-fast
+ * discovery pass ({@code TrackerAdapterDiscovery}; the check port's pass left with task 5.2 of
+ * migrate-verify-to-executor-contract) so the fail-fast
  * rule — a blank discriminator, or two providers claiming the same one, aborts registry build rather
  * than picking silently — is written once (NFR-R1 of add-plugin-architecture).
  *
  * <p>Lives beside {@link ProviderDiscoveryReport} as the same kind of thing: port-agnostic discovery
- * infrastructure, taking the SPI type as a generic parameter so it depends on neither {@code
- * adapter.tracker} nor {@code adapter.check}.
+ * infrastructure, taking the SPI type as a generic parameter so it depends on no port's adapter package.
  */
 public final class ProviderIndex {
 

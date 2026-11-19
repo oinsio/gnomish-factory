@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
 import com.github.oinsio.gnomish.executorcontract.Policy;
 import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.executorcontract.RoleInputs;
+import com.github.oinsio.gnomish.executorcontract.Status;
 import com.github.oinsio.gnomish.executorcontract.Workspace;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
@@ -72,9 +73,7 @@ final class CaseJudgement {
             return new CaseVerdict.Failed(breaches.getFirst().detail());
         }
         return switch (result.status()) {
-            case FAILED ->
-                new CaseVerdict.Failed("answered failed/"
-                        + Objects.requireNonNull(result.failureClass()).wire() + ": " + reason(result));
+            case FAILED -> new CaseVerdict.Failed("answered " + outcome(result));
             case PENDING -> new CaseVerdict.Failed("answered pending to a request that asked for no pending run");
             case COMPLETED -> completed(request, result.answer());
         };
@@ -92,6 +91,20 @@ final class CaseJudgement {
     static String threw(String operation, RuntimeException thrown) {
         return "the executor threw " + thrown.getClass().getName() + " from " + operation
                 + " where the contract asks for a result";
+    }
+
+    /**
+     * What {@code result} answered, as a report line names it: its status, and for {@code failed} its
+     * class and reason.
+     *
+     * @param result the answer; never null
+     * @return the words; never blank
+     */
+    static String outcome(ExecutorResult result) {
+        if (result.status() != Status.FAILED) {
+            return result.status().wire();
+        }
+        return "failed/" + Objects.requireNonNull(result.failureClass()).wire() + ": " + reason(result);
     }
 
     private static CaseVerdict completed(ExecutorRequest request, @Nullable JsonNode written) {

@@ -61,7 +61,7 @@ trait TaskSeedFixture implements RegisteredBranchFixture {
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
         TaskState state = RoundStates.recorded(trace.key())
-        new GitAttemptPersistence(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
+        HostRoundPersistence.over(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE).persist(taskId, state, trace)
         registerTip(cloneDir, taskId)
         state
     }

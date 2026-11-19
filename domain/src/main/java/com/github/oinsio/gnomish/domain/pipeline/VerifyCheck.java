@@ -67,24 +67,16 @@ public sealed interface VerifyCheck {
             implements VerifyCheck {
 
         /** The built-in a {@code builtin} check maps to. */
-        public static final String FILES_EXIST = "files-exist";
+        public static final String FILES_EXIST = BuiltInExecutors.FILES_EXIST;
 
         /** The built-in a {@code command} check maps to. */
-        public static final String SHELL = "shell";
+        public static final String SHELL = BuiltInExecutors.SHELL;
 
         /** The built-in an {@code external} check without a {@code provider} maps to. */
-        public static final String GITHUB_ACTIONS = "github-actions";
+        public static final String GITHUB_ACTIONS = BuiltInExecutors.GITHUB_ACTIONS;
 
         /** The built-in reader of named verdicts on the attempt SHA; it needs {@code expected}. */
-        public static final String SCM_STATUS = "scm-status";
-
-        /**
-         * The check-provider key the {@code github-actions} executor is still registered
-         * under by the bundle's check SPI and keyed by in {@code factory.check.*}, until
-         * the executor registry dispatch replaces the provider registry (tasks 3.3, 5.1 of
-         * migrate-verify-to-executor-contract).
-         */
-        private static final String GITHUB_PROVIDER_KEY = "github";
+        public static final String SCM_STATUS = BuiltInExecutors.SCM_STATUS;
 
         public Executor {
             settings = Map.copyOf(settings);
@@ -93,24 +85,13 @@ public sealed interface VerifyCheck {
         }
 
         /**
-         * True when the engine polls this check through the external-check client: every
-         * {@code external} check, and every check naming an executor other than the two
-         * in-process built-ins. The bridge the provider-registry dispatch reads until the
-         * executor registry runs every check (task 5.1 of
+         * True when this check is polled over time: every {@code external} check, and every
+         * check naming an executor other than the two in-process built-ins, so it carries the
+         * poll timing, identifier and pin-path rules of the load validation (FR1, UX2 of
          * migrate-verify-to-executor-contract).
          */
         public boolean polled() {
             return token == Token.EXTERNAL || !(executorName.equals(FILES_EXIST) || executorName.equals(SHELL));
-        }
-
-        /**
-         * The key the check-provider registry and the {@code factory.check.*} subtree know
-         * this check's executor by: {@code github} for {@link #GITHUB_ACTIONS}, the executor
-         * name otherwise. Deleted with the provider registry (tasks 3.3, 5.1 of
-         * migrate-verify-to-executor-contract).
-         */
-        public String providerKey() {
-            return executorName.equals(GITHUB_ACTIONS) ? GITHUB_PROVIDER_KEY : executorName;
         }
     }
 

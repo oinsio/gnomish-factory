@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.serveobservability.SweepCounts
 import com.github.oinsio.gnomish.serveobservability.SweepTickLine
 import com.github.oinsio.gnomish.serveobservability.TaskOutcome
 import com.github.oinsio.gnomish.serveobservability.TaskOutcomeLine
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
 import spock.lang.Specification
@@ -45,6 +46,7 @@ class LedgerJsonMapperSpec extends Specification {
         mapper.serialize(sweepTickLine()) == referenceLines[6]
         mapper.serialize(remoteOutageLine()) == referenceLines[7]
         mapper.serialize(RoundOutcomeLineMapperSpec.limitRoundLine()) == referenceLines[8]
+        mapper.serialize(RoundOutcomeLineMapperSpec.checkLine(UntrustedText.branchDocument('sonar-AY12...'))) == referenceLines[9]
     }
 
     // NFR-O1, NFR-O3 of add-base-ref-resolution.

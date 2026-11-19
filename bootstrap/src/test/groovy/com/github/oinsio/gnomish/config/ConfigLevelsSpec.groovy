@@ -124,7 +124,8 @@ class ConfigLevelsSpec extends Specification {
         type << [NotProperties, NotARecord]
     }
 
-    // FR6: the application's own table covers its registered records
+    // FR6: the application's own table covers its registered records; FR17 of
+    //     migrate-verify-to-executor-contract: the egress block's two scopes at their levels
     def "the application table places the documented keys at their design D5 levels"() {
         given:
         def application = ConfigLevels.application()
@@ -136,13 +137,14 @@ class ConfigLevelsSpec extends Specification {
         property || level
         'factory.docker-command-timeout' || HOST
         'factory.sandbox.project-id' || PROJECT
-        'factory.check.github.repo' || PROJECT
+        'factory.check.github-actions.repo' || PROJECT
         'factory.serve.slots' || ANY
         'factory.tracker.abort-backoff-base' || ANY
         'factory.sandbox.limits.cpus' || ANY
         'factory.bindings.default' || SANDBOX_BOUNDARY
         'factory.bindings.stages.build' || SANDBOX_BOUNDARY
-        'factory.sandbox.egress-allowlist[0]' || SANDBOX_BOUNDARY
+        'factory.egress.sandbox[0]' || SANDBOX_BOUNDARY
+        'factory.egress.in-process[0]' || PROJECT
     }
 
     // FR7: a FACTORY_* variable is named back as the key it spells, so the refusal can quote it
@@ -155,8 +157,8 @@ class ConfigLevelsSpec extends Specification {
         'FACTORY_SERVE_SLOTS' || 'factory.serve.slots'
         'FACTORY_GIT_NETWORK_TIMEOUT' || 'factory.git-network-timeout'
         'factory_instance_name' || 'factory.instance-name'
-        'FACTORY_CHECK_GITHUB_REPO' || 'factory.check.github.repo'
-        'FACTORY_SANDBOX_EGRESS_ALLOWLIST_0' || 'factory.sandbox.egress-allowlist.0'
+        'FACTORY_CHECK_SCMSTATUS_REPO' || 'factory.check.scmstatus.repo'
+        'FACTORY_EGRESS_SANDBOX_0' || 'factory.egress.sandbox.0'
         'FACTORY_NO_SUCH_KEY' || 'factory.no.such.key'
     }
 }

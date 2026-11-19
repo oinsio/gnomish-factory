@@ -197,7 +197,7 @@ class BranchTipSourceSpec extends Specification implements BareGitRepoFixture, R
     // stand above the register and are never read.
     /** Completes PROJ-1, cleans its branch up, then lands a human commit on top of the cleanup. */
     private void deliverWithCommitAfterCleanup() {
-        def persistence = new GitAttemptPersistence(runner, worktree(), 'PROJ-1', ClaimEpochSource.NONE)
+        def persistence = HostRoundPersistence.over(runner, worktree(), 'PROJ-1', ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey('PROJ-1', 'implement', 0),
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))

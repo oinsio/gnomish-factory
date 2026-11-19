@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Denial
@@ -123,8 +124,8 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        void closeRound() {
-            delegate.closeRound()
+        void closeRound(RoundClose close) {
+            delegate.closeRound(close)
         }
 
         @Override

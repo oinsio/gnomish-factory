@@ -7,9 +7,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
-import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import java.time.Duration
 
 /**
  * The describe preflight's check use site (FR1 of migrate-verify-to-executor-contract): a verify
@@ -18,17 +16,6 @@ import java.time.Duration
  * executor and the role.
  */
 class DescribeCheckPreflightSpec extends DescribePreflightSpecBase {
-
-    private static VerifyCheck.Executor check(VerifyCheck.Token token, String executor) {
-        new VerifyCheck.Executor(token, executor, 'sonar/gate', [:], Duration.ofSeconds(5), Duration.ofMinutes(5),
-        VerifyCheck.TimeoutClass.QUALITY, [], VerifyCheck.VerifyIn.FRESH_BOX, Threshold.DEFAULT, ['sonar/gate'])
-    }
-
-    private static StageDefinition verifying(VerifyCheck... checks) {
-        new StageDefinition('build', 'Purpose of build', [new ArtifactInput.Source()], [],
-        new StageDefinition.Executor(ExecutorType.AGENT_CLI, '', [:], Sandbox.none(), null),
-        'stages/build/instructions.md', checks.toList(), new AutonomyLimits(2), AdvancementMode.AUTO)
-    }
 
     // Scenario: verification/verdict-executors / Executor without the verdict role is refused
     def "FR1: a check whose executor's describe lists only transform is a located law error naming the check, the executor and the role"() {

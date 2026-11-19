@@ -26,7 +26,7 @@ class ContainerRunTerminationSweepSpec extends Specification {
     Path tempDir
 
     def docker = new ScriptedSandboxDocker()
-    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], false, null, null, null, null)
 
     // Scenario: cli/manual-run / Trackerless run touches no tracked object
     def "sweepOrphans evaluates through the injected sandbox lifecycle pass with NoVerdict liveness"() {

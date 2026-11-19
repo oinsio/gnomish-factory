@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.app.port.tracker.TrackerReadVerdict;
+import com.github.oinsio.gnomish.domain.egress.EndpointDeclaration;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.util.List;
 import java.util.Optional;
@@ -21,10 +22,7 @@ import java.util.Set;
  * PipelineDefinition} itself).
  *
  * <p>{@code create} receives the minted {@link com.github.oinsio.gnomish.app.port.tracker.InstanceId}
- * string on its context (task 5.15): several GitHub collaborators (e.g. {@code
- * GithubStateWrites}, {@code GithubCorrespondence}, {@code GithubDecisions}) stamp the instance id
- * into structural markers at construction time, so {@code TakeCommand} mints the {@code
- * InstanceId} before resolving the tracker rather than after.
+ * on its context (task 5.15): GitHub collaborators stamp it into markers at construction time.
  *
  * <p>Implementations are discovered through {@code ServiceLoader} and keyed by {@link #type()}, so
  * they must offer a public no-arg constructor (FR1, FR2 of add-plugin-architecture). Every
@@ -154,23 +152,27 @@ public interface TrackerAdapterFactory {
      * Declares this adapter's credential environment variable names (design D17, NFR-S1): the
      * agent process launcher removes every declared name from the CLI subprocess's environment
      * regardless of {@code factory.sandbox.env-passthrough}, so tracker credentials never reach
-     * the gnome. The default returns an empty list — an adapter with no credentials (e.g. the
-     * in-memory reference adapter) needs no
-     * override; declaring this is mandatory for any adapter that DOES read a credential from the
-     * environment (e.g. GitHub's {@code GNOMISH_GITHUB_TOKEN}).
+     * the gnome. The default returns an empty list (the in-memory reference); declaring this is
+     * mandatory for any adapter that reads a credential (e.g. GitHub's {@code GNOMISH_GITHUB_TOKEN}).
      *
-     * <p>Takes the resolved {@code config} because a credential name can be configuration data — a
-     * named connection profile supplies it rather than a compile-time constant — so a no-arg
-     * declaration could not see it, and core must not name any vendor's constant itself (FR17,
-     * design D11 of add-plugin-architecture).
+     * <p>Takes the resolved {@code config}: a connection profile may supply the name, and core
+     * names no vendor's constant (FR17, design D11 of add-plugin-architecture).
      *
-     * @param config the project's validated {@code tracker} section, carrying whatever connection
-     *     data names this adapter's credentials; never null
-     * @return the credential environment variable names this adapter declares; never null, empty
-     *     when this adapter has no credentials
+     * @param config the project's validated {@code tracker} section; never null
+     * @return the credential names this adapter declares; never null, empty when it has none
      */
     default List<String> credentialEnvVars(TrackerConfig config) {
         return List.of();
+    }
+
+    /**
+     * Names this adapter's HTTP endpoint — its subsection key and the vendor's own host (FR17, design
+     * D16 of migrate-verify-to-executor-contract). The loader admits the URL by the medium it was
+     * written in and hands the result to every member on {@link TrackerConfig#endpoint()}. The
+     * default declares none: an adapter that makes no HTTP call (the in-memory reference).
+     */
+    default Optional<EndpointDeclaration> endpoint() {
+        return Optional.empty();
     }
 
     /**

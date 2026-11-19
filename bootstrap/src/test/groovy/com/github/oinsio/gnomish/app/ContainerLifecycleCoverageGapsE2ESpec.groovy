@@ -117,7 +117,7 @@ advancement: auto
         def runner = newManualRunRunner(
                 projectRoot,
                 tempDir.resolve('home'),
-                new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null),
+                new SandboxProperties(image, null, null, null, [], false, null, null, null, null),
                 new BindingProperties(null, [:]),
                 TaskGitFixture.real(),
                 factoryProps)
@@ -150,7 +150,7 @@ advancement: auto
 
         taskId = "CTN-REVOKE-${System.nanoTime() % 100000}"
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def sandboxProps = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        def sandboxProps = new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
         def stage = new StageDefinition(
                 'work', 'purpose', [], [],
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),

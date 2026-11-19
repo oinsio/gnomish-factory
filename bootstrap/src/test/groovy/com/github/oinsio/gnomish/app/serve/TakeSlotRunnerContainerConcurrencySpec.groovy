@@ -129,7 +129,7 @@ autonomy:
 
     private TakeSlotRunner newContainerSlotRunner(Tracker tracker) {
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        def sandbox = new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
         def properties = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def registry = AdapterBindingRegistry.ratified([
             new ContainerBindingProvider()

@@ -20,8 +20,8 @@ import org.slf4j.MDC;
  * per-event listener (design D9, task 8.2).
  *
  * <p>Every {@link EngineEvent} variant carrying an {@link AttemptKey} — {@code AttemptStarted},
- * {@code ExecutionFinished}, {@code CheckStarted}, {@code CheckFinished}, {@code AttemptFinished}
- * — sets both keys from that key. {@code RunStarted} carries a {@link Position} rather than an
+ * {@code ExecutionFinished}, {@code CheckStarted}, {@code CheckPolled}, {@code CheckTimedOut},
+ * {@code CheckFinished}, {@code AttemptFinished} — sets both keys from that key. {@code RunStarted} carries a {@link Position} rather than an
  * {@code AttemptKey}; when the resolved position is {@link Position.AtStage}, or {@link
  * Position.AwaitingApproval} (the gate's stage, FR1 of make-checkpoint-gate-durable), this listener
  * sets {@code stage} from it so the MDC already names the stage before the first attempt starts (e.g.
@@ -64,6 +64,8 @@ public final class MdcEventListener implements EngineEventListener {
             case EngineEvent.AttemptStarted started -> put(started.key());
             case EngineEvent.ExecutionFinished finished -> put(finished.key());
             case EngineEvent.CheckStarted started -> put(started.key());
+            case EngineEvent.CheckPolled polled -> put(polled.key());
+            case EngineEvent.CheckTimedOut timedOut -> put(timedOut.key());
             case EngineEvent.CheckFinished finished -> put(finished.key());
             case EngineEvent.AttemptFinished finished -> put(finished.key());
             case EngineEvent.RunStarted started -> onRunStarted(started.position());

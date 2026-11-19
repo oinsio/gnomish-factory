@@ -1,0 +1,35 @@
+// Build script for the `:pendingkey` module (FR2, FR3, design D20 of
+// migrate-verify-to-executor-contract): the one owner of the pending key's type and rule —
+// the opaque key an executor returns with status `pending` and the factory polls with: not
+// blank, at most `PendingKey.MAX_LENGTH` UTF-16 characters, no ISO control character.
+//
+// The module deliberately depends on NOTHING — no factory module, no Spring, no Jackson, no
+// logging API. Like `:untrustedtext` and `:operatorevent`, whose template this file follows,
+// the emptiness is load-bearing: `:domain` (whose engine records carry the key) and
+// `:executor-contract` (whose result carries it on the wire) both reach this leaf, and the
+// published `:gnomish-plugin-api` reaches it through `:domain`, so any dependency added here
+// would be pushed into the domain, the contract and the published POM alike. There is no
+// production-scope declaration below because there is nothing to declare, and the layering
+// gate proves it stays that way.
+//
+// What stays outside: the key's JSON binding. The type carries no Jackson annotation; the
+// contract's one JSON binding, `ExecutorContractJson`, registers its serializer, and
+// `ResultReading` alone constructs a key from a written result.
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and the PIT
+// mutation gate all come from the convention plugins.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach — no internal
+    // project at all — is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Pending key: the opaque key a pending executor run is polled with, and its rule.'
+
+// `:pendingkey` reaches no other project at all — the same gate `:untrustedtext` and
+// `:operatorevent` carry, here for the reason stated above: the domain, the executor contract
+// and the published contract all reach this leaf, so an edge added here lands in each.
+layering {
+    allowedProjects = []
+}

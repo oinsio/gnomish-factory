@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.run.SandboxImageReadiness;
+import com.github.oinsio.gnomish.httpegress.EgressAllowlist;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,6 +34,7 @@ public class OperatorPreconditionsConfiguration {
             SandboxModeSelector sandboxModeSelector,
             SandboxImageReadiness sandboxImageReadiness,
             SandboxProperties sandboxProperties) {
-        return new ServePreconditions(git.branches(), sandboxModeSelector, sandboxImageReadiness, sandboxProperties);
+        return new ServePreconditions(
+                git.branches(), sandboxModeSelector, sandboxImageReadiness, sandboxProperties, EgressAllowlist::judge);
     }
 }

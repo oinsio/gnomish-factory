@@ -88,7 +88,7 @@ class OutcomeClassifierOwnerSpec extends Specification {
             imported: /import\s+com\.github\.oinsio\.gnomish\.domain\.engine\.Verdict\.(CannotVerify|\*)\s*;/,
             bare: /\bnew\s+CannotVerify\s*\(/,
             // Task 2.2 of migrate-verify-to-executor-contract routed ShellCommandCheckRunner,
-            //     FilesExistCheckRunner, ExternalPolling and VerifyOrchestrator through the owner.
+            //     FilesExistCheckRunner, the poll loop of the time (deleted by task 4.2f) and VerifyOrchestrator through the owner.
             allowed: [
                 (DERIVATION) : 'the owner',
                 (AGENT + 'JudgeVerdictExtractor.java') : JUDGE,
@@ -180,7 +180,7 @@ class OutcomeClassifierOwnerSpec extends Specification {
         'a status import' | 'import com.github.oinsio.gnomish.domain.engine.ExecutionResult.Failed;' || ['status read']
         'a verdict built' | 'return new Verdict.CannotVerify(r, d);' || ['check-side verdict']
         'a failure thrown' | 'throw new ExecutorFailure(e, d, t);' || ['thrown executor failure']
-        'a failed input built' | 'var s = new ExecutionResult.Failed(INFRASTRUCTURE, r, List.of());' || []
+        'a failed input built' | 'var s = new ExecutionResult.Failed(INFRASTRUCTURE, r, List.of(), null);' || []
         'a wire dto built' | 'var d = new EscalationReportDto.CannotExecute("cannotExecute", c, List.of());' || []
         'a bare DTO name without the domain import' | 'var d = new CannotExecute("cannotExecute", c, List.of());' || []
         'another verdict type' | 'return new RangeVerdict.CannotVerify(e);' || []

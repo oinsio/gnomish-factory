@@ -20,22 +20,20 @@ import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Maps between the domain's {@link TaskState} tree and the {@code state.json}
- * v1 DTO tree ({@link StateJsonDto}) — the mapper counterpart of {@code
- * status.json.AttemptMapper}, kept as a wholly separate contract (design D5).
- * Usage mapping goes through the one usage wire vocabulary's mappers, {@link ParticipantUsageWire}
- * and {@link UsageSnapshotWire} (FR16, FR17 of define-executor-contract). Every sealed
- * domain type is mapped through an exhaustive switch with no {@code default}
- * arm: a new variant fails to compile here until its mapping is added.
+ * Maps between the domain's {@link TaskState} tree and the {@code state.json} v1 DTO tree ({@link
+ * StateJsonDto}) — the mapper counterpart of {@code status.json.AttemptMapper}, kept as a wholly
+ * separate contract (design D5). Usage mapping goes through the one usage wire vocabulary's
+ * mappers, {@link ParticipantUsageWire} and {@link UsageSnapshotWire} (FR16, FR17 of
+ * define-executor-contract). Every sealed domain type is mapped through an exhaustive switch with
+ * no {@code default} arm: a new variant fails to compile here until its mapping is added.
  *
- * <p>Unlike {@code task.json}'s mapper, {@link #fromDto(StateJsonDto)} rebuilds
- * a full domain {@link TaskState}: every field a {@code TaskState} needs is
- * present on the wire. The one caveat is {@link CheckRef#index()} — the wire
- * format carries only a check's derived {@code label}, never its zero-based
- * list position, so {@link #fromDto} reconstructs each {@code CheckRef} with
- * index {@code 0} as a placeholder. No caller reconstructs a {@code CheckRef}'s
- * index from {@code state.json} today (same documented caveat as {@code
- * task.json}'s {@code EscalationReportDto.CannotVerify} mapping).
+ * <p>Unlike {@code task.json}'s mapper, {@link #fromDto(StateJsonDto)} rebuilds a full domain
+ * {@link TaskState}: every field a {@code TaskState} needs is present on the wire. The one caveat
+ * is {@link CheckRef#index()} — the checks list carries only a check's derived {@code label}, so
+ * {@link #fromDto} reconstructs each {@code CheckRef} with index {@code 0} as a placeholder (as
+ * {@code task.json}'s {@code EscalationReportDto.CannotVerify}); the root {@code pendingPolls}
+ * array alone carries the index in full ({@link StatePendingPollMapper}, D21 of
+ * migrate-verify-to-executor-contract).
  *
  * <p>Implements FR3, FR4 of add-git-workflow; FR13 of define-executor-contract (the version pin,
  * through {@link StateExecutorVersionsMapper}).
@@ -100,7 +98,8 @@ public final class StateJsonMapper {
                 state.attempts().stream().map(StateJsonMapper::toAttempt).toList(),
                 UsageSnapshotWire.toDto(state.totals()),
                 egressCursor,
-                StateExecutorVersionsMapper.toDto(state.executorVersions()));
+                StateExecutorVersionsMapper.toDto(state.executorVersions()),
+                StatePendingPollMapper.toDtos(state.pendingPolls()));
     }
 
     /**
@@ -112,11 +111,14 @@ public final class StateJsonMapper {
      */
     public static TaskState fromDto(StateJsonDto dto) {
         return new TaskState(
-                fromPosition(dto.position()),
-                dto.attemptsUsed(),
-                dto.attempts().stream().map(StateJsonMapper::fromAttempt).toList(),
-                UsageSnapshotWire.fromDto(dto.totals()),
-                StateExecutorVersionsMapper.fromDto(dto.executorVersions()));
+                        fromPosition(dto.position()),
+                        dto.attemptsUsed(),
+                        dto.attempts().stream()
+                                .map(StateJsonMapper::fromAttempt)
+                                .toList(),
+                        UsageSnapshotWire.fromDto(dto.totals()),
+                        StateExecutorVersionsMapper.fromDto(dto.executorVersions()))
+                .withPendingPolls(StatePendingPollMapper.fromDtos(dto.pendingPolls()));
     }
 
     private static StatePositionDto toPosition(Position position) {

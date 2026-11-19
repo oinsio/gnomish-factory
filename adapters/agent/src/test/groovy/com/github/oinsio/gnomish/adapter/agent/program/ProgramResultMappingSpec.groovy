@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.program
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.Denial
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
@@ -9,20 +10,25 @@ import com.github.oinsio.gnomish.domain.engine.UsageProvenance
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult
 import com.github.oinsio.gnomish.executorcontract.FailureClass
 import com.github.oinsio.gnomish.executorcontract.ModelUsage
-import com.github.oinsio.gnomish.executorcontract.PendingKey
+import com.github.oinsio.gnomish.executorcontract.PendingState
+import com.github.oinsio.gnomish.executorcontract.Role
 import com.github.oinsio.gnomish.executorcontract.Status
 import com.github.oinsio.gnomish.executorcontract.ToolUsage
 import com.github.oinsio.gnomish.executorcontract.Usage
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
 /**
  * {@link ProgramResultMapping} and {@link ProgramUsage} (FR2, FR6, FR7, FR10, NFR-O1 of
- * define-executor-contract): every contract status and failure class has its one engine
- * counterpart — the identity of the declared pair {@code ExecutionResult} ↔ {@code Status} +
- * {@code FailureClass}, iterated over {@code values()} of both sides — the answer is read by the
- * contract's one reading, and the usage keeps its provenance and cost.
+ * define-executor-contract; FR1, FR2, FR5 of migrate-verify-to-executor-contract, design D18, D19):
+ * every contract status, failure class and pending state has its one engine counterpart — the
+ * identity of the declared pair {@code ExecutionResult} ↔ {@code Status} + {@code FailureClass} +
+ * {@code PendingState}, iterated over {@code values()} of both sides — the answer is read by the
+ * contract's one reading (by role: {@link ProgramResultAnswerMappingSpec}), a failed or pending
+ * result keeps its facts ({@link ProgramResultFactsMappingSpec}), and the usage keeps its provenance
+ * and cost.
  */
 class ProgramResultMappingSpec extends Specification {
 
@@ -35,7 +41,7 @@ class ProgramResultMappingSpec extends Specification {
     }
 
     private static ExecutionResult map(ExecutorResult result, List<Denial> denials = []) {
-        ProgramResultMapping.toEngine('acme', KEY, result, denials)
+        ProgramResultMapping.toEngine('acme', Role.TRANSFORM, KEY, result, denials)
     }
 
     // FR2, D4: every contract failure class maps to the engine class of its name, and the two sets are one
@@ -69,11 +75,85 @@ class ProgramResultMappingSpec extends Specification {
         ]
     }
 
+    // FR19 of migrate-verify-to-executor-contract (design D22): the round closes verifiable exactly
+    // when the one mapping maps the result to completed — a decision request included, a verdict
+    // round with no answer not
+    def "FR19: a #role round answering #status closes #close"() {
+        given:
+        def contract = switch (status) {
+                    case Status.COMPLETED -> result(status, null, null, answer)
+                    case Status.FAILED -> result(status, FailureClass.QUALITY, 'red')
+                    case Status.PENDING -> result(status, null, null, null, Usage.absent(), new PendingKey('job-9'))
+                }
+
+        expect:
+        ProgramResultMapping.closeOf(role, contract) == close
+
+        where:
+        role | status | answer || close
+        Role.TRANSFORM | Status.COMPLETED | null || RoundClose.VERIFIABLE
+        Role.TRANSFORM | Status.COMPLETED | [kind: 'decision-request', question: 'q?', options: ['a', 'b']] || RoundClose.VERIFIABLE
+        Role.VERDICT | Status.COMPLETED | null || RoundClose.UNVERIFIABLE
+        Role.TRANSFORM | Status.FAILED | null || RoundClose.UNVERIFIABLE
+        Role.TRANSFORM | Status.PENDING | null || RoundClose.UNVERIFIABLE
+        Role.TRANSFORM | Status.COMPLETED | [kind: 'decision-request', question: 'q?', options: ['a']] || RoundClose.UNVERIFIABLE
+        Role.TRANSFORM | Status.COMPLETED | [kind: 'select', chosen: 'a'] || RoundClose.UNVERIFIABLE
+        Role.TRANSFORM | Status.COMPLETED | VERDICT_ANSWER || RoundClose.UNVERIFIABLE
+        Role.VERDICT | Status.COMPLETED | VERDICT_ANSWER || RoundClose.VERIFIABLE
+        Role.VERDICT | Status.COMPLETED | [kind: 'verdict', sarif: [version: '1.0']] || RoundClose.VERIFIABLE
+        Role.VERDICT | Status.COMPLETED | [kind: 'decision-request', question: 'q?', options: ['a', 'b']] || RoundClose.UNVERIFIABLE
+        Role.VERDICT | Status.FAILED | null || RoundClose.UNVERIFIABLE
+    }
+
+    // FR19 (design D22, human decision 2026-11-12): the close is decided from the contract result
+    // before the mapping, and agrees with it for every answer shape of every role — verifiable exactly
+    // when the one mapping maps the result to completed
+    def "FR19: the close of a completed #role round with #what agrees with its mapping"() {
+        given:
+        def contract = result(Status.COMPLETED, null, null, answer)
+
+        expect:
+        (ProgramResultMapping.closeOf(role, contract) == RoundClose.VERIFIABLE) ==
+                (ProgramResultMapping.toEngine('acme', role, KEY, contract, []).status() instanceof ExecutionResult.Completed)
+
+        where:
+        [role, what, answer] << [
+            Role.values(),
+            ANSWERS.keySet()
+        ].combinations().collect { r, w ->
+            [r, w, ANSWERS[w]]
+        }
+    }
+
+    private static final Map VERDICT_ANSWER = [kind: 'verdict', sarif: [version: '2.1.0', runs: [
+                [tool: [driver: [name: 'lint']], results: []]
+            ]]]
+
+    private static final Map<String, Object> ANSWERS = [
+        'no answer': null,
+        'a decision request': [kind: 'decision-request', question: 'q?', options: ['a', 'b']],
+        'a malformed decision request': [kind: 'decision-request', question: 'q?', options: ['a']],
+        'a verdict': VERDICT_ANSWER,
+        'a malformed verdict': [kind: 'verdict', sarif: [version: '1.0']],
+        'a select': [kind: 'select', chosen: 'a'],
+    ]
+
     // FR2: a pending transform result reaches the engine as pending with its key, which the classifier refuses
     def "FR2: a pending result reaches the engine with its key"() {
         expect:
         (map(result(Status.PENDING, null, null, null, Usage.absent(), new PendingKey('job-9'))).status()
-                as ExecutionResult.Pending).key() == 'job-9'
+                as ExecutionResult.Pending).key() == new PendingKey('job-9')
+    }
+
+    // FR2, D19: every contract pending state maps to the engine state of its name, and the two sets are one
+    def "FR2: pending state #contract maps to the engine's #contract.name()"() {
+        expect:
+        ProgramResultMapping.stateOf(contract).name() == contract.name()
+        (PendingState.values()*.name() as Set) ==
+                (com.github.oinsio.gnomish.domain.engine.PendingState.values()*.name() as Set)
+
+        where:
+        contract << PendingState.values()
     }
 
     // FR7: an executor's quality failure feeds its reason forward as the round's one finding
@@ -96,24 +176,6 @@ class ProgramResultMappingSpec extends Specification {
         expect:
         (map(result(Status.FAILED, FailureClass.QUALITY)).status() as ExecutionResult.Failed).reason()
                 .contains("program executor 'acme' reported failed/quality with no reason")
-    }
-
-    // Scenario: executor/wire-contract / Decision request with one option is malformed
-    // FR3, FR6: a decision request is a decision; a malformed answer or another kind is failed/infrastructure, never a pass
-    def "FR3, FR6: a #what answer of a transform run maps to #expected"() {
-        when:
-        def mapped = map(result(Status.COMPLETED, null, null, answer))
-
-        then:
-        (mapped.answer() != null) == (expected == 'decision')
-        (mapped.status() instanceof ExecutionResult.Failed) == (expected == 'failed/infrastructure')
-        expected != 'failed/infrastructure' || (mapped.status() as ExecutionResult.Failed).reason().contains(says)
-
-        where:
-        what | answer || expected | says
-        'decision-request' | [kind: 'decision-request', question: 'Which?', options: ['a', 'b']] || 'decision' | ''
-        'one-option decision' | [kind: 'decision-request', question: 'Which?', options: ['a']] || 'failed/infrastructure' | 'a malformed answer: decision-request.options holds 1 items; at least 2 are required, 1 missing'
-        'select' | [kind: 'select', chosen: 'a'] || 'failed/infrastructure' | 'a transform run does not take'
     }
 
     // FR10, NFR-O1: the usage keeps its provenance, tokens, cost, wall time and tools; ABSENT carries no model

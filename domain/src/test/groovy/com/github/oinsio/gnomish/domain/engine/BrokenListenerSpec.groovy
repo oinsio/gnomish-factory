@@ -6,7 +6,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import org.slf4j.LoggerFactory
@@ -31,14 +31,14 @@ class BrokenListenerSpec extends BrokenListenerSpecBase {
     def "a throwing listener changes nothing observable in the run outcome or port calls"() {
         given: 'a control run with a silent recording listener'
         def controlExec = new ScriptedExecutor()
-        def controlBuiltin = new ScriptedBuiltinCheckRunner()
+        def controlBuiltin = new ScriptedCheckRounds()
         def controlPersist = new InMemoryAttemptPersistence()
         def controlListener = new RecordingEventListener()
         scriptFailThenPass(controlExec, controlBuiltin)
 
         and: 'a broken run with an identical fresh set of fakes and a listener that throws on every event'
         def brokenExec = new ScriptedExecutor()
-        def brokenBuiltin = new ScriptedBuiltinCheckRunner()
+        def brokenBuiltin = new ScriptedCheckRounds()
         def brokenPersist = new InMemoryAttemptPersistence()
         def brokenListener = new RecordingEventListener(throwOnEvent: true)
         scriptFailThenPass(brokenExec, brokenBuiltin)
@@ -73,12 +73,12 @@ class BrokenListenerSpec extends BrokenListenerSpecBase {
     def "every event is still delivered despite the listener throwing on each one"() {
         given: 'a control run with a silent listener and a broken run with an identical fresh set'
         def controlExec = new ScriptedExecutor()
-        def controlBuiltin = new ScriptedBuiltinCheckRunner()
+        def controlBuiltin = new ScriptedCheckRounds()
         def controlListener = new RecordingEventListener()
         scriptFailThenPass(controlExec, controlBuiltin)
 
         def brokenExec = new ScriptedExecutor()
-        def brokenBuiltin = new ScriptedBuiltinCheckRunner()
+        def brokenBuiltin = new ScriptedCheckRounds()
         def brokenListener = new RecordingEventListener(throwOnEvent: true)
         scriptFailThenPass(brokenExec, brokenBuiltin)
 
@@ -124,7 +124,7 @@ class BrokenListenerSpec extends BrokenListenerSpecBase {
 
         and: 'the non-trivial fail-then-pass run with a listener that throws on every event'
         def executor = new ScriptedExecutor()
-        def builtinRunner = new ScriptedBuiltinCheckRunner()
+        def builtinRunner = new ScriptedCheckRounds()
         def listener = new RecordingEventListener(throwOnEvent: true)
         scriptFailThenPass(executor, builtinRunner)
 

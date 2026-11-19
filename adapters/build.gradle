@@ -73,9 +73,14 @@ dependencies {
     api project(':httpegress')
 
     // The executor contract (FR6, design D10 of define-executor-contract): a command check's
-    // findings file is read through the contract's one result reader. Method bodies and a
-    // package-private signature only.
-    implementation project(':executor-contract')
+    // findings file is read through the contract's one result reader. `api`, not
+    // `implementation`, since task 3.1 of migrate-verify-to-executor-contract: the `files-exist`
+    // built-in, `FilesExistExecutor`, implements the contract's `Executor` on its public surface.
+    api project(':executor-contract')
+    // The pending-key leaf (design D20 of migrate-verify-to-executor-contract): `HttpResults` builds
+    // the `http` built-in's pending key, and `HttpExecutor`, `ShellExecutor` and `FilesExistExecutor`
+    // name it on their public `poll`, so the type is on this module's own surface: `api`.
+    api project(':pendingkey')
     implementation libs.slf4j.api
     // The log-line sanitizer (design D5 of harden-logging-observability): the check runners
     // put a manifest command and a remote-chosen redirect target into log lines, and both
@@ -156,6 +161,10 @@ layering {
         // declared directly above, because this module's own log sites name `OperatorEvent`;
         // also reached through `:domain`, whose engine emitters take their head from it.
         ':operatorevent',
+        // The pending-key leaf (design D20 of migrate-verify-to-executor-contract), declared
+        // above: the built-ins' `poll` takes it; also reached through `:domain` and
+        // `:executor-contract`.
+        ':pendingkey',
         ':sandbox:core',
         ':sandbox:docker',
         // Transitive via `:sandbox:docker` / `:adapters:git`, which carry the

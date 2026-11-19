@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
-import com.github.oinsio.gnomish.app.CheckRunContext
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
@@ -66,7 +65,7 @@ class HttpExternalCheckClientRequestSpec extends Specification implements HttpCh
         def runContext = { name ->
             Optional.ofNullable(['task.id': 'PROJ-42', 'task.branch': 'gnomish/PROJ-42',
                 'stage.name': 'implement'][name])
-        } as CheckRunContext
+        } as HttpRunContext
         def exchange = new ScriptedExchange(200, 'ok')
         def params = [url: 'https://ci.example.invalid/api?branch=${task.branch}&rev=${attempt.commit}',
             headers: ['X-Stage': '${stage.name}']]

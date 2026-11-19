@@ -10,7 +10,8 @@ import spock.lang.Specification
 
 /**
  * GitHub adapter boundary gate (design D4 of add-external-check-github-actions): {@code
- * adapter.tracker.github} and {@code adapter.check.github} are siblings that both depend on the
+ * adapter.tracker.github} (the vendor bundle) and {@code adapter.scm} (the core-side SCM built-ins
+ * the GitHub Actions check moved to, design D4 of migrate-verify-to-executor-contract) are siblings that both depend on the
  * shared plumbing of the {@code :githubapi} library (HTTP client, retry config, conditional-request
  * cache; design D15 of migrate-verify-to-executor-contract) but must never depend on each other's
  * internals — each is a distinct port
@@ -31,21 +32,21 @@ class GithubAdapterBoundarySpec extends Specification {
     .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
     .importPackages('com.github.oinsio.gnomish')
 
-    def "D4: adapter.check.github does not depend on adapter.tracker.github"() {
+    def "D4: adapter.scm does not depend on adapter.tracker.github"() {
         given: 'the boundary rule forbidding the check adapter from reaching into the tracker adapter'
         def rule = noClasses()
-                .that().resideInAPackage('..adapter.check.github..')
+                .that().resideInAPackage('..adapter.scm..')
                 .should().dependOnClassesThat().resideInAPackage('..adapter.tracker.github..')
 
         expect: 'the rule holds over the production classes (check throws on violation)'
         rule.check(productionClasses)
     }
 
-    def "D4: adapter.tracker.github does not depend on adapter.check.github"() {
+    def "D4: adapter.tracker.github does not depend on adapter.scm"() {
         given: 'the boundary rule forbidding the tracker adapter from reaching into the check adapter'
         def rule = noClasses()
                 .that().resideInAPackage('..adapter.tracker.github..')
-                .should().dependOnClassesThat().resideInAPackage('..adapter.check.github..')
+                .should().dependOnClassesThat().resideInAPackage('..adapter.scm..')
 
         expect: 'the rule holds over the production classes (check throws on violation)'
         rule.check(productionClasses)

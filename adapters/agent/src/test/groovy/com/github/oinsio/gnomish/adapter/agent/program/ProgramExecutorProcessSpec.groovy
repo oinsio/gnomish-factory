@@ -59,7 +59,8 @@ class ProgramExecutorProcessSpec extends Specification {
         environment.materialize('gnomish/TASK-7', null)
         try {
             new ProgramExecutor(ProgramFixtures.declaration(['acme-program']), ProgramFixtures.describe(capabilities),
-            [], environment, ProgramFixtures.equipment(stderrParent, bounds, VirtualTimeEquipment.create()))
+            [], environment, ProgramFixtures.equipment(stderrParent, bounds, VirtualTimeEquipment.create()),
+            PendingScope.unscoped(new PendingRuns()))
             .start(ProgramFixtures.request())
         } finally {
             environment.dispose()

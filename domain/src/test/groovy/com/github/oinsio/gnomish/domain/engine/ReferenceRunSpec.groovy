@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -32,7 +31,7 @@ import spock.lang.Specification
  *
  * <ul>
  *   <li><b>all four verify-check types</b> — {@code judge} (design and review),
- *       {@code command} + {@code builtin} (build), {@code external} poll loop (ci);</li>
+ *       {@code command} + {@code builtin} (build), {@code external} check pending once, then passing (ci);</li>
  *   <li><b>a decision escalation and a decision-carrying resume</b> — the design stage's
  *       executor first returns {@code DecisionNeeded}; the caller appends the human answer
  *       to {@code TaskContext.decisions} and resumes, and that decision reaches the executor;</li>
@@ -100,11 +99,11 @@ class ReferenceRunSpec extends Specification {
         ])
     }
 
-    static EnginePorts portsFor(ScriptedExecutor executor, ScriptedBuiltinCheckRunner builtinRunner,
-            ScriptedCommandCheckRunner commandRunner, ScriptedExternalCheckClient externalClient,
+    static EnginePorts portsFor(ScriptedExecutor executor, ScriptedCheckRounds builtinRunner,
+            ScriptedCheckRounds commandRunner, ScriptedCheckRounds externalClient,
             ScriptedJudgeVoter judgeVoter) {
         def clock = new VirtualClock()
-        new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter,
                 new RecordingEventListener(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 
@@ -125,8 +124,8 @@ class ReferenceRunSpec extends Specification {
             ],
             ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'design', 0), []), [])
         ])
-        def ports1 = portsFor(exec1, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter())
+        def ports1 = portsFor(exec1, new ScriptedCheckRounds(), new ScriptedCheckRounds(),
+                new ScriptedCheckRounds(), new ScriptedJudgeVoter())
 
         when: 'run 1 drives the design stage'
         def outcome1 = new Engine().run(pipeline, context0, TaskState.atStageStart('design'), WORKSPACE, ports1)
@@ -154,14 +153,14 @@ class ReferenceRunSpec extends Specification {
             completed('ci'),
             completed('review')
         ])
-        def builtin2 = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
-        def command2 = new ScriptedCommandCheckRunner([
+        def builtin2 = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
+        def command2 = new ScriptedCheckRounds([
             fail('tests red'),
             new Verdict.Pass(null, [])
         ])
-        def external2 = new ScriptedExternalCheckClient([
-            new PollStatus.Running(),
-            new PollStatus.Pass()
+        def external2 = new ScriptedCheckRounds([
+            ScriptedCheckRounds.pending(),
+            new Verdict.Pass(null, [])
         ])
         def judge2 = new ScriptedJudgeVoter([
             new JudgeVoter.Vote(new Verdict.Pass(null, []), [:]),
@@ -170,7 +169,7 @@ class ReferenceRunSpec extends Specification {
         def persistence2 = new InMemoryAttemptPersistence()
         def clock2 = new VirtualClock()
         def sleeper2 = new VirtualSleeper(clock2)
-        def ports2 = new EnginePorts(exec2, builtin2, command2, external2, judge2,
+        def ports2 = new EnginePorts(CheckRouting.of(exec2, builtin2, command2, external2), judge2,
                 new RecordingEventListener(), persistence2, VirtualTimeEquipment.on(clock2, sleeper2), RoundIdentity.inPlace())
 
         and: 'run 2 resumes from the recorded design state, its history reset by the decision commit'
@@ -205,9 +204,9 @@ class ReferenceRunSpec extends Specification {
         judge2.voteCount == 2 // design + review
         command2.calls.size() == 2 // build attempt 0 (fail) + attempt 1 (pass)
         builtin2.calls.size() == 1 // build attempt 1 only (attempt 0 stopped at the failing command)
-        external2.pollCount == 2 // ci: Running then Pass
+        external2.calls.size() == 2 // ci: a start answering pending, then a poll answering a pass
 
-        and: 'the external poll loop slept the manifest interval once between its two polls'
+        and: 'the pending poll slept the manifest interval once between the start and the poll'
         sleeper2.slept == [SECOND]
 
         and: 'every executed round of run 2 was persisted (design, build x2, ci, review = 5)'
@@ -216,7 +215,7 @@ class ReferenceRunSpec extends Specification {
 
         and: 'every persisted round carries a startedAt begin instant read from the Clock (FR15)'
         // FR15: each recorded round is stamped with the Clock reading taken when it began; with the
-        //     VirtualClock starting at EPOCH and only the ci poll loop advancing it, every round begins
+        //     VirtualClock starting at EPOCH and only the ci check's pending poll advancing it, every round begins
         //     at or after EPOCH and no round is left without a begin instant.
         persistence2.entries.every { entry ->
             entry.state.attempts().every {

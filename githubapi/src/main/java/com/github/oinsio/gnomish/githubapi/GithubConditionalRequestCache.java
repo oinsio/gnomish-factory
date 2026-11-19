@@ -5,6 +5,7 @@ import java.net.http.HttpResponse;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -67,12 +68,28 @@ public final class GithubConditionalRequestCache {
      * live issue).
      */
     public ConditionalResult get(HttpRequest.Builder requestBuilder, String cacheKey) {
+        return get(requestBuilder, cacheKey, httpClient::send);
+    }
+
+    /**
+     * {@link #get}, reading the body as a bounded tail through {@link GithubHttpClient#sendTail}
+     * (design D16 of migrate-verify-to-executor-contract): a job log past the core's bound is kept
+     * as its last bytes, and cached and revalidated like any other body.
+     */
+    public ConditionalResult getTail(HttpRequest.Builder requestBuilder, String cacheKey) {
+        return get(requestBuilder, cacheKey, httpClient::sendTail);
+    }
+
+    private ConditionalResult get(
+            HttpRequest.Builder requestBuilder,
+            String cacheKey,
+            Function<HttpRequest.Builder, HttpResponse<String>> sender) {
         CachedEntry cached = entries.get(cacheKey);
         if (cached != null) {
             requestBuilder.header("If-None-Match", cached.eTag());
         }
 
-        HttpResponse<String> response = httpClient.send(requestBuilder);
+        HttpResponse<String> response = sender.apply(requestBuilder);
 
         if (response.statusCode() == 304 && cached != null) {
             return new NotModified(cached.body());
@@ -84,7 +101,11 @@ public final class GithubConditionalRequestCache {
         } else {
             entries.remove(cacheKey);
         }
-        return new Fresh(response.statusCode(), response.body(), eTag, GithubRateLimit.isRateLimited(response));
+        return new Fresh(
+                response.statusCode(),
+                response.body(),
+                eTag,
+                GithubRateLimit.of(response).orElse(null));
     }
 
     private record CachedEntry(String eTag, String body) {}
@@ -99,14 +120,19 @@ public final class GithubConditionalRequestCache {
      * distinguish e.g. a {@code 404} from a live {@code 200}. {@code eTag} is
      * {@code null} only if the server omitted the {@code ETag} header, in which
      * case no conditional caching is possible for this key. {@code
-     * rateLimited} is true when {@code statusCode} is a {@code 403} carrying
-     * GitHub's rate-limit signal (see {@link GithubRateLimit}) — a caller that
-     * classifies infrastructure failures (NFR-R1 of
-     * add-external-check-github-actions) must not mistake this for a
-     * business-outcome {@code 403}.
+     * rateLimit} is the rate limit {@link GithubRateLimit} judged on the
+     * response, with the pause GitHub asked for, or {@code null} when the
+     * response is none — a caller that classifies infrastructure failures
+     * (NFR-R1 of add-external-check-github-actions) must not mistake a
+     * rate-limited {@code 403} for a business outcome, and a caller that waits
+     * (the {@code scm-status} wait hint, design D19 of
+     * migrate-verify-to-executor-contract) takes the pause from here.
      */
     public record Fresh(
-            int statusCode, String body, @Nullable String eTag, boolean rateLimited) implements ConditionalResult {}
+            int statusCode,
+            String body,
+            @Nullable String eTag,
+            @Nullable RateLimit rateLimit) implements ConditionalResult {}
 
     /** The resource is unchanged since the cached ETag; reuse {@link #previousBody()}. */
     public record NotModified(String previousBody) implements ConditionalResult {}

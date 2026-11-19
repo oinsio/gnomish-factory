@@ -39,6 +39,26 @@ public interface AttemptPersistence {
     void persist(String taskId, TaskState state, ToolTrace trace);
 
     /**
+     * Durably records the open round's pending entries — a pending commit on the round's last
+     * registered commit, landed with its register and pushed — before the engine polls a key
+     * (design D21 of migrate-verify-to-executor-contract). Called only by the engine's one
+     * pending-poll owner, once per check whose executor answered {@code pending}, each time with the
+     * whole list of the round's entries so far.
+     *
+     * <p>The contract the caller keeps: {@code state}'s attempts, position and attempt counter
+     * equal the last persisted state's, so the write names no outcome (crash-consistency item 12);
+     * its {@link TaskState#pendingPolls()} is not empty; no trace is written. An implementation that
+     * cannot make the write durable throws and moves nothing: the engine then makes no poll, and
+     * the check whose key the write carried resolves as cannot-verify.
+     *
+     * <p>Implements FR2, FR20, NFR-R1 of migrate-verify-to-executor-contract.
+     *
+     * @param taskId the task whose round is open; never blank
+     * @param state the last persisted state with the round's pending entries; never null
+     */
+    void persistPending(String taskId, TaskState state);
+
+    /**
      * The round a {@link #persist} call records: the last attempt of the state it was handed, since
      * every round writer of {@link TaskState} appends the round it records — a pass that advances the
      * position keeps it there too (FR14 of define-executor-contract). The one spelling of that read,

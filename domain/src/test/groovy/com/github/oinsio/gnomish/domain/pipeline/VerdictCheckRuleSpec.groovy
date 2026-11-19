@@ -6,7 +6,7 @@ import spock.lang.Specification
 /**
  * VerdictCheckRule (FR4, NFR-S1 of migrate-verify-to-executor-contract; design D3, D6): an
  * {@code scm-status} check declares the contexts it waits for, and a check naming a law executor
- * granted credentials never runs in the round box. Pure: no process, no describe — the law's grant
+ * granted credentials never runs in the round box, and a check names an executor of the registry. Pure: no process, no describe — the law's grant
  * equals the describe's credentials once the describe preflight agreed (GrantAgreement).
  */
 class VerdictCheckRuleSpec extends Specification {
@@ -110,5 +110,37 @@ class VerdictCheckRuleSpec extends Specification {
             'verify[0].verifyIn',
             'verify[2].expected'
         ]
+    }
+
+    // FR1, UX2 (design D18): a check names an executor of the registry — a built-in or a declaration
+    def "FR1, UX2: a #token check naming an unknown executor is a located error at #field listing the six and the law's names"() {
+        expect:
+        VerdictCheckRule.validate(pipeline([
+            check(token, 'sonar', VerifyCheck.VerifyIn.FRESH_BOX)
+        ], [
+            declared('acme', [])
+        ])) == [
+            new ConfigError('stages/verify/stage.yaml', "verify[0].${field}".toString(),
+            "check 'sonar/gate' names unknown executor 'sonar'; the registry's executors are "
+            + 'files-exist, shell, github-actions, scm-status, http, command, acme')
+        ]
+
+        where:
+        token | field
+        VerifyCheck.Token.EXTERNAL | 'provider'
+        VerifyCheck.Token.EXECUTOR | 'executor'
+    }
+
+    // FR1: a built-in, a law declaration, and a blank name (the sanity rule's) are no unknown executor
+    def "FR1: a check naming '#executor' yields no name error"() {
+        expect:
+        VerdictCheckRule.validate(pipeline([
+            check(executor, VerifyCheck.VerifyIn.FRESH_BOX, ['ci'])
+        ], [
+            declared('acme', [])
+        ])) == []
+
+        where:
+        executor << BuiltInExecutors.NAMES + ['acme', '']
     }
 }

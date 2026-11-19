@@ -1,28 +1,38 @@
 package com.github.oinsio.gnomish.domain.engine;
 
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.time.Duration;
+import org.jspecify.annotations.Nullable;
+
 /**
- * The seven sealed events the engine emits synchronously as a run progresses — the
+ * The nine sealed events the engine emits synchronously as a run progresses — the
  * "Events at a glance" stream (design D7). Two run-level bookends,
  * {@link RunStarted} and {@link TaskFinished}, frame every run: they fire even for a
  * position already at {@code PipelineEnd} (an immediate completion) or a pre-flight
  * {@code PipelineMismatch}, so a run has no single {@code (stage, attempt)}. They
  * therefore carry {@code taskId} plus the richer payload the table fixes
  * ({@link Position}/{@link TaskOutcome}), which a bare {@link AttemptKey} — whose
- * {@code stage} is non-blank — cannot represent. The five per-attempt/per-check
- * events carry the full {@code AttemptKey}.
+ * {@code stage} is non-blank — cannot represent. The seven per-attempt/per-check
+ * events carry the full {@code AttemptKey}; two of them, {@link CheckPolled} and {@link
+ * CheckTimedOut}, report a pending check's wait (NFR-O1, UX1 of
+ * migrate-verify-to-executor-contract), so the engine's observability of a wait crosses the
+ * listener port like every other event rather than a logger of its own.
  *
  * <p>Every variant exposes {@link #taskId()} so a consumer can filter the whole
  * stream by task; key-carrying variants delegate to {@code key.taskId()} (UX2, the
  * key logs and telemetry share). The stream suffices to reconstruct a status view —
  * position, attempt, per-check results, aggregate metrics (NFR-O2). Inert values.
  *
- * <p>Implements FR12 of add-stage-engine.
+ * <p>Implements FR12 of add-stage-engine; NFR-O1, UX1 of migrate-verify-to-executor-contract.
  */
 public sealed interface EngineEvent
         permits EngineEvent.RunStarted,
                 EngineEvent.AttemptStarted,
                 EngineEvent.ExecutionFinished,
                 EngineEvent.CheckStarted,
+                EngineEvent.CheckPolled,
+                EngineEvent.CheckTimedOut,
                 EngineEvent.CheckFinished,
                 EngineEvent.AttemptFinished,
                 EngineEvent.TaskFinished {
@@ -58,11 +68,9 @@ public sealed interface EngineEvent
         }
 
         /**
-         * Fails fast on a blank {@code taskId}: a bookend that cannot name its task
-         * cannot correlate its run (UX2). Kept as an explicit static method rather than
-         * inline in the compact constructor: PIT's record filter suppresses all
-         * mutations inside a record's canonical constructor, which would silently exempt
-         * this validation from the 100% mutation gate.
+         * Fails fast on a blank {@code taskId}: a bookend that cannot name its task cannot
+         * correlate its run (UX2). An explicit static method, not inline in the compact constructor:
+         * PIT's record filter suppresses all mutations inside a record's canonical constructor.
          */
         private static String requireNonBlank(String value, String component) {
             if (value.isBlank()) {
@@ -71,11 +79,7 @@ public sealed interface EngineEvent
             return value;
         }
 
-        /**
-         * Fails fast on a negative {@code attemptsUsed}: a burn count cannot be negative
-         * (FR12). Explicit static method for the same PIT mutation-gate reason as
-         * {@link #requireNonBlank}.
-         */
+        /** Fails fast on a negative burn count (FR12); explicit for {@link #requireNonBlank}'s PIT reason. */
         private static int requireNonNegative(int value, String component) {
             if (value < 0) {
                 throw new IllegalArgumentException("EngineEvent.RunStarted." + component + " must not be negative");
@@ -136,16 +140,78 @@ public sealed interface EngineEvent
     }
 
     /**
+     * A pending check is about to be polled (NFR-O1 of migrate-verify-to-executor-contract): one
+     * event per {@code poll} of its wait, emitted by {@link PendingPoll} before the poll is made.
+     * The key is shown only as its prefix ({@link PendingKeyPrefix}), never whole: the event is
+     * observability, and the whole key lives in the round's pending record.
+     *
+     * <p>Implements NFR-O1 of migrate-verify-to-executor-contract.
+     *
+     * @param key the {@code (taskId, stage, attempt)} correlation key; never null
+     * @param check the identity of the polled check; never null
+     * @param executor the executor name the check named; never blank
+     * @param keyPrefix the shown prefix of the polled key, in the family of its source; never null
+     * @param turn whether the key was this run's or read from the pending record; never null
+     * @param elapsed the time since the entry's {@code since}; never null
+     * @param remaining the time left to the wait's deadline; never null
+     */
+    record CheckPolled(
+            AttemptKey key,
+            CheckRef check,
+            String executor,
+            UntrustedText keyPrefix,
+            PendingTurn.Origin turn,
+            Duration elapsed,
+            Duration remaining)
+            implements EngineEvent {
+        @Override
+        public String taskId() {
+            return key.taskId();
+        }
+    }
+
+    /**
+     * A pending check's wait reached its deadline (NFR-O1, UX1 of
+     * migrate-verify-to-executor-contract), emitted by {@link PendingPoll} before the check's
+     * {@link CheckFinished}: the failure the engine resolved the wait to, whose details for an
+     * {@code scm-status} check name every expected context still absent.
+     *
+     * <p>Implements NFR-O1, UX1 of migrate-verify-to-executor-contract.
+     *
+     * @param key the {@code (taskId, stage, attempt)} correlation key; never null
+     * @param check the identity of the timed-out check; never null
+     * @param executor the executor name the check named; never blank
+     * @param keyPrefix the shown prefix of the last key the wait polled; never null
+     * @param elapsed the time since the entry's {@code since}; never null
+     * @param failure the failure the engine resolved the wait to; never null
+     */
+    record CheckTimedOut(
+            AttemptKey key,
+            CheckRef check,
+            String executor,
+            UntrustedText keyPrefix,
+            Duration elapsed,
+            ExecutionResult.Failed failure)
+            implements EngineEvent {
+        @Override
+        public String taskId() {
+            return key.taskId();
+        }
+    }
+
+    /**
      * A verify check finished, carrying its {@link CheckResult} — which already bundles
      * the {@code checkRef}, {@code verdict} and {@code duration} the D7 table names, so
      * the existing type is reused rather than repeating three loose fields.
      *
-     * <p>Implements FR12 of add-stage-engine.
+     * <p>Implements FR12 of add-stage-engine; NFR-O1, UX3 of migrate-verify-to-executor-contract.
      *
      * @param key the {@code (taskId, stage, attempt)} correlation key; never null
      * @param result the check's checkRef + verdict + duration; never null
+     * @param outcome what an executor check's rounds came to; null for a judge check
      */
-    record CheckFinished(AttemptKey key, CheckResult result) implements EngineEvent {
+    record CheckFinished(
+            AttemptKey key, CheckResult result, @Nullable CheckOutcome outcome) implements EngineEvent {
         @Override
         public String taskId() {
             return key.taskId();

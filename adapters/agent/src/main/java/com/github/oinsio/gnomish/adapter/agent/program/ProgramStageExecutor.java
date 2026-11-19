@@ -63,11 +63,15 @@ public final class ProgramStageExecutor implements StageExecutor {
             round.environment().probeGuard();
             ExecutorResult result = executors.executor(round.environment()).start(contractRequest);
             round.environment().probeGuard();
-            round.closeRound();
+            // The close names its outcome by the one mapping's own judgement, made before it (design
+            // D22 of migrate-verify-to-executor-contract): a round its program did not complete is
+            // never resumed as an interrupted verification. The denials are read after the close
+            // and still join the mapped result.
+            round.closeRound(ProgramResultMapping.closeOf(contractRequest.role(), result));
             var denials = RoundDenialRead.onFinish(round);
             // A program is handed no decision file; the read is the source's hygiene of its round.
             round.readDecision();
-            return ProgramResultMapping.toEngine(name, key, result, denials);
+            return ProgramResultMapping.toEngine(name, contractRequest.role(), key, result, denials);
         } catch (RuntimeException e) {
             // throwable-not-subject: the round's failed/infrastructure carries the cause's class and
             //     message; the engine writes the one operator line for it.
@@ -81,7 +85,8 @@ public final class ProgramStageExecutor implements StageExecutor {
                     ExecutionResult.FailureClass.INFRASTRUCTURE,
                     UntrustedText.subprocess(
                             "program executor '" + name + "': the round failed before its result was read: " + e),
-                    List.of());
+                    List.of(),
+                    null);
             return new ExecutionResult(failed, null, ExecutorUsage.none(), new ToolTrace(key, List.of()), denials);
         }
     }

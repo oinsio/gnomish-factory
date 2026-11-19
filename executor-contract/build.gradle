@@ -4,10 +4,13 @@
 // are the contract's single source of truth; the Java DTOs that mirror them one to one, the
 // `Executor` interface built-ins implement, and the one result-file reader land here beside them.
 //
-// The module reaches the JDK, Jackson and the JDK-only `:untrustedtext` leaf, and nothing else: no Spring, no logging API, no factory
-// layer. The DTOs are a wire image, so they need a JSON binding and must not need anything that
-// would pull a layer behind them — the engine in `:domain`, the adapters and the conformance kit
-// all reach this module, and an edge added here would land in each of them. Jackson is `api`: the
+// The module reaches the JDK, Jackson and two JDK-only leafs, `:untrustedtext` and `:pendingkey`,
+// and nothing else: no Spring, no logging API, no factory layer. The DTOs are a wire image, so they
+// need a JSON binding and must not need anything that would pull a layer behind them — the
+// adapters, the composition root and the conformance kit all reach this module, and an edge added
+// here would land in each of them. The engine in `:domain` does not: it reaches the `:pendingkey`
+// leaf the contract's result names, not this module (design D20 of
+// migrate-verify-to-executor-contract). Jackson is `api`: the
 // DTOs carry its annotations and expose its tree nodes (`ObjectNode` settings, the `JsonNode`
 // answer slot), so every consumer compiles against it.
 //
@@ -33,6 +36,11 @@ dependencies {
     // Every text field a result file carries leaves ResultFileReader as an UntrustedText (FR6,
     // NFR-S2), and the carrier is on the reader's surface (ReadResult), so the edge is api.
     api project(':untrustedtext')
+    // The pending key (design D20 of migrate-verify-to-executor-contract): `ExecutorResult.pendingKey`
+    // and `Executor.poll` name the leaf's `PendingKey`, so the edge is api. The leaf is the key's one
+    // owner — its type and rule — shared with `:domain`; this module only binds it to JSON
+    // (`ExecutorContractJson`'s serializer).
+    api project(':pendingkey')
 
     // The one JSON Schema validator of the factory (FR9 of define-executor-contract, task 6.3):
     // `SettingsSchema` judges a law's settings against the schema an executor's describe declares,
@@ -44,10 +52,11 @@ dependencies {
     implementation libs.json.schema.validator
 }
 
-// `:executor-contract` reaches exactly one project: the JDK-only `:untrustedtext` leaf, whose
-// carrier every text field the result-file reader returns travels in (task 3.1). The leaf has no
-// internal edge of its own and may never acquire one, so this edge lands nothing else in the
-// engine, the adapters or the conformance kit that reach this module.
+// `:executor-contract` reaches exactly two projects, both JDK-only leafs: `:untrustedtext`, whose
+// carrier every text field the result-file reader returns travels in (task 3.1), and `:pendingkey`,
+// the pending key's one owner (design D20 of migrate-verify-to-executor-contract). Neither leaf has
+// an internal edge of its own or may ever acquire one, so these edges land nothing else in the
+// adapters or the conformance kit that reach this module.
 layering {
-    allowedProjects = [':untrustedtext']
+    allowedProjects = [':untrustedtext', ':pendingkey']
 }

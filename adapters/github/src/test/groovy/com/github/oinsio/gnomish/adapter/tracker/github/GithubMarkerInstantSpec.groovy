@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder
 import io.github.resilience4j.core.IntervalFunction
@@ -44,7 +45,7 @@ class GithubMarkerInstantSpec extends Specification {
     def setup() {
         wireMock = new WireMockServer(0)
         wireMock.start()
-        httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', RetryConfig.custom()
+        httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', RetryConfig.custom()
                 .maxAttempts(2)
                 .intervalFunction(IntervalFunction.of(10))
                 .retryOnException({ true })

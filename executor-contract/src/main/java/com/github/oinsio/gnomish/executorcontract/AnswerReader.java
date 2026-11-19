@@ -12,7 +12,7 @@ import java.util.function.Function;
  * AnswerReading.Malformed} carrying the refusal as its reason. Every text the answer carries, and
  * the reason, which quotes the document, is minted in the writer's family (NFR-S2).
  *
- * <p>Implements FR3, NFR-S2 of define-executor-contract.
+ * <p>Implements FR3, NFR-S2 of define-executor-contract; FR5 of migrate-verify-to-executor-contract.
  */
 final class AnswerReader {
 
@@ -21,6 +21,14 @@ final class AnswerReader {
     static AnswerReading read(JsonNode written, Function<String, UntrustedText> mint) {
         try {
             return new AnswerReading.Parsed(answer(written, new WrittenTexts(mint)));
+        } catch (IllegalArgumentException malformed) {
+            return new AnswerReading.Malformed(mint.apply(String.valueOf(malformed.getMessage())));
+        }
+    }
+
+    static AnswerReading readSarif(JsonNode sarifLog, Function<String, UntrustedText> mint) {
+        try {
+            return new AnswerReading.Parsed(SarifReader.verdict(sarifLog, new WrittenTexts(mint)));
         } catch (IllegalArgumentException malformed) {
             return new AnswerReading.Malformed(mint.apply(String.valueOf(malformed.getMessage())));
         }

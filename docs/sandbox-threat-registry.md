@@ -143,8 +143,13 @@ to over the executor contract's JSON, never Java code loaded into the factory pr
 third-party verifier code runs inside the factory process. A `program` verdict executor that
 declares credentials runs in a fresh box whose egress allowlist is derived from its describe —
 `verify-in: same-box` on such a check is a load error — and the built-in verdict executors
-that hold a token (`github-actions`, `scm-status`) run in the factory process under the
-in-process egress allowlist of their declared hosts, their token entering no box. Rows 32–36
+that hold a token (`github-actions`, `scm-status`) run in the factory process, their token
+entering no box, every call through the one guarded exchange of `:httpegress`. That exchange
+admits a destination by the medium its URL comes from: a host the operator's files name is
+granted, a host the law tree names for an in-process call (a manifest target, an inline tracker
+`api-url`) is a request granted only by the operator or by the vendor's own default host, and
+every hop — redirects included — is judged against the consumer's admitted set, with the
+credential headers dropped across hosts. The tracker's client runs over the same exchange. Rows 32–36
 apply to every verdict executor alike: its findings reach the one findings funnel as SARIF, and
 pass or fail is derived by the engine, never declared by the executor. Introduced by
 `migrate-verify-to-executor-contract` (design D1, D4, D6).

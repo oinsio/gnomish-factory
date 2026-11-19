@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app.describe
 
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
+import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
@@ -64,6 +65,19 @@ class DescribePreflightSpec extends DescribePreflightSpecBase {
         outcome == new DescribeOutcome.Invalid([
             new ConfigError('stages/build/stage.yaml', 'executor.name',
             "executor 'acme' lists only role 'effect', which is reserved and not executed in this version; stage 'build' needs role 'transform'")
+        ])
+    }
+
+    // Scenario: executor/wire-contract / Effect role is refused by the engine in this version
+    def "FR1, NG4: a check whose executor's describe lists only effect is a located law error naming the check and effect as reserved"() {
+        when:
+        def outcome = preflight().describe(environment, law(['acme': describeAs('effect-only')],
+        verifying(check(VerifyCheck.Token.EXECUTOR, 'acme'))))
+
+        then:
+        outcome == new DescribeOutcome.Invalid([
+            new ConfigError('stages/build/stage.yaml', 'verify[0].executor',
+            "executor 'acme' lists only role 'effect', which is reserved and not executed in this version; check 'sonar/gate' of stage 'build' needs role 'verdict'")
         ])
     }
 

@@ -141,7 +141,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         def burned = TaskState.atStageStart('implement').recordQualityFailure(AttemptRecords.of(
                         0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
                         ExecutorUsage.none(), [], Stop.none()), ExecutorVersions.none())
-        new GitAttemptPersistence(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE).persist('PROJ-1', burned,
+        HostRoundPersistence.over(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE).persist('PROJ-1', burned,
                 new ToolTrace(new AttemptKey('PROJ-1', 'implement', 0), []))
         def before = runner.run(worktree, 'rev-list', '--count', 'HEAD').stdout().forParsing().trim() as Integer
 
@@ -577,7 +577,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         def onDisk = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
         Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(new StateJsonDto(
                         onDisk.version(), onDisk.position(), onDisk.attemptsUsed(), onDisk.attempts(), onDisk.totals(),
-                        new EgressCursorDto('sha256:from-disk', '2026-09-21T00:00:00Z'), null)))
+                        new EgressCursorDto('sha256:from-disk', '2026-09-21T00:00:00Z'), null, null)))
 
         when: 'a lifecycle rewrite regenerates state.json'
         repository.appendDecision('PROJ-1', new Decision('proceed', 'implement', 'operator', null),
@@ -639,7 +639,7 @@ class GitTaskRepositorySpec extends Specification implements BareGitRepoFixture 
         Path taskJson = worktree.resolve('.gnomish-task').resolve('task.json')
         def state = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
         Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(new StateJsonDto(
-                        state.version(), state.position(), state.attemptsUsed(), state.attempts(), state.totals(), attempt, null)))
+                        state.version(), state.position(), state.attemptsUsed(), state.attempts(), state.totals(), attempt, null, null)))
         Files.writeString(taskJson, TaskStateJson.mapper()
                 .writeValueAsString(TaskJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(taskJson))).withEgressCursor(escalation)))
         runner.run(worktree, 'add', '-A')

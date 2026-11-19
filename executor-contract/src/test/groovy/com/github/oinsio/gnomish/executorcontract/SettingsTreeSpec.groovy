@@ -31,4 +31,13 @@ class SettingsTreeSpec extends Specification {
         SettingsSchema.judge(schema, [:]) instanceof SettingsJudgement.Accepted
         SettingsSchema.judge(schema, [x: 1]) instanceof SettingsJudgement.Rejected
     }
+
+    // FR1 of migrate-verify-to-executor-contract: a built-in reads the request's tree back as the law's values
+    def "FR1: a request's settings tree reads back as the values it was made from"() {
+        given:
+        def values = [files: ['a.txt', 42, null], nested: [on: true], none: null]
+
+        expect:
+        ExecutorContractJson.settingsValues(ExecutorContractJson.settingsTree(values)) == values
+    }
 }

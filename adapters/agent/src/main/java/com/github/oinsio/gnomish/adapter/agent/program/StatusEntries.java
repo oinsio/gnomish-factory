@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -45,6 +46,19 @@ final class StatusEntries {
             }
         }
         return entries;
+    }
+
+    /**
+     * The one object id a {@code rev-parse} answered, for the lag of a pending commit ({@link
+     * FactoryMove}). The value passed the fixed shape of a full object id — 40 or 64 lowercase hex
+     * characters over the whole trimmed answer — so it is compared whole and never shown.
+     *
+     * @param answer the command's captured output; never null
+     * @return the id, or empty when the answer is anything else
+     */
+    static Optional<String> objectId(UntrustedText answer) {
+        String id = answer.forParsing().strip();
+        return id.matches("[0-9a-f]{40}|[0-9a-f]{64}") ? Optional.of(id) : Optional.empty();
     }
 
     /**

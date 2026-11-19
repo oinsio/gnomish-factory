@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.app.port.agent.RoundClose;
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
@@ -176,9 +177,9 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         }
 
         @Override
-        public void closeRound() {
+        public void closeRound(RoundClose close) {
             new EnvironmentRoundSnapshot(environment, runner, cloneDir, rounds)
-                    .snapshot(taskId, key.stage(), key.attempt());
+                    .snapshot(taskId, key.stage(), key.attempt(), close);
         }
 
         @Override

@@ -8,7 +8,7 @@ import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -36,7 +36,7 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
         def box = localBox()
 
         when:
-        def outcome = run(pipeline(3), box, 'decision-needed', new ScriptedCommandCheckRunner())
+        def outcome = run(pipeline(3), box, 'decision-needed', new ScriptedCheckRounds())
 
         then: 'the round reached the factory: the question was read and the round committed'
         outcome instanceof TaskOutcome.Escalated
@@ -59,7 +59,7 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
 
         when:
         def logs = LogCaptureSupport.attach(DecisionRequestRead)
-        def outcome = run(pipeline(3), box, 'plain-round', new ScriptedCommandCheckRunner())
+        def outcome = run(pipeline(3), box, 'plain-round', new ScriptedCheckRounds())
         def lines = List.copyOf(logs.list)
         logs.detach()
 
@@ -80,7 +80,7 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
     def "FR1: a fresh judge box and a fresh-box check are pinned at the tip the factory resolved, not at the box's HEAD"() {
         given: 'a round that ended in a failed check: its snapshot harvested into the factory clone, the state commit on top'
         def box = localBox()
-        run(pipeline(1), box, 'plain-round', ScriptedCommandCheckRunner.fixed(new Verdict.Fail([])))
+        run(pipeline(1), box, 'plain-round', ScriptedCheckRounds.fixed(new Verdict.Fail([])))
         def harvested = gitOutput(clone, 'rev-parse', tip() + '^')
         assert subjectOf(clone, harvested).startsWith('gnomish: snapshot build#0')
 
@@ -103,7 +103,9 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
         new FreshJudgeEnvironments(recording, BRANCH).environmentFor(workspace)
         new SandboxCheckEnvironmentSource(new EnvironmentLease({
             -> box
-        }, BRANCH, []), recording, BRANCH)
+        }, BRANCH, []), recording, { List<String> grant ->
+            recording()
+        }, BRANCH)
         .acquire(VerifyChecks.command('make check', VerifyCheck.VerifyIn.FRESH_BOX), workspace)
 
         then: 'both are pinned at the factory\'s resolution of the harvested tip'

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -90,7 +91,7 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
         def openTip = tip()
         OpenedRound.reopen(rounds, cloneDir, BRANCH)
         write(box, 'work.txt', 'gnome work')
-        new EnvironmentRoundSnapshot(box, runner, cloneDir, rounds).snapshot(TASK, 'implement', 0)
+        new EnvironmentRoundSnapshot(box, runner, cloneDir, rounds).snapshot(TASK, 'implement', 0, RoundClose.VERIFIABLE)
 
         when:
         persistRound(persistence, 0)
@@ -100,13 +101,32 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
         gitOutput(cloneDir, 'log', '-1', '--format=%s', tip()) == 'gnomish: round implement#0'
     }
 
+    // FR19, FR20 of migrate-verify-to-executor-contract (design D21, D22): the persist re-admits an
+    // unverifiable round's snapshot by the subject the step chose, and the state commit sits on the
+    // round's registered commit
+    def "FR19: an unverifiable round's state commit lands on its unverified snapshot"() {
+        given:
+        def rounds = OpenedRound.at(cloneDir, BRANCH)
+        def box = materializedBox()
+        write(box, 'work.txt', 'half done')
+        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, rounds).snapshot(TASK, 'implement', 1, RoundClose.UNVERIFIABLE)
+
+        when:
+        persistRound(persistence(box, rounds), 1)
+
+        then:
+        gitOutput(cloneDir, 'rev-parse', tip() + '^') == snapshot
+        rounds.closed().registered() == snapshot
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', snapshot).startsWith('gnomish: unverified-snapshot implement#1 ')
+    }
+
     def "FR16: the carve-out admits the decision file named by the round's own token"() {
         given:
         def rounds = OpenedRound.at(cloneDir, BRANCH)
         def box = materializedBox()
         def token = rounds.opened().commit()
         write(box, ".gnomish-task/decisions/implement-a1-${token}.json", '{"question":"which db?"}')
-        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, rounds).snapshot(TASK, 'implement', 1)
+        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, rounds).snapshot(TASK, 'implement', 1, RoundClose.VERIFIABLE)
 
         when:
         persistRound(persistence(box, rounds), 1)
@@ -122,7 +142,7 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
         def registered = tip()
         def live = OpenedRound.at(cloneDir, BRANCH)
         write(box, '.gnomish-task/state.json', '{"forged":true}')
-        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, live).snapshot(TASK, 'implement', 1)
+        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, live).snapshot(TASK, 'implement', 1, RoundClose.VERIFIABLE)
 
         expect: 'the admission refused it: the branch and the register stayed on the registered commit'
         snapshot != registered
@@ -150,7 +170,7 @@ class EnvironmentAttemptPersistenceSpec extends Specification implements BareGit
         def live = OpenedRound.at(cloneDir, BRANCH)
         def token = live.opened().commit()
         write(box, ".gnomish-task/decisions/implement-a1-${token}.json", '{"question":"which db?"}')
-        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, live).snapshot(TASK, 'implement', 1)
+        def snapshot = new EnvironmentRoundSnapshot(box, runner, cloneDir, live).snapshot(TASK, 'implement', 1, RoundClose.VERIFIABLE)
         def resumed = new CurrentRound()
         resumed.restore(new SnapshotTipCheck(runner, cloneDir).inspect(TASK).get())
 

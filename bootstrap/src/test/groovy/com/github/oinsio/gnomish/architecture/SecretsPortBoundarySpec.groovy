@@ -2,7 +2,8 @@ package com.github.oinsio.gnomish.architecture
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
+import com.github.oinsio.gnomish.adapter.scm.actions.GithubActionsExecutor
+import com.github.oinsio.gnomish.adapter.scm.status.ScmStatusExecutor
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.adapter.tracker.github.GithubTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
@@ -53,10 +54,11 @@ class SecretsPortBoundarySpec extends Specification {
         ],
     ]
 
-    /** The credential names the adapters declare; each MUST stay absent from the build metadata. */
+    /** The credential names the adapters and built-ins declare; each MUST stay absent from the build metadata. */
     private static final List<String> CREDENTIAL_NAMES = [
         GithubTrackerAdapterFactory.TOKEN_ENV_VAR,
-        GithubCheckClientFactory.TOKEN_ENV_VAR
+        GithubActionsExecutor.TOKEN_ENV_VAR,
+        ScmStatusExecutor.TOKEN_ENV_VAR
     ]
 
     /**

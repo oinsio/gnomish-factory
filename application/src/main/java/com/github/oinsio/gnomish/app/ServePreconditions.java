@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.serve.PreconditionRecheck;
 import com.github.oinsio.gnomish.app.take.DaemonConditionKind;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.util.Objects;
 import java.util.Optional;
@@ -26,13 +27,12 @@ import java.util.Optional;
  * unchanged, as they would from a slot.
  *
  * <p>{@code doctor} reads the same checks one kind at a time through {@link #verdict}, which never
- * refuses (design D1 of add-doctor-command): the image is judged there by the readiness port's
- * contract inspection alone, which starts no container, so the box git floor is not probed by it.
- * {@link #assess} and {@link #rechecks} keep asking the port's {@link SandboxImageReadiness#assess},
- * both halves in order.
+ * refuses (design D1 of add-doctor-command); the image is judged there by contract inspection alone.
+ * The tracker endpoint's egress judgement (design D16 of migrate-verify-to-executor-contract) is a
+ * probe and a verdict only: startup's admission already ran at load.
  *
  * <p>Implements FR13, NFR-R3, UX3 of add-sandbox-base-image; FR1, FR4, NFR-R1 of
- * add-doctor-command.
+ * add-doctor-command; FR18 of migrate-verify-to-executor-contract.
  */
 public final class ServePreconditions {
 
@@ -55,22 +55,26 @@ public final class ServePreconditions {
     private final SandboxModeSelector modeSelector;
     private final SandboxImageReadiness imageReadiness;
     private final SandboxProperties sandbox;
+    private final EgressProbe egress;
 
     /**
      * @param branches the ref-format check's port; never null
      * @param modeSelector the process's one execution-mode selector; never null
      * @param imageReadiness the image contract and box git floor checks' port; never null
      * @param sandbox the operator sandbox config, read for the configured image; never null
+     * @param egress the tracker endpoint's connect-time judgement (the {@code EGRESS} probe)
      */
     ServePreconditions(
             TaskBranchGit branches,
             SandboxModeSelector modeSelector,
             SandboxImageReadiness imageReadiness,
-            SandboxProperties sandbox) {
+            SandboxProperties sandbox,
+            EgressProbe egress) {
         this.branches = branches;
         this.modeSelector = modeSelector;
         this.imageReadiness = imageReadiness;
         this.sandbox = sandbox;
+        this.egress = egress;
     }
 
     /**
@@ -123,18 +127,13 @@ public final class ServePreconditions {
      * contract is the port's contract inspection alone, with no container. Needs no claim and no
      * running daemon; logs nothing and throws nothing a check threw.
      *
-     * @param kind {@link DaemonConditionKind#CLONE_REF_FORMAT}, {@link
-     *     DaemonConditionKind#CONTAINER_RUNTIME} or {@link DaemonConditionKind#IMAGE_CONTRACT}
-     * @param clone the registered clone the verdict is about; never null
-     * @param definition the clone's pipeline definition, which the plan reads; never null
-     * @return the check's verdict; never null
      * @throws IllegalArgumentException for {@link DaemonConditionKind#BOX_GIT_FLOOR}, whose probe is
      *     a container start, and {@link DaemonConditionKind#REMOTE}, which no startup check owns
      */
     public PreconditionVerdict verdict(DaemonConditionKind kind, RegisteredClone clone, PipelineDefinition definition) {
         Runnable check =
                 switch (kind) {
-                    case CLONE_REF_FORMAT, CONTAINER_RUNTIME -> () -> check(kind, clone, definition);
+                    case CLONE_REF_FORMAT, CONTAINER_RUNTIME, EGRESS -> () -> check(kind, clone, definition);
                     case IMAGE_CONTRACT -> () -> imageReadiness.inspectContract(configuredImage());
                     case BOX_GIT_FLOOR ->
                         throw new IllegalArgumentException(
@@ -146,12 +145,8 @@ public final class ServePreconditions {
 
     /**
      * The non-refusing verdict on the clone's ref format alone, for {@code doctor}'s ref backend
-     * check (FR1 of add-doctor-command): {@link #verdict} for {@link
-     * DaemonConditionKind#CLONE_REF_FORMAT}, which reads no definition, so a pipeline that fails to
-     * load does not hide the clone's ref backend.
-     *
-     * @param clone the registered clone the verdict is about; never null
-     * @return the check's verdict; never null
+     * check (FR1 of add-doctor-command): it reads no definition, so a pipeline that fails to load
+     * does not hide the clone's ref backend.
      */
     public PreconditionVerdict refFormatVerdict(RegisteredClone clone) {
         return judge(() -> requireRefFormat(clone));
@@ -178,7 +173,16 @@ public final class ServePreconditions {
             case CLONE_REF_FORMAT -> requireRefFormat(clone);
             case CONTAINER_RUNTIME -> modeSelector.runsInBox(definition, clone);
             case IMAGE_CONTRACT, BOX_GIT_FLOOR -> imageReadiness.assess(configuredImage());
+            case EGRESS -> judgeTrackerEndpoint(definition);
             case REMOTE -> throw new IllegalArgumentException("the remote is probed by its own ls-remote");
+        }
+    }
+
+    /** The {@code EGRESS} check (design D16 of migrate-verify-to-executor-contract): no request sent. */
+    private void judgeTrackerEndpoint(PipelineDefinition definition) {
+        TrackerConfig tracker = definition.tracker();
+        if (tracker != null) {
+            tracker.endpoint().ifPresent(egress::judge);
         }
     }
 
@@ -187,11 +191,7 @@ public final class ServePreconditions {
         branches.requireRefFormat(clone.clonePath());
     }
 
-    /**
-     * The configured image. Startup and the rechecks ask it only after a boxed plan, which has
-     * already refused a container run with none configured; for {@link #verdict} an absent image is
-     * the {@link PreconditionVerdict.Failed} of this null check.
-     */
+    /** The configured image; absent, {@link #verdict}'s {@link PreconditionVerdict.Failed}. */
     private String configuredImage() {
         return Objects.requireNonNull(sandbox.image(), "factory.sandbox.image");
     }

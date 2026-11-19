@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.port.run;
 import com.github.oinsio.gnomish.app.port.agent.JudgeEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource;
+import com.github.oinsio.gnomish.app.port.check.FreshBoxSource;
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
@@ -24,11 +25,13 @@ import org.jspecify.annotations.Nullable;
  * never which backend supplies it (task 4.4, D12 of split-into-modules).
  *
  * <p>Implements FR4, FR13, FR15, FR21, FR23 of add-sandbox-core; FR13, FR15 of
- * make-checkpoint-gate-durable.
+ * make-checkpoint-gate-durable; FR3, NFR-S1 of migrate-verify-to-executor-contract.
  *
  * @param executorRounds the executor's round environment source; never null
  * @param judgeEnvironments the judge's fresh-box source; never null
  * @param checkEnvironments the command-check environment source; never null
+ * @param freshBoxes the box of each request of a {@code program} verdict check, by the executor's
+ *     grant (design D6, D11 of migrate-verify-to-executor-contract); never null
  * @param attemptReader the factory clone's bare-object reader builtin checks evaluate the
  *     attempt commit through; never null
  * @param attemptDelivery the external-check push-precondition seam; never null
@@ -41,6 +44,7 @@ public record SandboxRunPieces(
         RoundEnvironmentSource executorRounds,
         JudgeEnvironmentSource judgeEnvironments,
         CheckEnvironmentSource checkEnvironments,
+        FreshBoxSource freshBoxes,
         GitObjects attemptReader,
         AttemptDelivery attemptDelivery,
         CurrentRound rounds,

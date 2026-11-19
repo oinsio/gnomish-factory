@@ -21,7 +21,10 @@ poll exec-sh steps/executor-run.sh
 # The misbehaving fake: the reference executor with exactly one conformance case broken, the case its
 # link is named after (`break-<case>`, which StandIn.executor makes) — steps/executor-run.sh lists
 # the cases and how each breaks; a run in another case's workspace answers as the reference does.
+# The re-poll case keeps the runs it ended in the file beside that link (ENDED_RUNS, `<link>.ended-runs`),
+# outside every working copy, where a conforming program keeps its runs too.
 * export-name BROKEN
+* export ENDED_RUNS @ended-runs
 describe exec-sh steps/executor-run.sh
 start stdout data/stdout-executor#progress
 start stderr data/stderr-executor#start-noise
@@ -35,35 +38,6 @@ poll exec-sh steps/executor-run.sh
 describe result data/executor-describe#verdict-only
 describe exit 0
 start exec-sh steps/executor-run.sh
-
-[reference-recorded]
-# The reference executor's describe, every invocation recorded in the per-run log with the result
-# path it was handed: a spec counts the describes a run spawned and finds where the answer went
-# (DescribePreflightSpec, RunDescribeSpec).
-* record GNOMISH_RESULT_FILE
-describe result data/executor-describe#reference
-describe exit 0
-
-[describe-as]
-# An executor whose describe answers the section of data/executor-describe its per-run link is named
-# after: one preset for every describe a spec needs (version-2, protocol-2, verdict-only, transform-only,
-# effect-only, effect-and-verdict, no-role, malformed, control-chars, strict-settings, remote-schema, grants,
-# bad-egress), the name its link carries.
-describe result data/executor-describe#@name
-describe exit 0
-
-[describe-failing]
-# An executor whose describe exits 3 with a line on stderr and writes no result file.
-describe refuse 3 data/stderr-executor#describe-failed
-
-[describe-silent]
-# An executor whose describe exits 0 and writes no result file.
-describe exit 0
-
-[describe-oversized]
-# An executor whose describe writes more than the factory's describe cap into the result file.
-describe run steps/oversized-result.sh
-describe exit 0
 
 [run-as]
 # The reference executor's describe, and a start that answers the section of data/executor-result
@@ -100,3 +74,12 @@ start export-name EDIT
 start run steps/working-copy-edit.sh
 start result data/executor-result#completed
 start exit 0
+
+[verdict-scripted]
+# A verdict program answering the spec's `<link>.script` line by line, logging to `<link>.heads` (steps/scripted-verdict.sh).
+* export SCRIPT_FILE @script
+* export HEADS_FILE @heads
+start run steps/scripted-verdict.sh
+start exit 0
+poll run steps/scripted-verdict.sh
+poll exit 0

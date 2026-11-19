@@ -14,16 +14,19 @@ import org.slf4j.LoggerFactory;
 /**
  * The serve daemon's write point for the ledger's {@code roundOutcome} line (NFR-O2, UX3 of
  * define-executor-contract): an engine event listener that appends one line per {@link
- * EngineEvent.ExecutionFinished} — the event every executed round emits — through the shared
- * {@link RotatingLedgerAppender}, in the words {@link RoundOutcomeWords} owns. Every other event is
- * not this writer's business. One instance serves every slot of the daemon: it holds no per-run
- * state, and the appender serializes the writes.
+ * EngineEvent.ExecutionFinished} — the event every executed round emits — and one per {@link
+ * EngineEvent.CheckFinished} of an executor check, role {@code verdict}, naming the check, the status
+ * its rounds ended on and the key a resume took up (NFR-O1, UX3 of migrate-verify-to-executor-contract),
+ * through the shared {@link RotatingLedgerAppender}, in the words {@link RoundOutcomeWords} owns.
+ * Every other event, a judge check's finish included, is not this writer's business. One instance
+ * serves every slot of the daemon: it holds no per-run state, and the appender serializes the writes.
  *
  * <p>Write failures never propagate (NFR-R1 of add-serve-observability): an {@link IOException}
  * from the appender is logged and swallowed, as for every ledger line — an observability write must
  * never fail a round.
  *
- * <p>Implements NFR-O2, UX3 of define-executor-contract.
+ * <p>Implements NFR-O2, UX3 of define-executor-contract; NFR-O1, UX3 of
+ * migrate-verify-to-executor-contract.
  */
 public final class RoundOutcomeLedgerWriter implements EngineEventListener {
 
@@ -45,33 +48,60 @@ public final class RoundOutcomeLedgerWriter implements EngineEventListener {
     }
 
     /**
-     * Appends the {@code roundOutcome} line of a finished round; ignores every other event.
+     * Appends the {@code roundOutcome} line of a finished round or executor check; ignores every
+     * other event.
      *
      * @param event the event that just occurred; never null
      */
     @Override
     public void onEvent(EngineEvent event) {
-        if (!(event instanceof EngineEvent.ExecutionFinished finished)) {
-            return;
+        switch (event) {
+            case EngineEvent.ExecutionFinished finished -> {
+                var key = finished.key();
+                append(new RoundOutcomeLine(
+                        instance,
+                        clock.instant(),
+                        key.taskId(),
+                        key.stage(),
+                        key.attempt(),
+                        finished.executor().name(),
+                        finished.executor().version(),
+                        RoundOutcomeWords.STAGE_ROLE,
+                        RoundOutcomeWords.statusWithClass(finished.status()),
+                        null,
+                        null));
+            }
+            case EngineEvent.CheckFinished finished
+            when finished.outcome() != null -> {
+                var key = finished.key();
+                var outcome = finished.outcome();
+                append(new RoundOutcomeLine(
+                        instance,
+                        clock.instant(),
+                        key.taskId(),
+                        key.stage(),
+                        key.attempt(),
+                        outcome.executor(),
+                        null,
+                        RoundOutcomeWords.CHECK_ROLE,
+                        RoundOutcomeWords.statusWithClass(outcome.status()),
+                        finished.result().checkRef().index(),
+                        outcome.resumedKey()));
+            }
+            default -> {
+                // Not a round's outcome: nothing to write.
+            }
         }
-        var key = finished.key();
-        var line = new RoundOutcomeLine(
-                instance,
-                clock.instant(),
-                key.taskId(),
-                key.stage(),
-                key.attempt(),
-                finished.executor().name(),
-                finished.executor().version(),
-                RoundOutcomeWords.STAGE_ROLE,
-                RoundOutcomeWords.statusWithClass(finished.status()));
+    }
+
+    private void append(RoundOutcomeLine line) {
         try {
             appender.append(line);
         } catch (IOException e) {
             log.error(
                     OperatorEvent.ROUND_OUTCOME_LEDGER_APPEND_FAILED.head()
                             + "failed to append roundOutcome ledger line for task {}",
-                    key.taskId(),
+                    line.taskId(),
                     e);
         }
     }

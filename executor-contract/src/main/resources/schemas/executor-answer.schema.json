@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/oinsio/gnomish-factory/schemas/executor-contract/1/executor-answer.schema.json",
   "title": "Executor answer",
-  "description": "The optional structured answer of a result, written to the factory-named GNOMISH_ANSWER_FILE or carried in the result's answer slot, and read through the one capped result reader. A malformed answer is never read as a pass. Unknown-token arm: an unknown kind is a malformed answer (failed/infrastructure for transform, cannot-verify for verdict). Readers ignore unknown properties. Implements FR3, NFR-S2 of define-executor-contract.",
+  "description": "The optional structured answer of a result, written to the factory-named GNOMISH_ANSWER_FILE or carried in the result's answer slot, and read through the one capped result reader. A malformed answer is never read as a pass. Unknown-token arm: an unknown kind is a malformed answer (failed/infrastructure for transform, cannot-verify for verdict). Readers ignore unknown properties. Implements FR3, NFR-S2 of define-executor-contract; FR5 of migrate-verify-to-executor-contract.",
   "type": "object",
   "required": ["kind"],
   "properties": {
@@ -62,7 +62,14 @@
           "required": ["text"],
           "properties": { "text": { "type": "string" } }
         },
-        "locations": { "type": "array" }
+        "locations": { "type": "array" },
+        "properties": {
+          "description": "SARIF's property bag. The engine reads one member, details: the result's details apart from its message, when a string; a details of another type is a third-party tool's own and is ignored, never malformed (design D19 of migrate-verify-to-executor-contract).",
+          "type": "object",
+          "properties": {
+            "details": { "description": "The result's details, read when a string." }
+          }
+        }
       }
     },
     "select": {
@@ -97,7 +104,8 @@
           {
             "tool": { "driver": { "name": "example-judge" } },
             "results": [
-              { "ruleId": "javadoc", "level": "warning", "message": { "text": "Foo.bar has no javadoc" } }
+              { "ruleId": "javadoc", "level": "warning", "message": { "text": "Foo.bar has no javadoc" } },
+              { "level": "error", "message": { "text": "command exited with status 1" }, "properties": { "details": "> Task :test FAILED" } }
             ]
           }
         ]

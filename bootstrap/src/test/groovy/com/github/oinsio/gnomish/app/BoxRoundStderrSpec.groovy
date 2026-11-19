@@ -4,7 +4,7 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Files
@@ -49,7 +49,7 @@ class BoxRoundStderrSpec extends RoundFlowSpecBase {
         logs = LogCaptureSupport.attach(SCRATCH_LOGGER, Level.DEBUG)
 
         when:
-        def outcome = run(pipeline(3), observedBox(), 'chatty-stderr', ScriptedCommandCheckRunner.fixed(new Verdict.Pass(null, [])))
+        def outcome = run(pipeline(3), observedBox(), 'chatty-stderr', ScriptedCheckRounds.fixed(new Verdict.Pass(null, [])))
 
         then:
         outcome instanceof TaskOutcome.Completed
@@ -71,7 +71,7 @@ class BoxRoundStderrSpec extends RoundFlowSpecBase {
         logs = LogCaptureSupport.attach(SCRATCH_LOGGER, Level.DEBUG)
 
         when:
-        def outcome = run(pipeline(3), observedBox(), 'chatty-stderr-no-result', new ScriptedCommandCheckRunner())
+        def outcome = run(pipeline(3), observedBox(), 'chatty-stderr-no-result', new ScriptedCheckRounds())
 
         then:
         outcome instanceof TaskOutcome.Escalated

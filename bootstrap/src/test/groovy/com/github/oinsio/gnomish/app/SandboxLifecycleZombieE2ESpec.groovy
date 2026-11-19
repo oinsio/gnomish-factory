@@ -125,7 +125,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
     // runs, and the real operator default (2m) exists to protect a slot still mid-launch — not
     // something this spec is proving (that is SandboxLifecycleLaunchRaceE2ESpec's job, task 7.3).
     private static SandboxProperties sandboxProperties(String scenario) {
-        new SandboxProperties(FakeAgentSandboxImage.ensureBuilt(scenario), null, null, null, [], [], false, null,
+        new SandboxProperties(FakeAgentSandboxImage.ensureBuilt(scenario), null, null, null, [], false, null,
         Duration.ofMillis(1), Duration.ofDays(7), Duration.ofHours(24))
     }
 

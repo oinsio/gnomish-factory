@@ -9,23 +9,34 @@ persisted, how any factory instance resumes the poll, and how the wait ends.
 
 ### Requirement: Pending key is persisted before the first poll
 When a verdict executor returns `pending`, the engine SHALL persist the key with the check
-identity, attempt and start time in the task-branch state in one commit, pushed, before the
-first `poll`. The key SHALL be opaque to the engine and capped in size.
-**Implements**: FR2, NFR-R1 of migrate-verify-to-executor-contract
+identity, the attempt, the round's token and the start time as an entry of the open round's
+state, in one pending commit on the round's last registered commit with its register, pushed,
+before the first `poll`. The key SHALL be opaque to the engine and capped in size.
+**Implements**: FR2, FR20, NFR-R1 of migrate-verify-to-executor-contract
+**Notes**: The pending commit and its parent are stated in git-task-persistence, "Pending commits of an open round".
 
 #### Scenario: Key lands before polling
 - **WHEN** `start` returns `pending`
-- **THEN** the branch tip carries the key before any `poll` call is made
+- **THEN** the registered commit carries the key before any `poll` call is made
+
+#### Scenario: A pending entry names no outcome
+- **WHEN** a pending commit is registered
+- **THEN** its state's attempts, position and attempt counter equal those of the commit below it, and a pickup of it runs no stage executor
+
+#### Scenario: An in-place run keeps the key in memory
+- **WHEN** a check of a git-less in-place run returns `pending`
+- **THEN** the key is held in the run's memory, no commit is written, and the poll proceeds
 
 #### Scenario: Oversized key is infrastructure
 - **WHEN** a key exceeds the cap
 - **THEN** the check resolves as cannot-verify naming the cap, no poll is made
 
 ### Requirement: Poll loop with interval and timeout class
-The engine SHALL call `poll(key)` at the check's `interval`, passing the interval as the
-executor's in-poll wait bound, until a terminal status or the check's `timeout`; expiry SHALL
-classify per the declared timeout class, and `absent after timeout` of an expected context
-SHALL be infrastructure regardless of class.
+The engine SHALL call `poll(key)` no sooner than the larger of the check's `interval` and the
+last pending answer's wait hint,
+until a terminal status or the check's `timeout`; expiry SHALL classify per the declared
+timeout class, and a timeout whose last pending answer was `unreported` or `unobserved` (an expected context absent, or a source not read) SHALL be
+infrastructure regardless of class.
 **Implements**: FR2, FR4 of migrate-verify-to-executor-contract
 
 #### Scenario: Timeout with a quality class
@@ -39,8 +50,9 @@ SHALL be infrastructure regardless of class.
 ### Requirement: Any instance resumes a persisted poll
 A resuming instance SHALL read the persisted key and continue with `poll(key)`; it SHALL NOT
 call `start` again. A persisted key for an executor that no longer declares `poll` SHALL be an
-infrastructure failure.
-**Implements**: FR3, NFR-R1, NFR-R4, UX3 of migrate-verify-to-executor-contract
+infrastructure failure. It SHALL continue every entry of the round, and only the entries whose
+attempt and round token name the round it resumes.
+**Implements**: FR3, FR20, NFR-R1, NFR-R4, UX3 of migrate-verify-to-executor-contract
 
 #### Scenario: Kill between start and persist re-drives start
 - **WHEN** the factory is killed after `start` returned `pending` and before the key commit
@@ -51,8 +63,16 @@ infrastructure failure.
 - **THEN** the resuming instance polls with the persisted key, makes no `start` call, and the
   ledger shows the resume
 
+#### Scenario: Every pending check of the round is continued
+- **WHEN** two checks of one round went `pending`, the first one ended, and the factory is killed while the second is polled
+- **THEN** the resuming instance polls both recorded keys and calls `start` for neither
+
+#### Scenario: An entry of another round is not continued
+- **WHEN** the resumed state holds an entry whose attempt or round token differs from the round being verified
+- **THEN** the entry is not polled and the check calls `start`
+
 #### Scenario: Second recovery is a no-op
-- **WHEN** recovery runs on a branch whose poll already resolved
+- **WHEN** recovery runs on a branch whose round's closing commit already landed
 - **THEN** nothing is re-polled and the state is unchanged
 
 #### Scenario: Kill after the terminal poll re-polls the persisted key
@@ -77,9 +97,16 @@ whatever its subject. A pickup SHALL poll the key the registered commit records.
 
 ### Requirement: Poll observability
 Each `poll` SHALL log executor, key prefix, elapsed and remaining time under the task's MDC; the
-check's ledger line SHALL carry `executor=<name> status=<status>`.
+check's ledger line SHALL carry `executor=<name> status=<status>`. A timeout's finding or
+cannot-verify SHALL carry as its details the reason of the last pending answer whose
+`pendingState` was not `unobserved`, followed by the last answer's reason when that answer was
+`unobserved`; when every answer was `unobserved`, the last reason alone.
 **Implements**: NFR-O1, UX1 of migrate-verify-to-executor-contract
 
 #### Scenario: Timeout names the missing contexts
 - **WHEN** an `scm-status` check times out
 - **THEN** its finding and log line name every expected context still absent
+
+#### Scenario: Timeout after a rate-limited read still names the missing contexts
+- **WHEN** an `scm-status` check's answer names an absent expected context, its next read is rate-limited with a wait hint reaching past the timeout, and the check times out
+- **THEN** the cannot-verify names the absent context, followed by the rate-limit reason

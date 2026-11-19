@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.Snapshots
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
@@ -40,8 +39,8 @@ class EngineRunContractSpec extends Specification {
     static final Instant START = Instant.parse('2026-10-12T08:00:00Z')
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
-    def externalClient = new ScriptedExternalCheckClient()
+    def builtinRunner = new ScriptedCheckRounds()
+    def externalClient = new ScriptedCheckRounds()
     def persistence = new InMemoryAttemptPersistence()
     def clock = new VirtualClock(START)
     def sleeper = new VirtualSleeper(clock)
@@ -49,8 +48,7 @@ class EngineRunContractSpec extends Specification {
     private TaskOutcome run(List<VerifyCheck> verify, int attemptLimit = 3, TaskState state = TaskState.atStageStart('build')) {
         def stage = new StageDefinition('build', 'purpose', [], [], new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', verify, new AutonomyLimits(attemptLimit), AdvancementMode.AUTO)
-        def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(), externalClient,
-                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), externalClient), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(attemptLimit), [stage]), CONTEXT, state, new FakeWorkspace(), ports)
     }
 
@@ -70,7 +68,7 @@ class EngineRunContractSpec extends Specification {
     def "every timestamp and deadline the engine computes reads the instant source it was assembled with"() {
         given: 'an external check that never settles, on a 1s interval and a 3s timeout'
         externalClient.scripted.addAll((1..10).collect {
-            new PollStatus.Running()
+            ScriptedCheckRounds.pending()
         })
         executor.scripted << completed(0, ExecutorUsage.none())
 

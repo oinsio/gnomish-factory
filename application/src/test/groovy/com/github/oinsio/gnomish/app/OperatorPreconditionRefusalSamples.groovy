@@ -5,6 +5,8 @@ import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException
 import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeUnavailableException
 import com.github.oinsio.gnomish.app.port.run.ImageContractRefusedException
 import com.github.oinsio.gnomish.app.take.DaemonConditionKind
+import com.github.oinsio.gnomish.domain.egress.EgressRefusal
+import com.github.oinsio.gnomish.domain.egress.EgressRefusedException
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
@@ -35,6 +37,9 @@ final class OperatorPreconditionRefusalSamples {
                 'img:1', '2.56.0', UntrustedText.container('git version 2.43.0'), 'why')
             case DaemonConditionKind.IMAGE_CONTRACT:
                 return new ImageContractRefusedException('img:1', null, 'io.gnomish.image-contract', 2, 'rebuild')
+            case DaemonConditionKind.EGRESS:
+                return new EgressRefusedException(new EgressRefusal(EgressRefusal.Reason.ADDRESS_CLASS,
+                'https://gitea.internal/api', 'resolves to 10.0.0.5, which is private', 'tracker.github.api-url'))
             default:
                 throw new IllegalArgumentException("no sample refusal for ${kind}")
         }

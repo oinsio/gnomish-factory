@@ -66,12 +66,12 @@ class FactoryPropertiesSectionsSpec extends Specification {
     def "a configured provider subsection is carried through verbatim"() {
         when:
         def properties = new FactoryProperties(null, null, null,
-                [github: [('api-url'): 'https://api.github.com', repo: 'acme/widgets'],
+                [('github-actions'): [('api-url'): 'https://api.github.com', repo: 'acme/widgets'],
                     sonar: [('api-url'): 'https://sonar.example']])
 
         then:
-        properties.check().keySet() == ['github', 'sonar'] as Set
-        properties.check()['github'] == [('api-url'): 'https://api.github.com', repo: 'acme/widgets']
+        properties.check().keySet() == ['github-actions', 'sonar'] as Set
+        properties.check()['github-actions'] == [('api-url'): 'https://api.github.com', repo: 'acme/widgets']
         properties.check()['sonar'] == [('api-url'): 'https://sonar.example']
     }
 
@@ -79,27 +79,27 @@ class FactoryPropertiesSectionsSpec extends Specification {
     //     than a null the providers would each have to defend against
     def "a provider subsection with no content binds to an empty map"() {
         when:
-        def properties = new FactoryProperties(null, null, null, [github: null])
+        def properties = new FactoryProperties(null, null, null, [('github-actions'): null])
 
         then:
-        properties.check()['github'] == [:]
+        properties.check()['github-actions'] == [:]
     }
 
     // FR5 of add-plugin-architecture: the bound section is defensively copied, so a caller that
     //     mutates the map it passed cannot reshape a provider's configuration afterwards
     def "the bound check section is immutable"() {
         given:
-        Map<String, Map<String, Object>> source = [github: [('api-url'): 'https://api.github.com']]
+        Map<String, Map<String, Object>> source = [('github-actions'): [('api-url'): 'https://api.github.com']]
         def properties = new FactoryProperties(null, null, null, source)
 
         when:
         source['sonar'] = [:] as Map<String, Object>
 
         then:
-        properties.check().keySet() == ['github'] as Set
+        properties.check().keySet() == ['github-actions'] as Set
 
         when:
-        properties.check()['github'].put('repo', 'acme/widgets')
+        properties.check()['github-actions'].put('repo', 'acme/widgets')
 
         then:
         thrown(UnsupportedOperationException)

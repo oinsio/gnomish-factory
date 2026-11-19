@@ -3,8 +3,6 @@ package com.github.oinsio.gnomish.adapter.pipeline;
 import com.github.oinsio.gnomish.adapter.law.LawSource;
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineMapper.StageEntry;
 import com.github.oinsio.gnomish.adapter.pipeline.StructuralParse.Ok;
-import com.github.oinsio.gnomish.app.CheckParamsValidator;
-import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -12,7 +10,6 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineValidator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -24,8 +21,10 @@ import org.jspecify.annotations.Nullable;
  * tracker} DTO that mapping already has in hand; its errors append to the same
  * shared list as every other tier here. The check seam
  * ({@link ExternalCheckSeamValidator}, FR6/FR13 of add-plugin-architecture) runs
- * last, over the mapped stages, since it grades the provider selection the mapper
- * has just recorded.
+ * last, over the mapped stages, since it grades each check's settings by the
+ * executor the mapper has just recorded; the http targets are then judged against the operator's
+ * in-process egress scope ({@link ManifestTargetSeam}, FR17, design D16 of
+ * migrate-verify-to-executor-contract).
  *
  * <p>Implements FR1, FR3 of fix-oversized-adapters (D1): extracted from
  * {@link PipelineLoader} with identical {@code @Nullable} return semantics and
@@ -47,10 +46,8 @@ final class PipelineModelBuilder {
      * <p>Takes the {@link ParsedTree} whole rather than its three components
      * (FR6 of add-parameter-count-gate, design D12).
      *
-     * <p>{@code configuredCheckProviders} reaches the domain validator's
-     * unconfigured-provider rule (FR3, design D3 of remove-interactive-console);
-     * {@code checkProviders} stays the discovered set the check seam grades
-     * against.
+     * <p>{@code checkProviders} maps a built-in executor's name to the params
+     * validator the check seam grades its checks' settings with.
      *
      * @return the mapped, validated definition, or {@code null} when it could not
      *     be produced
@@ -59,9 +56,8 @@ final class PipelineModelBuilder {
             LawSource law,
             ParsedTree tree,
             Map<String, TrackerSubsectionValidator> trackerValidators,
-            Map<String, CheckParamsValidator> checkProviders,
-            Set<String> configuredCheckProviders,
-            ConnectionProfiles profiles,
+            Map<String, CheckSettingsValidator> checkProviders,
+            ConnectionAdmission connections,
             List<ConfigError> errors) {
         if (!(tree.config() instanceof Ok<ConfigDto>(ConfigDto value))
                 || !(tree.pipeline() instanceof Ok<PipelineDto>(PipelineDto value1))) {
@@ -75,18 +71,20 @@ final class PipelineModelBuilder {
         if (entries == null) {
             return null;
         }
-        PipelineMapper.Result mapped = PipelineMapper.map(value, entries, profiles);
+        PipelineMapper.Result mapped = PipelineMapper.map(value, entries, connections);
         errors.addAll(mapped.errors());
-        errors.addAll(TrackerSeamValidator.validate("config.yaml", value.tracker(), trackerValidators, profiles));
+        errors.addAll(TrackerSeamValidator.validate(
+                "config.yaml", value.tracker(), trackerValidators, connections.profiles()));
         PipelineDefinition model = mapped.definition();
         if (model == null) {
             return null;
         }
-        errors.addAll(PipelineValidator.validate(model, configuredCheckProviders));
+        errors.addAll(PipelineValidator.validate(model));
         errors.addAll(ReferencedFiles.check(law, model.stages()));
         errors.addAll(AgentSettingsValidator.validate(model));
         errors.addAll(CommandSettingsValidator.validate(model));
         errors.addAll(ExternalCheckSeamValidator.validate(model.stages(), checkProviders));
+        errors.addAll(ManifestTargetSeam.judge(model.stages(), connections.operator()));
         return model;
     }
 

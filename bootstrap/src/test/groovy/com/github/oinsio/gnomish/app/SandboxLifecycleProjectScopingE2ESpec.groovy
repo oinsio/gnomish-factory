@@ -125,7 +125,7 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
     def "a sweep scoped to project A never touches project B's unowned running box"() {
         given: 'two projects on one host, each with its own origin remote (and so its own project identity)'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def tinyMinAge = new SandboxProperties(image, null, null, null, [], [], false, null,
+        def tinyMinAge = new SandboxProperties(image, null, null, null, [], false, null,
         Duration.ofMillis(1), Duration.ofDays(7), Duration.ofHours(24))
         def projectA = cloneWithOrigin('project-a', 'https://example.invalid/org/project-a.git')
         def projectB = cloneWithOrigin('project-b', 'https://example.invalid/org/project-b.git')
@@ -155,7 +155,7 @@ class SandboxLifecycleProjectScopingE2ESpec extends Specification implements Bar
     def "a manual-mode box survives a sweep tick under its own running-stop threshold, oracle notwithstanding"() {
         given: 'a manual-mode box (as gnomish run creates), well under the default 24h running-stop age'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def tinyMinAge = new SandboxProperties(image, null, null, null, [], [], false, null,
+        def tinyMinAge = new SandboxProperties(image, null, null, null, [], false, null,
         Duration.ofMillis(1), Duration.ofDays(7), Duration.ofHours(24))
         def project = cloneWithOrigin('project-manual', 'https://example.invalid/org/project-manual.git')
         def taskId = "CTN-MANUAL-${System.nanoTime() % 100000}"

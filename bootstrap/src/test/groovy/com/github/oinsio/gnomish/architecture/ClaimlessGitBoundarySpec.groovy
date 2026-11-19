@@ -112,10 +112,11 @@ class ClaimlessGitBoundarySpec extends Specification {
      *       sandbox lifecycle E2E specs drive writers that hold no tenure — the same shape the
      *       production {@code run} wiring has; {@code SandboxTransientFilesE2ESpec} brings up a
      *       {@code manual}-owned task environment the way {@code run} does, and so does
-     *       {@code ProgramCredentialDeliverySpec}, whose subject is a box's child environments. {@code RoundTokenIdentitySpec} belongs here too: it
+     *       {@code CredentialDeliverySpecBase} (of {@code ProgramCredentialDeliverySpec}), whose subject is a box's child environments. {@code RoundTokenIdentitySpec} belongs here too: it
      *       drives the container-mode round adapters (round source, snapshot, persistence, resume
      *       re-verification) as a {@code run} wires them, and asserts the round's identity, not a
-     *       claim's. {@code ContainerContinuationMedium} too: the container medium of the identity
+     *       claim's; so does {@code PendingCommitResumeSpec}, over the same adapters and a pending
+     *       commit (design D21 of migrate-verify-to-executor-contract). {@code ContainerContinuationMedium} too: the container medium of the identity
      *       specs of make-checkpoint-gate-durable (task 5.3) parks through the same round adapters
      *       and continues through {@code run --resume}, and asserts the continuation commit, not a
      *       claim.
@@ -138,6 +139,7 @@ class ClaimlessGitBoundarySpec extends Specification {
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ContainerTerminalDriveSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/GitKillResumeSalvageCompletionSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ManualRunRunnerSpec.groovy',
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/PendingCommitResumeSpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/RoundTokenIdentitySpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/RoundFlowSpecBase.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleCrossInstanceE2ESpec.groovy',
@@ -147,7 +149,7 @@ class ClaimlessGitBoundarySpec extends Specification {
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleRemnantReapE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxLifecycleZombieE2ESpec.groovy',
         'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/SandboxTransientFilesE2ESpec.groovy',
-        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ProgramCredentialDeliverySpec.groovy',
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/CredentialDeliverySpecBase.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusCommandSpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusInterruptedHonestySpec.groovy',
         'application/src/test/groovy/com/github/oinsio/gnomish/app/StatusUsageReadOnlySpec.groovy',

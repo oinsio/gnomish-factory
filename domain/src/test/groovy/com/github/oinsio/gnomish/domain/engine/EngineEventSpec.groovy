@@ -5,7 +5,7 @@ import java.time.Duration
 import spock.lang.Specification
 
 /**
- * EngineEvent: the seven sealed events the engine emits per run, each exposing
+ * EngineEvent: the nine sealed events the engine emits per run, each exposing
  * its components as constructed and validating its bookend fields (run-level
  * bookends carry {@code taskId}; per-attempt events carry the full
  * {@code AttemptKey}, design D7). Cross-cutting {@code taskId()} reachability
@@ -105,7 +105,7 @@ class EngineEventSpec extends Specification {
         def result = sampleCheckResult()
 
         when: 'a CheckFinished event is created'
-        def event = new EngineEvent.CheckFinished(key, result)
+        def event = new EngineEvent.CheckFinished(key, result, null)
 
         then: 'the components are exposed exactly as constructed'
         event.key() == key
@@ -192,8 +192,8 @@ class EngineEventSpec extends Specification {
 
     def "CheckFinished has value equality"() {
         given: 'two CheckFinished events with equal components'
-        def a = new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult())
-        def b = new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult())
+        def a = new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult(), null)
+        def b = new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult(), null)
 
         expect: 'they are equal and share a hash code'
         a == b

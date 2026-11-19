@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check;
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource;
+import com.github.oinsio.gnomish.app.port.check.FreshBoxSource;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
@@ -8,6 +9,8 @@ import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.sandbox.environment.ContainerEnvironments;
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease;
 import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException;
+import java.util.List;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -27,12 +30,19 @@ import java.util.function.Supplier;
  * destroy that evidence. Its retention is bounded by the existing {@code sandbox-lifecycle}
  * sweep, as for any other kept environment of its role.
  *
- * <p>Implements FR8, FR13, NFR-R1 of add-sandbox-core; FR3 of polish-sandbox-forensics.
+ * <p>It is also the {@link FreshBoxSource} of a {@code program} verdict check (design D6, D11 as
+ * amended 2026-11-14 of migrate-verify-to-executor-contract): one fresh box per request, at the
+ * attempt commit the binding names, its guard admitting the operator's sandbox egress and that one
+ * executor's grant — materialized and released exactly as a {@code fresh-box} command check's.
+ *
+ * <p>Implements FR8, FR13, NFR-R1 of add-sandbox-core; FR3 of polish-sandbox-forensics; FR3, FR11,
+ * NFR-S1 of migrate-verify-to-executor-contract.
  */
-public final class SandboxCheckEnvironmentSource implements CheckEnvironmentSource {
+public final class SandboxCheckEnvironmentSource implements CheckEnvironmentSource, FreshBoxSource {
 
     private final EnvironmentLease lease;
     private final Supplier<TaskExecutionEnvironment> freshEnvironments;
+    private final Function<List<String>, TaskExecutionEnvironment> grantedEnvironments;
     private final String branch;
 
     /**
@@ -41,20 +51,27 @@ public final class SandboxCheckEnvironmentSource implements CheckEnvironmentSour
      * @param branch the task branch fresh boxes materialize from; never blank
      */
     public SandboxCheckEnvironmentSource(EnvironmentLease lease, ContainerEnvironments environments, String branch) {
-        this(lease, environments::verificationEnvironment, branch);
+        this(lease, environments::verificationEnvironment, environments::verificationEnvironment, branch);
     }
 
     /**
-     * Testing seam (package-private): the same source with the fresh-box environment supplied by
+     * Testing seam (package-private): the same source with the fresh-box environments supplied by
      * the caller, so a spec can drive the fresh-box lifecycle (materialize failure → dispose →
      * {@link CheckEnvironmentUnavailableException}) against a fake environment — {@link
      * ContainerEnvironments} is a final Docker-backed class that cannot be faked directly.
      * Production always goes through the public constructor.
+     *
+     * @param freshEnvironments the fresh box of a {@code fresh-box} command check
+     * @param grantedEnvironments the fresh box of a {@code program} check, by the executor's grant
      */
     SandboxCheckEnvironmentSource(
-            EnvironmentLease lease, Supplier<TaskExecutionEnvironment> freshEnvironments, String branch) {
+            EnvironmentLease lease,
+            Supplier<TaskExecutionEnvironment> freshEnvironments,
+            Function<List<String>, TaskExecutionEnvironment> grantedEnvironments,
+            String branch) {
         this.lease = lease;
         this.freshEnvironments = freshEnvironments;
+        this.grantedEnvironments = grantedEnvironments;
         this.branch = branch;
     }
 
@@ -88,9 +105,17 @@ public final class SandboxCheckEnvironmentSource implements CheckEnvironmentSour
                     "verify-in: fresh-box requires an attempt-commit workspace, got "
                             + workspace.getClass().getName());
         }
-        TaskExecutionEnvironment fresh = freshEnvironments.get();
+        return materialized(freshEnvironments.get(), attemptWorkspace.attemptCommitSha());
+    }
+
+    @Override
+    public Acquired freshBox(String attemptCommit, List<String> egress) {
+        return materialized(grantedEnvironments.apply(egress), attemptCommit);
+    }
+
+    private Acquired materialized(TaskExecutionEnvironment fresh, String attemptCommit) {
         try {
-            fresh.materialize(branch, attemptWorkspace.attemptCommitSha());
+            fresh.materialize(branch, attemptCommit);
         } catch (SelfCheckFailedException e) {
             // FR3 of polish-sandbox-forensics: the box the self-check rejected IS the evidence —
             // the adapter already stopped and kept it, so disposing it here would destroy exactly

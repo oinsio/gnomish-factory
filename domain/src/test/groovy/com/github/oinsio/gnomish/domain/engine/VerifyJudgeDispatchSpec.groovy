@@ -1,11 +1,10 @@
 package com.github.oinsio.gnomish.domain.engine
 
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
@@ -27,8 +26,8 @@ class VerifyJudgeDispatchSpec extends VerifyOrchestratorSpecBase {
         ])
 
         when: 'the single judge check is verified'
-        def result = orchestrator(new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), judgeVoter).verify([judge(3)], CONTEXT, WORKSPACE, KEY)
+        def result = orchestrator(new ScriptedCheckRounds(), new ScriptedCheckRounds(),
+                new ScriptedCheckRounds(), judgeVoter).verify(VerifyingStages.of([judge(3)]), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'the check passed on the majority, casting only the two votes it needed'
         result.results[0].verdict instanceof Verdict.Pass
@@ -47,8 +46,8 @@ class VerifyJudgeDispatchSpec extends VerifyOrchestratorSpecBase {
         ])
 
         when: 'the judge check is verified to its Fail majority'
-        def result = orchestrator(new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), judgeVoter).verify([judge(3)], CONTEXT, WORKSPACE, KEY)
+        def result = orchestrator(new ScriptedCheckRounds(), new ScriptedCheckRounds(),
+                new ScriptedCheckRounds(), judgeVoter).verify(VerifyingStages.of([judge(3)]), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'two Fails reach the majority, so only the two cast votes maps are accounted'
         result.results[0].verdict instanceof Verdict.Fail
@@ -74,8 +73,8 @@ class VerifyJudgeDispatchSpec extends VerifyOrchestratorSpecBase {
         ])
 
         when: 'the judge check is verified'
-        orchestrator(new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), judgeVoter).verify([judge(1)], context, WORKSPACE, KEY)
+        orchestrator(new ScriptedCheckRounds(), new ScriptedCheckRounds(),
+                new ScriptedCheckRounds(), judgeVoter).verify(VerifyingStages.of([judge(1)]), context, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'the voter received the exact context the chain was given'
         judgeVoter.contexts == [context]

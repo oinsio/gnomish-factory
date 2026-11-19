@@ -445,7 +445,7 @@ class GitObjectsTaskRepositorySpec extends Specification implements BareGitRepoF
         Path stateJson = work.resolve('.gnomish-task').resolve('state.json')
         def dto = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
         Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(
-                        new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor, null)))
+                        new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor, null, null)))
         commitAll(work, 'round state')
         gitOutput(work, 'push', 'origin', "HEAD:refs/heads/gnomish/${taskId}")
     }

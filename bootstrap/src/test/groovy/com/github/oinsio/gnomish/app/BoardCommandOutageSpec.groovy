@@ -58,7 +58,7 @@ tracker:
 
     private ManualRunRunner newRunner(TrackerWiring boardWiring) {
         newManualRunRunner(projectDir, homeDir,
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]),
                 TaskGitFixture.real(),
                 testProperties(instanceName: INSTANCE_NAME),

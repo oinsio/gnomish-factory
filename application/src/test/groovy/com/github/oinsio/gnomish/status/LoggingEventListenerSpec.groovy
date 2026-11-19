@@ -116,7 +116,7 @@ class LoggingEventListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onEvent(new EngineEvent.CheckFinished(key(), result))
+            listener.onEvent(new EngineEvent.CheckFinished(key(), result, null))
         }
 
         then:
@@ -191,7 +191,7 @@ class LoggingEventListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onEvent(new EngineEvent.CheckFinished(key(), result))
+            listener.onEvent(new EngineEvent.CheckFinished(key(), result, null))
         }
 
         then:

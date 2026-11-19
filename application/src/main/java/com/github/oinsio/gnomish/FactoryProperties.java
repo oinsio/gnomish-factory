@@ -38,9 +38,10 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  *     defaults to {@code "claude"} (resolved from {@code PATH}) when unset
  * @param tracker the tracker abort-backoff policy defaults ({@code factory.tracker.*}); defaults
  *     to {@link Tracker#Tracker(Duration, Duration)}'s own defaults when unset
- * @param check the check providers' operator subsections ({@code factory.check.<provider>.*}),
- *     keyed by provider discriminator and carried as raw untyped content; defaults to an empty map
- *     (no check provider configured) when absent
+ * @param check the built-in verdict executors' operator subsections ({@code
+ *     factory.check.<built-in>.*}), keyed by built-in name and carried as raw untyped content,
+ *     graded at startup by the composition root (task 5.2 of migrate-verify-to-executor-contract);
+ *     defaults to an empty map (no built-in connected) when absent
  * @param connections the named per-vendor connection profiles ({@code factory.connections.<name>.*}),
  *     keyed by profile name and carried as raw untyped content, that a port subsection references as
  *     {@code connection: <name>} instead of inlining endpoint and credential-name keys (FR16, design
@@ -56,6 +57,9 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  *     factory.check-command-timeout}); defaults to 30 minutes when unset, rejected when
  *     non-positive — expiry is a quality failure carrying the captured tail (FR5, FR12, UX1,
  *     design D8, D12 of bound-subprocess-commands)
+ * @param egress the operator egress block ({@code factory.egress.*}): the {@code sandbox} scope
+ *     every box may reach and the {@code in-process} scope the factory process may reach (FR17,
+ *     design D16 of migrate-verify-to-executor-contract); defaults to both scopes empty
  */
 @ConfigurationProperties("factory")
 public record FactoryProperties(
@@ -66,7 +70,8 @@ public record FactoryProperties(
         @ConfigLevel(Level.ANY) Map<String, Map<String, Object>> connections,
         @ConfigLevel(Level.ANY) Duration gitNetworkTimeout,
         @ConfigLevel(Level.HOST) Duration dockerCommandTimeout,
-        @ConfigLevel(Level.ANY) Duration checkCommandTimeout) {
+        @ConfigLevel(Level.ANY) Duration checkCommandTimeout,
+        EgressProperties egress) {
 
     // Every component is resolved through FactoryPropertyDefaults rather than inline: Spring's
     // reflective constructor binding can pass null for any component despite the compile-time
@@ -85,7 +90,8 @@ public record FactoryProperties(
             @Nullable Map<String, Map<String, Object>> connections,
             @Nullable Duration gitNetworkTimeout,
             @Nullable Duration dockerCommandTimeout,
-            @Nullable Duration checkCommandTimeout) {
+            @Nullable Duration checkCommandTimeout,
+            @Nullable EgressProperties egress) {
         this.instanceName = FactoryPropertyDefaults.instanceName(instanceName);
         this.agentCliBinary = FactoryPropertyDefaults.agentCliBinary(agentCliBinary);
         this.tracker = FactoryPropertyDefaults.tracker(tracker);
@@ -101,6 +107,7 @@ public record FactoryProperties(
                 checkCommandTimeout,
                 FactoryPropertyDefaults.DEFAULT_CHECK_COMMAND_TIMEOUT,
                 "factory.check-command-timeout");
+        this.egress = egress == null ? EgressProperties.none() : egress;
     }
 
     /**
@@ -129,7 +136,7 @@ public record FactoryProperties(
             @Nullable Tracker tracker,
             @Nullable Map<String, Map<String, Object>> check,
             @Nullable Map<String, Map<String, Object>> connections) {
-        this(instanceName, agentCliBinary, tracker, check, connections, null, null, null);
+        this(instanceName, agentCliBinary, tracker, check, connections, null, null, null, null);
     }
 
     /**

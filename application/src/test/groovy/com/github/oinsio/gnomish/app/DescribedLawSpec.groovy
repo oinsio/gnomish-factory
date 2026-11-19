@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory
+import com.github.oinsio.gnomish.domain.egress.AdmittedEndpoint
 import com.github.oinsio.gnomish.executorcontract.Describe
 import com.github.oinsio.gnomish.executorcontract.EnforcementLevel
 import com.github.oinsio.gnomish.executorcontract.Role
@@ -18,7 +19,7 @@ class DescribedLawSpec extends Specification {
 
     private static Describe describe(String version, List<String> credentials) {
         new Describe(1, UntrustedText.subprocess(version), [Role.TRANSFORM], [], JsonNodeFactory.instance.objectNode(),
-        credentials, [], null, [], EnforcementLevel.PROMPT_ONLY, false)
+        credentials, [], null, [], EnforcementLevel.PROMPT_ONLY, false, false)
     }
 
     def "FR9: the answer of each described executor is the preflight's, and an undescribed name has none"() {
@@ -41,5 +42,20 @@ class DescribedLawSpec extends Specification {
         law.executors().all().of('lint').get().forParsing() == '7'
         law.executors().credentials().of('acme') == ['ACME_API_KEY']
         law.executors().credentials().of('lint') == []
+    }
+
+    // FR13 of migrate-verify-to-executor-contract (design D18): the connections run assembly admitted
+    //     travel with the described law to the registry assembly, by built-in name
+    def "FR13: an admitted connection is found by its built-in's name, and a law without one carries none"() {
+        given:
+        def connection = new AdmittedConnection(
+                new AdmittedEndpoint(URI.create('https://api.github.com'), 'factory.check.scm-status.api-url', ['api.github.com']),
+                [repo: 'acme/widgets'])
+        def binding = LawBinding.workingTree(Path.of('/tmp/law'))
+
+        expect:
+        new DescribedLaw(binding, [:], ['scm-status': connection]).connectionOf('scm-status') == Optional.of(connection)
+        new DescribedLaw(binding, [:], ['scm-status': connection]).connectionOf('github-actions').isEmpty()
+        new DescribedLaw(binding, [:]).connectionOf('scm-status').isEmpty()
     }
 }

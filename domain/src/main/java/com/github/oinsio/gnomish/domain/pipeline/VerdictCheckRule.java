@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -19,7 +19,11 @@ import java.util.Map;
  *       credentials: the describe preflight refuses a grant that differs from them
  *       ({@code GrantAgreement}), so no run reaches a check under a grant its executor disowns. A
  *       {@code builtin} or {@code command} check names a built-in, which a law never declares, so it
- *       is out of scope; a built-in verdict executor's own token enters no box at all (NFR-S1).
+ *       is out of scope; a built-in verdict executor's own token enters no box at all (NFR-S1);
+ *   <li>an {@code external} or {@code executor:} check names an executor of the registry: one of the
+ *       six {@link BuiltInExecutors} or a law declaration. An unknown name is reported listing exactly
+ *       that union, so the built-ins' names are offered whether or not the law names them (design
+ *       D18, "The six built-in names have one owner"; FR1, UX2).
  * </ol>
  *
  * <p>Whether the named executor serves role {@code verdict} is not judged here: a program's roles
@@ -29,7 +33,7 @@ import java.util.Map;
  * <p>Problems are located {@link ConfigError}s naming the stage manifest and the check's field;
  * nothing is thrown. Order: stages in pipeline order, checks in check order.
  *
- * <p>Implements FR4, NFR-S1 of migrate-verify-to-executor-contract.
+ * <p>Implements FR1, FR4, NFR-S1, UX2 of migrate-verify-to-executor-contract.
  */
 public final class VerdictCheckRule {
 
@@ -42,10 +46,12 @@ public final class VerdictCheckRule {
      * @return every located problem; immutable, possibly empty
      */
     public static List<ConfigError> validate(PipelineDefinition model) {
-        Map<String, List<String>> grants = new HashMap<>();
+        Map<String, List<String>> grants = new LinkedHashMap<>();
         for (ExecutorDeclaration declaration : model.executors()) {
             grants.put(declaration.name(), declaration.credentials());
         }
+        List<String> registry = new ArrayList<>(BuiltInExecutors.NAMES);
+        registry.addAll(grants.keySet());
         List<ConfigError> errors = new ArrayList<>();
         for (StageDefinition stage : model.stages()) {
             String manifest = "stages/%s/stage.yaml".formatted(stage.name());
@@ -53,6 +59,7 @@ public final class VerdictCheckRule {
             for (int index = 0; index < checks.size(); index++) {
                 if (checks.get(index) instanceof VerifyCheck.Executor check) {
                     validateCheck(manifest, index, check, grants, errors);
+                    validateName(manifest, index, check, registry, errors);
                 }
             }
         }
@@ -84,5 +91,19 @@ public final class VerdictCheckRule {
                                     + " a credentialed check runs in a fresh box: declare verify-in fresh-box or omit it")
                             .formatted(check.checkId(), check.executorName(), String.join(", ", granted))));
         }
+    }
+
+    private static void validateName(
+            String manifest, int index, VerifyCheck.Executor check, List<String> registry, List<ConfigError> errors) {
+        String name = check.executorName();
+        if (name.isBlank() || registry.contains(name)) {
+            return;
+        }
+        String field = check.token() == VerifyCheck.Token.EXTERNAL ? "provider" : "executor";
+        errors.add(new ConfigError(
+                manifest,
+                "verify[%d].%s".formatted(index, field),
+                "check '%s' names unknown executor '%s'; the registry's executors are %s"
+                        .formatted(check.checkId(), name, String.join(", ", registry))));
     }
 }

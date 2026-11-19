@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
-import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
  * the behavior is unchanged.
  *
  * <p>Implements FR17, FR9 of add-tracker-port; FR3 of add-claim-heartbeat; FR6,
- * NFR-S3 of add-factory-serve.
+ * NFR-S3 of add-factory-serve; FR17 of migrate-verify-to-executor-contract.
  */
 final class TrackerConfigMapper {
 
@@ -48,10 +48,13 @@ final class TrackerConfigMapper {
      * {@code connection: <name>} reference resolved against the operator's named
      * connection profiles first (FR16, design D8 of add-plugin-architecture), so
      * every consumer downstream reads one inline connection shape and the adapter
-     * never learns that a profile was involved.
+     * never learns that a profile was involved. The adapter's endpoint is admitted from the raw
+     * subsection, before that merge, while the medium of its URL is still known ({@link
+     * ConnectionAdmission#trackerEndpoint}; FR17, design D16 of migrate-verify-to-executor-contract),
+     * and carried as {@link TrackerConfig#endpoint()}.
      */
     static @Nullable TrackerConfig map(
-            @Nullable TrackerDto tracker, ConnectionProfiles profiles, List<ConfigError> errors) {
+            @Nullable TrackerDto tracker, ConnectionAdmission connections, List<ConfigError> errors) {
         if (tracker == null) {
             return null;
         }
@@ -64,13 +67,15 @@ final class TrackerConfigMapper {
                 : tracker.heartbeatTtlMultiplier();
         int wipLimit = tracker.wipLimit() == null ? DEFAULT_WIP_LIMIT : tracker.wipLimit();
         String type = PipelineMapper.orEmpty(tracker.type());
+        Map<String, Object> raw =
+                PipelineMapper.castSubsection(tracker.subsections().get(type));
         return new TrackerConfig(
                 type,
                 threshold,
                 interval,
                 multiplier,
                 wipLimit,
-                profiles.resolve(
-                        PipelineMapper.castSubsection(tracker.subsections().get(type))));
+                connections.profiles().resolve(raw),
+                connections.trackerEndpoint(type, raw, errors));
     }
 }

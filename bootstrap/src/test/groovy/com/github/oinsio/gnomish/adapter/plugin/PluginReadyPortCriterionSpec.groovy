@@ -1,27 +1,25 @@
 package com.github.oinsio.gnomish.adapter.plugin
 
-import com.github.oinsio.gnomish.adapter.check.CheckClientDiscovery
-import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam
-import com.github.oinsio.gnomish.adapter.check.ProviderDispatchingExternalCheckClient
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerDto
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerSeamValidator
 import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterConfiguration
 import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterDiscovery
-import com.github.oinsio.gnomish.app.CheckClientFactory
+import com.github.oinsio.gnomish.app.ScmBuiltInRegistry
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
+import com.github.oinsio.gnomish.executorcontract.ExecutorName
 import java.lang.reflect.Modifier
-import java.time.Duration
 import spock.lang.Specification
 
 /**
- * The four-point "port is plugin-ready" criterion of FR4, applied independently to the two ports
- * this change claims for it (plugin-discovery: "A port is plugin-ready by a four-point criterion").
+ * The four-point "port is plugin-ready" criterion of FR4, applied to the tracker port
+ * (plugin-discovery: "A port is plugin-ready by a four-point criterion"). The check port left the
+ * criterion with task 5.2 of migrate-verify-to-executor-contract: a check is a verdict executor, a
+ * built-in named by core or a program the law declares, never a discovered provider. The last
+ * feature assesses the check port against the same four points and finds none of them
+ * (plugin-discovery: "The check port is outside the plugin-ready criterion").
  *
- * <p>The four points, one feature each, both ports asserted in every one:
+ * <p>The four points, one feature each:
  *
  * <ol>
  *   <li><b>(a)</b> an SPI factory exposing a {@code type()} / {@code provider()} discriminator —
@@ -40,13 +38,9 @@ import spock.lang.Specification
  * separate claim of {@link DiscoveredRegistryOnlySpec}; point (b) here only asserts the positive
  * half — every entry traces back to a {@code META-INF/services} line.
  *
- * <p>Implements FR4 of add-plugin-architecture.
+ * <p>Implements FR4 of add-plugin-architecture; FR13 of migrate-verify-to-executor-contract.
  */
 class PluginReadyPortCriterionSpec extends Specification {
-
-    private static final SecretsProvider NO_SECRETS = { name ->
-        Optional.empty()
-    } as SecretsProvider
 
     // FR4 (a): the discriminator is declared by the SPI itself, so discovery never has to know a
     //     provider's name from anywhere else — and FR2's half of the same point, since a factory
@@ -70,7 +64,6 @@ class PluginReadyPortCriterionSpec extends Specification {
         where:
         port | spi | discriminator | discover
         'tracker' | TrackerAdapterFactory | 'type' | TrackerAdapterDiscovery.&discover
-        'check' | CheckClientFactory | 'provider' | CheckClientDiscovery.&discover
     }
 
     // FR4 (b): the registry is the ServiceLoader scan — every entry traces back to a line some jar
@@ -88,44 +81,35 @@ class PluginReadyPortCriterionSpec extends Specification {
         where:
         port | spi | discover
         'tracker' | TrackerAdapterFactory | TrackerAdapterDiscovery.&discover
-        'check' | CheckClientFactory | CheckClientDiscovery.&discover
     }
 
-    // FR4 (c): each port has an operator/repo config subsection whose content is graded by the
-    //     provider's OWN validator, obtained from the discovered factory, and reported located.
+    // FR4 (c): the port has a config subsection whose content is graded by the provider's OWN
+    //     validator, obtained from the discovered factory, and reported located.
     // Scenario: plugin/plugin-discovery / Tracker and check ports each meet all four points
-    def "each port delegates its config subsection to the selected provider's validator"() {
-        given: 'a github subsection on each port, empty enough for the provider to object'
+    def "the tracker port delegates its config subsection to the selected provider's validator"() {
+        given: 'a github subsection, empty enough for the provider to object'
         def trackers = TrackerAdapterDiscovery.discover(getClass().classLoader)
         def validators = new TrackerAdapterConfiguration().trackerSubsectionValidatorRegistry(trackers)
-        def checks = CheckClientDiscovery.discover(getClass().classLoader)
 
         when:
         def trackerErrors = TrackerSeamValidator.validate(
                 'config.yaml', new TrackerDto('github', null, [github: [:]]), validators)
-        def checkErrors = CheckProviderSeam.validate('application.yaml', [github: [:]], checks)
 
-        then: 'both are located under the port\'s own subsection path, and both came from github\'s validator'
+        then: 'located under the port\'s own subsection path, from github\'s validator'
         !trackerErrors.isEmpty()
         trackerErrors.every { it.where().startsWith('tracker.github') }
-
-        and:
-        !checkErrors.isEmpty()
-        checkErrors.every { it.where().startsWith('factory.check.github') }
     }
 
     // FR4 (d), NFR-R1: selection is by discriminator, and a discriminator no discovered provider
-    //     serves fails by name on both ports — never a silent fallback to some default vendor.
+    //     serves fails by name — never a silent fallback to some default vendor.
     // Scenario: plugin/plugin-discovery / Unknown provider fails with a named error
     // Scenario: plugin/plugin-discovery / Tracker and check ports each meet all four points
-    def "each port selects by discriminator and names a discriminator nobody serves"() {
+    def "the tracker port selects by discriminator and names a discriminator nobody serves"() {
         given:
         def trackers = TrackerAdapterDiscovery.discover(getClass().classLoader)
-        def checks = CheckClientDiscovery.discover(getClass().classLoader)
 
         expect: 'every provider is reachable under exactly the discriminator it declares'
         trackers.every { type, factory -> factory.type() == type }
-        checks.every { provider, factory -> factory.provider() == provider }
 
         when: 'the tracker seam is pointed at a type no discovered provider serves'
         def trackerErrors = TrackerSeamValidator.validate(
@@ -133,25 +117,55 @@ class PluginReadyPortCriterionSpec extends Specification {
 
         then:
         trackerErrors*.message().join(' ').contains("unknown tracker type 'nosuchvendor'")
-
-        when: 'a check selects a provider no discovered jar serves'
-        new ProviderDispatchingExternalCheckClient(checks, [:], NO_SECRETS, VirtualTimeEquipment.create())
-        .poll(VerifyChecks.external('gate', 'nosuchvendor', Duration.ofSeconds(1),
-        Duration.ofSeconds(1), VerifyCheck.TimeoutClass.QUALITY), null)
-
-        then:
-        def failure = thrown(IllegalStateException)
-        failure.message.contains('nosuchvendor')
-        failure.message.contains('discovered providers:')
     }
 
-    // The assessment must really have run: two ports, each with providers discovered. A registry
-    //     that came back empty would let every 'every {}' above pass vacuously.
-    def "both ports were assessed against a non-empty discovered set"() {
+    // The assessment must really have run: a registry that came back empty would let every
+    //     'every {}' above pass vacuously.
+    def "the tracker port was assessed against a non-empty discovered set"() {
         expect:
         !TrackerAdapterDiscovery.discover(getClass().classLoader).isEmpty()
-        !CheckClientDiscovery.discover(getClass().classLoader).isEmpty()
     }
+
+    // FR13 of migrate-verify-to-executor-contract: the check port is assessed against the same four
+    //     points and meets none — no SPI factory and no per-provider validator exist to discover, no
+    //     registration names one, and a check selects its verdict executor by name from the executor
+    //     registry: a built-in core names, or a program the law declares (the executor contract).
+    // Scenario: plugin/plugin-discovery / The check port is assessed as not pluginizable
+    def "the check port is assessed as not pluginizable: its extension point is the executor contract"() {
+        expect: '(a) and (c): no check SPI factory and no per-provider check validator is on the classpath'
+        RETIRED_CHECK_SPI.every { name ->
+            getClass().classLoader.getResource(name.replace('.', '/') + '.class') == null
+        }
+
+        and: '(b): no jar registers a provider under either name, so no discovered registry can exist'
+        RETIRED_CHECK_SPI.every { name ->
+            !getClass().classLoader.getResources(ServiceRegistrationsHidden.SERVICES_DIR + name).hasMoreElements()
+        }
+
+        when: '(d) is replaced by the executor registry: a check resolves its executor by the name core gives it'
+        def registry = ScmBuiltInRegistry.assemble()
+        def entry = registry.resolve(new ExecutorName(BuiltInExecutors.SCM_STATUS))
+
+        then: 'the built-in is core\'s own name, never a discriminator a jar declared'
+        BuiltInExecutors.isBuiltIn(BuiltInExecutors.SCM_STATUS)
+        entry.name() == new ExecutorName(BuiltInExecutors.SCM_STATUS)
+
+        when: 'a name neither core gives nor the law declares'
+        registry.resolve(new ExecutorName('nosuchvendor'))
+
+        then: 'nothing on the classpath can supply it: the extension point is a law-declared program'
+        def e = thrown(IllegalStateException)
+        e.message.contains("no executor named 'nosuchvendor'")
+    }
+
+    /**
+     * The check SPI factory and its per-provider validator, retired by task 6.1 of
+     * migrate-verify-to-executor-contract: points (a) and (c) of the criterion for the check port.
+     */
+    private static final List<String> RETIRED_CHECK_SPI = [
+        'com.github.oinsio.gnomish.app.CheckClientFactory',
+        'com.github.oinsio.gnomish.app.CheckSubsectionValidator'
+    ]
 
     /** The provider class names every {@code META-INF/services} entry for {@code spi} declares. */
     private Set<String> registeredClassNames(Class<?> spi) {

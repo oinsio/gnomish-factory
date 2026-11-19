@@ -1,12 +1,11 @@
-// Build script for the `:adapters:agent` module (FR10, design D1/D2 of
-// split-into-modules, pass 2): the agent-CLI executor adapter — the command
-// line and invocation options, the stream-JSON round parser, the prompt
-// builders, the round timeout and the CLI judge voter, plus the host/fresh
+// Build script for the `:adapters:agent` module (FR10, design D1/D2 of split-into-modules, pass 2):
+// the agent-CLI executor adapter — the command line and invocation options, the stream-JSON round
+// parser, the prompt builders, the round timeout and the CLI judge voter, plus the host/fresh
 // environment sources that give a round its working copy.
 //
-// D1 warrants it as its own module for the PIT-scoping win (~35 production
-// classes with the build's largest fixture-driven suite behind them) and
-// because it is the executor seam a second CLI vendor would sit beside.
+// D1 warrants it as its own module for the PIT-scoping win (~35 production classes with the build's
+// largest fixture-driven suite behind them) and because it is the executor seam a second CLI vendor
+// would sit beside.
 plugins {
     id 'library-conventions'
     // The FR2 direction gate (task 5.2); the permitted reach is stated below.
@@ -16,8 +15,8 @@ plugins {
 description = 'Agent-CLI executor adapter: stage rounds and judge votes driven through a coding-agent CLI subprocess.'
 
 dependencies {
-    // Version management only; see the note in `domain/build.gradle`. The
-    // Jackson override carries the CVE fix (GHSA-5jmj-h7xm-6q6v).
+    // Version management only; see the note in `domain/build.gradle`. The Jackson override carries
+    // the CVE fix (GHSA-5jmj-h7xm-6q6v).
     api platform(libs.spring.boot.dependencies)
     api platform(libs.jackson.bom)
 
@@ -36,20 +35,17 @@ dependencies {
     // `ExecutorUsage` assertions (finding F86 of tighten-spec-contract) ride this edge since, so the
     // former test-only declaration is gone.
     implementation project(':gnomish-plugin-api')
-    // The coarse adapter remainder, for the frozen pipeline law and the
-    // briefing sections the prompt builders render (D1's "pass 2 decides
-    // whether `:adapters:agent` depends on the coarse module or the two move
-    // with it" — it depends on it). This is the one sibling edge pass 2 keeps,
-    // and `AgentCoarseReachSpec` in this module is what holds it to exactly the
-    // two packages named here; the reverse edge is gone, task 10.2 having moved
-    // `AgentSettingsValidator` to the loader's own package. add-command-executor
-    // (design D2) adds a third: the shared command-run core, `adapter.command`,
-    // which the `command` built-in runs its rounds on.
+    // The coarse adapter remainder, for the frozen pipeline law and the briefing sections the
+    // prompt builders render (D1's "pass 2 decides whether `:adapters:agent` depends on the coarse
+    // module or the two move with it" — it depends on it). This is the one sibling edge pass 2
+    // keeps, and `AgentCoarseReachSpec` in this module is what holds it to exactly the two packages
+    // named here; the reverse edge is gone, task 10.2 having moved `AgentSettingsValidator` to the
+    // loader's own package. add-command-executor (design D2) adds a third: the shared command-run
+    // core, `adapter.command`, which the `command` built-in runs its rounds on.
     api project(':adapters')
-    // The execution environment a round runs in (task 6.1): the host and fresh
-    // judge environment sources construct backends directly. `implementation`,
-    // not `api` — the backend is never on this module's own signatures, only
-    // inside the sources that build one.
+    // The execution environment a round runs in (task 6.1): the host and fresh judge environment
+    // sources construct backends directly. `implementation`, not `api` — the backend is never on
+    // this module's own signatures, only inside the sources that build one.
     implementation project(':sandbox:docker')
     api project(':sandbox:core')
 
@@ -62,10 +58,10 @@ dependencies {
     // environment source hands `ProcessLaunch.grouped()` to every host environment it builds.
     // Declared, not inherited through `:sandbox:docker`: this module names the type in its own source.
     implementation project(':subprocess')
-    // The operator-event catalog leaf (FR4, design D3 of split-logtext-leaves): every
-    // WARN/ERROR site in this module takes its `[GFnnn]` head from an `OperatorEvent`
-    // constant. `implementation`, not `api`: the enum is named only inside log calls,
-    // never in a signature this module exports.
+    // The operator-event catalog leaf (FR4, design D3 of split-logtext-leaves): every WARN/ERROR
+    // site in this module takes its `[GFnnn]` head from an `OperatorEvent` constant.
+    // `implementation`, not `api`: the enum is named only inside log calls, never in a signature
+    // this module exports.
     implementation project(':operatorevent')
     // The untrusted-text leaf (FR3, design D2 of type-untrusted-text): this module holds
     // a class marked `@UntrustedExit`, the annotation that allows a machine writer to read
@@ -79,6 +75,9 @@ dependencies {
     // `ProgramExecutor` implements its `Executor` interface (task 7.1), so its request, result and
     // describe types are on this module's own signatures: `api`.
     api project(':executor-contract')
+    // The pending-key leaf (D20 of migrate-verify-to-executor-contract): `ProgramExecutor` and
+    // `CommandStageExecutor` take it on their public `poll`, so the edge is `api`.
+    api project(':pendingkey')
     // The factory's git invocation policy (design D1 of own-git-invocation-policy): the
     // working-copy-unchanged check of a verdict or decision run (FR11, NFR-S4 of
     // define-executor-contract) runs `git status` in the environment under `GitInvocation`.
@@ -91,8 +90,8 @@ dependencies {
     implementation libs.jackson.databind
     implementation libs.jackson.core
 
-    // Shared fakes (FR7, design D8), test scope only — `FakeAgentBinary` and
-    // the scenario library the round specs drive instead of a real CLI.
+    // Shared fakes (FR7, design D8), test scope only — `FakeAgentBinary` and the scenario library
+    // the round specs drive instead of a real CLI.
     testImplementation project(':test-fixtures')
     testImplementation project(':httpegress') // FindingsFunnelSpec scripts the `http` exchange (D16)
     // Logback's ListAppender backs the specs asserting on log output.
@@ -119,9 +118,9 @@ tasks.named('test') {
     systemProperty 'fakeAgentDir', rootProject.file('test-fixtures/src/main/resources/fake-agent').absolutePath
 }
 
-// PIT exclusions documented for THIS module (task 8.1: each module carries its
-// own exceptions, next to the mutation scope they narrow). Moved here with the
-// spec they name when task 10.2 carved the agent seam out of `:adapters`.
+// PIT exclusions documented for THIS module (task 8.1: each module carries its own exceptions, next
+// to the mutation scope they narrow). Moved here with the spec they name when task 10.2 carved the
+// agent seam out of `:adapters`.
 pitest {
     // PIT's coverage and mutation minions are separate JVM launches that inherit
     // nothing from the `test` task, so the fake agent's on-disk location has to be
@@ -145,18 +144,17 @@ pitest {
     ]
 }
 
-// The one adapter module with a sibling edge, and it is stated here rather than
-// left implicit: `:adapters` is the coarse remainder, not another technology
-// seam, and `AgentCoarseReachSpec` narrows the reach to `adapter.law`,
-// `adapter.briefing` and `adapter.command` (FR2, M4, design D1; design D2 of
-// add-command-executor).
+// The one adapter module with a sibling edge, and it is stated here rather than left implicit:
+// `:adapters` is the coarse remainder, not another technology seam, and `AgentCoarseReachSpec`
+// narrows the reach to `adapter.law`, `adapter.briefing` and `adapter.command` (FR2, M4, design D1;
+// design D2 of add-command-executor).
 layering {
     allowedProjects = [
         ':adapters',
         ':application',
-        // Transitive via `:application`, which renames its snapshot and dashboard writes
-        // through the dependency-free atomic-write leaf (design D10 of
-        // harden-task-branch-contract); no source in this module names it.
+        // Transitive via `:application`, which renames its snapshot and dashboard writes through
+        // the dependency-free atomic-write leaf (design D10 of harden-task-branch-contract); no
+        // source in this module names it.
         ':atomicfile',
         // The base-resolution leaf, reached transitively through `:adapters` (design D2
         // of add-base-ref-resolution); no source in this module names it.
@@ -185,11 +183,13 @@ layering {
         // declared directly above, because this module's own log sites name `OperatorEvent`;
         // also reached through `:domain`, whose engine emitters take their head from it.
         ':operatorevent',
+        // The pending-key leaf (D20), declared above; also via `:domain` and `:executor-contract`.
+        ':pendingkey',
         ':sandbox:core',
         ':sandbox:docker',
-        // Transitive via `:sandbox:docker` / `:adapters:git`, which carry the
-        // dependency-free `:subprocess` leaf onto the runtime classpath the gate
-        // reads (design D9/D11 of bound-subprocess-commands).
+        // Transitive via `:sandbox:docker` / `:adapters:git`, which carry the dependency-free
+        // `:subprocess` leaf onto the runtime classpath the gate reads (design D9/D11 of
+        // bound-subprocess-commands).
         ':subprocess',
         // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves; FR3, design D2
         // of type-untrusted-text): reached through `:logtext`, whose `LogText` is a facade

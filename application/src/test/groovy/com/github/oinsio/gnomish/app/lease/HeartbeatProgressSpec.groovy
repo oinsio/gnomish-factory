@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
@@ -82,7 +83,9 @@ class HeartbeatProgressSpec extends Specification {
         'implement' | 3 | new EngineEvent.AttemptStarted(key('implement', 3))
         'implement' | 1 | new EngineEvent.ExecutionFinished(key('implement', 1), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
         'build' | 0 | new EngineEvent.CheckStarted(key('build', 0), new CheckRef(0, UntrustedText.manifest('builtin:files_exist')))
-        'build' | 4 | new EngineEvent.CheckFinished(key('build', 4), passResult())
+        'build' | 4 | new EngineEvent.CheckFinished(key('build', 4), passResult(), null)
+        'build' | 5 | new EngineEvent.CheckPolled(key('build', 5), new CheckRef(0, UntrustedText.manifest('executor:ci')), 'scm-status', UntrustedText.subprocess('k-1'), PendingTurn.Origin.ISSUED, Duration.ofSeconds(30), Duration.ofMinutes(9))
+        'build' | 6 | new EngineEvent.CheckTimedOut(key('build', 6), new CheckRef(0, UntrustedText.manifest('executor:ci')), 'scm-status', UntrustedText.subprocess('k-1'), Duration.ofMinutes(10), new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, UntrustedText.factory('timed out'), [], null))
         'review' | 2 | new EngineEvent.AttemptFinished(key('review', 2), TaskState.atStageStart('review'), trace('review', 2))
     }
 

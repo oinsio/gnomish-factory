@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.buildchecks.atomicwrite.NonAtomicWrite;
-import com.github.oinsio.gnomish.sandbox.EgressEntries;
+import com.github.oinsio.gnomish.httpegress.EgressEntries;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -25,12 +25,24 @@ import java.util.stream.Collectors;
  * of metadata (never bodies) to stdout, where {@code docker logs} makes it
  * readable factory-side (NFR-O1).
  *
- * <p>Allowlist entries are exact host names, IP literals, or {@code *.suffix}
- * wildcards, matched case-insensitively against the destination host (never the
- * port). Entries are validated against a conservative grammar so a config typo
- * cannot smuggle syntax into the rendered JSON.
+ * <p>Allowlist entries are the {@code sandbox} subset of the one egress grammar
+ * ({@link EgressEntries#isSandboxEntry}): exact host names, IP literals, or
+ * {@code *.suffix} wildcards, matched case-insensitively against the destination
+ * host (never the port). Entries are validated against that grammar so a config
+ * typo cannot smuggle syntax into the rendered JSON, and a CIDR block or a class
+ * word — which the addon cannot match — is refused rather than rendered.
  *
- * <p>Implements FR7, NFR-O1, NFR-S2 of add-sandbox-core.
+ * <p>Kept in sync with {@link EgressEntries}: the addon's {@code _allowed} matches
+ * the {@code sandbox} subset by hand — an exact host by equality, {@code *.suffix}
+ * as a suffix that never matches the apex — and must answer exactly as
+ * {@link EgressEntries#namesHost} does for every name. The addon runs in the guard
+ * container, in Python, where no Java class can: a classpath barrier, so the pair
+ * is declared rather than shared (design D8, D16 of
+ * migrate-verify-to-executor-contract). {@code EgressGuardMatcherIdentitySpec}
+ * drives both matchers over one table of names.
+ *
+ * <p>Implements FR7, NFR-O1, NFR-S2 of add-sandbox-core; FR17 of
+ * migrate-verify-to-executor-contract.
  */
 @NonAtomicWrite("factory-private guard configuration mounted read-only into a container that is started"
         + " only after render() returns; no factory instance ever reads it back as durable state, so a torn"
@@ -46,8 +58,16 @@ final class EgressGuardConfig {
     /** The stdout prefix marking one structured denial event; kept in sync with {@link GuardDenialLog}. */
     static final String DENY_MARKER = "GNOMISH-EGRESS-DENY ";
 
-    private static final String SCRIPT = """
+    /**
+     * The addon. Package-private so {@code EgressGuardMatcherIdentitySpec} runs its matcher; never
+     * assembled from data.
+     */
+    static final String SCRIPT = """
             \"\"\"Gnomish egress guard: default-deny allowlist, SNI/CONNECT mode, no TLS opening.\"\"\"
+
+            # Kept in sync with EgressEntries (module :httpegress): _allowed matches the sandbox
+            # subset of the one egress grammar -- an exact host by equality, *.suffix as a suffix
+            # that never matches the apex -- exactly as EgressEntries.namesHost does.
 
             import json
 
@@ -97,7 +117,8 @@ final class EgressGuardConfig {
      * and the directory carries no other state.
      *
      * @param configDir the factory-private directory mounted read-only into the guard
-     * @param allowlist the operator allowlist from {@code factory.sandbox.egress-allowlist}
+     * @param allowlist the box's admitted names: {@code factory.egress.sandbox} and the law's
+     *     executor egress
      */
     static void render(Path configDir, List<String> allowlist) {
         try {
@@ -129,7 +150,7 @@ final class EgressGuardConfig {
      *
      * @param allowlist the operator allowlist entries
      * @return the rendered JSON array
-     * @throws IllegalArgumentException if an entry is blank or outside the host grammar
+     * @throws IllegalArgumentException if an entry is outside the {@code sandbox} subset
      */
     static String allowlistJson(List<String> allowlist) {
         return allowlist.stream()
@@ -139,9 +160,9 @@ final class EgressGuardConfig {
     }
 
     private static String validated(String entry) {
-        if (!EgressEntries.isEntry(entry)) {
+        if (!EgressEntries.isSandboxEntry(entry)) {
             throw new IllegalArgumentException(
-                    "factory.sandbox.egress-allowlist entry is not a host, IP, or *.suffix wildcard: '" + entry + "'");
+                    "box egress entry is not an exact host, an IP literal or a *.suffix wildcard: '" + entry + "'");
         }
         return EgressEntries.normalized(entry);
     }

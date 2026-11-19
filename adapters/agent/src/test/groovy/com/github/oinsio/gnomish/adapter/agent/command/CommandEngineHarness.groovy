@@ -7,10 +7,9 @@ import com.github.oinsio.gnomish.domain.engine.EnginePorts
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -40,7 +39,7 @@ final class CommandEngineHarness {
 
     final Path workspace
     final VirtualClock clock = new VirtualClock()
-    final ScriptedBuiltinCheckRunner builtinRunner = new ScriptedBuiltinCheckRunner()
+    final ScriptedCheckRounds builtinRunner = new ScriptedCheckRounds()
     final List<TaskState> persisted = []
     /** The tool trace persisted beside each state, in the same order. */
     final List<ToolTrace> traces = []
@@ -84,9 +83,8 @@ final class CommandEngineHarness {
             persisted << state
             traces << trace
         } as AttemptPersistence
-        def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), { } as EngineEventListener, persistence,
-                VirtualTimeEquipment.on(clock, new VirtualSleeper(clock)), RoundIdentity.inPlace())
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), { } as EngineEventListener, persistence,
+        VirtualTimeEquipment.on(clock, new VirtualSleeper(clock)), RoundIdentity.inPlace())
         try {
             new Engine().run(new PipelineDefinition('1', new AutonomyLimits(5), [
                 CommandFixtures.stage(settings, './gradlew build', [

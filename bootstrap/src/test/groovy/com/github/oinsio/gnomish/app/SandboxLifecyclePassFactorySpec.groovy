@@ -27,7 +27,7 @@ class SandboxLifecyclePassFactorySpec extends Specification {
 
     def "returns SandboxLifecyclePass.NONE when no sandbox image is configured"() {
         given:
-        def sandbox = new SandboxProperties(null, null, null, null, [], [], false, null, null, null, null)
+        def sandbox = new SandboxProperties(null, null, null, null, [], false, null, null, null, null)
 
         expect:
         SandboxLifecyclePassFactory.create(sandbox, new FactoryProperties(null, null, null, null), clock) == SandboxLifecyclePass.NONE
@@ -60,7 +60,7 @@ class SandboxLifecyclePassFactorySpec extends Specification {
      * than resting on {@code ProjectIdentity}'s origin-less fallback happening to be unique too.
      */
     private static SandboxProperties sandbox() {
-        new SandboxProperties('gnomish/img', null, null, null, [], [], false, "spec-${UUID.randomUUID()}".toString(),
+        new SandboxProperties('gnomish/img', null, null, null, [], false, "spec-${UUID.randomUUID()}".toString(),
         null, null, null)
     }
 

@@ -28,10 +28,10 @@ import org.slf4j.LoggerFactory;
  * and the round's open costs one {@code rev-parse}, not two (NFR-P1 of wire-host-mid-round-push;
  * FR21 of define-executor-contract), as the sandboxed twin takes its token; every time this listener notices and
  * acts on a movement, the baseline advances to the new {@code HEAD} so a later event covering the
- * same still-unmoved tip is a no-op. This tracking is deliberately separate from {@link
- * GitAttemptPersistence}'s own {@code previousTip} bookkeeping: the two are different observers of
- * the same branch, at different points in the round's timeline (per-tool-event here, versus once
- * at the round's close there).
+ * same still-unmoved tip is a no-op. This tracking is deliberately separate from the base {@link
+ * GitAttemptPersistence} reads from the run's round cell: the two are different observers of the
+ * same branch, at different points in the round's timeline (per-tool-event here, versus once at the
+ * round's close there).
  *
  * <p>Per {@link AgentProgressListener}'s contract, {@link #onProgress} never throws and returns
  * promptly: the only git work it does is one cheap {@code rev-parse} per event, escalating to the

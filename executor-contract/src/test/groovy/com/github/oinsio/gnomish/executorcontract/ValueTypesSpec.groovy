@@ -3,8 +3,9 @@ package com.github.oinsio.gnomish.executorcontract
 import spock.lang.Specification
 
 /**
- * FR2, FR9 of define-executor-contract: the two names the contract's callers key by — an executor
- * name and a pending key — refuse a value outside their shape and print as their value.
+ * FR9 of define-executor-contract: the executor name the contract's callers key by refuses a value
+ * outside its shape. The pending key's own spec moved with its type to the `:pendingkey` leaf
+ * (`PendingKeySpec`, design D20 of migrate-verify-to-executor-contract).
  */
 class ValueTypesSpec extends Specification {
 
@@ -63,26 +64,5 @@ class ValueTypesSpec extends Specification {
             'acme!',
             'a' * 65
         ]
-    }
-
-    def "FR2: a pending key prints as its value"() {
-        expect:
-        new PendingKey('build-8812').toString() == 'build-8812'
-    }
-
-    def "FR2, NFR-R3: a pending key that #why is refused, so no unusable key reaches GNOMISH_PENDING_KEY"() {
-        when:
-        new PendingKey(key)
-
-        then:
-        def refusal = thrown(IllegalArgumentException)
-        refusal.message == "pendingKey is unusable: ${why}"
-
-        where:
-        why | key
-        'it holds a control character' | 'a\u0000b'
-        'it holds a control character' | 'a\u001bb'
-        'it holds a control character' | 'a\u007fb'
-        "it is longer than ${PendingKey.MAX_LENGTH} characters" | 'k' * (PendingKey.MAX_LENGTH + 1)
     }
 }

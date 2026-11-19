@@ -110,7 +110,8 @@ class GitResumeDecisionSpec extends GitResumeSpecBase {
         def first = subjects.indexOf('gnomish: task escalated')
         subjects[first + 1] == 'gnomish: task resumed'
         subjects.count('gnomish: task resumed') == 1
-        subjects[first + 2].startsWith('gnomish: round build#')
+        // the rerun round's first commit: its snapshot (design D22 of migrate-verify-to-executor-contract), or its round commit
+        subjects[first + 2] ==~ /gnomish: (snapshot|round) build#.*/
         subjects.last() == 'gnomish: task escalated'
         subjects.count('gnomish: task escalated') == 2
     }

@@ -1,10 +1,10 @@
 package com.github.oinsio.gnomish.app
 
-import com.github.oinsio.gnomish.adapter.agent.command.CommandExecutorFactory
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
 import com.github.oinsio.gnomish.domain.pipeline.CommandLine
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorDeclaration
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
@@ -38,8 +39,9 @@ import spock.lang.Timeout
 
 /**
  * FR8 of add-command-executor (design D6): the run's {@link ExecutorRegistry} holds the {@code command}
- * built-in as one entry beside the law's declarations, built by the shared round wrapper over the
- * built-in's factory and opening its rounds through the run's one round source. A command round is
+ * built-in as one entry beside the law's declarations; the dispatch runs it through the shared round
+ * wrapper over the entry's factory, opening its rounds through the run's one round source (design D18
+ * of migrate-verify-to-executor-contract: entries bound at resolution). A command round is
  * observed by the process it launches in the round's real host environment, whose launch hands back a
  * {@link FakeProcess} that has already exited; an agent round by the request the agent arm receives.
  * The mixed pipeline is driven through the run's real {@link ExecutorDispatch}, whose {@code COMMAND}
@@ -109,9 +111,9 @@ class ExecutorRegistryCommandSpec extends Specification {
 
     private ExecutorRegistry registry(String declared = 'acme') {
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, VirtualTimeEquipment.on(clock),
-                TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'))
+                TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'), LastRegisteredCommit.NONE)
         def described = new DescribedLaw(LawBinding.workingTree(Path.of('/tmp/law')), [(declared): ProgramInBox.describe()])
-        ExecutorRegistry.of(described, definition(declared), law, rounds(), equipment, new CommandExecutorFactory(clock))
+        ExecutorRegistry.of(described, definition(declared), law, equipment, BuiltInEntriesFixture.of(clock), null)
     }
 
     private static StageExecutor.Request request(StageDefinition stage) {
@@ -119,12 +121,12 @@ class ExecutorRegistryCommandSpec extends Specification {
         stage, new Workspace() {}, 0, [])
     }
 
-    def "FR8: the registry resolves the built-in name to the command built-in, which runs the stage's declared command in the round the run's round source opens"() {
+    def "FR8: the dispatch resolves the built-in name to the command built-in, which runs the stage's declared command in the round the run's round source opens"() {
         given:
         def build = request(stage('build', ExecutorType.COMMAND, './gradlew build'))
 
         when:
-        def result = registry().resolve(new ExecutorName(CommandExecutorFactory.NAME)).execute(build)
+        def result = new ExecutorDispatch(registry(), rounds(), agent).execute(build)
 
         then: 'the round was opened by the run round source, for this request'
         opened.size() == 1
@@ -148,7 +150,7 @@ class ExecutorRegistryCommandSpec extends Specification {
     def "FR8: in a mixed pipeline each stage runs through the dispatch: the agent stage on the agent arm, the command stage on the built-in and never on the agent arm"() {
         given: 'the run dispatch over the registry, built once at wiring'
         def registry = registry()
-        def dispatch = new ExecutorDispatch(registry, agent)
+        def dispatch = new ExecutorDispatch(registry, rounds(), agent)
         def implement = request(stage('implement', ExecutorType.AGENT_CLI, null))
         def build = request(stage('build', ExecutorType.COMMAND, './gradlew build'))
         def agentResult = ExecutionResult.completed(ExecutorUsage.none(),
@@ -171,13 +173,15 @@ class ExecutorRegistryCommandSpec extends Specification {
     }
 
     // Scenario: executor/command-executor / A law declaration named after the built-in is refused
-    def "FR8: a law that declares an executor under the built-in's name is refused when the registry is built"() {
+    def "FR8, D18: a law that declares an executor under the built-in name '#name' is refused when the registry is built"() {
         when:
-        registry(CommandExecutorFactory.NAME)
+        registry(name)
 
         then:
         def refused = thrown(IllegalStateException)
-        refused.message == "the law declares an executor named 'command', the name of the built-in a command stage runs; " +
-                'rename the declaration'
+        refused.message == "the law declares an executor named '${name}', a built-in's name; rename the declaration"
+
+        where:
+        name << BuiltInExecutors.NAMES
     }
 }

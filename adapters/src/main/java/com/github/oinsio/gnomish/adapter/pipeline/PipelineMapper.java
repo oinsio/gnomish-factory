@@ -110,7 +110,7 @@ public final class PipelineMapper {
      *     mapping errors when a duration is malformed
      */
     public static Result map(ConfigDto config, List<StageEntry> entries) {
-        return map(config, entries, ConnectionProfiles.none());
+        return map(config, entries, ConnectionAdmission.of(ConnectionProfiles.none()));
     }
 
     /**
@@ -119,9 +119,11 @@ public final class PipelineMapper {
      * operator's named profiles, so the domain {@link TrackerConfig} always carries flat, inline
      * connection data.
      *
-     * @param profiles the operator-declared connection profiles; never null, possibly none
+     * @param connections the operator-declared connection profiles, the adapters' endpoint
+     *     declarations and the operator's in-process egress, which admit the tracker's endpoint
+     *     (FR17, design D16 of migrate-verify-to-executor-contract); never null
      */
-    public static Result map(ConfigDto config, List<StageEntry> entries, ConnectionProfiles profiles) {
+    public static Result map(ConfigDto config, List<StageEntry> entries, ConnectionAdmission connections) {
         int defaultLimit = attemptDefault(config);
         List<ConfigError> errors = new ArrayList<>();
         // The declarations are mapped first, since a check's default verify-in depends on whether its
@@ -138,7 +140,7 @@ public final class PipelineMapper {
         for (StageEntry entry : entries) {
             stages.add(mapStage(entry, defaultLimit, credentialed, errors));
         }
-        TrackerConfig tracker = TrackerConfigMapper.map(config.tracker(), profiles, errors);
+        TrackerConfig tracker = TrackerConfigMapper.map(config.tracker(), connections, errors);
         errors.addAll(executorErrors);
         if (!errors.isEmpty()) {
             return new Result(null, errors);

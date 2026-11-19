@@ -23,18 +23,22 @@ proof lives in `gnomish-plugin-api/sample`: a stand-in third-party adapter whose
 build file declares this artifact and nothing else. If the surface ever stops
 being self-sufficient, that module stops compiling and `check` goes red.
 
+A verification check is not written against this artifact: it is a verdict
+program speaking the executor contract, with no factory dependency at all. The
+sample module ships one, `sample/verdict/sample-verdict.sh`, and a spec runs the
+conformance kit against it, as `gnomish executor verify` does (FR8 of
+`migrate-verify-to-executor-contract`).
+
 ## What is in it
 
 | Surface                 | Type                                                                                                                                                                                                                                                                                                                     |
 |-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Tracker port            | `app.port.tracker.Tracker` plus its DTO family (`TaskRef`, `TrackerTask`, `TaskSnapshot`, `TrackerTaskState`, `ClaimResult`, `ClaimVersion`, `HeartbeatResult`, `RemoveStaleClaimResult`, `ReadyTask`, `OpenTask`, `HumanReply`, `AbortFacts`, `AbortRecord`, `ParkReason`, `InstanceId`, `TrackerUnavailableException`) |
 | Tracker SPI             | `app.TrackerAdapterFactory` — constructs a live `Tracker` for one `tracker.type`, expands short refs, declares its credential env vars                                                                                                                                                                                   |
-| Check SPI               | `app.CheckClientFactory` — constructs an `ExternalCheckClient` for one `provider`, declares its credential env vars, contributes pin paths                                                                                                                                                                               |
-| Config-validation SPI   | `app.TrackerSubsectionValidator`, `app.CheckSubsectionValidator` — grade your adapter-owned `tracker.<type>` / `factory.check.<provider>` config subsection; `app.CheckParamsValidator` grades a manifest check's `params`                                                                                               |
-| SPI contexts            | `app.TrackerAdapterContext`, `app.CheckClientContext` — everything the host hands a factory's one `create`: secrets, configuration, instance id and claim epochs (tracker) or run context (check), and the host's `TimeEquipment`                                                                                        |
-| Run context             | `app.CheckRunContext` — the closed set of run-scoped values (`task.id`, `task.branch`, `stage.name`) a check may interpolate                                                                                                                                                                                             |
+| Config-validation SPI   | `app.TrackerSubsectionValidator` — grades your adapter-owned `tracker.<type>` config subsection
+| SPI context             | `app.TrackerAdapterContext` — everything the host hands the factory's one `create`: secrets, configuration, instance id, claim epochs and the host's `TimeEquipment`
 | Secrets port            | `app.port.secrets.SecretsProvider` — the only way an adapter reaches a credential (NFR-S1)                                                                                                                                                                                                                               |
-| Check + workspace ports | `domain.engine.port.ExternalCheckClient`, `domain.engine.port.Workspace` — reached transitively through `:domain`                                                                                                                                                                                                        |
+| Workspace port          | `domain.engine.port.Workspace` — reached transitively through `:domain`
 
 `TrackerHealthTracker` ships alongside the port as a ready-made transparent
 decorator; it is not something you implement.
@@ -95,6 +99,7 @@ Breaking releases so far — pre-1.0, a break is a MINOR bump:
 | 0.12.0  | `BranchTipFacts` reads the registered commit: `cleanupCommitInHistory` gave way to `registeredCleanup` and the new `TipRelation` (tighten-spec-contract, design D13).                                                                                                                                                              |
 | 0.13.0  | `OperatorEvent` loses `FACTORY_CLONE_REF_FORMAT_REFUSED` and `BOX_GIT_VERSION_REFUSED` (GF162, GF163): the checks no longer log their refusals, and the deciding layer's new codes are additive (add-sandbox-base-image, design D19).                                                                                              |
 | 0.14.0  | `ExecutionResult` became one closed shape (completed, failed with a failure class, pending with a key): `DecisionNeeded`, the `RoundOutcome` variants `CannotExecute`, `NeedsDecision` and `Verified`, `ExecutorFailure` and `JudgeUsage` are gone; usage is one `ExecutorUsage` per invocation keyed by the contract role; `TaskState` pins `ExecutorVersions` and `EscalationReport.PipelineMismatch` names the executor and both versions (define-executor-contract, D4, D11, D13, D14).
+| 0.15.0  | `TrackerConfig` carries the tracker's admitted HTTP endpoint (`Optional<AdmittedEndpoint> endpoint`), so its canonical constructor gained a component; `TrackerAdapterFactory.endpoint()` and `ConnectionProfiles.endpoint` name and mint the endpoint with the medium its URL came from (migrate-verify-to-executor-contract, design D16). The pending key of `ExecutionResult.Pending` and `PendingTurn` is the `PendingKey` of the new JDK-only `pendingkey` leaf rather than a `String`, so both canonical constructors changed, and the leaf entered the published jar graph (same change, design D20). `AttemptRecord` carries the recorded pending poll of a verdict check (`@Nullable PendingPollRecord pendingPoll`, the new `domain.engine.PendingPollRecord`), so its canonical constructor gained a component (same change, design D7 as amended). The check SPI left the contract: `CheckClientFactory`, `CheckClientContext`, `CheckParamsValidator`, `CheckSubsectionValidator`, `CheckRunContext`, `ExternalCheckClient` and `ExternalCheckPinContributor` are removed — a verdict check is an executor program authored against the executor contract — and `AttemptCommitWorkspace` moved to `:domain` (`domain.engine.port`), where the SCM built-ins read it (same change, task 6.1, D16, D18, D20). |
 
 0.7.0 was a non-breaking bump: no signature changed, but the `untrustedtext` and `operatorevent`
 leaves entered the published jar graph (split-logtext-leaves).
@@ -105,9 +110,11 @@ binary-incompatible change to this module — or to a `:domain` type it re-expos
 
 The baseline is **committed**, in `compat-baseline/`, because nothing is
 published yet and a check that skips whenever its baseline is missing is not a
-gate. Two jars live there: this module's, and the `:domain` one it re-exposes
-through its `api` dependency. Third-party libraries are not compared — they are
-not our contract, and their releases must not be able to fail our gate.
+gate. Five jars live there: this module's, the `:domain` one it re-exposes
+through its `api` dependency, and the three JDK-only leaves on that graph —
+`untrustedtext`, `operatorevent` and `pendingkey`. Third-party libraries are not
+compared — they are not our contract, and their releases must not be able to fail
+our gate.
 
 An **intended** surface change is accepted deliberately, the way an `apiDump`
 workflow works:
@@ -129,8 +136,7 @@ adapter owns config keys) and return your `Tracker` from its one
 `create(TrackerAdapterContext)`. The context carries everything the host hands
 you: the `SecretsProvider` for credentials, your validated config, the instance
 id, the claim-epoch record, and the host's `TimeEquipment` — stamp and wait on
-that, never on a clock of your own. A check provider does the same through
-`CheckClientFactory.create(CheckClientContext)`. When the host gains a
+that, never on a clock of your own. When the host gains a
 collaborator to hand you, it becomes a new accessor on the context, never a
 second `create`. `gnomish-plugin-api/sample/src/main/java/...` is a complete,
 compiling skeleton of exactly that.

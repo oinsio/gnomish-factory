@@ -84,7 +84,7 @@ class GitTaskStoreSpec extends Specification implements BareGitRepoFixture, Task
         def worktree = worktreeFor('PROJ-2')
 
         when:
-        AttemptPersistence persistence = store.attemptPersistence(worktree, 'PROJ-2')
+        AttemptPersistence persistence = store.attemptPersistence(worktree, 'PROJ-2', HostRoundPersistence.openedAtHead(runner, worktree))
         persistence.persist('PROJ-2', RoundStates.recorded(new ToolTrace(
                         new AttemptKey('PROJ-2', 'verify', 0), [
                             new ToolCall(0, 'bash', Instant.parse('2026-07-18T10:00:00Z'), Duration.ofMillis(50))

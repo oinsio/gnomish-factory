@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.ServeProperties
 import com.github.oinsio.gnomish.adapter.pipeline.TrackerValidatorStub
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.CloneRefFormatRefusedException
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
@@ -23,7 +24,6 @@ import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
-import java.util.function.UnaryOperator
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 import spock.lang.Timeout
@@ -130,7 +130,7 @@ class TakeRefDispatchSpec extends Specification implements RunChainFakes {
             classifyShape: { Path cloneDir, String taskId ->
                 throw new CloneRefFormatRefusedException(cloneDir.toString(), 'reftable', UntrustedText.subprocess('files'))
             },
-        ] as TaskBranchGit, git.worktrees(), UnaryOperator.identity(), git.baseRefs(), new ClaimEpochBook())
+        ] as TaskBranchGit, git.worktrees(), HostGitRounds.NONE, git.baseRefs(), new ClaimEpochBook())
 
         when:
         dispatch(['github:o/r#1'], refusingGit)

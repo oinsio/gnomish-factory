@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
+import com.github.oinsio.gnomish.app.port.agent.RoundClose;
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
@@ -81,9 +82,11 @@ record HostRoundEnvironmentSource(DecisionFileTransport transport, InstantSource
         }
 
         @Override
-        public void closeRound() {
-            // Host rounds close as the single round commit in persistence (FR21); only the round's
-            // scratch area leaves here.
+        public void closeRound(RoundClose close) {
+            // Host rounds close in persistence (FR21), and a git-mode host round that completed is
+            // snapshotted by the stage chain's decoration, which acts on the result itself (design
+            // D22 of migrate-verify-to-executor-contract): the close names nothing here. Only the
+            // round's scratch area leaves.
             environment.dispose();
         }
 

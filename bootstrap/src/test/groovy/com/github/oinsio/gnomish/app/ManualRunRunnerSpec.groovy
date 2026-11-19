@@ -4,9 +4,11 @@ import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.HostRoundPersistence
 import com.github.oinsio.gnomish.adapter.git.RegisteredBranchFixture
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.UnsupportedStateFileVersionException
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -27,7 +29,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
-import java.util.function.UnaryOperator
 import org.slf4j.MDC
 import org.springframework.boot.DefaultApplicationArguments
 import spock.lang.Specification
@@ -59,7 +60,7 @@ class ManualRunRunnerSpec extends Specification implements AppAssemblyFixture, M
     // (FR6 of remove-interactive-console), so stdin carries only the operator dialogs.
     private ManualRunRunner newRunner(String scenario = 'plain-round') {
         newManualRunRunner(projectRoot, homeDir,
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]), TaskGitFixture.real(), FakeAgentSupport.propertiesFor(scenario))
     }
 
@@ -422,18 +423,19 @@ advancement: auto
         given: 'a task-git bundle whose mid-round push decoration is a recognizable marker'
         def decorated = Stub(RoundEnvironmentSource)
         def real = TaskGitFixture.real()
-        def git = new TaskGit(real.store(), real.branches(), real.worktrees(), { rounds ->
-            decorated
-        } as UnaryOperator<RoundEnvironmentSource>, real.epochs())
+        def git = new TaskGit(real.store(), real.branches(), real.worktrees(), Stub(HostGitRounds) {
+            decorate(_, _) >> decorated
+        }, real.epochs())
         def source = Stub(RoundEnvironmentSource)
 
         when: 'the runner is built over that bundle'
         def runner = newManualRunRunner(projectRoot, homeDir,
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]), git)
 
         then: 'the shared assembly in-place assembles from still decorates nothing'
-        runner.drive.assembly.hostGitPush.apply(source).is(source)
+        runner.drive.assembly.hostGitPush.is(HostGitRounds.NONE)
+        runner.drive.assembly.hostRun == null
     }
 
     // FR6, FR7, UX1: --mode git (the default) prints the branch/worktree banner upfront, before
@@ -590,7 +592,7 @@ advancement: auto
         def context = new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of())
         repository.createTask(context, TaskStart.commit(projectRoot, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def worktree = registeredClone().worktrees().resolve(taskId)
-        def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId, ClaimEpochSource.NONE)
+        def persistence = HostRoundPersistence.over(gitRunner, worktree, taskId, ClaimEpochSource.NONE)
         def state = TaskState.atStageStart('build')
         def trace = new ToolTrace(new AttemptKey(taskId, 'build', 0),
                 [

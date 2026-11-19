@@ -90,7 +90,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
             taskRepository() >> store
         }
         def branches = Stub(TaskBranchGit) {
@@ -131,7 +131,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
 
         when:
@@ -205,7 +205,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
 
         when:
@@ -239,7 +239,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence(failOnCall: 1)
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
 
         when:
@@ -269,7 +269,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
 
         when:

@@ -1,12 +1,10 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.adapter.check.PinCheckedExternalCheckClient;
+import com.github.oinsio.gnomish.adapter.check.PinCheck;
 import com.github.oinsio.gnomish.adapter.law.LawSource;
 import com.github.oinsio.gnomish.adapter.law.LawSources;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.adapter.law.PipelineLawReader;
-import com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor;
-import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
@@ -15,16 +13,17 @@ import org.jspecify.annotations.Nullable;
 /**
  * One run's law, opened: the seam where a {@link LawBinding} becomes the bare-object reader of
  * its repository, the {@link LawSource} its files are read through, the frozen {@link
- * PipelineLaw}, and the external-check pin guard that vouches for it — all from one peel of the
+ * PipelineLaw}, and the pin-check that vouches for its checks' definition files — all from one peel of the
  * binding's revision (design D12 of add-base-ref-resolution). Extracted from {@code RunAssembler}
  * as the owner of this responsibility: the assembler wires executors, checks and consoles, and
- * asks this class for the law and the guard instead of resolving either itself.
+ * asks this class for the law and the pin-check instead of resolving either itself.
  *
  * <p>Law reads and pin reads share the one {@link GitObjects} opened here, over the binding's own
  * repository root, so the pin paths — repository-relative by design — and the law commit are read
  * from the same object store by construction.
  *
- * <p>Implements FR11, M5 of add-base-ref-resolution; FR16, D10 of add-sandbox-core.
+ * <p>Implements FR11, M5 of add-base-ref-resolution; FR16, D10 of add-sandbox-core; FR16 of
+ * migrate-verify-to-executor-contract.
  */
 final class RunLaw {
 
@@ -78,18 +77,16 @@ final class RunLaw {
     }
 
     /**
-     * Wraps {@code client} in the {@link PinCheckedExternalCheckClient} (FR16, D10 of
-     * add-sandbox-core) comparing against the very commit this law was opened at: the law commit's
-     * own SHA wherever a ref was resolved, the checked-out commit where the law is the working tree.
-     * The in-place mode's workspace may not be a git repository at all, in which case a check that
-     * declares pin paths degrades fail-closed to CannotVerify while a pinless check passes
-     * vacuously.
+     * The run's pin-check (FR16, D10 of add-sandbox-core; design D17 of
+     * migrate-verify-to-executor-contract), comparing against the very commit this law was opened at:
+     * the law commit's own SHA wherever a ref was resolved, the checked-out commit where the law is
+     * the working tree. The in-place mode's workspace may not be a git repository at all, in which
+     * case a check whose pin set is not empty degrades fail-closed to a cannot-verify while a check
+     * with an empty pin set runs as usual.
      *
-     * @param client the selected external-check client the guard fronts
-     * @param contributor the client's pin-path contribution seam
-     * @return the pin-guarded client; never null
+     * @return the pin-check the run's check dispatch guards every bound executor with; never null
      */
-    ExternalCheckClient pinGuarded(ExternalCheckClient client, ExternalCheckPinContributor contributor) {
-        return new PinCheckedExternalCheckClient(client, contributor, gitObjects, lawCommit);
+    PinCheck pinCheck() {
+        return new PinCheck(gitObjects, lawCommit);
     }
 }

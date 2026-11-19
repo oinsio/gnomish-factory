@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.EgressProperties
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
@@ -92,13 +93,13 @@ class SandboxTransientFilesE2ESpec extends Specification implements BareGitRepoF
         def runner = new ShellCommandCheckRunner(new VirtualClock()).withEnvironments(support.pieces(null).checkEnvironments())
 
         when: 'a command check reports its own findings path as its finding'
-        def verdict = runner.run(VerifyChecks.command(
+        def verdict = ShellCheckRounds.answerOf(ShellCheckRounds.run(runner, VerifyChecks.command(
                         'printf \'{"findings":[{"message":"%s"}]}\' "$GNOMISH_FINDINGS_FILE" > "$GNOMISH_FINDINGS_FILE"; exit 1'),
-                support.workspace())
+                support.workspace()))
 
         then: 'the runner read the findings back from inside the box'
-        verdict instanceof VerdictAnswer.QualityFailure
-        def findingsPath = (verdict as VerdictAnswer.QualityFailure).findings()[0].message()
+        verdict instanceof VerdictAnswer.Sarif
+        def findingsPath = (verdict as VerdictAnswer.Sarif).results()[0].finding().message()
         findingsPath.startsWith(box.scratchRoot() + '/')
 
         and: 'no such file exists on the factory side: not at that path, not in the temp directory, not in the clone'
@@ -115,14 +116,15 @@ class SandboxTransientFilesE2ESpec extends Specification implements BareGitRepoF
     /** A clone with its task branch and the container support of one task, keyed {@code CTN-<label>-<n>}. */
     private void startTask(String label) {
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def sandbox = new SandboxProperties(image, null, null, null, ['example.com'], [], false, null, null, null, null)
+        def sandbox = new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
         project = initWorkingRepo(tempDir, 'transient-files-project')
         Files.createDirectories(project.resolve('.gnomish'))
         Files.writeString(project.resolve('.gnomish/instructions.md'), 'build it\n')
         commitAll(project)
         taskId = "CTN-${label}-${System.nanoTime() % 100000}"
         support = ContainerSupportFixture.direct(project, taskId, segments(), sandbox,
-                new FactoryProperties(null, null, null, null), OwnershipMode.MANUAL, ClaimEpochSource.NONE)
+                new FactoryProperties(null, null, null, null, null, null, null, null, new EgressProperties(['example.com'], [])), OwnershipMode.MANUAL,
+                ClaimEpochSource.NONE)
         support.taskRepository().createTask(
                 new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 TaskStart.commit(project, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('work'))

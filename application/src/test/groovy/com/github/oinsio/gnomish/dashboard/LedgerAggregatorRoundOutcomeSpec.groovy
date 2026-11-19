@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.serveobservability.ObservabilityPaths
 import com.github.oinsio.gnomish.serveobservability.OutcomeCounts
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJsonMapper
 import com.github.oinsio.gnomish.serveobservability.json.RoundOutcomeLineMapperSpec
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -15,7 +16,9 @@ import spock.lang.TempDir
  * NFR-O2, UX3 of define-executor-contract: the dashboard's day view sums {@code taskOutcome}
  * snapshots only, so a day's {@code roundOutcome} lines — written by the real ledger mapper — leave
  * its counts and tokens exactly as they are without them (the reader end of the declared pair
- * {@code LedgerJsonMapper} ↔ {@code LedgerAggregator}).
+ * {@code LedgerJsonMapper} ↔ {@code LedgerAggregator}); so do an executor check's lines, role {@code
+ * verdict}, with their {@code check} index and {@code resumedKey} (NFR-O1, UX3 of
+ * migrate-verify-to-executor-contract).
  */
 class LedgerAggregatorRoundOutcomeSpec extends Specification {
 
@@ -43,6 +46,18 @@ class LedgerAggregatorRoundOutcomeSpec extends Specification {
         view == aggregator.aggregate(withoutRounds, TODAY, 1)
         view.perDay()[0].counts() == new OutcomeCounts(1, 0, 0, 0)
         view.tokensByModel()['claude'].input() == 7
+    }
+
+    // NFR-O1, UX3 of migrate-verify-to-executor-contract: an executor check's line, resumed key included
+    def "an executor check's roundOutcome line, a resumed one included, changes neither the day's counts nor its tokens"() {
+        given:
+        def check = new LedgerJsonMapper().serialize(RoundOutcomeLineMapperSpec.checkLine(UntrustedText.branchDocument('k-1')))
+        write(withRounds, [check, TASK_LINE])
+        write(withoutRounds, [TASK_LINE])
+        def aggregator = new LedgerAggregator()
+
+        expect:
+        aggregator.aggregate(withRounds, TODAY, 1) == aggregator.aggregate(withoutRounds, TODAY, 1)
     }
 
     private static void write(Path serveDir, List<String> lines) {

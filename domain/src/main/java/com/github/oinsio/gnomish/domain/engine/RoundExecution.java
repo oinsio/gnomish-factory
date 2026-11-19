@@ -43,12 +43,15 @@ import org.jspecify.annotations.Nullable;
  * are never consulted by a verdict (FR2, FR3 of fix-denial-report-attachment). Every recorded round
  * names itself: its task, stage and number from the {@link AttemptKey}, its round token taken once
  * from the run's {@link RoundIdentity} — never re-derived from the position or the history (FR14,
- * FR21 of define-executor-contract, design D13). An unrecorded round takes no token.
+ * FR21 of define-executor-contract, design D13). An unrecorded round takes no token. The verify
+ * chain gets that same token with the state the round ran from, so a pending entry names its round
+ * by it (design D21 of migrate-verify-to-executor-contract).
  *
  * <p>Implements FR4, FR6, FR10, FR12, FR13, NFR-O1 of add-stage-engine; FR15 of add-manual-run;
  * FR2, FR3 of fix-denial-report-attachment; FR1 of fix-denial-attribution-durability;
  * FR5 of split-logtext-leaves; FR5 of make-checkpoint-gate-durable; FR20 of
- * fix-terminal-receipt-convergence; FR7 of define-executor-contract.
+ * fix-terminal-receipt-convergence; FR7 of define-executor-contract; FR20 of
+ * migrate-verify-to-executor-contract.
  */
 final class RoundExecution {
 
@@ -86,8 +89,12 @@ final class RoundExecution {
      * <p>Implements FR4, FR6, FR10, FR12, FR13, NFR-O1 of add-stage-engine; FR7 of
      * define-executor-contract.
      *
+     * <p>{@code state} is the last persisted state: the verify chain's pending writes carry it
+     * unchanged but for their entries (D21 item 12 of migrate-verify-to-executor-contract); the round's
+     * number and feedback come from its {@link Engine#resumedFrom} view, the stage's own history.
+     *
      * @param context the task's identity and human decisions; never null
-     * @param state the recorded state this round resumes from; never null
+     * @param state the last persisted state this round resumes from; never null
      * @param workspace the opaque working copy the round operates on; never null
      * @param stage the resolved stage this round runs; never null
      * @param startedAt the Clock reading taken by the loop when this round began; carried onto
@@ -96,19 +103,31 @@ final class RoundExecution {
      */
     RoundOutcome execute(
             TaskContext context, TaskState state, Workspace workspace, StageDefinition stage, Instant startedAt) {
-        int number = state.attempts().size();
-        var key = new AttemptKey(context.taskId(), stage.name(), number);
-        var feedback = RoundRecords.priorFailures(state);
+        var key = keyOf(context, state, stage);
+        int number = key.attempt();
+        var feedback = RoundRecords.priorFailures(Engine.resumedFrom(state));
         ExecutionResult result;
         try {
             result = executor.execute(new StageExecutor.Request(context, stage, workspace, number, feedback));
         } catch (RuntimeException ex) {
             var failed = RoundFailures.thrown(key, ex);
-            return shape(context, workspace, stage, key, startedAt, failed, ExecutorOutcomeClassifier.classify(failed));
+            return shape(
+                    context, state, workspace, stage, startedAt, failed, ExecutorOutcomeClassifier.classify(failed));
         }
         var accounting = ExecutorOutcomeClassifier.classify(result);
         RoundFailures.reported(key, accounting);
-        return shape(context, workspace, stage, key, startedAt, result, accounting);
+        return shape(context, state, workspace, stage, startedAt, result, accounting);
+    }
+
+    /**
+     * The round's key: its task, stage and number — the size (0-based) of the stage's own history,
+     * the {@link Engine#resumedFrom} view of {@code state}.
+     */
+    private static AttemptKey keyOf(TaskContext context, TaskState state, StageDefinition stage) {
+        return new AttemptKey(
+                context.taskId(),
+                stage.name(),
+                Engine.resumedFrom(state).attempts().size());
     }
 
     /**
@@ -118,18 +137,19 @@ final class RoundExecution {
      */
     private RoundOutcome shape(
             TaskContext context,
+            TaskState state,
             Workspace workspace,
             StageDefinition stage,
-            AttemptKey key,
             Instant startedAt,
             ExecutionResult result,
             AttemptAccounting accounting) {
+        var key = keyOf(context, state, stage);
         var executor = described.executorOf(stage);
         var executed = Participants.transform(executor.name(), result.usage());
         Events.emit(listener, new EngineEvent.ExecutionFinished(key, executed, executor, result.status()));
         return switch (accounting) {
             case AttemptAccounting.Proceed ignored ->
-                verified(context, workspace, stage, identity(key, startedAt, executed), result);
+                verified(context, state, workspace, stage, identity(key, startedAt, executed), result);
             case AttemptAccounting.BurnAttempt burn ->
                 RoundRecords.qualityFailed(identity(key, startedAt, executed), stage, result, burn);
             case AttemptAccounting.EndStage end ->
@@ -156,12 +176,13 @@ final class RoundExecution {
      */
     private RoundOutcome.Judged verified(
             TaskContext context,
+            TaskState state,
             Workspace workspace,
             StageDefinition stage,
             RecordedRound round,
             ExecutionResult completed) {
         var key = round.key();
-        var verification = verifyOrchestrator.verify(stage.verify(), context, workspace, key);
+        var verification = verifyOrchestrator.verify(stage, context, workspace, key, state, round.token());
         var verdict = RoundRecords.overallVerdict(verification);
         // FR5 of make-checkpoint-gate-durable: a CannotVerify round carries its stop — the check
         // that broke the chain (its last result) with the verdict's reason and details.

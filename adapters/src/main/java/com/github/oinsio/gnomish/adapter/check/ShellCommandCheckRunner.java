@@ -2,22 +2,15 @@ package com.github.oinsio.gnomish.adapter.check;
 
 import com.github.oinsio.gnomish.adapter.command.CommandRun;
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource;
-import com.github.oinsio.gnomish.domain.engine.Finding;
-import com.github.oinsio.gnomish.domain.engine.ResultLevel;
-import com.github.oinsio.gnomish.domain.engine.VerdictAnswer;
-import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
-import com.github.oinsio.gnomish.executorcontract.ReadResult;
 import com.github.oinsio.gnomish.logtext.LogText;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
-import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Duration;
 import java.time.InstantSource;
-import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,50 +18,38 @@ import org.slf4j.LoggerFactory;
 /**
  * The real command check runner (design D6): runs {@code check} through a {@link
  * CommandProcessRunner} — the check's use of the shared command-run core {@link CommandRun}
- * (design D2 of add-command-executor) — over the environment acquired from the run's {@link CheckEnvironmentSource}
- * (host workspace environment by default; the round's leased box or a fresh box in sandboxed mode)
- * — the task environment port is the sole process-launch seam (FR4 of add-sandbox-core) — then
- * reports the exit code as the check's answer (FR7, D6): exit 0 is a {@link VerdictAnswer.Sarif}
- * answer carrying the findings {@link CheckFindings} read from the channel as {@code error}
- * results, empty when the channel is absent, empty or malformed (D5 second amendment of
- * migrate-verify-to-executor-contract: the file is read whatever the exit code); exit
- * 126/127 (shell convention for "not executable" / "not found") is a {@link
- * VerdictAnswer.InfrastructureFailure}, honoring the same classification a missing binary would
- * get, and the findings channel plays no role; any other non-zero exit is a {@link
- * VerdictAnswer.QualityFailure} carrying either the findings {@link CheckFindings} read from the
- * channel (if present and well-formed) or one synthetic {@link Finding} built from the output tail
- * (if the content is absent, empty, or malformed — NFR-R2: the exit-code failure always stands). A
- * process start failure (a null {@link CommandProcessRunner#run} result) is also an infrastructure
- * failure. The runner constructs no verdict: the engine's {@code VerdictDerivation} derives it from
- * the answer (D5, D9 of migrate-verify-to-executor-contract); the exit code stops carrying a verdict
- * when the {@code shell} built-in reports SARIF (task 3.2, FR5).
+ * (design D2 of add-command-executor) — over the environment acquired from the run's {@link
+ * CheckEnvironmentSource} (host workspace environment by default; the round's leased box or a fresh
+ * box in sandboxed mode) — the task environment port is the sole process-launch seam (FR4 of
+ * add-sandbox-core). {@link #probe} judges the run once, as a {@link ShellOutcome} — the exit code
+ * is status, never a verdict (FR5, design D5 as amended of migrate-verify-to-executor-contract) —
+ * and the {@link ShellExecutor}, its one consumer, renders it as the executor contract's result,
+ * which the one contract → domain mapping carries to the engine (D9). The runner constructs no
+ * verdict: the engine's {@code VerdictDerivation} derives it (D5, D9).
  *
  * <p>The findings channel follows FR1/NFR-S3 of add-sandbox-core: the path is allocated in the
  * environment's scratch area (outside the working copy, inside the environment boundary), handed
- * to the command as {@code GNOMISH_FINDINGS_FILE}, and — only for a run that chose its own exit
- * code — read back through the environment's size-capped {@code readFile} by the executor
- * contract's one result reader (FR6 of define-executor-contract), bytes in memory, never a
- * factory-side file; {@code dispose()} removes the scratch area whatever the outcome. The child
- * environment is the layered allowlist carried by {@link #childEnv} (D6, FR9); {@link
+ * to the command as {@code GNOMISH_FINDINGS_FILE}, and read back through the environment's
+ * size-capped {@code readFile} by the executor contract's one result reader (FR6 of
+ * define-executor-contract); {@code dispose()} removes the scratch area whatever the outcome. The
+ * child environment is the layered allowlist carried by {@link #childEnv} (D6, FR9); {@link
  * #withChildEnv} threads the run's allowlist — passthrough plus the active tracker adapter's
  * declared credential names — per run.
  *
  * <p>Both infrastructure exits that happen before any exit code exists — the environment the
  * check needs cannot be served, and the process refuses to start — carry a WARN naming the check
- * (FR5 of harden-logging-observability): they hand the engine a {@code CannotVerify} that looks,
- * from the escalation report alone, exactly like an endpoint that was merely slow — the derived
- * {@code CannotVerify}.
+ * (FR5 of harden-logging-observability): from the escalation report alone they look exactly like an
+ * endpoint that was merely slow.
  *
  * <p>Implements FR7, FR8, NFR-R2, NFR-S1, D6 of add-manual-run; FR1, FR4, FR9, NFR-S3 of
- * add-sandbox-core; FR5 of harden-logging-observability; FR6 of define-executor-contract; FR7 of
- * migrate-verify-to-executor-contract.
+ * add-sandbox-core; FR5 of harden-logging-observability; FR6 of define-executor-contract; FR5, FR7
+ * of migrate-verify-to-executor-contract.
  */
 public record ShellCommandCheckRunner(
         CommandProcessRunner processRunner,
         InstantSource clock,
         ChildEnvAllowlist childEnv,
-        CheckEnvironmentSource environments)
-        implements CommandCheckRunner {
+        CheckEnvironmentSource environments) {
 
     private static final Logger log = LoggerFactory.getLogger(ShellCommandCheckRunner.class);
 
@@ -151,8 +132,15 @@ public record ShellCommandCheckRunner(
         return new ShellCommandCheckRunner(processRunner, clock, childEnv, environments);
     }
 
-    @Override
-    public VerdictAnswer run(VerifyCheck.Executor check, Workspace workspace) {
+    /**
+     * Runs {@code check}'s command in the environment its source serves for {@code workspace}, and
+     * judges the run once (FR5 of migrate-verify-to-executor-contract).
+     *
+     * @param check the command check; never null
+     * @param workspace the engine's workspace for the round under verification; never null
+     * @return what the run found; never null
+     */
+    ShellOutcome probe(VerifyCheck.Executor check, Workspace workspace) {
         CheckEnvironmentSource.Acquired acquired;
         try {
             acquired = environments.acquire(check, workspace);
@@ -162,7 +150,7 @@ public record ShellCommandCheckRunner(
                             + "command check '{}' cannot be verified: no environment to run it in",
                     identityOf(check),
                     e);
-            return new VerdictAnswer.InfrastructureFailure(
+            return new ShellOutcome.Unanswerable(
                     UntrustedText.subprocess(e.getMessage() != null ? e.getMessage() : e.toString()),
                     NoCheckDetails.NO_DETAILS);
         }
@@ -178,83 +166,16 @@ public record ShellCommandCheckRunner(
                         OperatorEvent.COMMAND_CHECK_PROCESS_START_FAILED.head()
                                 + "command check '{}' cannot be verified: the process failed to start",
                         identityOf(check));
-                return new VerdictAnswer.InfrastructureFailure(
+                return new ShellOutcome.Unanswerable(
                         UntrustedText.manifest("failed to start command: " + check.checkId()),
                         NoCheckDetails.NO_DETAILS);
             }
-
-            // The termination decides first (FR6, FR12 of bound-subprocess-commands): a run that
-            // never chose an exit code has no findings worth reading, and the read itself would
-            // fail on the interrupted path — an in-box read is a supervised docker exec, and the
-            // interrupt flag the wait restored makes it throw instead of answering.
-            if (!(outcome.termination() instanceof ExecHandle.Wait.Exited)) {
-                return unfinished(outcome);
-            }
-            return classify(identityOf(check), outcome, CheckFindings.read(environment, findingsPath));
+            return ShellOutcome.judge(identityOf(check), outcome, environment, findingsPath);
         }
     }
 
     /** The check's log-plane identity: its command, flattened and capped so one check is one line. */
     private static String identityOf(VerifyCheck.Executor check) {
         return LogText.forLog(check.checkId(), IDENTITY_CAP_CHARS);
-    }
-
-    /**
-     * Classifies a run that ended without ever choosing an exit code (FR12, FR6 of
-     * bound-subprocess-commands), from its termination alone — the findings channel is never
-     * consulted here. A check killed on the installation's timeout is a quality failure — the
-     * command ran and failed to finish, exactly as a red exit code would have failed it — carrying
-     * the tail captured so far as its one synthetic finding; any findings file it left behind is
-     * half-written by construction. An interrupted check is infrastructure: the factory was shut
-     * down mid-check, and nothing about the work is known.
-     */
-    private static VerdictAnswer unfinished(CommandProcessRunner.CommandOutcome outcome) {
-        if (outcome.termination() instanceof ExecHandle.Wait.TimedOut) {
-            return new VerdictAnswer.QualityFailure(List.of(new Finding(
-                    "command timed out before it exited and its process tree was killed", null, outcome.outputTail())));
-        }
-        return new VerdictAnswer.InfrastructureFailure(
-                UntrustedText.factory("command run was interrupted before a verdict existed"),
-                UntrustedText.subprocess(outcome.outputTail()));
-    }
-
-    /**
-     * Reports a completed run's exit code as its answer (FR7, D6): 0 is a SARIF answer whose
-     * results are the findings the command wrote, normalized to {@code error} (the legacy file has
-     * no level), and empty when it wrote none worth using (D5 second amendment of
-     * migrate-verify-to-executor-contract); 126/127 are the
-     * shell's "not executable" / "not found" conventions and are treated as infrastructure
-     * failures, the findings channel playing no role; any other non-zero exit is a quality
-     * failure carrying either the structured findings the command wrote, or one synthetic
-     * finding built from the output tail if none were written or they were malformed (FR8,
-     * NFR-R2).
-     */
-    private static VerdictAnswer classify(
-            String checkIdentity,
-            CommandProcessRunner.CommandOutcome outcome,
-            ReadResult<CheckFindings.FindingsFile> findingsRead) {
-        int exitCode = outcome.exitCode();
-        if (exitCode == 0) {
-            List<Finding> reported = CheckFindings.findings(checkIdentity, findingsRead);
-            return new VerdictAnswer.Sarif(reported == null ? List.of() : asErrors(reported));
-        }
-        if (exitCode == 126 || exitCode == 127) {
-            // The reason is the factory's own sentence about an exit code, quoting nothing the
-            // command printed — its family is FACTORY, not the family of the tail beside it
-            // (design D3 of type-untrusted-text).
-            String reason = exitCode == 126 ? "command not executable (exit 126)" : "command not found (exit 127)";
-            return new VerdictAnswer.InfrastructureFailure(
-                    UntrustedText.factory(reason), UntrustedText.subprocess(outcome.outputTail()));
-        }
-        Finding syntheticFinding = new Finding("command exited with status " + exitCode, null, outcome.outputTail());
-        List<Finding> parsed = CheckFindings.findings(checkIdentity, findingsRead);
-        return new VerdictAnswer.QualityFailure(parsed != null ? parsed : List.of(syntheticFinding));
-    }
-
-    /** The legacy findings as SARIF results: the legacy file names no level, so each is an error. */
-    private static List<VerdictAnswer.Result> asErrors(List<Finding> findings) {
-        return findings.stream()
-                .map(finding -> new VerdictAnswer.Result(ResultLevel.ERROR, finding))
-                .toList();
     }
 }

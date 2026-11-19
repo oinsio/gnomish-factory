@@ -20,7 +20,7 @@ class ProgramExecutorFactorySpec extends Specification {
     private ProgramExecutorFactory factory() {
         new ProgramExecutorFactory(PipelineLaw.ofContent(['instructions.md': 'build it\n']),
         new DescribedProgram(ProgramFixtures.declaration(['unused']), ProgramFixtures.describe(), ['ACME_API_KEY']),
-        ProgramFixtures.equipment(stderrParent))
+        ProgramFixtures.equipment(stderrParent), new PendingRuns())
     }
 
     // FR8 of add-command-executor (D2): the entry's name is the law declaration's

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
-import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.app.port.pipeline.ConfiguredDesignatorKinds;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
 import java.util.ArrayList;
@@ -50,11 +49,11 @@ record TrustedTierSections(@Nullable ConfigDto config) {
      * tracker} section: the mapping tier proper runs later and reports the section's own problems,
      * so the ones this pass would repeat are discarded. No section, no adapter, no kinds.
      */
-    Set<String> designatorKinds(ConnectionProfiles profiles, ConfiguredDesignatorKinds designatorKinds) {
+    Set<String> designatorKinds(ConnectionAdmission connections, ConfiguredDesignatorKinds designatorKinds) {
         if (config == null) {
             return Set.of();
         }
-        TrackerConfig tracker = TrackerConfigMapper.map(config.tracker(), profiles, new ArrayList<>());
+        TrackerConfig tracker = TrackerConfigMapper.map(config.tracker(), connections, new ArrayList<>());
         return tracker == null ? Set.of() : designatorKinds.forTracker(tracker);
     }
 }

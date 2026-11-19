@@ -25,10 +25,9 @@ import org.slf4j.LoggerFactory;
  * some manifest claims. A packaged distribution reports jar file names; a development classpath
  * reports the classes directory, which identifies the module just as well.
  *
- * <p>Lives beside the two port registries in {@code :bootstrap} because building them is
- * composition, and takes {@code Map<String, ?>} rather than either port's SPI type so it stays one
- * report shared by both ports and depends on neither {@code adapter.tracker} nor
- * {@code adapter.check}.
+ * <p>Lives beside the port registry in {@code :bootstrap} because building it is composition, and
+ * takes {@code Map<String, ?>} rather than the port's SPI type so it depends on no port's adapter
+ * package (the check port's registry left with task 5.2 of migrate-verify-to-executor-contract).
  *
  * <p>Implements NFR-O1, NFR-S3 of add-plugin-architecture.
  */

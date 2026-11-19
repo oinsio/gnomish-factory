@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.adapter.plugin
 
-import com.github.oinsio.gnomish.adapter.check.CheckClientDiscovery
 import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterDiscovery
-import com.github.oinsio.gnomish.app.CheckClientFactory
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory
 import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import com.tngtech.archunit.core.domain.JavaClasses
@@ -37,8 +35,14 @@ import spock.lang.Specification
  */
 class DiscoveredRegistryOnlySpec extends Specification {
 
-    /** The declaration shape of a hardwired registry: a map from discriminator to an SPI type. */
-    private static final Pattern HARDWIRED_REGISTRY = ~/(?s)Map\s*<\s*String\s*,\s*(?:TrackerAdapterFactory|CheckClientFactory|TrackerSubsectionValidator|CheckSubsectionValidator|CheckParamsValidator)\s*>[^;]{0,300}?=\s*Map\s*\.\s*(?:of|ofEntries)\s*\(/
+    /**
+     * The declaration shape of a hardwired registry: a map from discriminator to an SPI type. The
+     * check validators are not in it since task 5.2 of migrate-verify-to-executor-contract: the
+     * built-ins' params validators are keyed by the built-in names core owns ({@code
+     * BuiltInCheckConfiguration}), not by a discovered discriminator — a built-in is compiled into and
+     * named by core (ADR 0020). The check SPI factory itself left the api with task 6.1 of that change.
+     */
+    private static final Pattern HARDWIRED_REGISTRY = ~/(?s)Map\s*<\s*String\s*,\s*(?:TrackerAdapterFactory|TrackerSubsectionValidator)\s*>[^;]{0,300}?=\s*Map\s*\.\s*(?:of|ofEntries)\s*\(/
 
     @Shared
     JavaClasses productionClasses = new ClassFileImporter()
@@ -46,7 +50,7 @@ class DiscoveredRegistryOnlySpec extends Specification {
     .importPackages('com.github.oinsio.gnomish')
 
     // M1, FR1: the structural form of the claim. Every discovered factory is built reflectively by
-    //     ServiceLoader, which ArchUnit cannot see — so a production `new SomeCheckClientFactory()`
+    //     ServiceLoader, which ArchUnit cannot see — so a production `new SomeTrackerAdapterFactory()`
     //     is, by construction, someone assembling a registry by hand.
     //
     //     One shape is not: a DECORATOR, which takes the SPI as a constructor parameter and can
@@ -79,9 +83,9 @@ class DiscoveredRegistryOnlySpec extends Specification {
         productionClasses.size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
 
         where:
+        // The tracker SPI is the only one left since task 6.1 of migrate-verify-to-executor-contract.
         spi << [
-            TrackerAdapterFactory,
-            CheckClientFactory
+            TrackerAdapterFactory
         ]
     }
 
@@ -97,7 +101,8 @@ class DiscoveredRegistryOnlySpec extends Specification {
         }
     }
 
-    // M1: the behavioural form, and the sharpest of the three. Hide every registration of one port's
+    // M1: the behavioural form, and the sharpest of the three — for the tracker, the one discovered
+    //     port since task 5.2 of migrate-verify-to-executor-contract. Hide every registration of one port's
     //     SPI — not one artifact's, as GithubArtifact does, but all of them — and the registry must
     //     come back empty. Anything a core file still knew about would show up here.
     def "with every #port service registration hidden the registry is empty"() {
@@ -113,7 +118,6 @@ class DiscoveredRegistryOnlySpec extends Specification {
         where:
         port | spi | discover
         'tracker' | TrackerAdapterFactory | TrackerAdapterDiscovery.&discover
-        'check' | CheckClientFactory | CheckClientDiscovery.&discover
     }
 
     // M1, verbatim: "zero hardwired Map.of(...) provider registries remain". Comments are stripped

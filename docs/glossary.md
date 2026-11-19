@@ -327,13 +327,30 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   produced only by `FactoryRegisterRead` (introduced by
   `tighten-spec-contract`, design D13).
 - **Closing commit** — a commit by which the factory closes a step of the
-  task's record: task started, a round's state commit, the round snapshot, an
-  outcome, an approval, an appended decision, a resumed write, a salvage, the
+  task's record: task started, a round's state commit, the round snapshot, a
+  **pending commit**, an outcome, an approval, an appended decision, a resumed write, a salvage, the
   cleanup. Made as an object first, then landed with the **factory register**
   in one ref transaction and carried to origin by the **closing push** (the
   atomic push of branch and register). A host closing commit is built on the
   task branch's tip, never on the worktree's `HEAD`. *Not:* a gnome commit,
   which never moves the register.
+- **Pending commit** — the closing commit that records an open round's
+  pending checks before the factory polls any of them: exactly `state.json`,
+  whose list of the round's entries (one per check that answered `pending`,
+  each with its key, attempt, round token and `since`) is the only change; its
+  tree is the round's last registered commit's with that one file replaced, its
+  only parent that commit (the snapshot for the round's first, the previous
+  pending commit after), subject `gnomish: pending <stage>#<round> <token>`.
+  It lands with its register in one ref transaction and is pushed. On the host
+  it is built from objects in the clone's `.git` (no worktree, no index); in
+  the box through a private index, then harvested and admitted. It moves the
+  working copy's `HEAD` and leaves the index's and the working tree's
+  `state.json` behind it — the lag the working-copy check and the host round
+  close recognise by identity (the round's last registered commit), never by
+  content. Writers: `AttemptPersistence.persistPending`, through
+  `HostPendingCommit` and `InBoxPendingCommit` (introduced by
+  `migrate-verify-to-executor-contract`, design D21). *Not:* a round commit —
+  it records no outcome, and a pickup of it may poll and nothing more.
 - **Harvest quarantine** — the ref `refs/gnomish-quarantine/<task>`, in the
   factory clone only, that every harvest of a box's task branch fetches into;
   what the gnome committed exists factory-side as objects and this one scratch
@@ -418,7 +435,8 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   lands at least its record commit and every reset rides a commit of its own.
   It names the round's decision request
   (`decisions/<stage>-a<attempt>-<token>.json`, the only path read for that
-  round), rides the snapshot commit's subject in container mode, and is stamped
+  round), rides the snapshot commit's subject in both branch modes (a host git
+  round's snapshot since `migrate-verify-to-executor-contract`, design D22), and is stamped
   on the round's record
   (`roundToken`, beside `taskId` and `stage`); the **usage snapshot** names the
   last round it folded by it (`through`). A fresh round mints it from the tip it
@@ -439,9 +457,13 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   token and the snapshot commit together). Filled either by the live round
   opening or restored from the snapshot's record on the resume path — the same
   two transitions in both cases. It exists only because the engine's ports
-  cannot carry a round identity without learning about commits. Types:
-  `CurrentRound`; a closed round is `ClosedRound` (introduced by
-  `make-checkpoint-gate-durable`, D10). *Never:* "ref" or "holder" for it in
+  cannot carry a round identity without learning about commits. One per run:
+  in host git mode the run preparation builds it (with the interrupted
+  verification a resume passed in, `RunRound`) before the round source and the
+  persistence that both read it. Types: `CurrentRound`; a closed round is
+  `ClosedRound` — its snapshot, its last registered commit and its close
+  (introduced by `make-checkpoint-gate-durable`, D10; per-run owner and the
+  host snapshot by `migrate-verify-to-executor-contract`, D22). *Never:* "ref" or "holder" for it in
   docs.
 - **Round commit** — the commit that records one round in `state.json` (its
   record commit). Its subject, `gnomish: round <stage>#<round>`, is rendered
@@ -450,6 +472,17 @@ checklist for new transitions lives in `.claude/rules/crash-consistency.md`.
   different stages (introduced by `add-git-workflow`; rendered from the record
   by `define-executor-contract`, design D13). *Not:* a parsing contract —
   readers take a round's identity from its record, never from the subject.
+- **Unverified snapshot** — the snapshot commit of a round whose executor did
+  not complete (a program that answered `failed` or `pending`), subject
+  `gnomish: unverified-snapshot <stage>#<round> <token>`. The round's close names
+  its outcome (`RoundClose`: `VERIFIABLE` or `UNVERIFIABLE`) and the one round
+  snapshot step chooses the subject by it. A registered unverified snapshot is
+  not an interrupted verification: `SnapshotTipCheck` does not read it, and a
+  pickup re-runs the round's stage executor with no attempt burned. It is still
+  in the `gnomish: ` namespace, so a gnome commit carrying it is a boundary
+  violation (introduced by `migrate-verify-to-executor-contract`, design D22).
+  *Not:* a **round commit**; nor a snapshot the admission refused, which keeps
+  its subject and is never registered.
 
 ## Pipeline execution
 
@@ -598,8 +631,12 @@ external; the decisions are ADR 0020.
   one set of Java types mirrors them. Introduced by `define-executor-contract`;
   ADR 0020. *Not:* the plugin contract of trackers, which is a Java interface.
 - **Built-in executor** — an executor compiled into the factory, a member of a
-  closed set, run in process through the **mirror interface**. Introduced by
-  `define-executor-contract` (design D1, D2); ADR 0020, decisions 1 and 2.
+  closed set, run in process through the **mirror interface**; named by core
+  (`BuiltInExecutors`), never by a discovered provider: a bundled jar's provider
+  is not a built-in, and removing the **vendor bundle** leaves every built-in
+  available. Introduced by `define-executor-contract` (design D1, D2); ADR 0020,
+  decisions 1 and 2; the naming rule by `migrate-verify-to-executor-contract`
+  (design D4).
 - **External executor** — an executor that is a program in any language,
   spawned only through `TaskExecutionEnvironment.exec` (inside the box when the
   stage runs in one) and spoken to over the executor contract's JSON; a stage
@@ -688,8 +725,9 @@ external; the decisions are ADR 0020.
   a run pollable until the run ends, and a poll of an ended run's key returns
   that run's terminal status and answer again, never a new run. For a
   **verdict executor** the engine owns the wait: `PendingPoll` persists the key
-  with the check identity, the attempt and the start time in the task-branch
-  state (the attempt's `pendingPoll` record, type `PendingPollRecord`) in one
+  with the check identity, the attempt, the round token and the start time in
+  the task-branch state (an entry of the open round's list
+  `TaskState.pendingPolls`, type `PendingPollRecord`, design D21) in one
   commit with its register, pushed, before the first `poll`; a key a `poll`
   replaces is persisted the same way before the next `poll`. Resume on any
   instance polls the recorded key and never calls `start` again; a `program`
@@ -697,12 +735,43 @@ external; the decisions are ADR 0020.
   unchanged against its `HEAD`. The key is capped in size; an oversized key is
   cannot-verify. A `pending` from a role whose caller cannot poll (`transform`,
   until `extract-agent-round-runner`) is an infrastructure failure naming the
-  limitation. Type: `PendingKey`; the keys a run issued or adopted are held by
+  limitation. Type: `PendingKey`, in the JDK-only `:pendingkey` leaf both the
+  engine and the executor contract carry (one type on every layer, design D20
+  of `migrate-verify-to-executor-contract`); the keys a run issued or adopted are held by
   `PendingRuns`. Introduced by `define-executor-contract` (design D2, D3, D4,
   D6); ADR 0020, decisions 2 and 4; persisted, rotated, retained and adopted
   by `migrate-verify-to-executor-contract` (design D2, D7, D11, D12, D14).
   *Not:* a **continuation key**, which resumes after an answer rather than
   waiting on an unfinished run.
+- **Wait hint** — the optional `pollAfterMillis` of a `pending` result: the
+  fewest milliseconds, from 0 to 86 400 000, after the answer before the engine
+  polls the **pending key** again. A lower bound beside the check's interval
+  (the next poll waits for the larger of the two), never a faster poll, and
+  never past the check's timeout. Relative, never an instant — the executor's
+  clock is not the factory's — and not persisted. On another status, or out of
+  range, the result reads as `failed/infrastructure` naming the field; an
+  in-process built-in's result is refused at construction. Field:
+  `ExecutorResult.pollAfterMillis`. Introduced by
+  `migrate-verify-to-executor-contract` (design D19). *Not:* the GitHub
+  core's rate-limit pause (`RateLimit`), which `scm-status` turns into one.
+- **Pending state** — the optional `pendingState` of a `pending` result, one of
+  `running` (every awaited subject seen, one still running), `unreported` (an
+  awaited subject never appeared on the polled commit) or `unobserved` (the
+  source could not be read this time, such as a rate limit). At a check's
+  timeout the engine reads the last pending answer: `unreported` or
+  `unobserved` resolve as cannot-verify whatever the declared timeout class;
+  `running`, no state and an unknown token keep it. The names of what is
+  awaited stay in the `reason`, shown and never decided on. Type:
+  `PendingState`, the contract's and the engine's (`domain.engine`), one to
+  one. Introduced by `migrate-verify-to-executor-contract` (design D19).
+  *Not:* a **status** — it qualifies `pending`, never replaces it.
+- **Pending turn** — what a check round's request on the engine port carries
+  when it continues a pending run: the **pending key** and where the engine
+  took it from — `ISSUED` (this run's own `start` or `poll` returned it) or
+  `RECORDED` (read from the pending record on resume, by the resume path
+  only). A request with no turn is a `start`; with one, the check round polls
+  the key. Type: `PendingTurn` (`domain.engine.port`). Introduced by
+  `migrate-verify-to-executor-contract` (design D14).
 - **Continuation key** — the optional key a `decision-request` answer carries,
   returned to the executor in the next request's `continuation` once the
   decision is answered, so the executor can pick up where it asked. Opaque to
@@ -737,15 +806,19 @@ external; the decisions are ADR 0020.
   conformance case — `describe`, `settings-schema`, `transform`, `verdict`,
   `decision` (each declared role; an undeclared one is not applicable),
   `unknown-role`, `oversized-output`, `stderr-noise`, `non-json-stdout`,
-  `pending-poll`, `unknown-request-fields`, `malformed-answer` — one line per
-  case. The `pending-poll` case runs only against a candidate whose describe
+  `pending-poll`, `pending-repoll`, `unknown-request-fields`,
+  `malformed-answer` — thirteen cases, one line per case. The `pending-poll`
+  and `pending-repoll` cases run only against a candidate whose describe
   declares `poll`, under the settings the command's `--pending-settings` option
-  carries (a JSON object; the reference executor's is `{"defer":true}`), and is
-  not applicable otherwise. There is no `cancel` case: `cancel` is a declared
+  carries (a JSON object; the reference executor's is `{"defer":true}`), and are
+  not applicable otherwise; `pending-repoll` polls the key that ended the run
+  once more and passes only when the run's terminal status and answer come back
+  unchanged (the idempotent re-poll). There is no `cancel` case: `cancel` is a declared
   capability without an operation (ADR 0020, decision 5). Its core drives the
   **mirror interface**, so a built-in executor runs the same cases in process.
   Type of the case list: `KitCase`. Introduced by `define-executor-contract`
-  (design D2, D18, D19); ADR 0020, decisions 2 and 5.
+  (design D2, D18, D19); the re-poll case by `migrate-verify-to-executor-contract`
+  (design D11); ADR 0020, decisions 2 and 5.
 - **Reference executor / misbehaving fake** — the two executors the factory's
   own specs run, both committed **stand-in** presets of the `executor` table
   (`StandIn.executor('reference')`, `StandIn.executor('break-<case>')`) with no
@@ -754,7 +827,7 @@ external; the decisions are ADR 0020.
   `describe`, `start` for the three live roles, and `pending` then `poll` under
   the settings `{"defer":true}`; it answers no `cancel` and declares no
   `cancel` capability, and refuses a role it does not list. Each preset of the
-  misbehaving fake breaks exactly one of the kit's twelve named cases; there is
+  misbehaving fake breaks exactly one of the kit's thirteen named cases; there is
   no `break-cancel`. Introduced by `define-executor-contract` (design D18). *Not:* a shipped artefact — executor
   authors run the kit against their own program.
 - **Verdict executor** — an executor run in role `verdict` for a **verify
@@ -1454,12 +1527,29 @@ ADR 0013.
   needs no pull request from the plugin author.
 - **SPI context** — the one value a plugin factory's single `create` receives,
   carrying every collaborator the host hands it: `TrackerAdapterContext`
-  (secrets, configuration, instance id, claim epochs, time equipment) and
-  `CheckClientContext` (secrets, provider subsection, run context, time
-  equipment), interfaces in `gnomish-plugin-api` that the host implements. A
-  collaborator the host adds later is a new accessor on the context, never a
-  second `create`. Introduced by `supervise-daemon-loops-and-embed-dashboard`
-  (design D21).
+  (secrets, configuration, instance id, claim epochs, time equipment), an
+  interface in `gnomish-plugin-api` that the host implements. A collaborator
+  the host adds later is a new accessor on the context, never a second
+  `create`. Introduced by `supervise-daemon-loops-and-embed-dashboard`
+  (design D21); the check SPI's context left the api with
+  `migrate-verify-to-executor-contract` (design D4).
+- **Vendor bundle** — the first-party plugin jar of one vendor, packaged and
+  discovered exactly as a third-party plugin is (`META-INF/services`, no
+  built-in shortcut). Today one exists, the github bundle (`adapters/github`),
+  and it carries the GitHub tracker provider only: the tracker is the
+  pluginizable port. Removing the jar disables the github tracker and nothing
+  else. *Not:* the home of the `github-actions` or `scm-status` **built-in
+  executors**, which are core's own, nor of the **GitHub API library**.
+  Introduced by `add-plugin-architecture`; narrowed to the tracker by
+  `migrate-verify-to-executor-contract` (design D4).
+- **GitHub API library** — `:githubapi`, the one first-party module holding the
+  GitHub HTTP core: the client (`GithubHttpClient`), the credential header, the
+  conditional-request cache, the rate-limit judgement and the retry. The
+  **vendor bundle**'s tracker and core's `github-actions` and `scm-status`
+  built-ins all call GitHub through it, and no second GitHub HTTP client
+  exists. It sends only to an admitted endpoint, through the **HTTP egress
+  leaf**. *Not:* part of `gnomish-plugin-api`, and not private to the bundle.
+  Introduced by `migrate-verify-to-executor-contract` (design D15).
 - **Tracker read verdict** — `TrackerReadVerdict`, the answer of
   `TrackerAdapterFactory.probeRead`: the adapter's own read-only probe of the
   configured tracker binding, which is the first request its startup makes,
@@ -1506,9 +1596,54 @@ Introduced by `add-project-registry`; the levels and the check are ADR 0011.
   startup.
 - **Sandbox-boundary key** — a `factory.*` key that selects or widens the
   sandbox a gnome runs in: `factory.bindings.*`, `factory.sandbox.image`,
-  `factory.sandbox.egress-allowlist`, `factory.sandbox.env-passthrough`. Read
+  `factory.egress.sandbox`, `factory.sandbox.env-passthrough`. Read
   from the resolved project's own project file and nowhere else, the command
   line included.
+- **Operator medium** — where the operator writes: the `factory.*` files of
+  the factory home (the host file, a project file), and the command line. A
+  host it names — a `factory.check.<name>` subsection, a
+  `factory.connections.<name>` profile, the operator egress block — is
+  *granted*. *Not:* the target repository's `.gnomish/` tree, the law medium,
+  whichever person committed it. Introduced by
+  `migrate-verify-to-executor-contract` (design D16).
+- **Law medium** — the target repository's `.gnomish/` tree at the law
+  commit: the stage manifests and `config.yaml`, written by whoever commits to
+  the repository. A host it names for an in-process call (a manifest's http
+  target, an inline tracker `api-url`) is a *request*, admitted only when the
+  operator medium grants it; a law's `executors.<name>.egress` is the law's
+  grant to a `program` executor's own box. *Not:* the operator medium, even
+  when the operator also commits to the repository. Introduced by
+  `migrate-verify-to-executor-contract` (design D16).
+- **Egress medium** — the medium a URL the factory calls was written in,
+  operator or law, carried with the URL as a value from where the
+  configuration is read (`ConnectionProfiles.endpoint`) to the admission
+  that judges it (`EgressAdmission`): the operator medium's host is granted,
+  the law medium's is a request. An endpoint after admission — its URL, the
+  configuration key a refusal names, and its admitted set — is an *admitted
+  endpoint*, the only form the GitHub HTTP core accepts. *Not:* who wrote the
+  URL as a person. Introduced by `migrate-verify-to-executor-contract`
+  (design D16).
+- **Egress entry** — one entry of an egress list, in the one grammar
+  `EgressEntries` owns: an exact host; a wildcard `*.suffix`, matching every
+  subdomain at any depth and never the apex; an IP literal; a CIDR block; or an
+  address-class word, `loopback` or `private` (RFC 1918 and IPv6 unique-local),
+  granting a host whose every address lies in that class. Never a port, a
+  scheme or a URL. Every egress list is read by it: the operator egress block's
+  `factory.egress.sandbox` and `factory.egress.in-process`, a law's
+  `executors.<name>.egress`, a describe's `egress`. The `sandbox` subset —
+  exact host, IP literal, wildcard — is what a box guard can apply, since it
+  matches names and resolves nothing; the `sandbox` scope and a law's executor
+  egress take only that subset. *Not:* a redirect host — a redirect target is
+  judged like any other egress target. Introduced by
+  `migrate-verify-to-executor-contract` (design D16).
+- **HTTP egress leaf** — `:httpegress`, the module that owns every in-process
+  HTTP call's egress: the one place a JDK `HttpClient` is constructed, the
+  guarded exchange that sends only to an admitted endpoint, the admission
+  (`EgressAdmission`) that judges an **egress medium**, and the **egress
+  entry** grammar (`EgressEntries`). Every built-in's HTTP — the **GitHub API
+  library**'s and the `http` check's — passes it. *Not:* the box's guard,
+  which applies the `sandbox` subset of the same grammar inside the sandbox.
+  Introduced by `migrate-verify-to-executor-contract` (design D16).
 - **Doctor** — the `gnomish doctor [--dir=<clone>] [--online] [--json]`
   command: every readiness check of the machine and a registered clone in one
   run, each verdict taken from the component the startup path asks for the same

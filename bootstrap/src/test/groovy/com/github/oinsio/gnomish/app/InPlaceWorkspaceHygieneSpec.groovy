@@ -50,7 +50,7 @@ advancement: auto
         write(projectRoot, 'stages/build/instructions.md', 'build it\n')
         def before = listing(projectRoot)
         def runner = newManualRunRunner(projectRoot, homeDir,
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]), TaskGitFixture.real(), FakeAgentSupport.propertiesFor('plain-round'))
 
         when:

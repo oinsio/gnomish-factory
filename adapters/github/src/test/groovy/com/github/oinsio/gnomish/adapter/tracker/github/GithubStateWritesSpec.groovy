@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
@@ -71,7 +72,7 @@ class GithubStateWritesSpec extends Specification {
     }
 
     private GithubStateWrites newWrites(String instanceId = 'gnomish-factory-x7k2q1') {
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', fastRetryConfig())
         def labelOps = new GithubLabelOps(httpClient)
         new GithubStateWrites(httpClient, labelOps, markerWriter(httpClient, instanceId),
                 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered', 'gnomish:ready')
@@ -79,7 +80,7 @@ class GithubStateWritesSpec extends Specification {
 
     /** A writer that holds the given tenure on every task, for the epoch-stamping scenarios. */
     private GithubStateWrites newWritesHolding(long epoch) {
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', fastRetryConfig())
         def labelOps = new GithubLabelOps(httpClient)
         def source = { String taskId ->
             Optional.of(new ClaimEpoch(epoch))

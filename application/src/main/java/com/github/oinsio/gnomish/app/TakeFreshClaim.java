@@ -134,6 +134,6 @@ final class TakeFreshClaim {
                 wiring.credentialEnvVarsToScrub(),
                 wiring.tenure().lossFlag(),
                 bound.lawBinding());
-        return execution.run(lawBound, bootstrap, synthesized.context(), synthesized.initialState());
+        return execution.run(lawBound, bootstrap, synthesized.context(), synthesized.initialState(), null);
     }
 }

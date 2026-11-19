@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
-import com.github.oinsio.gnomish.httpegress.EgressRefusal
-import com.github.oinsio.gnomish.httpegress.EgressRefusedException
+import com.github.oinsio.gnomish.domain.egress.EgressRefusal
+import com.github.oinsio.gnomish.domain.egress.EgressRefusedException
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import spock.lang.Specification
@@ -37,7 +37,8 @@ class HttpCheckRefusalLoggingSpec extends Specification implements HttpCheckFixt
     def "FR5: a target the allowlist refuses is logged once, naming the check and the rule"() {
         given:
         def refusal = new EgressRefusal(
-                EgressRefusal.Reason.NOT_ALLOWLISTED, URL, 'no allowlist entry for ci.example.invalid')
+                EgressRefusal.Reason.NOT_ALLOWLISTED, URL, 'no allowlist entry for ci.example.invalid',
+                'factory.egress.in-process')
 
         when:
         poll([url: URL], new ScriptedExchange(new EgressRefusedException(refusal)))
@@ -49,17 +50,18 @@ class HttpCheckRefusalLoggingSpec extends Specification implements HttpCheckFixt
         line.contains(URL)
     }
 
-    def "FR5, FR6: a redirect chain past its bound is logged as one line naming the rule"() {
+    def "FR5, FR6: a refused redirect downgrade is logged as one line naming the rule"() {
         given: 'a refusal whose target is the location a remote server chose, newlines and all'
-        def forged = 'https://evil.example.invalid/' + ESC + '[31m?x=1\nWARN forged line'
-        def refusal = new EgressRefusal(EgressRefusal.Reason.REDIRECT_LIMIT, forged, 'more than 3 redirects followed')
+        def forged = 'http://evil.example.invalid/' + ESC + '[31m?x=1\nWARN forged line'
+        def refusal = new EgressRefusal(
+                EgressRefusal.Reason.SCHEME, forged, 'a redirect downgrades https', 'factory.egress.in-process')
 
         when:
         poll([url: URL], new ScriptedExchange(new EgressRefusedException(refusal)))
 
         then:
         def line = refusalLine()
-        line.contains('redirect limit')
+        line.contains('scheme')
 
         and: 'the remote-chosen target cannot forge a second record or carry an escape sequence'
         !line.contains('\n')

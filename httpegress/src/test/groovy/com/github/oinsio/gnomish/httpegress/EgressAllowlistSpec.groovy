@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.httpegress
 
+import com.github.oinsio.gnomish.domain.egress.EgressRefusal
 import java.net.InetAddress
 import spock.lang.Specification
 
@@ -25,7 +26,7 @@ class EgressAllowlistSpec extends Specification {
     }
 
     private static EgressAllowlist allowing(List<String> entries, Map<String, String> addresses = [:]) {
-        new EgressAllowlist(entries, resolvingTo(addresses))
+        new EgressAllowlist(entries, resolvingTo(addresses), EgressAllowlist.IN_PROCESS_KEY, false)
     }
 
     // NFR-S2: only https — an http check sends a credential and reads a verdict.
@@ -141,13 +142,14 @@ class EgressAllowlistSpec extends Specification {
         .reason() == EgressRefusal.Reason.ADDRESS_CLASS
     }
 
-    def "a host that does not resolve is refused rather than attempted"() {
+    // NFR-R5 of migrate-verify-to-executor-contract: an unknown host is a transport failure of the
+    //     call, never a configuration refusal (design D16, the outcome classes)
+    def "a host that does not resolve is a transport failure, not a refusal"() {
         when:
-        def refusal = allowing(['gone.example.com']).refuse(URI.create('https://gone.example.com/x'))
+        allowing(['gone.example.com']).refuse(URI.create('https://gone.example.com/x'))
 
         then:
-        refusal.reason() == EgressRefusal.Reason.UNRESOLVABLE
-        refusal.describe().contains('does not resolve')
+        thrown(UnknownHostException)
     }
 
     def "a target naming no host is refused"() {
@@ -162,29 +164,58 @@ class EgressAllowlistSpec extends Specification {
 
         expect:
         refusal.target() == 'https://evil.example.net/exfil'
-        refusal.describe().startsWith("http check target 'https://evil.example.net/exfil' refused")
+        refusal.describe().startsWith("target 'https://evil.example.net/exfil' refused")
     }
 
-    // NFR-S2, D5: the allowlist is read from operator config and from nothing else.
-    // Scenario: verification/factory-egress-allowlist / Allowlist lives in operator config, not the manifest
-    def "entries are read from the operator subsection"() {
+    // FR17: the list a refusal names is the operator's in-process scope, read through the one grammar.
+    def "a refusal names the in-process scope's key, and the scope-built allowlist refuses a host it does not name"() {
         expect:
-        EgressAllowlist.entriesOf([allowlist: [
-                'a.example.com',
-                'b.example.com'
-            ]]) ==
-        [
-            'a.example.com',
-            'b.example.com'
-        ]
-        EgressAllowlist.entriesOf([:]).isEmpty()
-        EgressAllowlist.entriesOf([allowlist: 'not-a-list']).isEmpty()
-    }
-
-    def "the subsection-built allowlist refuses a host it does not name"() {
-        expect:
-        EgressAllowlist.from([allowlist: ['sonar.example.com']])
+        EgressAllowlist.of(new OperatorEgress(['sonar.example.com']))
         .refuse(URI.create('https://evil.example.net/x'))
-        .reason() == EgressRefusal.Reason.NOT_ALLOWLISTED
+        .key() == EgressAllowlist.IN_PROCESS_KEY
+    }
+
+    // FR17: a connection's allowlist is its admitted set, naming its key; http only if admitted on it
+    def "an admitted endpoint's allowlist names the endpoint's key and allows plain http only for an http endpoint"() {
+        given:
+        def endpoint = new com.github.oinsio.gnomish.domain.egress.AdmittedEndpoint(
+                URI.create("${scheme}://127.0.0.1:8080/api"), 'tracker.github.api-url', ['127.0.0.1', 'loopback'])
+
+        expect:
+        (EgressAllowlist.of(endpoint).refuse(URI.create('http://127.0.0.1:8080/x')) == null) == plainAllowed
+        EgressAllowlist.of(endpoint).key() == 'tracker.github.api-url'
+
+        where:
+        scheme || plainAllowed
+        'http' || true
+        'https' || false
+    }
+
+    // FR18 of migrate-verify-to-executor-contract: the EGRESS probe's judgement, no request sent
+    def "the endpoint judgement passes a granted literal, refuses an ungranted one, and has no answer for an unknown host"() {
+        given:
+        def admitted = { String url, List<String> set ->
+            new com.github.oinsio.gnomish.domain.egress.AdmittedEndpoint(URI.create(url), 'tracker.github.api-url', set)
+        }
+
+        when:
+        EgressAllowlist.judge(admitted('https://93.184.216.34', ['93.184.216.34']))
+
+        then:
+        notThrown(Exception)
+
+        when:
+        EgressAllowlist.judge(admitted('https://10.1.2.3', ['10.1.2.3/32', '10.0.0.0/30']))
+        EgressAllowlist.judge(admitted('https://93.184.216.35', ['loopback']))
+
+        then:
+        def refused = thrown(com.github.oinsio.gnomish.domain.egress.EgressRefusedException)
+        refused.refusal().key() == 'tracker.github.api-url'
+
+        when:
+        EgressAllowlist.judge(admitted('https://tracker.gnomish.invalid', ['tracker.gnomish.invalid']))
+
+        then:
+        thrown(UncheckedIOException)
     }
 }

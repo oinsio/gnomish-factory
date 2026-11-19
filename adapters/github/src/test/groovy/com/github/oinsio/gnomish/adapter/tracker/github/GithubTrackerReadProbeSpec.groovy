@@ -10,6 +10,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.app.port.tracker.TrackerReadVerdict
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.oinsio.gnomish.untrustedtext.Provenance
 
 /**
@@ -25,6 +26,7 @@ class GithubTrackerReadProbeSpec extends GithubLabelRepoSpecification {
 
     private TrackerConfig configWith(Map<String, Object> extra = [:]) {
         new TrackerConfig('github', 3, ['api-url': wireMock.baseUrl(), repo: 'acme/widgets'] + extra)
+        .withEndpoint(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())))
     }
 
     private TrackerReadVerdict probe(TrackerConfig config, Map<String, String> secrets = [GNOMISH_GITHUB_TOKEN: 'tok-1']) {

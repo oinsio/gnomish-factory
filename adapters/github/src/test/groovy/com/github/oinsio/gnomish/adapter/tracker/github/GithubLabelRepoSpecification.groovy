@@ -5,6 +5,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import spock.lang.Specification
 
@@ -33,7 +34,7 @@ abstract class GithubLabelRepoSpecification extends Specification {
     }
 
     GithubLabelProvisioner newProvisioner() {
-        new GithubLabelProvisioner(new GithubHttpClient(wireMock.baseUrl(), 'tok'))
+        new GithubLabelProvisioner(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok'))
     }
 
     void listingAnswers(int status, String body, Map<String, String> headers = [:]) {

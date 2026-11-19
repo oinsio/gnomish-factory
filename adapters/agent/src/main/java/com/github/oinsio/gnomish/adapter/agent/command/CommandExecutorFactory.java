@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent.command;
 import com.github.oinsio.gnomish.adapter.agent.program.RoundExecutorFactory;
 import com.github.oinsio.gnomish.adapter.command.CommandRun;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors;
 import com.github.oinsio.gnomish.domain.pipeline.CommandLine;
 import com.github.oinsio.gnomish.executorcontract.Bounds;
 import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson;
@@ -30,7 +31,7 @@ import org.jspecify.annotations.Nullable;
 public final class CommandExecutorFactory implements RoundExecutorFactory {
 
     /** The built-in's name in the executor registry, the one a {@code command} stage resolves to. */
-    public static final String NAME = "command";
+    public static final String NAME = BuiltInExecutors.COMMAND;
 
     /** The working copy as a command round names it: the directory {@code exec} starts in. */
     private static final String WORKSPACE = ".";

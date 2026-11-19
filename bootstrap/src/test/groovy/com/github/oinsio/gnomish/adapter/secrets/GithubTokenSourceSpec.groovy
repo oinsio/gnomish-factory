@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.FixedTrackerAdapterContext
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import java.nio.file.Path
@@ -63,7 +64,8 @@ class GithubTokenSourceSpec extends Specification {
 
         when:
         def errors = factory.subsectionValidator().get().validate('config.yaml', 'tracker.github', subsection)
-        factory.create(new FixedTrackerAdapterContext(envFile, new TrackerConfig('github', 3, subsection), 'gnomish-factory-x7k2q1'))
+        factory.create(new FixedTrackerAdapterContext(envFile, new TrackerConfig('github', 3, subsection)
+                .withEndpoint(GithubTestEndpoints.loopback(URI.create(subsection['api-url'] as String))), 'gnomish-factory-x7k2q1'))
 
         then: 'the inline key is a located load error'
         errors*.where() == ['tracker.github.token']

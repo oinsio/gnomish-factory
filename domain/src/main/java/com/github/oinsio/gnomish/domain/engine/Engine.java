@@ -7,20 +7,17 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
- * The pure orchestrator that drives one task from its recorded {@link TaskState} to a
- * terminal {@link TaskOutcome} (design D1): {@link #run} takes the pipeline, the task
- * context, the recorded state, the opaque workspace and the {@link EnginePorts} bundle,
- * and returns an outcome the caller acts on — the engine itself touches no tracker,
- * filesystem or git, and escalation is a returned value, never a control-flow signal.
+ * The pure orchestrator that drives one task from its recorded {@link TaskState} to a terminal
+ * {@link TaskOutcome} (design D1): {@link #run} takes the pipeline, the task context, the recorded
+ * state, the opaque workspace and the {@link EnginePorts} bundle, and returns an outcome the caller
+ * acts on — the engine touches no tracker, filesystem or git, and escalation is a returned value.
  *
- * <p>Reentrant and free of shared mutable state: an {@code Engine} holds nothing at all,
- * so one instance drives concurrent runs with independent ports safely (NFR-R1). Every
- * run is framed by a {@link EngineEvent.RunStarted} and a {@link EngineEvent.TaskFinished}
- * emitted through the shared swallow-and-log {@link Events#emit} helper, so an event-driven
- * wrapper always sees the run begin and end (design D7).
+ * <p>Reentrant and free of shared mutable state: an {@code Engine} holds nothing, so one instance
+ * drives concurrent runs with independent ports safely (NFR-R1). Every run is framed by a {@link
+ * EngineEvent.RunStarted} and a {@link EngineEvent.TaskFinished} emitted through the shared
+ * swallow-and-log {@link Events#emit} helper, so a wrapper always sees the run begin and end (D7).
  *
- * <p>Implements FR1, FR5, FR8, FR9, FR12, FR14, NFR-S1 of add-stage-engine — the engine
- * executes nothing itself: commands, processes and model calls happen only behind ports.
+ * <p>Implements FR1, FR5, FR8, FR9, FR12, FR14, NFR-S1 of add-stage-engine (work only behind ports).
  */
 public final class Engine {
 
@@ -31,9 +28,8 @@ public final class Engine {
      * or persistence port ({@link #preflight}, {@link #atStage}: FR5, FR8, FR9; FR2, FR6 of
      * make-checkpoint-gate-durable; FR13 of define-executor-contract); otherwise the stage attempt
      * loop runs. Every path emits {@link EngineEvent.TaskFinished} with the outcome (FR12).
-     *
-     * <p>Implements FR1, FR5, FR8, FR9, FR12 of add-stage-engine; FR6 of make-checkpoint-gate-durable;
-     * FR13 of define-executor-contract.
+     * Implements FR1, FR5, FR8, FR9, FR12 of add-stage-engine; FR6 of make-checkpoint-gate-durable; FR13
+     * of define-executor-contract; FR20 of migrate-verify-to-executor-contract.
      *
      * @param definition the pipeline whose stages the run advances through; never null
      * @param context the task's identity and human decisions; never null
@@ -49,17 +45,24 @@ public final class Engine {
             Workspace workspace,
             EnginePorts ports) {
         var listener = ports.listener();
-        // A state read back from the branch may carry the attempts of a stage that already passed:
-        // its pass and the advance it implied landed in one commit (FR4 of
-        // harden-task-branch-contract), so the position names the next stage while the list still
-        // describes the finished one. Normalizing here keeps the resumed stage's first round at
-        // round zero and its attempt history its own. A no-op within a live run, where the engine's
-        // own advance already emptied the list.
-        var resumed = state.startOfStage();
+        var resumed = resumedFrom(state);
         Events.emit(listener, new EngineEvent.RunStarted(context.taskId(), resumed.position(), resumed.attemptsUsed()));
-        var outcome = preflight(definition, context, resumed, workspace, ports);
+        var outcome = preflight(definition, context, state, workspace, ports);
         Events.emit(listener, new EngineEvent.TaskFinished(context.taskId(), outcome));
         return outcome;
+    }
+
+    /**
+     * The state a round starts its stage's history from: {@link TaskState#startOfStage} of the last
+     * persisted state (FR4 of harden-task-branch-contract), with the open round's pending entries read
+     * before it empties them — a pending commit of a stage's first round carries the previous stage's
+     * pass (D21 item 12, D22 of migrate-verify). The persisted state itself is what a round's pending
+     * write carries ({@link StageAttemptLoop}); this view gives the round its number and feedback.
+     */
+    static TaskState resumedFrom(TaskState recorded) {
+        TaskState normalized = recorded.startOfStage();
+        var entries = recorded.pendingPolls();
+        return normalized.pendingPolls().equals(entries) ? normalized : normalized.withPendingPolls(entries);
     }
 
     /**
@@ -69,17 +72,19 @@ public final class Engine {
      * EscalationReport.PipelineMismatch} when the pipeline no longer declares the gate's stage
      * (FR9) and otherwise pauses again at the gate (FR2 of make-checkpoint-gate-durable);
      * {@link Position.AtStage} is resolved by {@link #atStage}, the only arm that threads the
-     * {@code context}, {@code workspace} and {@code ports} on to the stage attempt loop.
+     * {@code context}, {@code workspace} and {@code ports} on to the stage attempt loop. Every
+     * outcome carries the {@link #resumedFrom} view of the {@code recorded} state.
      */
     private TaskOutcome preflight(
             PipelineDefinition definition,
             TaskContext context,
-            TaskState state,
+            TaskState recorded,
             Workspace workspace,
             EnginePorts ports) {
+        var state = resumedFrom(recorded);
         return switch (state.position()) {
             case Position.PipelineEnd ignored -> new TaskOutcome.Completed(state);
-            case Position.AtStage atStage -> atStage(definition, context, state, workspace, ports, atStage.name());
+            case Position.AtStage atStage -> atStage(definition, context, recorded, workspace, ports, atStage.name());
             // FR2 of make-checkpoint-gate-durable: the position is the gate — the run pauses
             // again, invoking no port, until the approval write moves the position past it. A
             // stale gate name is a PipelineMismatch first (FR9), as for AtStage.
@@ -96,23 +101,25 @@ public final class Engine {
      * StopEscalation} (FR6 of make-checkpoint-gate-durable), an {@code attemptsUsed} at the limit is
      * {@link EscalationReport.AttemptsExhausted} (FR5), an executor version that differs from the
      * task's pin is a {@code PipelineMismatch} naming both (FR13 of define-executor-contract) — all
-     * before any port — otherwise the stage runs through {@link #runStages}.
+     * before any port, each judged on the {@link #resumedFrom} view — otherwise the stage runs
+     * through {@link #runStages} from the {@code recorded} state itself.
      */
     private TaskOutcome atStage(
             PipelineDefinition definition,
             TaskContext context,
-            TaskState state,
+            TaskState recorded,
             Workspace workspace,
             EnginePorts ports,
             String stageName) {
+        var state = resumedFrom(recorded);
         var stage = definition.findStage(stageName);
         if (stage == null) {
             return mismatch(state, stageName);
         }
         // FR6 of make-checkpoint-gate-durable: a stop whose park was lost re-raises from the record.
-        var recorded = StopEscalation.recorded(state);
-        if (recorded.isPresent()) {
-            return new TaskOutcome.Escalated(state, recorded.get());
+        var stop = StopEscalation.recorded(state);
+        if (stop.isPresent()) {
+            return new TaskOutcome.Escalated(state, stop.get());
         }
         int limit = stage.limits().attemptLimit();
         if (state.attemptsUsed() >= limit) {
@@ -124,7 +131,7 @@ public final class Engine {
         if (changed.isPresent()) {
             return new TaskOutcome.Escalated(state, changed.get());
         }
-        return runStages(definition, context, state, workspace, ports, stage);
+        return runStages(definition, context, recorded, workspace, ports, stage);
     }
 
     /**
@@ -148,8 +155,10 @@ public final class Engine {
      *
      * <p>Each iteration runs the current stage: a {@link StageResult.Terminal} ends the run; a {@link
      * StageResult.Passed} applies the stage's {@link AdvancementMode} exhaustively. {@code AUTO}
-     * advances — resetting the in-memory attempt history (FR14), the position already recorded by
-     * the round commit (FR4 of harden-task-branch-contract) — or completes at {@link
+     * advances — the next stage's loop starts from the passing round's persisted state, whose
+     * position the round commit already advanced (FR4 of harden-task-branch-contract), and resets the
+     * history itself (FR14; {@link #resumedFrom}), so the next stage's first round writes its pending
+     * entries over exactly that persisted state (D21 item 12 of migrate-verify) — or completes at {@link
      * Position.PipelineEnd} past the last stage (design D4). {@code MANUAL} pauses with exactly the
      * state the round persisted, the position at the gate (FR1 of make-checkpoint-gate-durable, D1).
      *
@@ -163,9 +172,8 @@ public final class Engine {
             EnginePorts ports,
             StageDefinition stage) {
         var verifyOrchestrator = new VerifyOrchestrator(
-                ports.builtinRunner(),
-                ports.commandRunner(),
-                new ExternalPolling(ports.externalClient(), ports.attemptDelivery(), ports.time()),
+                new PendingPoll(
+                        ports.executor(), ports.persistence(), ports.attemptDelivery(), ports.time(), ports.listener()),
                 new JudgeVoting(ports.judgeVoter()),
                 ports.time().clock(),
                 ports.listener());
@@ -184,7 +192,7 @@ public final class Engine {
                     if (next == null) {
                         return new TaskOutcome.Completed(passed.state().advanceTo(new Position.PipelineEnd()));
                     }
-                    currentState = passed.state().advanceTo(new Position.AtStage(next.name()));
+                    currentState = passed.state();
                     currentStage = next;
                 }
                 case MANUAL -> {

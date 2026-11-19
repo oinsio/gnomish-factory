@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.app.take.FinishTransition;
 import com.github.oinsio.gnomish.app.take.ParkTransition;
 import com.github.oinsio.gnomish.app.take.RevocationCheckingAttemptPersistence;
 import com.github.oinsio.gnomish.app.take.RevocationDetectedException;
+import com.github.oinsio.gnomish.app.take.RevocationStopNote;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import com.github.oinsio.gnomish.app.take.TerminalTransitions;
 import com.github.oinsio.gnomish.domain.engine.Engine;
@@ -71,14 +72,13 @@ import org.jspecify.annotations.Nullable;
  * terminal write differently from the other.
  *
  * <p>Kept in sync with {@link com.github.oinsio.gnomish.app.take.RevocationHandler}: both must end
- * a revoked claim with the same stop note and the same two tracker writes — the "Work stopped:"
- * heading over the revocation reason taken through the comment plane's fenced shape, then {@code
- * postNote} followed by {@code release}, and never {@code park}, {@code recordAbort} or {@code
- * finish} (FR15 of add-tracker-port). Only the salvage mechanics differ by medium, which is why
- * this end calls {@link SandboxRunSupport#revocationSalvageAndPush} where the host end salvages
- * against a worktree path. The note is what a human reads on the thread of a task that stopped
- * without a verdict, so a wording or an exit that changed on one medium alone would make the two
- * modes report the same event differently.
+ * a revoked claim with the same two tracker writes — {@code postNote} of the one {@link
+ * RevocationStopNote} followed by {@code release}, and never {@code park}, {@code recordAbort} or
+ * {@code finish} (FR15 of add-tracker-port) — and both settle the leftovers through the one {@link
+ * NoSalvageOverVerification} (design D22 of migrate-verify-to-executor-contract). Only the salvage
+ * mechanics differ by medium, which is why this end calls {@link
+ * SandboxRunSupport#revocationSalvageAndPush} where the host end acts on a worktree path. An exit
+ * that changed on one medium alone would make the two modes report the same event differently.
  *
  * <p>Implements FR1 of add-serve-sandbox-lifecycle; FR9, FR12, FR13, FR15, FR18, D2, D3, D19 of
  * add-tracker-port and add-sandbox-core; FR18, FR22 of supervise-daemon-loops-and-embed-dashboard
@@ -142,16 +142,8 @@ record TakeContainerEngineExecution(
 
         var revocation = persistence.revocation();
         if (revocation.isPresent()) {
-            support.revocationSalvageAndPush(order.taskId());
-            // The reason names what the tracker held — the new claim's holder, a closure reason —
-            // so it leaves through the comment plane at the write, with the factory's own sentences
-            // outside the fence (design D7 of type-untrusted-text). The fenced shape, not the
-            // inline one: the note is a heading over one capture, so the label describes the block
-            // it spans truthfully (design D6, revised 2026-09-19).
-            UntrustedText reason = UntrustedText.tracker(RevocationDetectedException.reasonFor(revocation.get()));
-            String note = "Work stopped:\n" + reason.forComment()
-                    + "\nUncommitted work was salvage-committed and the branch left in place for whoever resumes"
-                    + " this task.";
+            boolean kept = support.revocationSalvageAndPush(order.taskId());
+            String note = RevocationStopNote.of(RevocationDetectedException.reasonFor(revocation.get()), kept);
             order.tracker().postNote(order.ref(), note);
             order.tracker().release(order.ref());
             return new TakeResult.Revoked(outcome.finalState(), UntrustedText.factory(note));

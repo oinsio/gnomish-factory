@@ -57,6 +57,20 @@ final class WorktreeClosingCommit {
      * @return the commit that landed, or the step that failed
      */
     Outcome commit(Path worktree, String taskId, String message) {
+        return close(worktree, taskId, message, false);
+    }
+
+    /**
+     * As {@link #commit}, but an index whose tree equals the parent's is committed too, as the box's
+     * {@code --allow-empty} snapshot is: the host round snapshot, its one caller, gives every
+     * completed round a snapshot commit, one that changed nothing included (design D22 of
+     * migrate-verify-to-executor-contract).
+     */
+    Outcome commitAllowingEmpty(Path worktree, String taskId, String message) {
+        return close(worktree, taskId, message, true);
+    }
+
+    private Outcome close(Path worktree, String taskId, String message, boolean allowEmpty) {
         String branchRef = TaskBranchRefs.head(taskId);
         GitCommandResult base = runner.run(worktree, "rev-parse", branchRef, branchRef + "^{tree}");
         if (!base.succeeded()) {
@@ -77,7 +91,7 @@ final class WorktreeClosingCommit {
         if (!VerifiedTip.isObjectId(treeId)) {
             return malformed("git write-tree");
         }
-        if (treeId.equals(ids.get(1))) {
+        if (!allowEmpty && treeId.equals(ids.get(1))) {
             return new Outcome.Failed("git commit", UntrustedText.factory("nothing to commit in " + worktree));
         }
         String parent = ids.getFirst();

@@ -29,7 +29,7 @@ class E2eFixtureLoadSpec extends Specification {
 
     def setupSpec() {
         def outcome = PipelineLoader.load(E2eFixture.gnomishDir(), [:],
-        TrackerValidatorStub.discoveredGithubCheckProvider(), [] as Set)
+        TrackerValidatorStub.acceptingGithubActions())
         assert outcome instanceof LoadOutcome.Loaded
         model = (outcome as LoadOutcome.Loaded).definition()
     }
@@ -40,8 +40,8 @@ class E2eFixtureLoadSpec extends Specification {
         model.stages()[0].advancement() == AdvancementMode.MANUAL
     }
 
-    // D5 of remove-interactive-console: the fixture carries no `external` check — no provider can
-    // be configured for a packaged-jar run, and an unconfigured one is a startup refusal.
+    // D5 of remove-interactive-console: the fixture carries no `external` check — no built-in
+    // connection is configured for a packaged-jar run, and an unconnected one is refused.
     def "M1: the work stage's verify list covers three check kinds in order"() {
         given:
         def verify = model.stages()[0].verify()
@@ -55,12 +55,15 @@ class E2eFixtureLoadSpec extends Specification {
         (verify[2] as VerifyCheck.Judge).votes() == 1
     }
 
-    // FR3, D5 of remove-interactive-console: the unconfigured-provider fixture is structurally a
-    // valid pipeline — its one `external` check names a discovered provider — so the only thing
-    // that refuses it is the factory-instance fact that no `factory.check.github` is configured.
-    def "FR3: the unconfigured-provider fixture loads once github is configured"() {
+    // D18 of migrate-verify-to-executor-contract ("Where a refusal at run assembly goes"): the
+    //     unconnected-built-in fixture is a valid law — its one `external` check names the
+    //     github-actions built-in — and loads; the missing factory.check.github-actions connection
+    //     is refused at run assembly, never by a second, load-time validator.
+    def "the unconnected-built-in fixture loads, its check naming github-actions"() {
         when:
-        def outcome = loadUnconfiguredProviderFixture(TrackerValidatorStub.configuredGithubCheckProvider())
+        def outcome = PipelineLoader.load(
+                E2eFixture.unconfiguredProviderRoot().resolve('.gnomish'), [:],
+                TrackerValidatorStub.acceptingGithubActions())
 
         then:
         outcome instanceof LoadOutcome.Loaded
@@ -68,25 +71,6 @@ class E2eFixtureLoadSpec extends Specification {
         verify.size() == 1
         verify[0] instanceof VerifyCheck.Executor
         (verify[0] as VerifyCheck.Executor).executorName() == 'github-actions'
-    }
-
-    def "FR3: the unconfigured-provider fixture is refused, located at its check's provider"() {
-        when:
-        def outcome = loadUnconfiguredProviderFixture([] as Set)
-
-        then:
-        outcome instanceof LoadOutcome.Invalid
-        def errors = (outcome as LoadOutcome.Invalid).errors()
-        errors.size() == 1
-        errors[0].file() == 'stages/work/stage.yaml'
-        errors[0].where() == 'verify[0].provider'
-        errors[0].message().contains("check provider 'github' has no factory.check.github section")
-    }
-
-    private static LoadOutcome loadUnconfiguredProviderFixture(Set<String> configured) {
-        PipelineLoader.load(
-                E2eFixture.unconfiguredProviderRoot().resolve('.gnomish'), [:],
-                TrackerValidatorStub.discoveredGithubCheckProvider(), configured)
     }
 
     def "M1: the fixture project root carries marker.txt for the files_exist check"() {

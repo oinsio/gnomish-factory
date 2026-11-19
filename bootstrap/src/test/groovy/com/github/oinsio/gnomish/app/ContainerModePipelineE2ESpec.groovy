@@ -126,7 +126,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
     def "a container-mode run completes: rounds in the box, harvest, outside push, disposed environment"() {
         given: 'a container-mode runner over the fake-agent sandbox image'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        def sandbox = new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
@@ -176,7 +176,7 @@ class ContainerModePipelineE2ESpec extends Specification implements BareGitRepoF
     def "M1: in container mode the executor round and the judge vote launch with their permission mode and the MCP exclusion"() {
         given: 'a container-mode runner over the argv-checking fake agent, one attempt allowed'
         def image = FakeAgentSandboxImage.ensureBuiltCheckingArgv(JUDGE_MODEL)
-        def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        def sandbox = new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.ARGV_CHECKING_BINARY)
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(

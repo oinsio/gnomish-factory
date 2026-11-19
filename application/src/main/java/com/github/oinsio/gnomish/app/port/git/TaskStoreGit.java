@@ -34,13 +34,16 @@ public interface TaskStoreGit {
     TaskLifecycleStore taskRepository(RegisteredClone clone);
 
     /**
-     * The round persistence for the task executing in {@code worktree}.
+     * The round persistence for the task executing in {@code worktree}, over the run's round cell:
+     * the base of each round's boundary is the round's registered snapshot, or the tip the round
+     * opened on (design D22 of migrate-verify-to-executor-contract).
      *
      * @param worktree the task's worktree; never null
      * @param taskId the tracker's original taskId; never null
+     * @param rounds the run's round cell, the one its round source opens rounds in; never null
      * @return the persistence; never null
      */
-    AttemptPersistence attemptPersistence(Path worktree, String taskId);
+    AttemptPersistence attemptPersistence(Path worktree, String taskId, CurrentRound rounds);
 
     /**
      * Reads back the last durably recorded task state at {@code taskId}'s registered commit — the

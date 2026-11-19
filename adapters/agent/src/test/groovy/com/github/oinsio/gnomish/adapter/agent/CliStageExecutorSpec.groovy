@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
@@ -167,7 +168,7 @@ class CliStageExecutorSpec extends Specification {
         events.any { it instanceof AgentProgressEvent.RoundFinished }
     }
 
-    // FR21, D15: closeRound() is the sandboxed snapshot-commit + harvest hook — it must run on
+    // FR21, D15: closeRound(RoundClose.VERIFIABLE) is the sandboxed snapshot-commit + harvest hook — it must run on
     // every successful round, before the decision file is read. Wraps the real
     // HostRoundEnvironmentSource's Round in a counting delegate so the interaction is observed
     // without hand-mocking the whole TaskExecutionEnvironment/ExecHandle chain.
@@ -188,7 +189,7 @@ class CliStageExecutorSpec extends Specification {
         countingSource.round.closeRoundCalledBeforeReadDecision
     }
 
-    /** Test seam: wraps a real {@link RoundEnvironmentSource} to count/order {@code closeRound()} calls. */
+    /** Test seam: wraps a real {@link RoundEnvironmentSource} to count/order {@code closeRound(RoundClose.VERIFIABLE)} calls. */
     private static final class CountingRoundEnvironmentSource implements RoundEnvironmentSource {
         private final RoundEnvironmentSource delegate
         CountingRound round
@@ -239,9 +240,9 @@ class CliStageExecutorSpec extends Specification {
         }
 
         @Override
-        void closeRound() {
+        void closeRound(RoundClose close) {
             closeRoundCalls++
-            delegate.closeRound()
+            delegate.closeRound(close)
         }
 
         @Override

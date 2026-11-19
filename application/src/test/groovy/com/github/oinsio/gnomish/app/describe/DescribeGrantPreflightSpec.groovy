@@ -119,7 +119,8 @@ class DescribeGrantPreflightSpec extends DescribePreflightSpecBase {
         def error = only(outcome)
         error.where() == 'executors.acme.program'
         error.message().startsWith("executor 'acme' cannot be described (configuration error): its describe declares an "
-                + "egress host that is not a host name, an IP literal or a *.suffix wildcard (https://api.acme.example/v1)")
+                + "egress host that is not an egress entry (a host name, an IP literal, a *.suffix wildcard, a CIDR"
+                + " block or an address-class word) (https://api.acme.example/v1)")
     }
 
     private static PipelineDefinition grants(java.nio.file.Path program, List<String> credentials, List<String> egress) {

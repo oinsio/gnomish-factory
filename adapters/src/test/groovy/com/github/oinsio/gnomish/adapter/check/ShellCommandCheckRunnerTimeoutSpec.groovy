@@ -1,8 +1,10 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
-import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
+import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.executorcontract.FailureClass
+import com.github.oinsio.gnomish.executorcontract.Status
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
@@ -32,7 +34,8 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
 
     def runner = new ShellCommandCheckRunner(new VirtualClock()).withCheckTimeout(SHORT_TIMEOUT)
 
-    // Scenario: verification/check-provider-model / A hung check fails instead of hanging the run
+    // The scenario "A hung check fails instead of hanging the run" is asserted on the contract path,
+    //     through the check round's mapping, by ShellCheckRoundTimeoutSpec (task 4.2f).
     @Timeout(30)
     def "FR12, UX4: a check that never exits is a quality failure carrying the tail captured so far"() {
         given: 'a check that has printed a distinctive line and never exits on its own'
@@ -51,14 +54,14 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         def fakeRunner = runner.withEnvironments(hostEnvironments(launch))
 
         when:
-        def verdict = fakeRunner.run(command('the-hung-check'), workspace())
+        def result = new ShellExecutor(fakeRunner, command('the-hung-check'), workspace())
+                .start(ShellExecutorDescribeSpec.verdict())
 
         then: 'a quality failure, not a hang and not an infrastructure verdict'
-        verdict instanceof VerdictAnswer.QualityFailure
-        def fail = verdict as VerdictAnswer.QualityFailure
-        fail.findings().size() == 1
-        fail.findings()[0].message().toLowerCase().contains('timed out')
-        fail.findings()[0].details().contains('hung-output')
+        result.status() == Status.FAILED
+        result.failureClass() == FailureClass.QUALITY
+        result.reason().raw().toLowerCase().contains('timed out')
+        result.details().raw().contains('hung-output')
 
         and: 'the drain read the line through the pipe'
         process.awaitStdoutRead(Duration.ZERO)
@@ -88,17 +91,17 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         def treeKillRunner = new ShellCommandCheckRunner(new VirtualClock()).withCheckTimeout(Duration.ofSeconds(2))
 
         when:
-        def verdict = treeKillRunner.run(check, workspace())
+        def outcome = treeKillRunner.probe(check, workspace())
 
         then: 'the descendant recorded its pid and is no longer alive once the check resolves'
-        verdict instanceof VerdictAnswer.QualityFailure
+        outcome instanceof ShellOutcome.TimedOut
         def childPid = recordedPid(pidFile)
         !ProcessHandle.of(childPid).map { it.isAlive() }.orElse(false)
     }
 
     /**
      * Bounded poll for the pid the descendant records: the write races only the check's own
-     * deadline, so by the time {@code run} has returned the file is normally already there — the
+     * deadline, so by the time {@code probe} has returned the file is normally already there — the
      * poll covers the last sliver where the shell was killed between creating and filling it.
      */
     private static long recordedPid(Path pidFile) {
@@ -127,7 +130,7 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
 
         when:
         def events = capture(CommandProcessRunner) {
-            wallClockRunner.run(check, workspace())
+            wallClockRunner.probe(check, workspace())
         }
 
         then: 'one WARN names the check id and the deadline an operator would raise'
@@ -148,7 +151,7 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
     def "NFR-O1: a check that answers in time writes no WARN at all"() {
         expect: 'an operator\'s WARN log means a bound actually fired'
         capture(CommandProcessRunner) {
-            runner.run(command('echo done'), workspace())
+            runner.probe(command('echo done'), workspace())
         }.findAll { it.level.toString() == 'WARN' }.isEmpty()
     }
 
@@ -158,18 +161,18 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         def check = command('while true; do sleep 1; done')
 
         when:
-        def verdict = null
+        def outcome = null
         def events = capture(CommandProcessRunner) {
             def worker = Thread.start {
                 Thread.currentThread().interrupt()
-                verdict = runner.run(check, workspace())
+                outcome = runner.probe(check, workspace())
             }
             worker.join()
         }
 
         then: 'the shutdown never burns a stage attempt on a verdict nobody established'
-        verdict instanceof VerdictAnswer.InfrastructureFailure
-        (verdict as VerdictAnswer.InfrastructureFailure).reason().forLog().toLowerCase().contains('interrupted')
+        outcome instanceof ShellOutcome.Unanswerable
+        (outcome as ShellOutcome.Unanswerable).reason().forLog().toLowerCase().contains('interrupted')
 
         and: 'NFR-O2: the WARN names interruption, not a deadline the check never reached'
         def warnings = events.findAll { it.level.toString() == 'WARN' }
@@ -185,20 +188,21 @@ class ShellCommandCheckRunnerTimeoutSpec extends Specification implements ShellC
         def check = command('echo fine-output; exit 3')
 
         when:
-        def verdict = runner.run(check, workspace())
+        def outcome = runner.probe(check, workspace())
 
-        then:
-        verdict instanceof VerdictAnswer.QualityFailure
-        def fail = verdict as VerdictAnswer.QualityFailure
-        fail.findings()[0].message().contains('3')
-        fail.findings()[0].details().contains('fine-output')
+        then: 'the exit code is status: a red command with no findings file answers its synthetic error result'
+        findingsOf(outcome)*.message() == [
+            'command exited with status 3'
+        ]
+        findingsOf(outcome)[0].details().contains('fine-output')
     }
 
     def "NFR-R3: a passing check under the bound is still a Pass"() {
         when:
-        def verdict = runner.run(command('exit 0'), workspace())
+        def outcome = runner.probe(command('exit 0'), workspace())
 
         then:
-        verdict == new VerdictAnswer.Sarif([])
+        outcome == new ShellOutcome.Answered([])
+        derived(outcome) instanceof Verdict.Pass
     }
 }

@@ -3,10 +3,12 @@ package com.github.oinsio.gnomish.app.killpoint
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBackend
+import com.github.oinsio.gnomish.adapter.git.HostRoundPersistence
 import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.adapter.git.WorktreeSalvage
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TrackerWrite
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
@@ -25,7 +27,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.nio.file.Files
 import java.time.Duration
 import java.time.Instant
-import java.util.function.UnaryOperator
 
 /**
  * The two reclaim cycles as kill-point table rows (FR6, NFR-R1 of fix-claim-epoch-fence): a tip
@@ -130,7 +131,7 @@ final class ReclaimKillPoints {
     private static void salvageStep(KillPointWorld world, int index) {
         def runner = new GitProcessRunner()
         if (index == 0) {
-            new GitAttemptPersistence(runner, world.worktree, world.taskId, world.epochs).persist(
+            HostRoundPersistence.over(runner, world.worktree, world.taskId, world.epochs).persist(
                     world.taskId,
                     TaskState.atStageStart('build').recordUnburnedRound(AttemptRecords.of(
                             0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-18T09:00:00Z'), [],
@@ -188,6 +189,6 @@ final class ReclaimKillPoints {
         def reclaimerEpochs = new ClaimEpochBook()
         reclaimerEpochs.issued(world.taskId, RECLAIM_EPOCH)
         GitTaskBackend.taskGit(new GitProcessRunner(), VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock(),
-                UnaryOperator.identity(), reclaimerEpochs).branches()
+                HostGitRounds.NONE, reclaimerEpochs).branches()
     }
 }

@@ -16,5 +16,5 @@ defines one SHALL be a located config error like any overlapping key.
 - **THEN** a redirect of a job-log request to `store.ghe.example` is admitted, and a redirect elsewhere is refused naming `factory.check.github-actions`
 
 #### Scenario: A profile's egress grants a law-medium tracker host
-- **WHEN** the tracker subsection declares `connection: ghe` and the profile's endpoint is the enterprise host
+- **WHEN** the tracker subsection declares `connection: ghe` and an inline `api-url` on `ghe.example.com`, and `factory.connections.ghe` defines no `api-url` and its `egress` lists `ghe.example.com`
 - **THEN** the tracker's calls to that host proceed with no `factory.egress.in-process` entry

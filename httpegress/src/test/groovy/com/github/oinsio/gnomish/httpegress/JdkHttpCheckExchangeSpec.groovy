@@ -65,9 +65,10 @@ class JdkHttpCheckExchangeSpec extends Specification {
         when:
         new JdkHttpCheckExchange().send(HttpRequest.newBuilder(URI.create(url('/huge'))).GET().build())
 
-        then:
-        def refused = thrown(EgressRefusedException)
-        refused.refusal().reason() == EgressRefusal.Reason.RESPONSE_SIZE
+        then: 'an exchange limit naming the bound, never a refusal advising a grant'
+        def limit = thrown(ExchangeLimitException)
+        limit.limit() == ExchangeLimitException.Limit.RESPONSE_SIZE
+        limit.message.contains("${JdkHttpCheckExchange.MAX_BODY_BYTES} bytes")
     }
 
     def "a body at the size bound is read whole"() {

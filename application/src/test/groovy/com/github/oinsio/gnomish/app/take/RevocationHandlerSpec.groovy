@@ -48,8 +48,9 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
         runner.run(repo, 'push', 'origin', "${BRANCH}:${BRANCH}")
 
         worktreeSalvage = new WorktreeSalvage(runner, repo, ClaimEpochSource.NONE)
-        branchPush = TaskGitFixture.real(runner).branches()
-        handler = new RevocationHandler(tracker, worktreeSalvage, branchPush)
+        def git = TaskGitFixture.real(runner)
+        branchPush = git.branches()
+        handler = new RevocationHandler(tracker, git.worktrees(), branchPush)
     }
 
     // Scenario: tracker/tracker-take / Revocation is a runner result, not an engine outcome
@@ -72,7 +73,7 @@ class RevocationHandlerSpec extends Specification implements BareGitRepoFixture 
 
         and: 'a stop note is posted and the claim is released'
         1 * tracker.postNote(REF, { String note ->
-            note.contains('task closed')
+            note.contains('task closed') && note.contains('salvage-committed')
         })
         1 * tracker.release(REF)
 

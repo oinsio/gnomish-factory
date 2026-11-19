@@ -11,10 +11,18 @@ import org.jspecify.annotations.Nullable;
  * Before this line the ledger wrote nothing per round; usage stays on {@link TaskOutcomeLine} only,
  * so a day view summing {@code taskOutcome} snapshots is unchanged by it.
  *
- * <p>The words are the ones {@code RoundOutcomeWords} owns; the executor's version is its own text
- * and stays a carrier until the ledger's machine exit writes it. Inert value data compared by content.
+ * <p>An executor check writes the same line with the role {@code verdict} (NFR-O1 of
+ * migrate-verify-to-executor-contract): one per check, naming the status its rounds ended on, the
+ * check's index in the stage's {@code verify} list, and — when this instance resumed the check's
+ * wait from the round's pending record — the prefix of the key it took from there, the ledger's
+ * {@code resumed key} (UX3). A stage round has neither.
  *
- * <p>Implements NFR-O2, UX3 of define-executor-contract.
+ * <p>The words are the ones {@code RoundOutcomeWords} owns; the executor's version and a resumed key
+ * are their own text and stay carriers until the ledger's machine exit writes them. Inert value
+ * data compared by content.
+ *
+ * <p>Implements NFR-O2, UX3 of define-executor-contract; NFR-O1, UX3 of
+ * migrate-verify-to-executor-contract.
  *
  * @param instance the writing process's identity; never null
  * @param at when the round finished; never null
@@ -25,6 +33,8 @@ import org.jspecify.annotations.Nullable;
  * @param executorVersion the executor's describe version; null for an executor with no describe
  * @param role the round's role token ({@code transform} for a stage round); never blank
  * @param status the round's {@code <status>[/<class>]} token; never blank
+ * @param check the check's index in the stage's {@code verify} list; null for a stage round
+ * @param resumedKey the prefix of the key a resume took from the pending record; null otherwise
  */
 public record RoundOutcomeLine(
         InstanceInfo instance,
@@ -35,5 +45,7 @@ public record RoundOutcomeLine(
         String executorName,
         @Nullable UntrustedText executorVersion,
         String role,
-        String status)
+        String status,
+        @Nullable Integer check,
+        @Nullable UntrustedText resumedKey)
         implements LedgerLine {}

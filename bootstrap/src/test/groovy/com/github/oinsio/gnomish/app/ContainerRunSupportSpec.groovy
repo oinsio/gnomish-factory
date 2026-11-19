@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.app
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
@@ -13,6 +12,8 @@ import com.github.oinsio.gnomish.adapter.git.state.EgressCursorDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskStateJson
+import com.github.oinsio.gnomish.adapter.scm.actions.GithubActionsExecutor
+import com.github.oinsio.gnomish.adapter.scm.status.ScmStatusExecutor
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -72,7 +73,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
     Path tempDir
 
     def docker = new ScriptedSandboxDocker()
-    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], false, null, null, null, null)
     Path cloneDir
     Path origin
 
@@ -854,12 +855,13 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         gitOutput(origin, 'rev-parse', 'refs/heads/gnomish/T-1') == gitOutput(cloneDir, 'rev-parse', 'gnomish/T-1')
     }
 
-    // FR3 of add-sandbox-core; FR17, D11 of add-plugin-architecture: create() scrubs whatever
-    // credential names the configured check providers declared through the SPI — handed down by the
-    // composition root, never named here. Observed via ContainerEnvironments#scrubsCredential, a
+    // FR3 of add-sandbox-core; FR17, D11 of add-plugin-architecture: create() scrubs exactly the
+    // credential names the composition root resolved and handed down, never named here, and no
+    // built-in's token name the operator neither connected nor the law named (task 5.2 of
+    // migrate-verify-to-executor-contract). Observed via ContainerEnvironments#scrubsCredential, a
     // testing seam over the composed allowlist (FR9), since neither branch is otherwise observable
     // without materializing a real environment.
-    def "create scrubs exactly the check credential names the composition root resolved"() {
+    def "create scrubs exactly the credential names the composition root resolved"() {
         given:
         def segments = [
             new Segment(new AdapterBinding(BindingNames.CONTAINER, CapabilityPassport.container()), [stage()])
@@ -868,16 +870,23 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         when:
         def configuredSupport = ContainerSupportFixture.direct(
                 cloneDir, 'T-CFG', segments, sandbox, new FactoryProperties(null, null, null, null),
-                OwnershipMode.MANUAL, ClaimEpochSource.NONE, [
-                    GithubCheckClientFactory.TOKEN_ENV_VAR
-                ])
+                OwnershipMode.MANUAL, ClaimEpochSource.NONE, ['GNOMISH_SONAR_TOKEN'])
         def unconfiguredSupport =
                 ContainerSupportFixture.direct(cloneDir, 'T-UNCFG', segments, sandbox,
                 new FactoryProperties(null, null, null, null), OwnershipMode.MANUAL, ClaimEpochSource.NONE)
 
         then:
-        configuredSupport.environments.scrubsCredential(GithubCheckClientFactory.TOKEN_ENV_VAR)
-        !unconfiguredSupport.environments.scrubsCredential(GithubCheckClientFactory.TOKEN_ENV_VAR)
+        configuredSupport.environments.scrubsCredential('GNOMISH_SONAR_TOKEN')
+        !unconfiguredSupport.environments.scrubsCredential('GNOMISH_SONAR_TOKEN')
+
+        and: "no built-in is connected and the law names none, so no built-in token name is declared"
+        [
+            configuredSupport,
+            unconfiguredSupport
+        ].every {
+            !it.environments.scrubsCredential(GithubActionsExecutor.TOKEN_ENV_VAR) &&
+            !it.environments.scrubsCredential(ScmStatusExecutor.TOKEN_ENV_VAR)
+        }
     }
 
     // FR12: lease() returns the run's real EnvironmentLease — not null — and it is the very
@@ -920,7 +929,7 @@ class ContainerRunSupportSpec extends Specification implements BareGitRepoFixtur
         def pieces = support.pieces(null)
 
         when: 'the resume executor would restore an interrupted round into the pieces cell'
-        pieces.rounds().restore(new PendingVerification('abc123', 'work', 0, RoundToken.of('0a1b2c'), Optional.empty()))
+        pieces.rounds().restore(new PendingVerification('abc123', 'work', 0, RoundToken.of('0a1b2c'), Optional.empty(), 'abc123', ['abc123']))
 
         then: 'the check workspace reads that round, and a second pieces bundle hands the same cell'
         support.workspace().attemptCommitSha() == 'abc123'

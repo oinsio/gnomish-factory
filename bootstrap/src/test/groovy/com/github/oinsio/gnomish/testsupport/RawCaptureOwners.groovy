@@ -56,6 +56,10 @@ class RawCaptureOwners {
             'TRACKER (transport): holds the body as the cached/fresh envelope the tracker parsers read; the mint is at GithubTaskFetcher and GithubMarker, per D3',
         ],
         [
+            'githubapi/src/main/java/com/github/oinsio/gnomish/githubapi/ExchangeHttpResponse.java',
+            'TRACKER (transport): adapts the guarded exchange\'s capped body to HttpResponse<String> for GithubHttpClient; the body travels on to the cache and the tracker parsers unchanged, and the mint is at GithubTaskFetcher and GithubMarker, per D3',
+        ],
+        [
             'adapters/github/src/main/java/com/github/oinsio/gnomish/adapter/tracker/github/GithubClaimLease.java',
             'TRACKER (transport): body goes to the claim-comment parser, which yields ids and instants',
         ],

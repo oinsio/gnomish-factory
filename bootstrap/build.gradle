@@ -23,11 +23,10 @@ buildscript {
 }
 
 plugins {
-    // Convention plugins from the `build-logic` included build (FR6, design D9):
-    // java-conventions = toolchain, Spotless, Error Prone + NullAway, JaCoCo;
-    // test-conventions = Spock, JaCoCo reporting, PIT wired into `check`.
-    // `library-conventions` is deliberately not applied: this module is the
-    // executable, not a library.
+    // Convention plugins from the `build-logic` included build (FR6, design D9): java-conventions =
+    // toolchain, Spotless, Error Prone + NullAway, JaCoCo; test-conventions = Spock, JaCoCo
+    // reporting, PIT wired into `check`. `library-conventions` is deliberately not applied: this
+    // module is the executable, not a library.
     id 'java-conventions'
     id 'product-version-conventions' // replaces java-conventions' placeholder version (FR3, D1)
     id 'test-conventions'
@@ -55,26 +54,24 @@ apply from: 'security-overrides.gradle'
 apply from: 'packaging.gradle' // what the boot jar carries and how it ships (add-release-pipeline)
 
 dependencies {
-    // The layer modules this composition root wires together (FR1, design
-    // D1/D2). `:application` re-exposes the layers below it as `api`
-    // dependencies, but each stays declared here as well — they are used
-    // directly, which the dependency-analysis gate requires stated rather than
+    // The layer modules this composition root wires together (FR1, design D1/D2). `:application`
+    // re-exposes the layers below it as `api` dependencies, but each stays declared here as well —
+    // they are used directly, which the dependency-analysis gate requires stated rather than
     // inherited.
     implementation project(':domain')
     implementation project(':gitobjects')
     implementation project(':gnomish-plugin-api')
     implementation project(':application')
     implementation project(':sandbox:core')
-    // The adapters (FR1, FR2, design D1/D3): binding a port to its realization
-    // is exactly the thing only the composition root may do, and this is the
-    // only module in the build declaring this edge.
+    implementation project(':httpegress') // the egress block's entries are judged by its grammar (D16)
+    // The adapters (FR1, FR2, design D1/D3): binding a port to its realization is exactly the
+    // thing only the composition root may do, and this is the only module declaring this edge.
     implementation project(':adapters')
-    // The GitHub vendor bundle — `runtimeOnly` since task 2.4 of
-    // add-plugin-architecture: no production source here names a github type, both
-    // ports resolving it through `ServiceLoader` instead, so the bundle need only
-    // carry its `META-INF/services` entries at runtime (FR12, made structural by
-    // the dependency-analysis gate).
+    // `runtimeOnly`, reached via `ServiceLoader` (FR12 of add-plugin-architecture): the github bundle is
+    // the GitHub tracker provider and nothing else. The `github-actions` check is core's own built-in in
+    // `:adapters:scm`, below, so removing this jar removes the tracker only (M5 of migrate-verify-...).
     runtimeOnly project(':adapters:github')
+    implementation project(':adapters:scm') // the SCM built-ins, built typed by the registry (D18)
     // The two technology seams (task 10.2): the run assemblies bind the git
     // repository, persistence and salvage ports, and select the agent-CLI
     // executor and judge voter — port-to-realization binding, the composition
@@ -82,6 +79,7 @@ dependencies {
     implementation project(':adapters:git')
     implementation project(':adapters:agent')
     implementation project(':executor-contract') // ExecutorRegistry keys by ExecutorName (task 7.3)
+    implementation project(':pendingkey') // `ConformanceKit` polls by the key (D20)
     // The execution-environment backends (task 6.1): `ContainerRunSupport` and
     // the run assemblies construct `ContainerEnvironments` and drive the
     // lease/self-check chain directly — composition, by D3's by-role rule.
@@ -92,10 +90,10 @@ dependencies {
     testImplementation project(':test-fixtures')
     testImplementation project(':adapters:github')
     testImplementation project(':githubapi') // the GitHub HTTP core the outage/Gitea specs use (D15)
+    testImplementation testFixtures(project(':githubapi')) // `GithubTestEndpoints` admits their URL (D16)
     testImplementation project(':baseref')
-    // Production scope since type-untrusted-text: the composition root's own sources name the
-    // carrier, so the edge is no longer test-only — the architecture gates that name `TextSafety`,
-    // `UntrustedExit` and `UntrustedParser` inherit it rather than declaring a second scope.
+    // Production scope since type-untrusted-text: the composition root's own sources name the carrier,
+    // and the gates naming `TextSafety`, `UntrustedExit`, `UntrustedParser` inherit the edge.
     implementation project(':untrustedtext')
     // Test scope (design D3/D8 of split-logtext-leaves): the log-contract and expectation gates
     // name the catalog; no production source here does.
@@ -173,6 +171,7 @@ layering {
         ':adapters:agent',
         ':adapters:git',
         ':adapters:github',
+        ':adapters:scm',
         ':application',
         ':atomicfile',
         ':baseref',
@@ -192,6 +191,7 @@ layering {
         // configuration records carry `@ConfigLevel`.
         ':operatorconfig',
         ':operatorevent',
+        ':pendingkey',
         ':sandbox:core',
         ':sandbox:docker',
         ':subprocess',

@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.agent.command;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.github.oinsio.gnomish.adapter.agent.RoundTimeout;
 import com.github.oinsio.gnomish.adapter.command.CommandRun;
@@ -11,16 +9,13 @@ import com.github.oinsio.gnomish.executorcontract.Executor;
 import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
-import com.github.oinsio.gnomish.executorcontract.PendingKey;
 import com.github.oinsio.gnomish.executorcontract.Role;
+import com.github.oinsio.gnomish.pendingkey.PendingKey;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * The {@code command} built-in of the executor contract (FR4, FR5, FR8 of add-command-executor; design
@@ -40,8 +35,6 @@ import java.util.Objects;
  * <p>Implements FR3, FR4, FR5, FR6, FR7, FR8, NFR-C1, NFR-S1, NG1 of add-command-executor.
  */
 public final class CommandStageExecutor implements Executor {
-
-    private static final TypeReference<Map<String, Object>> SETTINGS = new TypeReference<>() {};
 
     private final TaskExecutionEnvironment environment;
     private final CommandRun run;
@@ -64,6 +57,16 @@ public final class CommandStageExecutor implements Executor {
      */
     @Override
     public Describe describe() {
+        return describeAnswer();
+    }
+
+    /**
+     * The describe answer, the same for every binding: what the executor registry entry carries
+     * before any check or round is bound (design D18 of migrate-verify-to-executor-contract).
+     *
+     * @return a fresh answer; never null
+     */
+    public static Describe describeAnswer() {
         return new Describe(
                 Describe.SPOKEN_PROTOCOL_VERSION,
                 UntrustedText.factory("built-in"),
@@ -75,7 +78,8 @@ public final class CommandStageExecutor implements Executor {
                 null,
                 List.of(),
                 EnforcementLevel.PROMPT_ONLY,
-                true);
+                true,
+                false);
     }
 
     @Override
@@ -85,22 +89,12 @@ public final class CommandStageExecutor implements Executor {
             return CommandRoundReport.refused("the command built-in runs transform rounds only, and was asked for a "
                     + request.role().wire() + " run");
         }
-        Duration timeout = RoundTimeout.resolve(settings(request.settings()));
+        Duration timeout = RoundTimeout.resolve(ExecutorContractJson.settingsValues(request.settings()));
         return CommandRoundReport.of(command, timeout, run.run(environment, command, Map.of(), timeout));
     }
 
     @Override
     public ExecutorResult poll(ExecutorRequest request, PendingKey key) {
         return CommandRoundReport.refused("a command round is never pending, so there is nothing to poll");
-    }
-
-    /** The request's settings as the plain JDK values the law loader mapped them from. */
-    private static Map<String, Object> settings(JsonNode settings) {
-        try {
-            return Objects.requireNonNull(
-                    ExecutorContractJson.reader().forType(SETTINGS).readValue(settings));
-        } catch (IOException e) {
-            throw new UncheckedIOException("a request's settings tree could not be read back as values", e);
-        }
     }
 }

@@ -17,14 +17,18 @@ class ReachEntrySpec extends Specification {
         ':operatorevent',
         ':operatorconfig',
         ':gittransfer',
-        ':httpegress'
+        ':httpegress',
+        ':pendingkey'
     ]
 
     /**
      * The declared edges a transitive leaf may arrive through; {@code :gitobjects} carries
      * {@code :gittransfer} to {@code :application} (FR1 of own-git-invocation-policy), and
      * {@code :adapters} carries {@code :httpegress} to {@code :adapters:agent} (FR15, design D16 of
-     * migrate-verify-to-executor-contract).
+     * migrate-verify-to-executor-contract), and {@code :githubapi} carries it to the github vendor
+     * bundle since task 3.3 of that change moved the bundle's check provider to {@code :adapters:scm};
+     * {@code :executor-contract} carries {@code :pendingkey} beside {@code :domain}, since both
+     * declare it as {@code api} (design D20 of that change).
      */
     private static final List<String> CARRIERS = [
         ':adapters',
@@ -35,7 +39,9 @@ class ReachEntrySpec extends Specification {
         ':logtext',
         ':gitobjects',
         ':sandbox:docker',
-        ':adapters:git'
+        ':adapters:git',
+        ':githubapi',
+        ':executor-contract'
     ]
 
     // Scenario: build-system/module-layering / A reach entry names the edge it arrives through

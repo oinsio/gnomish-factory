@@ -10,8 +10,8 @@ import spock.lang.Specification
  *
  * <ul>
  *   <li>{@code SecretsProvider} as a field or parameter — declared only where secrets are used, not
- *       relayed: {@code TrackerWiring} (the tracker side), {@code CheckEquipment} and the
- *       provider-dispatching check client (the check-provider side, which is not this owner's
+ *       relayed: {@code TrackerWiring} (the tracker side), {@code CheckEquipment} and the built-ins'
+ *       connection admission and registry entries (the check side, which is not this owner's
  *       concern), and the configuration that binds the bean. Every other application class reaches
  *       a tracker through the wiring and can neither obtain the seam nor hand it on.
  *   <li>{@code EpochRecordingTracker} — built only by {@code TrackerWiring.resolveTracker}, the one
@@ -37,9 +37,12 @@ class TrackerWiringOwnerBoundarySpec extends Specification {
             APP + 'app/TrackerWiring.java',
             BOOT + 'app/CheckEquipment.java',
             BOOT + 'app/ManualRunConfiguration.java',
-            BOOT + 'adapter/check/ProviderDispatchingExternalCheckClient.java',
             // FR12 of define-executor-contract: the kit's command uses the seam as the value source of its candidate's base environment
             BOOT + 'app/conformance/ExecutorVerifyCommand.java',
+            // D18 of migrate-verify-to-executor-contract (task 3.6): built by CheckEquipment, the SCM
+            //     admission asks whether a token resolves, and the registry entries resolve the SCM tokens
+            BOOT + 'app/BuiltInConnections.java',
+            BOOT + 'app/BuiltInEntries.java',
         ],
         'new EpochRecordingTracker(': [
             APP + 'app/TrackerWiring.java',

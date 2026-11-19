@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
@@ -15,15 +15,15 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
     // FR2: an all-Pass chain runs every check in strict manifest order, one result each
     def "runs every check in manifest order when all pass"() {
         given: 'a builtin then a command check, both scripted to pass'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
+        def builtinRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
+        def commandRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
         def checks = [
             builtin('files_exist'),
             command('./gradlew test')
         ]
 
         when: 'the chain is verified'
-        def result = orchestrator(builtinRunner, commandRunner).verify(checks, CONTEXT, WORKSPACE, KEY)
+        def result = orchestrator(builtinRunner, commandRunner).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'both runners ran exactly once, each once'
         builtinRunner.calls.size() == 1
@@ -44,15 +44,15 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
     // Scenario: pipeline/stage-engine / Later checks not reached
     def "stops at the first non-Pass check and never invokes later checks"() {
         given: 'a builtin that fails, then a command that would pass if reached'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Fail([])])
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
+        def builtinRunner = new ScriptedCheckRounds([new Verdict.Fail([])])
+        def commandRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
         def checks = [
             builtin('files_exist'),
             command('./gradlew test')
         ]
 
         when: 'the chain is verified'
-        def result = orchestrator(builtinRunner, commandRunner).verify(checks, CONTEXT, WORKSPACE, KEY)
+        def result = orchestrator(builtinRunner, commandRunner).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'the failing check ran but the later command check never did'
         builtinRunner.calls.size() == 1
@@ -67,8 +67,8 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
     // FR2: a CannotVerify verdict also stops the chain (any non-Pass breaks)
     def "stops the chain on a CannotVerify verdict too"() {
         given: 'a command that cannot verify, then a builtin that would pass'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
-        def commandRunner = new ScriptedCommandCheckRunner([
+        def builtinRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
+        def commandRunner = new ScriptedCheckRounds([
             new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess(''))
         ])
         def checks = [
@@ -77,7 +77,7 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
         ]
 
         when: 'the chain is verified'
-        def result = orchestrator(builtinRunner, commandRunner).verify(checks, CONTEXT, WORKSPACE, KEY)
+        def result = orchestrator(builtinRunner, commandRunner).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'the later builtin check is never invoked'
         commandRunner.calls.size() == 1
@@ -91,11 +91,11 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
     // FR2: an empty verify list passes vacuously with an empty result and no events
     def "verifies an empty check list to an empty result"() {
         given: 'no checks at all'
-        def builtinRunner = new ScriptedBuiltinCheckRunner()
-        def commandRunner = new ScriptedCommandCheckRunner()
+        def builtinRunner = new ScriptedCheckRounds()
+        def commandRunner = new ScriptedCheckRounds()
 
         when: 'the empty chain is verified'
-        def result = orchestrator(builtinRunner, commandRunner).verify([], CONTEXT, WORKSPACE, KEY)
+        def result = orchestrator(builtinRunner, commandRunner).verify(VerifyingStages.of([]), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'no results, no judge usage, and no events'
         result.results.isEmpty()

@@ -11,13 +11,14 @@ import org.jspecify.annotations.Nullable;
 /**
  * How an {@link Answer} is written: the wire document {@code executor-answer.schema.json} accepts,
  * the inverse of {@link AnswerReader} — an absent ranking, rationale or key, and an absent result
- * rule or location, are left out.
+ * rule, location or details, are left out; a result's details are written as its {@code
+ * properties.details}.
  *
  * <p>A machine writer, and so an exit: every carrier the answer holds is written as the JSON string
  * it was read from, into a document only {@link ResultFileReader} reads back, minting it again
  * (NFR-S2).
  *
- * <p>Implements FR3, NFR-S2 of define-executor-contract.
+ * <p>Implements FR3, NFR-S2 of define-executor-contract; FR5 of migrate-verify-to-executor-contract.
  */
 @UntrustedExit
 final class AnswerWriter {
@@ -69,6 +70,10 @@ final class AnswerWriter {
         optional(node, "ruleId", result.ruleId());
         node.put("level", result.level().wire());
         node.putObject("message").put("text", result.message().raw());
+        UntrustedText details = result.details();
+        if (details != null) {
+            node.putObject("properties").put("details", details.raw());
+        }
         UntrustedText uri = result.uri();
         Integer startLine = result.startLine();
         if (uri == null && startLine == null) {

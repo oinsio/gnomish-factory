@@ -41,8 +41,8 @@ class GithubRetryVisibilitySpec extends Specification {
     // Scenario: observability/factory-logging / Retry storm is visible
     def "FR5: every retry of a rate-limited call names its attempt and its wait"() {
         given:
-        wireMock.stubFor(get(urlEqualTo(PATH)).willReturn(aResponse().withStatus(429).withBody('{}')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.withRateLimiting())
+        wireMock.stubFor(get(urlEqualTo(PATH)).willReturn(aResponse().withStatus(429).withHeader('retry-after', '0').withBody('{}')))
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.withRateLimiting())
 
         when:
         client.send(client.newRequest(PATH))
@@ -61,7 +61,7 @@ class GithubRetryVisibilitySpec extends Specification {
     def "FR5: a 5xx that never clears is retried visibly and the response still reaches the caller"() {
         given:
         wireMock.stubFor(get(urlEqualTo(PATH)).willReturn(aResponse().withStatus(503).withBody('{}')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.withRateLimiting())
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.withRateLimiting())
 
         when:
         def response = client.send(client.newRequest(PATH))
@@ -76,7 +76,7 @@ class GithubRetryVisibilitySpec extends Specification {
         given: 'a server that is not there at all — every attempt is a connect failure'
         def deadUrl = wireMock.baseUrl()
         wireMock.stop()
-        def client = new GithubHttpClient(deadUrl, 'tok', GithubFastRetryConfig.withRateLimiting())
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(deadUrl)), 'tok', GithubFastRetryConfig.withRateLimiting())
 
         when:
         client.send(client.newRequest(PATH))
@@ -100,7 +100,7 @@ class GithubRetryVisibilitySpec extends Specification {
     def "FR5: a healthy call logs no retry chatter at all"() {
         given:
         wireMock.stubFor(get(urlEqualTo(PATH)).willReturn(aResponse().withStatus(200).withBody('{}')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.withRateLimiting())
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.withRateLimiting())
 
         when:
         client.send(client.newRequest(PATH))

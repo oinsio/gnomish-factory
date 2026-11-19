@@ -25,7 +25,13 @@ import java.util.List;
  * define-executor-contract). The carry is structural: every rewrite goes through {@link #rewrite},
  * every round writer through {@link #recorded}, so no transition can drop either carried field.
  *
- * <p>Implements FR8, FR13, FR14, NFR-C1 of add-stage-engine; FR13, FR17 of define-executor-contract.
+ * <p>{@code pendingPolls} is the open round's pending polls, one per pending verdict check, each
+ * naming its round by attempt and token (D21 of migrate-verify-to-executor-contract). Not an
+ * outcome: only {@link #withPendingPolls} sets it; every other writer builds an empty list, so no
+ * entry outlives its round ({@link #startOfStage} with nothing to normalize returns {@code this}).
+ *
+ * <p>Implements FR8, FR13, FR14, NFR-C1 of add-stage-engine; FR13, FR17 of define-executor-contract;
+ * FR2, FR20 of migrate-verify-to-executor-contract.
  *
  * @param position     where the task sits in its pipeline; never null
  * @param attemptsUsed quality failures burned in the current stage; never negative
@@ -37,17 +43,40 @@ import java.util.List;
  * @param executorVersions the executor version pin: the first recorded describe version per executor
  *                     name, surviving advancement, decision reset and resume; never null (FR13 of
  *                     define-executor-contract)
+ * @param pendingPolls the open round's pending polls; copied, unmodifiable, possibly empty (D21)
  */
 public record TaskState(
         Position position,
         int attemptsUsed,
         List<AttemptRecord> attempts,
         UsageSnapshot totals,
-        ExecutorVersions executorVersions) {
+        ExecutorVersions executorVersions,
+        List<PendingPollRecord> pendingPolls) {
 
     public TaskState {
         attemptsUsed = requireNonNegative(attemptsUsed, "attemptsUsed");
         attempts = List.copyOf(attempts);
+        pendingPolls = List.copyOf(pendingPolls);
+    }
+
+    /** A state with no pending poll: the form every writer but {@link #withPendingPolls} builds (D21). */
+    public TaskState(
+            Position position,
+            int attemptsUsed,
+            List<AttemptRecord> attempts,
+            UsageSnapshot totals,
+            ExecutorVersions executorVersions) {
+        this(position, attemptsUsed, attempts, totals, executorVersions, List.of());
+    }
+
+    /**
+     * This state with the open round's pending polls replaced by {@code polls}, nothing else changed,
+     * so a pending commit's state names no outcome (D21). Called by the pending-poll owner, by the
+     * state-file reader, and by the engine's resume, which carries the entries it read across {@link
+     * #startOfStage} (D22); an entry is judged live by its round token, never by the list's presence.
+     */
+    public TaskState withPendingPolls(List<PendingPollRecord> polls) {
+        return new TaskState(position, attemptsUsed, attempts, totals, executorVersions, polls);
     }
 
     /**

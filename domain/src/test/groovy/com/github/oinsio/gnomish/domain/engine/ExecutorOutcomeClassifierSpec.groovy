@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -23,7 +24,7 @@ class ExecutorOutcomeClassifierSpec extends Specification {
     }
 
     static ExecutionResult.Failed failed(ExecutionResult.FailureClass failureClass) {
-        new ExecutionResult.Failed(failureClass, REASON, [FINDING])
+        new ExecutionResult.Failed(failureClass, REASON, [FINDING], null)
     }
 
     // FR7, FR2: each status and class maps to exactly the accounting the table prescribes
@@ -43,7 +44,7 @@ class ExecutorOutcomeClassifierSpec extends Specification {
                 new AttemptAccounting.Escalate(new EscalationReport.CannotExecute(REASON, [DENIAL]))
         'failed/limit' | result(failed(ExecutionResult.FailureClass.LIMIT)) |
                 new AttemptAccounting.EndStage(AttemptRecord.Result.BUDGET_EXHAUSTED, new Stop.BudgetExhausted(REASON))
-        'pending (transform)' | result(new ExecutionResult.Pending('k-1')) |
+        'pending (transform)' | result(new ExecutionResult.Pending(new PendingKey('k-1'), null, PendingState.RUNNING, null, null)) |
                 new AttemptAccounting.Escalate(new EscalationReport.CannotExecute(ExecutorOutcomeClassifier.UNPOLLABLE, [DENIAL]))
     }
 
@@ -73,5 +74,28 @@ class ExecutorOutcomeClassifierSpec extends Specification {
 
         then:
         burn.findings() == [FINDING]
+    }
+
+    static final def PENDING = new ExecutionResult.Pending(new PendingKey('k-1'), null, PendingState.RUNNING, null, null)
+    static final def QUESTION = new ExecutionResult.DecisionRequest(UntrustedText.agent('which db?'), [UntrustedText.agent('pg')])
+    static final def REPLY = new ExecutionResult.VerdictReply(new VerdictAnswer.Sarif([]))
+
+    // FR19, FR2 of migrate-verify-to-executor-contract (D21, D22; human decision 2026-11-12): the
+    // readers ask the owner instead of reading the status, and each answer is the table read once
+    def "the owner answers its readers for #row: verifiable #verifiable, pending #pending, failure #failure"() {
+        expect:
+        ExecutorOutcomeClassifier.verifiable(input) == verifiable
+        ExecutorOutcomeClassifier.pending(input) == Optional.ofNullable(pending ? input.status() : null)
+        ExecutorOutcomeClassifier.failure(input) == Optional.ofNullable(failure ? input.status() : null)
+
+        where:
+        row | input || verifiable | pending | failure
+        'completed' | result(new ExecutionResult.Completed()) || true | false | false
+        'completed + verdict reply' | result(new ExecutionResult.Completed(), REPLY) || true | false | false
+        'completed + decision-request' | result(new ExecutionResult.Completed(), QUESTION) || false | false | false
+        'failed/quality' | result(failed(ExecutionResult.FailureClass.QUALITY)) || false | false | true
+        'failed/infrastructure' | result(failed(ExecutionResult.FailureClass.INFRASTRUCTURE)) || false | false | true
+        'failed/limit' | result(failed(ExecutionResult.FailureClass.LIMIT)) || false | false | true
+        'pending' | result(PENDING) || false | true | false
     }
 }

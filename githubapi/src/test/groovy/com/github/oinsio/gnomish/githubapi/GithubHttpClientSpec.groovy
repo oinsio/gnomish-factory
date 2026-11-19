@@ -43,7 +43,7 @@ class GithubHttpClientSpec extends Specification {
     //     decide default-host omission from it (the tracker's task identity).
     def "exposes the configured API URL"() {
         expect:
-        new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+        new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
                 .apiUrl() == wireMock.baseUrl()
     }
 
@@ -51,7 +51,7 @@ class GithubHttpClientSpec extends Specification {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets'))
                 .willReturn(aResponse().withStatus(200).withBody('{}')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'secret-token-123',
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'secret-token-123',
                 GithubFastRetryConfig.serverErrorsOnly())
 
         when:
@@ -67,7 +67,7 @@ class GithubHttpClientSpec extends Specification {
         given:
         wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets'))
                 .willReturn(aResponse().withStatus(200).withBody('{}')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         client.send(client.newRequest('/repos/acme/widgets'))
@@ -89,7 +89,7 @@ class GithubHttpClientSpec extends Specification {
                 .inScenario('flaky-503')
                 .whenScenarioStateIs('second')
                 .willReturn(aResponse().withStatus(200).withBody('ok')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         def response = client.send(client.newRequest('/flaky'))
@@ -104,7 +104,7 @@ class GithubHttpClientSpec extends Specification {
         given:
         wireMock.stubFor(get(urlEqualTo('/always-down'))
                 .willReturn(aResponse().withStatus(503)))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         def response = client.send(client.newRequest('/always-down'))
@@ -120,7 +120,7 @@ class GithubHttpClientSpec extends Specification {
         given:
         wireMock.stubFor(get(urlEqualTo('/missing'))
                 .willReturn(aResponse().withStatus(404).withBody('{"message":"Not Found"}')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         def response = client.send(client.newRequest('/missing'))
@@ -137,7 +137,7 @@ class GithubHttpClientSpec extends Specification {
                 .withHeader('Location', wireMock.baseUrl() + '/blob-storage/log-1')))
         wireMock.stubFor(get(urlEqualTo('/blob-storage/log-1'))
                 .willReturn(aResponse().withStatus(200).withBody('log tail contents')))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         def response = client.send(client.newRequest('/repos/acme/widgets/actions/jobs/1/logs'))
@@ -151,7 +151,7 @@ class GithubHttpClientSpec extends Specification {
         given:
         def deadUrl = wireMock.baseUrl()
         wireMock.stop()
-        def client = new GithubHttpClient(deadUrl, 'tok', GithubFastRetryConfig.serverErrorsOnly())
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(deadUrl)), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         client.send(client.newRequest('/unreachable'))
@@ -168,7 +168,7 @@ class GithubHttpClientSpec extends Specification {
         given:
         wireMock.stubFor(post(urlEqualTo('/slow'))
                 .willReturn(aResponse().withStatus(200).withFixedDelay(30_000)))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         def outcome = InterruptMidRequest.run(wireMock, postRequestedFor(urlEqualTo('/slow'))) {
@@ -194,7 +194,7 @@ class GithubHttpClientSpec extends Specification {
         given:
         wireMock.stubFor(get(urlEqualTo('/reset'))
                 .willReturn(aResponse().withFault(CONNECTION_RESET_BY_PEER)))
-        def client = new GithubHttpClient(wireMock.baseUrl(), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
 
         when:
         client.send(client.newRequest('/reset'))
@@ -203,5 +203,47 @@ class GithubHttpClientSpec extends Specification {
         thrown(GithubHttpException)
         wireMock.verify(4, getRequestedFor(urlEqualTo('/reset')))
         !Thread.currentThread().isInterrupted()
+    }
+
+    // FR15 of migrate-verify-to-executor-contract, design D16: the core declares its own bounds —
+    //     16 MiB and 60 s — rather than inheriting the http built-in's status-document ones
+    def "the core declares its own response bound and request timeout"() {
+        expect:
+        GithubHttpClient.MAX_BODY_BYTES == 16 * 1024 * 1024
+        GithubHttpClient.REQUEST_TIMEOUT == java.time.Duration.ofSeconds(60)
+    }
+
+    // FR15: the client is bound to the admitted endpoint — its URL is the base of every request
+    def "requests are built against the admitted endpoint's URL"() {
+        given:
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok')
+
+        expect:
+        client.newRequest('/repos/a/b').build().uri() == URI.create(wireMock.baseUrl() + '/repos/a/b')
+    }
+
+    // NFR-R5 of migrate-verify-to-executor-contract: a refusal and an exchange limit leave unwrapped,
+    //     after the one attempt — neither is the GithubHttpException of an exhausted transport
+    def "a refused redirect and a redirect loop leave unwrapped after one request each"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/away')).willReturn(aResponse().withStatus(302)
+                .withHeader('Location', 'https://93.184.216.34/collect')))
+        wireMock.stubFor(get(urlEqualTo('/loop')).willReturn(aResponse().withStatus(302)
+                .withHeader('Location', wireMock.baseUrl() + '/loop')))
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        client.send(client.newRequest('/away'))
+
+        then:
+        thrown(com.github.oinsio.gnomish.domain.egress.EgressRefusedException)
+        wireMock.verify(1, getRequestedFor(urlEqualTo('/away')))
+
+        when:
+        client.send(client.newRequest('/loop'))
+
+        then:
+        thrown(com.github.oinsio.gnomish.httpegress.ExchangeLimitException)
+        wireMock.verify(1, getRequestedFor(urlEqualTo('/loop')))
     }
 }

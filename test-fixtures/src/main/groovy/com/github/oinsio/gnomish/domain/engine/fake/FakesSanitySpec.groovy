@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.domain.engine.fake
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
-import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
@@ -11,8 +10,6 @@ import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.time.Duration
-import java.time.Instant
 import spock.lang.Specification
 
 /**
@@ -66,56 +63,6 @@ class FakesSanitySpec extends Specification {
 
         then: 'the exhaustion is reported'
         thrown(IllegalStateException)
-    }
-
-    def "a scripted runner in throw-mode throws the supplied exception"() {
-        given: 'a builtin runner set to throw'
-        def boom = new RuntimeException('adapter blew up')
-        def runner = new ScriptedBuiltinCheckRunner()
-        runner.toThrow = boom
-
-        when: 'it is run'
-        runner.run(null, WS)
-
-        then: 'the supplied exception propagates and the call is recorded'
-        def thrown = thrown(RuntimeException)
-        thrown.is(boom)
-        runner.calls.size() == 1
-    }
-
-    def "a scripted runner runs its onRun side effect mid-call before returning"() {
-        given: 'a command runner whose onRun advances a shared clock'
-        def clock = new VirtualClock()
-        def runner = new ScriptedCommandCheckRunner([new Verdict.Pass(null, [])])
-        runner.onRun = { check, ws -> clock.advance(Duration.ofSeconds(7)) }
-
-        when: 'it is run'
-        def verdict = runner.run(null, WS)
-
-        then: 'the side effect fired and the scripted verdict still came back'
-        verdict instanceof Verdict.Pass
-        clock.instant() == Instant.EPOCH.plusSeconds(7)
-        runner.calls.size() == 1
-    }
-
-    // Suppressed: same IDE-only false positive as ScriptedExecutor above, for the sealed
-    // PollStatus interface's Running/Pass subtypes in the [.., ..] literal.
-    @SuppressWarnings('GroovyAssignabilityCheck')
-    def "ScriptedExternalCheckClient returns a poll sequence and counts polls"() {
-        given: 'a client scripted Running then Pass'
-        def client = new ScriptedExternalCheckClient([
-            new PollStatus.Running(),
-            new PollStatus.Pass()
-        ])
-
-        when: 'polled twice'
-        def first = client.poll(null, WS)
-        def second = client.poll(null, WS)
-
-        then: 'the sequence and count are as scripted'
-        first instanceof PollStatus.Running
-        second instanceof PollStatus.Pass
-        client.pollCount == 2
     }
 
     def "ScriptedJudgeVoter returns a vote sequence, counts votes and records the context"() {

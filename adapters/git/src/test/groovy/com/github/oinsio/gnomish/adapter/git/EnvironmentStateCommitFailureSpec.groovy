@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -57,7 +58,7 @@ class EnvironmentStateCommitFailureSpec extends Specification implements BareGit
     def "FR21: a failed in-box state commit surfaces the captured git output in the persist failure"() {
         given: 'a snapshotted round'
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
-        snapshotStep.snapshot(TASK, 'implement', 1)
+        snapshotStep.snapshot(TASK, 'implement', 1, RoundClose.VERIFIABLE)
 
         and: 'a locked in-box index, so the state-commit git add must fail loudly'
         new File(box.workingCopy.toFile(), '.git/index.lock').text = ''

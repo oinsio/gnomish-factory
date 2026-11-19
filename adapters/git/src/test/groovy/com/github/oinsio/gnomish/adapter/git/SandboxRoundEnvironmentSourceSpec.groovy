@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
@@ -120,7 +121,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         def first = source().openRound(request(0))
         assert rounds.opened() == RoundToken.of(openTip)
         def firstPath = first.decisionFilePath().toString()
-        first.closeRound()
+        first.closeRound(RoundClose.VERIFIABLE)
 
         when: 'the same stage and attempt open again on the moved tip'
         def second = source().openRound(request(0))
@@ -204,7 +205,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         new File(((LocalBoxEnvironment) round.environment()).workingCopy.toFile(), 'work.txt').text = 'gnome work'
 
         when:
-        round.closeRound()
+        round.closeRound(RoundClose.VERIFIABLE)
 
         then: 'the cell now holds the round closed by the harvested snapshot commit, under the token it opened with'
         def closed = rounds.closed()
@@ -214,5 +215,27 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         and: 'FR15 of make-checkpoint-gate-durable: its subject names the token the round opened with'
         gitOutput(cloneDir, 'log', '-1', '--format=%s', attempt) == 'gnomish: snapshot ' + STAGE + '#1 ' + openTip
         gitOutput(cloneDir, 'show', attempt + ':work.txt') == 'gnome work'
+    }
+
+    // FR19 of migrate-verify-to-executor-contract (design D22): the close names its outcome, and a
+    // round its executor did not complete is registered under the unverified subject
+    def "FR19: an unverifiable close registers the snapshot under the unverified subject and records the close"() {
+        given:
+        def openTip = branchTip()
+        def round = source().openRound(request(1))
+        new File(((LocalBoxEnvironment) round.environment()).workingCopy.toFile(), 'work.txt').text = 'gnome work'
+
+        when:
+        round.closeRound(RoundClose.UNVERIFIABLE)
+
+        then:
+        def closed = rounds.closed()
+        closed.close() == RoundClose.UNVERIFIABLE
+        gitOutput(cloneDir, 'log', '-1', '--format=%s', closed.attemptCommit()) ==
+                'gnomish: unverified-snapshot ' + STAGE + '#1 ' + openTip
+
+        and: 'it is registered, and no pickup reads it as an interrupted verification'
+        branchTip() == closed.attemptCommit()
+        new SnapshotTipCheck(new GitProcessRunner(), cloneDir).inspect(TASK).isEmpty()
     }
 }

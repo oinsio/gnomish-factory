@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
+import com.github.oinsio.gnomish.sandbox.SandboxEgress
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Path
 import spock.lang.Specification
@@ -23,7 +24,7 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
     static final String KEY = 'org-repo-9'
 
     private ContainerEnvironments factoryBuilt(OwnershipMode mode, ChildEnvAllowlist allowlist) {
-        new ContainerEnvironmentFactory(sandbox, timing, Path.of('/factory/guard-config'), mode).forTask(
+        new ContainerEnvironmentFactory(sandbox, SandboxEgress.none(), timing, Path.of('/factory/guard-config'), mode).forTask(
                 KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), allowlist, 'proj-1',
                 { -> DenialRestoration.none() }, [])
     }
@@ -74,7 +75,7 @@ class ContainerEnvironmentsSeamSpec extends Specification implements ContainerEn
 
         and:
         new ContainerEnvironments(
-                new BoxEquipment(docker, sandbox, timing, Path.of('/factory/guard-config'), OwnershipMode.MANUAL, ImageContractCheck.current()),
+                new BoxEquipment(docker, sandbox, SandboxEgress.none(), timing, Path.of('/factory/guard-config'), OwnershipMode.MANUAL, ImageContractCheck.current()),
                 KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), ChildEnvAllowlist.none(), 'proj-1',
                 { -> DenialRestoration.none() }, [])
                 .ownershipMode() == OwnershipMode.MANUAL

@@ -1,22 +1,18 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.AttemptRecords
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
-import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner
-import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
@@ -48,19 +44,18 @@ class EnginePreflightRecordedStopSpec extends Specification {
     static final def TRACE = new ToolTrace(new AttemptKey('TASK-1', 'build', 0), [])
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
+    def builtinRunner = new ScriptedCheckRounds()
     def persistence = new InMemoryAttemptPersistence()
     def clock = new VirtualClock()
 
     EnginePorts livePorts() {
-        new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
-                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 
     /** Ports whose every call throws, so any call the re-escalation makes surfaces at once. */
     EnginePorts throwingPorts(RecordingEventListener listener) {
-        new EnginePorts(throwing(StageExecutor), throwing(BuiltinCheckRunner), throwing(CommandCheckRunner),
-                throwing(ExternalCheckClient), throwing(JudgeVoter), listener, throwing(AttemptPersistence),
+        new EnginePorts(throwing(StageExecutor),
+                throwing(JudgeVoter), listener, throwing(AttemptPersistence),
                 new TimeEquipment(throwing(InstantSource), throwing(Sleeper)), throwing(AttemptDelivery), DescribedExecutors.none(), RoundIdentity.inPlace())
     }
 
@@ -93,7 +88,7 @@ class EnginePreflightRecordedStopSpec extends Specification {
     }
 
     static ExecutionResult limit() {
-        new ExecutionResult(new ExecutionResult.Failed(ExecutionResult.FailureClass.LIMIT, UntrustedText.agent('token bound 1000'), []),
+        new ExecutionResult(new ExecutionResult.Failed(ExecutionResult.FailureClass.LIMIT, UntrustedText.agent('token bound 1000'), [], null),
         null, ExecutorUsage.none(), TRACE, [])
     }
 

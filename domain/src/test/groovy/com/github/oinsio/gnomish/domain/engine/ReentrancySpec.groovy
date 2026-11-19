@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -74,7 +73,7 @@ class ReentrancySpec extends Specification {
     static class Run {
         String taskId
         ScriptedExecutor executor
-        ScriptedBuiltinCheckRunner builtinRunner
+        ScriptedCheckRounds builtinRunner
         InMemoryAttemptPersistence persistence
         RecordingEventListener listener
         TaskOutcome outcome
@@ -83,7 +82,7 @@ class ReentrancySpec extends Specification {
     Run newRun(String taskId, CyclicBarrier barrier) {
         def run = new Run(taskId: taskId)
         run.executor = new ScriptedExecutor([completed(taskId)])
-        run.builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass(null, [])])
+        run.builtinRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
         if (barrier != null) {
             run.builtinRunner.onRun = { check, workspace ->
                 barrier.await(5, TimeUnit.SECONDS)
@@ -96,8 +95,7 @@ class ReentrancySpec extends Specification {
 
     EnginePorts portsOf(Run run) {
         def clock = new VirtualClock()
-        new EnginePorts(run.executor, run.builtinRunner, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), run.listener,
+        new EnginePorts(CheckRouting.of(run.executor, run.builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), run.listener,
                 run.persistence, VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 

@@ -12,6 +12,7 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedParser;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,46 +20,44 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Classifies a task branch on resume (FR21, design D15): a registered commit carrying the
- * snapshot commit message — {@code gnomish: snapshot <stage>#<round> <token>} — means
- * the factory died between the snapshot and the state commit, i.e. <em>during
+ * Classifies a task branch on resume (FR21, design D15): a registered commit carrying the snapshot
+ * subject — {@code gnomish: snapshot <stage>#<round> <token>} — means the factory died <em>during
  * verification</em>. The subject is read at the task's registered commit and nowhere else (design
- * D13 of tighten-spec-contract): the snapshot is a closing commit the factory registers, so a
- * snapshot-shaped subject the gnome commits above the register is not a snapshot. The resuming instance re-runs verification against exactly
- * that attempt commit and the attempt counter is unchanged — no attempt burned
- * for a verdict that was never recorded. Any other tip (a state commit, a
- * lifecycle commit, the gnome's own commits from an interrupted round) resumes
- * through the ordinary salvage path.
+ * D13 of tighten-spec-contract), so a snapshot-shaped subject the gnome commits above the register
+ * is not a snapshot. The resuming instance re-verifies exactly that attempt commit and burns no
+ * attempt; any other register resumes through the ordinary salvage path.
  *
- * <p>The subject's round token names the round that wrote the snapshot, and with the stage and
- * round fixes the one path that round's decision request could live at ({@link
- * GnomeRangeInspection#decisionPath}, the one spelling): the request — if any — is read from the
- * snapshot's own tree, so a round killed after asking re-raises its question rather than passing
- * as completed (FR15, NFR-R4 of make-checkpoint-gate-durable, design D10). A subject without a
- * readable token is refused like any other malformed one. The token itself travels on, typed, in
- * the {@link PendingVerification} ({@link RoundToken#of} — the resumed round's one producer of its
- * identity, which reuses the recorded token and never mints), so the resuming executor restores
- * the round from the record rather than from a re-read tip (FR13 of make-checkpoint-gate-durable,
- * design D10 as amended 2026-10-07).
+ * <p>A registered pending commit (design D21 of migrate-verify-to-executor-contract) is the same
+ * interrupted verification one step later: its subject names the round as the snapshot's does, and
+ * {@link PendingChain} follows first parents over the round's pending commits down to that snapshot.
+ * The answer carries both commits — the snapshot the checks judge, the pending commit the round's
+ * close sits on — and the round's registered chain the one walk passed (design D14 as amended
+ * 2026-11-13). A malformed subject, or a pending commit standing on no snapshot of its round, is
+ * refused.
  *
- * <p>Reads only the commit subject and one blob as bare-object queries in the factory clone
- * — no checkout, no hooks (FR17). The snapshot message is the one service
- * message that is deliberately a parsing contract (see {@link
- * ServiceCommitMessages#snapshot}).
+ * <p>The token, with the stage and round, fixes the one path the round's decision request could live
+ * at ({@link GnomeRangeInspection#decisionPath}), so a round killed after asking re-raises its question
+ * (FR15, NFR-R4 of make-checkpoint-gate-durable); it travels on through {@link RoundToken#of}, reused,
+ * never minted, so the round is restored from the record (FR13 of make-checkpoint-gate-durable).
  *
- * <p>Implements FR21 of add-sandbox-core; FR15 of make-checkpoint-gate-durable.
+ * <p>Reads only commit subjects and one blob as bare-object queries in the factory clone — no
+ * checkout, no hooks (FR17); the subjects are a parsing contract ({@link ServiceCommitMessages#snapshot}).
+ *
+ * <p>Implements FR21 of add-sandbox-core; FR15 of make-checkpoint-gate-durable; FR3, FR20 of
+ * migrate-verify-to-executor-contract.
  */
-// Not a record: a behavior-bearing reader over the git seam, kept a plain final class for parity
-// with its siblings in this package (see GitShowTip, VerifiedTip).
+// Not a record: a behavior-bearing reader over the git seam, like GitShowTip and VerifiedTip.
 @SuppressWarnings("ClassCanBeRecord")
 @UntrustedParser
 public final class SnapshotTipCheck {
 
     private static final Logger log = LoggerFactory.getLogger(SnapshotTipCheck.class);
 
-    // Single owner: reads ServiceCommitMessages#SNAPSHOT_PREFIX rather than repeating the
-    // literal, so the writer and this parser cannot drift (manual-sync-pairs.md, preference 1).
-    private static final String SUBJECT_PREFIX = ServiceCommitMessages.SNAPSHOT_PREFIX;
+    // Single owner: reads ServiceCommitMessages' prefixes rather than repeating the literals, so
+    // the writer and this parser cannot drift (manual-sync-pairs.md, preference 1).
+    private static final String SNAPSHOT_PREFIX = ServiceCommitMessages.SNAPSHOT_PREFIX;
+
+    private static final String PENDING_PREFIX = ServiceCommitMessages.PENDING_PREFIX;
 
     /**
      * What follows the prefix: {@code <stage>#<round> <token>}. The stage is everything before the
@@ -70,11 +69,13 @@ public final class SnapshotTipCheck {
     private final GitRunner runner;
     private final Path cloneDir;
     private final FactoryRegisterRead register;
+    private final PendingChain chain;
 
     public SnapshotTipCheck(GitRunner runner, Path cloneDir) {
         this.runner = runner;
         this.cloneDir = cloneDir;
         this.register = new FactoryRegisterRead(runner);
+        this.chain = new PendingChain(runner, cloneDir);
     }
 
     /**
@@ -82,8 +83,9 @@ public final class SnapshotTipCheck {
      *
      * @param taskId the tracker's original taskId; sanitized into the task branch name ({@link
      *     TaskIdSanitizer#branchName})
-     * @return the pending verification's attempt commit, round and decision request, or empty when
-     *     the registered commit is not a well-formed snapshot commit, or there is none
+     * @return the pending verification's attempt commit, registered commit, round and decision
+     *     request, or empty when the registered commit is neither a well-formed snapshot commit nor a
+     *     pending commit standing on one of its round, or there is none
      */
     public Optional<PendingVerification> inspect(String taskId) {
         String branch = TaskIdSanitizer.branchName(taskId);
@@ -99,8 +101,7 @@ public final class SnapshotTipCheck {
     private Optional<PendingVerification> inspectAt(String taskId, String branch, RegisteredCommit registered) {
         GitCommandResult subjectLine = runner.run(cloneDir, "log", "-1", "--format=%s", registered.id());
         if (subjectLine.exitCode() != 0) {
-            // Not an alarm — the commit may be unreadable here — but the resume it silently
-            // routes through the ordinary salvage path is worth a trace (FR5).
+            // Not an alarm, but the salvage it routes the resume through is worth a trace (FR5).
             // throwable-not-subject: git reported a status, not a thrown fault.
             log.debug(
                     "snapshot-tip check could not read {} (git exited {}): {}",
@@ -109,50 +110,71 @@ public final class SnapshotTipCheck {
                     subjectLine.stderr().forLog());
             return Optional.empty();
         }
-        // @UntrustedParser warrant (design D11): what leaves is a commit subject the factory itself
-        //     wrote (ServiceCommitMessages) on a commit the register names, from which only the
-        //     stage name, the round number and the round token are lifted — and a malformed subject
-        //     is refused below.
+        // @UntrustedParser warrant (design D11): a subject the factory wrote on the registered
+        //     commit, of which only stage, round and token are lifted; a malformed one is refused.
         String line = subjectLine.stdout().forParsing().strip();
-        if (!line.startsWith(SUBJECT_PREFIX)) {
-            return Optional.empty();
+        if (line.startsWith(SNAPSHOT_PREFIX)) {
+            return round(taskId, branch, line.substring(SNAPSHOT_PREFIX.length()))
+                    .map(round -> verification(registered, List.of(registered.id()), round));
         }
-        String rest = line.substring(SUBJECT_PREFIX.length());
+        if (line.startsWith(PENDING_PREFIX)) {
+            return round(taskId, branch, line.substring(PENDING_PREFIX.length()))
+                    .flatMap(round -> chain.snapshotBelow(branch, registered, round.key(), round.token())
+                            .map(chain -> verification(registered, chain, round)));
+        }
+        return Optional.empty();
+    }
+
+    /** The round a well-formed subject names: its stage and number, and its token. */
+    private record Round(AttemptKey key, RoundToken token) {}
+
+    /** The round {@code rest}, a subject past its prefix, names, or empty (traced) when malformed. */
+    private static Optional<Round> round(String taskId, String branch, String rest) {
         Matcher subject = STAGE_ROUND_TOKEN.matcher(rest);
         if (!subject.matches()) {
             warnMalformed(branch, rest);
             return Optional.empty();
         }
-        AttemptKey key;
         try {
-            key = new AttemptKey(taskId, subject.group(1), Integer.parseInt(subject.group(2)));
+            var key = new AttemptKey(taskId, subject.group(1), Integer.parseInt(subject.group(2)));
+            return Optional.of(new Round(key, RoundToken.of(subject.group(3))));
         } catch (IllegalArgumentException e) {
             // A blank stage or a round past int range: the shape matched, the values did not.
             warnMalformed(branch, rest);
             return Optional.empty();
         }
-        RoundToken token = RoundToken.of(subject.group(3));
-        return Optional.of(new PendingVerification(
-                registered.id(), key.stage(), key.attempt(), token, request(registered, key, token)));
     }
 
     /**
-     * The decision request the snapshot's tree holds at the round's token path, or empty when the
-     * round asked nothing — {@code git show <snapshot>:<path>} in the factory clone, the durable
-     * medium (ADR 0003), through the package's one {@code git show} seam, which throws rather than
-     * answering "absent" for a read cut off before its own exit.
-     *
-     * <p>The blob is handed to the same {@link DecisionRequestRead} a live round reads its file
-     * through, as the bytes of a {@link ResultSource}, so recovery parses the request through the
-     * live path's read, cap and fallbacks included (crash-consistency item 14; FR6 of
-     * define-executor-contract).
+     * The interrupted verification of {@code round} judged at the snapshot that ends {@code chain}, the
+     * registered chain from the register down, whose request is read
+     * at the register: a pending commit's tree is its snapshot's with only {@code state.json} replaced
+     * (its admission refuses any other path), so the round's request path reads the same blob there.
+     */
+    private PendingVerification verification(RegisteredCommit registered, List<String> chain, Round round) {
+        return new PendingVerification(
+                chain.getLast(),
+                round.key().stage(),
+                round.key().attempt(),
+                round.token(),
+                request(registered, round.key(), round.token()),
+                registered.id(),
+                chain);
+    }
+
+    /**
+     * The decision request the registered tree holds at the round's token path, or empty when the
+     * round asked nothing — read from the durable medium (ADR 0003) through the package's one {@code
+     * git show} seam, which throws rather than answering "absent" for a read cut off before its exit.
+     * The blob goes to the same {@link DecisionRequestRead} a live round reads its file through, as
+     * the bytes of a {@link ResultSource}, so recovery parses through the live path's read
+     * (crash-consistency item 14; FR6 of define-executor-contract).
      *
      * <p>@UntrustedParser warrant (design D11): the content leaves raw because it is the decision
-     * file itself, handed to the one tolerant read, which mints it again as agent text — the same
-     * bytes the live read takes from the box's working copy.
+     * file itself, handed to the one tolerant read, which mints it again as agent text.
      */
-    private Optional<RoundDecisionRequest> request(RegisteredCommit snapshot, AttemptKey key, RoundToken token) {
-        Optional<byte[]> blob = new GitShowTip(runner, cloneDir, snapshot)
+    private Optional<RoundDecisionRequest> request(RegisteredCommit registered, AttemptKey key, RoundToken token) {
+        Optional<byte[]> blob = new GitShowTip(runner, cloneDir, registered)
                 .readAtRegister(GnomeRangeInspection.decisionPath(key, token))
                 .map(text -> text.forParsing().getBytes(StandardCharsets.UTF_8));
         return DecisionRequestRead.read(limit -> blob.map(bytes -> Arrays.copyOf(bytes, prefixLength(bytes, limit))));
@@ -164,11 +186,9 @@ public final class SnapshotTipCheck {
     }
 
     /**
-     * A tip that announces itself as a snapshot but does not carry a readable {@code
-     * <stage>#<round> <token>}: the factory wrote it, so this is an anomaly rather than an ordinary
-     * tip, and it silently costs the resume its no-attempt-burned re-verification (FR5 of
-     * harden-logging-observability). DEBUG because the resume still completes correctly through
-     * salvage — nothing is lost, only re-done.
+     * A register naming a snapshot or pending commit with no readable {@code <stage>#<round> <token>}:
+     * it costs the resume its re-verification (FR5 of harden-logging-observability); DEBUG, since
+     * salvage still completes.
      */
     private static void warnMalformed(String branch, String subjectTail) {
         // throwable-not-subject: the shape is the diagnosis; the parse failure carries nothing more.

@@ -14,7 +14,8 @@ import java.nio.file.Path;
  * design D13 of tighten-spec-contract). A failed push is one WARN inside {@link
  * BestEffortClosingPush} and work continues; durability is the recorded branch state.
  *
- * <p>Implements FR5 of add-sandbox-core; FR13 of tighten-spec-contract.
+ * <p>Implements FR5 of add-sandbox-core; FR13 of tighten-spec-contract; FR20 of
+ * migrate-verify-to-executor-contract.
  */
 // Not a record: this is a behavior-bearing decorator (delegates a persist call and then triggers a
 // push side effect), not immutable data, kept as a plain final class for parity with its documented
@@ -40,6 +41,17 @@ public final class PushBestEffortAttemptPersistence implements AttemptPersistenc
     @Override
     public void persist(String taskId, TaskState state, ToolTrace trace) {
         delegate.persist(taskId, state, trace);
+        push.pushBestEffort(cloneDir, taskId);
+    }
+
+    /**
+     * Lands the open round's pending commit through the delegate, then pushes branch and register
+     * the same way: a pending commit is pushed with its register (design D21 of
+     * migrate-verify-to-executor-contract), so every clone reads it alike after its fetch.
+     */
+    @Override
+    public void persistPending(String taskId, TaskState state) {
+        delegate.persistPending(taskId, state);
         push.pushBestEffort(cloneDir, taskId);
     }
 }

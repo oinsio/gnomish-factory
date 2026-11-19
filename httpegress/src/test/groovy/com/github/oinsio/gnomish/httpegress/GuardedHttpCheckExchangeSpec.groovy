@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.httpegress
 
+import com.github.oinsio.gnomish.domain.egress.EgressRefusal
+import com.github.oinsio.gnomish.domain.egress.EgressRefusedException
+import java.net.http.HttpHeaders
 import java.net.http.HttpRequest
 import spock.lang.Specification
 
@@ -13,23 +16,6 @@ import spock.lang.Specification
  */
 class GuardedHttpCheckExchangeSpec extends Specification {
 
-    /** A delegate answering from a queue and recording every request it was actually handed. */
-    private static class Hops implements HttpCheckExchange {
-
-        List<HttpCheckExchange.Response> answers
-        List<HttpRequest> seen = []
-
-        Hops(HttpCheckExchange.Response... answers) {
-            this.answers = answers as List
-        }
-
-        @Override
-        HttpCheckExchange.Response send(HttpRequest request) {
-            seen << request
-            answers[Math.min(seen.size() - 1, answers.size() - 1)]
-        }
-    }
-
     private static final HostResolver PUBLIC = { host ->
         [
             InetAddress.getByAddress(host, InetAddress.ofLiteral('93.184.216.34').address)
@@ -37,7 +23,7 @@ class GuardedHttpCheckExchangeSpec extends Specification {
     } as HostResolver
 
     private static EgressAllowlist allowing(List<String> entries, HostResolver resolver = PUBLIC) {
-        new EgressAllowlist(entries, resolver)
+        new EgressAllowlist(entries, resolver, 'factory.check.sonar', false)
     }
 
     private static HttpRequest get(String url, Map<String, String> headers = [:]) {
@@ -47,7 +33,14 @@ class GuardedHttpCheckExchangeSpec extends Specification {
     }
 
     private static HttpCheckExchange.Response redirect(String location) {
-        new HttpCheckExchange.Response(302, '', location)
+        HttpCheckExchange.Response.redirect(302, location)
+    }
+
+    private static HttpCheckExchange.Response withLocation(int status, String location) {
+        def headers = location == null ? [:] : [Location: [location]]
+        new HttpCheckExchange.Response(status, HttpHeaders.of(headers, { a, b ->
+            true
+        }), 'body')
     }
 
     // NFR-S2: refused before any socket opens — the delegate is never handed the request.
@@ -119,19 +112,23 @@ class GuardedHttpCheckExchangeSpec extends Specification {
         refused.refusal().reason() == EgressRefusal.Reason.SCHEME
     }
 
-    // NFR-S2: bounded — the chain stops at MAX_REDIRECTS rather than running forever.
+    // NFR-S2, FR15 of migrate-verify-to-executor-contract: bounded — a chain of distinct URLs stops
+    //     at MAX_REDIRECTS as an exchange limit, never as a refusal advising a grant
     // Scenario: verification/factory-egress-allowlist / A redirect cannot escape into a blocked class
-    def "a redirect loop is refused once the bound is reached"() {
+    def "a chain of redirects stops at the bound as an exchange limit"() {
         given:
-        def delegate = new Hops(redirect('https://sonar.example.com/again'))
+        def delegate = new Hops((1..5).collect {
+            redirect("https://sonar.example.com/hop${it}".toString())
+        } as HttpCheckExchange.Response[])
         def exchange = new GuardedHttpCheckExchange(delegate, allowing(['sonar.example.com']))
 
         when:
         exchange.send(get('https://sonar.example.com/api'))
 
         then:
-        def refused = thrown(EgressRefusedException)
-        refused.refusal().reason() == EgressRefusal.Reason.REDIRECT_LIMIT
+        def limit = thrown(ExchangeLimitException)
+        limit.limit() == ExchangeLimitException.Limit.REDIRECT_LIMIT
+        !limit.message.contains('grant')
         delegate.seen.size() == GuardedHttpCheckExchange.MAX_REDIRECTS + 1
     }
 
@@ -180,7 +177,7 @@ class GuardedHttpCheckExchangeSpec extends Specification {
     def "statuses that are not redirects are returned even when a Location is present"() {
         given:
         def exchange = new GuardedHttpCheckExchange(
-                new Hops(new HttpCheckExchange.Response(status, 'body', 'https://sonar.example.com/other')),
+                new Hops(withLocation(status, 'https://sonar.example.com/other')),
                 allowing(['sonar.example.com']))
 
         expect:
@@ -193,7 +190,7 @@ class GuardedHttpCheckExchangeSpec extends Specification {
     def "a redirect status with no usable Location ends the chain"() {
         given:
         def exchange = new GuardedHttpCheckExchange(
-                new Hops(new HttpCheckExchange.Response(302, 'body', location)), allowing(['sonar.example.com']))
+                new Hops(withLocation(302, location)), allowing(['sonar.example.com']))
 
         expect:
         exchange.send(get('https://sonar.example.com/api')).status() == 302
@@ -202,10 +199,13 @@ class GuardedHttpCheckExchangeSpec extends Specification {
         location << [null, '   ']
     }
 
-    // NFR-S2: total time is bounded by construction — bounded hops, each with its own timeout.
-    def "the total duration bound follows from the per-hop timeout and the hop bound"() {
-        expect:
-        GuardedHttpCheckExchange.MAX_TOTAL_DURATION ==
-                JdkHttpCheckExchange.REQUEST_TIMEOUT.multipliedBy(GuardedHttpCheckExchange.MAX_REDIRECTS + 1L)
+    def "a refusal names the allowlist's configuration key"() {
+        when:
+        new GuardedHttpCheckExchange(new Hops(new HttpCheckExchange.Response(200, 'ok')), allowing([]))
+        .send(get('https://evil.example.net/x'))
+
+        then:
+        def refused = thrown(EgressRefusedException)
+        refused.refusal().key() == 'factory.check.sonar'
     }
 }

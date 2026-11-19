@@ -34,7 +34,6 @@ class CheckRefSpec extends Specification {
     // FR8 (add-plugin-architecture): the identity findings correlate under is the
     // provider + checkId pair — one checkId served by two providers is two identities,
     // so one platform's findings are never attributed to the other
-    // Scenario: verification/check-provider-model / Same checkId under two providers stays distinct
     def "of keeps the same checkId under two providers distinct"() {
         given: 'the same checkId declared under two different providers'
         def onGithub = VerifyChecks.external('ci/build', 'github', Duration.ofSeconds(10),
@@ -50,6 +49,26 @@ class CheckRefSpec extends Specification {
         githubRef.label().forLog() == 'external:github:ci/build'
         httpRef.label().forLog() == 'external:http:ci/build'
         githubRef != httpRef
+    }
+
+    // FR1 of migrate-verify-to-executor-contract: findings correlate by executor plus checkId, so two
+    //     checks on one executor stay apart in the attempt record and the tracker
+    // Scenario: verification/check-provider-model / Same executor, two checks
+    def "of keeps two checks on one executor distinct by their checkIds"() {
+        given: 'two http checks with different checkIds in one stage'
+        def health = VerifyChecks.external('health', 'http', Duration.ofSeconds(10),
+                Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+        def ready = VerifyChecks.external('ready', 'http', Duration.ofSeconds(10),
+                Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
+
+        when:
+        def first = CheckRef.of(0, health)
+        def second = CheckRef.of(1, ready)
+
+        then: 'each identity names the executor and its own checkId'
+        first.label().forLog() == 'external:http:health'
+        second.label().forLog() == 'external:http:ready'
+        first.label() != second.label()
     }
 
     // FR4: the index and label are exposed exactly as constructed

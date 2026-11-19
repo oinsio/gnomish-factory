@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  * reading ({@link AnswerJson}); there a malformed answer is a mapping error, and the family is the
  * one {@link ResultFileReader} opened the read with, so an answer read anywhere else fails.
  *
- * <p>Implements FR3, NFR-S2 of define-executor-contract.
+ * <p>Implements FR3, NFR-S2 of define-executor-contract; FR5 of migrate-verify-to-executor-contract.
  */
 @JsonSerialize(using = AnswerJson.Writer.class)
 @JsonDeserialize(using = AnswerJson.Reader.class)
@@ -38,6 +38,21 @@ public sealed interface Answer {
      */
     static AnswerReading read(JsonNode written, Function<String, UntrustedText> mint) {
         return AnswerReader.read(written, mint);
+    }
+
+    /**
+     * The verdict a bare SARIF 2.1.0 log states, or why it is malformed; never throws on a written
+     * document. The log is read exactly as the {@code sarif} member of a verdict answer is — the same
+     * version, levels, cap and refusals — for an executor that relays a SARIF file a tool wrote rather
+     * than writing an answer document itself (the {@code shell} built-in's findings path, FR5 of
+     * migrate-verify-to-executor-contract).
+     *
+     * @param sarifLog the SARIF log as the tool wrote it
+     * @param mint the capture family of its writer, e.g. {@code UntrustedText::subprocess}
+     * @return the reading, a {@link Verdict} when parsed; never null
+     */
+    static AnswerReading readSarif(JsonNode sarifLog, Function<String, UntrustedText> mint) {
+        return AnswerReader.readSarif(sarifLog, mint);
     }
 
     /**

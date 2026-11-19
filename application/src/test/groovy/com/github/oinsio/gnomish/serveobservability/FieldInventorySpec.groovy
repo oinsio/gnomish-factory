@@ -129,6 +129,10 @@ class FieldInventorySpec extends Specification {
         // no task input — and the status as <status>/<class>; role and attempt are listed above
         executor : FieldCategory.QUALIFIED_TOKEN,
         status : FieldCategory.QUALIFIED_TOKEN,
+        // an executor check's roundOutcome line (migrate-verify-to-executor-contract, NFR-O1, UX3): the
+        // check's index in the stage's verify list, and the shown prefix of the key a resume took up
+        check : FieldCategory.COUNTER,
+        resumedKey : FieldCategory.IDENTIFIER,
     ]
 
     /**
@@ -190,7 +194,7 @@ class FieldInventorySpec extends Specification {
             def root = LedgerJson.mapper().readTree(line)
             assertSubtree('$', root, false)
         }
-        lines.size() == 9
+        lines.size() == 10
     }
 
     /**

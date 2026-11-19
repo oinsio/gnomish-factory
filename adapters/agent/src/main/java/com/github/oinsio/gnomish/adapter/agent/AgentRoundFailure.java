@@ -68,7 +68,7 @@ final class AgentRoundFailure {
         //     engine writes the one operator line for it, and this line keeps the stack.
         log.debug("agent-cli round {} ended without its result", key, failure);
         var status = new ExecutionResult.Failed(
-                ExecutionResult.FailureClass.INFRASTRUCTURE, reason(failure, stderrTail), List.of());
+                ExecutionResult.FailureClass.INFRASTRUCTURE, reason(failure, stderrTail), List.of(), null);
         return new ExecutionResult(
                 status, null, new ExecutorUsage(wallTime, List.of(), Map.of()), new ToolTrace(key, List.of()), denials);
     }

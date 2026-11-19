@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.status
 
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
+import com.github.oinsio.gnomish.domain.engine.PendingState
 import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.executorcontract.Describe
 import com.github.oinsio.gnomish.executorcontract.FailureClass
 import com.github.oinsio.gnomish.executorcontract.Status
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -21,7 +23,7 @@ class RoundOutcomeWordsSpec extends Specification {
     // NFR-R3, UX3: every engine failure class maps to the contract token of the same name
     def "failure class #engine reads back to the contract's #engine"() {
         when:
-        def token = RoundOutcomeWords.failureClass(new ExecutionResult.Failed(engine, REASON, []))
+        def token = RoundOutcomeWords.failureClass(new ExecutionResult.Failed(engine, REASON, [], null))
 
         then:
         FailureClass.fromWire(token).get().name() == engine.name()
@@ -40,20 +42,20 @@ class RoundOutcomeWordsSpec extends Specification {
         where:
         status | word | withClass
         new ExecutionResult.Completed() | 'completed' | 'completed'
-        new ExecutionResult.Pending('k-1') | 'pending' | 'pending'
-        new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, REASON, []) | 'failed' | 'failed/quality'
-        new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, REASON, []) | 'failed' | 'failed/infrastructure'
-        new ExecutionResult.Failed(ExecutionResult.FailureClass.LIMIT, REASON, []) | 'failed' | 'failed/limit'
+        new ExecutionResult.Pending(new PendingKey('k-1'), null, PendingState.RUNNING, null, null) | 'pending' | 'pending'
+        new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, REASON, [], null) | 'failed' | 'failed/quality'
+        new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, REASON, [], null) | 'failed' | 'failed/infrastructure'
+        new ExecutionResult.Failed(ExecutionResult.FailureClass.LIMIT, REASON, [], null) | 'failed' | 'failed/limit'
     }
 
     // NFR-O2: only a limit failure reached a bound; a non-failed status has no class
     def "the bound is the reason of a limit failure only"() {
         expect:
-        RoundOutcomeWords.bound(new ExecutionResult.Failed(ExecutionResult.FailureClass.LIMIT, REASON, [])) == REASON
-        RoundOutcomeWords.bound(new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, REASON, [])) == null
+        RoundOutcomeWords.bound(new ExecutionResult.Failed(ExecutionResult.FailureClass.LIMIT, REASON, [], null)) == REASON
+        RoundOutcomeWords.bound(new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, REASON, [], null)) == null
         RoundOutcomeWords.bound(new ExecutionResult.Completed()) == null
         RoundOutcomeWords.failureClass(new ExecutionResult.Completed()) == null
-        RoundOutcomeWords.failureClass(new ExecutionResult.Pending('k')) == null
+        RoundOutcomeWords.failureClass(new ExecutionResult.Pending(new PendingKey('k'), null, PendingState.RUNNING, null, null)) == null
     }
 
     // NFR-O2: a described executor speaks the factory's one protocol version; an undescribed one none
@@ -71,5 +73,11 @@ class RoundOutcomeWordsSpec extends Specification {
         RoundOutcomeWords.executorForLog(new RoundExecutor('lint-bot', UntrustedText.subprocess('2.3.1'))) == 'lint-bot@2.3.1'
         RoundOutcomeWords.executorForLog(new RoundExecutor('agent-cli', null)) == 'agent-cli'
         RoundOutcomeWords.STAGE_ROLE == 'transform'
+    }
+
+    // NFR-O1 of migrate-verify-to-executor-contract: an executor check is a verdict
+    def "an executor check's role is verdict"() {
+        expect:
+        RoundOutcomeWords.CHECK_ROLE == 'verdict'
     }
 }

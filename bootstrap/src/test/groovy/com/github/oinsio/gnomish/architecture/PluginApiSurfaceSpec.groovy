@@ -32,7 +32,7 @@ class PluginApiSurfaceSpec extends Specification {
     /** Two SPI types the api certainly holds — a mis-selected subject would pass every rule vacuously. */
     private static final List<String> KNOWN_API_TYPES = [
         'com.github.oinsio.gnomish.app.TrackerAdapterFactory',
-        'com.github.oinsio.gnomish.app.CheckClientFactory',
+        'com.github.oinsio.gnomish.app.TrackerSubsectionValidator',
     ]
 
     /**
@@ -68,14 +68,14 @@ class PluginApiSurfaceSpec extends Specification {
     //     the vendor core back on the contract without moving a class into it.
     // Scenario: plugin/github-plugin / The plugin's private core is not in the public api
     def "no api class depends on a github type"() {
-        // The bundle's two packages and the first-party GitHub library (D15 of
+        // The bundle's package, core's SCM built-ins and the first-party GitHub library (D15 of
         // migrate-verify-to-executor-contract) are named exactly: a `..github..` pattern would also
         // match the project's own `com.github.oinsio` root, and the rule would fail over every class.
-        given: 'the vendor bundle packages and the GitHub HTTP core'
+        given: 'the vendor bundle package, the SCM built-ins and the GitHub HTTP core'
         def rule = noClasses().should().dependOnClassesThat().resideInAnyPackage(
                 '..gnomish.githubapi..',
                 '..adapter.tracker.github..',
-                '..adapter.check.github..')
+                '..adapter.scm..')
 
         expect:
         rule.check(apiClasses)

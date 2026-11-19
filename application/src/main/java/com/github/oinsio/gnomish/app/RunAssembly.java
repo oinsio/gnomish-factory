@@ -1,7 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.console.DialogConsole;
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds;
+import com.github.oinsio.gnomish.app.port.git.RunRound;
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
@@ -16,7 +17,6 @@ import com.github.oinsio.gnomish.gitobjects.ObjectId;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.function.UnaryOperator;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -166,18 +166,19 @@ public interface RunAssembly {
     RunAssembly withSandbox(SandboxRunPieces pieces);
 
     /**
-     * Returns a copy of this assembly whose host executor rounds are decorated by {@code
-     * decoration} (FR1, FR3, design D3 of wire-host-mid-round-push): git-mode host control flows
-     * attach the mid-round push decoration this way, in-place mode never calls it, and a run in
-     * container mode ignores it — the sandbox rounds win by construction. The decoration is a
-     * value, not a flag: the composition root builds the operator, so no git-adapter knowledge
-     * enters this layer, and the default is {@code UnaryOperator.identity()} so consumers apply
-     * it unconditionally.
+     * Returns a copy of this assembly whose host executor rounds and stage chain are decorated by
+     * {@code decoration} over {@code run}'s cell (FR1, FR3, design D3 of wire-host-mid-round-push;
+     * design D22 of migrate-verify-to-executor-contract): git-mode host control flows attach the
+     * mid-round push and the snapshot of a completed round this way, in-place mode never calls it,
+     * and a run in container mode ignores it — the sandbox rounds win by construction. The
+     * decoration is a value, not a flag: the composition root builds it, so no git-adapter
+     * knowledge enters this layer.
      *
-     * @param decoration the round-source decoration the composition root built; never null
+     * @param decoration the host-git decoration the composition root built; never null
+     * @param run the run's round identity, the cell the run's persistence reads too; never null
      * @return a new assembly identical but for the decoration; never null
      */
-    RunAssembly withHostGitPush(UnaryOperator<RoundEnvironmentSource> decoration);
+    RunAssembly withHostGitPush(HostGitRounds decoration, RunRound run);
 
     /**
      * Returns a copy of this assembly whose runs read their task tier through {@code

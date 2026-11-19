@@ -2,7 +2,9 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -76,7 +78,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     // and pushes the task branch best-effort — the tip lands on origin before the round closes.
     def "a commit between two progress events is pushed by the round's listener"() {
         given:
-        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock())
+        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock(), new CurrentRound())
         def round = source.openRound(request())
 
         when:
@@ -94,7 +96,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     // starting tip, not a movement to push.
     def "each round gets a fresh listener with its own baseline"() {
         given:
-        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock())
+        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock(), new CurrentRound())
         source.openRound(request(0))
         gnomeCommit()
 
@@ -110,11 +112,11 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     def "delegated methods pass through to the host round"() {
         given:
         def delegate = new PassThroughRounds()
-        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock())
+        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock(), new CurrentRound())
 
         when:
         def round = source.openRound(request())
-        round.closeRound()
+        round.closeRound(RoundClose.VERIFIABLE)
         round.discard()
 
         then:
@@ -133,7 +135,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         given: 'a git wrapper that logs every invocation before delegating to the real binary'
         Path invocationLog = tempDir.resolve('git-invocations.log')
         def countingRunner = new GitProcessRunner(recordingGit(invocationLog).toString())
-        def source = new MidRoundPushRounds(new PassThroughRounds(), countingRunner, new VirtualClock())
+        def source = new MidRoundPushRounds(new PassThroughRounds(), countingRunner, new VirtualClock(), new CurrentRound())
 
         when: 'a round opens (baseline read) and two stationary events arrive'
         def round = source.openRound(request())
@@ -156,7 +158,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     // so the second round's failure is a suppressed repeat, not a fresh WARN edge.
     def "a tip-resolution failure spanning two rounds logs one WARN edge, not one per round"() {
         given: 'two rounds opened over the worktree, whose HEAD then stops resolving, so every poll fails'
-        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock())
+        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock(), new CurrentRound())
         def first = source.openRound(request(0))
         def second = source.openRound(request(1))
         unbornHead()
@@ -184,7 +186,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         given: 'origin points nowhere, so the triggered push fails'
         FixtureGitConfig.setRemoteUrl(repo, 'origin', tempDir.resolve('no-such-remote.git').toString())
         def delegate = new PassThroughRounds()
-        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock())
+        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock(), new CurrentRound())
         def round = source.openRound(request())
         def logs = LogCaptureSupport.attach(BestEffortPush, Level.DEBUG)
 
@@ -192,7 +194,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
         round.roundListener().onProgress(toolEvent)
         gnomeCommit()
         round.roundListener().onProgress(toolEvent)
-        round.closeRound()
+        round.closeRound(RoundClose.VERIFIABLE)
 
         then: 'nothing thrown, the round closed normally, and the fault is the push WARN'
         noExceptionThrown()
@@ -209,14 +211,14 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     def "a failing rev-parse inside onProgress never throws and leaves the round usable"() {
         given: 'a round opened over the worktree, whose HEAD then stops resolving'
         def delegate = new PassThroughRounds()
-        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock())
+        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock(), new CurrentRound())
         def logs = LogCaptureSupport.attach(MidRoundPushListener, Level.DEBUG)
         def round = source.openRound(request(0))
         unbornHead()
 
         when:
         round.roundListener().onProgress(toolEvent)
-        round.closeRound()
+        round.closeRound(RoundClose.VERIFIABLE)
 
         then:
         noExceptionThrown()
@@ -235,7 +237,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     // at, in the run's own cell, and the next round on the tip the first one's commit left
     def "FR21: each round opens on the worktree tip as its round token, in the cell the engine reads"() {
         given:
-        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock())
+        def source = new MidRoundPushRounds(new PassThroughRounds(), runner, new VirtualClock(), new CurrentRound())
 
         when: 'a round opens, the round commits, and the next round opens'
         def firstTip = currentHead(repo)
@@ -256,7 +258,7 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
     def "FR21: a worktree whose tip does not resolve fails the round's open"() {
         given:
         def delegate = new PassThroughRounds()
-        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock())
+        def source = new MidRoundPushRounds(delegate, runner, new VirtualClock(), new CurrentRound())
         unbornHead()
 
         when:

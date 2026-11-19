@@ -33,7 +33,8 @@ public final class RemoteOutageGates {
             DaemonConditionKind.CLONE_REF_FORMAT,
             DaemonConditionKind.CONTAINER_RUNTIME,
             DaemonConditionKind.IMAGE_CONTRACT,
-            DaemonConditionKind.BOX_GIT_FLOOR);
+            DaemonConditionKind.BOX_GIT_FLOOR,
+            DaemonConditionKind.EGRESS);
 
     /**
      * The conditions wired for the serve daemon (task 7.4 of add-base-ref-resolution; design D19 of

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -31,7 +32,7 @@ class RecordIdentitySpec extends EventEmissionSpecBase {
     static final RoundToken SECOND = RoundToken.of('2222222222222222222222222222222222222222')
 
     EnginePorts portsWith(RoundIdentity identity) {
-        new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter,
                 listener, persistence, VirtualTimeEquipment.on(clock, sleeper), identity)
     }
 
@@ -111,7 +112,7 @@ class RecordIdentitySpec extends EventEmissionSpecBase {
         where:
         shape | result
         'quality-failed' | new ExecutionResult(
-                new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, UntrustedText.agent('bad'), []),
+                new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, UntrustedText.agent('bad'), [], null),
                 null, ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])
         'decision-needed' | ExecutionResult.decisionNeeded(UntrustedText.agent('which?'), [UntrustedText.agent('a')],
         ExecutorUsage.none(), new ToolTrace(new AttemptKey('TASK-1', 'build', 0), []), [])

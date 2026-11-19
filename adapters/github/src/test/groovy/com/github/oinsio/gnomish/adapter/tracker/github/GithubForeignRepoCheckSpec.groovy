@@ -8,6 +8,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.tomakehurst.wiremock.WireMockServer
 import spock.lang.Specification
@@ -28,7 +29,7 @@ class GithubForeignRepoCheckSpec extends Specification {
     def setup() {
         wireMock = new WireMockServer(0)
         wireMock.start()
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok')
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok')
         check = new GithubForeignRepoCheck(httpClient)
     }
 

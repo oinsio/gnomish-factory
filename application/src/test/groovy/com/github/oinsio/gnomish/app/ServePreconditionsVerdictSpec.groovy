@@ -34,6 +34,7 @@ class ServePreconditionsVerdictSpec extends Specification implements SandboxBind
 
     TaskBranchGit branches = Mock()
     SandboxImageReadiness readiness = Mock()
+    EgressProbe egress = Mock()
 
     private static PipelineDefinition pipeline() {
         new PipelineDefinition('1', new AutonomyLimits(3), [
@@ -45,7 +46,7 @@ class ServePreconditionsVerdictSpec extends Specification implements SandboxBind
     }
 
     private static SandboxProperties sandbox(String image) {
-        new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
     }
 
     private ServePreconditions preconditions(String binding, boolean runtimeAnswers, String image = IMAGE) {
@@ -57,7 +58,7 @@ class ServePreconditionsVerdictSpec extends Specification implements SandboxBind
         def selector = new SandboxModeSelector(new BindingProperties(binding, [:]), sandbox(image), registry, {
             -> runtimeAnswers
         } as ContainerRuntimeProbe)
-        new ServePreconditions(branches, selector, readiness, sandbox(image))
+        new ServePreconditions(branches, selector, readiness, sandbox(image), egress)
     }
 
     def "FR1, NFR-R1: each kind holds through the one check it owns, the image through the inspection alone: #kind"() {
@@ -76,6 +77,7 @@ class ServePreconditionsVerdictSpec extends Specification implements SandboxBind
         DaemonConditionKind.CLONE_REF_FORMAT | 1 | 0
         DaemonConditionKind.CONTAINER_RUNTIME | 0 | 0
         DaemonConditionKind.IMAGE_CONTRACT | 0 | 1
+        DaemonConditionKind.EGRESS | 0 | 0
     }
 
     def "FR4: a refusal is the typed answer a recheck gives, never thrown: #kind"() {

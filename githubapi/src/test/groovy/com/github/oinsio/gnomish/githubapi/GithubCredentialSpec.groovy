@@ -16,7 +16,7 @@ class GithubCredentialSpec extends Specification {
 
     private static final String DEFAULT_NAME = 'GNOMISH_GITHUB_TOKEN'
     private static final String FILE = 'application.yaml'
-    private static final String WHERE = 'factory.check.github'
+    private static final String WHERE = 'factory.check.github-actions'
 
     // FR16: a connection that names its credential is honoured — this is the whole point of the key.
     def "a declared credential name is used"() {
@@ -44,7 +44,7 @@ class GithubCredentialSpec extends Specification {
     def "a present but unusable credential key is a located error"() {
         expect:
         GithubCredential.validateName([credential: value], FILE, WHERE) == [
-            new ConfigError(FILE, 'factory.check.github.credential',
+            new ConfigError(FILE, 'factory.check.github-actions.credential',
             "'credential' must be a non-blank credential environment variable name")
         ]
 
@@ -69,15 +69,15 @@ class GithubCredentialSpec extends Specification {
 
         then: 'one error per token-shaped key, the ordinary key untouched'
         errors*.where() as Set == [
-            'factory.check.github.token',
-            'factory.check.github.api-token',
-            'factory.check.github.apiToken',
-            'factory.check.github.access_TOKEN'
+            'factory.check.github-actions.token',
+            'factory.check.github-actions.api-token',
+            'factory.check.github-actions.apiToken',
+            'factory.check.github-actions.access_TOKEN'
         ] as Set
         errors.find {
-            it.where() == 'factory.check.github.token'
+            it.where() == 'factory.check.github-actions.token'
         } == new ConfigError(FILE,
-        'factory.check.github.token',
+        'factory.check.github-actions.token',
         "'token' must not appear in config.yaml; GNOMISH_GITHUB_TOKEN is read from the environment only")
     }
 

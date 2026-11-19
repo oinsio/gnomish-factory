@@ -1,10 +1,9 @@
 package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import java.time.InstantSource;
-import java.util.function.UnaryOperator;
 
 /**
  * The one public way to build the git-backed {@link TaskGit} bundle (design D12, finding F74 of
@@ -33,7 +32,25 @@ public final class GitTaskBackend {
     private GitTaskBackend() {}
 
     /**
-     * Builds the git-backed task-git bundle over one tenure record.
+     * Builds the production git-backed task-git bundle over one tenure record, its host-git
+     * decoration included (design D22 of migrate-verify-to-executor-contract): the host snapshot is a
+     * writer of a tenure's commits too, so it stamps from the same book, and no caller can hand it
+     * another.
+     *
+     * @param runner the git runner every collaborator shares; never null
+     * @param retry the infrastructure budget; never null
+     * @param clock the time source the store and the push suppressors stamp from; never null
+     * @param epochs the process's one tenure record; never null
+     * @return the bundle; never null
+     */
+    public static TaskGit taskGit(
+            GitRunner runner, GitInfrastructureRetry retry, InstantSource clock, ClaimEpochBook epochs) {
+        return taskGit(runner, retry, clock, new GitHostRounds(runner, clock, epochs), epochs);
+    }
+
+    /**
+     * Builds the git-backed task-git bundle over one tenure record, with the host-git decoration a
+     * spec chooses ({@link HostGitRounds#NONE} where it runs no git-mode host round).
      *
      * @param runner the git runner every collaborator shares — the composition root's one {@code
      *     GitProcessRunner}, which serializes repo-level mutating commands per clone; typed as the
@@ -42,8 +59,9 @@ public final class GitTaskBackend {
      * @param retry the infrastructure budget the store, the branch operations and the base-ref
      *     reads are re-attempted under; never null
      * @param clock the time source the store stamps from; never null
-     * @param midRoundPush the executor-rounds decoration the bundle carries (FR1, design D3 of
-     *     wire-host-mid-round-push); {@link UnaryOperator#identity()} where none is wanted; never null
+     * @param midRoundPush the host-git decoration the bundle carries (FR1, design D3 of
+     *     wire-host-mid-round-push; design D22 of migrate-verify-to-executor-contract): {@link
+     *     GitHostRounds} in production, {@link HostGitRounds#NONE} where none is wanted; never null
      * @param epochs the process's one tenure record: the book the three writers stamp from and the
      *     one the bundle carries for the claiming commands to wrap their tracker with; never null
      * @return the bundle; never null
@@ -52,7 +70,7 @@ public final class GitTaskBackend {
             GitRunner runner,
             GitInfrastructureRetry retry,
             InstantSource clock,
-            UnaryOperator<RoundEnvironmentSource> midRoundPush,
+            HostGitRounds midRoundPush,
             ClaimEpochBook epochs) {
         return new TaskGit(
                 new GitTaskStore(runner, epochs, retry, clock),

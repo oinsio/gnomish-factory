@@ -63,7 +63,7 @@ class GitVersionFloorSpec extends Specification implements AppAssemblyFixture {
         def runner = newManualRunRunner(
                 clonePath,
                 homeDir,
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]),
                 TaskGitFixture.real(git),
                 properties,

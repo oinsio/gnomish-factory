@@ -4,10 +4,8 @@ import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBackend
-import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds
 import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -88,9 +86,7 @@ class GitModeMidRoundPushSpec extends Specification implements BareGitRepoFixtur
      */
     private static TaskGit taskGit() {
         def runner = new GitProcessRunner()
-        GitTaskBackend.taskGit(runner, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock(), { RoundEnvironmentSource rounds ->
-            new MidRoundPushRounds(rounds, runner, new VirtualClock())
-        }, new ClaimEpochBook())
+        GitTaskBackend.taskGit(runner, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock(), new ClaimEpochBook())
     }
 
     // M1: gnome commit mid-round -> next progress event -> the remote tip equals the new commit,

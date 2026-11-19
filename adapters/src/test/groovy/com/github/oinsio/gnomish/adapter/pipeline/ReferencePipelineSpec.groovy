@@ -47,7 +47,7 @@ class ReferencePipelineSpec extends Specification {
     PipelineDefinition model
 
     def setupSpec() {
-        def outcome = PipelineLoader.load(fixtureRoot(), [:], TrackerValidatorStub.discoveredGithubCheckProvider(), TrackerValidatorStub.configuredGithubCheckProvider())
+        def outcome = PipelineLoader.load(fixtureRoot(), [:], TrackerValidatorStub.acceptingGithubActions())
         assert outcome instanceof LoadOutcome.Loaded
         model = (outcome as LoadOutcome.Loaded).definition()
     }

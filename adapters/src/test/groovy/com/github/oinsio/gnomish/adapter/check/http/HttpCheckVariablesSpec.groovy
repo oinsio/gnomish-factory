@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
-import com.github.oinsio.gnomish.app.CheckRunContext
 import spock.lang.Specification
 
 /**
@@ -10,8 +9,8 @@ import spock.lang.Specification
  */
 class HttpCheckVariablesSpec extends Specification {
 
-    private static CheckRunContext contextOf(Map<String, String> values) {
-        { name -> Optional.ofNullable(values[name]) } as CheckRunContext
+    private static HttpRunContext contextOf(Map<String, String> values) {
+        { name -> Optional.ofNullable(values[name]) } as HttpRunContext
     }
 
     private static final Map<String, String> RUN = [
@@ -93,5 +92,20 @@ class HttpCheckVariablesSpec extends Specification {
     def "the attempt commit comes from the round, not from the run context"() {
         expect:
         HttpCheckVariables.of(contextOf(RUN), 'c0ffee').resolve('${attempt.commit}') == 'c0ffee'
+    }
+
+    // FR17, design D16 of migrate-verify-to-executor-contract: load leaves a templated host to connect
+    def "a reference in the authority is told from one elsewhere: #url"() {
+        expect:
+        HttpCheckVariables.templatesAuthority(url) == templated
+
+        where:
+        url || templated
+        'https://${task.id}.ci.example.com/x' || true
+        'https://ci.example.com:${task.id}/x' || true
+        'https://${task.branch}@ci.example.com/x' || true
+        'https://ci.example.com/${task.id}?b=${task.branch}#${stage.name}' || false
+        'https://ci.example.com/x' || false
+        'https://exa mple.com/${task.id}' || false
     }
 }

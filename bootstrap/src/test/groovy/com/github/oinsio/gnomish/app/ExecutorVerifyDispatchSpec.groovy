@@ -38,7 +38,7 @@ class ExecutorVerifyDispatchSpec extends Specification implements AppAssemblyFix
     def "FR12: 'gnomish executor verify' reaches the conformance kit, not the run flow"() {
         given:
         def runner = newManualRunRunner(clonePath, homeDir,
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]), TaskGitFixture.real())
 
         when:
@@ -47,7 +47,7 @@ class ExecutorVerifyDispatchSpec extends Specification implements AppAssemblyFix
         then:
         thrown(ExecutorVerifyFailedException)
         def lines = out.toString('UTF-8').readLines()
-        lines.size() == 12
+        lines.size() == 13
         lines.contains('FAIL verdict: completed with no answer, although role verdict needs one')
     }
 

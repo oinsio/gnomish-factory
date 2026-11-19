@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.adapter.plugin.ProviderDiscoveryReport;
 import com.github.oinsio.gnomish.app.TrackerAdapterFactory;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.UsageException;
+import com.github.oinsio.gnomish.domain.egress.EndpointDeclaration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -69,6 +70,22 @@ public class TrackerAdapterConfiguration {
         // wrapped the whole registry held only for assemblies that went through the bean, which
         // every hand-built end-to-end fixture does not.
         return ProviderDiscoveryReport.reported(PORT, TrackerAdapterDiscovery.discover());
+    }
+
+    /**
+     * The {@code tracker.type} → endpoint declaration registry (FR17, design D16 of
+     * migrate-verify-to-executor-contract): each provider names its HTTP endpoint through {@link
+     * TrackerAdapterFactory#endpoint()}, derived here like the validators so the two registries are
+     * keyed identically; the loader admits the tracker's URL against it. A provider that makes no
+     * HTTP call contributes no entry.
+     */
+    @Bean
+    public Map<String, EndpointDeclaration> trackerEndpointRegistry(
+            Map<String, TrackerAdapterFactory> trackerAdapterRegistry) {
+        var endpoints = new LinkedHashMap<String, EndpointDeclaration>();
+        trackerAdapterRegistry.forEach(
+                (type, factory) -> factory.endpoint().ifPresent(endpoint -> endpoints.put(type, endpoint)));
+        return Map.copyOf(endpoints);
     }
 
     /**

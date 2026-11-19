@@ -6,10 +6,10 @@ import com.github.oinsio.gnomish.executorcontract.Capability
 import com.github.oinsio.gnomish.executorcontract.Describe
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult
 import com.github.oinsio.gnomish.executorcontract.FailureClass
-import com.github.oinsio.gnomish.executorcontract.PendingKey
 import com.github.oinsio.gnomish.executorcontract.Role
 import com.github.oinsio.gnomish.executorcontract.Status
 import com.github.oinsio.gnomish.executorcontract.UsageProvenance
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ChildEnvValues
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -144,6 +144,7 @@ class CommandStageExecutorSpec extends Specification {
         describe.credentials().isEmpty()
         describe.egress().isEmpty()
         describe.reportsUsage()
+        !describe.checkIdIsPinnedPath()
         describe.settingsSchema().get('type').asText() == 'object'
     }
 

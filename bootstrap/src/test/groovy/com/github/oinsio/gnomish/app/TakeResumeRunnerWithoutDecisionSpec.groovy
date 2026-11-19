@@ -168,7 +168,9 @@ class TakeResumeRunnerWithoutDecisionSpec extends TakeResumeSpecBase {
         def subjects = subjectsOldestFirst(taskId)
         subjects.indexOf('gnomish: task resumed') == subjects.indexOf('gnomish: task escalated') + 2
         subjects.count('gnomish: task resumed') == 1
-        subjects[subjects.indexOf('gnomish: task resumed') + 1].startsWith('gnomish: round build#')
+        // the next commit is the round's own: its snapshot (design D22 of migrate-verify-to-executor-contract)
+        // or, for a round with none, its round commit
+        subjects[subjects.indexOf('gnomish: task resumed') + 1] ==~ /gnomish: (snapshot|round) build#.*/
 
         and: 'that one commit carries both halves: the outcome consumed and the attempts reset'
         def resumed = commitWithSubject(taskId, 'gnomish: task resumed')

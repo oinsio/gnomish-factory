@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.console.DialogConsole;
+import com.github.oinsio.gnomish.app.port.git.PendingVerification;
+import com.github.oinsio.gnomish.app.port.git.RunRound;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
@@ -20,8 +22,8 @@ import org.jspecify.annotations.Nullable;
  * make-run-headless).
  *
  * <p>Kept in sync with {@link ContainerResumeOutcomes}: both implement the same four outcome arms
- * dispatched by {@link GitResumeRunner}/{@link ContainerResumeRunner} — {@code null} salvages the
- * interrupted round's leftovers (or honours {@code --discard-work}) before continuing; both resolve
+ * dispatched by {@link GitResumeRunner}/{@link ContainerResumeRunner} — {@code null} settles the
+ * interrupted round's leftovers through {@link NoSalvageOverVerification} before continuing; both resolve
  * the escalation through {@link EscalationResume} and land its decision or resumed commit through
  * {@link EscalationResume#land}; both open the gate through {@code TaskRepository.approveCheckpoint}
  * (via {@link CheckpointApproval#continuePause}) before continuing; {@code completed} lands a lost
@@ -60,26 +62,22 @@ final class GitResumeContinuation {
     }
 
     /**
-     * Outcome {@code null} ("process died mid-visit"): reconciles uncommitted leftovers of the
-     * interrupted round, then continues the engine loop from {@code state.json}'s recorded
-     * position, with no dialog. Divergence reconciliation already ran in {@link
-     * GitResumeRunner#bootstrap} — the worktree's {@code HEAD} is exactly the last round (or
-     * salvage) commit, so anything still dirty is the interrupted round's leftovers. Default
-     * ({@code --discard-work} absent): {@link com.github.oinsio.gnomish.app.port.git.TaskSalvage#salvage} commits the leftovers as-is
-     * (not a round, never recorded in {@code state.json}) so the next round's gnome sees the
-     * half-done work and the QC loop judges it. {@code --discard-work}: {@link
-     * com.github.oinsio.gnomish.app.port.git.WorktreeSalvager#discard} resets to {@code HEAD}, so the loop replays the round clean.
+     * Outcome {@code null} ("process died mid-visit"): settles the interrupted round's uncommitted
+     * leftovers through {@link NoSalvageOverVerification}, then continues the engine loop from
+     * {@code state.json}'s recorded position, with no dialog. Divergence reconciliation already ran
+     * in {@link GitResumeRunner#bootstrap}, so anything still dirty is the interrupted round's
+     * leftovers. A register naming a snapshot or a pending commit is an interrupted verification:
+     * the leftovers are discarded and the owner's answer is handed on, so the round is re-verified
+     * without its stage executor (design D22 of migrate-verify-to-executor-contract). Otherwise
+     * they are salvage-committed (not a round, never recorded in {@code state.json}), or discarded
+     * under {@code --discard-work} so the loop replays the round clean.
      *
-     * <p>Implements FR8, FR10 of add-git-workflow.
+     * <p>Implements FR8, FR10 of add-git-workflow; FR19 of migrate-verify-to-executor-contract.
      */
     void resumeFromRecordedPosition(RunOrder order, TaskState finalState) {
-        var salvage = git.worktrees().salvage(bootstrap.worktreePath());
-        if (order.discardWork()) {
-            salvage.discard();
-        } else {
-            salvage.salvage(bootstrap.taskId());
-        }
-        runToTerminalBoundary(order, bootstrap.context(), finalState);
+        var pending = NoSalvageOverVerification.onHost(
+                git.worktrees(), bootstrap.worktreePath(), bootstrap.taskId(), order.discardWork());
+        runToTerminalBoundary(order, bootstrap.context(), finalState, pending);
     }
 
     /**
@@ -109,7 +107,7 @@ final class GitResumeContinuation {
         var resumption = new EscalationResume(console, assembly.timeEquipment().clock(), returnPath())
                 .decide(bootstrap.context(), escalated, decision);
         EscalationResume.land(taskRepository, bootstrap.taskId(), resumption, decision);
-        runToTerminalBoundary(order, resumption.context(), resumption.state());
+        runToTerminalBoundary(order, resumption.context(), resumption.state(), null);
     }
 
     /**
@@ -124,7 +122,7 @@ final class GitResumeContinuation {
     void resumePaused(RunOrder order, TaskState finalState) {
         TaskState approved = CheckpointApproval.continuePause(
                 taskRepository, bootstrap.taskId(), finalState, order.definition(), () -> {});
-        runToTerminalBoundary(order, bootstrap.context(), approved);
+        runToTerminalBoundary(order, bootstrap.context(), approved, null);
     }
 
     /**
@@ -142,12 +140,16 @@ final class GitResumeContinuation {
      * the new terminal outcome through {@link GitOutcomeRecorder} — {@code Completed} (read back from
      * {@code state.json}), {@code Aborted} (from the caught {@link AbortedException}), or a park
      * (returned by the loop), which then exits 10/11 through {@link RunParkedException} (design D8
-     * of make-run-headless).
+     * of make-run-headless). The run's one round cell is built here, beside {@code pending}, before
+     * the persistence and the host-git decoration that both read it (design D22 of
+     * migrate-verify-to-executor-contract).
      */
-    private void runToTerminalBoundary(RunOrder order, TaskContext context, TaskState state) {
+    private void runToTerminalBoundary(
+            RunOrder order, TaskContext context, TaskState state, @Nullable PendingVerification pending) {
         PipelineDefinition definition = order.definition();
         Path worktree = bootstrap.worktreePath();
-        var persistence = git.store().attemptPersistence(worktree, bootstrap.taskId());
+        var run = RunRound.of(pending);
+        var persistence = git.store().attemptPersistence(worktree, bootstrap.taskId(), run.rounds());
         var workspace = assembly.workspaceAt(worktree);
         var described = ManualRunDescribe.described(
                 assembly,
@@ -157,7 +159,7 @@ final class GitResumeContinuation {
         var assembled =
                 // Git-mode host resume attaches the same mid-round push decoration the fresh
                 // run does (FR1, FR3, design D3 of wire-host-mid-round-push).
-                assembly.withHostGitPush(git.midRoundPush())
+                assembly.withHostGitPush(git.midRoundPush(), run)
                         .assemble(order, context, state, persistence, List.of(), described);
 
         var returnPath = returnPath();

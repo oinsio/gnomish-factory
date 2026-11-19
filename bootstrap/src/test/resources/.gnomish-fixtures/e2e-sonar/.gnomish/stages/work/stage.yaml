@@ -1,0 +1,16 @@
+purpose: do the work and pass the project's SonarQube quality gate
+executor:
+  type: agent-cli
+  model: work-model
+  settings:
+    maxTurns: 10
+instructions: stages/work/instructions.md
+verify:
+  - type: command
+    command: test -z "${SONAR_TOKEN:-}"
+  - executor: sonarqube
+    checkId: quality-gate
+    verifyIn: fresh-box
+    interval: 1s
+    timeout: 3m
+advancement: auto

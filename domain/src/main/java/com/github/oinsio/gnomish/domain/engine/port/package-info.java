@@ -1,10 +1,11 @@
 /**
  * Engine port interfaces, discovered from the consumer side.
  *
- * <p>Defines the seven ports the stage engine drives instead of touching the
- * outside world: {@code StageExecutor}, {@code BuiltinCheckRunner},
- * {@code CommandCheckRunner}, {@code ExternalCheckClient}, {@code JudgeVoter},
- * {@code EngineEventListener}, and {@code AttemptPersistence}. Pure contracts
+ * <p>Defines the ports the stage engine drives instead of touching the outside
+ * world: {@code StageExecutor} (a stage round and every executor check's rounds,
+ * design D18 of migrate-verify-to-executor-contract), {@code JudgeVoter},
+ * {@code EngineEventListener}, {@code AttemptPersistence}, {@code AttemptDelivery}
+ * and {@code RoundIdentity}. Pure contracts
  * only — no filesystem, no Jackson, no adapter dependencies; the boundary over
  * {@code ..domain..} is enforced by ArchUnit (design D9 of add-stage-engine).
  *

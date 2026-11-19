@@ -1,0 +1,43 @@
+# Executor stand-ins whose subject is a pending run (design D11 of migrate-verify-to-executor-contract):
+# a pending answer the reader refuses, a verdict executor that goes pending, one that keeps its run in
+# its working copy, one whose poll breaks the result schema — the conformance kit's pending cases.
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
+
+[verdict-deferring]
+# The reference executor under a describe that lists the role verdict alone, with poll
+# (data/executor-describe#verdict-poll): the conformance kit runs its pending cases in role verdict,
+# so their polls name a working copy holding the content before start (design D11 of
+# migrate-verify-to-executor-contract as amended 2026-11-14).
+describe result data/executor-describe#verdict-poll
+describe exit 0
+start exec-sh steps/executor-run.sh
+poll exec-sh steps/executor-run.sh
+
+[pending-in-copy]
+# The reference executor, except that it keeps its pending run in its working copy: a start under
+# `defer` records it in the copy's `.git` and a poll reads it back from there, refusing the key when
+# its own copy holds none (steps/pending-in-copy.sh) — the candidate the conformance kit's poll from a
+# new working copy fails (design D11 of migrate-verify-to-executor-contract as amended 2026-11-14).
+describe result data/executor-describe#reference
+describe exit 0
+start exec-sh steps/pending-in-copy.sh
+poll exec-sh steps/pending-in-copy.sh
+
+[pending-bad-hint]
+# The reference executor's describe, and a start that answers `pending` with a wait hint out of
+# range (data/executor-result#pending-bad-hint, `pollAfterMillis: -1`): the kit's pending-poll case
+# run against it fails naming the field (design D19 of migrate-verify-to-executor-contract).
+describe result data/executor-describe#reference
+describe exit 0
+start result data/executor-result#pending-bad-hint
+start exit 0
+
+[poll-breaks]
+# The reference executor, except that every poll answers a result that breaks its schema
+# (data/executor-result#malformed-answer): the kit's pending case fails on the poll's breach, which
+# the poll's own observation judged.
+describe result data/executor-describe#reference
+describe exit 0
+start exec-sh steps/executor-run.sh
+poll result data/executor-result#malformed-answer
+poll exit 0

@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
-import com.github.oinsio.gnomish.app.CheckParamsValidator
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.ArtifactInput
 import com.github.oinsio.gnomish.domain.pipeline.ArtifactOutput
@@ -8,6 +7,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.domain.pipeline.Threshold
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import java.time.Duration
@@ -15,13 +15,12 @@ import spock.lang.Specification
 
 /**
  * {@link ExternalCheckSeamValidator}: the manifest-side check seam (FR6, FR13, UX1 of
- * add-plugin-architecture).
+ * add-plugin-architecture; task 5.2 of migrate-verify-to-executor-contract).
  *
- * <p>The claims: a provider no discovered jar serves is a located error naming both the selection
- * and the discovered set — including the {@code github} the loader defaults to when a manifest
- * names none, so an absent github jar fails visibly instead of silently; a served provider's params
- * are graded by that provider's own validator and its problems come back as located data; and no
- * provider is ever asked about another's params.
+ * <p>The claims: a check's settings are graded by the params validator its built-in executor owns,
+ * keyed by the executor's name, and its problems come back as located data; no validator is ever
+ * asked about another executor's settings; and a check whose executor owns no validator is graded by
+ * nothing here — an unknown executor is the law's load validation's error, not this seam's.
  */
 class ExternalCheckSeamValidatorSpec extends Specification {
 
@@ -29,70 +28,45 @@ class ExternalCheckSeamValidatorSpec extends Specification {
 
     private static StageDefinition stage(List<VerifyCheck> checks) {
         new StageDefinition('build', 'p', [new ArtifactInput.Source()], [new ArtifactOutput('o')],
-        new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]), 'i.md', checks,
+        new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [: ]), 'i.md', checks,
         new AutonomyLimits(3), AdvancementMode.AUTO)
     }
 
-    private static VerifyCheck.Executor external(String checkId, String provider, Map params = [:]) {
-        VerifyChecks.external(checkId, provider, params, Duration.ofSeconds(30), Duration.ofMinutes(5),
+    private static VerifyCheck.Executor external(String checkId, String executor, Map params = [: ]) {
+        VerifyChecks.external(checkId, executor, params, Duration.ofSeconds(30), Duration.ofMinutes(5),
                 VerifyCheck.TimeoutClass.QUALITY, [])
     }
 
-    // FR6/UX1: an unknown provider is a load error naming what was selected and what exists.
-    // Scenario: pipeline/pipeline-config / Unknown provider is a located load error
-    def "a check naming an undiscovered provider is a located error naming it and the discovered set"() {
-        when:
-        def errors = ExternalCheckSeamValidator.validate(
-                [
-                    stage([external('gate', 'sonar')])
-                ], [github: CheckParamsValidator.none()])
+    private static final CheckSettingsValidator REJECTING = { String file, String where, Map params ->
+        [
+            new ConfigError(file, where, 'rejected')
+        ]
+    } as CheckSettingsValidator
 
-        then:
-        errors.size() == 1
-        errors[0].file() == MANIFEST
-        errors[0].where() == 'verify[0].provider'
-        errors[0].message().contains("'sonar'")
-        errors[0].message().contains('github')
-    }
-
-    // FR13/M2: the defaulted github is graded like any other selection, so a classpath without the
-    //     github jar reports the same located error rather than failing mid-run.
-    // Scenario: pipeline/pipeline-config / Defaulted github provider absent from the registry is a located error
-    def "the defaulted github provider is reported the same way when no jar serves it"() {
-        when: 'the loader-defaulted github selection meets an empty discovered set'
-        def errors = ExternalCheckSeamValidator.validate([
-            stage([
-                external('ci/build', 'github')
-            ])
-        ], [:])
-
-        then:
-        errors.size() == 1
-        errors[0].where() == 'verify[0].provider'
-        errors[0].message().contains("'github'")
-        errors[0].message().contains('[]')
-    }
-
-    // FR13/M4: a manifest whose external check resolves to a discovered provider passes untouched.
-    def "a check selecting a discovered provider yields no error"() {
+    // D18 of migrate-verify-to-executor-contract ("The six built-in names have one owner"): an
+    //     executor no validator is keyed by — another built-in, a law's program, or a name nobody
+    //     declares — is graded by nothing here; ExecutorDeclarations owns the unknown name.
+    def "a check whose executor owns no params validator yields no error"() {
         expect:
         ExternalCheckSeamValidator.validate(
                 [
                     stage([
-                        external('ci/build', 'github')
+                        external('ci/build', 'scm-status'),
+                        external('gate', 'sonar'),
+                        external('other', 'nobody-declares-this')
                     ])
-                ], [github: CheckParamsValidator.none()]).isEmpty()
+                ], ['github-actions': REJECTING]).isEmpty()
     }
 
-    // FR6: the provider owns its params; the seam only locates the delegation.
+    // FR6: the built-in owns its settings; the seam only locates the delegation.
     // Scenario: pipeline/pipeline-config / External check provider defaults to github and validates its params
-    def "a served provider grades its own params and its problems come back located"() {
-        given: 'a provider rejecting any params it is handed'
+    def "a built-in grades its own check's settings and its problems come back located"() {
+        given: 'a validator rejecting any params it is handed'
         def rejecting = { String file, String where, Map params ->
             [
                 new ConfigError(file, where + '.url', "missing required 'url'")
             ]
-        } as CheckParamsValidator
+        } as CheckSettingsValidator
 
         when:
         def errors = ExternalCheckSeamValidator.validate(
@@ -110,67 +84,70 @@ class ExternalCheckSeamValidatorSpec extends Specification {
         ]
     }
 
-    // FR6: "a provider with no matching validator selection is never asked to validate another
-    //     provider's params" — dispatch is by the check's own discriminator.
-    // Scenario: verification/check-provider-model / Provider validates its own params
-    def "no provider is asked about another provider's params"() {
+    // FR1, UX2 of migrate-verify-to-executor-contract: a check in the explicit executor: form names
+    //     its settings `settings`, and is graded under that field.
+    def "an explicit executor check is graded under its settings field"() {
+        given:
+        def check = new VerifyCheck.Executor(VerifyCheck.Token.EXECUTOR, 'http', 'gate', [url: 'x'],
+        Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY, [],
+        VerifyCheck.VerifyIn.SAME_BOX, Threshold.ERROR, [])
+
+        expect:
+        ExternalCheckSeamValidator.validate([stage([check])], [http: REJECTING])*.where() == ['verify[0].settings']
+    }
+
+    // FR6: "a validator is never asked to validate another executor's settings" — dispatch is by the
+    //     check's own executor name.
+    def "no validator is asked about another executor's settings"() {
         given:
         def asked = []
-        def recording = { String provider -> {
-                String file, String where, Map params ->
-                asked << provider; []
-            } as CheckParamsValidator
+        def recording = { String executor ->
+            { String file, String where, Map params ->
+                asked << executor; []
+            } as CheckSettingsValidator
         }
 
         when:
         ExternalCheckSeamValidator.validate(
                 [
                     stage([
-                        external('ci', 'github'),
+                        external('ci', 'github-actions'),
                         external('gate', 'http')
                     ])
                 ],
-                [github: recording('github'), http: recording('http')])
+                ['github-actions': recording('github-actions'), http: recording('http')])
 
-        then: 'each check was graded once, by its own provider'
-        asked == ['github', 'http']
+        then: 'each check was graded once, by its own executor\'s validator'
+        asked == ['github-actions', 'http']
     }
 
-    // FR6/NFR-R1: an unknown provider is not also params-graded — nobody can speak for it — and
-    //     errors stay in stage-then-check order for a deterministic report.
-    def "errors are reported in check order and an unknown provider is not params-graded"() {
-        given:
-        def rejecting = { String file, String where, Map params ->
-            [
-                new ConfigError(file, where, 'rejected')
-            ]
-        } as CheckParamsValidator
-
+    // NFR-R1: errors stay in stage-then-check order for a deterministic report.
+    def "errors are reported in check order"() {
         when:
         def errors = ExternalCheckSeamValidator.validate(
                 [
                     stage([
-                        external('first', 'nobody'),
+                        external('first', 'github-actions'),
                         external('second', 'http')
                     ])
-                ], [http: rejecting])
+                ], [http: REJECTING, 'github-actions': REJECTING])
 
         then:
         errors*.where() == [
-            'verify[0].provider',
+            'verify[0].params',
             'verify[1].params'
         ]
     }
 
-    // Restraint: non-external checks carry no provider and are never graded here.
+    // Restraint: the in-process built-ins own no params validator, and a judge check names no executor.
     def "builtin, command and judge checks are ignored"() {
         expect:
         ExternalCheckSeamValidator.validate([
             stage([
-                VerifyChecks.builtin('files_exist', [:]),
+                VerifyChecks.builtin('files_exist', [: ]),
                 VerifyChecks.command('./gradlew test'),
-                new VerifyCheck.Judge('acceptance.md', 'model-x', [:], 1)
+                new VerifyCheck.Judge('acceptance.md', 'model-x', [: ], 1)
             ])
-        ], [:]).isEmpty()
+        ], [http: REJECTING, 'github-actions': REJECTING]).isEmpty()
     }
 }

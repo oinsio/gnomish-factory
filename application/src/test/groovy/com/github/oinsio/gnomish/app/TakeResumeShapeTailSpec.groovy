@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
@@ -18,7 +19,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 /**
@@ -70,12 +70,13 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
         }
         worktrees.ensureWorktree(_, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
+        worktrees.interruptedVerification(_, _) >> Optional.empty()
         worktrees.environmentDisposal(_) >> disposal
         // The tip a completion's cleanup reads at the registered commit: the Completed envelope
         // is still there behind every finish these scenarios reach.
         branches.classifyShape(_, _) >> new BranchShape.CompletedUncleaned()
         store.taskRepository(_) >> lifecycleStore
-        store.attemptPersistence(_, _) >> { journal }
+        store.attemptPersistence(_, _, _) >> { journal }
         store.readRecordedState(_, _) >> { recordedState() }
         store.readTaskRecord(_, _) >> { Optional.ofNullable(record) }
         tracker.fetchTask(_) >> heldByUs()
@@ -83,7 +84,7 @@ class TakeResumeShapeTailSpec extends Specification implements RunChainFakes {
 
     /** The real host resume chain over the ports above. */
     private TakeDispositionResume chain() {
-        def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
+        def git = new TaskGit(store, branches, worktrees, HostGitRounds.NONE, baseRefGit, new ClaimEpochBook())
         def runner = new TakeResumeRunner(slotWiring(assemblyRunning(executor), git, tracker, registeredClone))
         def mechanics = new HostResumeMechanics(runner, git, registeredClone, completingPipeline())
         new TakeDispositionResume(mechanics, new TakeDecisionResume(mechanics), git, VirtualTimeRetries.terminalWrite())

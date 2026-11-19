@@ -2,10 +2,7 @@ package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
-import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner;
-import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
-import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter;
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
@@ -18,15 +15,17 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  * factory once and reuse it across runs; the engine reads each field but never stores
  * it in shared state, so the same {@code EnginePorts} can back concurrent runs (NFR-R1).
  *
- * <p>Five execution/verification ports do the real work — {@link StageExecutor} runs a
- * round, and the four check ports ({@link BuiltinCheckRunner}, {@link CommandCheckRunner},
- * {@link ExternalCheckClient}, {@link JudgeVoter}) serve the verify chain (design D2).
+ * <p>Two execution/verification ports do the real work — {@link StageExecutor} runs a stage round
+ * and every executor check's rounds (design D18 of migrate-verify-to-executor-contract: a check
+ * round names its check as the request's subject), and {@link JudgeVoter} casts the judge's votes;
+ * the three former check ports are gone (task 5.2 of that change), so a check reaches its executor
+ * only through the {@link StageExecutor} port.
  * The remaining four are cross-cutting seams: {@link EngineEventListener} observes the
  * event stream (D7), {@link AttemptPersistence} durably records each round (D7), the
  * environment ports — the {@link TimeEquipment}, the current instant and waiting as one value
  * (design D20 of supervise-daemon-loops-and-embed-dashboard) — make the poll loop's timing
- * deterministic (D8), {@link AttemptDelivery} verifies the external-check push
- * precondition before the poll loop starts (FR21 of add-sandbox-core), and {@link RoundIdentity}
+ * deterministic (D8), {@link AttemptDelivery} verifies the polled check's push
+ * precondition before its first round (FR21 of add-sandbox-core), and {@link RoundIdentity}
  * yields the token of each round the engine records (FR14, FR21 of define-executor-contract).
  *
  * <p>An inert record: it holds the collaborators and enforces no rule beyond the
@@ -37,9 +36,6 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  * supervise-daemon-loops-and-embed-dashboard (the time equipment as the environment ports).
  *
  * @param executor the port that runs one round of a stage's work; never null
- * @param builtinRunner the port that runs built-in declarative checks; never null
- * @param commandRunner the port that runs command checks; never null
- * @param externalClient the port that polls external checks; never null
  * @param judgeVoter the port that casts one judge vote; never null
  * @param listener the observer the engine emits its event stream to; never null
  * @param persistence the port that durably records each executed round; never null
@@ -56,9 +52,6 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  */
 public record EnginePorts(
         StageExecutor executor,
-        BuiltinCheckRunner builtinRunner,
-        CommandCheckRunner commandRunner,
-        ExternalCheckClient externalClient,
         JudgeVoter judgeVoter,
         EngineEventListener listener,
         AttemptPersistence persistence,
@@ -68,7 +61,7 @@ public record EnginePorts(
         RoundIdentity roundIdentity) {
 
     /**
-     * The dominant construction: assemblies and specs whose external checks have no
+     * The dominant construction: assemblies and specs whose checks have no
      * push precondition to verify (the in-place shape) default {@code
      * attemptDelivery} to {@link AttemptDelivery#assumedDelivered()}; sandboxed git assemblies
      * use the canonical constructor with a real push-verifying implementation (FR21 of
@@ -77,9 +70,6 @@ public record EnginePorts(
      */
     public EnginePorts(
             StageExecutor executor,
-            BuiltinCheckRunner builtinRunner,
-            CommandCheckRunner commandRunner,
-            ExternalCheckClient externalClient,
             JudgeVoter judgeVoter,
             EngineEventListener listener,
             AttemptPersistence persistence,
@@ -87,9 +77,6 @@ public record EnginePorts(
             RoundIdentity roundIdentity) {
         this(
                 executor,
-                builtinRunner,
-                commandRunner,
-                externalClient,
                 judgeVoter,
                 listener,
                 persistence,

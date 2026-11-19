@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
+import com.github.oinsio.gnomish.sandbox.SandboxEgress
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -50,7 +51,7 @@ class ImageInspectionCountSpec extends Specification implements ContainerEnviron
 
     private ContainerEnvironments environmentsFor(String key) {
         new ContainerEnvironments(
-                new BoxEquipment(docker, sandbox, timing, guardRoot, OwnershipMode.TRACKED, ImageContractCheck.current()),
+                new BoxEquipment(docker, sandbox, SandboxEgress.none(), timing, guardRoot, OwnershipMode.TRACKED, ImageContractCheck.current()),
                 key, new BoxGitLink(Path.of('/factory/clone'), harvester), ChildEnvAllowlist.none(), 'proj-1',
                 { -> DenialRestoration.none() }, [])
     }

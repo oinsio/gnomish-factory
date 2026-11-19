@@ -1,7 +1,8 @@
 package com.github.oinsio.gnomish.app.take;
 
+import com.github.oinsio.gnomish.app.NoSalvageOverVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit;
-import com.github.oinsio.gnomish.app.port.git.TaskSalvage;
+import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.app.port.tracker.Tracker;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
@@ -16,13 +17,15 @@ import java.nio.file.Path;
  * only has to deal with whatever the interrupted next round left uncommitted, then hand the task
  * back cleanly.
  *
- * <p>The protocol, in order: salvage-commit any uncommitted leftovers ({@link
- * TaskSalvage#salvage} — the host realization commits in the worktree, the sandboxed one commits
- * in-box and harvests (FR6 of add-sandbox-core), letting a {@code GitSalvageFailedException}
- * propagate — a failed salvage is a genuine local-durability problem, not something this handler
- * can paper over); best-effort closing push of the branch and its factory register ({@link
+ * <p>The protocol, in order: settle the uncommitted leftovers through {@link
+ * NoSalvageOverVerification} — salvage-committed in the worktree, or discarded when the register
+ * names a snapshot or a pending commit, whose verification the revocation interrupted (design D22
+ * of migrate-verify-to-executor-contract) — letting a {@code GitSalvageFailedException} propagate,
+ * since a failed salvage is a genuine local-durability problem, not something this handler can
+ * paper over; best-effort closing push of the branch and its factory register ({@link
  * TaskBranchGit#pushClosingBestEffort}, which never throws); post a
- * structural "work stopped" note; release the claim. The tracker's logical state is deliberately
+ * structural "work stopped" note ({@link RevocationStopNote}, naming the salvage or the discard);
+ * release the claim. The tracker's logical state is deliberately
  * left untouched (FR15) — revocation may have been caused by a human closing the task or claiming
  * it directly, and this handler must not fight that action, only stop working and get out of the
  * way. None of {@code park}, {@code recordAbort}, or {@code finish} are ever called here: this is
@@ -30,24 +33,22 @@ import java.nio.file.Path;
  *
  * <p>Kept in sync with {@code com.github.oinsio.gnomish.app.TakeContainerEngineExecution} (package-
  * private, not linkable from this package): both
- * must end a revoked claim with the same stop note and the same two tracker writes — the "Work
- * stopped:" heading over the revocation reason taken through the comment plane's fenced shape,
- * then {@code postNote} followed by {@code release}, and never {@code park}, {@code recordAbort}
- * or {@code finish} (FR15). Only the salvage mechanics differ by medium: this end salvages against
- * a worktree path, the sandboxed end calls {@code SandboxRunSupport.revocationSalvageAndPush}. The
- * note is what a human reads on the thread of a task that stopped without a verdict, so a wording
- * or an exit that changed on one medium alone would make the two modes report the same event
- * differently.
+ * must end a revoked claim with the same two tracker writes — {@code postNote} of the one {@link
+ * RevocationStopNote} followed by {@code release}, and never {@code park}, {@code recordAbort} or
+ * {@code finish} (FR15) — and both settle the leftovers through the one {@link
+ * NoSalvageOverVerification}. Only the salvage mechanics differ by medium: this end acts on a
+ * worktree path, the sandboxed end calls {@code SandboxRunSupport.revocationSalvageAndPush}. An exit
+ * that changed on one medium alone would make the two modes report the same event differently.
  *
- * <p>Implements FR15, D2 of add-tracker-port.
+ * <p>Implements FR15, D2 of add-tracker-port; FR19 of migrate-verify-to-executor-contract.
  *
  * @param tracker the tracker port used for the best-effort {@code postNote} and the {@code
  *     release} that drops this instance's claim; never null
- * @param worktreeSalvage salvages the interrupted round's uncommitted leftovers — in the task
- *     worktree (host) or inside the environment with a harvest (sandboxed); never null
+ * @param worktrees the worktree capabilities the register is read and the interrupted round's
+ *     uncommitted leftovers salvaged or discarded through; never null
  * @param branchPush best-effort pushes the task branch after the salvage commit; never null
  */
-public record RevocationHandler(Tracker tracker, TaskSalvage worktreeSalvage, TaskBranchGit branchPush) {
+public record RevocationHandler(Tracker tracker, TaskWorktreeGit worktrees, TaskBranchGit branchPush) {
 
     /**
      * Runs the full revocation protocol for one revoked task: salvage, best-effort push, stop
@@ -72,17 +73,10 @@ public record RevocationHandler(Tracker tracker, TaskSalvage worktreeSalvage, Ta
      */
     public TakeResult.Revoked handle(
             TaskRef ref, String taskId, TaskState finalState, Path worktreeRoot, String reason) {
-        worktreeSalvage.salvage(taskId);
+        boolean kept = NoSalvageOverVerification.onHost(worktrees, worktreeRoot, taskId, false) != null;
         branchPush.pushClosingBestEffort(worktreeRoot, taskId);
 
-        // The reason names what the tracker held — the new claim's holder, a closure reason — so it
-        // leaves through the comment plane at the write, with the factory's own sentences outside
-        // the fence (design D7 of type-untrusted-text). The fenced shape, not the inline one: the
-        // note is a heading over one capture, so the label "untrusted machine output" describes
-        // the block it spans truthfully (design D6, revised 2026-09-19).
-        String note = "Work stopped:\n" + UntrustedText.tracker(reason).forComment()
-                + "\nUncommitted work was salvage-committed and the branch left in place for whoever resumes"
-                + " this task.";
+        String note = RevocationStopNote.of(reason, kept);
         tracker.postNote(ref, note);
         tracker.release(ref);
 

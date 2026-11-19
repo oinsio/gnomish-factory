@@ -121,45 +121,6 @@ tracker:
         0 * tracker._
     }
 
-    // FR3, D3 of remove-interactive-console: take binds its startup law through the same loader as
-    //     run, so an `external` check on a provider with no factory.check section refuses the
-    //     pipeline at load (exit 3) — before the tracker is asked for, let alone written to.
-    def "an external check on an unconfigured provider refuses take at load, before any tracker call"() {
-        given: 'the build stage gains an external check on github; the factory configures no provider'
-        Files.writeString(projectDir.resolve('.gnomish/stages/build/stage.yaml'), '''\
-purpose: build it
-executor:
-  type: agent-cli
-  model: model-x
-instructions: stages/build/instructions.md
-advancement: auto
-verify:
-  - type: external
-    provider: github
-    checkId: ci/build
-    interval: 1s
-    timeout: 10s
-''')
-        writeConfig('''
-tracker:
-  type: github
-  github:
-    api-url: https://api.github.com
-    repo: acme/widgets
-''')
-        def command = newCommand([github: fakeFactory(tracker)])
-
-        when:
-        command.run(args('take', 'github:acme/widgets#42', "--dir=$projectDir"))
-
-        then:
-        def ex = thrown(PipelineLoadFailedException)
-        ex.renderedErrors().any {
-            it.contains("check provider 'github' has no factory.check.github section")
-        }
-        0 * tracker._
-    }
-
     def "explicit mode fetches the task from the resolved tracker and dispatches to TakeDisposition"() {
         given:
         writeConfig('''

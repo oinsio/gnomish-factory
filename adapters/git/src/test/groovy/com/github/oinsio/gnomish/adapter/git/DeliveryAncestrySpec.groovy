@@ -71,7 +71,7 @@ class DeliveryAncestrySpec extends Specification implements BareGitRepoFixture {
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ])
-        new GitAttemptPersistence(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE)
+        HostRoundPersistence.over(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE)
                 .persist('PROJ-1', RoundStates.recorded(trace.key()), trace)
         repository.recordOutcome('PROJ-1', new TaskOutcome.Completed(TaskState.atStageStart('implement')), TrackerWrite.OWED)
         repository.finishCleanup('PROJ-1')

@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
+import com.github.oinsio.gnomish.sandbox.SandboxEgress
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
 import spock.lang.Specification
@@ -15,7 +16,7 @@ class BoxEquipmentSpec extends Specification implements ContainerEnvironmentsFix
     static final ResourceLimits LIMITS = new ResourceLimits('2', '2g', 512L, '10g')
 
     private BoxEquipment equipment(SandboxProperties properties) {
-        new BoxEquipment(docker, properties, timing, Path.of('/factory/guard-config'), OwnershipMode.MANUAL, ImageContractCheck.current())
+        new BoxEquipment(docker, properties, SandboxEgress.none(), timing, Path.of('/factory/guard-config'), OwnershipMode.MANUAL, ImageContractCheck.current())
     }
 
     def "FR13: a role's guard config renders under the installation's guard config root, in the key's own directory"() {
@@ -30,7 +31,7 @@ class BoxEquipmentSpec extends Specification implements ContainerEnvironmentsFix
 
     def "FR13: the container settings are the sandbox config's image, runtime, limits and disk-quota opt-in"() {
         given:
-        def properties = new SandboxProperties('gnomish/img', 'runsc', null, LIMITS, null, null, true, null, null, null, null)
+        def properties = new SandboxProperties('gnomish/img', 'runsc', null, LIMITS, null, true, null, null, null, null)
 
         expect:
         equipment(properties).containerSettings() == new TaskContainerSettings('gnomish/img', 'runsc', LIMITS, true)
@@ -38,7 +39,7 @@ class BoxEquipmentSpec extends Specification implements ContainerEnvironmentsFix
 
     def "FR13: an installation without an image builds its equipment, and refuses only when a box's settings are asked for"() {
         given: 'a host-only installation: no image configured'
-        def properties = new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null)
+        def properties = new SandboxProperties(null, null, null, null, null, false, null, null, null, null)
         def equipment = equipment(properties)
 
         when:

@@ -336,7 +336,12 @@ public enum OperatorEvent {
     // streams_progress wrote a stdout line that is not JSON, a contract violation, or one the
     // 64 KiB line cap cut so it no longer parses (named as cut); the line is skipped, the first of
     // a run at WARN and the rest at DEBUG.
-    PROGRAM_PROGRESS_NOT_JSON("GF187");
+    PROGRAM_PROGRESS_NOT_JSON("GF187"),
+    // daemon conditions (migrate-verify-to-executor-contract, design D16, FR18): the egress guard
+    // refused a tracker call — the operator's grant, the daemon's truth — so the EGRESS condition
+    // opened with the refusal and the key to edit, and past the sustained-open threshold the ERROR.
+    CONDITION_EGRESS_OPENED("GF188"),
+    CONDITION_EGRESS_SUSTAINED_OPEN("GF189");
 
     private final String code;
     private final String head;

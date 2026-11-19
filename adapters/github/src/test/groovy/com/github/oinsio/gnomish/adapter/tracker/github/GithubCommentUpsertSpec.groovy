@@ -11,6 +11,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -54,7 +55,7 @@ class GithubCommentUpsertSpec extends Specification {
     }
 
     private GithubCommentUpsert newUpsert() {
-        new GithubCommentUpsert(new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig()))
+        new GithubCommentUpsert(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', fastRetryConfig()))
     }
 
     private static GithubTaskId taskId() {

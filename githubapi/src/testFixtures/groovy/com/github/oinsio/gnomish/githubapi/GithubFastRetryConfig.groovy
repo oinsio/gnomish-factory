@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.githubapi
 
+import io.github.resilience4j.core.IntervalBiFunction
 import io.github.resilience4j.core.IntervalFunction
+import io.github.resilience4j.core.functions.Either
 import io.github.resilience4j.retry.RetryConfig
 import java.net.http.HttpResponse
 
@@ -28,14 +30,14 @@ class GithubFastRetryConfig {
      * A client on the package-private {@code GithubHttpClient} test seam, wired with {@link
      * #withRateLimiting()} — 4 attempts, 10ms interval, production's result predicate. Lives here
      * because the seam is package-private: specs in other packages (the vendor bundle's
-     * {@code adapter.tracker.github} and {@code adapter.check.github} specs) can only reach it
+     * {@code adapter.tracker.github} and {@code adapter.scm.actions} specs) can only reach it
      * through a helper that shares {@code GithubHttpClient}'s package.
      *
      * <p>The token is fixed at {@code 'tok'}: a spec that asserts on the token value itself (token
      * hygiene) needs its own client, not this seam.
      */
     static GithubHttpClient fastClient(String baseUrl) {
-        new GithubHttpClient(baseUrl, 'tok', withRateLimiting())
+        new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(baseUrl)), 'tok', withRateLimiting())
     }
 
     /**
@@ -45,7 +47,12 @@ class GithubFastRetryConfig {
      * outside {@code githubapi} cannot build the client itself.
      */
     static GithubHttpClient fastClient(String baseUrl, RetryConfig retryConfig) {
-        new GithubHttpClient(baseUrl, 'tok', retryConfig)
+        new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(baseUrl)), 'tok', retryConfig)
+    }
+
+    /** {@link #fastClient(String)} over an endpoint the spec admitted itself — a host off loopback. */
+    static GithubHttpClient fastClient(com.github.oinsio.gnomish.domain.egress.AdmittedEndpoint endpoint) {
+        new GithubHttpClient(endpoint, 'tok', withRateLimiting())
     }
 
     /** Retries only server errors (>= 500) — the plain infrastructure-failure policy. */
@@ -56,15 +63,38 @@ class GithubFastRetryConfig {
     }
 
     /**
-     * Retries server errors, 429s and a 403 carrying GitHub's rate-limit signal — the same result
-     * predicate {@code GithubRetryConfig.build()} installs in production, so a spec on this policy
-     * exercises the real retry surface rather than a subset of it.
+     * Retries what production retries — server errors and a rate limit whose pause is at most the
+     * retry's ceiling — through the very predicate {@code GithubRetryConfig.build()} installs, so a
+     * spec on this policy exercises the real retry surface rather than a copy of it.
      */
     static RetryConfig withRateLimiting() {
         builder()
                 .retryOnResult({ HttpResponse<?> r ->
-                    r.statusCode() >= 500 || r.statusCode() == 429 || GithubRateLimit.isRateLimited(r)
+                    GithubRetryConfig.retried(r)
                 })
+                .build()
+    }
+
+    /**
+     * Production's policy whole — its attempts, its predicates and its interval rule — except that
+     * the wait is not slept: each interval production would wait is appended to {@code waits} and
+     * the retry then waits one millisecond. A spec asserts the wait production chose (design D19 of
+     * migrate-verify-to-executor-contract: a rate limit is retried no sooner than its pause) with no
+     * real-time wait; Resilience4j's own sleep is a process-wide static, so the interval is the one
+     * seam a spec can own.
+     */
+    static RetryConfig recordingWaits(List<Long> waits) {
+        RetryConfig production = GithubRetryConfig.build()
+        RetryConfig.<HttpResponse<?>> custom()
+                .maxAttempts(production.maxAttempts)
+                .retryOnException(production.exceptionPredicate)
+                .retryOnResult({ HttpResponse<?> r ->
+                    GithubRetryConfig.retried(r)
+                })
+                .intervalBiFunction({ Integer attempt, Either<Throwable, HttpResponse<?>> outcome ->
+                    waits << GithubRetryConfig.interval(attempt, outcome)
+                    1L
+                } as IntervalBiFunction<HttpResponse<?>>)
                 .build()
     }
 

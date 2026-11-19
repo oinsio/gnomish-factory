@@ -114,7 +114,7 @@ tracker:
     private static ContainerTakeSupport containerTakeSupport(
             FactoryProperties factoryProperties, ClaimEpochSource epochs) {
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        def sandbox = new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
         def registry = AdapterBindingRegistry.ratified([
             new ContainerBindingProvider()
         ], BindingTrustTable.firstParty())

@@ -21,7 +21,7 @@ import java.util.List;
 /**
  * Builds the {@link Run} for one {@link ManualRunAssembly#assemble} call: the console, the event
  * listeners, the child-environment allowlist and the engine ports. Two responsibilities it does
- * not own live beside it — {@link RunLaw} opens and freezes the law and builds its pin guard, and
+ * not own live beside it — {@link RunLaw} opens and freezes the law and builds its pin-check, and
  * {@link CheckEquipment} builds the run's check ports and derives what the configured check
  * providers contribute — so this class wires, and asks.
  *
@@ -58,8 +58,8 @@ final class RunAssembler {
      *     workspace in-place and in a manual {@code run} without {@code --base}. Never the gnome's
      *     per-task worktree, so a running task cannot rewrite its own instructions or acceptance
      *     criteria; and the read is frozen in memory, so a later edit to the same file has no
-     *     effect on the running task. The binding's repository is also where the external-check
-     *     pin guard reads its repository-relative pin paths — opened once by {@link RunLaw}
+     *     effect on the running task. The binding's repository is also where the check
+     *     pin-check reads its repository-relative pin paths — opened once by {@link RunLaw}
      * @return the outcome loop and the ports it drives; never null
      */
     static Run assemble(
@@ -85,20 +85,21 @@ final class RunAssembler {
             listeners.add(assembly.extraListener);
         }
         // The run's layered child-environment allowlist (D6, FR9 of add-sandbox-core): operator
-        // passthrough plus the declared credential names — the tracker's, and the external-check
-        // token when that adapter is configured (FR26) — validated here, before any dialog, so a
+        // passthrough plus the declared credential names — the tracker's, and the built-ins' (each SCM
+        // built-in's token name, each http check's own credential) — validated here, before any dialog, so a
         // credential name in passthrough fails the run at assembly time. Its values come through
         // the secrets port the check equipment holds (NFR-S3 of tighten-spec-contract).
         var childEnv = assembly.checks.childEnv(
                 assembly.sandboxProperties.envPassthrough(), definition, credentialEnvVarsToScrub);
         var listener = new CompositeEngineEventListener(listeners);
         var sandbox = assembly.sandbox;
-        var stageRounds = ExecutorAdapterSelector.stageRounds(assembly, childEnv, frozen, law, definition);
+        var runContext = RunCheckRunContext.of(context, holder);
+        var stageRounds = ExecutorAdapterSelector.stageRounds(
+                assembly, childEnv, frozen, law, definition, runContext, runLaw.pinCheck());
         var ports = new EnginePorts(
-                stageRounds.executor(),
-                assembly.checks.builtinRunner(sandbox),
-                assembly.checks.commandRunner(childEnv, sandbox),
-                assembly.checks.externalCheckClient(runLaw, RunCheckRunContext.of(context, holder)),
+                // FR1, FR2 of migrate-verify-to-executor-contract: one port for stage and check
+                // rounds, a check round routed to the check dispatch behind the pin decorator.
+                stageRounds.port(),
                 ExecutorAdapterSelector.judgeVoter(
                         assembly.factoryProperties, assembly.time.clock(), childEnv, frozen, sandbox),
                 listener,

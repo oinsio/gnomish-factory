@@ -2,6 +2,8 @@ package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag;
 import com.github.oinsio.gnomish.app.port.TrackerWrite;
+import com.github.oinsio.gnomish.app.port.git.PendingVerification;
+import com.github.oinsio.gnomish.app.port.git.RunRound;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.take.FinishTransition;
@@ -18,6 +20,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import java.nio.file.Path;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The shared "run the engine exactly once, no dialog" tail both {@link
@@ -117,9 +120,17 @@ record TakeEngineExecution(
      * @param context the task context to run with — the caller's choice of original or
      *     decision-appended context
      * @param state the state to run with — the caller's choice of unchanged or attempt-reset state
+     * @param pending the interrupted verification the resume path found, passed in by that path —
+     *     never read again here (design D22 of migrate-verify-to-executor-contract); {@code null} on a
+     *     fresh claim and on a resume that starts from a closed round
      * @return the {@link TakeResult} the terminal outcome maps to
      */
-    TakeResult run(TakeOrder order, ResumeBootstrap bootstrap, TaskContext context, TaskState state) {
+    TakeResult run(
+            TakeOrder order,
+            ResumeBootstrap bootstrap,
+            TaskContext context,
+            TaskState state,
+            @Nullable PendingVerification pending) {
         PipelineDefinition definition = order.run().definition();
         Path worktree = bootstrap.worktreePath();
         String taskId = bootstrap.taskId();
@@ -127,7 +138,10 @@ record TakeEngineExecution(
         // owner of that root, so the clone dir is read from it rather than carried twice.
         Path cloneDir = lawBinding.repositoryRoot();
         var taskRepository = git.store().taskRepository(registeredClone);
-        var delegate = git.store().attemptPersistence(worktree, taskId);
+        // The run's one round cell (design D22 of migrate-verify-to-executor-contract), built before
+        // both its readers: the persistence below and the host-git decoration the assembly attaches.
+        var run = RunRound.of(pending);
+        var delegate = git.store().attemptPersistence(worktree, taskId, run.rounds());
         var persistence = new RevocationCheckingAttemptPersistence(
                 delegate, order.tracker(), order.ref(), order.instanceId(), claimLossFlag);
         var workspace = assembly.workspaceAt(worktree);
@@ -142,7 +156,7 @@ record TakeEngineExecution(
         // The one take attachment point for the mid-round push decoration (FR1, FR3, design D3
         // of wire-host-mid-round-push): fresh (TakeFreshClaim) and resume (TakeResumeRunner) both
         // funnel through this method, so neither entry point can silently lose it.
-        var assembled = assembly.withHostGitPush(git.midRoundPush())
+        var assembled = assembly.withHostGitPush(git.midRoundPush(), run)
                 .assemble(order.run(), context, state, persistence, credentialEnvVarsToScrub, (DescribedLaw) described);
 
         TaskOutcome outcome = new Engine().run(definition, context, state, workspace, assembled.ports());
@@ -150,7 +164,7 @@ record TakeEngineExecution(
         var revocation = persistence.revocation();
         if (revocation.isPresent()) {
             RevocationDetectedException revoked = revocation.get();
-            var handler = new RevocationHandler(order.tracker(), git.worktrees().salvage(worktree), git.branches());
+            var handler = new RevocationHandler(order.tracker(), git.worktrees(), git.branches());
             return handler.handle(
                     order.ref(),
                     taskId,

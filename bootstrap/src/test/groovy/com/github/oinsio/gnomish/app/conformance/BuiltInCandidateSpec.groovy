@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.app.conformance
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.executorcontract.Executor
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest
-import com.github.oinsio.gnomish.executorcontract.PendingKey
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.testfixtures.executor.InProcessExecutorDouble
 import java.nio.file.Files
 import java.nio.file.Path
@@ -31,7 +31,14 @@ class BuiltInCandidateSpec extends Specification {
     private KitReport run(Executor executor) {
         new ConformanceKit([:], { Duration d ->
             waits << d
-        } as Sleeper).run(new BuiltInCandidate(executor, scratch))
+        } as Sleeper).run(candidate(executor))
+    }
+
+    /** The double as an entry would hand it in: its describe, and a binding that hands it to every case. */
+    private BuiltInCandidate candidate(Executor executor) {
+        new BuiltInCandidate(executor.describe(), { KitCase kase, Path workingCopy ->
+            executor
+        } as CaseBinding, [:], scratch)
     }
 
     private static List<KitCase> failed(KitReport report) {
@@ -61,17 +68,19 @@ class BuiltInCandidateSpec extends Specification {
         ]
         report.lines().contains('n/a  non-json-stdout: the case exists only on the wire, and this executor runs in process')
 
-        and: 'the pending case went pending by construction, under empty settings, and its one poll ended it'
-        builtIn.asked.count { it.op == 'poll' } == 1
-        builtIn.asked.find {
+        and: 'each pending case went pending by construction, under empty settings: one poll ended it, the re-poll case polled again'
+        builtIn.asked.count { it.op == 'poll' } == 3
+        builtIn.asked.findAll {
             it.op == 'poll'
-        }.key == new PendingKey(InProcessExecutorDouble.PENDING_KEY)
+        }*.key.toSet() == [
+            new PendingKey(InProcessExecutorDouble.PENDING_KEY)
+        ] as Set
         builtIn.asked.every {
             (it.request as ExecutorRequest).settings().size() == 0
         }
         waits == []
 
-        and: 'each case that ran left its own empty working copy and nothing else'
+        and: 'each case that ran left its own empty working copy and nothing else, each pending case a poll copy beside'
         Files.list(scratch).withCloseable {
             it.map { p ->
                 p.fileName.toString()
@@ -81,12 +90,22 @@ class BuiltInCandidateSpec extends Specification {
             'decision',
             'malformed-answer',
             'pending-poll',
+            'pending-repoll',
+            'poll',
             'transform',
             'unknown-role',
             'verdict'
         ]
+        Files.list(scratch.resolve('poll')).withCloseable {
+            it.map { p ->
+                p.fileName.toString()
+            }.sorted().toList()
+        } == [
+            'pending-poll',
+            'pending-repoll'
+        ]
         Files.list(scratch).withCloseable {
-            it.allMatch { p ->
+            it.filter { p -> p.fileName.toString() != 'poll' }.allMatch { p ->
                 Files.list(p).withCloseable { c ->
                     c.count()
                 } == 0
@@ -115,6 +134,7 @@ class BuiltInCandidateSpec extends Specification {
         KitCase.DECISION | "chose 'not-an-option', which is none of the options"
         KitCase.UNKNOWN_ROLE | 'answered completed in role effect'
         KitCase.PENDING_POLL | "answered failed/infrastructure: no pending run has the key 'in-process-deferred'"
+        KitCase.PENDING_REPOLL | "a re-poll of the ended run's key 'in-process-deferred' answered failed/infrastructure"
         KitCase.MALFORMED_ANSWER | 'answered a malformed answer'
     }
 
@@ -132,7 +152,7 @@ class BuiltInCandidateSpec extends Specification {
 
     def "FR8: the double's describe, written back through the contract's writer, is the document the settings-schema case reads"() {
         when:
-        def described = new BuiltInCandidate(new InProcessExecutorDouble(), scratch).describe()
+        def described = candidate(new InProcessExecutorDouble()).describe()
 
         then:
         described.answer() == new InProcessExecutorDouble().describe()
@@ -172,7 +192,6 @@ class BuiltInCandidateSpec extends Specification {
 
         where:
         operation | kase
-        'describe' | KitCase.DESCRIBE
         'start' | KitCase.TRANSFORM
         'poll' | KitCase.PENDING_POLL
     }

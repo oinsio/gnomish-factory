@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
+import com.github.oinsio.gnomish.app.port.git.PendingVerification
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.executorcontract.ResultSource
@@ -86,6 +87,178 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
         and: 'FR13 (design D10 as amended): the recorded token travels on, typed — the round it names, not the snapshot'
         pending.get().token() == token
         pending.get().token() != RoundToken.of(pending.get().attemptCommit())
+    }
+
+    // FR19 of migrate-verify-to-executor-contract (design D22): a round its executor did not
+    // complete closes under the unverified subject, which no pickup resumes as a verification
+    def "FR19: a registered unverified snapshot is not an interrupted verification"() {
+        given: 'a round opened on the current tip, closed unverifiable, and registered'
+        def token = RoundToken.of(tip())
+        tipWithSubject(ServiceCommitMessages.unverifiedSnapshot('implement', 3, token))
+
+        expect:
+        new SnapshotTipCheck(runner, clone).inspect(TASK).isEmpty()
+    }
+
+    /** A factory commit on the branch with {@code subject} and the given parents, registered. */
+    private String registeredCommitOn(String subject, String... parents) {
+        def args = [
+            'commit-tree',
+            tip() + '^{tree}'
+        ]
+        parents.each { args += ['-p', it] }
+        def commit = gitOutput(clone, *(args + ['-m', subject]))
+        gitOutput(clone, 'update-ref', 'refs/heads/' + BRANCH, commit)
+        registerTip(clone, TASK)
+        commit
+    }
+
+    // FR3, FR20 of migrate-verify-to-executor-contract (design D21): a registered pending commit is
+    // the same interrupted verification one step later — the checks judge the snapshot below it,
+    // the round's close sits on the pending commit
+    def "FR20: a registered pending commit yields the snapshot below it and itself as the registered commit"() {
+        given: 'a round snapshotted, then a check of it went pending'
+        def token = RoundToken.of(tip())
+        tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
+        def snapshot = tip()
+        def pending = registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), snapshot)
+
+        when:
+        def found = new SnapshotTipCheck(runner, clone).inspect(TASK)
+
+        then:
+        found.get() == new PendingVerification(snapshot, 'implement', 3, token, Optional.empty(), pending, [pending, snapshot])
+    }
+
+    def "FR20: a registered snapshot is its own registered commit"() {
+        given:
+        def token = RoundToken.of(tip())
+        tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
+
+        expect:
+        new SnapshotTipCheck(runner, clone).inspect(TASK).get().registered() == tip()
+        new SnapshotTipCheck(runner, clone).inspect(TASK).get().chain() == [tip()]
+    }
+
+    // D21: a second check's pending commit stacks on the first one, so the walk crosses both
+    def "FR20: a stacked pending commit is followed over the round's pending commits down to the snapshot"() {
+        given:
+        def token = RoundToken.of(tip())
+        tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
+        def snapshot = tip()
+        def first = registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), snapshot)
+        def second = registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), first)
+
+        when:
+        def found = new SnapshotTipCheck(runner, clone).inspect(TASK).get()
+
+        then:
+        found.attemptCommit() == snapshot
+        found.registered() == second
+        found.token() == token
+
+        and: 'the chain the one walk passed is the first-parent history from the register down to the snapshot (D14)'
+        found.chain() == [second, first, snapshot]
+        def history = gitOutput(clone, 'rev-list', '--first-parent', second).readLines()
+        found.chain() == history.subList(0, history.indexOf(snapshot) + 1)
+    }
+
+    def "FR15, FR20: the request a snapshot carries is read through the pending commit above it"() {
+        given:
+        def token = RoundToken.of(tip())
+        def path = GnomeRangeInspection.decisionPath(new AttemptKey(TASK, 'implement', 0), token)
+        commitFile(path, '{"question":"which db?"}', ServiceCommitMessages.snapshot('implement', 0, token))
+        registeredCommitOn(ServiceCommitMessages.pending('implement', 0, token), tip())
+
+        expect:
+        new SnapshotTipCheck(runner, clone).inspect(TASK).get().request().get().question().forLog() == 'which db?'
+    }
+
+    // D21: only the round's own commits are crossed — a commit of another identity, another kind or
+    // another shape below a pending commit ends the walk with nothing, and the pickup salvages
+    def "FR20: a pending commit whose parent is not a snapshot of its round is refused (#variant)"() {
+        given:
+        def token = RoundToken.of(tip())
+        def other = RoundToken.of(gitOutput(clone, 'rev-parse', 'HEAD^{tree}'))
+        Map<String, String> below = [
+            'another token': ServiceCommitMessages.snapshot('implement', 3, other),
+            'another round': ServiceCommitMessages.snapshot('implement', 2, token),
+            'another stage': ServiceCommitMessages.snapshot('review', 3, token),
+            'an unverified snapshot': ServiceCommitMessages.unverifiedSnapshot('implement', 3, token),
+            'a round commit': 'gnomish: round implement#3',
+            'a pending commit of another token': ServiceCommitMessages.pending('implement', 3, other),
+        ]
+        tipWithSubject(below[variant])
+        registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), tip())
+        def logs = LogCaptureSupport.attach(PendingChain, Level.DEBUG)
+
+        when:
+        def found = new SnapshotTipCheck(runner, clone).inspect(TASK)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        found.isEmpty()
+        events*.formattedMessage.any {
+            it.contains('stands on no snapshot of its round')
+        }
+
+        where:
+        variant << [
+            'another token',
+            'another round',
+            'another stage',
+            'an unverified snapshot',
+            'a round commit',
+            'a pending commit of another token'
+        ]
+    }
+
+    // D21: the walk crosses only the round's pending commits — a foreign commit between the pending
+    // commit and the round's own snapshot ends it, even though the snapshot lies below
+    def "FR20: a foreign commit between the pending commit and its round's snapshot is not crossed"() {
+        given:
+        def token = RoundToken.of(tip())
+        tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
+        gnomeCommit('wip: between')
+        registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), tip())
+
+        expect:
+        new SnapshotTipCheck(runner, clone).inspect(TASK).isEmpty()
+    }
+
+    def "FR20: a pending commit with #count parents is not the factory's and is refused"() {
+        given:
+        def token = RoundToken.of(tip())
+        tipWithSubject(ServiceCommitMessages.snapshot('implement', 3, token))
+        def snapshot = tip()
+        def parents = count == 0 ? [] : [
+            snapshot,
+            gitOutput(clone, 'rev-parse', snapshot + '^')
+        ]
+        registeredCommitOn(ServiceCommitMessages.pending('implement', 3, token), *parents)
+
+        expect:
+        new SnapshotTipCheck(runner, clone).inspect(TASK).isEmpty()
+
+        where:
+        count << [0, 2]
+    }
+
+    def "FR20: a pending subject without a readable round is traced as malformed and refused"() {
+        given:
+        tipWithSubject('gnomish: pending implement#latest 0a1b')
+        def logs = LogCaptureSupport.attach(SnapshotTipCheck, Level.DEBUG)
+
+        when:
+        def found = new SnapshotTipCheck(runner, clone).inspect(TASK)
+        def events = List.copyOf(logs.list)
+        logs.detach()
+
+        then:
+        found.isEmpty()
+        events.size() == 1
+        events[0].formattedMessage.contains('unreadable stage#round token')
     }
 
     def "FR15: the request the round asked is read from the snapshot's tree at its token path"() {

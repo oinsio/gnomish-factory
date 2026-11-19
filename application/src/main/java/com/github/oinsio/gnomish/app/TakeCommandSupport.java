@@ -44,7 +44,7 @@ final class TakeCommandSupport {
      * @throws IOException if the definition cannot be read (a genuine I/O fault)
      */
     static PipelineDefinition loadPipeline(Path dir, PipelineSource pipelineSource) throws IOException {
-        LoadOutcome outcome = pipelineSource.loadReadOnly(dir);
+        LoadOutcome outcome = pipelineSource.load(dir);
         return switch (outcome) {
             case LoadOutcome.Loaded(var definition) -> definition;
             case LoadOutcome.Invalid(List<ConfigError> errors) ->

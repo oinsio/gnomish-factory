@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TrackerWrite
 import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.project.RegisteredClone
@@ -18,7 +19,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 /**
@@ -69,13 +69,13 @@ abstract class HostResumeReplicationSpecBase extends Specification implements Ru
         worktrees.ensureWorktree(_, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_) >> lifecycleStore
-        store.attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+        store.attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
         store.readRecordedState(_, _) >> Optional.of(TaskState.atStageStart('build'))
         tracker.fetchTask(_) >> heldByUs()
     }
 
     TaskGit git() {
-        new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
+        new TaskGit(store, branches, worktrees, HostGitRounds.NONE, baseRefGit, new ClaimEpochBook())
     }
 
     /** The real routing chain over the ports above; {@code verdict} decides whether a run parks. */

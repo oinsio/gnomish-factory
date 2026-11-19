@@ -34,3 +34,10 @@
 # an atomic closing push lands neither ref (FactoryRegisterIdentitySpec).
 refs/gnomish-factory/* refuse 1 data/stderr#register-refused
 * exit 0
+
+[hook-hold-pending-push]
+# A pre-receive hook that holds a push carrying a factory pending commit until a kill ends it, and
+# lets every other push through; the refs it holds are appended to the per-run file `<link>.held`,
+# which tells the spec that the pushing factory is inside the window (PendingStartKillJarE2eSpec).
+* export HOLD_LOG @held
+* exec-sh steps/hold-pending-push.sh

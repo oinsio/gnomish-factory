@@ -1,66 +1,123 @@
 package com.github.oinsio.gnomish.httpegress;
 
+import com.github.oinsio.gnomish.domain.egress.AdmittedEndpoint;
+import com.github.oinsio.gnomish.domain.egress.EgressRefusal;
+import com.github.oinsio.gnomish.domain.egress.EgressRefusedException;
+import java.io.UncheckedIOException;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.TreeSet;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The factory-side egress allowlist governing every request the {@code http} check provider makes
- * (NFR-S2, design D5 of add-plugin-architecture). It is the sole guard against the http check being
- * used as an SSRF or exfiltration vector: {@code EgressGuard} watches the agent sandbox, not the
- * factory's own outbound calls, and the factory's calls are the ones with credentials attached.
+ * The connect-time judgement of one consumer's admitted set (NFR-S2, design D5 of
+ * add-plugin-architecture; FR15, FR17, design D16 of migrate-verify-to-executor-contract): every hop
+ * a consumer is about to send — the first included — is judged here before any socket to it is
+ * opened. {@code EgressGuard} watches the agent sandbox, not the factory's own outbound calls, and
+ * the factory's calls are the ones with credentials attached.
  *
- * <p>It is built from the operator's {@code factory.check.http.allowlist} and from nothing else. A
- * stage manifest — repo-committed, written by whoever the pipeline serves — declares a target but
- * can never widen what is reachable, which is the whole point of the split.
+ * <p>One allowlist per consumer: the {@code http} built-in's is the operator's {@value
+ * #IN_PROCESS_KEY} scope ({@link #of(OperatorEgress)}), and a connection's is the admitted set its {@link
+ * AdmittedEndpoint} carries ({@link #of(AdmittedEndpoint)}) — a class word waives its block for the
+ * set it is listed in and no other. A refusal names the consumer's configuration key.
  *
- * <p>Four rules, applied to the first hop and re-applied to every redirect hop alike: only {@code
- * https}; only a host an allowlist entry names; and never an address class that means "inside"
- * ({@link BlockedAddressClass}) — waived only when the operator allowlisted that literal address,
- * which is the one way to say "yes, this internal endpoint, deliberately"; and a host that does not
- * resolve is refused rather than attempted.
+ * <p>Every entry is read by the one egress grammar, {@link EgressEntries}; this class holds no
+ * grammar of its own. Four rules: the scheme ({@code https}, or {@code http} for an endpoint
+ * admitted on it); a host an entry grants — by name ({@link EgressEntries#namesHost}), or by address
+ * when every address the host resolves to lies in a CIDR block or class word of the set; never an
+ * address class that means "inside" ({@link BlockedAddressClass}) unless an entry waives it for that
+ * address — the IP literal the target itself names, or a CIDR block or class word covering it; and
+ * the cloud-metadata address waived by nothing. A <em>name</em> never waives the block: a name
+ * resolving inside is precisely the rebinding case the block exists for. A host that does not
+ * resolve is no refusal: the lookup's {@link UnknownHostException} is a transport failure.
  *
- * <p>An unset or empty allowlist permits nothing. Configuring the provider is enabling it; deciding
- * where it may call is a separate, explicit act.
- *
- * <p>Implements NFR-S2, UX2 of add-plugin-architecture; FR15 of migrate-verify-to-executor-contract
- * (moved into this leaf by design D16).
+ * <p>Implements NFR-S2, UX2 of add-plugin-architecture; FR15, FR17, NFR-R5 of
+ * migrate-verify-to-executor-contract.
  */
 public final class EgressAllowlist {
 
-    /** The one key of the {@code factory.check.http} operator subsection. */
-    public static final String ALLOWLIST_KEY = "allowlist";
+    /** The operator key the {@code in-process} scope is read from. */
+    public static final String IN_PROCESS_KEY = "factory.egress.in-process";
 
-    /** The only permitted scheme: an http check sends a credential and reads a verdict. */
+    /** The scheme every target may use. */
     public static final String SCHEME = "https";
 
-    /** The wildcard form an entry may take: {@code *.example.com} matches any subdomain of it. */
-    public static final String WILDCARD_PREFIX = "*.";
+    private static final String PLAIN = "http";
 
     private final List<String> entries;
     private final HostResolver resolver;
+    private final String key;
+    private final boolean plainHttp;
 
-    public EgressAllowlist(List<String> entries, HostResolver resolver) {
-        this.entries = entries.stream().map(EgressAllowlist::normalize).toList();
+    /**
+     * @param entries the admitted set, as entries of the grammar; never null
+     * @param resolver the name service the address judgement resolves through; never null
+     * @param key the consumer's configuration key every refusal names; never blank
+     * @param plainHttp whether a target may be {@code http} — an endpoint admitted on it; never for a
+     *     manifest target
+     */
+    public EgressAllowlist(List<String> entries, HostResolver resolver, String key, boolean plainHttp) {
+        this.entries = entries.stream().map(EgressEntries::normalized).toList();
         this.resolver = resolver;
+        this.key = key;
+        this.plainHttp = plainHttp;
     }
 
-    /** The allowlist an operator subsection declares, over the platform name service. */
-    public static EgressAllowlist from(Map<String, Object> subsection) {
-        return new EgressAllowlist(entriesOf(subsection), HostResolver.system());
+    /**
+     * The {@code http} built-in's allowlist: the operator's {@value #IN_PROCESS_KEY} scope over the
+     * platform name service, {@code https} only. It takes the typed scope, never a bare list, so no
+     * consumer can hand the guard a list the operator did not write.
+     *
+     * @param operator the operator's {@code in-process} scope; never null
+     * @return the allowlist
+     */
+    public static EgressAllowlist of(OperatorEgress operator) {
+        return new EgressAllowlist(operator.inProcess(), HostResolver.system(), IN_PROCESS_KEY, false);
     }
 
-    /** The declared entries of a subsection, as text; anything else in it is a config error. */
-    public static List<String> entriesOf(Map<String, Object> subsection) {
-        if (!(subsection.get(ALLOWLIST_KEY) instanceof List<?> declared)) {
-            return List.of();
+    /**
+     * A connection's allowlist: the admitted set its endpoint carries, over the platform name
+     * service, naming the endpoint's key; {@code http} is reachable when the endpoint was admitted on
+     * it.
+     *
+     * @param endpoint the admitted endpoint; never null
+     * @return the allowlist
+     */
+    public static EgressAllowlist of(AdmittedEndpoint endpoint) {
+        return new EgressAllowlist(
+                endpoint.admitted(),
+                HostResolver.system(),
+                endpoint.key(),
+                PLAIN.equalsIgnoreCase(endpoint.url().getScheme()));
+    }
+
+    /**
+     * Repeats the connect-time judgement of {@code endpoint}'s own URL and sends no request (the
+     * {@code EGRESS} condition's probe; design D16 of migrate-verify-to-executor-contract, FR18):
+     * the host resolved, every address judged against the endpoint's admitted set.
+     *
+     * @param endpoint the admitted endpoint; never null
+     * @throws EgressRefusedException when the judgement refuses the endpoint now
+     * @throws UncheckedIOException when the host does not resolve — no answer, not a refusal
+     */
+    public static void judge(AdmittedEndpoint endpoint) {
+        EgressRefusal refusal;
+        try {
+            refusal = of(endpoint).refuse(endpoint.url());
+        } catch (UnknownHostException e) {
+            throw new UncheckedIOException(e);
         }
-        return declared.stream().map(String::valueOf).toList();
+        if (refusal != null) {
+            throw new EgressRefusedException(refusal);
+        }
+    }
+
+    /** The configuration key a refusal of this allowlist names. */
+    public String key() {
+        return key;
     }
 
     /**
@@ -68,79 +125,72 @@ public final class EgressAllowlist {
      *
      * @param target the absolute URL of the hop about to be requested; never null
      * @return the refusal, or {@code null} when the target is permitted
+     * @throws UnknownHostException when the host does not resolve — a transport failure, not a
+     *     refusal (design D16, the outcome classes)
      */
-    public @Nullable EgressRefusal refuse(URI target) {
-        if (!SCHEME.equalsIgnoreCase(target.getScheme())) {
-            return new EgressRefusal(
+    public @Nullable EgressRefusal refuse(URI target) throws UnknownHostException {
+        String scheme = String.valueOf(target.getScheme()).toLowerCase(Locale.ROOT);
+        if (!SCHEME.equals(scheme) && !(plainHttp && PLAIN.equals(scheme))) {
+            return refusal(
                     EgressRefusal.Reason.SCHEME,
-                    target.toString(),
-                    "only '%s' is permitted, got '%s'".formatted(SCHEME, target.getScheme()));
+                    target,
+                    "only '%s' is permitted, got '%s'".formatted(plainHttp ? "http' or 'https" : SCHEME, scheme));
         }
         String host = target.getHost();
         if (host == null || host.isBlank()) {
-            return new EgressRefusal(EgressRefusal.Reason.NOT_ALLOWLISTED, target.toString(), "target names no host");
+            return refusal(EgressRefusal.Reason.NOT_ALLOWLISTED, target, "target names no host");
         }
-        if (!permits(host)) {
-            return new EgressRefusal(
-                    EgressRefusal.Reason.NOT_ALLOWLISTED,
-                    target.toString(),
-                    "host '%s' is on no entry of factory.check.http.%s; allowed: %s"
-                            .formatted(host, ALLOWLIST_KEY, new TreeSet<>(entries)));
+        boolean named = entries.stream().anyMatch(entry -> EgressEntries.namesHost(entry, host));
+        if (!named && entries.stream().noneMatch(EgressEntries::grantsByAddress)) {
+            return notAllowlisted(target, host);
         }
-        return addressRefusal(target, host);
+        List<InetAddress> addresses = resolver.resolve(host);
+        if (!named && !addresses.stream().allMatch(this::coveredByAddressEntry)) {
+            return notAllowlisted(target, host);
+        }
+        return addressRefusal(target, host, addresses);
+    }
+
+    private EgressRefusal notAllowlisted(URI target, String host) {
+        return refusal(
+                EgressRefusal.Reason.NOT_ALLOWLISTED,
+                target,
+                "host '%s' is on no entry of the admitted set; allowed: %s".formatted(host, new TreeSet<>(entries)));
     }
 
     /** The address-class judgement on every address the host resolves to (NFR-S2). */
-    private @Nullable EgressRefusal addressRefusal(URI target, String host) {
-        List<InetAddress> addresses;
-        try {
-            addresses = resolver.resolve(host);
-        } catch (UnknownHostException e) {
-            return new EgressRefusal(
-                    EgressRefusal.Reason.UNRESOLVABLE, target.toString(), "host '%s' does not resolve".formatted(host));
-        }
+    private @Nullable EgressRefusal addressRefusal(URI target, String host, List<InetAddress> addresses) {
         for (InetAddress address : addresses) {
             String blocked = BlockedAddressClass.of(address);
-            if (blocked != null && !allowlistsLiterally(host)) {
-                return new EgressRefusal(
+            if (blocked != null && !waives(host, address)) {
+                return refusal(
                         EgressRefusal.Reason.ADDRESS_CLASS,
-                        target.toString(),
+                        target,
                         "host '%s' resolves to %s, which is %s".formatted(host, address.getHostAddress(), blocked));
             }
         }
         return null;
     }
 
-    /** Whether any entry names {@code host} — exactly, or as a subdomain of a wildcard entry. */
-    private boolean permits(String host) {
-        String candidate = normalize(host);
-        return entries.stream()
-                .anyMatch(entry -> entry.startsWith(WILDCARD_PREFIX)
-                        ? candidate.endsWith("." + entry.substring(WILDCARD_PREFIX.length()))
-                        : entry.equals(candidate));
+    private EgressRefusal refusal(EgressRefusal.Reason reason, URI target, String detail) {
+        return new EgressRefusal(reason, target.toString(), detail, key);
     }
 
     /**
-     * Whether the operator allowlisted this host as a literal address — the deliberate opt-in that
-     * waives the address-class block. A <em>name</em> never waives it: a name resolving inside is
-     * precisely the rebinding case the block exists for.
+     * Whether an entry waives the block on {@code address}: the IP literal the host itself is, or a
+     * CIDR block or class word covering the address. Nothing waives the cloud-metadata address.
+     *
+     * <p>A literal host reaches this judgement only granted — named by an entry, or covered by an
+     * address entry — so its being a literal is the waiver; a name never is.
      */
-    private boolean allowlistsLiterally(String host) {
-        String candidate = normalize(host);
-        return entries.contains(candidate) && isAddressLiteral(candidate);
-    }
-
-    /** {@code InetAddress.ofLiteral} accepts the bracketed IPv6 form a URL's host carries. */
-    private static boolean isAddressLiteral(String host) {
-        try {
-            InetAddress.ofLiteral(host);
-            return true;
-        } catch (IllegalArgumentException e) {
+    private boolean waives(String host, InetAddress address) {
+        if (BlockedAddressClass.CLOUD_METADATA.equals(address.getHostAddress())) {
             return false;
         }
+        return EgressEntries.isAddressLiteral(EgressEntries.normalized(host)) || coveredByAddressEntry(address);
     }
 
-    private static String normalize(String host) {
-        return host.trim().toLowerCase(Locale.ROOT);
+    private boolean coveredByAddressEntry(InetAddress address) {
+        return entries.stream().anyMatch(entry -> EgressEntries.coversAddress(entry, address));
     }
 }

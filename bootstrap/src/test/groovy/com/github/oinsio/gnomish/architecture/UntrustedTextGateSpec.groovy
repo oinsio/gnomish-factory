@@ -91,14 +91,14 @@ class UntrustedTextGateSpec extends Specification {
         //     the engine's shape — the executor's quality reason and denial texts become domain
         //     Findings, which hold plain text (the CheckFindings precedent).
         'com.github.oinsio.gnomish.adapter.agent.program.ProgramResultMapping',
-        // Joined at task 3.2 of define-executor-contract: the findings-funnel entry of a command
-        //     check, the JudgeVerdictExtractor precedent — the findings file's fields arrive from
-        //     the result reader as carriers and the domain Finding holds plain text.
-        'com.github.oinsio.gnomish.adapter.check.CheckFindings',
         // Joined at task 4.4 of define-executor-contract: the executor version pin's describe
         //     versions are written verbatim into state.json — split out of StateJsonMapper.
         'com.github.oinsio.gnomish.adapter.git.state.StateExecutorVersionsMapper',
         'com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper',
+        // Joined at task 4.1 of migrate-verify-to-executor-contract (moved to the root
+        //     `pendingPolls` array at task 4.1r, D21): each entry's check label is written verbatim
+        //     into state.json — split out of StateJsonMapper, the same branch-document writer.
+        'com.github.oinsio.gnomish.adapter.git.state.StatePendingPollMapper',
         // Joined at task 2.1 of make-checkpoint-gate-durable: the attempt `stop` object's
         //     question, options, reason and details are written verbatim into state.json —
         //     split out of StateJsonMapper, the same branch-document writer.
@@ -107,6 +107,15 @@ class UntrustedTextGateSpec extends Specification {
         //     text, split out of TaskJsonMapper when the sixth report kind arrived.
         'com.github.oinsio.gnomish.adapter.git.state.TaskEscalationMapper',
         'com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper',
+        // Joined at task 4.0b of migrate-verify-to-executor-contract, taking the place ShellResult held
+        //     since task 3.2 of that change (and CheckFindings before it): the one reading of a SARIF
+        //     result onto the engine's verdict answer, extracted from ShellResult's engine-port reading
+        //     (deleted at the task 7.2 sweep) for ProgramResultMapping's verdict branch — the result's texts arrive as
+        //     carriers and the domain Finding holds plain text. ShellResult left: it reads no raw text
+        //     of its own any more. (The fold of a result's details into its message, and the http
+        //     built-in's HttpResults, which joined at task 3.4 for the same fold, left at task 4.0a:
+        //     details travel as their own carriers, design D19.)
+        'com.github.oinsio.gnomish.app.port.check.SarifResultReading',
         'com.github.oinsio.gnomish.board.json.BoardJsonMapper',
         // Joined at task 3.1 of define-executor-contract: the executor contract's two machine
         //     writers. A result, describe or answer document carries the executor's own text as the
@@ -168,10 +177,20 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.adapter.git.GnomeRangeInspection':
         'log lines into each commit\'s parents, subject and state-directory paths, judged into a' +
         ' verdict; the subjects and paths it quotes go back into a carrier through the log exit',
+        // FR20 of migrate-verify-to-executor-contract (design D21): the host pending commit opens the
+        // bare-object library over the clone's .git, which only git can name from a worktree.
+        'com.github.oinsio.gnomish.adapter.git.HostPendingCommit':
+        'rev-parse --git-common-dir output into the absolute Path handed back to git as its git directory,' +
+        ' never shown to a reader',
         'com.github.oinsio.gnomish.adapter.git.HostBranchProbe':
         'symbolic-ref output into whether HEAD is on the task branch (a boolean)',
         'com.github.oinsio.gnomish.adapter.git.OriginRemote':
         'remote get-url output into the origin URL, or empty',
+        // FR20 of migrate-verify-to-executor-contract (design D21): the walk from a registered pending
+        // commit down to the snapshot of its round.
+        'com.github.oinsio.gnomish.adapter.git.PendingChain':
+        'a log line into a commit\'s parent ids, handed back to git, and its subject, compared whole with' +
+        ' the writer\'s own rendering of the round\'s subjects, never shown',
         'com.github.oinsio.gnomish.adapter.git.RemoteBaseRef':
         'ls-remote lines into the commit id each named ref points at',
         'com.github.oinsio.gnomish.adapter.git.RemoteBranchTip':
@@ -179,7 +198,7 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.adapter.git.RemoteDefaultBranch':
         'an ls-remote --symref answer into the default branch name, gated by DefaultBranch\'s rules',
         'com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck':
-        'a NUL-separated log line into the snapshot\'s stage, round and round token; the decision' +
+        'a registered commit\'s subject into the snapshot\'s or pending commit\'s stage, round and round token; the decision' +
         ' request it reads at the token path is the document itself, handed raw to the tolerant reader that mints it',
         'com.github.oinsio.gnomish.adapter.git.TaskBranchLister':
         'for-each-ref output into the list of task-branch refs, each held to the factory\'s own prefix',

@@ -1,19 +1,10 @@
 package com.github.oinsio.gnomish.app.conformance
 
-import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.git.RepositoryInit
-import com.github.oinsio.gnomish.app.describe.ProgramChannel
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
-import com.github.oinsio.gnomish.subprocess.ProcessLaunch
-import com.github.oinsio.gnomish.subprocess.StdinSource
-import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.testfixtures.executor.InProcessExecutorDouble
 import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 import java.nio.file.Files
 import java.nio.file.Path
-import spock.lang.Specification
-import spock.lang.TempDir
 
 /**
  * FR12, FR23, FR24, M4 of define-executor-contract (design D18, D19): the conformance kit against
@@ -22,40 +13,11 @@ import spock.lang.TempDir
  * own {@code ProgramExecutor}, each case in a git repository of its own, every launch recorded. No
  * feature rests on a scheduling order: each start and poll is waited to its end before the next.
  */
-class ConformanceKitSpec extends Specification {
-
-    private static final Map<String, Object> DEFER = [defer: true]
-
-    @TempDir
-    Path tempDir
-
-    private final List<List<String>> launched = []
-    private final Set<Path> scratchAreas = [] as Set
-
-    private KitReport verify(Path program, Map<String, Object> pendingSettings = [:]) {
-        def counted = { ProcessBuilder builder, StdinSource stdin ->
-            launched << List.copyOf(builder.command())
-            String written = builder.environment()[ProgramChannel.RESULT_FILE_VARIABLE]
-            if (written != null) {
-                scratchAreas << Path.of(written).parent
-            }
-            ProcessLaunch.grouped().start(builder, stdin)
-        } as ProcessLaunch
-        def equipment = new KitEquipment(VirtualTimeEquipment.create(), TestChildEnvironment.hostAllowlist(), counted,
-                new RepositoryInit(new GitProcessRunner()), Files.createTempDirectory(tempDir, 'stderr-'))
-        def candidate = new ProgramCandidate([program.toString()], pendingSettings, Files.createTempDirectory(tempDir, 'kit-'), equipment)
-        new ConformanceKit(pendingSettings, equipment.time().sleeper()).run(candidate)
-    }
-
-    private static List<KitCase> failed(KitReport report) {
-        report.verdicts().findAll {
-            it.value instanceof CaseVerdict.Failed
-        }.keySet().toList()
-    }
+class ConformanceKitSpec extends ConformanceKitProgramSpecBase {
 
     // Scenario: executor/conformance-kit / Reference executor passes every case
     // Scenario: executor/wire-contract / Older executor survives a new optional field
-    def "FR12, M4: the reference executor passes all twelve cases under its pending settings"() {
+    def "FR12, M4: the reference executor passes all thirteen cases under its pending settings"() {
         when:
         def report = verify(StandIn.executor('reference'), DEFER)
 
@@ -67,12 +29,12 @@ class ConformanceKitSpec extends Specification {
             "pass ${it.word()}".toString()
         }
 
-        and: 'every case environment, the describe one included, was disposed with its scratch area'
-        scratchAreas.size() == KitCase.values().size() - 1
+        and: 'every case environment, the describe one and the two pending cases\' poll ones included, was disposed with its scratch area'
+        scratchAreas.size() == KitCase.values().size() - 1 + 2
         scratchAreas.every { !Files.exists(it) }
 
-        and: 'the pending case started and polled one program instance, each operation its own process'
-        launched*.last().count { it == 'poll' } == 1
+        and: 'each pending case started on one program executor and polled on a second sharing its run table, each operation its own process'
+        launched*.last().count { it == 'poll' } == 3
     }
 
     // Scenario: executor/conformance-kit / Misbehaving fake fails each case it is told to break
@@ -102,8 +64,23 @@ class ConformanceKitSpec extends Specification {
         KitCase.STDERR_NOISE | 'wrote no result'
         KitCase.NON_JSON_STDOUT | 'wrote no result'
         KitCase.PENDING_POLL | 'wrote no result'
+        KitCase.PENDING_REPOLL | "a re-poll of the ended run's key 'reference-deferred' answered failed/infrastructure"
         KitCase.UNKNOWN_REQUEST_FIELDS | 'answered failed/infrastructure'
         KitCase.MALFORMED_ANSWER | 'the result document breaks its schema at answer (oneOf)'
+    }
+
+    // FR2, NFR-R2 of migrate-verify-to-executor-contract (design D19): no kit case is added for the
+    //     pending facts; a program's out-of-range wait hint fails the pending case through the schema
+    //     every result is judged against and the reading that fails it closed.
+    def "FR2: a start that goes pending with a wait hint of -1 fails the pending case, naming pollAfterMillis"() {
+        when:
+        def report = verify(StandIn.executor('pending-bad-hint'), DEFER)
+
+        then:
+        def verdict = report.verdicts()[KitCase.PENDING_POLL]
+        verdict instanceof CaseVerdict.Failed
+        (verdict as CaseVerdict.Failed).detail().contains('pollAfterMillis')
+        !launched.any { it.last() == 'poll' }
     }
 
     // Scenario: executor/conformance-kit / A built-in executor is driven through the same cases in process
@@ -114,7 +91,9 @@ class ConformanceKitSpec extends Specification {
         when:
         def onWire = verify(StandIn.executor(preset), DEFER)
         def offWire = new ConformanceKit([:], { d -> } as Sleeper)
-        .run(new BuiltInCandidate(inProcess, Files.createTempDirectory(tempDir, 'built-in-')))
+        .run(new BuiltInCandidate(inProcess.describe(), { KitCase kase, Path workingCopy ->
+            inProcess
+        } as CaseBinding, [:], Files.createTempDirectory(tempDir, 'built-in-')))
 
         then:
         KitCase.values().findAll { !it.wireOnly() }.every {
@@ -146,6 +125,7 @@ class ConformanceKitSpec extends Specification {
 
     // Scenario: executor/conformance-kit / Role not declared is not exercised
     // Scenario: executor/conformance-kit / Pending case needs the poll capability
+    // Scenario: executor/conformance-kit / Re-poll case needs the poll capability
     def "FR12, FR23: a verdict-only candidate runs the verdict case, the other roles and the pending case are not applicable, and no poll is sent"() {
         when:
         def report = verify(StandIn.executor('verdict-only'))
@@ -156,12 +136,14 @@ class ConformanceKitSpec extends Specification {
             KitCase.TRANSFORM,
             KitCase.DECISION,
             KitCase.MALFORMED_ANSWER,
-            KitCase.PENDING_POLL
+            KitCase.PENDING_POLL,
+            KitCase.PENDING_REPOLL
         ].every {
             report.verdicts()[it] instanceof CaseVerdict.NotApplicable
         }
         report.verdicts()[KitCase.VERDICT] instanceof CaseVerdict.Passed
         report.lines().contains('n/a  pending-poll: the describe declares no poll capability')
+        report.lines().contains('n/a  pending-repoll: the describe declares no poll capability')
         report.lines().contains('n/a  transform: the describe lists no role transform')
 
         and: 'no poll reached the candidate'

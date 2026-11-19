@@ -15,11 +15,10 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -63,7 +62,7 @@ class CommandStatusEngineContractSpec extends Specification {
     static final String QUALITY_REASON = 'command exited with status 1\nBUILD FAILED: Foo.java:3: error'
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
+    def builtinRunner = new ScriptedCheckRounds()
     def clock = new VirtualClock()
     List<Object> timeline = []
     List<TaskState> persisted = []
@@ -88,12 +87,11 @@ class CommandStatusEngineContractSpec extends Specification {
     static ExecutionResult round(int attempt, Status status, FailureClass failureClass = null, String reason = null) {
         def contract = new ExecutorResult(status, failureClass, null,
                 reason == null ? null : UntrustedText.subprocess(reason), null, Usage.absent(), [])
-        ProgramResultMapping.toEngine('command', new AttemptKey('TASK-1', 'build', attempt), contract, [])
+        ProgramResultMapping.toEngine('command', com.github.oinsio.gnomish.executorcontract.Role.TRANSFORM, new AttemptKey('TASK-1', 'build', attempt), contract, [])
     }
 
     TaskOutcome run(int attemptLimit) {
-        def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence,
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), listener, persistence,
                 VirtualTimeEquipment.on(clock, new VirtualSleeper(clock)), RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(5), [commandStage(attemptLimit)]),
         CONTEXT, TaskState.atStageStart('build'), new FakeWorkspace(), ports)

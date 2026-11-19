@@ -57,7 +57,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture,
     }
 
     private void persistRound(String taskId, TaskState state, String stage = 'implement', int round = 0) {
-        def persistence = new GitAttemptPersistence(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE)
+        def persistence = HostRoundPersistence.over(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])
@@ -170,7 +170,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture,
         new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE, new VirtualClock()).createTask(
                 new TaskContext('PROJ-6', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-6'), 'PROJ-6', ClaimEpochSource.NONE)
+        HostRoundPersistence.over(runner, seedRegistered.worktrees().resolve('PROJ-6'), 'PROJ-6', ClaimEpochSource.NONE)
                 .persist('PROJ-6', RoundStates.recorded(new ToolTrace(new AttemptKey('PROJ-6', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]).key()),
@@ -332,7 +332,7 @@ class BranchStateReaderSpec extends Specification implements BareGitRepoFixture,
         new GitTaskRepository(runner, seedRegistered, ClaimEpochSource.NONE, new VirtualClock()).createTask(
                 new TaskContext('PROJ-9', UntrustedText.tracker('T'), UntrustedText.tracker('B'), []), TaskStart.commit(seedRepo, 'HEAD'),
                 TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('implement'))
-        new GitAttemptPersistence(runner, seedRegistered.worktrees().resolve('PROJ-9'), 'PROJ-9', ClaimEpochSource.NONE)
+        HostRoundPersistence.over(runner, seedRegistered.worktrees().resolve('PROJ-9'), 'PROJ-9', ClaimEpochSource.NONE)
                 .persist('PROJ-9', RoundStates.recorded(new ToolTrace(new AttemptKey('PROJ-9', 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))
                 ]).key()),

@@ -155,6 +155,22 @@ verdict per context, and SHALL fail with findings naming each failed context.
 #### Scenario: Rate limit backs off
 - **WHEN** the SCM answers with a rate-limit response
 - **THEN** the executor returns `pending` with a wait hint and the engine respects it
+- **AND** the result carries `pendingState: unobserved` and a `pollAfterMillis` taken from the response's `retry-after`, or else its rate-limit reset, and the engine makes no poll of the key sooner
+
+### Requirement: The SCM status reader names what it awaits
+While an expected context is absent on the attempt SHA, `scm-status` SHALL answer `pending` with
+`pendingState: unreported`, and while every expected context is reported and one is running, with
+`pendingState: running`; its `reason` SHALL name every expected context still absent or running.
+**Implements**: FR4, FR9, UX1 of migrate-verify-to-executor-contract
+**Notes**: The engine decides the timeout's class from the state and shows the reason (design D19).
+
+#### Scenario: Absent context is reported as unreported
+- **WHEN** two contexts are expected, one has reported success and the other has not reported on the attempt SHA
+- **THEN** the result is `pending` with `pendingState: unreported` and a reason naming the absent context
+
+#### Scenario: Running context is reported as running
+- **WHEN** every expected context has reported and one of them is still running
+- **THEN** the result is `pending` with `pendingState: running` and a reason naming the running context
 
 ### Requirement: Existing providers keep their behavior as built-ins
 The `github-actions` and `http` built-ins SHALL preserve the observable behavior of the former
@@ -174,15 +190,21 @@ workflow file; status-code probe with conditions — expressed as `start`/`poll`
 The `github-actions` and `scm-status` built-ins SHALL be compiled into the factory and
 registered by core like every built-in, outside the github vendor bundle; the bundle SHALL
 carry the github tracker only. Both built-ins and the bundle's tracker SHALL use the one
-first-party GitHub HTTP core, and every in-process HTTP call of a built-in verdict executor
-SHALL pass the one HTTP egress guard, admitted by its operator connection, the connection's
-`egress` list and the hosts its describe `egress` declares.
-**Implements**: FR13, FR14, FR15, FR17 of migrate-verify-to-executor-contract
+first-party GitHub HTTP core.
+**Implements**: FR13, FR14 of migrate-verify-to-executor-contract
 **Notes**: Human decision of 2026-11-06 on the escalation of task #121 (design D4, D15, D16); the `plugin/github-plugin` capability is restated for the tracker.
 
 #### Scenario: Removing the vendor bundle keeps the SCM built-ins
 - **WHEN** the github vendor bundle is absent and a stage declares a `github-actions` check and an `scm-status` check
 - **THEN** both checks resolve from the executor registry and run, while the github tracker is unavailable
+
+
+### Requirement: A built-in verdict executor's HTTP passes the egress guard
+Every in-process HTTP call of a built-in verdict executor SHALL pass the one HTTP egress guard,
+admitted by its operator connection, the connection's `egress` list, the hosts its describe
+`egress` declares and the `in-process` scope.
+**Implements**: FR15, FR17 of migrate-verify-to-executor-contract
+**Notes**: Split out of "SCM verdict built-ins are core's own, outside the vendor bundle" to keep both within OpenSpec's 500-character limit (design D16 as amended 2026-11-09).
 
 #### Scenario: A built-in's HTTP call outside its declared hosts is refused
 - **WHEN** the platform answers a `github-actions` call with a redirect to a host that neither the built-in's describe `egress`, nor its connection's `egress`, nor `factory.egress.in-process` names
@@ -190,7 +212,7 @@ SHALL pass the one HTTP egress guard, admitted by its operator connection, the c
 
 ### Requirement: Credentialed verdict executors run in a fresh box
 A `program` verdict executor whose describe declares credentials SHALL run in `FRESH_BOX` with
-an egress allowlist derived from its declared hosts; a `SAME_BOX` declaration on such a check
+the egress the law's `executors.<name>.egress` grants, bounded by its describe; a `SAME_BOX` declaration on such a check
 SHALL be a located load error. A credentialed built-in runs in the factory process under the
 in-process egress guard (its operator connection, the connection's `egress` and its describe `egress`); its token SHALL
 enter no box, and its `verify-in` value SHALL not move its HTTP call.
@@ -199,9 +221,40 @@ enter no box, and its `verify-in` value SHALL not move its HTTP call.
 #### Scenario: Secret never enters the gnome's box
 - **WHEN** a check names an executor declaring `SONAR_TOKEN`
 - **THEN** the executor runs in a fresh box, the token is present there and absent from the
-  round box, and the fresh box may reach only the declared hosts
+  round box, and the fresh box may reach only the hosts the law grants the executor
 
 #### Scenario: A built-in's token enters no box
 - **WHEN** a check names the `github-actions` built-in in container mode
 - **THEN** the token is resolved in the factory process, is absent from the round box and from
   any fresh box of the attempt, and the built-in's calls pass the in-process allowlist
+
+### Requirement: Each request of a fresh-box program check gets its own box at the attempt commit
+Each `start` and each `poll` of a `program` verdict check bound through the fresh box SHALL run in
+a box materialized for that request at the attempt commit of the round under verification and
+disposed after it, so the working copy's `HEAD` is that commit on every request of the check, a
+resumed instance's included.
+**Implements**: FR11, FR3 of migrate-verify-to-executor-contract
+**Notes**: Design D11 as amended 2026-11-14; reusing a box across requests is proposal NG16, with the measurement of task 5.3 as its pickup.
+**Notes**: A pollable verdict program keeps what a later `poll` of its key needs outside its box — in the service it drives, or in the key itself; the conformance kit's pending cases enforce it ("Pending cases poll from a new working copy"). A key whose run it kept only in a box is answered by the program as a key it does not hold: a refusal is the visible `failed/infrastructure`, and a program that starts the run anew breaks FR11 and fails the kit's pending cases.
+
+#### Scenario: Two requests of one check see one commit in two boxes
+- **WHEN** a fresh-box `program` verdict check returns `pending` from `start` and its key is polled
+- **THEN** the poll runs in a box other than the one `start` ran in, and `HEAD` of both working copies is the attempt commit
+
+#### Scenario: A resumed poll runs in a box at the same commit
+- **WHEN** an instance resumes a pending fresh-box `program` check from its recorded key
+- **THEN** the poll runs in a new box whose `HEAD` is the attempt commit the recorded round names, and no `start` is sent
+
+### Requirement: A program verdict check outside a fresh box is refused at run assembly
+A law whose check names a `program` executor that would run outside a fresh box SHALL be refused
+at run assembly with a located error naming the check and the executor, taking the path of a
+describe refusal; the refusal SHALL NOT surface as a failure of the check's round.
+**Implements**: FR1, FR3 of migrate-verify-to-executor-contract
+**Notes**: Outside a fresh box means host mode, or `same-box` verification in container mode, the default for a check without credentials. The located error names the check by its manifest and `verify[<i>]`.
+**Notes**: As for a describe refusal, `take` and `serve` park the task with the located report and no attempt burned, and `run` exits as for an invalid law.
+**Notes**: Proposal NG14: no task binds a `program` check on the host or in the round's box; the first change that does lifts this refusal for its medium (design D14, D18).
+**Notes**: The refusal follows the run-assembly refusal of a built-in's connection (design D18, "Where a refusal at run assembly goes"); the resolution's `IllegalStateException` stays a wiring defect no law can reach.
+
+#### Scenario: A program verdict check outside a fresh box is a located error
+- **WHEN** a law's check names a `program` executor and the run would verify it on the host or in the round's box
+- **THEN** run assembly refuses with a located error naming the check and the executor, no process of the executor is spawned, `take` and `serve` park the task with no attempt burned, and `run` exits as for an invalid law

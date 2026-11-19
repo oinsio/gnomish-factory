@@ -79,7 +79,7 @@ class SlotConditionReportSpec extends Specification implements BareGitRepoFixtur
 
     def git = TaskGitFixture.real()
     def docker = new ScriptedSandboxDocker()
-    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], false, null, null, null, null)
     def tracker = new InMemoryTracker()
     def runtimeAnswers = true
     Path cloneDir

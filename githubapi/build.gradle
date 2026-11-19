@@ -9,9 +9,9 @@
 // It is neither `gnomish-plugin-api` (the api stays free of GitHub types) nor a compatibility
 // surface for third parties: its consumers are first-party, and no japicmp baseline covers it.
 //
-// Task 3.0a moved the core with unchanged behaviour: the client still builds its own JDK
-// `HttpClient`. Task 3.0b builds it over the guarded exchange of `:httpegress`, adds that edge,
-// and deletes the `PENDING` row of `HttpClientConstructionBoundarySpec` that names this module.
+// Task 3.0a moved the core with unchanged behaviour; task 3.0c builds the client over the guarded
+// exchange of `:httpegress` (design D16): it takes an `AdmittedEndpoint` and no `String` URL, and it
+// constructs no JDK `HttpClient` of its own.
 plugins {
     id 'library-conventions'
     // The FR2 direction gate of split-into-modules; the permitted reach is stated below.
@@ -33,6 +33,10 @@ dependencies {
     // `api`: the type is on the public signature of `validateName` / `rejectTokenKeys`.
     api project(':domain')
 
+    // The guarded exchange every request passes (FR15, design D16): admission, the per-hop egress
+    // judgement, the hop rules and the bounded body. `implementation`: no signature here names it.
+    implementation project(':httpegress')
+
     implementation libs.slf4j.api
 
     // Retry for the HTTP client core (NFR-R2 of add-tracker-port). `resilience4j-core` is declared
@@ -47,10 +51,16 @@ dependencies {
     // main `implementation`: WireMock's transitive HTTP stack takes the project's pinned versions.
     testFixturesImplementation platform(libs.spring.boot.dependencies)
     testFixturesApi libs.resilience4j.retry
-    testFixturesImplementation libs.resilience4j.core
+    // `api`: the fast-retry fixture's public surface names resilience4j-core types.
+    testFixturesApi libs.resilience4j.core
     testFixturesApi libs.wiremock
     testFixturesImplementation enforcedPlatform(libs.jetty.bom)
     testFixturesCompileOnly libs.jspecify
+    // `GithubTestEndpoints` admits a spec's loopback URL through the production owner,
+    // `EgressAdmission` (design D16, "Test posture").
+    // `api`, with `:domain`: the helper's own signatures name `AdmittedEndpoint` and `OperatorEgress`.
+    testFixturesApi project(':httpegress')
+    testFixturesApi project(':domain')
     // The fixtures are Groovy, like the specs that use them; `InterruptMidRequest.run` takes a `Closure`.
     testFixturesApi libs.groovy
 
@@ -68,9 +78,14 @@ dependencies {
 layering {
     allowedProjects = [
         ':domain',
+        // The HTTP egress leaf (design D16): declared directly above.
+        ':httpegress',
         // The operator-event catalog leaf: transitive via `:domain`, whose engine emitters take
         // their head from it. No source here names it.
         ':operatorevent',
+        // The pending-key leaf (design D20): transitive via `:domain`, whose pending result and
+        // pending turn carry it. No source here names it.
+        ':pendingkey',
         // The untrusted-text leaf: transitive via `:domain`, whose value model names the carrier.
         // No source here names it.
         ':untrustedtext',

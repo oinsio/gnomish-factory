@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
@@ -8,6 +9,7 @@ import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import java.nio.file.Files
 import java.nio.file.Path
@@ -54,7 +56,7 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
 
         when:
-        snapshotStep.snapshot(TASK, 'implement', 1)
+        snapshotStep.snapshot(TASK, 'implement', 1, RoundClose.VERIFIABLE)
 
         then: 'the step fails with the git evidence rather than recording the empty string'
         def failure = thrown(BranchTipUnavailableException)
@@ -80,7 +82,7 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
         given: 'a closed round, and a persistence whose git cannot resolve the tip after the harvest'
         def gitObjects = GitObjects.open(cloneDir.resolve('.git'), Files.createDirectories(tempDir.resolve('tmp')))
         def closed = OpenedRound.reopen(rounds, cloneDir, BRANCH)
-        new EnvironmentRoundSnapshot(box, new GitProcessRunner(), cloneDir, closed).snapshot(TASK, 'implement', 1)
+        new EnvironmentRoundSnapshot(box, new GitProcessRunner(), cloneDir, closed).snapshot(TASK, 'implement', 1, RoundClose.VERIFIABLE)
         def persistence = new EnvironmentAttemptPersistence(box, blindToTips(), cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
 
         when:
@@ -93,18 +95,26 @@ class VerifiedTipPersistenceSpec extends Specification implements BareGitRepoFix
         failure.message.contains(GIT_FAILURE_STDERR)
     }
 
-    def "FR13: the host twin refuses a blank round baseline for the same reason"() {
+    // The host round's baseline is minted at the round's open (MidRoundPushRoundsSpec, "a worktree
+    // whose tip does not resolve fails the round's open"); its close reads HEAD again, and a read
+    // that never answered is cannot-verify, never a clean boundary (design D22 of
+    // migrate-verify-to-executor-contract: the base lives in the run's cell, not here).
+    def "FR13: the host twin refuses to judge a round boundary whose HEAD does not resolve"() {
         given:
         def worktree = initWorkingRepo(tempDir, 'worktree')
         new File(worktree.toFile(), 'a.txt').text = 'first'
         commitAll(worktree)
         assert gitExitCode(worktree, 'checkout', '-q', '-b', BRANCH) == 0
+        def cell = HostRoundPersistence.openedAtHead(new GitProcessRunner(), worktree)
+        def key = new AttemptKey(TASK, 'implement', 0)
 
         when:
-        new GitAttemptPersistence(blindToTips(), worktree, TASK, ClaimEpochSource.NONE)
+        new GitAttemptPersistence(blindToTips(), worktree, TASK, ClaimEpochSource.NONE, cell, new VirtualClock())
+                .persist(TASK, RoundStates.recorded(key), new ToolTrace(key, []))
 
-        then:
-        def failure = thrown(BranchTipUnavailableException)
+        then: 'infrastructure, carrying git\'s words'
+        def failure = thrown(GitPersistFailedException)
+        failure.message.contains('round boundary')
         failure.message.contains(GIT_FAILURE_STDERR)
     }
 }

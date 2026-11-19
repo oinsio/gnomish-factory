@@ -88,11 +88,12 @@ final class TakeResumeRunner {
     /**
      * Resumes a tip whose outcome is {@code null}: a process that died mid-visit, or a {@code
      * CHECKPOINT}/{@code INFRA} return whose approval or resumed write already landed — so {@code
-     * finalState} is exactly what the tip records (FR4, FR7 of make-checkpoint-gate-durable). Salvages (default) or
-     * discards ({@code --discard-work}) the interrupted round's leftovers exactly as {@link
-     * GitResumeContinuation#resumeFromRecordedPosition} does, then runs the engine once.
+     * finalState} is exactly what the tip records (FR4, FR7 of make-checkpoint-gate-durable). Settles
+     * the interrupted round's leftovers through {@link NoSalvageOverVerification}, exactly as {@link
+     * GitResumeContinuation#resumeFromRecordedPosition} does, then runs the engine once, handing it
+     * the interrupted verification the register names, if any.
      *
-     * <p>Implements FR9 of add-tracker-port.
+     * <p>Implements FR9 of add-tracker-port; FR19 of migrate-verify-to-executor-contract.
      *
      * @param order the take order being resumed: the clone (never mutated), the pipeline the run
      *     advances through, {@code --discard-work} (true discards
@@ -103,20 +104,20 @@ final class TakeResumeRunner {
      * @return the mapped {@link TakeResult} for the engine run
      */
     public TakeResult resumeWithoutDecision(TakeOrder order, ResumeBootstrap bootstrap, TaskState finalState) {
-        var salvage = git.worktrees().salvage(bootstrap.worktreePath());
-        if (order.run().discardWork()) {
-            salvage.discard();
-        } else {
-            salvage.salvage(bootstrap.taskId());
-        }
-
+        var pending = NoSalvageOverVerification.onHost(
+                git.worktrees(),
+                bootstrap.worktreePath(),
+                bootstrap.taskId(),
+                order.run().discardWork());
         return execution.run(
                 order.run().cloneDir(),
                 ResumeLawBinding.pinnedRef(bootstrap.pin(), bootstrap.baseCommit()),
                 finalState,
                 order.ref(),
                 order.tracker(),
-                eng -> eng.run(order, bootstrap, bootstrap.context(), finalState));
+                // The owner's answer is the interrupted verification this run re-verifies, never read
+                // again downstream (design D22 of migrate-verify-to-executor-contract).
+                eng -> eng.run(order, bootstrap, bootstrap.context(), finalState, pending));
     }
 
     /**
@@ -143,7 +144,7 @@ final class TakeResumeRunner {
                 resetState,
                 order.ref(),
                 order.tracker(),
-                eng -> eng.run(order, bootstrap, context, resetState));
+                eng -> eng.run(order, bootstrap, context, resetState, null));
     }
 
     /**

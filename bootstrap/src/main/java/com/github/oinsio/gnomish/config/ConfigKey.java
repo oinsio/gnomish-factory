@@ -12,7 +12,7 @@ import org.springframework.boot.context.properties.source.ConfigurationPropertyN
  * One {@code factory.*} key a {@code @ConfigurationProperties} record binds, with the level its
  * component declares (FR6, design D4). A {@code Map}-, collection- or array-valued component is a
  * subtree: its level covers every key below it ({@code factory.check.<provider>.*}, {@code
- * factory.sandbox.egress-allowlist[0]}).
+ * factory.egress.sandbox[0]}).
  *
  * <p>Implements FR4, FR6 of add-project-registry.
  *

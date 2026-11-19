@@ -40,7 +40,7 @@ final class DeliveredCleanupMedium {
     static final String CONTAINER = 'container'
 
     private static final SandboxProperties SANDBOX =
-    new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+    new SandboxProperties('gnomish/img', null, null, null, [], false, null, null, null, null)
 
     final String name
     final ScriptedSandboxDocker docker = new ScriptedSandboxDocker()

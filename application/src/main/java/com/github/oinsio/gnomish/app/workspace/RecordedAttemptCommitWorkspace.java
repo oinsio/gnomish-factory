@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app.workspace;
 
-import com.github.oinsio.gnomish.app.port.check.AttemptCommitWorkspace;
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
+import com.github.oinsio.gnomish.domain.engine.port.AttemptCommitWorkspace;
 
 /**
  * The sandboxed-mode workspace the engine hands to check runners: instead of a host
@@ -19,11 +19,11 @@ import com.github.oinsio.gnomish.app.port.git.CurrentRound;
  * or {@link CurrentRound#restore} on resume), so every consumer always observes the current
  * round's attempt commit.
  *
- * <p>The name is decorated because the plugin-facing type owns the undecorated one: this record
- * is the engine's <em>recording</em> implementation of the published {@link
- * AttemptCommitWorkspace} contract, whose sha a check plugin reads by narrowing to the api
- * interface (design D1/D2). The record itself, and the mutable cell protocol it carries, stay
- * engine internals — no plugin sees them.
+ * <p>The name is decorated because the capability owns the undecorated one: this record is the
+ * engine's <em>recording</em> implementation of the domain's {@link AttemptCommitWorkspace}
+ * capability, whose sha a built-in check reads by narrowing to the interface (design D1/D2 of
+ * close-plugin-api-compilability-gap; D18 of migrate-verify-to-executor-contract). The record
+ * itself, and the mutable cell protocol it carries, stay engine internals — no reader sees them.
  *
  * <p>Implements FR21, FR26 of add-sandbox-core; FR1 of close-plugin-api-compilability-gap; FR13 of
  * make-checkpoint-gate-durable.

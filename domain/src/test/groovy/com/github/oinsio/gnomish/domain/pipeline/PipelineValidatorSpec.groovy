@@ -21,7 +21,6 @@ import spock.lang.Specification
 class PipelineValidatorSpec extends Specification {
 
     /** The factory configures no check provider: every model here declares no external check. */
-    private static final Set<String> NO_PROVIDERS = [] as Set
 
     private static StageDefinition.Executor executor(String model = 'claude-sonnet-4-5') {
         new StageDefinition.Executor(ExecutorType.AGENT_CLI, model, [:])
@@ -67,7 +66,7 @@ class PipelineValidatorSpec extends Specification {
     // rule aggregates to an empty list.
     def "a fully valid model produces no errors"() {
         expect: 'the aggregate error list is empty'
-        PipelineValidator.validate(validModel(), NO_PROVIDERS) == []
+        PipelineValidator.validate(validModel()) == []
     }
 
     // FR8: each delegated rule's contribution is observable in the aggregate —
@@ -75,7 +74,7 @@ class PipelineValidatorSpec extends Specification {
     // concatenation, so each rule must be reachable).
     def "the aggregate contains the errors of the #ruleName rule"() {
         expect: 'the rule-specific error appears in the aggregate'
-        PipelineValidator.validate(model, NO_PROVIDERS).containsAll(expected)
+        PipelineValidator.validate(model).containsAll(expected)
 
         where:
         ruleName | model || expected
@@ -84,16 +83,15 @@ class PipelineValidatorSpec extends Specification {
         'StageOrder' | emptyOrderModel() || StageOrderRule.validate(emptyOrderModel().stages())
         'ArtifactGraph' | danglingRefModel() || ArtifactGraphRule.validate(danglingRefModel().stages())
         'StageSanity' | blankModelModel() || StageSanityRule.validate(blankModelModel().stages())
-        'UnconfiguredCheckProvider' | externalCheckModel() || UnconfiguredCheckProviderRule.validate(externalCheckModel().stages(), NO_PROVIDERS)
         'VerdictCheck' | scmStatusWithoutExpectedModel() || VerdictCheckRule.validate(scmStatusWithoutExpectedModel())
     }
 
-    // FR3 of remove-interactive-console: the configured set reaches the rule — the same
-    // external check that is refused with no provider configured passes once it is.
-    def "an external check on a configured provider contributes no error"() {
+    // D18 of migrate-verify-to-executor-contract ("Where a refusal at run assembly goes"): no load
+    //     rule reads the operator's factory.check configuration — a check naming a credentialed
+    //     built-in is judged connected once, at run assembly, never by a second load validator.
+    def "an external check loads without any operator check configuration"() {
         expect:
-        !UnconfiguredCheckProviderRule.validate(externalCheckModel().stages(), NO_PROVIDERS).isEmpty()
-        PipelineValidator.validate(externalCheckModel(), ['github'] as Set) == []
+        PipelineValidator.validate(externalCheckModel()) == []
     }
 
     // FR8 / UX1 / delta-spec "All problems reported in one pass": a model
@@ -105,7 +103,7 @@ class PipelineValidatorSpec extends Specification {
         PipelineDefinition model = allRulesBrokenModel()
 
         expect: 'the aggregate is exactly the five rules concatenated in order'
-        PipelineValidator.validate(model, NO_PROVIDERS) ==
+        PipelineValidator.validate(model) ==
                 SchemaVersionRule.validate(model.schemaVersion()) +
                 TrackerConfigRule.validate(model.tracker()) +
                 StageOrderRule.validate(model.stages()) +
@@ -124,7 +122,7 @@ class PipelineValidatorSpec extends Specification {
     // list on every call.
     def "validation is deterministic for #ruleName"() {
         expect: 'two validations of the same model are equal'
-        PipelineValidator.validate(model, NO_PROVIDERS) == PipelineValidator.validate(model, NO_PROVIDERS)
+        PipelineValidator.validate(model) == PipelineValidator.validate(model)
 
         where:
         ruleName | model
@@ -135,7 +133,7 @@ class PipelineValidatorSpec extends Specification {
     // NFR-R1 / conventions: the returned list is immutable (defensive copy).
     def "the returned error list is immutable"() {
         when: 'mutating the returned list'
-        PipelineValidator.validate(allRulesBrokenModel(), NO_PROVIDERS).add(
+        PipelineValidator.validate(allRulesBrokenModel()).add(
                 new ConfigError('config.yaml', 'x', 'y'))
 
         then: 'it is rejected'
@@ -151,7 +149,7 @@ class PipelineValidatorSpec extends Specification {
                     stage('plan', [new ArtifactInput.Source()], [
                         new ArtifactOutput('plan-out')
                     ], executor(), [
-                        VerifyChecks.external('ci', 'github', Duration.ofSeconds(30),
+                        VerifyChecks.external('ci', 'github-actions', Duration.ofSeconds(30),
                         Duration.ofMinutes(10), VerifyCheck.TimeoutClass.QUALITY)
                     ])
                 ])

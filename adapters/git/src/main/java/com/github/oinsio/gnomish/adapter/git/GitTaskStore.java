@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper;
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper;
+import com.github.oinsio.gnomish.app.port.git.CurrentRound;
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore;
 import com.github.oinsio.gnomish.app.port.git.TaskRecord;
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit;
@@ -83,8 +84,8 @@ public final class GitTaskStore implements TaskStoreGit {
     }
 
     @Override
-    public AttemptPersistence attemptPersistence(Path worktree, String taskId) {
-        return new GitAttemptPersistence(runner, worktree, taskId, epochs);
+    public AttemptPersistence attemptPersistence(Path worktree, String taskId, CurrentRound rounds) {
+        return new GitAttemptPersistence(runner, worktree, taskId, epochs, rounds, clock);
     }
 
     @Override

@@ -1,9 +1,13 @@
 package com.github.oinsio.gnomish.app.conformance
 
-import com.github.oinsio.gnomish.adapter.agent.command.CommandStageExecutor
+import com.github.oinsio.gnomish.adapter.agent.command.CommandExecutorFactory
 import com.github.oinsio.gnomish.adapter.command.CommandRun
+import com.github.oinsio.gnomish.app.BuiltInEntriesFixture
+import com.github.oinsio.gnomish.app.DescribedLaws
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
+import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
@@ -19,7 +23,9 @@ import spock.lang.Timeout
 /**
  * FR8 of add-command-executor (design D2): the {@code command} built-in through the conformance kit of
  * define-executor-contract, driven in process by {@link BuiltInCandidate} — the mirror interface alone,
- * no document on a wire. The built-in runs the kit's {@code transform} instructions as its command, in
+ * no document on a wire — through its registry entry: the entry's describe, and each case's executor
+ * bound by the entry to a host environment over that case's own working copy (design D18 of
+ * migrate-verify-to-executor-contract). The built-in runs the kit's {@code transform} instructions as its command, in
  * a real host environment whose launch hands back a {@link FakeProcess} that exits 0, so the case
  * judges what the built-in reports rather than what a shell makes of the kit's English sentence; the
  * exit-code contract itself is {@code CommandExitCodeSpec}'s.
@@ -29,9 +35,6 @@ class CommandBuiltInConformanceSpec extends Specification {
 
     @TempDir
     Path scratch
-
-    @TempDir
-    Path workingCopy
 
     List<List<String>> launched = []
     List<Duration> waits = []
@@ -46,18 +49,27 @@ class CommandBuiltInConformanceSpec extends Specification {
             process
         } as ProcessLaunch
         def clock = new VirtualClock()
-        def environment = new HostTaskExecutionEnvironment(workingCopy, clock, ChildEnvAllowlist.none(), launch)
-        environment.materialize('gnomish/TASK-1', null)
-        def builtIn = new CommandStageExecutor(environment, new CommandRun(CommandRun.POSIX_SHELL, clock))
+        def entry = BuiltInEntriesFixture.of(clock).of(
+                new PipelineDefinition('1', new AutonomyLimits(3), [], null, []),
+                DescribedLaws.none()).find {
+                    it.name().value() == CommandExecutorFactory.NAME
+                }
+        List<HostTaskExecutionEnvironment> environments = []
+        def binding = { KitCase kase, Path caseCopy ->
+            def environment = new HostTaskExecutionEnvironment(caseCopy, clock, ChildEnvAllowlist.none(), launch)
+            environment.materialize('gnomish/TASK-1', null)
+            environments << environment
+            entry.rounds().executor(environment)
+        } as CaseBinding
 
         when:
         def report
         try {
             report = new ConformanceKit([:], { Duration d ->
                 waits << d
-            } as Sleeper).run(new BuiltInCandidate(builtIn, scratch))
+            } as Sleeper).run(new BuiltInCandidate(entry.describe(), binding, [:], scratch))
         } finally {
-            environment.dispose()
+            environments*.dispose()
         }
         def verdicts = report.verdicts()
 
@@ -82,6 +94,7 @@ class CommandBuiltInConformanceSpec extends Specification {
         (verdicts[KitCase.DECISION] as CaseVerdict.NotApplicable).reason().contains('decision')
         (verdicts[KitCase.MALFORMED_ANSWER] as CaseVerdict.NotApplicable).reason().contains('decision')
         (verdicts[KitCase.PENDING_POLL] as CaseVerdict.NotApplicable).reason().contains('poll')
+        (verdicts[KitCase.PENDING_REPOLL] as CaseVerdict.NotApplicable).reason().contains('poll')
         waits == []
 
         and: 'the transform case ran the instructions once as sh -c; the unknown-role start ran nothing'

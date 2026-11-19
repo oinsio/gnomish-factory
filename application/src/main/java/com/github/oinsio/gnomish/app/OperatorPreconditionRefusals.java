@@ -6,19 +6,22 @@ import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeUnavailableExcepti
 import com.github.oinsio.gnomish.app.port.run.ImageContractRefusedException;
 import com.github.oinsio.gnomish.app.take.DaemonConditionKind;
 import com.github.oinsio.gnomish.app.take.TakeResult;
+import com.github.oinsio.gnomish.domain.egress.EgressRefusedException;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Optional;
 
 /**
  * The one classifier of an operator precondition refusal (design D22 of add-sandbox-base-image):
- * whether a failure is one of the four refusals a check throws when the operator's setup does not
- * meet what the factory needs (design D18), and which. Every reader asks here — the claimed-run
+ * whether a failure is one of the five refusals a check throws when the operator's setup does not
+ * meet what the factory needs (design D18) — the egress guard's refusal of a tracker call among them
+ * (design D16 of migrate-verify-to-executor-contract, FR18) — and which. Every reader asks here — the claimed-run
  * dispatch for its typed result, {@code run}'s reporting and exit code, and the first-box step of
  * both fresh container paths for which failure leaves before the engine — so a fifth precondition
  * is one arm here, never a list per reader. {@code OperatorPreconditionOwnerSpec} in {@code
- * :bootstrap} keeps the four type names out of every other classification in this module.
+ * :bootstrap} keeps the five type names out of every other classification in this module.
  *
- * <p>Implements FR14, NFR-R2 of add-sandbox-base-image.
+ * <p>Implements FR14, NFR-R2 of add-sandbox-base-image; FR18, NFR-R5 of
+ * migrate-verify-to-executor-contract.
  */
 public final class OperatorPreconditionRefusals {
 
@@ -37,6 +40,7 @@ public final class OperatorPreconditionRefusals {
             case ContainerRuntimeUnavailableException ignored -> Optional.of(DaemonConditionKind.CONTAINER_RUNTIME);
             case BoxGitVersionRefusedException ignored -> Optional.of(DaemonConditionKind.BOX_GIT_FLOOR);
             case ImageContractRefusedException ignored -> Optional.of(DaemonConditionKind.IMAGE_CONTRACT);
+            case EgressRefusedException ignored -> Optional.of(DaemonConditionKind.EGRESS);
             default -> Optional.empty();
         };
     }

@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.e2e.gitea
 
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckExternalClient
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.scm.actions.GithubCheckExternalClient
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
 import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
 import com.github.oinsio.gnomish.domain.engine.PollStatus
@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -94,7 +95,7 @@ class GiteaActionsRunnerE2ESpec extends Specification implements BareGitRepoFixt
         pushResult.exitCode() == 0
 
         and: 'the adapter this change built eventually observes the run passing (real runner, real async delay)'
-        def httpClient = new GithubHttpClient(gitea.apiBaseUrl(), gitea.adminToken())
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(gitea.apiBaseUrl())), gitea.adminToken())
         def client = new GithubCheckExternalClient(httpClient, GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, new VirtualClock())
         def check = VerifyChecks.external(
                 CHECK_ID, 'github', Duration.ofSeconds(5), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)

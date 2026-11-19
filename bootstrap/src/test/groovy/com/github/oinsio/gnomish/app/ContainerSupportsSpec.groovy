@@ -44,7 +44,7 @@ class ContainerSupportsSpec extends Specification implements BareGitRepoFixture,
 
     Path cloneDir
 
-    SandboxProperties sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+    SandboxProperties sandbox = new SandboxProperties('gnomish/img', null, null, null, [], false, null, null, null, null)
 
     TimeEquipment time = VirtualTimeEquipment.create()
 
@@ -149,7 +149,7 @@ class ContainerSupportsSpec extends Specification implements BareGitRepoFixture,
     }
 
     private ContainerSupports newSupports(SecretsProvider secrets = MapSecretsProvider.NONE) {
-        new ContainerSupports([:], checksOver(secrets), testProperties(), sandbox, selector, TaskGitFixture.real(), time)
+        new ContainerSupports(checksOver(secrets), testProperties(), sandbox, selector, TaskGitFixture.real(), time)
     }
 
     private static List<Segment> segments() {
@@ -172,7 +172,7 @@ class ContainerSupportsSpec extends Specification implements BareGitRepoFixture,
 
     /** The installation's check equipment over {@code secrets}, as the root's checkEquipment bean builds it. */
     private static CheckEquipment checksOver(SecretsProvider secrets) {
-        new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(new VirtualClock()), [:], secrets,
-        new FactoryProperties('container-supports', null, null, null), VirtualTimeEquipment.create())
+        new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(new VirtualClock()), secrets,
+                new FactoryProperties('container-supports', null, null, null))
     }
 }

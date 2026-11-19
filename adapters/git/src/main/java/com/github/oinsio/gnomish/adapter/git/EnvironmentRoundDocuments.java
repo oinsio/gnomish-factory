@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Renders the two factory-authored documents a sandboxed round commits — {@code state.json}
@@ -58,6 +59,25 @@ final class EnvironmentRoundDocuments {
                 .denialCursor()
                 .map(c -> new EgressCursorDto(c.source(), c.position()))
                 .orElse(null);
+        return render(taskId, key, state, cursor);
+    }
+
+    /**
+     * Renders {@code state.json} for an open round's pending commit (design D21 of
+     * migrate-verify-to-executor-contract), carrying the registered commit's denial cursor
+     * unchanged rather than the environment's: the round's denials are not on the state yet, so a
+     * cursor past them would lead the record and a resume would never replay them.
+     *
+     * @param registeredCursor the cursor the round's last registered commit carries, or {@code null}
+     * @return the {@code state.json} bytes
+     * @throws GitPersistFailedException if the state cannot be serialized
+     */
+    static byte[] pendingState(
+            String taskId, AttemptKey key, TaskState state, @Nullable EgressCursorDto registeredCursor) {
+        return render(taskId, key, state, registeredCursor);
+    }
+
+    private static byte[] render(String taskId, AttemptKey key, TaskState state, @Nullable EgressCursorDto cursor) {
         try {
             return TaskStateJson.mapper()
                     .writeValueAsString(StateJsonMapper.toDto(state, cursor))

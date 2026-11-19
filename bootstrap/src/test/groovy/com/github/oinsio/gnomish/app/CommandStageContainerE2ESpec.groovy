@@ -81,7 +81,7 @@ class CommandStageContainerE2ESpec extends Specification implements BareGitRepoF
     def "FR9, NFR-R1, G2: in container mode a flaky command stage retries with its finding, each round's effects harvested and committed, classified as on the host"() {
         given: 'a container-mode runner over the fake-agent sandbox image'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        def sandbox = new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
         def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def git = TaskGitFixture.real()
         def runner = new ContainerGitModeRunner(
@@ -99,6 +99,10 @@ class CommandStageContainerE2ESpec extends Specification implements BareGitRepoF
 
         then: 'each command round was harvested from the box like an agent round'
         [0, 1].every { int round -> snapshotOf('build', round) }
+
+        and: 'the failed round closed unverifiable, the passing one verifiable (FR19, design D22)'
+        subjectOf(cloneDir, snapshotOf('build', 0)).startsWith('gnomish: unverified-snapshot build#0 ')
+        subjectOf(cloneDir, snapshotOf('build', 1)).startsWith('gnomish: snapshot build#1 ')
 
         and: "the first round's harvest and commit carry the marker the failing command wrote, and no build result"
         tree(snapshotOf('build', 0)).contains(CommandStagePipeline.MARKER)
@@ -140,10 +144,14 @@ class CommandStageContainerE2ESpec extends Specification implements BareGitRepoF
         !gitOutput(cloneDir, 'ls-tree', '-r', '--name-only', "gnomish/${taskId}").contains('.gnomish-task/')
     }
 
-    /** The harvest commit of {@code stage}'s round {@code round}; exactly one exists. */
+    /**
+     * The harvest commit of {@code stage}'s round {@code round}; exactly one exists. A round its
+     * command failed closes under the unverified subject (design D22 of
+     * migrate-verify-to-executor-contract), a passing one under the snapshot subject.
+     */
     private String snapshotOf(String stage, int round) {
-        def commits = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%H', '--grep',
-                "^gnomish: snapshot ${stage}#${round} [0-9a-f]*\$").readLines().findAll {
+        def commits = gitOutput(cloneDir, 'log', "gnomish/${taskId}", '--format=%H', '-E', '--grep',
+                "^gnomish: (unverified-)?snapshot ${stage}#${round} [0-9a-f]*\$").readLines().findAll {
                     !it.isBlank()
                 }
         assert commits.size() == 1

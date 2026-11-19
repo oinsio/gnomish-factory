@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.adapter.git.BestEffortPush
 import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.git.HostRoundPersistence
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.InstanceId
@@ -92,7 +93,7 @@ class ZombieFenceSpec extends Specification implements BareGitRepoFixture {
 
     /** A round-boundary persist for {@code holder} over {@code worktree}, wrapping the real git persistence. */
     private RevocationCheckingAttemptPersistence persistenceFor(Path worktree, InstanceId holder, Tracker tracker) {
-        def git = new GitAttemptPersistence(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE)
+        def git = HostRoundPersistence.over(runner, worktree, 'PROJ-1', ClaimEpochSource.NONE)
         new RevocationCheckingAttemptPersistence(git, tracker, REF, holder)
     }
 

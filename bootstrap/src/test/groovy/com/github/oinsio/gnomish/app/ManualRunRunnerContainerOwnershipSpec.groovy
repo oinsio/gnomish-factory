@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.sandbox.DiscoveredBindings
 import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
@@ -75,7 +74,7 @@ class ManualRunRunnerContainerOwnershipSpec extends Specification implements Bar
     }
 
     private static SandboxProperties sandbox() {
-        new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+        new SandboxProperties('gnomish/img', null, null, null, [], false, null, null, null, null)
     }
 
     private static List<Segment> segments() {
@@ -106,13 +105,13 @@ class ManualRunRunnerContainerOwnershipSpec extends Specification implements Bar
                 new BindingProperties(null, [:]), sandbox, DiscoveredBindings.real(), {
                     -> true
                 } as ContainerRuntimeProbe)
-        new ContainerSupports([(GithubCheckClientFactory.PROVIDER): new GithubCheckClientFactory()], checksOver(MapSecretsProvider.NONE), testProperties(),
-        sandbox, selector, TaskGitFixture.real(), VirtualTimeEquipment.create())
+        new ContainerSupports(checksOver(MapSecretsProvider.NONE), testProperties(),
+                sandbox, selector, TaskGitFixture.real(), VirtualTimeEquipment.create())
     }
 
     /** The installation's check equipment over {@code secrets}, as the root's checkEquipment bean builds it. */
     private static CheckEquipment checksOver(SecretsProvider secrets) {
-        new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(new VirtualClock()), [:], secrets,
-        new FactoryProperties('container-supports', null, null, null), VirtualTimeEquipment.create())
+        new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(new VirtualClock()), secrets,
+                new FactoryProperties('container-supports', null, null, null))
     }
 }

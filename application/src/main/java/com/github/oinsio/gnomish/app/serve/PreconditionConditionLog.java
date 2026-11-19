@@ -41,6 +41,7 @@ record PreconditionConditionLog(DaemonConditionKind kind) implements ConditionLo
             case IMAGE_CONTRACT ->
                 log.warn(OperatorEvent.CONDITION_IMAGE_CONTRACT_OPENED.head() + OPENED, kind, reason);
             case BOX_GIT_FLOOR -> log.warn(OperatorEvent.CONDITION_BOX_GIT_FLOOR_OPENED.head() + OPENED, kind, reason);
+            case EGRESS -> log.warn(OperatorEvent.CONDITION_EGRESS_OPENED.head() + OPENED, kind, reason);
             case REMOTE -> {
                 // refused by the compact constructor
             }
@@ -99,6 +100,8 @@ record PreconditionConditionLog(DaemonConditionKind kind) implements ConditionLo
                         kind,
                         threshold,
                         lastError);
+            case EGRESS ->
+                log.error(OperatorEvent.CONDITION_EGRESS_SUSTAINED_OPEN.head() + SUSTAINED, kind, threshold, lastError);
             case REMOTE -> {
                 // refused by the compact constructor
             }

@@ -47,7 +47,7 @@ class GithubConditionalRequestCacheSpec extends Specification {
     }
 
     private GithubHttpClient newClient() {
-        new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', fastRetryConfig())
     }
 
     def "first request for a key carries no If-None-Match and caches the returned ETag"() {
@@ -85,7 +85,7 @@ class GithubConditionalRequestCacheSpec extends Specification {
                 .withoutHeader('If-None-Match'))
     }
 
-    def "a 403 carrying x-ratelimit-remaining: 0 is surfaced as rate limited"() {
+    def "a 403 carrying x-ratelimit-remaining: 0 is surfaced as rate limited, with the default pause when no reset is named"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/issues/1'))
                 .willReturn(aResponse().withStatus(403).withHeader('x-ratelimit-remaining', '0').withBody('{"message":"rate limit"}')))
@@ -95,10 +95,10 @@ class GithubConditionalRequestCacheSpec extends Specification {
         def result = cache.get(cache.httpClient().newRequest('/issues/1'), 'issues/1')
 
         then:
-        result.rateLimited()
+        result.rateLimit() == new RateLimit(GithubRateLimit.DEFAULT_PAUSE)
     }
 
-    def "a 403 carrying Retry-After (secondary rate limit) is surfaced as rate limited"() {
+    def "a 403 carrying Retry-After (secondary rate limit) is surfaced as rate limited, with that pause"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/issues/2'))
                 .willReturn(aResponse().withStatus(403).withHeader('Retry-After', '30').withBody('{"message":"secondary rate limit"}')))
@@ -108,7 +108,7 @@ class GithubConditionalRequestCacheSpec extends Specification {
         def result = cache.get(cache.httpClient().newRequest('/issues/2'), 'issues/2')
 
         then:
-        result.rateLimited()
+        result.rateLimit() == new RateLimit(java.time.Duration.ofSeconds(30))
     }
 
     def "a plain permission-denied 403 is not surfaced as rate limited"() {
@@ -121,7 +121,7 @@ class GithubConditionalRequestCacheSpec extends Specification {
         def result = cache.get(cache.httpClient().newRequest('/issues/3'), 'issues/3')
 
         then:
-        !result.rateLimited()
+        result.rateLimit() == null
     }
 
     def "a 2xx response without an ETag is not cached"() {
@@ -154,6 +154,9 @@ class GithubConditionalRequestCacheSpec extends Specification {
                 .withHeader('If-None-Match', WireMock.equalTo('"v1"')))
     }
 
+    // FR15 of migrate-verify-to-executor-contract: the ETag and the 304 travel through the guarded
+    //     exchange's response, which hands the core its headers
+    // Scenario: verification/factory-egress-allowlist / Response headers reach the consumer
     def "a 304 response is treated as no change, reusing the previously cached body"() {
         given:
         wireMock.stubFor(get(urlEqualTo('/issues/42'))

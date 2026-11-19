@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -49,9 +48,9 @@ class DecisionCarryingResumeSpec extends Specification {
     static final def WORKSPACE = new FakeWorkspace()
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
-    def commandRunner = new ScriptedCommandCheckRunner()
-    def externalClient = new ScriptedExternalCheckClient()
+    def builtinRunner = new ScriptedCheckRounds()
+    def commandRunner = new ScriptedCheckRounds()
+    def externalClient = new ScriptedCheckRounds()
     def judgeVoter = new ScriptedJudgeVoter()
     def persistence = new InMemoryAttemptPersistence()
     def listener = new RecordingEventListener()
@@ -59,7 +58,7 @@ class DecisionCarryingResumeSpec extends Specification {
     def sleeper = new VirtualSleeper(clock)
 
     EnginePorts ports() {
-        new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter,
                 listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
@@ -133,8 +132,7 @@ class DecisionCarryingResumeSpec extends Specification {
 
         when: 'a run enters at the limit — no caller reset — with its own fakes'
         def exhaustedExecutor = new ScriptedExecutor()
-        def exhaustedPorts = new EnginePorts(exhaustedExecutor, new ScriptedBuiltinCheckRunner(),
-                new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(),
+        def exhaustedPorts = new EnginePorts(CheckRouting.of(exhaustedExecutor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(),
                 new RecordingEventListener(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
         def exhausted = new Engine().run(pipeline(stageDef), context,
                 new TaskState(new Position.AtStage('build'), 2, [], UsageSnapshot.EMPTY, ExecutorVersions.none()), WORKSPACE, exhaustedPorts)

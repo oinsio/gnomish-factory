@@ -1,44 +1,39 @@
 package com.github.oinsio.gnomish.httpegress;
 
+import com.github.oinsio.gnomish.domain.egress.EgressRefusal;
+import com.github.oinsio.gnomish.domain.egress.EgressRefusedException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpRequest;
-import java.time.Duration;
+import java.util.HashSet;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@link HttpCheckExchange} the {@code http} provider actually calls: every hop judged by the
- * {@link EgressAllowlist} before it is sent, and the chain of hops bounded (NFR-S2, design D5 of
- * add-plugin-architecture).
+ * The guarded exchange every factory HTTP consumer calls (NFR-S2, design D5 of
+ * add-plugin-architecture; FR15, FR17, design D16 of migrate-verify-to-executor-contract): every hop
+ * — the first included — judged by the consumer's {@link EgressAllowlist} before it is sent, and the
+ * chain of hops bounded.
  *
- * <p>Redirects are followed here rather than by the JDK client precisely so each hop can be
- * re-judged: an allowlisted host answering {@code 302 Location: http://169.254.169.254/…} is exactly
- * the escape the address-class rules exist to stop, and a client that follows redirects internally
- * would take that hop before any guard saw it.
+ * <p>Redirects are followed here rather than by the JDK client so each hop is re-judged: an
+ * admitted host answering {@code 302 Location: http://169.254.169.254/…} is exactly the escape the
+ * address-class rules exist to stop. A hop is built by {@link RedirectHop} (the method, body and
+ * credential rules); a hop from {@code https} to {@code http} is refused as a downgrade, a hop onto
+ * a URL the chain already visited is a loop, and a fourth redirect outruns {@link #MAX_REDIRECTS} —
+ * the last two are {@link ExchangeLimitException}s, never refusals.
  *
- * <p>A cross-host redirect carries no headers forward. The declared headers of an http check include
- * its credential, and handing a credential to a host the manifest never named — merely one the
- * allowlist also permits — is the exfiltration case in miniature. A same-host redirect (a path
- * rewrite, a trailing slash) keeps them.
- *
- * <p>Total request time is bounded by construction rather than by a clock: each hop carries {@link
- * JdkHttpCheckExchange#REQUEST_TIMEOUT} and the hops are bounded by {@link #MAX_REDIRECTS}, so an
- * exchange cannot outlive {@link #MAX_TOTAL_DURATION}.
- *
- * <p>Implements NFR-S2 of add-plugin-architecture; FR15 of migrate-verify-to-executor-contract
- * (moved into this leaf by design D16).
+ * <p>Implements NFR-S2 of add-plugin-architecture; FR15, FR17 of
+ * migrate-verify-to-executor-contract.
  */
 public final class GuardedHttpCheckExchange implements HttpCheckExchange {
 
     /**
-     * How many redirects one exchange may follow. A status endpoint that needs a fourth hop is
+     * How many redirects one exchange may follow. An endpoint that needs a fourth hop is
      * misconfigured, and an unbounded chain is a way to keep the factory busy.
      */
     public static final int MAX_REDIRECTS = 3;
 
-    /** The bound the per-hop timeout and the hop bound together imply. */
-    public static final Duration MAX_TOTAL_DURATION =
-            JdkHttpCheckExchange.REQUEST_TIMEOUT.multipliedBy(MAX_REDIRECTS + 1L);
+    private static final String HTTPS = "https";
 
     private final HttpCheckExchange delegate;
     private final EgressAllowlist allowlist;
@@ -49,69 +44,67 @@ public final class GuardedHttpCheckExchange implements HttpCheckExchange {
     }
 
     /**
-     * Sends {@code request}, following permitted redirects up to the bound.
+     * Sends {@code request}, following admitted redirects up to the bound.
      *
      * @param request the composed first hop; never null
      * @return the first non-redirect response; never null
-     * @throws EgressRefusedException if any hop — the first included — is refused, or if the chain
-     *     outruns {@link #MAX_REDIRECTS}
+     * @throws EgressRefusedException if any hop is refused, a downgrade included
+     * @throws ExchangeLimitException if the chain loops or outruns {@link #MAX_REDIRECTS}
+     * @throws IOException if a host does not resolve or the exchange fails at the transport
      */
     @Override
     public Response send(HttpRequest request) throws IOException, InterruptedException {
-        return send(request, MAX_REDIRECTS);
+        Set<URI> visited = new HashSet<>();
+        HttpRequest hop = request;
+        for (int redirects = 0; ; redirects++) {
+            judge(hop.uri());
+            visited.add(hop.uri().normalize());
+            Response response = delegate.send(hop);
+            URI next = redirectTarget(hop, response);
+            if (next == null) {
+                return response;
+            }
+            refuseUnfollowable(hop, next, visited, redirects);
+            hop = RedirectHop.of(hop, response.status(), next);
+        }
     }
 
-    /**
-     * One judged hop, recursing into the redirect it points at while hops remain. Recursion rather
-     * than a counted loop is deliberate: the remaining budget is a parameter that only ever shrinks,
-     * so the chain is bounded by the shape of the code rather than by a loop variable that has to be
-     * trusted to advance.
-     *
-     * @param hop the request about to be judged and sent; never null
-     * @param remaining how many further redirects may still be followed
-     */
-    private Response send(HttpRequest hop, int remaining) throws IOException, InterruptedException {
-        EgressRefusal refusal = allowlist.refuse(hop.uri());
+    private void judge(URI target) throws IOException {
+        EgressRefusal refusal = allowlist.refuse(target);
         if (refusal != null) {
             throw new EgressRefusedException(refusal);
         }
-        Response response = delegate.send(hop);
-        URI next = redirectTarget(hop, response);
-        if (next == null) {
-            return response;
-        }
-        if (remaining <= 0) {
+    }
+
+    /** A downgrade is a refusal; a loop or a fourth redirect is an exchange limit. */
+    private void refuseUnfollowable(HttpRequest hop, URI next, Set<URI> visited, int redirects) {
+        if (HTTPS.equalsIgnoreCase(hop.uri().getScheme()) && !HTTPS.equalsIgnoreCase(next.getScheme())) {
             throw new EgressRefusedException(new EgressRefusal(
-                    EgressRefusal.Reason.REDIRECT_LIMIT,
+                    EgressRefusal.Reason.SCHEME,
                     next.toString(),
-                    "more than %d redirects followed from '%s'".formatted(MAX_REDIRECTS, hop.uri())));
+                    "a redirect from '%s' downgrades https to '%s'".formatted(hop.uri(), next.getScheme()),
+                    allowlist.key()));
         }
-        return send(hopTo(hop, next), remaining - 1);
+        if (visited.contains(next.normalize())) {
+            throw new ExchangeLimitException(
+                    ExchangeLimitException.Limit.REDIRECT_LOOP,
+                    next.toString(),
+                    "'%s' redirects back to a URL this chain already visited".formatted(hop.uri()));
+        }
+        if (redirects >= MAX_REDIRECTS) {
+            throw new ExchangeLimitException(
+                    ExchangeLimitException.Limit.REDIRECT_LIMIT,
+                    next.toString(),
+                    "more than %d redirects followed from '%s'".formatted(MAX_REDIRECTS, hop.uri()));
+        }
     }
 
     /** The absolute target of a redirect response, or {@code null} when this is the final hop. */
     private static @Nullable URI redirectTarget(HttpRequest hop, Response response) {
         String location = response.location();
-        if (!isRedirect(response.status()) || location == null || location.isBlank()) {
+        if (!RedirectHop.isRedirect(response.status()) || location == null || location.isBlank()) {
             return null;
         }
         return hop.uri().resolve(location);
-    }
-
-    /** 3xx statuses that carry a {@code Location} — 304 and 305 do not redirect a check anywhere. */
-    private static boolean isRedirect(int status) {
-        return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
-    }
-
-    /** The next hop: same method, headers only when the host is unchanged (no credential travels). */
-    private static HttpRequest hopTo(HttpRequest previous, URI next) {
-        HttpRequest.Builder builder = HttpRequest.newBuilder(next)
-                .timeout(previous.timeout().orElse(JdkHttpCheckExchange.REQUEST_TIMEOUT))
-                .method(previous.method(), HttpRequest.BodyPublishers.noBody());
-        if (next.getHost() != null
-                && next.getHost().equalsIgnoreCase(previous.uri().getHost())) {
-            previous.headers().map().forEach((name, values) -> values.forEach(value -> builder.header(name, value)));
-        }
-        return builder.build();
     }
 }
