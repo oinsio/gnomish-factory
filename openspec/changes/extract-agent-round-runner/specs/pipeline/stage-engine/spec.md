@@ -63,8 +63,7 @@ pending ceiling counted from the recorded start time, as `failed/infrastructure`
 ### Requirement: Any instance resumes a pending transform round
 A pickup that finds a pending round record at the registered commit SHALL continue that round
 with `poll(key)` in an environment materialized at that commit, on any instance, and SHALL NOT
-call `start`. The live path SHALL continue from the record read back from its own commit,
-through the same parse as the resume.
+call `start`.
 **Implements**: FR11, NFR-R3, NFR-R4, G5 of extract-agent-round-runner; FR11 of migrate-verify-to-executor-contract
 
 #### Scenario: Kill before the pending commit re-drives start

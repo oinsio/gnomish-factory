@@ -22,7 +22,19 @@ transport of its own. The branch-side reader of a pending request SHALL read the
 - **WHEN** a factory dies after the snapshot commit carrying the answer file
 - **THEN** a resuming instance finds the decision request in the branch and escalates it
 
+#### Scenario: Answer file read is capped
+- **WHEN** the gnome writes an answer file larger than the result cap
+- **THEN** at most the cap is read, truncation is recorded, and the round still resolves as a
+  decision request
+
 ## REMOVED Requirements
+
+### Requirement: Decision file is read through the shared result reader
+**Reason**: Superseded by "Decision request is the answer file": the read through the shared
+result reader and its cap are kept there (scenario "Answer file read is capped"), and the runner
+returns the contract's status, which the engine classifies; the decision-file path and its
+protocol are what this change replaces.
+**Migration**: none for manifests; `GNOMISH_DECISION_FILE` is replaced by `GNOMISH_ANSWER_FILE`.
 
 ### Requirement: Decision-file protocol
 **Reason**: The decision request becomes the contract's answer file read by the single result

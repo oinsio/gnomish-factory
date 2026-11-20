@@ -9,8 +9,8 @@ makes a vendor's CLI one replaceable implementation behind it.
 
 ### Requirement: One runner serves every role
 The agent round runner SHALL execute `transform`, `verdict` and `decision` requests through one
-code path: argv from the dialect, launch through the environment seam, concurrent capped
-drains, three bounds, result and answer through the shared result-file reader, denials from
+code path: argv from the dialect, launch through the environment seam, a capped stdout drain
+and the kept stderr file, three bounds, result and answer through the shared result-file reader, denials from
 the environment, and the post-hoc working-copy check for `verdict` and `decision`.
 **Implements**: FR1, NFR-S2 of extract-agent-round-runner
 
@@ -28,7 +28,7 @@ A dialect SHALL provide describe fields, argv rendering for a request (compiled 
 bounds, answer schema, session resume), event parsing into progress and usage, final-answer
 extraction, exit-code mapping to status with `limit` for turn or budget stops, and
 continuation-key extraction. The runner SHALL depend on nothing else from the vendor.
-**Implements**: FR2, FR8, G1 of extract-agent-round-runner
+**Implements**: FR2, FR8, G1, UX2 of extract-agent-round-runner
 
 #### Scenario: Second dialect needs no runner change
 - **WHEN** a fake dialect with a different event format is registered in test fixtures
@@ -41,9 +41,12 @@ continuation-key extraction. The runner SHALL depend on nothing else from the ve
 #### Scenario: Turn limit is a limit stop
 - **WHEN** the dialect reports a turn-limit stop
 - **THEN** the status is `failed/limit` naming the bound and no attempt is burned
+- **AND** the escalation report reads `budget exhausted: <bound>`
 
 ### Requirement: Bounded drains and three bounds
-Stdout and stderr SHALL be drained concurrently from launch with byte and line caps; the
+Stdout SHALL be drained from launch through the one drain owner with byte and line caps; stderr
+SHALL go to a file in the round scratch directory and be read, capped, after the exit
+(`agent-executor`, "The round's stderr is kept"), never through a pipe of its own; the
 startup-read, silence and overall bounds SHALL be applied; expiry SHALL kill the process tree
 and report `failed/infrastructure` naming the bound.
 **Implements**: FR1, FR8, NFR-R1 of extract-agent-round-runner

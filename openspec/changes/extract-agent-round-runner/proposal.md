@@ -2,12 +2,13 @@
 
 ## Why
 
-`adapters/agent` is 4,330 lines in which Claude Code's `stream-json` dialect (about 1,900
+`adapters/agent` was 4,330 lines when this change was written (7,748 since the `program` and
+`command` executors landed beside it), in which Claude Code's `stream-json` dialect (about 1,900
 lines) is interleaved with the generic mechanics of running one agent round (about 1,300
 lines), duplicated per role (`ExecutorRoundExecution` ↔ `JudgeRoundExecution`), and leaking
 outward: judge read-only policy is spelled as Claude tool names, settings validation accepts
 Claude keys for every stage, progress events carry Claude `subtype` and session ids, the
-agent's exit code and stderr are never read, and the stdout drain has no size cap. After
+agent's exit code is never read, and the stdout drain has no size cap. After
 `define-executor-contract` and `migrate-verify-to-executor-contract` the agent CLI is the
 last mechanism outside the contract, and `judge` the last check outside it. This change
 turns the agent CLI into one named executor with three roles, behind one generic round
@@ -23,8 +24,8 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   interface in roles `transform`, `verdict` and `decision`; its describe declares its
   credentials, egress hosts, config-directory variable, repo-policy-disabling flags, settings
   schema and enforcement level `TOOL_GATE`.
-- **ADDED**: a generic **agent round runner** (launch through the environment seam, capped
-  concurrent drains, three bounds, result and answer through the shared result-file channel,
+- **ADDED**: a generic **agent round runner** (launch through the environment seam, a capped
+  stdout drain through the one drain owner, stderr to the round scratch file, three bounds, result and answer through the shared result-file channel,
   denials, post-hoc working-copy check for `verdict`/`decision`) parameterized by an
   **agent dialect**: argv rendering, policy compilation, event parsing, usage and trace
   extraction, continuation (session id). Claude is the first dialect.
@@ -100,8 +101,9 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 ### Functional
 
 - FR1: One `AgentRoundRunner` SHALL execute any role: build the request, render argv through
-  the dialect, launch through the environment seam, drain stdout/stderr concurrently with
-  byte and line caps, apply the three bounds, read the result and answer through the shared
+  the dialect, launch through the environment seam, drain stdout through the one drain owner
+  with byte and line caps, direct stderr to the round scratch file and read it capped after the
+  exit (`agent-executor`, "The round's stderr is kept"), apply the three bounds, read the result and answer through the shared
   result-file reader, attach denials, run the post-hoc working-copy check for `verdict` and
   `decision`, and return `ExecutorResult`.
 - FR2: An `AgentDialect` SHALL provide: describe fields, argv for a request (including the
@@ -125,7 +127,8 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   describe schema; the Claude schema accepts `allowedTools`, `disallowedTools`, `maxTurns`,
   `roundTimeout` and the three bounds.
 - FR8: The agent's exit code and stderr SHALL be read: non-zero exit with no result event is
-  `failed/infrastructure`; a turn or budget stop is `failed/limit`; stderr is a capped log.
+  `failed/infrastructure`; a turn or budget stop is `failed/limit`; stderr is read from the scratch file after the exit,
+  capped.
 - FR9: Decision continuation: a `decision-request` answer SHALL carry the session id as its
   continuation key; a `start` with a continuation and an answer SHALL resume the session.
 - FR10: A `transform` executor whose describe declares `poll` MAY return `pending + key`. The
@@ -155,8 +158,9 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   remote run per kill, logged); a kill after it — including after a key-rotating poll and after a
   terminal poll not yet closed — resumes the poll with no `start`, on the wire obligation of FR11
   of `migrate-verify-to-executor-contract`; recovery of a closed round is a no-op. Kill-point specs cover each window, each resumed by a second instance.
-- NFR-R4: The live path and the resume path continue a pending round from the record through one
-  parse, so the round token, usage and ledger lines of a resumed round are those of the round
+- NFR-R4: The live path and the resume path continue a pending round through the pending-poll
+  owner's one wait path over one record — the live path from the entry it persisted, the resume
+  from that entry parsed back at the register — so the round token, usage and ledger lines of a resumed round are those of the round
   that went pending (identity spec on a real bare origin).
 
 ### Non-Functional Observability
@@ -235,8 +239,15 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 - `adapters/agent` restructured into `runner` and `claude` packages; `application/port/agent`
   progress types trimmed; `domain/engine` `JudgeVoting` and `EnginePorts`.
 - `domain/engine` `PendingPoll`/`PendingPollRecord` (from `migrate-verify-to-executor-contract`)
-  gain the round subject; the round-close persistence pair (`GitAttemptPersistence`,
-  `EnvironmentAttemptPersistence`) writes the pending round commit.
+  gain the round subject; the persistence pair (`GitAttemptPersistence`,
+  `EnvironmentAttemptPersistence`) writes the pending round commit through its landed
+  `persistPending`, above a pending-round snapshot; `ResumeVerificationStageExecutor` stays the one
+  recovery owner and gains the pending-round subject.
+- Stderr: sequenced after `fix-terminal-receipt-convergence`, whose NG13 rejects a concurrent
+  stderr drain as the second drain its NG12 rejects; the runner inherits `StderrPolicy.ToFile`
+  and the round scratch directory, and adds no stderr pump.
+- Sequenced after `add-command-executor`, which shares the `roundTimeout` shape judge and keeps
+  the dispatch's `COMMAND` arm; both stay (design D6).
 - Sequencing: after `migrate-verify-to-executor-contract` and `remove-interactive-console`;
   FR10–FR12 depend on its `PendingPoll`, `PendingPollRecord`, its key rotation (FR10), its wire
   obligation and re-poll kit case (FR11, FR12) and its task 4.3a (a `program` executor's poll

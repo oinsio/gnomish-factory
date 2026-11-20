@@ -45,6 +45,17 @@ checks.
 - **WHEN** a `verdict` request's settings list a write-capable tool
 - **THEN** the effective tool set stays read-only
 
+### Requirement: Turn and budget bounds as hints
+The dialect SHALL pass the request's turn and budget bounds to the CLI as hints (`--max-turns`
+and the CLI's budget flag); the ledger SHALL enforce the bounds after the round regardless of
+what the CLI honoured.
+**Implements**: NFR-C1 of extract-agent-round-runner
+
+#### Scenario: Turn and budget hints reach the argv
+- **WHEN** a request carries a turn bound and a budget bound
+- **THEN** the rendered argv carries `--max-turns` with the turn bound and the budget flag with the
+  budget bound
+
 ### Requirement: Schema-enforced answers
 For `verdict` and `decision` requests the dialect SHALL pass the answer's JSON Schema to the
 CLI (`--json-schema`) and SHALL write the validated final output to the answer file; a final

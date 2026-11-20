@@ -4,14 +4,18 @@
 
 - [ ] 1.1 Define `AgentDialect` (describe fields, `render(request) → argv`, `parse(line)`,
   `answer(events, answerFile)`, `status(exit, events)`, `continuation(events)`) and the
-  vendor-neutral progress events (model, tool name, summary, usage); adapt
-  `MidRoundHarvestListener`, `MidRoundPushListener`, `AgentActivityEnricher` to drop the
-  session id; specs green (FR2, FR6, D7)
+  vendor-neutral progress events (model, tool name, summary, usage); drop the session id from
+  `RoundStarted` and adapt its consumers (`LoggingAgentProgressListener`, `AgentProgressEmitter`,
+  `AgentRoundResult`, `AgentRoundResultExtractor`, `StreamJsonEventMapper`,
+  `MissingResultEventException`); specs green (FR2, FR6, D7)
 - [ ] 1.2 Implement `AgentRoundRunner implements Executor`: launch via `RoundEnvironment`,
-  concurrent capped drains (byte + line caps on stdout), three bounds on virtual time,
+  a capped stdout drain through the one drain owner (byte + line caps), stderr through
+  `StderrPolicy.ToFile` into the round scratch directory read capped after the exit (no stderr
+  pump; `DrainOwnerGateSpec` stays green), three bounds on virtual time,
   `ResultFileReader` for result and answer, denials, post-hoc working-copy check for
   `verdict`/`decision`; specs with the fake dialect for all three roles, exit-without-result,
-  turn-limit → `failed/limit`, oversized stdout, silence bound (FR1, FR8, NFR-R1, NFR-S2)
+  turn-limit → `failed/limit` with the escalation report `budget exhausted: <bound>`, oversized
+  stdout, silence bound (FR1, FR8, NFR-R1, NFR-S2, UX2)
 - [ ] 1.3 Add the fake dialect to `test-fixtures` and run the conformance kit against the runner
   with it (M4)
 
@@ -23,12 +27,16 @@
   fixtures replay identically (FR3)
 - [ ] 2.2 `ClaudePolicyCompiler`: `Policy` → permission mode, tool sets, `--strict-mcp-config`,
   answer-path allowance; delete `AgentRole`, `JUDGE_READ_ONLY_TOOLS`; specs: no argv carries
-  `bypassPermissions`, settings cannot widen read-only (FR5, D5)
+  `bypassPermissions`, settings cannot widen read-only; turn and budget hints rendered as
+  `--max-turns` and the budget flag (scenario "Turn and budget hints reach the argv") (FR5, D5,
+  NFR-C1)
 - [ ] 2.3 Describe: roles, capabilities, `TOOL_GATE`, credential names, egress host from base
   URL, `CLAUDE_CONFIG_DIR`, repo-policy-disabling flags, settings schema (four legacy keys +
-  three bounds); delete `AgentAiSeam`, the Claude list in `AgentSettingsValidator`,
-  `RoundTimeout` shape parsing, `FactoryProperties.agentCliEnvPassthrough`; located-error spec
-  for a settings typo (FR7, NFR-S1, D6)
+  three bounds); delete `AgentAiSeam` and the Claude list in `AgentSettingsValidator`; the
+  `roundTimeout` shape judge stays one owner in `:adapters`, called by the Claude schema,
+  `CommandSettingsValidator` and the command executor's `roundTimeout` resolution, with the shapes
+  accepted today (command-stage validation specs stay green); located-error spec for a settings
+  typo (FR7, NFR-S1, D6)
 - F107 (carried from `tighten-spec-contract`): since that change, the agent CLI's credentials and
   every child-environment value reach a round only through `SecretsProvider`: the run's
   `ChildEnvAllowlist` resolves them through the `ChildEnvValues` role interface the root binds at
@@ -57,10 +65,11 @@
   reads it through `ResultFileReader`; delete `DecisionFileTransport`; remove the
   `GNOMISH_DECISION_FILE` literal everywhere (grep → zero); envelope-paths gate extended;
   kill-point specs of the decision path re-pointed (FR9, D3, D9)
-- [ ] 3.2 Remove the `DecisionFileTransport` ↔ `BranchDecisionFile` registry row and markers; at
-  spec sync, also retire the `agent-executor` requirement "Decision file is read through the
-  shared result reader" added by `define-executor-contract` (superseded by "Decision request is
-  the answer file"; it is a delta today, so this change cannot list it under REMOVED)
+- [ ] 3.2 Remove the `DecisionFileTransport` ↔ `BranchDecisionFile` registry row and markers; the
+  `agent-executor` requirement "Decision file is read through the shared result reader" is
+  REMOVED by this change's delta (superseded by "Decision request is the answer file"): its two
+  scenario markers retire with the others in the section-5 note, and the feature for the new
+  scenario "Answer file read is capped" carries its marker (FR9)
 
 ## 4. Judge on the contract
 
@@ -85,65 +94,81 @@
 
 ## 5. Deletions and pair dissolution
 
-- [ ] 5.1 Delete `CliStageExecutor`, `ExecutorRoundExecution`, `ResumeVerificationStageExecutor`
-  (resume check moves to the engine resume path), `HostRoundEnvironmentSource`,
+- [ ] 5.1 Delete `CliStageExecutor`, `ExecutorRoundExecution`, `HostRoundEnvironmentSource`,
   `SandboxRoundEnvironmentSource`, `HostJudgeEnvironmentSource`; runner takes the environment
   from the existing `verifyIn` acquisition; registry entry `claude` wired in
-  `ExecutorAdapterSelector` (D7, D8)
+  `ExecutorAdapterSelector`. `ResumeVerificationStageExecutor` is **not** deleted: it stays the one
+  recovery owner of an interrupted verification (`task-branch-contract`, "An interrupted
+  verification is InProgress with one recovery owner") and decorates the chain over the `claude`
+  executor as it did the old arm; its pending-round subject is task 6.5 (D7, D8)
 - [ ] 5.1a Dispatch arm (carried from D8 and the `ExecutorRegistry` row of D10 of
   `define-executor-contract`): `ExecutorDispatch` (`:bootstrap`) sends a `program` stage to the
   registry by `executor.name` and every other stage to one type-keyed `agent-cli` arm, kept "until
   `extract-agent-round-runner` makes the agent a named executor"; with the `claude` entry of 5.1
-  the arm is deleted and an agent stage resolves through `ExecutorRegistry` like any other
-  (D8)
+  the agent arm is deleted and an agent stage resolves through `ExecutorRegistry` like any other;
+  the `COMMAND` arm stays (design D6 of `add-command-executor`) (D8)
 - [ ] 5.2 Remove the `ExecutorRoundExecution` ↔ `JudgeRoundExecution`, `HostRoundEnvironmentSource`
   ↔ `SandboxRoundEnvironmentSource`, `RoundTimeout` ↔ `AgentSettingsValidator` registry rows;
-  `grep -rn "Kept in sync with" adapters/agent` → zero (M1)
+  collapse `MidRoundPushRounds` ↔ `SandboxRoundEnvironmentSource` into one round-token minting
+  step the host decoration and the box acquisition both call, and remove both markers (D7);
+  `grep -rn "Kept in sync with" adapters/agent` → zero, and no marker names a deleted class (M1)
 - [ ] 5.3 Glossary: agent dialect, agent round runner, continuation key (update), answer file;
   update the `Executor` and `Judge` entries
-- Spec contract (`tighten-spec-contract`): this change REMOVES six `agent-executor`
+- Spec contract (`tighten-spec-contract`): this change REMOVES seven `agent-executor`
   requirements and the `stage-engine` requirement "Judge majority voting"; their scenarios carry
   `// Scenario: executor/agent-executor / <title>` and `// Scenario: pipeline/stage-engine / <title>` markers
-  (41 of the 48 scenarios, today) and eight lines in
-  `config/spec-contract-exemptions/executor-agent-executor.txt`. In this same change, every marker of a
+  (find every one with grep for `Scenario: executor/agent-executor /` and
+  `Scenario: pipeline/stage-engine / <removed title>`). In this same change, every marker of a
   removed scenario goes with the test it sits on (or is retargeted to a scenario this change
-  adds), and each exemption line naming a removed scenario is deleted, so `checkSpecContract`
+  adds), and any exemption line naming a removed scenario is deleted, so `checkSpecContract`
   reports no marker or exemption naming a scenario that no longer exists.
 
 ## 6. Transform `pending` through the one pending-poll owner
 
 Human decision 2026-11-02; design D11. Consumers of the record (D8 row `PendingPoll`):
-`StageAttemptLoop` (live and resume), `GitAttemptPersistence` and `EnvironmentAttemptPersistence`
-(write the pending round commit), `StateJsonMapper`/`StateAttemptDto` (read and write it), the
-shape classifier (reads it as an `InProgress` sub-state). Old way: the `transform` arm "a
+`StageAttemptLoop` (hands a `transform` `pending` to `PendingPoll`), `PendingPoll` (live and
+resumed), the `persistPending` implementations of `GitAttemptPersistence` and
+`EnvironmentAttemptPersistence` (write the pending round commit), `StateJsonMapper`/`TaskState`
+(the `pendingPolls` list), `ResumeVerificationStageExecutor` (the recogniser and one recovery
+owner). Old way: the `transform` arm "a
 `pending` the stage cannot poll" in `RoundFailures`, `AttemptAccounting`, `RoundOutcome`.
 
 - [ ] 6.1 Premise check (`spec-mismatch.md`, item 1): confirm with `file:line` that
-  `migrate-verify-to-executor-contract` landed `PendingPoll`, `PendingPollRecord` in the attempt
-  state, and task 4.3a's resumable `program` poll (no per-instance `PendingRuns` membership on
+  `migrate-verify-to-executor-contract` landed `PendingPoll`, `PendingPollRecord` as entries of
+  `TaskState.pendingPolls`, `AttemptPersistence.persistPending` and the recogniser in
+  `ResumeVerificationStageExecutor`, and task 4.3a's resumable `program` poll (no per-instance `PendingRuns` membership on
   the poll a persisted record drives, superseded and ended keys included), its key rotation
   (FR10 there, "A changed pending key is persisted before the next poll"), and its wire
   obligation with the kit's `pending-repoll` case (FR11, FR12 there). If any is missing, stop and
   report under that rule before 6.2 (FR10, FR11, FR12)
-- [ ] 6.2 Record subject: `PendingPollRecord` gains the sealed subject `Check(checkId)` |
-  `Round(roundToken)`; state DTO and mapper carry it; wire round-trip spec iterating every subject
+- [ ] 6.2 Record subject: `PendingPollRecord` gains the sealed subject `Check(CheckRef)` |
+  `Round` (the round token is already on the record); `StateJsonMapper` carries it in the
+  `pendingPolls` list; wire round-trip spec iterating every subject
   and pinning the unknown-token arm; a record whose round token does not name the round the
   registered commit holds open is refused, never polled (FR10, NFR-R3, D11)
 - [ ] 6.3 Engine path, TDD on virtual time with a fake `transform` executor declaring `poll`:
   narrow the refusal in `RoundFailures`/`AttemptAccounting`/`RoundOutcome` to executors without
   `poll`, re-point `ExecutorOutcomeTableSpec`'s marker feature to the reworded scenario and add the
   pollable row; `StageAttemptLoop` hands `pending` to `PendingPoll`; pending interval and ceiling
-  as factory-owned bounds beside `ProgramBounds`; ceiling counted from `since`; no verify and no
+  as factory-owned bounds beside `ProgramBounds`, and a `PendingWait` construction from them beside
+  the check-scoped one (pace `max(interval, pollAfter)`, no in-poll wait bound on the request,
+  NG13 of `migrate-verify-to-executor-contract`); ceiling counted from `since`; no verify and no
   advancement on a pending round commit; closing commit drops the record; one feature per
   scenario of the `pipeline/stage-engine` and `executor/wire-contract` deltas, markers included
   (FR10, FR11, NFR-O2, UX3)
-- [ ] 6.4 Pending round commit at both ends of the persistence pair: `GitAttemptPersistence` and
-  `EnvironmentAttemptPersistence` write it through their existing sequence (gnome range inspected,
-  owned paths restored, commit + register in one ref transaction, one atomic push), with no new
-  step; the registry row of the pair names the pending round commit; specs per medium (FR10, D7)
-- [ ] 6.5 One path, live and resumed: after the pending commit the live instance reads the record
-  back through the resume's parse and both call `PendingPoll.resume(record)`; the resume
-  materializes the environment at the registered commit; identity spec `PendingRoundIdentitySpec`
+- [ ] 6.4 Pending round commit at both ends of the persistence pair: the `Round` subject on the
+  entry `persistPending` already writes (the pending commit of `git-task-persistence`, "Pending
+  commits of an open round"); the host snapshot trigger (D22 of
+  `migrate-verify-to-executor-contract`, `completed` only) widened to a `pending` `transform`
+  result; the container's round close given a pending-round subject; the registry row of the pair
+  names the pending commit's subject rule; specs per medium (FR10, D7, D11)
+- [ ] 6.5 One path, live and resumed, on the landed rule of `PendingPoll` (D11): the live instance
+  continues from the entry it persisted, a resuming instance from the entry parsed at the register,
+  both through `PendingPoll`'s one wait path; `ResumeVerificationStageExecutor` gains the
+  pending-round subject — an entry with subject `Round` resumes through `PendingPoll` with no
+  `start` and is never answered `Completed`, and a pending-round snapshot with no pending commit
+  above it is handed back to the round (K1), never re-verified; the resume materializes the
+  environment at the registered commit; identity spec `PendingRoundIdentitySpec`
   on a real bare origin — the round token, the usage participants and the ledger lines of a round
   closed by a second instance equal those of the round that went pending (FR11, NFR-R4, D11)
 - [ ] 6.6 Key rotation for a round (FR12, reuse): `migrate-verify-to-executor-contract` owns the
@@ -153,7 +178,8 @@ shape classifier (reads it as an `InProgress` sub-state). Old way: the `transfor
   pending round lands in a pending round commit", marker included; no second rotation path
 - [ ] 6.7 Kill-point specs on a real bare origin for windows K1–K4 and after the round close
   (design D11), each resumed by a second instance, each followed by a second recovery pass that
-  changes nothing; K1 asserts the re-driven `start` is in the ledger; K3 and K4 assert no `start`
+  changes nothing; K1 — killed before the snapshot, and with the pending-round snapshot registered
+  but no pending commit — asserts the re-driven `start` is in the ledger; K3 and K4 assert no `start`
   (the fixture executor conforms to "A pending key stays pollable until its run ends"), K4 also
   the scenario "Kill after the terminal poll closes the round without a start", marker included
   (NFR-R3, NFR-C2)
