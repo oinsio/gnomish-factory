@@ -31,11 +31,11 @@ The factory's `factory.*` configuration SHALL be assembled from, in rising prece
 - **THEN** the effective list is the project file's list alone, with no element of the host file's list
 
 ### Requirement: Every key declares where it may be set
-Every `factory.*` key SHALL declare exactly one level: `host` — the host file or the command line; `project` — the project file or the command line; `any` — every source; `sandbox-boundary` — the project file only. The sandbox-boundary keys SHALL be `factory.bindings.*`, `factory.sandbox.image`, `factory.sandbox.egress-allowlist` and `factory.sandbox.env-passthrough`.
-**Implements**: FR6, NFR-S1 of add-project-registry
+Every `factory.*` key SHALL declare exactly one level: `host` — the host file or the command line; `project` — the project file or the command line; `any` — every source; `sandbox-boundary` — the project file only. The sandbox-boundary keys SHALL be `factory.bindings.*`, `factory.sandbox.image`, `factory.egress.sandbox` and `factory.sandbox.env-passthrough`; `factory.egress.in-process` SHALL be a `project` key.
+**Implements**: FR6, NFR-S1 of add-project-registry; FR17 of migrate-verify-to-executor-contract
 
 #### Scenario: A boundary key in the host file
-- **WHEN** `factory.yaml` sets `factory.sandbox.egress-allowlist`
+- **WHEN** `factory.yaml` sets `factory.egress.sandbox`
 - **THEN** startup stops with a violation naming the file and line and the project files the key belongs in
 
 #### Scenario: A boundary key on the command line
@@ -82,3 +82,20 @@ Before any tracker call, branch, worktree or box, the factory SHALL check the co
 #### Scenario: Doctor lists violations instead of stopping
 - **WHEN** `gnomish doctor` runs with a boundary key in `factory.yaml`
 - **THEN** the violation appears as a `fail` line with its location and fix, and the remaining checks still run
+
+### Requirement: The operator egress block replaces the two allowlist keys
+Operator configuration SHALL carry one egress block, `factory.egress`, with the scopes `sandbox`
+(what a box may reach) and `in-process` (what the factory process may reach beyond the hosts its
+connections grant), each a list in the one egress entry grammar. `factory.sandbox.egress-allowlist`
+and `factory.check.http.allowlist` SHALL be removed keys, reported with the scope that replaces
+each; `gnomish project show` SHALL print the block like any other key.
+**Implements**: FR17 of migrate-verify-to-executor-contract
+**Notes**: Design D16 as amended 2026-11-09; the consolidation follows GitLab's single outbound-request section and Gitea's migration onto one `ALLOWED_HOST_LIST`.
+
+#### Scenario: The two scopes are read from the block
+- **WHEN** a project file sets `factory.egress.sandbox` and `factory.egress.in-process`
+- **THEN** the box guard admits the first list and the in-process guard the second, and neither list reaches the other guard
+
+#### Scenario: A removed key names its scope
+- **WHEN** a project file sets `factory.sandbox.egress-allowlist`
+- **THEN** startup stops with a violation naming the line and `factory.egress.sandbox` as the key to move the list to

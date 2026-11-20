@@ -101,19 +101,22 @@ and connect adapters — belongs to `bootstrap`; use-case logic stays in
 
 ### Requirement: Vertical adapter modules per technology
 In the second pass, adapters SHALL be split vertically per technology:
-`:adapters:github` bundles the shared github HTTP core with the github tracker
-and github check adapters as one vendor module; `:adapters:git` and
+`:adapters:github` is the github vendor bundle, one module carrying the github
+tracker; the shared github HTTP core is the first-party library `:githubapi`,
+which only the bundle and `:adapters:scm` declare; `:adapters:git` and
 `:adapters:agent` get their own modules; the in-memory tracker stays in-tree as
 the reference/test double and the small adapters stay in the coarse remainder
 module.
-**Implements**: FR10 of split-into-modules
+**Implements**: FR10 of split-into-modules; FR13, FR14 of migrate-verify-to-executor-contract
+**Notes**: Design D15 of migrate-verify-to-executor-contract: the core left the bundle when the `github-actions` and `scm-status` built-ins moved into core (rule of two); `:githubapi` is not `gnomish-plugin-api` and not a compatibility surface.
 
 #### Scenario: The github vendor bundle is one module
 - **WHEN** `./gradlew projects` is run after the vertical split
 - **THEN** `:adapters:github`, `:adapters:git`, and `:adapters:agent` appear as
   separate projects
-- **AND** the shared github HTTP core is an internal package of
-  `:adapters:github`, not a module other adapters can depend on
+- **AND** the shared github HTTP core is the library `:githubapi`, its classes
+  live in that module only, and no production module other than
+  `:adapters:github` and `:adapters:scm` declares it
 
 #### Scenario: Sibling isolation holds after the vertical split
 - **WHEN** the boundary rules re-run after the vertical split
@@ -150,9 +153,9 @@ engine already consumes it) that `bootstrap` binds to the concrete adapter.
 The module dependency direction SHALL be acyclic and enforced by the build: each
 module SHALL declare only the internal edges its layer permits, and the layering
 gate SHALL fail the build naming any declared edge outside that set.
-**Implements**: FR9, NFR-S3 of bound-subprocess-commands; FR2 of split-into-modules; FR5 of harden-task-branch-contract; FR4, FR6, FR8 of harden-logging-observability; FR2, FR3 of add-subprocess-access-log; FR10, NFR-S3 of add-base-ref-resolution; FR6, FR7, FR11, NFR-S1 of split-logtext-leaves; FR2 of own-git-transfer-argv; FR19 of fix-terminal-receipt-convergence; FR1 of own-git-invocation-policy
+**Implements**: FR9, NFR-S3 of bound-subprocess-commands; FR2 of split-into-modules; FR5 of harden-task-branch-contract; FR4, FR6, FR8 of harden-logging-observability; FR2, FR3 of add-subprocess-access-log; FR10, NFR-S3 of add-base-ref-resolution; FR6, FR7, FR11, NFR-S1 of split-logtext-leaves; FR2 of own-git-transfer-argv; FR19 of fix-terminal-receipt-convergence; FR1 of own-git-invocation-policy; FR2, FR15, FR17 of migrate-verify-to-executor-contract
 **Notes**: "Depends only on" in the scenarios describes declared edges; a module's layering allowlist describes reach, since the gate walks the transitive production graph.
-**Notes**: The dependency-free leafs stay empty because any edge added to one is pushed into every consumer: the emptiness of `subprocess` and `atomicfile` keeps their consumers free of transitive coupling, the domain reaches the event catalog and the published contract reaches both text leafs, and the git adapter and a sandbox backend reach `gittransfer` from opposite sides of the layering. `baseref` takes and returns plain values, which constructively keeps the resolution policy ignorant of subprocesses, trackers and configuration formats.
+**Notes**: The dependency-free leafs stay empty because any edge added to one is pushed into every consumer: the emptiness of `subprocess` and `atomicfile` keeps their consumers free of transitive coupling, the domain reaches the event catalog and the pending-key leaf, the published contract reaches both text leafs, and the git adapter and a sandbox backend reach `gittransfer` from opposite sides of the layering. `baseref` takes and returns plain values, which constructively keeps the resolution policy ignorant of subprocesses, trackers and configuration formats.
 **Notes**: The git-object library reaches `gittransfer` for the invocation policy alone, so extracting that library means moving it with its two JDK-only leafs, `subprocess` and `gittransfer`.
 
 #### Scenario: A vendor adapter reaches the tenure record through the contract
@@ -184,8 +187,8 @@ gate SHALL fail the build naming any declared edge outside that set.
 
 #### Scenario: Domain reaches only JDK-only leafs
 - **WHEN** the layering gate runs against `:domain`
-- **THEN** every project in its allowlist — `:operatorevent` and
-  `:untrustedtext` today — declares no
+- **THEN** every project in its allowlist — `:operatorevent`,
+  `:untrustedtext` and `:pendingkey` today — declares no
   internal module and no external library, which is the whole admission rule:
   the next leaf the domain needs is admitted by adding the edge that uses it,
   not by amending this requirement
@@ -202,7 +205,8 @@ gate SHALL fail the build naming any declared edge outside that set.
   `:adapters:git`, `:application` reaching `:gittransfer` through
   `:gitobjects`, and `:sandbox:docker`, `:adapters`, `:adapters:git` and
   `:adapters:agent` reaching `:operatorconfig` through `:application` or
-  `:sandbox:core`
+  `:sandbox:core`; and every module reaching `:pendingkey` through `:domain`
+  or `:executor-contract` without declaring it
 - **THEN** the gate passes only because that module's allowlist names the
   leaf; removing the entry fails the gate naming the leaf as an unlisted reach
 
@@ -219,6 +223,19 @@ gate SHALL fail the build naming any declared edge outside that set.
   `:operatorevent`
 - **THEN** each declares no internal module dependency and no external
   dependency at all — the layering gate lists no allowed project for either
+
+#### Scenario: The pendingkey leaf stays empty of dependencies
+- **WHEN** the dependency gates run against `:pendingkey`
+- **THEN** it declares no internal module dependency and no external
+  dependency at all — the layering gate lists no allowed project for it —
+  and both `:domain` and `:executor-contract` declare it, so the pending key
+  is one type on both sides of the engine port
+
+#### Scenario: The executor contract depends only on two JDK-only leafs
+- **WHEN** the layering gate runs against `:executor-contract`
+- **THEN** its only internal edges are the `:untrustedtext` leaf its result
+  texts travel in and the `:pendingkey` leaf whose key its pending results
+  and its poll carry
 
 #### Scenario: The gittransfer leaf stays empty of dependencies
 - **WHEN** the dependency gates run against `:gittransfer`
@@ -253,12 +270,12 @@ gate SHALL fail the build naming any declared edge outside that set.
   caller-supplied observer hook
 
 #### Scenario: The dependency-free leafs depend on nothing internal
-- **WHEN** the layering gate runs against `:subprocess`, `:atomicfile`, `:untrustedtext`, `:operatorevent`, `:operatorconfig` and `:gittransfer`
+- **WHEN** the layering gate runs against `:subprocess`, `:atomicfile`, `:untrustedtext`, `:operatorevent`, `:operatorconfig`, `:gittransfer` and `:pendingkey`
 - **THEN** none of them declares an internal module dependency, now or in any later change
 
 #### Scenario: The domain carries no logging, framework, serialization or filesystem module
 - **WHEN** the layering gate runs against `:domain`
-- **THEN** it depends only on JDK-only leafs — today exactly `:operatorevent` and `:untrustedtext` — and never on a module that carries a logging API, a framework, a serialization library or the filesystem
+- **THEN** it depends only on JDK-only leafs — today exactly `:operatorevent`, `:untrustedtext` and `:pendingkey` — and never on a module that carries a logging API, a framework, a serialization library or the filesystem
 
 #### Scenario: The plugin contract depends only on domain and the text leaf
 - **WHEN** the layering gate runs against `:gnomish-plugin-api`
@@ -266,15 +283,19 @@ gate SHALL fail the build naming any declared edge outside that set.
 
 #### Scenario: The sandbox core depends only on domain and two leafs
 - **WHEN** the layering gate runs against `:sandbox:core`
-- **THEN** its only internal edges are `:domain`, the `:untrustedtext` leaf its exec results carry, the `:operatorconfig` leaf its configuration records name, and the dependency-free `:subprocess` leaf its exec capture drains the output on
+- **THEN** its only internal edges are `:domain`, the `:untrustedtext` leaf its exec results carry, the `:operatorconfig` leaf its configuration records name, the dependency-free `:subprocess` leaf its exec capture drains the output on, and the `:httpegress` module whose egress entry grammar its box guard and law loader parse
+
+#### Scenario: The egress module depends only on the domain
+- **WHEN** the layering gate runs against `:httpegress`
+- **THEN** its only internal edge is `:domain`, whose egress value types it admits and refuses with, and it declares no external library
 
 #### Scenario: The application layer declares only its permitted edges
 - **WHEN** the layering gate runs against `:application`
-- **THEN** its only internal edges are `:domain`, `:subprocess`, `:atomicfile`, `:untrustedtext`, `:operatorevent`, `:operatorconfig`, `:logtext`, `:gitobjects`, `:baseref`, `:gnomish-plugin-api` and `:sandbox:core`
+- **THEN** its only internal edges are `:domain`, `:subprocess`, `:atomicfile`, `:untrustedtext`, `:operatorevent`, `:operatorconfig`, `:logtext`, `:gitobjects`, `:baseref`, `:gnomish-plugin-api`, `:sandbox:core`, `:executor-contract` (the executor contract its result reader and check dispatch use), `:httpegress` (the one egress entry grammar) and `:pendingkey` (the key its check port's pending adoption names)
 
 #### Scenario: An adapter module declares only its permitted edges
 - **WHEN** the layering gate runs against an adapter module
-- **THEN** it depends on `:domain` and `:untrustedtext`; on `:application` unless it is the GitHub vendor bundle, which builds on the published contract alone; on `:gnomish-plugin-api` unless it is `:adapters:agent`, which reaches the contract through `:application`; plus `:gitobjects` where it reads git objects, `:subprocess` where it launches OS processes, `:atomicfile` where it writes factory-owned files atomically, `:logtext` where it logs untrusted text or emits subprocess access-log records, `:operatorevent` where it emits a coded operator line, `:baseref` where it maps configuration into the resolution policy's value types, `:gittransfer` where it runs a git transfer, `:sandbox:core` where it bridges to the execution environment, and a sandbox backend module where it drives that backend
+- **THEN** it depends on `:domain` and `:untrustedtext`; on `:application` unless it is the GitHub vendor bundle, which builds on the published contract alone; on `:gnomish-plugin-api` unless it is `:adapters:agent`, which reaches the contract through `:application`; plus `:gitobjects` where it reads git objects, `:subprocess` where it launches OS processes, `:atomicfile` where it writes factory-owned files atomically, `:logtext` where it logs untrusted text or emits subprocess access-log records, `:operatorevent` where it emits a coded operator line, `:baseref` where it maps configuration into the resolution policy's value types, `:gittransfer` where it runs a git transfer, `:pendingkey` where it constructs or carries a pending key, `:sandbox:core` where it bridges to the execution environment, and a sandbox backend module where it drives that backend
 - **AND** its only edge to a sibling adapter is the one declared exception, `:adapters:agent` on the coarse `:adapters` remainder
 
 #### Scenario: A sandbox backend declares only its permitted edges
@@ -295,8 +316,8 @@ gate SHALL fail the build naming any declared edge outside that set.
 - **AND** the edge is declared in the change whose code uses it
 
 #### Scenario: A reach entry names the edge it arrives through
-- **WHEN** a module's production classpath reaches `:untrustedtext`, `:operatorevent`, `:operatorconfig` or `:gittransfer` without declaring the edge
-- **THEN** its layering allowlist lists the leaf, and outside the composition root `:bootstrap` with a comment naming the edge it arrives through — `:domain`, `:gnomish-plugin-api`, `:application`, `:sandbox:core`, `:logtext`, `:gitobjects`, `:sandbox:docker`, `:adapters:git`, or a direct declaration
+- **WHEN** a module's production classpath reaches `:untrustedtext`, `:operatorevent`, `:operatorconfig`, `:gittransfer` or `:pendingkey` without declaring the edge
+- **THEN** its layering allowlist lists the leaf, and outside the composition root `:bootstrap` with a comment naming the edge it arrives through — `:domain`, `:executor-contract`, `:gnomish-plugin-api`, `:application`, `:sandbox:core`, `:logtext`, `:gitobjects`, `:sandbox:docker`, `:adapters:git`, or a direct declaration
 
 #### Scenario: The gitobjects observer hook defaults to a no-op
 - **WHEN** `:gitobjects` runs a git command and no observer was supplied
