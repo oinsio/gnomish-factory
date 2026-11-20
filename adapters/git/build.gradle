@@ -101,6 +101,11 @@ dependencies {
     // and sits on a public type, so it travels on this module's own surface — which is what
     // the dependency-analysis gate establishes.
     api project(':untrustedtext')
+    // The pending-key leaf (FR2, design D7 as amended, D20 of migrate-verify-to-executor-contract):
+    // `StatePendingPollMapper` rebuilds each `pendingPolls` entry's key through the leaf's
+    // constructor, so the state file's cap is `PendingKey.MAX_LENGTH`. `implementation`: the
+    // mapper is package-private and the public `StatePendingPollDto` carries the key as a string.
+    implementation project(':pendingkey')
 
     // The task state file and `task.json` are Jackson documents. The state DTOs
     // are on this module's own api surface (the `git.state` mappers hand them
@@ -139,6 +144,10 @@ layering {
         // runner executes its values, the refusal parser grades its failures.
         ':gittransfer',
         ':gnomish-plugin-api',
+        // The HTTP egress leaf (design D16 of migrate-verify-to-executor-contract): runtime-only,
+        // through `:sandbox:core`, whose box egress grant is held to its one grammar. No source in
+        // this module names it.
+        ':httpegress',
         ':logtext',
         // The operator-configuration level leaf (design D4 of add-project-registry): runtime-only,
         // through `:application` and `:sandbox:core`, whose configuration records carry
@@ -148,6 +157,9 @@ layering {
         // declared directly above, because this module's own log sites name `OperatorEvent`;
         // also reached through `:domain`, whose engine emitters take their head from it.
         ':operatorevent',
+        // The pending-key leaf (design D20 of migrate-verify-to-executor-contract): declared
+        // directly above, because the state file's `pendingPolls` mapper builds the key (task 4.1r).
+        ':pendingkey',
         ':sandbox:core',
         ':sandbox:docker',
         ':subprocess',

@@ -4,9 +4,9 @@
 // JDK-only leafs (FR6, design D5 of split-logtext-leaves): a leaf that declares
 // no internal module and no external library, so reaching it can bring the
 // domain no logging API, no framework, no serialization library and no
-// filesystem. Today that is exactly `:operatorevent`; `:untrustedtext` joins the
+// filesystem. Today that is `:operatorevent`; `:untrustedtext` joins the
 // list with `type-untrusted-text`, which brings the first domain type that names
-// it. The edge is declared by the change that uses it, never ahead of one: an
+// it, and `:pendingkey` with `migrate-verify-to-executor-contract` (design D20). The edge is declared by the change that uses it, never ahead of one: an
 // unused declaration is what the dependency-analysis gate exists to reject.
 //
 // It also hosts the root-package `@DoNotMutate` PIT marker. Design D1 lists
@@ -39,6 +39,14 @@ dependencies {
     // the type sits on this module's public surface, so every consumer compiles against it —
     // and, like `:operatorevent`, it is a JDK-only leaf, so the domain stays framework-free.
     api project(':untrustedtext')
+
+    // The pending-key leaf (FR2, FR3, design D20 of migrate-verify-to-executor-contract): the
+    // engine's own records name the key — `ExecutionResult.Pending` carries the one an executor
+    // returned, `PendingTurn` the one a check round polls by — so the rule (not blank, at most 4096
+    // characters, no control character) has one owner both this module and the executor contract
+    // reach. `api`, not `implementation`: the type sits on this module's public surface — and, like
+    // `:untrustedtext`, it is a JDK-only leaf, so the domain stays framework-free.
+    api project(':pendingkey')
 
     // Version management only (no artifacts): slf4j-api, logback and the JUnit
     // BOM behind opentest4j are all BOM-pinned in this project rather than
@@ -75,5 +83,8 @@ layering {
         // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves; FR1, design D4 of
         // type-untrusted-text): named directly by the domain's own value model.
         ':untrustedtext',
+        // The pending-key leaf (FR2, FR3, design D20 of migrate-verify-to-executor-contract):
+        // named directly by the engine's pending result and pending turn.
+        ':pendingkey',
     ]
 }

@@ -75,14 +75,19 @@ key's level is a one-line annotation change.
 
 A sandbox-boundary key widens or selects the sandbox a gnome runs in:
 `factory.bindings.*`, `factory.sandbox.image`,
-`factory.sandbox.egress-allowlist` and `factory.sandbox.env-passthrough`. It
+`factory.egress.sandbox` and `factory.sandbox.env-passthrough`. It
 is read from the resolved project's own file and nowhere else. The command
 line is refused too: the quick one-run toggle is exactly what lets a boundary
 drift away from the file an operator reviews. Everything that shapes one
 project's sandbox can therefore be read in one file.
 
 A new key that selects an adapter binding, admits a network destination, or
-passes a variable into a box is a sandbox-boundary key.
+passes a variable into a box is a sandbox-boundary key. The box's network
+destinations are the `sandbox` scope of the operator egress block,
+`factory.egress.sandbox`, which replaced `factory.sandbox.egress-allowlist`;
+the block's other scope, `factory.egress.in-process` — what the factory process
+itself may reach — is a `project` key, since it widens no box (design D16 of
+`migrate-verify-to-executor-contract`).
 
 ### One check, one complete report, before anything else happens
 
@@ -93,6 +98,12 @@ when it finds:
 
 - a key in a source its level does not admit;
 - a `factory.*` key that no record defines, removed keys included;
+- a removed key that names its replacement — reported with the key to move its
+  value to, not as unknown: `factory.sandbox.egress-allowlist` (now
+  `factory.egress.sandbox`) and `factory.check.http.allowlist` (now
+  `factory.egress.in-process`); a key removed with no replacement, such as
+  `factory.agent-cli-env-passthrough`, stays an unknown key;
+- an entry of the egress block its scope cannot take, at its file and line;
 - a `FACTORY_*` environment variable;
 - a configuration file writable by group or others (`chmod go-w` fixes it);
 - a `--dir` that is not a registered clone, or lies inside one.

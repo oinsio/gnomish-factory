@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.executorcontract
 import static com.github.oinsio.gnomish.executorcontract.WireJson.t
 
 import com.fasterxml.jackson.databind.node.ObjectNode
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 
 /**
  * FR1 of define-executor-contract: one DTO sample per wire variant the contract names — every role
@@ -58,7 +59,13 @@ final class WireSamples {
             new ExecutorResult(Status.FAILED, FailureClass.QUALITY, null, t('tests red'), null, Usage.absent(), []),
             new ExecutorResult(Status.FAILED, FailureClass.INFRASTRUCTURE, null, null, null, Usage.absent(), []),
             new ExecutorResult(Status.FAILED, FailureClass.LIMIT, null, t('turns'), null, Usage.absent(), []),
-            new ExecutorResult(Status.PENDING, null, new PendingKey('build-8812'), null, null, Usage.absent(), [])
+            new ExecutorResult(Status.PENDING, null, new PendingKey('build-8812'), null, null, Usage.absent(), []),
+            new ExecutorResult(Status.PENDING, null, new PendingKey('build-8812'), t('waiting'), null, Usage.absent(), [],
+            0L, PendingState.UNOBSERVED, t('HTTP 429')),
+            new ExecutorResult(Status.PENDING, null, new PendingKey('build-8812'), null, null, Usage.absent(), [],
+            ExecutorResult.MAX_POLL_AFTER_MILLIS, PendingState.RUNNING, null),
+            new ExecutorResult(Status.FAILED, FailureClass.QUALITY, null, t('timed out'), null, Usage.absent(), [],
+            null, null, t('the output tail'))
         ]
     }
 
@@ -68,10 +75,11 @@ final class WireSamples {
                 new SarifRun(t('judge'), [
                     new SarifResult(t('javadoc'), SarifLevel.WARNING, t('Foo has no javadoc'), t('src/Foo.java'), 12),
                     new SarifResult(null, SarifLevel.ERROR, t('tests red'), null, null),
+                    new SarifResult(null, SarifLevel.ERROR, t('exited 1'), null, null, t('the output tail')),
                     new SarifResult(null, SarifLevel.NOTE, t('only a file'), t('build.gradle'), null),
                     new SarifResult(null, SarifLevel.NONE, t('only a line'), null, 3)
-                ]),
-                new SarifRun(t('lint'), [])
+                ], null),
+                new SarifRun(t('lint'), [], null)
             ]),
             new Answer.Verdict([]),
             new Answer.Select(t('main'), [], null),
@@ -89,11 +97,11 @@ final class WireSamples {
         [
             new Describe(1, t('0.4.2'), Role.values() as List, Capability.values() as List,
             object('{"type":"object"}'), ['ACME_API_KEY'], ['api.acme.example'], 'ACME_CONFIG_DIR',
-            ['--no-project-config'], EnforcementLevel.TOOL_GATE, true),
+            ['--no-project-config'], EnforcementLevel.TOOL_GATE, true, true),
             new Describe(2, t('1.0.0'), [Role.VERDICT], [], object('{}'), [], [], null, [],
-            EnforcementLevel.PROMPT_ONLY, false)
+            EnforcementLevel.PROMPT_ONLY, false, false)
         ] + EnforcementLevel.values().collect {
-            new Describe(1, t('1'), [Role.TRANSFORM], [], object('{}'), [], [], null, [], it, false)
+            new Describe(1, t('1'), [Role.TRANSFORM], [], object('{}'), [], [], null, [], it, false, false)
         }
     }
 }

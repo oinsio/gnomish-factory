@@ -4,13 +4,13 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
 import com.github.oinsio.gnomish.app.port.git.BranchLocationUnavailableException
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 
 /**
@@ -31,7 +31,7 @@ class RemoteOutageGatesSignalingSpec extends Specification {
     def "signaling returns the same bundle with only its base-ref and branch ports replaced"() {
         given:
         def gate = DaemonConditionFixtures.closedGate()
-        def push = UnaryOperator.identity()
+        def push = HostGitRounds.NONE
         def git = new TaskGit(
                 Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), push, BaseRefGit.UNWIRED,
                 new ClaimEpochBook())
@@ -63,7 +63,7 @@ class RemoteOutageGatesSignalingSpec extends Specification {
                 outage
             }] as BaseRefGit
         def git = new TaskGit(
-                Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), UnaryOperator.identity(), remote,
+                Stub(TaskStoreGit), Stub(TaskBranchGit), Stub(TaskWorktreeGit), HostGitRounds.NONE, remote,
                 new ClaimEpochBook())
 
         when:
@@ -86,7 +86,7 @@ class RemoteOutageGatesSignalingSpec extends Specification {
             }
         }
         def git = new TaskGit(
-                Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), BaseRefGit.UNWIRED,
+                Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit), HostGitRounds.NONE, BaseRefGit.UNWIRED,
                 new ClaimEpochBook())
 
         when:

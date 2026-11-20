@@ -189,11 +189,28 @@ class StatusReportJsonMapperSpec extends Specification {
 
     def "verdict pass renders empty findings and no reason/details"() {
         given:
-        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("builtin:files_exist")), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("builtin:files_exist")), new Verdict.Pass(null, []), Duration.ofMillis(3))
 
         expect:
         AttemptMapper.toCheck(check) ==
                 new CheckDto("builtin:files_exist", "pass", [], 3L, null, null, null)
+    }
+
+    // FR7 of migrate-verify-to-executor-contract (D5 as amended): a pass's below-threshold findings render as a failure's do
+    def "verdict pass renders its findings in full"() {
+        given:
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("builtin:lint")),
+                new Verdict.Pass("https://ci.example/runs/8", [
+                    new Finding("unused import", "A.java:3", null),
+                    new Finding("long line", null, "121 > 120")
+                ]), Duration.ofMillis(5))
+
+        expect:
+        AttemptMapper.toCheck(check) ==
+                new CheckDto("builtin:lint", "pass", [
+                    new FindingDto("unused import", "A.java:3", null),
+                    new FindingDto("long line", null, "121 > 120")
+                ], 5L, null, null, "https://ci.example/runs/8")
     }
 
     // Scenario: observability/status-report / Findings are carried in full
@@ -346,7 +363,7 @@ class StatusReportJsonMapperSpec extends Specification {
         given: 'a round that passed every check and denied one egress attempt'
         def denial = new Finding(
                 "egress denied: paste.example.com:443", "paste.example.com:443/upload", "kind=http method=POST")
-        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("builtin:files_exist")), new Verdict.Pass(), Duration.ofMillis(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest("builtin:files_exist")), new Verdict.Pass(null, []), Duration.ofMillis(3))
         def attempt = AttemptRecords.of(
                 0, AttemptRecord.Result.PASSED, Instant.parse("2026-07-16T14:35:10Z"),
                 [check], ExecutorUsage.none(), [Denial.unidentified(denial)], Stop.none())

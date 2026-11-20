@@ -26,7 +26,7 @@ trait PipelineLoaderFixtureSupport implements GnomishTreeWriter {
      * known, so no adapter import crosses the {@code TrackerPortBoundarySpec} gate.
      */
     LoadOutcome loadTree() {
-        PipelineLoader.load(getRoot(), [:], TrackerValidatorStub.discoveredGithubCheckProvider(), TrackerValidatorStub.configuredGithubCheckProvider())
+        PipelineLoader.load(getRoot(), [:], TrackerValidatorStub.acceptingGithubActions())
     }
 
     /** Loads the built tree with a registry in which {@code github} is a known tracker type. */
@@ -34,7 +34,7 @@ trait PipelineLoaderFixtureSupport implements GnomishTreeWriter {
         PipelineLoader.load(
                 getRoot(),
                 TrackerValidatorStub.acceptingGithub(),
-                TrackerValidatorStub.discoveredGithubCheckProvider(), TrackerValidatorStub.configuredGithubCheckProvider())
+                TrackerValidatorStub.acceptingGithubActions())
     }
 
     /**
@@ -46,9 +46,8 @@ trait PipelineLoaderFixtureSupport implements GnomishTreeWriter {
         PipelineLoader.loadConfiguration(
                 getRoot(),
                 TrackerValidatorStub.acceptingGithub(),
-                TrackerValidatorStub.discoveredGithubCheckProvider(),
-                TrackerValidatorStub.configuredGithubCheckProvider(),
-                ConnectionProfiles.none(),
+                TrackerValidatorStub.acceptingGithubActions(),
+                ConnectionAdmission.of(ConnectionProfiles.none()),
                 designatorKinds)
     }
 

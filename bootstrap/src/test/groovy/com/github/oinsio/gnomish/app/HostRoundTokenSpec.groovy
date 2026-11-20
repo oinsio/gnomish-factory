@@ -5,11 +5,9 @@ import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskBackend
-import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds
 import com.github.oinsio.gnomish.adapter.git.VirtualTimeGitRetries
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.domain.engine.Decision
@@ -22,6 +20,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -57,7 +56,7 @@ class HostRoundTokenSpec extends Specification implements BareGitRepoFixture, Ap
     /** One stage whose command check fails on its first run and passes on every later one. */
     private StageDefinition stage() {
         Path marker = tempDir.resolve('checked-once')
-        def check = new VerifyCheck.Command("test -f '${marker}' || { touch '${marker}'; exit 1; }".toString())
+        def check = VerifyChecks.command("test -f '${marker}' || { touch '${marker}'; exit 1; }".toString())
         new StageDefinition(
                 'build', 'purpose', [], [],
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
@@ -68,9 +67,24 @@ class HostRoundTokenSpec extends Specification implements BareGitRepoFixture, Ap
     /** The production task git bundle with the production host round decoration. */
     private static TaskGit taskGit() {
         def runner = new GitProcessRunner()
-        GitTaskBackend.taskGit(runner, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock(), { RoundEnvironmentSource rounds ->
-            new MidRoundPushRounds(rounds, runner, new VirtualClock())
-        }, new ClaimEpochBook())
+        GitTaskBackend.taskGit(runner, VirtualTimeGitRetries.gitInfrastructure(), new VirtualClock(), new ClaimEpochBook())
+    }
+
+    /**
+     * The tip a round opened on, read below its round commit: a completed git-mode host round closes
+     * its gnome work in a snapshot first (design D22 of migrate-verify-to-executor-contract), whose
+     * subject names the same token, so the tip is the snapshot's parent; a round with no snapshot
+     * opened on its round commit's parent.
+     */
+    private String openedOn(String roundCommit) {
+        def parent = gitOutput(cloneDir, 'rev-parse', roundCommit + '^')
+        def subject = gitOutput(cloneDir, 'log', '-1', '--format=%s', parent)
+        if (!subject.startsWith('gnomish: snapshot ')) {
+            return parent
+        }
+        def opened = gitOutput(cloneDir, 'rev-parse', parent + '^')
+        assert subject.endsWith(' ' + opened)
+        opened
     }
 
     /** The {@code state.json} the given commit of the task branch carries, parsed. */
@@ -105,7 +119,7 @@ class HostRoundTokenSpec extends Specification implements BareGitRepoFixture, Ap
         and: 'each record names its task and stage, and carries the tip its round opened on'
         attempts*.taskId == [TASK, TASK]
         attempts*.stage == ['build', 'build']
-        attempts[0].roundToken == gitOutput(cloneDir, 'rev-parse', rounds[0] + '^')
+        attempts[0].roundToken == openedOn(rounds[0])
         attempts[1].roundToken == rounds[0]
 
         and: 'the two tokens differ'
@@ -141,7 +155,7 @@ class HostRoundTokenSpec extends Specification implements BareGitRepoFixture, Ap
         ].collect(commitOf)
         commits.every { it != null }
 
-        and: 'every record, read from its own round commit, carries the tip its round opened on: that commit\'s parent'
+        and: 'every record, read from its own round commit, carries the tip its round opened on: the commit below its snapshot, or below the round commit when it has none'
         def keys = [
             ['build', 0],
             ['build', 1],
@@ -153,9 +167,7 @@ class HostRoundTokenSpec extends Specification implements BareGitRepoFixture, Ap
             }
         }
         attempts.every { it != null }
-        attempts*.roundToken == commits.collect {
-            gitOutput(cloneDir, 'rev-parse', it + '^')
-        }
+        attempts*.roundToken == commits.collect { openedOn(it) }
 
         and: 'the command rounds are the built-in\'s, the agent round the CLI\'s'
         attempts.collect {

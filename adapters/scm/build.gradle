@@ -1,0 +1,84 @@
+// Build script for the `:adapters:scm` module (FR13, design D4 of
+// migrate-verify-to-executor-contract): core's own SCM verdict built-ins. The `github-actions`
+// built-in left the github vendor bundle for this module — a built-in is compiled into and named
+// by core (ADR 0020), while the bundle is discovered-only — and `scm-status` (task 3.5) joins it.
+// Both are written against the first-party GitHub HTTP core `:githubapi` (design D15) and read
+// their operator connection through the one reader, `ScmConnectionReader`, which admits it
+// through the egress leaf (design D16).
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate (task 5.2 of split-into-modules); the permitted reach is stated below.
+    id 'layering-conventions'
+}
+
+description = 'Core SCM verdict built-ins: github-actions and scm-status over the first-party GitHub HTTP core.'
+
+dependencies {
+    // Version management only; see the note in `domain/build.gradle`. The Jackson override carries
+    // the CVE fix (GHSA-5jmj-h7xm-6q6v).
+    api platform(libs.spring.boot.dependencies)
+    api platform(libs.jackson.bom)
+
+    // The value model (`PollStatus`, `VerifyCheck`, `Workspace`, `AttemptCommitWorkspace` — the
+    // capability the built-ins read the attempt commit through, moved here from the plugin api by
+    // task 6.1 — and the egress records).
+    api project(':domain')
+    // The published types the built-ins read (`ConnectionProfiles`, `SecretsProvider`, `FindingsSanitizer`).
+    api project(':gnomish-plugin-api')
+    // The executor contract the built-ins implement (`Executor`, `Describe`, SARIF).
+    api project(':executor-contract')
+    // The pending-key leaf (design D20): `GithubActionsResults` and `ScmStatusResults` build the
+    // built-ins' pending keys and both executors name it on their public `poll`.
+    api project(':pendingkey')
+    // The first-party GitHub HTTP core (design D15): the client and the conditional-request cache
+    // sit on public constructors and record components here.
+    api project(':githubapi')
+    // The HTTP egress leaf (design D16): the connection reader admits through `EgressAdmission` and
+    // takes the operator's `OperatorEgress` on its constructor.
+    api project(':httpegress')
+    // The logging-support leaf: the poll's cannot-verify `RepeatSuppressor` is a record component.
+    api project(':logtext')
+    // The untrusted-text leaf: the built-ins mint the reasons and SARIF texts they answer.
+    // `implementation`: the carrier reaches a consumer through `:executor-contract`'s own surface.
+    implementation project(':untrustedtext')
+    // The operator-event catalog: the poll's WARN sites take their head from it.
+    implementation project(':operatorevent')
+
+    implementation libs.slf4j.api
+    // The Actions run and job payloads, parsed by package-private parsers.
+    implementation libs.jackson.databind
+    implementation libs.jackson.core
+
+    testImplementation project(':test-fixtures')
+    // The core's fast-retry seam, the loopback admission helper and the interrupt helper.
+    testImplementation testFixtures(project(':githubapi'))
+    // WireMock for the Actions HTTP contract specs, in-JVM — no Docker (.claude/rules/testing.md).
+    // The pinned Jetty 11 line and its accepted-risk advisories are documented in the root build
+    // script and osv-scanner.toml.
+    testImplementation libs.wiremock
+    testImplementation enforcedPlatform(libs.jetty.bom)
+    // Logback's ListAppender backs the specs asserting on log output.
+    testImplementation libs.logback.classic
+    // The specs build their own fast retry policies. Declared last for the same reason as in
+    // `:adapters:github`: ahead of the fixture and WireMock edges, resolution fetches a POM the
+    // dependency-verification metadata does not carry.
+    testImplementation libs.resilience4j.retry
+    testImplementation libs.resilience4j.core
+}
+
+// A core-side adapter reaches the contract, the domain and the leafs below it; never the vendor
+// bundle, `:application` or another adapter module (FR2 of split-into-modules; design D4, D15).
+layering {
+    allowedProjects = [
+        ':domain',
+        ':executor-contract',
+        ':githubapi',
+        ':gnomish-plugin-api',
+        ':httpegress',
+        ':logtext',
+        ':operatorevent',
+        // The pending-key leaf (design D20 of migrate-verify-to-executor-contract): declared above.
+        ':pendingkey',
+        ':untrustedtext',
+    ]
+}

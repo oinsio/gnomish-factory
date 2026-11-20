@@ -109,7 +109,7 @@ class ConcurrentCloneConfigSpec extends Specification implements BareGitRepoFixt
                 TaskState.atStageStart('implement'))
         Path worktree = registeredClone.worktrees().resolve(taskId)
         new File(worktree.toFile(), 'gnome.txt').text = "work by ${taskId}"
-        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId,
+        HostRoundPersistence.over(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId,
                 RoundStates.recorded(new ToolTrace(new AttemptKey(taskId, 'implement', 1), []).key()), new ToolTrace(new AttemptKey(taskId, 'implement', 1), []))
         runner.run(clone, 'rev-parse', FactoryRegisterRefs.of(taskId).name()).stdout().forParsing().trim()
     }

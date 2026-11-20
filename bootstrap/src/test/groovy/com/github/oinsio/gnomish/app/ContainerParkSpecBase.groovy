@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
@@ -72,8 +73,17 @@ abstract class ContainerParkSpecBase extends Specification implements BareGitRep
         ]
     }
 
-    static SandboxProperties sandbox() {
-        new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'), null, null, null, [], [], false, null, null, null, null)
+    /** The box image every run of this world uses; a world whose checks run a program in the box widens it. */
+    SandboxProperties sandbox() {
+        new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'), null, null, null, [], false, null, null, null, null)
+    }
+
+    /**
+     * The installation settings every run of this world is built with: the fake agent's binary. A
+     * world whose checks need more of the operator (an in-process egress scope) widens them.
+     */
+    FactoryProperties factoryProperties() {
+        testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
     }
 
     /**
@@ -81,23 +91,29 @@ abstract class ContainerParkSpecBase extends Specification implements BareGitRep
      * park when one is named — otherwise the real boundary runs to its exit.
      */
     void freshRun(PipelineDefinition pipeline, RunKillPoint killPoint = null) {
-        def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
+        freshRunOver(pipeline) { ContainerSupportFactory support ->
+            killPoint == null ? support : RunKills.killedAt(killPoint, support)
+        }
+    }
+
+    /** A fresh container run of {@code pipeline} for {@link #taskId} over the supports {@code dying} makes of the real ones. */
+    void freshRunOver(PipelineDefinition pipeline, Closure<ContainerSupportFactory> dying) {
+        def factoryProps = factoryProperties()
         def git = TaskGitFixture.real()
         def support = ContainerSupportFixture.real(git.epochs(), sandbox(), factoryProps)
-        new ContainerGitModeRunner(newAssembly(factoryProps), git,
-                killPoint == null ? support : RunKills.killedAt(killPoint, support), LiveConsoleIO.onStdout())
+        new ContainerGitModeRunner(newAssembly(factoryProps), git, dying.call(support), LiveConsoleIO.onStdout())
                 .run(new RunOrder(cloneDir, null, pipeline, false), segments(pipeline),
                 new TaskContext(taskId, UntrustedText.tracker('title'), UntrustedText.tracker('body'), List.<Decision> of()),
                 TaskState.atStageStart('work'))
     }
 
-    /** The container resume of {@link #taskId} through the real runner chain. */
-    void resume(PipelineDefinition pipeline) {
-        def factoryProps = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
+    /** The container resume of {@link #taskId} through the real runner chain, over {@code clone}. */
+    void resume(PipelineDefinition pipeline, Path clone = cloneDir) {
+        def factoryProps = factoryProperties()
         def git = TaskGitFixture.real()
         new ContainerResumeRunner(newAssembly(factoryProps), git, 'taskId',
                 ContainerSupportFixture.real(git.epochs(), sandbox(), factoryProps))
-                .run(new RunOrder(cloneDir, null, pipeline, false), taskId, null, segments(pipeline))
+                .run(new RunOrder(clone, null, pipeline, false), taskId, null, segments(pipeline))
     }
 
     String branch() {

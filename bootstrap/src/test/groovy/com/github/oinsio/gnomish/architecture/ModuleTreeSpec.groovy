@@ -20,6 +20,7 @@ class ModuleTreeSpec extends Specification {
         ':atomicfile',
         ':untrustedtext',
         ':operatorevent',
+        ':pendingkey',
         ':operatorconfig',
         ':logtext',
         ':gitobjects',
@@ -29,6 +30,7 @@ class ModuleTreeSpec extends Specification {
         ':application',
         ':adapters',
         ':adapters:github',
+        ':adapters:scm',
         ':adapters:git',
         ':adapters:agent',
         ':sandbox:core',
@@ -36,11 +38,27 @@ class ModuleTreeSpec extends Specification {
         ':bootstrap'
     ]
 
-    /** The three vertical adapter modules; none may declare another. */
+    /**
+     * The vertical adapter modules; none may declare another. {@code :adapters:scm} joined with task
+     * 3.3 of migrate-verify-to-executor-contract: core's SCM built-ins, beside the vendor bundle.
+     */
     private static final List<String> VERTICAL_ADAPTERS = [
         ':adapters:github',
+        ':adapters:scm',
         ':adapters:git',
         ':adapters:agent'
+    ]
+
+    /** The first-party GitHub HTTP core (design D15 of migrate-verify-to-executor-contract). */
+    private static final String GITHUB_CORE = ':githubapi'
+
+    /**
+     * The only modules that may declare {@link #GITHUB_CORE} on a production classpath: the vendor
+     * bundle, and the core-side SCM built-ins of {@code :adapters:scm} (task 3.3).
+     */
+    private static final List<String> GITHUB_CORE_CONSUMERS = [
+        ':adapters:github',
+        ':adapters:scm'
     ]
 
     // FR1 of split-into-modules: every layer is its own Gradle project with its own build file, and
@@ -59,26 +77,30 @@ class ModuleTreeSpec extends Specification {
         !Files.exists(RepoSourceTree.repoRoot().resolve('src'))
     }
 
-    // FR10 of split-into-modules: the github bundle is one module, and its shared HTTP core is a
-    //     package inside it rather than a module another adapter could depend on
+    // FR10 of split-into-modules; FR13, FR14 of migrate-verify-to-executor-contract: the github
+    //     bundle is one module, and its shared HTTP core is the first-party library :githubapi,
+    //     which only the bundle and :adapters:scm declare on a production classpath (design D15)
     // Scenario: build-system/module-layering / The github vendor bundle is one module
-    def "the github bundle is one module whose HTTP core no other production module can reach"() {
+    def "the github bundle is one module whose HTTP core is a library only the bundle and adapters/scm declare"() {
         given:
         def coreSources = RepoSourceTree.productionSources {
-            it.contains('/com/github/oinsio/gnomish/adapter/github/')
+            it.contains('/com/github/oinsio/gnomish/githubapi/')
         }
+        def declaring = declaringModules("project(':githubapi')")
 
-        expect: 'the three vertical adapters are separate projects'
-        ModuleBuildFile.includedProjects().containsAll(VERTICAL_ADAPTERS)
+        expect: 'the vertical adapters and the core library are separate projects'
+        ModuleBuildFile.includedProjects().containsAll(VERTICAL_ADAPTERS + GITHUB_CORE)
 
-        and: 'the shared HTTP core is a package of :adapters:github only'
+        and: 'the shared HTTP core lives in :githubapi only'
         !coreSources.isEmpty()
         coreSources.every {
-            RepoSourceTree.relative(it).startsWith('adapters/github/src/main/')
+            RepoSourceTree.relative(it).startsWith('githubapi/src/main/')
         }
 
-        and: 'only the composition root declares the github module on a production classpath'
-        declaringModules("project(':adapters:github')") == [':bootstrap']
+        and: 'the bundle and :adapters:scm declare the core, and no other production module does'
+        ':adapters:github' in declaring
+        ':adapters:scm' in declaring
+        (declaring - GITHUB_CORE_CONSUMERS).isEmpty()
     }
 
     // FR2, FR10 of split-into-modules: an undeclared sibling is absent from the compile classpath, so

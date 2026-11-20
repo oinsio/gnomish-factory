@@ -32,6 +32,7 @@ public final class ConditionTokens {
             case CLONE_REF_FORMAT -> "cloneRefFormat";
             case IMAGE_CONTRACT -> "imageContract";
             case BOX_GIT_FLOOR -> "boxGitFloor";
+            case EGRESS -> "egress";
         };
     }
 

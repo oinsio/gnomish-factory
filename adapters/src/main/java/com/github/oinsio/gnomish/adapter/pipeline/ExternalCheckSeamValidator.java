@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
-import com.github.oinsio.gnomish.app.CheckParamsValidator;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
@@ -9,84 +8,57 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Validates the seam around each {@code external} check's provider selection (FR6, FR13, UX1 of
- * add-plugin-architecture) — the manifest-side counterpart of {@link TrackerSeamValidator}. Core
- * owns the problem <em>around</em> the delegation, namely a check naming a provider no discovered
- * jar serves; the provider's own {@link CheckParamsValidator} owns everything inside its {@code
- * params}, which core never interprets.
+ * Grades each check's settings with the params validator its built-in executor owns (FR6, FR13, UX1
+ * of add-plugin-architecture; FR1, FR6, FR13 of migrate-verify-to-executor-contract): the {@code
+ * http} and {@code github-actions} built-ins each grade their own per-check settings, which core
+ * never interprets. The validators are keyed by built-in executor name and handed in by the
+ * composition root; a check whose executor has no validator — the built-ins with no per-check
+ * selectors, or a law's program — is graded by nothing here. A law's program is graded once its
+ * describe answers: the describe preflight holds each check's settings to that executor's settings
+ * schema ({@code SettingsAgreement} in {@code :application}).
  *
- * <p>The registry is keyed by every discovered provider, so its {@code keySet()} <em>is</em> the
- * discovered set: a provider grading no params contributes {@link CheckParamsValidator#none()}
- * rather than no entry, which is what lets a missing key mean "nobody serves this provider" and
- * nothing else.
- *
- * <p>Provider existence is checked at load time because it is in-process knowledge — which jars are
- * on the classpath — not target liveness (which the loader deliberately never probes, NG7 of
- * load-pipeline-config). It is checked identically whatever command follows ({@code run},
- * {@code take}, {@code serve}): a command-dependent rule would let the same manifest load under one
- * command and fail under another (design D10).
+ * <p>Whether the executor a check names exists is not this seam's question: the law's load
+ * validation ({@code ExecutorDeclarations}) refuses a name outside the six built-ins and the law's
+ * declarations as a located error listing that union (design D18, "The six built-in names have one
+ * owner"), so a missing key here means only "this executor grades no settings". The check-provider
+ * registry this seam once read the discovered provider set from is gone (task 5.2).
  *
  * <p>Errors are located {@link ConfigError} data in stage-then-check order, never thrown, so they
  * aggregate with every other load problem in the loader's single pass (NFR-R1).
  *
- * <p>Implements FR6, FR13, UX1 of add-plugin-architecture.
+ * <p>Implements FR6, FR13, UX1 of add-plugin-architecture; FR1, FR13 of
+ * migrate-verify-to-executor-contract.
  */
 public final class ExternalCheckSeamValidator {
 
     private ExternalCheckSeamValidator() {}
 
     /**
-     * Validates every {@code external} check of every stage against the discovered providers.
-     *
-     * <p>Implements FR6, FR13, UX1 of add-plugin-architecture.
+     * Grades the settings of every check whose executor owns a params validator.
      *
      * @param stages the mapped stages in pipeline order
-     * @param checkProviders the params validators keyed by every discovered provider; an empty map
-     *     means no provider was discovered and every {@code external} check is reported unknown
-     * @return every located problem, in stage-then-check-then-field order; empty when every check
-     *     selects a discovered provider whose validator accepts its params
+     * @param validators the params validators keyed by built-in executor name; never null
+     * @return every located problem, in stage-then-check-then-field order; empty when every graded
+     *     check's settings are accepted
      */
     public static List<ConfigError> validate(
-            List<StageDefinition> stages, Map<String, CheckParamsValidator> checkProviders) {
+            List<StageDefinition> stages, Map<String, CheckSettingsValidator> validators) {
         List<ConfigError> errors = new ArrayList<>();
         for (StageDefinition stage : stages) {
-            validateStage(stage, checkProviders, errors);
-        }
-        return List.copyOf(errors);
-    }
-
-    private static void validateStage(
-            StageDefinition stage, Map<String, CheckParamsValidator> checkProviders, List<ConfigError> errors) {
-        String manifest = "stages/%s/stage.yaml".formatted(stage.name());
-        List<VerifyCheck> checks = stage.verify();
-        for (int index = 0; index < checks.size(); index++) {
-            if (checks.get(index) instanceof VerifyCheck.External external) {
-                validateExternal(manifest, index, external, checkProviders, errors);
+            String manifest = "stages/%s/stage.yaml".formatted(stage.name());
+            List<VerifyCheck> checks = stage.verify();
+            for (int index = 0; index < checks.size(); index++) {
+                if (!(checks.get(index) instanceof VerifyCheck.Executor check)) {
+                    continue;
+                }
+                CheckSettingsValidator validator = validators.get(check.executorName());
+                if (validator != null) {
+                    String field = check.token() == VerifyCheck.Token.EXECUTOR ? "settings" : "params";
+                    errors.addAll(
+                            validator.validate(manifest, "verify[%d].%s".formatted(index, field), check.settings()));
+                }
             }
         }
-    }
-
-    /**
-     * Reports an undiscovered provider — naming both the selection and the discovered set, so an
-     * operator reads what to install or what to write instead (UX1) — or hands the check's params
-     * to the selected provider's own validator. A check whose provider is unknown is not also
-     * params-graded: no validator can speak for a provider nobody serves.
-     */
-    private static void validateExternal(
-            String manifest,
-            int index,
-            VerifyCheck.External external,
-            Map<String, CheckParamsValidator> checkProviders,
-            List<ConfigError> errors) {
-        CheckParamsValidator validator = checkProviders.get(external.provider());
-        if (validator == null) {
-            errors.add(new ConfigError(
-                    manifest,
-                    "verify[%d].provider".formatted(index),
-                    "unknown check provider '%s'; discovered providers: %s"
-                            .formatted(external.provider(), checkProviders.keySet())));
-            return;
-        }
-        errors.addAll(validator.validate(manifest, "verify[%d].params".formatted(index), external.params()));
+        return List.copyOf(errors);
     }
 }

@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.program;
 
+import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
 import com.github.oinsio.gnomish.executorcontract.Policy;
@@ -17,6 +19,7 @@ import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The working-copy-unchanged check of the {@code verdict} and {@code decision} roles (FR11, NFR-S4
@@ -39,7 +42,7 @@ import java.util.Map;
  * is the same), and an index flag ({@code assume-unchanged}, {@code skip-worktree}) that hides a
  * file's change from git. A run outside a git working copy cannot be checked at all, and is refused.
  *
- * <p>Implements FR11, NFR-S4 of define-executor-contract.
+ * <p>Implements FR11, NFR-S4 of define-executor-contract; FR20 of migrate-verify-to-executor-contract.
  */
 final class WorkingCopyCheck {
 
@@ -66,17 +69,24 @@ final class WorkingCopyCheck {
     private final TaskExecutionEnvironment environment;
     private final Duration bound;
     private final InstantSource clock;
+    private final LastRegisteredCommit registered;
 
     /**
      * @param environment the environment whose working copy the run uses; materialized; never null
-     * @param bound how long one view may take: the factory's startup bound, the bound of its other short
-     *     read in the environment ({@code describe}); never null
+     * @param bound how long one view may take: the factory's startup bound; never null
      * @param clock the clock the bound is measured on; never null
+     * @param registered the run's round cell: a move of {@code HEAD} onto its last registered commit is
+     *     the factory's pending commit ({@link FactoryMove}, D21 of migrate-verify-to-executor-contract)
      */
-    WorkingCopyCheck(TaskExecutionEnvironment environment, Duration bound, InstantSource clock) {
+    WorkingCopyCheck(
+            TaskExecutionEnvironment environment,
+            Duration bound,
+            InstantSource clock,
+            LastRegisteredCommit registered) {
         this.environment = environment;
         this.bound = bound;
         this.clock = clock;
+        this.registered = registered;
     }
 
     /**
@@ -113,6 +123,22 @@ final class WorkingCopyCheck {
         };
     }
 
+    /** The {@code state.json} object of {@code commit}, read in the environment; empty unless answered. */
+    Optional<String> stateBlobAt(String commit) {
+        List<String> argv = GitInvocation.commandLine(
+                "git", List.of("rev-parse", "--verify", "--quiet", commit + ":" + EnvelopePaths.STATE_JSON_PATH));
+        ExecHandle handle;
+        try {
+            handle = environment.exec(new ExecCommand(argv, Map.of(), null, StderrPolicy.MERGED));
+        } catch (ProcessStartException refused) {
+            // No lag recognised: the difference refuses the answer, naming it.
+            return Optional.empty();
+        }
+        BoundedCapture output = BoundedCapture.of(handle, "working-copy-state-blob", 256L, bound, clock);
+        boolean answered = output.ended() instanceof ExecHandle.Wait.Exited && handle.waitForExit() == 0;
+        return answered && !output.incomplete() ? StatusEntries.objectId(output.output()) : Optional.empty();
+    }
+
     private static WorkingCopyView exited(int exitCode, UntrustedText text, boolean incomplete) {
         if (exitCode != 0) {
             return new WorkingCopyView.Unreadable("git status exited " + exitCode + ": " + text.excerpt(512));
@@ -145,7 +171,8 @@ final class WorkingCopyCheck {
                         obligation + ", and it could not be verified after the run: " + unreadable.why(),
                         result);
             case WorkingCopyView.Taken after -> {
-                List<String> changed = StatusEntries.changedPaths(before.entries(), after.entries());
+                List<String> changed = FactoryMove.changed(
+                        before.entries(), after.entries(), registered.lastRegistered(), this::stateBlobAt);
                 yield changed.isEmpty()
                         ? result
                         : ProgramFailures.discarded(
@@ -154,7 +181,7 @@ final class WorkingCopyCheck {
         };
     }
 
-    private static String named(List<String> paths) {
+    static String named(List<String> paths) {
         List<String> shown = new ArrayList<>();
         for (String path : paths.subList(0, Math.min(NAMED_PATHS, paths.size()))) {
             shown.add(UntrustedText.subprocess(path).excerpt(256));

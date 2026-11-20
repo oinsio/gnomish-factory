@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.oinsio.gnomish.app.port.git.UsageRow;
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
 import com.github.oinsio.gnomish.domain.engine.CheckResult;
+import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.UsageSnapshot;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
@@ -96,10 +97,22 @@ public final class UsageReportJsonMapper {
         return switch (check.verdict()) {
             case Verdict.Pass pass ->
                 new CheckDto(
-                        check.checkRef().label().raw(), "pass", List.of(), durationMillis, null, null, pass.runUrl());
+                        check.checkRef().label().raw(),
+                        "pass",
+                        toFindings(pass.findings()),
+                        durationMillis,
+                        null,
+                        null,
+                        pass.runUrl());
             case Verdict.Fail fail ->
                 new CheckDto(
-                        check.checkRef().label().raw(), "fail", toFindings(fail), durationMillis, null, null, null);
+                        check.checkRef().label().raw(),
+                        "fail",
+                        toFindings(fail.findings()),
+                        durationMillis,
+                        null,
+                        null,
+                        null);
             case Verdict.CannotVerify cannotVerify ->
                 new CheckDto(
                         check.checkRef().label().raw(),
@@ -112,8 +125,8 @@ public final class UsageReportJsonMapper {
         };
     }
 
-    private static List<FindingDto> toFindings(Verdict.Fail fail) {
-        return fail.findings().stream()
+    private static List<FindingDto> toFindings(List<Finding> findings) {
+        return findings.stream()
                 .map(finding -> new FindingDto(finding.message(), finding.location(), finding.details()))
                 .toList();
     }

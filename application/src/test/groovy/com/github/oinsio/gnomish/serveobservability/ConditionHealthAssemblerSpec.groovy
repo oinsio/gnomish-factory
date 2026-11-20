@@ -29,10 +29,12 @@ class ConditionHealthAssemblerSpec extends Specification {
             'cloneRefFormat',
             'containerRuntime',
             'imageContract',
-            'boxGitFloor'
+            'boxGitFloor',
+            'egress'
         ]
         section*.target() == [
             'origin',
+            null,
             null,
             null,
             null,
@@ -43,6 +45,7 @@ class ConditionHealthAssemblerSpec extends Specification {
             false,
             false,
             true,
+            false,
             false
         ]
         with(section[3]) {

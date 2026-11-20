@@ -1,0 +1,249 @@
+package com.github.oinsio.gnomish.githubapi
+
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
+import static com.github.tomakehurst.wiremock.client.WireMock.get
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
+import static com.github.tomakehurst.wiremock.client.WireMock.post
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
+import static com.github.tomakehurst.wiremock.http.Fault.CONNECTION_RESET_BY_PEER
+
+import com.github.tomakehurst.wiremock.WireMockServer
+import com.github.tomakehurst.wiremock.client.WireMock
+import java.net.http.HttpRequest
+import spock.lang.Specification
+
+/**
+ * GithubHttpClient (NFR-R2, NFR-S1 of add-tracker-port, design D5, D13, D15):
+ * verifies the Authorization header carries the configured token, and that
+ * infrastructure failures (5xx, connection reset) are retried per the
+ * Resilience4j policy while a plain 4xx business response is returned as-is,
+ * never retried.
+ *
+ * <p>An interrupt of the calling thread is none of those (FR11, NFR-R3 of fix-operator-blockers):
+ * it is the stop of that thread, so the client sends nothing more, keeps the interrupt set and
+ * fails with a cancellation that no transport-failure handler matches.
+ *
+ * Implements NFR-R2, NFR-S1 of add-tracker-port; FR11, NFR-R3 of fix-operator-blockers.
+ */
+class GithubHttpClientSpec extends Specification {
+
+    WireMockServer wireMock
+
+    def setup() {
+        wireMock = new WireMockServer(0)
+        wireMock.start()
+    }
+
+    def cleanup() {
+        wireMock.stop()
+    }
+
+    // Design D7 of add-tracker-port: the configured base is exposed as given, for callers that
+    //     decide default-host omission from it (the tracker's task identity).
+    def "exposes the configured API URL"() {
+        expect:
+        new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+                .apiUrl() == wireMock.baseUrl()
+    }
+
+    def "sends the Authorization header as Bearer <token>"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets'))
+                .willReturn(aResponse().withStatus(200).withBody('{}')))
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'secret-token-123',
+                GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        def response = client.send(client.newRequest('/repos/acme/widgets'))
+
+        then:
+        response.statusCode() == 200
+        wireMock.verify(getRequestedFor(urlEqualTo('/repos/acme/widgets'))
+                .withHeader('Authorization', WireMock.equalTo('Bearer secret-token-123')))
+    }
+
+    def "sends standard Accept and X-GitHub-Api-Version headers"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets'))
+                .willReturn(aResponse().withStatus(200).withBody('{}')))
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        client.send(client.newRequest('/repos/acme/widgets'))
+
+        then:
+        wireMock.verify(getRequestedFor(urlEqualTo('/repos/acme/widgets'))
+                .withHeader('Accept', WireMock.equalTo('application/vnd.github+json'))
+                .withHeader('X-GitHub-Api-Version', WireMock.matching('.+')))
+    }
+
+    def "retries a transient 503 and eventually succeeds"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/flaky'))
+                .inScenario('flaky-503')
+                .whenScenarioStateIs('Started')
+                .willReturn(aResponse().withStatus(503))
+                .willSetStateTo('second'))
+        wireMock.stubFor(get(urlEqualTo('/flaky'))
+                .inScenario('flaky-503')
+                .whenScenarioStateIs('second')
+                .willReturn(aResponse().withStatus(200).withBody('ok')))
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        def response = client.send(client.newRequest('/flaky'))
+
+        then:
+        response.statusCode() == 200
+        response.body() == 'ok'
+        wireMock.verify(2, getRequestedFor(urlEqualTo('/flaky')))
+    }
+
+    def "exhausts retries and surfaces a failure when 5xx persists"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/always-down'))
+                .willReturn(aResponse().withStatus(503)))
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        def response = client.send(client.newRequest('/always-down'))
+
+        then:
+        // retryOnResult without a final exception returns the last result once
+        // the retry budget is exhausted (no exception was thrown by doSend).
+        response.statusCode() == 503
+        wireMock.verify(4, getRequestedFor(urlEqualTo('/always-down')))
+    }
+
+    def "a 4xx business response is returned as-is, never retried"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/missing'))
+                .willReturn(aResponse().withStatus(404).withBody('{"message":"Not Found"}')))
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        def response = client.send(client.newRequest('/missing'))
+
+        then:
+        response.statusCode() == 404
+        wireMock.verify(1, getRequestedFor(urlEqualTo('/missing')))
+    }
+
+    def "follows a 302 redirect and returns the target's body (e.g. workflow job logs)"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/repos/acme/widgets/actions/jobs/1/logs'))
+                .willReturn(aResponse().withStatus(302)
+                .withHeader('Location', wireMock.baseUrl() + '/blob-storage/log-1')))
+        wireMock.stubFor(get(urlEqualTo('/blob-storage/log-1'))
+                .willReturn(aResponse().withStatus(200).withBody('log tail contents')))
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        def response = client.send(client.newRequest('/repos/acme/widgets/actions/jobs/1/logs'))
+
+        then:
+        response.statusCode() == 200
+        response.body() == 'log tail contents'
+    }
+
+    def "a persistent connection failure exhausts retries and throws GithubHttpException"() {
+        given:
+        def deadUrl = wireMock.baseUrl()
+        wireMock.stop()
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(deadUrl)), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        client.send(client.newRequest('/unreachable'))
+
+        then:
+        thrown(GithubHttpException)
+    }
+
+    // FR11, NFR-R3 of fix-operator-blockers: the interrupt arrives while GitHub has not answered —
+    //     the stop of the calling thread, not a network fault to retry or to report as one.
+    // Scenario: tracker/github-tracker / One attempt, then a cancellation
+    // Scenario: tracker/github-tracker / No message calls a cancellation a failure after retries
+    def "an interrupt mid-request is a cancellation: one request, its own failure, the interrupt kept"() {
+        given:
+        wireMock.stubFor(post(urlEqualTo('/slow'))
+                .willReturn(aResponse().withStatus(200).withFixedDelay(30_000)))
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        def outcome = InterruptMidRequest.run(wireMock, postRequestedFor(urlEqualTo('/slow'))) {
+            client.send(client.newRequest('/slow').POST(HttpRequest.BodyPublishers.noBody()))
+        }
+
+        then: 'the failure is the cancellation, which no transport-failure handler matches'
+        outcome.failure instanceof GithubCallInterruptedException
+        !(outcome.failure instanceof GithubHttpException)
+        !outcome.failure.message.contains('after retries')
+
+        and: 'the caller reads the stop from its own thread'
+        outcome.interruptSet
+
+        and: 'no retry was spent on it'
+        wireMock.verify(1, postRequestedFor(urlEqualTo('/slow')))
+    }
+
+    // FR11 of fix-operator-blockers, control row: a connection reset on a thread nobody
+    //     interrupted is a transport failure and keeps the whole retry budget.
+    // Scenario: tracker/github-tracker / A real transport failure keeps its retries
+    def "a connection reset on an uninterrupted thread keeps its retries"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/reset'))
+                .willReturn(aResponse().withFault(CONNECTION_RESET_BY_PEER)))
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        client.send(client.newRequest('/reset'))
+
+        then:
+        thrown(GithubHttpException)
+        wireMock.verify(4, getRequestedFor(urlEqualTo('/reset')))
+        !Thread.currentThread().isInterrupted()
+    }
+
+    // FR15 of migrate-verify-to-executor-contract, design D16: the core declares its own bounds —
+    //     16 MiB and 60 s — rather than inheriting the http built-in's status-document ones
+    def "the core declares its own response bound and request timeout"() {
+        expect:
+        GithubHttpClient.MAX_BODY_BYTES == 16 * 1024 * 1024
+        GithubHttpClient.REQUEST_TIMEOUT == java.time.Duration.ofSeconds(60)
+    }
+
+    // FR15: the client is bound to the admitted endpoint — its URL is the base of every request
+    def "requests are built against the admitted endpoint's URL"() {
+        given:
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok')
+
+        expect:
+        client.newRequest('/repos/a/b').build().uri() == URI.create(wireMock.baseUrl() + '/repos/a/b')
+    }
+
+    // NFR-R5 of migrate-verify-to-executor-contract: a refusal and an exchange limit leave unwrapped,
+    //     after the one attempt — neither is the GithubHttpException of an exhausted transport
+    def "a refused redirect and a redirect loop leave unwrapped after one request each"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo('/away')).willReturn(aResponse().withStatus(302)
+                .withHeader('Location', 'https://93.184.216.34/collect')))
+        wireMock.stubFor(get(urlEqualTo('/loop')).willReturn(aResponse().withStatus(302)
+                .withHeader('Location', wireMock.baseUrl() + '/loop')))
+        def client = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', GithubFastRetryConfig.serverErrorsOnly())
+
+        when:
+        client.send(client.newRequest('/away'))
+
+        then:
+        thrown(com.github.oinsio.gnomish.domain.egress.EgressRefusedException)
+        wireMock.verify(1, getRequestedFor(urlEqualTo('/away')))
+
+        when:
+        client.send(client.newRequest('/loop'))
+
+        then:
+        thrown(com.github.oinsio.gnomish.httpegress.ExchangeLimitException)
+        wireMock.verify(1, getRequestedFor(urlEqualTo('/loop')))
+    }
+}

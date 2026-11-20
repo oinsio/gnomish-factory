@@ -110,6 +110,12 @@ tasks.named('test') {
     inputs.files(rootProject.fileTree(rootProject.file('docs/examples/sandbox-image')),
             rootProject.file('docs/guides/operator-guide-sandbox.md')).withPropertyName('referenceRecipe')
 
+    // SampleVerdictProgramSpec (task 6.2 of migrate-verify-to-executor-contract, FR8) runs the api
+    // sample's verdict program through the conformance kit and reads it as data: without declaring
+    // its directory, an edit of the program leaves `test` up to date and the kit simply does not run.
+    inputs.files(rootProject.fileTree(rootProject.file('gnomish-plugin-api/sample/verdict')))
+            .withPropertyName('sampleVerdictProgram')
+
     // The Ollama E2E layer (task 11.1) needs a native local Ollama install and a logged-in
     // `claude` CLI, and the paid smoke layer (task 11.3) spends real money against the real
     // Anthropic backend by design. Both are excluded here and run only via their dedicated tasks

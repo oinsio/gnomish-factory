@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent.program
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
+import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -48,12 +49,12 @@ final class ProgramFixtures {
 
     static Describe describe(List<Capability> capabilities = []) {
         new Describe(1, UntrustedText.subprocess('1'), [Role.TRANSFORM], capabilities,
-        JsonNodeFactory.instance.objectNode(), ['ACME_API_KEY'], [], null, [], EnforcementLevel.PROMPT_ONLY, true)
+        JsonNodeFactory.instance.objectNode(), ['ACME_API_KEY'], [], null, [], EnforcementLevel.PROMPT_ONLY, true, false)
     }
 
     static ProgramRoundEquipment equipment(Path stderrParent, ProgramBounds bounds = ProgramBounds.DEFAULTS,
-            TimeEquipment time = VirtualTimeEquipment.create()) {
-        new ProgramRoundEquipment(bounds, time, ChildEnvAllowlist.of([], [], SECRETS).programGrant(), stderrParent)
+            TimeEquipment time = VirtualTimeEquipment.create(), LastRegisteredCommit registered = LastRegisteredCommit.NONE) {
+        new ProgramRoundEquipment(bounds, time, ChildEnvAllowlist.of([], [], SECRETS).programGrant(), stderrParent, registered)
     }
 
     static StageDefinition stage(String model = '', Map<String, Object> settings = [:]) {

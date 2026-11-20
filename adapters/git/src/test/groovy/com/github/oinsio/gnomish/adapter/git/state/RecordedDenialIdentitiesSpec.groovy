@@ -22,7 +22,7 @@ class RecordedDenialIdentitiesSpec extends Specification {
     private static StateJsonDto stateWith(List<StateDenialDto> denials) {
         new StateJsonDto(1, new StatePositionDto.AtStage('atStage', 'build'), 1, [
             new StateAttemptDto('T-1', 'build', null, 0, 'passed', '2026-08-19T10:00:00Z', [], denials, [], null)
-        ], emptyTotals(), null, null)
+        ], emptyTotals(), null, null, null)
     }
 
     /** The totals component this package declares non-null, with nothing recorded in it. */

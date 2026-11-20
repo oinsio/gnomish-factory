@@ -24,7 +24,9 @@ import org.jspecify.annotations.Nullable;
  * window-total tokens-by-model with their grand total. Other {@link
  * com.github.oinsio.gnomish.serveobservability.LedgerLine} variants ({@code
  * lifecycle}, {@code runSummary}, and the per-round {@code roundOutcome} line of
- * define-executor-contract, NFR-O2, UX3) are ignored: the day view sums the
+ * define-executor-contract, NFR-O2, UX3 — a stage round's and, since
+ * migrate-verify-to-executor-contract (NFR-O1, UX3), an executor check's, role {@code verdict},
+ * with its {@code check} index and {@code resumedKey}) are ignored: the day view sums the
  * {@code taskOutcome} snapshots only, so a round is never counted twice. Reuses {@link
  * LedgerLineReader} for the torn-last-line tolerance (NFR-R2 of
  * add-serve-observability) — a malformed non-tail line still surfaces as an

@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefreshOutcome
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.OriginContact
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -41,7 +42,6 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -164,7 +164,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         and:
         def git = new TaskGit(
-                store, branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                store, branches, Stub(TaskWorktreeGit), HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         claim(claimAndWork(git, tracker, Stub(RunAssembly) {
@@ -346,7 +346,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def tracker = Mock(Tracker)
         def branches = freshBranches()
         def git = new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), Stub(BaseRefGit), new ClaimEpochBook())
+                HostGitRounds.NONE, Stub(BaseRefGit), new ClaimEpochBook())
         // A conflicting designator (two values named for the same base) is Underdetermined before
         // any refresh is even attempted — the same shape FreshClaimBaseBindingSpec drives at the
         // unit level, here driven through the real claim/dispatch stack.
@@ -381,7 +381,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         given:
         def tracker = Mock(Tracker)
         def git = new TaskGit(Stub(TaskStoreGit), freshBranches(), Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), unavailableBaseRefGit(), new ClaimEpochBook())
+                HostGitRounds.NONE, unavailableBaseRefGit(), new ClaimEpochBook())
 
         when:
         def result = claim(claimAndWork(git, tracker, Stub(RunAssembly) {
@@ -414,7 +414,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def taskWithAborts = new TrackerTask(REF, new TaskSnapshot('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body')),
                 new TrackerTaskState.Ready(), facts, false)
         def git = new TaskGit(Stub(TaskStoreGit), freshBranches(), Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), unavailableBaseRefGit(), new ClaimEpochBook())
+                HostGitRounds.NONE, unavailableBaseRefGit(), new ClaimEpochBook())
         def subject = claimAndWork(git, tracker, Stub(RunAssembly) {
             timeEquipment() >> VirtualTimeEquipment.create()
         })
@@ -448,7 +448,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def lifecycleStore = Mock(TaskLifecycleStore)
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> lifecycleStore
-            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
         def branches = freshBranches()
@@ -459,7 +459,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
             ]
         }
         def git = new TaskGit(store, branches, Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), recoveringBaseRefGit, new ClaimEpochBook())
+                HostGitRounds.NONE, recoveringBaseRefGit, new ClaimEpochBook())
         def beat = new RecordingBeat()
         def subject = claimAndWork(git,
                 tracker, assemblyRunning(new ScriptedExecutor([completedRound()])), beat,
@@ -522,13 +522,13 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         def lifecycleStore = Mock(TaskLifecycleStore)
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> lifecycleStore
-            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
         def branches = freshBranches()
         def beat = new RecordingBeat()
         def git = new TaskGit(
-                store, branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                store, branches, Stub(TaskWorktreeGit), HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         def result = claimAndRun(claimAndWork(git,
@@ -563,14 +563,14 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
         Files.createDirectories(resumedWorktree)
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> lifecycleStore
-            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_, _) >> Optional.of(freshRecord())
             readRecordedState(_, _) >> Optional.of(TaskState.atStageStart('build'))
         }
         // FR12, D13 of add-base-ref-resolution: resume always resolves its pinned base ref now, so
         // this port-fake chain needs a working BaseRefGit rather than BaseRefGit.UNWIRED.
         def baseRefGit = resumingBaseRefGit()
-        def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
+        def git = new TaskGit(store, branches, worktrees, HostGitRounds.NONE, baseRefGit, new ClaimEpochBook())
 
         when:
         def result = claimAndRun(claimAndWork(git, tracker,
@@ -599,6 +599,7 @@ class TakeClaimAndWorkSpec extends Specification implements RunChainFakes {
 
         and: 'the resume checks the working copy for leftovers of the interrupted attempt'
         worktrees.salvage(resumedWorktree) >> Stub(WorktreeSalvager)
+        worktrees.interruptedVerification(resumedWorktree, _) >> Optional.empty()
 
         and:
         tracker.fetchTask(_) >> heldByUs()

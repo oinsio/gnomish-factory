@@ -4,11 +4,7 @@ import com.github.oinsio.gnomish.DoNotMutate;
 import com.github.oinsio.gnomish.adapter.pipeline.PathSafety;
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace;
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace;
-import com.github.oinsio.gnomish.domain.engine.Finding;
-import com.github.oinsio.gnomish.domain.engine.Verdict;
-import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.gitobjects.GitObjects;
 import com.github.oinsio.gnomish.gitobjects.InvalidTreePathException;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
@@ -21,12 +17,14 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The real {@code files_exist} built-in check runner (design D2): checks that
- * every literal workspace-relative path in the {@code files} param exists,
- * collecting one {@link Finding} per missing path. Malformed params or a
- * path resolving outside the workspace root never reach an existence check —
- * they yield {@link Verdict.CannotVerify} instead, since no verdict about the
- * artifact's quality can be trusted from an unsafe or unparseable input.
+ * The real {@code files_exist} existence judgement (design D2): checks that every literal
+ * workspace-relative path in the {@code files} setting exists, answering the missing paths, which
+ * {@link FilesExistExecutor} renders as one {@code error} SARIF result per path within the result cap
+ * {@link FilesExistOutcome#reported} applies (D5 of migrate-verify-to-executor-contract: the
+ * executor answers, the engine's {@code VerdictDerivation} derives the verdict against the check's
+ * threshold). Malformed settings or a path resolving outside the workspace root never reach an
+ * existence check — they yield {@link FilesExistOutcome.Unanswerable} instead, since no verdict
+ * about the artifact's quality can be trusted from an unsafe or unparseable input.
  *
  * <p>Two legs, one runner for every environment adapter (FR21, D15 of
  * add-sandbox-core): over a {@link DirectoryWorkspace} (host modes) existence
@@ -37,14 +35,21 @@ import org.jspecify.annotations.Nullable;
  * per run through {@link #withAttemptReader}; the sandbox integration pass
  * wires it alongside the workspace itself.
  *
- * <p>Implements FR6 of add-manual-run; FR21, D15 of add-sandbox-core.
+ * <p>The existence judgement is {@link #probe}, made once; {@link FilesExistExecutor} wraps the
+ * runner as the {@code files-exist} executor of the executor contract (FR1 of
+ * migrate-verify-to-executor-contract), its one rendering — the engine-port rendering left with
+ * the engine ports (task 5.2, design D9 of that change). The settings are read by {@link
+ * FilesExistSettings}.
+ *
+ * <p>Implements FR6 of add-manual-run; FR21, D15 of add-sandbox-core; FR1, FR7 of
+ * migrate-verify-to-executor-contract.
  *
  * <p>A plain class, not a record: PIT's JVMTI-based hot-swap mutation testing refuses record
  * bytecode changes (hcoles/pitest#1285) — a record shape here would turn nearly every mutation of
- * {@link #run}/{@link #runAgainstAttemptCommit}/{@link #describeType} into an unkillable RUN_ERROR
- * instead of the one isolated, documented exception {@link #opaqueWorkspaceVerdict} carries.
+ * {@link #probe} into an unkillable RUN_ERROR instead of the one isolated, documented
+ * exception {@link #opaqueWorkspace} carries.
  */
-public final class FilesExistCheckRunner implements BuiltinCheckRunner {
+public final class FilesExistCheckRunner {
 
     private final @Nullable GitObjects attemptReader;
 
@@ -70,38 +75,43 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
         return new FilesExistCheckRunner(attemptReader);
     }
 
-    @Override
-    public Verdict run(VerifyCheck.Builtin check, Workspace workspace) {
+    /**
+     * Judges existence of every path the {@code files} setting lists against {@code workspace}: the
+     * one existence judgement the executor contract's {@link FilesExistExecutor} renders.
+     *
+     * @param settings the check's settings as plain values; never null
+     * @param workspace the working copy the paths are judged in; never null
+     * @return the missing paths, or why none could be judged; never null
+     */
+    FilesExistOutcome probe(Map<String, ?> settings, Workspace workspace) {
         List<String> files;
         try {
-            files = readFiles(check.params());
-        } catch (MalformedParamsException e) {
-            return new Verdict.CannotVerify(UntrustedText.manifest(e.reason()), NoCheckDetails.NO_DETAILS);
+            files = FilesExistSettings.files(settings);
+        } catch (FilesExistSettings.MalformedSettingsException e) {
+            return new FilesExistOutcome.Unanswerable(UntrustedText.manifest(e.reason()));
         }
 
         if (workspace instanceof RecordedAttemptCommitWorkspace attemptWorkspace) {
-            return runAgainstAttemptCommit(files, attemptWorkspace);
+            return probeAttemptCommit(files, attemptWorkspace);
         }
         if (!(workspace instanceof DirectoryWorkspace directoryWorkspace)) {
-            return opaqueWorkspaceVerdict(workspace);
+            return opaqueWorkspace(workspace);
         }
 
         Path root = directoryWorkspace.root();
-        List<Finding> findings = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
         for (String file : files) {
             PathSafety.Resolution resolution = PathSafety.resolveWithinRoot(root, file);
             if (resolution instanceof PathSafety.Escapes(String ref)) {
-                return new Verdict.CannotVerify(
-                        UntrustedText.manifest("files_exist path escapes the workspace: " + ref),
-                        NoCheckDetails.NO_DETAILS);
+                return new FilesExistOutcome.Unanswerable(
+                        UntrustedText.manifest("files_exist path escapes the workspace: " + ref));
             }
             PathSafety.Within within = (PathSafety.Within) resolution;
             if (!Files.exists(within.path())) {
-                findings.add(new Finding("missing file: " + file, file, null));
+                missing.add(file);
             }
         }
-
-        return findings.isEmpty() ? new Verdict.Pass() : new Verdict.Fail(findings);
+        return new FilesExistOutcome.Missing(missing);
     }
 
     /**
@@ -111,95 +121,42 @@ public final class FilesExistCheckRunner implements BuiltinCheckRunner {
      * tree-path validation (absolute, {@code ..}, {@code .git}) is the sandboxed twin of the
      * host leg's workspace-escape refusal.
      */
-    private Verdict runAgainstAttemptCommit(List<String> files, RecordedAttemptCommitWorkspace workspace) {
+    private FilesExistOutcome probeAttemptCommit(List<String> files, RecordedAttemptCommitWorkspace workspace) {
         if (attemptReader == null) {
-            return new Verdict.CannotVerify(
-                    UntrustedText.factory("files_exist has no factory-clone reader bound for the sandboxed workspace"),
-                    NoCheckDetails.NO_DETAILS);
+            return new FilesExistOutcome.Unanswerable(
+                    UntrustedText.factory("files_exist has no factory-clone reader bound for the sandboxed workspace"));
         }
         ObjectId commit = ObjectId.of(workspace.attemptCommitSha());
-        List<Finding> findings = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
         for (String file : files) {
             try {
                 if (!attemptReader.exists(commit, file)) {
-                    findings.add(new Finding("missing file: " + file, file, null));
+                    missing.add(file);
                 }
             } catch (InvalidTreePathException e) {
-                return new Verdict.CannotVerify(
-                        UntrustedText.manifest("files_exist path escapes the workspace: " + file),
-                        NoCheckDetails.NO_DETAILS);
+                return new FilesExistOutcome.Unanswerable(
+                        UntrustedText.manifest("files_exist path escapes the workspace: " + file));
             }
         }
-        return findings.isEmpty() ? new Verdict.Pass() : new Verdict.Fail(findings);
+        return new FilesExistOutcome.Missing(missing);
     }
 
     /**
-     * Builds the {@link Verdict.CannotVerify} for a non-{@link DirectoryWorkspace}
-     * argument, naming the workspace's actual runtime type.
+     * The outcome for a workspace that is neither a {@link DirectoryWorkspace} nor a {@link
+     * RecordedAttemptCommitWorkspace}, naming its actual runtime type.
      *
      * <p>PIT M4 documented exception (build.gradle has the full rationale):
      * {@code @DoNotMutate} — the same JVMTI RedefineClasses/record-attribute
      * restriction as the class javadoc above (hcoles/pitest#1285) — NO_COVERAGE,
-     * not a real gap: "a workspace that is not a DirectoryWorkspace yields
-     * CannotVerify" in FilesExistCheckRunnerSpec exercises this method directly
-     * and passes. Isolated to its own method so the rest of {@link #run} stays
+     * not a real gap: "a workspace that is not a DirectoryWorkspace is
+     * failed/infrastructure naming its runtime type" in FilesExistExecutorSpec exercises it
+     * and passes. Isolated to its own method so the rest of {@link #probe} stays
      * under the 100% mutation gate.
      */
     @DoNotMutate
-    private static Verdict opaqueWorkspaceVerdict(Workspace workspace) {
-        return new Verdict.CannotVerify(
+    private static FilesExistOutcome opaqueWorkspace(Workspace workspace) {
+        return new FilesExistOutcome.Unanswerable(
                 UntrustedText.factory("files_exist requires a DirectoryWorkspace, got "
-                        + workspace.getClass().getName()),
-                NoCheckDetails.NO_DETAILS);
-    }
-
-    /**
-     * Reads and validates the {@code files} param as a list of non-null strings,
-     * throwing {@link MalformedParamsException} for anything else — a missing
-     * key, a non-list value, or a list with a non-string entry.
-     */
-    private static List<String> readFiles(Map<String, Object> params) {
-        Object rawFiles = params.get("files");
-        if (rawFiles == null) {
-            throw new MalformedParamsException("files_exist requires a 'files' param");
-        }
-        if (!(rawFiles instanceof List<?> list)) {
-            throw new MalformedParamsException("files_exist 'files' param must be a list, got "
-                    + rawFiles.getClass().getName());
-        }
-        List<String> files = new ArrayList<>(list.size());
-        for (Object entry : list) {
-            if (!(entry instanceof String stringEntry)) {
-                throw new MalformedParamsException(
-                        "files_exist 'files' entries must all be strings, found " + describeType(entry));
-            }
-            files.add(stringEntry);
-        }
-        return files;
-    }
-
-    /**
-     * Describes {@code entry}'s runtime type for a malformed-params message, tolerating a
-     * {@code null} list entry — a genuine possibility for externally supplied {@code files}
-     * params (e.g. a YAML/JSON {@code null} literal in the list), even though the surrounding
-     * loop variable's inferred type is non-null.
-     */
-    private static String describeType(@Nullable Object entry) {
-        return entry == null ? "null" : entry.getClass().getName();
-    }
-
-    /** Signals malformed {@code files_exist} params; caught locally and turned into CannotVerify. */
-    private static final class MalformedParamsException extends RuntimeException {
-
-        private final String reason;
-
-        MalformedParamsException(String reason) {
-            super(reason);
-            this.reason = reason;
-        }
-
-        String reason() {
-            return reason;
-        }
+                        + workspace.getClass().getName()));
     }
 }

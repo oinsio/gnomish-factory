@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import java.time.Duration
 import spock.lang.Specification
 
@@ -15,7 +17,7 @@ import spock.lang.Specification
 class StageDefinitionSpec extends Specification {
 
     private static final ArtifactOutput OUTPUT = new ArtifactOutput('impl-diff')
-    private static final VerifyCheck CHECK = new VerifyCheck.Command('./gradlew check')
+    private static final VerifyCheck CHECK = VerifyChecks.command('./gradlew check')
 
     private static StageDefinition.Executor anExecutor(Map<String, Object> settings = [temperature: 0]) {
         new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', settings)
@@ -69,9 +71,9 @@ class StageDefinitionSpec extends Specification {
     def "the ordered position of each verify check within the stage is preserved"() {
         given: 'a verify list with all four check types, cheap deterministic first'
         def checks = [
-            new VerifyCheck.Builtin('files_exist', [paths: ['README.md']]),
-            new VerifyCheck.Command('./gradlew check'),
-            new VerifyCheck.External('ci/build', 'ci-platform', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY),
+            VerifyChecks.builtin('files_exist', [paths: ['README.md']]),
+            VerifyChecks.command('./gradlew check'),
+            VerifyChecks.external('ci/build', 'ci-platform', Duration.ofSeconds(30), Duration.ofMinutes(15), VerifyCheck.TimeoutClass.QUALITY),
             new VerifyCheck.Judge('stages/implement/acceptance.md', 'claude-sonnet-4-5', [:], 3),
         ]
 
@@ -90,7 +92,7 @@ class StageDefinitionSpec extends Specification {
         def stage = stageWith(inputs, outputs, checks)
         inputs << new ArtifactInput.Internal('later noise')
         outputs << new ArtifactOutput('later-noise')
-        checks << new VerifyCheck.Command('later noise')
+        checks << VerifyChecks.command('later noise')
 
         then: 'the stage still holds only the original elements'
         stage.inputs() == [new ArtifactInput.Source()]
@@ -113,7 +115,7 @@ class StageDefinitionSpec extends Specification {
         section | list | intruder
         'inputs' | { it.inputs() } | new ArtifactInput.Source()
         'outputs' | { it.outputs() } | new ArtifactOutput('intruder')
-        'verify' | { it.verify() } | new VerifyCheck.Command('intruder')
+        'verify' | { it.verify() } | VerifyChecks.command('intruder')
     }
 
     // FR2/Q1: the mechanism section is executor type + pinned model + opaque settings

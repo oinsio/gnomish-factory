@@ -44,7 +44,7 @@ class RoundLogLineSpec extends Specification {
     def "a described executor's round line names the executor, protocol version, role, status, class and bound under the task's MDC"() {
         given:
         def executor = new RoundExecutor('lint-bot', UntrustedText.subprocess('2.3.1'))
-        def status = new ExecutionResult.Failed(ExecutionResult.FailureClass.LIMIT, UntrustedText.subprocess('turns 40'), [])
+        def status = new ExecutionResult.Failed(ExecutionResult.FailureClass.LIMIT, UntrustedText.subprocess('turns 40'), [], null)
 
         when:
         def line = lineOf(executor, status)
@@ -87,7 +87,7 @@ class RoundLogLineSpec extends Specification {
     def "a quality failure names its class and reaches no bound"() {
         when:
         def line = lineOf(new RoundExecutor('agent-cli', null),
-                new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, UntrustedText.subprocess('red'), []))
+                new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, UntrustedText.subprocess('red'), [], null))
 
         then:
         line.formattedMessage.contains('class=quality')

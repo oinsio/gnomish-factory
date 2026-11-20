@@ -1,7 +1,5 @@
 package com.github.oinsio.gnomish.adapter.tracker.github
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.StateLabels
@@ -10,6 +8,9 @@ import com.github.oinsio.gnomish.app.port.tracker.Tracker
 import com.github.oinsio.gnomish.app.port.tracker.TrackerFacts
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import com.github.tomakehurst.wiremock.http.RequestMethod
@@ -154,7 +155,7 @@ class GithubKillWindowWorld {
     private Tracker newTracker(GithubDesignatorRules rules) {
         def labels = new GithubStateLabels(FixtureSeeder.READY_LABEL, FixtureSeeder.WORKING_LABEL,
                 FixtureSeeder.NEEDS_HUMAN_LABEL, FixtureSeeder.DELIVERED_LABEL)
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'kill-window-token', fastRetryConfig())
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'kill-window-token', fastRetryConfig())
         def cache = new GithubConditionalRequestCache(httpClient)
         def labelOps = new GithubLabelOps(httpClient)
         // One clock for every collaborator, set after every marker the seeder writes (year 2000): the

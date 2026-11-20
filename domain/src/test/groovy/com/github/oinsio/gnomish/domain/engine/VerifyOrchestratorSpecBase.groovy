@@ -1,16 +1,17 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
+import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
@@ -20,7 +21,9 @@ import spock.lang.Specification
  * runs a stage attempt's ordered verify list, emits a CheckStarted/CheckFinished pair per
  * executed check, times each against the injected Clock, and stops at the first non-Pass
  * check. This base holds the common check builders, port fakes and orchestrator factory the
- * per-concern chain specs share. Implements FR2, FR3 of add-stage-engine.
+ * per-concern chain specs share: every executor check is a check round on the engine's port,
+ * answered by the scripted check rounds of its executor's name (task 4.2f of
+ * migrate-verify-to-executor-contract). Implements FR2, FR3 of add-stage-engine.
  */
 abstract class VerifyOrchestratorSpecBase extends Specification {
 
@@ -28,21 +31,21 @@ abstract class VerifyOrchestratorSpecBase extends Specification {
     static final def KEY = new AttemptKey('TASK-1', 'build', 0)
     static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
-    static VerifyCheck.Builtin builtin(String name) {
-        new VerifyCheck.Builtin(name, [:])
+    static VerifyCheck.Executor builtin(String name) {
+        VerifyChecks.builtin(name, [:])
     }
 
-    static VerifyCheck.Command command(String line) {
-        new VerifyCheck.Command(line)
+    static VerifyCheck.Executor command(String line) {
+        VerifyChecks.command(line)
     }
 
-    static VerifyCheck.External external(String checkId, Duration interval, Duration timeout) {
-        new VerifyCheck.External(checkId, 'ci-platform', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
+    static VerifyCheck.Executor external(String checkId, Duration interval, Duration timeout) {
+        VerifyChecks.external(checkId, 'ci-platform', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
     }
 
-    static VerifyCheck.External external(String checkId, Duration interval, Duration timeout,
+    static VerifyCheck.Executor external(String checkId, Duration interval, Duration timeout,
             VerifyCheck.TimeoutClass timeoutClass) {
-        new VerifyCheck.External(checkId, 'ci-platform', interval, timeout, timeoutClass)
+        VerifyChecks.external(checkId, 'ci-platform', interval, timeout, timeoutClass)
     }
 
     static VerifyCheck.Judge judge(int votes) {
@@ -52,14 +55,16 @@ abstract class VerifyOrchestratorSpecBase extends Specification {
     def listener = new RecordingEventListener()
     def clock = new VirtualClock()
     def sleeper = new VirtualSleeper(clock)
+    def persistence = new InMemoryAttemptPersistence()
 
-    VerifyOrchestrator orchestrator(ScriptedBuiltinCheckRunner builtinRunner,
-            ScriptedCommandCheckRunner commandRunner,
-            ScriptedExternalCheckClient externalClient = new ScriptedExternalCheckClient(),
+    VerifyOrchestrator orchestrator(ScriptedCheckRounds builtinRunner,
+            ScriptedCheckRounds commandRunner,
+            ScriptedCheckRounds externalClient = new ScriptedCheckRounds(),
             ScriptedJudgeVoter judgeVoter = new ScriptedJudgeVoter(),
             AttemptDelivery attemptDelivery = AttemptDelivery.assumedDelivered()) {
-        new VerifyOrchestrator(builtinRunner, commandRunner,
-                new ExternalPolling(externalClient, attemptDelivery, VirtualTimeEquipment.on(clock, sleeper)),
+        def rounds = CheckRouting.byExecutor(builtinRunner, commandRunner, externalClient)
+        new VerifyOrchestrator(new PendingPoll(rounds, persistence, attemptDelivery, VirtualTimeEquipment.on(clock, sleeper),
+                listener),
                 new JudgeVoting(judgeVoter), clock, listener)
     }
 }

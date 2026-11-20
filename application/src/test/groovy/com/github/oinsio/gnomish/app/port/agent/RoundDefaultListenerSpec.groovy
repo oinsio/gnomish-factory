@@ -34,7 +34,7 @@ class RoundDefaultListenerSpec extends Specification {
         }
 
         @Override
-        void closeRound() {}
+        void closeRound(RoundClose close) {}
 
         @Override
         Optional<RoundDecisionRequest> readDecision() {

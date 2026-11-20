@@ -17,7 +17,7 @@ class EventEmissionSpec extends EventEmissionSpecBase {
         given: 'a single AUTO stage with one check that fails once then passes'
         def stageDef = stage('build', 5, [builtin('files_exist')])
         builtinRunner.scripted << fail('nope')
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed(0)
         executor.scripted << completed(1)
 
@@ -48,7 +48,7 @@ class EventEmissionSpec extends EventEmissionSpecBase {
         given: 'a single AUTO stage with one check that fails once then passes'
         def stageDef = stage('build', 5, [builtin('files_exist')])
         builtinRunner.scripted << fail('nope')
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed(0)
         executor.scripted << completed(1)
 
@@ -81,7 +81,7 @@ class EventEmissionSpec extends EventEmissionSpecBase {
         given: 'a passing single-check stage whose executor reports a non-none usage'
         def stageDef = stage('build', 5, [builtin('files_exist')])
         def fed = usage(120, 34)
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed(0, fed)
 
         when: 'the run is driven'

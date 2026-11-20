@@ -1,16 +1,12 @@
 // Build script for the `:adapters:github` module (FR10, design D1/D2 of
-// split-into-modules, pass 2): the GitHub vendor bundle. One module holds all
-// three GitHub packages — `adapter.github` (the shared HTTP core: client, retry
-// config, rate-limit accounting, conditional-request cache), `adapter.tracker
-// .github` (the `Tracker` port realization) and `adapter.check.github` (the
-// `ExternalCheckClient` realization over Actions) — because D1 makes the shared
-// core an INTERNAL package of the vendor bundle rather than a module of its own:
-// splitting it out would buy a third build unit and publish plumbing that only
-// these two adapters may use.
-//
-// The two sibling realizations still must not reach into each other; that line
-// is drawn inside this module by `GithubAdapterBoundarySpec`, which predates the
-// split and keeps its scope.
+// split-into-modules, pass 2): the GitHub vendor bundle, carrying the tracker
+// realization `adapter.tracker.github` (the `Tracker` port). The GitHub Actions
+// check left it for the core-side `:adapters:scm` as the `github-actions` built-in
+// (FR13, design D4 of migrate-verify-to-executor-contract, task 3.3), and the
+// shared HTTP core it was written against, D1's internal `adapter.github`
+// package, left for the first-party library `:githubapi` (FR14, design D15),
+// because the core-side GitHub built-ins need the same client and a second one
+// would be a hand-synced pair.
 //
 // This is D1's first module warrant of both kinds at once: a vendor boundary
 // (the DEC-9/DEC-10 plugin exemplar — the first adapter a third party would
@@ -22,7 +18,7 @@ plugins {
     id 'layering-conventions'
 }
 
-description = 'GitHub vendor adapter bundle: the tracker and external-check port realizations over one shared HTTP core.'
+description = 'GitHub vendor adapter bundle: the tracker port realization over the first-party GitHub HTTP core.'
 
 dependencies {
     // Version management only; see the note in `domain/build.gradle`. The
@@ -34,10 +30,8 @@ dependencies {
 
     // The ports these adapters realize and the value model their signatures are
     // drawn in: the tracker port family and `SecretsProvider` from the published
-    // contract, `Workspace` / `Finding` / `PollStatus` / `TrackerConfig` from the
-    // domain, and the `app` types the check client and the sanitizer sit on
-    // (`ExternalCheckPinContributor`, `AttemptCommitWorkspace`,
-    // `FindingsSanitizer`). Each is used directly here, which the
+    // contract, and `TrackerConfig` with its value model from the
+    // domain. Each is used directly here, which the
     // dependency-analysis gate requires stated rather than inherited.
     //
     // These project edges plus `:logtext` below are the whole compile classpath of
@@ -50,16 +44,11 @@ dependencies {
     api project(':gnomish-plugin-api')
     api project(':domain')
 
-    // The logging-support leaf (FR4 of harden-logging-observability): the Actions
-    // poll and the shared retry config report their failures to `RepeatSuppressor`
-    // so a dependency that stays down costs the console edges rather than one WARN
-    // per tick. `api`, and the only edge beyond the two above: the suppressor is a
-    // component of the public `GithubCheckExternalClient` record, so it is on this
-    // bundle's own surface. `:logtext` is a dependency-free leaf carrying slf4j-api
-    // and nothing else, so exporting it adds no transitive reach — the "a third
-    // party could build this bundle" claim below is about `:application` and the
-    // layers above it, which are still absent.
-    api project(':logtext')
+    // The logging-support leaf (FR4 of harden-logging-observability): the tracker sanitizes the
+    // untrusted text it logs through it. `implementation` since task 3.3 of
+    // migrate-verify-to-executor-contract moved the Actions check, whose public client record carried
+    // the poll's `RepeatSuppressor`, to `:adapters:scm`: no signature here names it any more.
+    implementation project(':logtext')
     // The operator-event catalog leaf (FR4, design D3 of split-logtext-leaves): every
     // WARN/ERROR site in this module takes its `[GFnnn]` head from an `OperatorEvent`
     // constant. `implementation`, not `api`: the enum is named only inside log calls,
@@ -70,6 +59,15 @@ dependencies {
     // `implementation`: the carrier sits on a public accessor, so it travels on this module's
     // own surface — which is what the dependency-analysis gate establishes.
     api project(':untrustedtext')
+    // The first-party GitHub HTTP core (FR14, design D15 of
+    // migrate-verify-to-executor-contract): client, credential rules, conditional-request
+    // cache, rate-limit classification and retry, which this bundle's two realizations are
+    // written against. `api`: the client and the cache sit on public constructors here.
+    api project(':githubapi')
+    // The HTTP egress leaf (design D16 of migrate-verify-to-executor-contract), test scope only since
+    // task 3.3 moved the check provider, which admitted its operator connection itself, to
+    // `:adapters:scm`: the refusal-classification specs admit their endpoints through it.
+    testImplementation project(':httpegress')
 
     implementation libs.slf4j.api
 
@@ -82,16 +80,12 @@ dependencies {
     implementation libs.jackson.databind
     implementation libs.jackson.core
 
-    // Retry for the HTTP client core (NFR-R2 of add-tracker-port):
-    // infrastructure failures of tracker calls are retried. `resilience4j-core`
-    // is declared directly because `GithubRetryConfig` names `IntervalFunction`
-    // itself.
-    implementation libs.resilience4j.retry
-    implementation libs.resilience4j.core
-
     // Shared fakes and the tracker / external-check port-contract suites (FR7,
     // design D8), test scope only.
     testImplementation project(':test-fixtures')
+    // The core's fast-retry seam and mid-request interrupt helper, shared with
+    // `:githubapi`'s own specs (task 3.0a of migrate-verify-to-executor-contract).
+    testImplementation testFixtures(project(':githubapi'))
     // WireMock for the tracker/check HTTP contract specs, in-JVM — no Docker
     // (.claude/rules/testing.md). The pinned Jetty 11 line and its accepted-risk
     // advisories are documented in the root build script and osv-scanner.toml.
@@ -99,6 +93,14 @@ dependencies {
     testImplementation enforcedPlatform(libs.jetty.bom)
     // Logback's ListAppender backs the specs asserting on log output.
     testImplementation libs.logback.classic
+    // Retry for the HTTP client core (NFR-R2 of add-tracker-port) lives with the
+    // core in `:githubapi`; the specs here build their own fast retry policies.
+    // Declared last on purpose: declared ahead of the fixture and WireMock edges,
+    // the resolution fetched the POM of slf4j-api 1.7.30 (resilience4j's own,
+    // evicted request), which the dependency-verification metadata does not
+    // carry, and every compile of this build failed verification.
+    testImplementation libs.resilience4j.retry
+    testImplementation libs.resilience4j.core
 }
 
 // PIT exclusions documented for THIS module (task 8.1: each module carries its
@@ -143,10 +145,23 @@ layering {
         // declared directly above, because this module's own log sites name `OperatorEvent`;
         // also reached through `:domain`, whose engine emitters take their head from it.
         ':operatorevent',
+        // The pending-key leaf (design D20 of migrate-verify-to-executor-contract): transitive via
+        // `:domain`, whose pending result and pending turn carry it. No source here names it.
+        ':pendingkey',
         // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves; FR3, design D2
         // of type-untrusted-text): reached through `:logtext`, whose `LogText` is a facade
         // over it, and now declared directly — this module mints the tracker family and names
         // the carrier on `ParsedMarker`'s own accessor.
         ':untrustedtext',
+        // The first-party GitHub HTTP core (FR14, design D15 of
+        // migrate-verify-to-executor-contract): the bundle's tracker is written against its
+        // client, cache, rate-limit and retry, which left this bundle's `adapter.github` package
+        // for a library the core-side GitHub built-ins share. Not the plugin api, and not a
+        // sibling adapter: the library depends on `:domain` and the egress leaf only.
+        ':githubapi',
+        // The HTTP egress leaf (design D16 of migrate-verify-to-executor-contract): reached
+        // through `:githubapi`, whose client runs over its guarded exchange. No production source
+        // here names it since task 3.3 moved the check provider to `:adapters:scm`.
+        ':httpegress',
     ]
 }

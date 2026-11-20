@@ -62,6 +62,22 @@ class WireObservationSpec extends Specification {
         observation.describeDocument().path('enforcementLevel').asText() == 'SANDBOXED'
     }
 
+    def "FR16 (D17): a describe whose checkIdIsPinnedPath is not a boolean is a describe breach at that field"() {
+        given:
+        def observation = new WireObservation(delegate, false)
+        delegate.readFile('/s/result.json', 65536) >> bytes(StandIn.data('executor-describe#pin-flag-string'))
+
+        when:
+        observation.exec(operation(ProgramChannel.DESCRIBE))
+        observation.readFile('/s/result.json', 65536)
+
+        then:
+        1 * delegate.exec(_) >> handle
+        observation.breaches()*.document() == [WireDocument.DESCRIBE]
+        observation.breaches().first().violation().path() == 'checkIdIsPinnedPath'
+        observation.breaches().first().detail().contains('the describe document breaks its schema at checkIdIsPinnedPath')
+    }
+
     // Scenario: executor/conformance-kit / Observation leaves the factory's reads unchanged
     def "FR24: a start's request, result and answer are judged; valid documents leave no breach and the command goes out as it came"() {
         given:

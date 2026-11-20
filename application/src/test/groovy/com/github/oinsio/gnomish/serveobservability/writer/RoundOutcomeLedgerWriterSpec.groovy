@@ -10,18 +10,16 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Participants
-import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -34,6 +32,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.serveobservability.InstanceInfo
 import com.github.oinsio.gnomish.serveobservability.json.LedgerJson
@@ -52,9 +51,8 @@ import spock.lang.TempDir
  *
  * <p>The program round is the engine's: the stage-engine is executor-agnostic, so a scripted
  * executor stands in for the process, and the run's {@link DescribedExecutors} names the stage's
- * {@code program} executor with the version its describe answered — what the describe preflight
- * (task 6.2) hands the engine. The adapter-level line of a real {@code ProgramExecutor} round is
- * task 7.1's to assert.
+ * {@code program} executor with the version its describe answered (the describe preflight's, task
+ * 6.2). A real {@code ProgramExecutor} round's line is task 7.1's to assert.
  */
 class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedgerAppenderFixture {
 
@@ -67,7 +65,7 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
     Path homeDir
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
+    def builtinRunner = new ScriptedCheckRounds()
 
     private Path serveDir() {
         homeDir.resolve('serve')
@@ -91,11 +89,10 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
                 : new StageDefinition.Executor(ExecutorType.PROGRAM, '', [:], Sandbox.none(), executorName)
         def stage = new StageDefinition('lint', 'purpose', [], [], mechanism,
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ], new AutonomyLimits(3), AdvancementMode.AUTO)
         def clock = new VirtualClock(NOW)
-        def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
-                new ScriptedJudgeVoter(), writer(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock),
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), writer(), new InMemoryAttemptPersistence(), VirtualTimeEquipment.on(clock),
                 AttemptDelivery.assumedDelivered(), described, RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(5), [stage]), CONTEXT,
         TaskState.atStageStart('lint'), new FakeWorkspace(), ports)
@@ -112,14 +109,14 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
         def described = new DescribedExecutors(
                 new ExecutorVersions(['lint-bot': UntrustedText.subprocess('2.3.1')]), com.github.oinsio.gnomish.domain.engine.ExecutorCredentialNames.none())
         executor.scripted << result(new ExecutionResult.Completed(), 0)
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         runLintStage(described, 'lint-bot')
 
-        then:
+        then: 'the stage round\'s line, then its files_exist check\'s (NFR-O1 of migrate-verify-to-executor-contract)'
         def lines = ledgerLines()
-        lines.size() == 1
+        lines.size() == 2
         lines[0] == [
             version : 1,
             type : 'roundOutcome',
@@ -130,15 +127,18 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
             attempt : 0,
             executor: 'lint-bot@2.3.1',
             role : 'transform',
-            status : 'completed'
+            status : 'completed',
+            check : null,
+            resumedKey : null
         ]
+        lines[1] == lines[0] + [executor: VerifyCheck.Executor.FILES_EXIST, role: 'verdict', check: 0]
     }
 
     // NFR-O2, UX3: every round has its line — a quality retry, then an unrecorded infrastructure failure
     def "each round writes its own line, the failure classes included"() {
         given:
-        executor.scripted << result(new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, UntrustedText.subprocess('red'), []), 0)
-        executor.scripted << result(new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, UntrustedText.subprocess('down'), []), 1)
+        executor.scripted << result(new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, UntrustedText.subprocess('red'), [], null), 0)
+        executor.scripted << result(new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, UntrustedText.subprocess('down'), [], null), 1)
         def logs = LogCaptureSupport.attach('com.github.oinsio.gnomish.domain.engine.RoundFailures', Level.WARN)
 
         when:
@@ -169,16 +169,6 @@ class RoundOutcomeLedgerWriterSpec extends Specification implements RotatingLedg
 
         cleanup:
         logs.detach()
-    }
-
-    // NFR-O2: only the round event writes a line
-    def "no other engine event writes a line"() {
-        when:
-        writer().onEvent(new EngineEvent.AttemptStarted(new AttemptKey('TASK-9', 'lint', 0)))
-        writer().onEvent(new EngineEvent.RunStarted('TASK-9', new Position.AtStage('lint'), 0))
-
-        then:
-        ledgerLines().isEmpty()
     }
 
     // NFR-R1 of add-serve-observability: an append failure never reaches the round

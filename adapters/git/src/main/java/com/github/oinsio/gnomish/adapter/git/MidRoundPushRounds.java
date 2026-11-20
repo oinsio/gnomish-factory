@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.app.port.agent.RoundClose;
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.git.CurrentRound;
@@ -21,7 +22,7 @@ import java.util.Optional;
  * D13), and carries a fresh {@link MidRoundPushListener} (FR1, FR2, design D1 of
  * wire-host-mid-round-push). {@code openRound} first reads the worktree's {@code HEAD} — the tip the
  * round opens on — through {@link HostBranchProbe#currentHead()}, mints it through {@link RoundToken#of} and opens it
- * in this run's own {@link CurrentRound}, which is what {@link #identity()} names to the engine;
+ * in the run's {@link CurrentRound} it was handed, which is what {@link #identity()} names to the engine;
  * then it delegates to the host source and wraps the returned {@code Round} so {@code
  * roundListener()} returns the push listener built from the request's own facts — worktree root
  * from the {@link DirectoryWorkspace}, taskId from the {@code TaskContext}, stage name, the
@@ -38,8 +39,9 @@ import java.util.Optional;
  * <p>The minting sits here, not in {@code HostRoundEnvironmentSource}, because this decoration is
  * the one piece of the host wiring that holds git and is applied only on the git-mode paths: the
  * bare host source, in {@code adapters/agent}, has no git edge and also serves the in-place run,
- * which needs no git. One instance per run (one {@code apply} of the operator per assembly), so its
- * cell is the run's.
+ * which needs no git. The cell is not its own (design D22 of migrate-verify-to-executor-contract): the
+ * run preparation constructs one per run and hands it here and to the run's persistence, so the round
+ * this source opens is the round the snapshot closes and the persistence bases its boundary on.
  *
  * <p>Kept in sync with {@link SandboxRoundEnvironmentSource}: both mint the round token once per
  * opened round from a {@link VerifiedTip}-checked read of the tip the round opens on, through {@link
@@ -54,15 +56,15 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
     private final RoundEnvironmentSource host;
     private final GitRunner runner;
 
-    /** This run's round cell: each round is opened here over the worktree tip it opens on. */
-    private final CurrentRound rounds = new CurrentRound();
+    /** The run's round cell: each round is opened here over the worktree tip it opens on. */
+    private final CurrentRound rounds;
 
     /**
      * Shared by every round of this task (FR4 of harden-logging-observability, design D4): the
      * listener is per-round, but a tip that cannot be resolved is one fault whether it spans
      * polls of one round or rounds of one task, and a per-round suppressor would re-announce it
      * each time. Built here rather than injected — this decorator is constructed once per run
-     * (one {@code apply} of the composition-root operator per {@code assemble}), so it is the
+     * (one {@code decorate} of the host-git decoration per {@code assemble}), so it is the
      * owner the round's {@link MidRoundPollContext} borrows it from, the same shape {@code
      * SandboxRoundEnvironmentSource.harvestSuppressor} records — on the composition root's time
      * source (FR18 of supervise-daemon-loops-and-embed-dashboard).
@@ -73,10 +75,12 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
      * @param host the host round source being decorated; never null
      * @param runner the git subprocess runner the listeners poll and push through; never null
      * @param clock the time source the task's push-failure suppressor measures on; never null
+     * @param rounds the run's round cell, built by the run preparation; never null
      */
-    public MidRoundPushRounds(RoundEnvironmentSource host, GitRunner runner, InstantSource clock) {
+    public MidRoundPushRounds(RoundEnvironmentSource host, GitRunner runner, InstantSource clock, CurrentRound rounds) {
         this.host = host;
         this.runner = runner;
+        this.rounds = rounds;
         this.pushSuppressor = RepeatSuppressor.withDefaultRollUp(clock);
     }
 
@@ -131,8 +135,8 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        public void closeRound() {
-            host.closeRound();
+        public void closeRound(RoundClose close) {
+            host.closeRound(close);
         }
 
         @Override

@@ -32,6 +32,11 @@ dependencies {
     // CapabilityPassport, ResourceLimits, Segment/SegmentPlanner,
     // ChildEnvAllowlist) — `api`, consumers compile against them too.
     api project(':sandbox:core')
+    // The HTTP egress leaf (FR17, design D16 of migrate-verify-to-executor-contract):
+    // `EgressGuardConfig` renders the box's names through the one egress grammar, `EgressEntries`,
+    // whose `sandbox` subset its addon matches (a declared pair). Also reached through
+    // `:sandbox:core`.
+    implementation project(':httpegress')
     // Domain value types on public signatures: `Clock`/`Sleeper` (constructor
     // injection), `Finding` (EgressGuard.denialFindings), `StageDefinition`
     // (EnvironmentLease).
@@ -132,6 +137,9 @@ layering {
         // helper's clone line is the owner's `SeedPath` value, rendered.
         ':gittransfer',
         ':gnomish-plugin-api',
+        // The HTTP egress leaf (design D16 of migrate-verify-to-executor-contract): declared
+        // directly above — the guard config renders entries through the one egress grammar.
+        ':httpegress',
         // The dependency-free logging-support leaf (design D5/D10 of
         // harden-logging-observability); `DockerCli` names its `ShutdownPhase`.
         ':logtext',
@@ -143,6 +151,10 @@ layering {
         // declared directly above, because this module's own log sites name `OperatorEvent`;
         // also reached through `:domain`, whose engine emitters take their head from it.
         ':operatorevent',
+        // The pending-key leaf (design D20 of migrate-verify-to-executor-contract): transitive via `:domain`, whose
+        // pending result and pending turn carry it, and via `:application`'s `:executor-contract`.
+        // No source in this module names it.
+        ':pendingkey',
         ':sandbox:core',
         ':subprocess',
         // The untrusted-text leaf (FR11, design D9 of split-logtext-leaves; FR1, FR10, design

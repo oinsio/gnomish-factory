@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
@@ -28,9 +28,9 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         def stage2 = stage('test', AdvancementMode.AUTO, 3, [builtin('test_check')])
         def stage3 = stage('review', AdvancementMode.AUTO, 3, [builtin('review_check')])
         def executor = new ScriptedExecutor([completed(), completed()])
-        def builtin = new ScriptedBuiltinCheckRunner()
-        builtin.scripted << new Verdict.Pass()
-        builtin.scripted << new Verdict.Pass()
+        def builtin = new ScriptedCheckRounds()
+        builtin.scripted << new Verdict.Pass(null, [])
+        builtin.scripted << new Verdict.Pass(null, [])
 
         when: 'the run starts from a state positioned at stage2 (stage1 already done in an earlier run)'
         def outcome = new Engine().run(pipeline(stage1, stage2, stage3), CONTEXT,
@@ -55,7 +55,7 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         def stageDef = stage('build', AdvancementMode.AUTO, 9, [builtin('files_exist')])
         def failA = fail('findingA')
         def failB = fail('findingB')
-        def priorBuiltin = new ScriptedBuiltinCheckRunner()
+        def priorBuiltin = new ScriptedCheckRounds()
         priorBuiltin.scripted << failA
         priorBuiltin.scripted << failB
         priorBuiltin.scripted << fail('findingC')
@@ -77,8 +77,8 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
 
         when: 'a NEW run resumes from that persisted mid-retry state and its check now passes'
         def resumeExecutor = new ScriptedExecutor([completed()])
-        def resumeBuiltin = new ScriptedBuiltinCheckRunner()
-        resumeBuiltin.scripted << new Verdict.Pass()
+        def resumeBuiltin = new ScriptedCheckRounds()
+        resumeBuiltin.scripted << new Verdict.Pass(null, [])
         def resumed = new Engine().run(pipeline(stageDef), CONTEXT, resumeState, WORKSPACE,
                 freshPorts(resumeExecutor, resumeBuiltin, new InMemoryAttemptPersistence(), new RecordingEventListener()))
 
@@ -88,8 +88,8 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         and: 'that first request carries the failed check results of BOTH prior attempts, in order'
         def feedback = resumeExecutor.requests[0].feedback()
         feedback.size() == 2
-        feedback[0].verdict().is(failA)
-        feedback[1].verdict().is(failB)
+        feedback[0].verdict() == failA
+        feedback[1].verdict() == failB
 
         and: 'the now-passing round advances the pipeline to completion'
         resumed instanceof TaskOutcome.Completed
@@ -107,7 +107,7 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
 
         and: 'a first run pauses on the manual stage, held at its gate'
         def paused = new Engine().run(definition, CONTEXT, TaskState.atStageStart('build'), WORKSPACE,
-                freshPorts(new ScriptedExecutor([completed()]), new ScriptedBuiltinCheckRunner(),
+                freshPorts(new ScriptedExecutor([completed()]), new ScriptedCheckRounds(),
                 new InMemoryAttemptPersistence(), new RecordingEventListener()))
         paused instanceof TaskOutcome.Paused
         paused.finalState().position() == new Position.AwaitingApproval('build')
@@ -116,7 +116,7 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         def gateExecutor = new ScriptedExecutor()
         def gatePersistence = new InMemoryAttemptPersistence()
         def again = new Engine().run(definition, CONTEXT, paused.finalState(), WORKSPACE,
-                freshPorts(gateExecutor, new ScriptedBuiltinCheckRunner(),
+                freshPorts(gateExecutor, new ScriptedCheckRounds(),
                 gatePersistence, new RecordingEventListener()))
 
         then: 'it pauses again at the same gate, state unchanged, and invokes no port'
@@ -127,7 +127,7 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         when: 'a THIRD run resumes from the approved state'
         def resumeExecutor = new ScriptedExecutor([completed()])
         def resumed = new Engine().run(definition, CONTEXT, paused.finalState().approveGate(definition), WORKSPACE,
-                freshPorts(resumeExecutor, new ScriptedBuiltinCheckRunner(),
+                freshPorts(resumeExecutor, new ScriptedCheckRounds(),
                 new InMemoryAttemptPersistence(), new RecordingEventListener()))
 
         then: 'the resume ran only stage2, from round zero, and completed — stage1 never re-executed'
@@ -146,7 +146,7 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         given: 'a stage whose first round cannot verify — recorded unburned, then escalated'
         def stageDef = stage('build', AdvancementMode.AUTO, 9, [builtin('files_exist')])
         def cannotVerify = new Verdict.CannotVerify(UntrustedText.subprocess('binary not found'), UntrustedText.subprocess('no such tool'))
-        def priorBuiltin = new ScriptedBuiltinCheckRunner()
+        def priorBuiltin = new ScriptedCheckRounds()
         priorBuiltin.scripted << cannotVerify
         def priorPersistence = new InMemoryAttemptPersistence()
         def priorPorts = freshPorts(new ScriptedExecutor([completed()]),
@@ -163,7 +163,7 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
         when: 'a NEW run resumes from that persisted state as it stands'
         def unresetExecutor = new ScriptedExecutor([completed()])
         def unreset = new Engine().run(pipeline(stageDef), CONTEXT, resumeState, WORKSPACE,
-                freshPorts(unresetExecutor, new ScriptedBuiltinCheckRunner(), new InMemoryAttemptPersistence(), new RecordingEventListener()))
+                freshPorts(unresetExecutor, new ScriptedCheckRounds(), new InMemoryAttemptPersistence(), new RecordingEventListener()))
 
         then: 'it re-escalates the very CannotVerify report from the record, running no executor'
         unreset == new TaskOutcome.Escalated(resumeState, prior.report())
@@ -171,8 +171,8 @@ class ResumeMatrixSpec extends ResumeMatrixSpecBase {
 
         when: 'a NEW run resumes from the history a continuation reset, and its check now passes'
         def resumeExecutor = new ScriptedExecutor([completed()])
-        def resumeBuiltin = new ScriptedBuiltinCheckRunner()
-        resumeBuiltin.scripted << new Verdict.Pass()
+        def resumeBuiltin = new ScriptedCheckRounds()
+        resumeBuiltin.scripted << new Verdict.Pass(null, [])
         def resumed = new Engine().run(pipeline(stageDef), CONTEXT, resumeState.resetAttempts(), WORKSPACE,
                 freshPorts(resumeExecutor, resumeBuiltin, new InMemoryAttemptPersistence(), new RecordingEventListener()))
 

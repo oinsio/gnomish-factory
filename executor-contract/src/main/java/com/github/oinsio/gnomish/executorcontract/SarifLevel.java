@@ -8,7 +8,12 @@ import java.util.Optional;
  * result written without a level is a {@link #WARNING}, as SARIF defines. Unknown-token arm: an
  * unknown level makes the verdict a malformed answer, never a pass.
  *
- * <p>Implements FR3, NFR-R3 of define-executor-contract.
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.domain.engine.ResultLevel}: the same four
+ * levels in the same rising order, each level here with exactly one counterpart in the engine's
+ * verdict derivation (no shared classpath, so the reference is by name; design D5 of
+ * migrate-verify-to-executor-contract).
+ *
+ * <p>Implements FR3, NFR-R3 of define-executor-contract; FR7 of migrate-verify-to-executor-contract.
  */
 public enum SarifLevel implements WireToken {
     /** No severity. */

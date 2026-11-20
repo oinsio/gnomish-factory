@@ -50,10 +50,14 @@ class RawCaptureOwners {
             'sandbox/docker/src/main/java/com/github/oinsio/gnomish/sandbox/environment/HostChannelFiles.java',
             'mechanics: reads a host channel file under a byte cap and answers bytes; the caller that turns a channel file into prose mints at its own edge, as its container-mode twin ContainerFileChannel does',
         ],
-        // --- HTTP response bodies: the github bundle and the http check transport ---
+        // --- HTTP response bodies: the GitHub HTTP core and bundle, and the http check transport ---
         [
-            'adapters/github/src/main/java/com/github/oinsio/gnomish/adapter/github/GithubConditionalRequestCache.java',
+            'githubapi/src/main/java/com/github/oinsio/gnomish/githubapi/GithubConditionalRequestCache.java',
             'TRACKER (transport): holds the body as the cached/fresh envelope the tracker parsers read; the mint is at GithubTaskFetcher and GithubMarker, per D3',
+        ],
+        [
+            'githubapi/src/main/java/com/github/oinsio/gnomish/githubapi/ExchangeHttpResponse.java',
+            'TRACKER (transport): adapts the guarded exchange\'s capped body to HttpResponse<String> for GithubHttpClient; the body travels on to the cache and the tracker parsers unchanged, and the mint is at GithubTaskFetcher and GithubMarker, per D3',
         ],
         [
             'adapters/github/src/main/java/com/github/oinsio/gnomish/adapter/tracker/github/GithubClaimLease.java',
@@ -92,8 +96,8 @@ class RawCaptureOwners {
             'TRACKER (transport): body is parsed into the issue detail whose labels drive the write',
         ],
         [
-            'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/http/JdkHttpCheckExchange.java',
-            'MANIFEST/check (transport): streams the body under a byte cap into the check exchange; HttpExternalCheckClient matches it against the manifest\'s patterns and excerpts it through the carrier',
+            'httpegress/src/main/java/com/github/oinsio/gnomish/httpegress/JdkHttpCheckExchange.java',
+            'MANIFEST/check (transport): streams the body under a byte cap into the check exchange; HttpCheckProbe matches it against the manifest\'s patterns and excerpts it through the carrier',
         ],
         // --- document file reads ---
         // The four host-side envelope readers that used to sit here — GitTaskStore,

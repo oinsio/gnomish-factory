@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -21,7 +22,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -63,7 +63,7 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
         worktrees.ensureWorktree(_, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_) >> lifecycleStore
-        store.attemptPersistence(_, _) >> { journal }
+        store.attemptPersistence(_, _, _) >> { journal }
         store.readRecordedState(_, _) >> Optional.of(TaskState.atStageStart('build'))
         store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
@@ -71,7 +71,7 @@ class TakeFenceScopeSpec extends Specification implements RunChainFakes {
 
     /** The real host resume chain over the ports above. */
     private TakeDispositionResume chain() {
-        def git = new TaskGit(store, branches, worktrees, UnaryOperator.identity(), resumingBaseRefGit(), new ClaimEpochBook())
+        def git = new TaskGit(store, branches, worktrees, HostGitRounds.NONE, resumingBaseRefGit(), new ClaimEpochBook())
         def runner = new TakeResumeRunner(
                 slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, registeredClone))
         def mechanics = new HostResumeMechanics(runner, git, registeredClone, completingPipeline())

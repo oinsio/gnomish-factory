@@ -1,13 +1,12 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -19,7 +18,9 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
@@ -42,17 +43,16 @@ class ExecutorOutcomeTableSpec extends Specification {
     static final def USAGE = new ExecutorUsage(Duration.ofSeconds(7), [], Unpriced.of(['m-1': new TokenUsage(900, 120, 0, 0)]))
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
+    def builtinRunner = new ScriptedCheckRounds()
     def persistence = new InMemoryAttemptPersistence()
     def listener = new RecordingEventListener()
 
     def run() {
         def stage = new StageDefinition('build', 'purpose', [], [], new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ], new AutonomyLimits(1), AdvancementMode.AUTO)
-        def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
-                new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(new VirtualClock()), RoundIdentity.inPlace())
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(new VirtualClock()), RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(5), [stage]), CONTEXT,
         TaskState.atStageStart('build'), new FakeWorkspace(), ports)
     }
@@ -64,7 +64,7 @@ class ExecutorOutcomeTableSpec extends Specification {
     static ExecutionResult.Failed failed(ExecutionResult.FailureClass failureClass) {
         new ExecutionResult.Failed(failureClass, BOUND, [
             new Finding('a finding', null, null)
-        ])
+        ], null)
     }
 
     // FR7, FR2: one row per status and class, through a fake executor and the real engine
@@ -73,7 +73,7 @@ class ExecutorOutcomeTableSpec extends Specification {
     def "#row: attempts burned #burned, rounds recorded #recorded, outcome #outcomeKind"() {
         given: 'the executor produces the row once; a completed round passes its one check'
         executor.scripted << input
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         def outcome = run()
@@ -92,7 +92,7 @@ class ExecutorOutcomeTableSpec extends Specification {
         'failed/quality' | result(failed(ExecutionResult.FailureClass.QUALITY)) | 1 | 1 | EscalationReport.AttemptsExhausted
         'failed/infrastructure' | result(failed(ExecutionResult.FailureClass.INFRASTRUCTURE)) | 0 | 0 | EscalationReport.CannotExecute
         'failed/limit' | result(failed(ExecutionResult.FailureClass.LIMIT)) | 0 | 1 | EscalationReport.BudgetExhausted
-        'pending (transform)' | result(new ExecutionResult.Pending('k-1')) | 0 | 0 | EscalationReport.CannotExecute
+        'pending (transform)' | result(new ExecutionResult.Pending(new PendingKey('k-1'), null, PendingState.RUNNING, null, null)) | 0 | 0 | EscalationReport.CannotExecute
     }
 
     // FR7: failed/limit escalates BudgetExhausted carrying the bound, burns nothing, records the

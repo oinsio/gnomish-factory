@@ -34,7 +34,7 @@ class TempDirCheckEnvironments implements CheckEnvironmentSource {
     }
 
     @Override
-    Acquired acquire(VerifyCheck.Command check, Workspace workspace) {
+    Acquired acquire(VerifyCheck.Executor check, Workspace workspace) {
         def environment = new HostTaskExecutionEnvironment(directory, clock, TestChildEnvironment.hostAllowlist(), ProcessLaunch.grouped())
         environment.materialize('acceptance', null)
         new Acquired() {

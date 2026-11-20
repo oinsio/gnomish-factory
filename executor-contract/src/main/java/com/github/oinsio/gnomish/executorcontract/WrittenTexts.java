@@ -22,6 +22,11 @@ final class WrittenTexts {
         this.mint = mint;
     }
 
+    /** {@code value}, a string already judged to be one, minted in the writer's family. */
+    UntrustedText mint(String value) {
+        return mint.apply(value);
+    }
+
     /** The string {@code field} of {@code node}; refuses an absent or non-string one. */
     UntrustedText text(JsonNode node, String field, String where) {
         return mint.apply(WrittenNodes.text(node, field, where));

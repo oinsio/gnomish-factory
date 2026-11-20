@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.Snapshots
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
@@ -21,6 +20,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -39,8 +39,8 @@ class EngineRunContractSpec extends Specification {
     static final Instant START = Instant.parse('2026-10-12T08:00:00Z')
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
-    def externalClient = new ScriptedExternalCheckClient()
+    def builtinRunner = new ScriptedCheckRounds()
+    def externalClient = new ScriptedCheckRounds()
     def persistence = new InMemoryAttemptPersistence()
     def clock = new VirtualClock(START)
     def sleeper = new VirtualSleeper(clock)
@@ -48,8 +48,7 @@ class EngineRunContractSpec extends Specification {
     private TaskOutcome run(List<VerifyCheck> verify, int attemptLimit = 3, TaskState state = TaskState.atStageStart('build')) {
         def stage = new StageDefinition('build', 'purpose', [], [], new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', verify, new AutonomyLimits(attemptLimit), AdvancementMode.AUTO)
-        def ports = new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(), externalClient,
-                new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), externalClient), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(attemptLimit), [stage]), CONTEXT, state, new FakeWorkspace(), ports)
     }
 
@@ -69,13 +68,13 @@ class EngineRunContractSpec extends Specification {
     def "every timestamp and deadline the engine computes reads the instant source it was assembled with"() {
         given: 'an external check that never settles, on a 1s interval and a 3s timeout'
         externalClient.scripted.addAll((1..10).collect {
-            new PollStatus.Running()
+            ScriptedCheckRounds.pending()
         })
         executor.scripted << completed(0, ExecutorUsage.none())
 
         when:
         def outcome = run([
-            new VerifyCheck.External('ci', 'ci-platform', Duration.ofSeconds(1), Duration.ofSeconds(3), VerifyCheck.TimeoutClass.QUALITY)
+            VerifyChecks.external('ci', 'ci-platform', Duration.ofSeconds(1), Duration.ofSeconds(3), VerifyCheck.TimeoutClass.QUALITY)
         ], 1)
 
         then: 'the round began at the source\'s reading, and the deadline ran out on the same source'
@@ -98,14 +97,14 @@ class EngineRunContractSpec extends Specification {
     def "an invariant the engine's own logic breaks propagates out of the run instead of becoming an outcome"() {
         given: 'a check during which the instant source steps back, so the engine computes a negative duration'
         executor.scripted << completed(0, ExecutorUsage.none())
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         builtinRunner.onRun = { check, workspace ->
             clock.advance(Duration.ofSeconds(-5))
         }
 
         when:
         run([
-            new VerifyCheck.Builtin('lint', [:])
+            VerifyChecks.builtin('lint', [:])
         ])
 
         then:
@@ -123,12 +122,12 @@ class EngineRunContractSpec extends Specification {
         def persisted = new TaskState(new Position.AtStage('build'), 0, [], Snapshots.executed(['model-a': new TokenUsage(1000, 0, 0, 0)]), ExecutorVersions.none())
         builtinRunner.scripted << new Verdict.Fail([
             new Finding('red', null, null)
-        ]) << new Verdict.Pass()
+        ]) << new Verdict.Pass(null, [])
         executor.scripted << completed(0, usage(2, 50)) << completed(1, usage(3, 20))
 
         when:
         def outcome = run([
-            new VerifyCheck.Builtin('lint', [:])
+            VerifyChecks.builtin('lint', [:])
         ], 3, persisted)
 
         then: 'each recorded round folded into the running snapshot'

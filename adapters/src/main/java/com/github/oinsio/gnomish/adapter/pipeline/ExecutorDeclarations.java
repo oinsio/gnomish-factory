@@ -1,10 +1,11 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorDeclaration;
 import com.github.oinsio.gnomish.executorcontract.ExecutorName;
 import com.github.oinsio.gnomish.executorcontract.VariableNames;
-import com.github.oinsio.gnomish.sandbox.EgressEntries;
+import com.github.oinsio.gnomish.httpegress.EgressEntries;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -20,19 +21,23 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Every grammar is judged by its one owner: the name by {@link ExecutorName#isName}, a
  * credential by {@link VariableNames#isVariableName} (the grammar describe's credentials are held
- * to), an egress host by {@link EgressEntries#isEntry} (the grammar the egress guard renders), so a
- * declaration the law accepts is one the later readers accept.
+ * to), an egress host by {@link EgressEntries#isSandboxEntry} — the {@code sandbox} subset of the one
+ * egress grammar, since a law's {@code executors.<name>.egress} is a grant to the box guard, which
+ * matches names only (design D16 of migrate-verify-to-executor-contract) — so a declaration the law
+ * accepts is one the later readers accept, and a CIDR block or a class word the guard could not
+ * apply is a located load error naming the scope.
  *
- * <p>Implements FR9, FR10, UX1 of define-executor-contract.
+ * <p>Implements FR9, FR10, UX1 of define-executor-contract; FR1, FR13, FR17 of
+ * migrate-verify-to-executor-contract.
  */
 final class ExecutorDeclarations {
 
     private static final String CONFIG = "config.yaml";
 
     /**
-     * The declarable type wire values: {@code program} only. A built-in executor ({@code command},
-     * design D6 of add-command-executor) is registered at wiring and reached by stage type, never
-     * declared.
+     * The declarable type wire values: {@code program} only. A built-in executor is registered by the
+     * factory, never declared, and a declaration under any of the six {@link BuiltInExecutors} names
+     * is refused (design D18 of migrate-verify-to-executor-contract).
      */
     private static final List<String> TYPES = List.of("program");
 
@@ -90,6 +95,12 @@ final class ExecutorDeclarations {
                     CONFIG,
                     where,
                     "invalid executor name '%s'; a name matches %s".formatted(name, ExecutorName.grammar())));
+        } else if (BuiltInExecutors.isBuiltIn(name)) {
+            errors.add(new ConfigError(
+                    CONFIG,
+                    where,
+                    "executor '%s' is a built-in's name, which a law cannot declare; built-in names are %s"
+                            .formatted(name, String.join(", ", BuiltInExecutors.NAMES))));
         }
         String type = dto.type();
         if (type == null) {
@@ -139,11 +150,13 @@ final class ExecutorDeclarations {
     private static void checkEgress(String where, @Nullable List<String> hosts, List<ConfigError> errors) {
         List<String> values = strings(hosts);
         for (int i = 0; i < values.size(); i++) {
-            if (!EgressEntries.isEntry(values.get(i))) {
+            if (!EgressEntries.isSandboxEntry(values.get(i))) {
                 errors.add(new ConfigError(
                         CONFIG,
                         "%s.egress[%d]".formatted(where, i),
-                        "invalid egress host '%s'; an egress entry is a host name, an IP literal or a *.suffix wildcard"
+                        ("invalid egress host '%s'; an executor's egress is a grant to the box guard, which matches"
+                                        + " names only: an exact host, an IP literal or a *.suffix wildcard, never a"
+                                        + " CIDR block or an address-class word")
                                 .formatted(values.get(i))));
             }
         }

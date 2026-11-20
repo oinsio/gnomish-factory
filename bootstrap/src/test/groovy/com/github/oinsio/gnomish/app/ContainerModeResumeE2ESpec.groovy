@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -23,6 +24,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
 import com.github.oinsio.gnomish.sandbox.BindingNames
@@ -109,7 +111,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
                 [
-                    new VerifyCheck.Builtin('files_exist', [files: ['output.txt']])
+                    VerifyChecks.builtin('files_exist', [files: ['output.txt']])
                 ],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
     }
@@ -125,7 +127,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
     }
 
     private static SandboxProperties sandbox(String scenario) {
-        new SandboxProperties(FakeAgentSandboxImage.ensureBuilt(scenario), null, null, null, [], [], false, null, null, null, null)
+        new SandboxProperties(FakeAgentSandboxImage.ensureBuilt(scenario), null, null, null, [], false, null, null, null, null)
     }
 
     // M4 + FR23: instance one is killed at its escalation, before the park is recorded — the pending decision request
@@ -254,7 +256,7 @@ class ContainerModeResumeE2ESpec extends Specification implements BareGitRepoFix
         def openTip = gitOutput(cloneDir, 'rev-parse', TaskIdSanitizer.branchName(taskId)).trim()
         rounds.open(RoundToken.of(openTip))
         def snapshot = new EnvironmentRoundSnapshot(environment, gitRunner, cloneDir, rounds)
-                .snapshot(taskId, 'work', 0)
+                .snapshot(taskId, 'work', 0, RoundClose.VERIFIABLE)
         support.keepStopped()
 
         when: 'a second instance resumes'

@@ -6,12 +6,14 @@ import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.port.run.SandboxImageReadiness
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.take.DaemonConditionKind
+import com.github.oinsio.gnomish.domain.egress.AdmittedEndpoint
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
 import com.github.oinsio.gnomish.sandbox.AdapterBindingRegistry
 import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.BindingProperties
@@ -37,6 +39,7 @@ class ServePreconditionsSpec extends Specification implements SandboxBindingFixt
 
     TaskBranchGit branches = Mock()
     SandboxImageReadiness readiness = Mock()
+    EgressProbe egress = Mock()
 
     private static PipelineDefinition pipeline() {
         new PipelineDefinition('1', new AutonomyLimits(3), [
@@ -48,7 +51,7 @@ class ServePreconditionsSpec extends Specification implements SandboxBindingFixt
     }
 
     private static SandboxProperties sandbox(String image) {
-        new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
     }
 
     private ServePreconditions preconditions(String binding, boolean runtimeAnswers, String image = IMAGE) {
@@ -60,7 +63,7 @@ class ServePreconditionsSpec extends Specification implements SandboxBindingFixt
         def selector = new SandboxModeSelector(new BindingProperties(binding, [:]), sandbox(image), registry, {
             -> runtimeAnswers
         } as ContainerRuntimeProbe)
-        new ServePreconditions(branches, selector, readiness, sandbox(image))
+        new ServePreconditions(branches, selector, readiness, sandbox(image), egress)
     }
 
     // Scenario: serve/factory-serve / Preconditions that hold let startup continue unchanged
@@ -173,6 +176,55 @@ class ServePreconditionsSpec extends Specification implements SandboxBindingFixt
         DaemonConditionKind.CONTAINER_RUNTIME | 0 | 0
         DaemonConditionKind.IMAGE_CONTRACT | 0 | 1
         DaemonConditionKind.BOX_GIT_FLOOR | 0 | 1
+        DaemonConditionKind.EGRESS | 0 | 0
+    }
+
+    private static final AdmittedEndpoint TRACKER_ENDPOINT = new AdmittedEndpoint(
+    URI.create('https://gitea.internal/api/v1'), 'tracker.github.api-url', ['private'])
+
+    private static PipelineDefinition trackedPipeline() {
+        new PipelineDefinition('1', new AutonomyLimits(3), pipeline().stages(),
+                new TrackerConfig('github', 3).withEndpoint(TRACKER_ENDPOINT))
+    }
+
+    // FR18 of migrate-verify-to-executor-contract: the EGRESS probe repeats the connect-time
+    //     judgement of the tracker's admitted endpoint, sending no request
+    def "FR18: the egress recheck judges the tracker's admitted endpoint and asks no other port"() {
+        when:
+        def answer = preconditions(BindingNames.CONTAINER, true).rechecks(CLONE, trackedPipeline())
+                .recheck(DaemonConditionKind.EGRESS)
+
+        then:
+        1 * egress.judge(TRACKER_ENDPOINT)
+        0 * _
+        answer.isEmpty()
+    }
+
+    def "FR18: a refused judgement is the typed egress refusal, naming the tracker's key"() {
+        given:
+        egress.judge(TRACKER_ENDPOINT) >> {
+            throw OperatorPreconditionRefusalSamples.of(DaemonConditionKind.EGRESS)
+        }
+
+        when:
+        def answer = preconditions(BindingNames.CONTAINER, true).rechecks(CLONE, trackedPipeline())
+                .recheck(DaemonConditionKind.EGRESS)
+
+        then:
+        answer.get().kind() == DaemonConditionKind.EGRESS
+        answer.get().reason().forLog().contains('tracker.github.api-url')
+    }
+
+    def "FR18: a tracker with no HTTP endpoint has nothing to judge"() {
+        given:
+        def inMemory = new PipelineDefinition('1', new AutonomyLimits(3), pipeline().stages(), new TrackerConfig('inmemory', 3))
+
+        when:
+        def answer = preconditions(BindingNames.CONTAINER, true).rechecks(CLONE, inMemory).recheck(DaemonConditionKind.EGRESS)
+
+        then:
+        0 * egress._
+        answer.isEmpty()
     }
 
     def "FR15: a recheck that meets a refusal answers it typed, with the check's message and the kind it names: #kind"() {

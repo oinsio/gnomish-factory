@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.domain.pipeline;
 
+import com.github.oinsio.gnomish.domain.egress.AdmittedEndpoint;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The core {@code tracker} section keys carried on {@link PipelineDefinition}
@@ -24,7 +26,12 @@ import java.util.Map;
  * {@link ConfigError} reported by the seam validator, not a constructor
  * exception (design D3).
  *
- * <p>Implements FR9, FR17 of add-tracker-port.
+ * <p>The tracker's HTTP endpoint travels here once admitted (FR15, FR17, design D16 of
+ * migrate-verify-to-executor-contract): the loader admits the URL by the medium it was read from and
+ * carries the result as {@link #endpoint()}, the one carrier every factory member reading this
+ * config takes it from — no consumer re-reads the {@code api-url} string to build a client.
+ *
+ * <p>Implements FR9, FR17 of add-tracker-port; FR15, FR17 of migrate-verify-to-executor-contract.
  *
  * @param type the adapter discriminator (e.g. {@code github}); never {@code
  *     null} when the section is present — an absent wire value is a located
@@ -48,6 +55,8 @@ import java.util.Map;
  * @param subsection the raw, already-schema-validated subsection matching
  *     {@code type} (e.g. {@code tracker.github}'s {@code api-url}/{@code
  *     repo}/{@code labels} keys); empty when absent
+ * @param endpoint the adapter's HTTP endpoint after egress admission; empty when the adapter
+ *     declares none (the in-memory reference makes no HTTP call)
  */
 public record TrackerConfig(
         String type,
@@ -55,7 +64,8 @@ public record TrackerConfig(
         Duration heartbeatInterval,
         int heartbeatTtlMultiplier,
         int wipLimit,
-        Map<String, Object> subsection) {
+        Map<String, Object> subsection,
+        Optional<AdmittedEndpoint> endpoint) {
 
     /** FR3 of add-claim-heartbeat, design D8: the beat interval default (5 minutes). */
     public static final Duration DEFAULT_HEARTBEAT_INTERVAL = Duration.ofMinutes(5);
@@ -68,6 +78,38 @@ public record TrackerConfig(
 
     public TrackerConfig {
         subsection = subsection == null ? Map.of() : Map.copyOf(subsection);
+    }
+
+    /**
+     * The section with no admitted endpoint — every caller predating egress admission, and every
+     * adapter that declares no endpoint.
+     *
+     * <p>Implements FR6 of add-factory-serve; FR17 of migrate-verify-to-executor-contract.
+     */
+    public TrackerConfig(
+            String type,
+            int abortThreshold,
+            Duration heartbeatInterval,
+            int heartbeatTtlMultiplier,
+            int wipLimit,
+            Map<String, Object> subsection) {
+        this(type, abortThreshold, heartbeatInterval, heartbeatTtlMultiplier, wipLimit, subsection, Optional.empty());
+    }
+
+    /**
+     * This section with {@code admitted} as its endpoint, every other component unchanged.
+     *
+     * <p>Implements FR17 of migrate-verify-to-executor-contract.
+     */
+    public TrackerConfig withEndpoint(AdmittedEndpoint admitted) {
+        return new TrackerConfig(
+                type,
+                abortThreshold,
+                heartbeatInterval,
+                heartbeatTtlMultiplier,
+                wipLimit,
+                subsection,
+                Optional.of(admitted));
     }
 
     /**

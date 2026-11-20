@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.adapter.agent.command.CommandExecutorFactory;
+import com.github.oinsio.gnomish.adapter.agent.program.ProgramStageExecutor;
+import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
@@ -25,19 +27,29 @@ import java.util.Objects;
  * names an executor is a {@code program} stage by the law load's rule ({@code ExecutorReferenceRule}),
  * so the name and the type cannot point at two executors.
  *
- * <p>Implements FR9, FR10 of define-executor-contract; FR8 of add-command-executor.
+ * <p>The registry holds entries, not executors (design D18 of migrate-verify-to-executor-contract,
+ * as amended 2026-11-10): each round resolves its entry and runs it through the shared round wrapper,
+ * {@link ProgramStageExecutor}, over the run's one round source, which binds the entry's executor to
+ * the round's environment once the round is open — so a registry round's token lands in the run's
+ * current-round cell exactly as an agent round's does (FR14, FR21 of define-executor-contract).
+ *
+ * <p>Implements FR9, FR10 of define-executor-contract; FR8 of add-command-executor; FR13 of
+ * migrate-verify-to-executor-contract.
  */
 final class ExecutorDispatch implements StageExecutor {
 
     private final ExecutorRegistry registry;
+    private final RoundEnvironmentSource rounds;
     private final StageExecutor agent;
 
     /**
      * @param registry the run's executors by name; never null
+     * @param rounds the run's one round source, the same the agent arm opens its rounds through
      * @param agent the {@code agent-cli} arm; never null
      */
-    ExecutorDispatch(ExecutorRegistry registry, StageExecutor agent) {
+    ExecutorDispatch(ExecutorRegistry registry, RoundEnvironmentSource rounds, StageExecutor agent) {
         this.registry = Objects.requireNonNull(registry, "registry");
+        this.rounds = Objects.requireNonNull(rounds, "rounds");
         this.agent = Objects.requireNonNull(agent, "agent");
     }
 
@@ -46,12 +58,16 @@ final class ExecutorDispatch implements StageExecutor {
         StageDefinition.Executor executor = request.stage().executor();
         return switch (executor.type()) {
             case PROGRAM ->
-                registry.resolve(new ExecutorName(Objects.requireNonNull(
+                round(new ExecutorName(Objects.requireNonNull(
                                 executor.name(), "a program stage names its executor (ExecutorReferenceRule)")))
                         .execute(request);
-            case COMMAND ->
-                registry.resolve(new ExecutorName(CommandExecutorFactory.NAME)).execute(request);
+            case COMMAND -> round(new ExecutorName(CommandExecutorFactory.NAME)).execute(request);
             case AGENT_CLI, API -> agent.execute(request);
         };
+    }
+
+    /** The round wrapper over the entry {@code name} resolves to, binding at the round's open. */
+    private StageExecutor round(ExecutorName name) {
+        return new ProgramStageExecutor(registry.resolve(name).rounds(), rounds);
     }
 }

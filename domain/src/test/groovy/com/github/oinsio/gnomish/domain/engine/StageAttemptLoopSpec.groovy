@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
@@ -20,6 +19,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -41,9 +41,9 @@ class StageAttemptLoopSpec extends Specification {
     static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
-    def commandRunner = new ScriptedCommandCheckRunner()
-    def externalClient = new ScriptedExternalCheckClient()
+    def builtinRunner = new ScriptedCheckRounds()
+    def commandRunner = new ScriptedCheckRounds()
+    def externalClient = new ScriptedCheckRounds()
     def judgeVoter = new ScriptedJudgeVoter()
     def persistence = new InMemoryAttemptPersistence()
     def listener = new RecordingEventListener()
@@ -51,12 +51,12 @@ class StageAttemptLoopSpec extends Specification {
     def sleeper = new VirtualSleeper(clock)
 
     EnginePorts ports() {
-        new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter,
                 listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
-    static VerifyCheck.Builtin builtin(String name) {
-        new VerifyCheck.Builtin(name, [:])
+    static VerifyCheck.Executor builtin(String name) {
+        VerifyChecks.builtin(name, [:])
     }
 
     static VerifyCheck.Judge judge(int votes) {
@@ -79,8 +79,10 @@ class StageAttemptLoopSpec extends Specification {
 
     // FR4, FR13: a check that CannotVerify escalates without burning an attempt, and the
     //     round is still recorded with its check results and usages (recorded, not counted)
-    // Scenario: pipeline/stage-engine / Infrastructure-classed timeout burns no attempt
+    //     The scripted cannot-verify is answered by the check's round as `failed/infrastructure`
+    //     (ScriptedCheckRounds through ScriptedAnswers), the verdict executor's own status.
     // Scenario: pipeline/stage-engine / Unburned round is still recorded
+    // Scenario: pipeline/stage-engine / Check infrastructure failure burns no attempt
     // Scenario: verification/verification-hardening / Malformed judge verdict burns no attempt
     def "escalates CannotVerify recording the round without counting it"() {
         given: 'a stage whose single builtin check cannot be verified, run by a Completed executor'
@@ -200,7 +202,7 @@ class StageAttemptLoopSpec extends Specification {
 
         where:
         begin | verdict || expectedResult
-        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Pass() || AttemptRecord.Result.PASSED
+        Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Pass(null, []) || AttemptRecord.Result.PASSED
         Instant.parse('2026-07-16T14:00:00Z') | new Verdict.Fail([]) || AttemptRecord.Result.QUALITY_FAILURE
         Instant.parse('2026-07-16T14:00:00Z') | new Verdict.CannotVerify(UntrustedText.subprocess('x'), UntrustedText.subprocess('y')) || AttemptRecord.Result.CANNOT_VERIFY
     }
@@ -249,7 +251,7 @@ class StageAttemptLoopSpec extends Specification {
         executor.scripted << completed(ExecutorUsage.none())
         builtinRunner.scripted << new Verdict.Fail([])
         builtinRunner.scripted << new Verdict.Fail([])
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         // each round advances the clock one minute during its verification, so each round begins later
         builtinRunner.onRun = { check, workspace ->
             clock.advance(Duration.ofMinutes(1))

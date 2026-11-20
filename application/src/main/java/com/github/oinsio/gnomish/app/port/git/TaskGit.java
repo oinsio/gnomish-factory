@@ -1,8 +1,6 @@
 package com.github.oinsio.gnomish.app.port.git;
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook;
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
-import java.util.function.UnaryOperator;
 
 /**
  * The task-git capability set a use case is handed as one injected value: the task store, the
@@ -23,11 +21,12 @@ import java.util.function.UnaryOperator;
  *     state reads, push; never null
  * @param worktrees the worktree-level operations: materialization, reconciliation, salvage,
  *     cleanup; never null
- * @param midRoundPush the executor-rounds decoration git-mode host control flows attach via
- *     {@code RunAssembly.withHostGitPush} (FR1, FR3, design D3 of wire-host-mid-round-push) —
+ * @param midRoundPush the git-mode host decoration of a run's rounds, over the run's cell, which
+ *     git-mode host control flows attach via {@code RunAssembly.withHostGitPush} (FR1, FR3,
+ *     design D3 of wire-host-mid-round-push; design D22 of migrate-verify-to-executor-contract) —
  *     a git capability co-travelling with the other git capabilities, so no runner signature
- *     grows for it; identity by default, the real operator is built by the composition root
- *     beside the rest of this bundle; never null
+ *     grows for it; {@link HostGitRounds#NONE} by default, the real one is built by the
+ *     composition root beside the rest of this bundle; never null
  * @param baseRefs the base-ref operations: default-branch discovery, the narrow base refresh, and
  *     the resume-time rebind (FR5, FR6, FR12 of add-base-ref-resolution) — a git capability
  *     co-travelling with the rest for the same reason as {@code midRoundPush}; {@link
@@ -46,7 +45,7 @@ public record TaskGit(
         TaskStoreGit store,
         TaskBranchGit branches,
         TaskWorktreeGit worktrees,
-        UnaryOperator<RoundEnvironmentSource> midRoundPush,
+        HostGitRounds midRoundPush,
         BaseRefGit baseRefs,
         ClaimEpochBook epochs) {
 
@@ -56,7 +55,7 @@ public record TaskGit(
      * untouched but for the tenure record, which no form defaults.
      */
     public TaskGit(TaskStoreGit store, TaskBranchGit branches, TaskWorktreeGit worktrees, ClaimEpochBook epochs) {
-        this(store, branches, worktrees, UnaryOperator.identity(), epochs);
+        this(store, branches, worktrees, HostGitRounds.NONE, epochs);
     }
 
     /** A push decoration without a base-ref capability: the specs of the mid-round push wiring. */
@@ -64,7 +63,7 @@ public record TaskGit(
             TaskStoreGit store,
             TaskBranchGit branches,
             TaskWorktreeGit worktrees,
-            UnaryOperator<RoundEnvironmentSource> midRoundPush,
+            HostGitRounds midRoundPush,
             ClaimEpochBook epochs) {
         this(store, branches, worktrees, midRoundPush, BaseRefGit.UNWIRED, epochs);
     }

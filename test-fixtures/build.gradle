@@ -73,6 +73,9 @@ dependencies {
     // `InProcessExecutorDouble` implements the executor contract's mirror interface over its DTOs
     // (task 8.2a of define-executor-contract), so the contract is on this module's own signatures.
     api project(':executor-contract')
+    // The pending-key leaf (design D20 of migrate-verify-to-executor-contract): the double's `poll`
+    // takes the key on its own signature.
+    api project(':pendingkey')
     // `ScriptedSandboxDocker` builds the docker environments over a scripted CLI
     // and hands back `:sandbox:core` port types.
     api project(':sandbox:core')
@@ -103,6 +106,11 @@ dependencies {
     // the backend type; only the cast target reaches a consuming spec's compile surface, so the
     // API itself stays `implementation` (dependency-analysis advice).
     implementation libs.slf4j.api
+    // The HTTP egress leaf (design D16 of migrate-verify-to-executor-contract): `TrackerValidatorStub`
+    // builds the operator's `OperatorEgress` for the loader's connection admission. It reached this
+    // module transitively through the check-provider fixtures task 5.2 deleted; declared directly
+    // now, `implementation` since no fixture signature names it (dependency-analysis advice).
+    implementation project(':httpegress')
 
 
     // `ApplicationArgumentsFixture` returns Spring Boot's own

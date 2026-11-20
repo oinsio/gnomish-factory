@@ -50,7 +50,7 @@ final class ServeCommands {
                 sandboxLifecyclePass,
                 // The host-only sandbox config every caller's bundle was built with: the bundle no
                 // longer exposes its inputs (design D22 of supervise-daemon-loops-and-embed-dashboard).
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                 // The page inside serve, as the root builds it: the tracker wiring in its BoardReaders
                 // role, over the command's own project scope and the daemon's one time equipment.
                 new ServeDashboard(trackerWiring, scope, factoryProperties, assembly.timeEquipment()))
@@ -61,7 +61,7 @@ final class ServeCommands {
                 trackerWiring,
                 git,
                 new ServePreconditions(git.branches(), containerTakeSupport.modeSelector(), imageReadiness,
-                new SandboxProperties('gnomish/fixture-image', null, null, null, null, null, false, null, null, null, null)),
+                new SandboxProperties('gnomish/fixture-image', null, null, null, null, false, null, null, null, null), { endpoint -> } as com.github.oinsio.gnomish.app.EgressProbe),
                 errorConsole)
         new ServeCommand(runtimeAssembly, startupGates, scope, serveProperties, trackerWiring, starter, errorConsole)
     }

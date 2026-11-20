@@ -56,7 +56,7 @@ class RunTerminalBoundaryGateParkSpec extends Specification implements RunChainF
         cloneDir = tempDir.resolve('my-project')
         Files.createDirectories(cloneDir)
         store.taskRepository(_) >> lifecycleStore
-        store.attemptPersistence(_, _) >> persistence
+        store.attemptPersistence(_, _, _) >> persistence
     }
 
     private TaskGit git() {
@@ -108,6 +108,7 @@ class RunTerminalBoundaryGateParkSpec extends Specification implements RunChainF
         given:
         Path worktree = Files.createDirectories(tempDir.resolve('worktree'))
         worktrees.salvage(worktree) >> Stub(WorktreeSalvager)
+        worktrees.interruptedVerification(worktree, _) >> Optional.empty()
         def bootstrap = new ResumeBootstrap('PROJ-1', CheckpointMechanicsFixtures.context(), null, null, worktree,
                 new BranchAdoption.AlreadyLocal('PROJ-1'), 'abc123', false, BasePin.UNPINNED)
         def continuation = new GitResumeContinuation(assemblyRunningLoop(executor, io), git(), lifecycleStore, cloneDir, bootstrap,

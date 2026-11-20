@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
+import com.github.oinsio.gnomish.sandbox.SandboxEgress
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
 import java.time.Duration
@@ -22,7 +23,7 @@ trait ContainerEnvironmentsFixture {
 
     RecordingDockerCli docker = new RecordingDockerCli()
     SandboxProperties sandbox = new SandboxProperties(
-    'gnomish/img', null, null, null, null, null, false, null, null, null, null)
+    'gnomish/img', null, null, null, null, false, null, null, null, null)
     InstantSource clock = new VirtualClock()
     ContainerHarvest harvester = { String container, String branch -> } as ContainerHarvest
     Sleeper sleeper = { Duration d -> } as Sleeper
@@ -37,7 +38,7 @@ trait ContainerEnvironmentsFixture {
             },
             List<String> executorEgress = []) {
         new ContainerEnvironments(
-                new BoxEquipment(docker, sandbox, timing, Path.of('/factory/guard-config'), OwnershipMode.TRACKED, ImageContractCheck.current()),
+                new BoxEquipment(docker, sandbox, SandboxEgress.none(), timing, Path.of('/factory/guard-config'), OwnershipMode.TRACKED, ImageContractCheck.current()),
                 key, new BoxGitLink(Path.of('/factory/clone'), harvester), allowlist, 'proj-1', restoration, executorEgress)
     }
 }

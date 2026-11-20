@@ -110,7 +110,7 @@ class UsageHistoryRangeSpec extends Specification implements UsageHistoryFixture
         def first = TaskState.atStageStart('implement').recordQualityFailure(round('PROJ-9', 'implement', 0, AttemptRecord.Result.QUALITY_FAILURE, 500, 50), ExecutorVersions.none())
         persistRound('PROJ-9', first)
         def worktree = worktreeFor('PROJ-9')
-        def forged = new GitAttemptPersistence(runner, worktree, 'PROJ-9', ClaimEpochSource.NONE)
+        def forged = HostRoundPersistence.over(runner, worktree, 'PROJ-9', ClaimEpochSource.NONE)
         def registered = registeredId(cloneDir, 'PROJ-9')
         forged.persist('PROJ-9', first.recordUnburnedRound(round('PROJ-9', 'implement', 1, AttemptRecord.Result.PASSED, 900, 90), ExecutorVersions.none()),
                 new ToolTrace(new AttemptKey('PROJ-9', 'implement', 1), []))

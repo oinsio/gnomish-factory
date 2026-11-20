@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskStoreGit
@@ -22,7 +23,6 @@ import com.github.oinsio.gnomish.status.AnchorLog
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 
 /**
@@ -151,7 +151,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(store, Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+        }, Stub(TaskWorktreeGit), HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
         def subject = new BareTakeClaimWalk(
                 claimAndWork(git, tracker, Stub(RunAssembly) {
                     timeEquipment() >> VirtualTimeEquipment.create()
@@ -185,7 +185,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(store, Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+        }, Stub(TaskWorktreeGit), HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
         def subject = new BareTakeClaimWalk(
                 claimAndWork(git, tracker, Stub(RunAssembly) {
                     timeEquipment() >> VirtualTimeEquipment.create()
@@ -223,7 +223,7 @@ class BareTakeClaimWalkSpec extends Specification implements RunChainFakes {
         def git = new TaskGit(store, Stub(TaskBranchGit) {
             locate(_, _) >> new BranchLocation.NotFound()
             classifyShape(_, _) >> new BranchShape.Bare()
-        }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+        }, Stub(TaskWorktreeGit), HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
         def subject = new BareTakeClaimWalk(
                 claimAndWork(git, tracker, Stub(RunAssembly) {
                     timeEquipment() >> VirtualTimeEquipment.create()

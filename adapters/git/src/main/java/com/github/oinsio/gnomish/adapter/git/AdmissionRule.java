@@ -48,14 +48,13 @@ record AdmissionRule(PathPermit gnome, Optional<FactoryTop> top) {
     /**
      * The snapshot of round {@code key} ({@link EnvironmentRoundSnapshot}): the gnome's commits and
      * the in-box snapshot of its working tree, the round's own request the one permitted path in
-     * either (FR23 of add-sandbox-core; FR16 of make-checkpoint-gate-durable).
+     * either (FR23 of add-sandbox-core; FR16 of make-checkpoint-gate-durable), the snapshot's subject
+     * the one the round snapshot step chose by the round's close ({@link RoundSnapshot#subject};
+     * design D22 of migrate-verify-to-executor-contract).
      */
-    static AdmissionRule snapshot(AttemptKey key, RoundToken token) {
+    static AdmissionRule snapshot(AttemptKey key, RoundToken token, String subject) {
         String decision = GnomeRangeInspection.decisionPath(key, token);
-        return closing(
-                PathPermit.only(decision),
-                ServiceCommitMessages.snapshot(key.stage(), key.attempt(), token),
-                PathPermit.only(decision));
+        return closing(PathPermit.only(decision), subject, PathPermit.only(decision));
     }
 
     /**
@@ -68,6 +67,18 @@ record AdmissionRule(PathPermit gnome, Optional<FactoryTop> top) {
                 PathPermit.only(GnomeRangeInspection.decisionPath(key, token)),
                 ServiceCommitMessages.round(recorded),
                 PathPermit.only(EnvelopePaths.STATE_JSON_PATH, tracePath));
+    }
+
+    /**
+     * A pending commit of an open round ({@link InBoxPendingCommit}; design D21 of
+     * migrate-verify-to-executor-contract): no gnome commit may sit in its range — its parent is the
+     * round's last registered commit, which the writer's parent check asserts — and the factory's
+     * top carries {@code subject} and changes {@code state.json} as the one path under the state
+     * directory. That it changes no path outside the state directory either is the writer's own
+     * tree check, since this rule, like every closing rule, judges the state directory only.
+     */
+    static AdmissionRule pending(String subject) {
+        return closing(PathPermit.none(), subject, PathPermit.only(EnvelopePaths.STATE_JSON_PATH));
     }
 
     /**

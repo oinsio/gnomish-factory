@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
+import com.github.oinsio.gnomish.sandbox.SandboxEgress
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.StderrPolicy
 import com.github.oinsio.gnomish.subprocess.StdinSource
@@ -121,7 +122,7 @@ class ScriptedSandboxDocker extends RecordingDockerCli {
                         // wall clock (FR21 of supervise-daemon-loops-and-embed-dashboard).
                         new VirtualClock(Instant.parse('2026-01-01T00:00:00Z')), { d -> } as Sleeper), DEFAULT_COMMAND_TIMEOUT)
         new ContainerEnvironments(
-                new BoxEquipment(this, sandbox, timing, guardRoot, mode, ImageContractCheck.current()),
+                new BoxEquipment(this, sandbox, SandboxEgress.none(), timing, guardRoot, mode, ImageContractCheck.current()),
                 key,
                 // A scripted box changed nothing: its harvest lands the branch's own tip in the
                 // task's quarantine, as a real harvest of an unchanged box does (design D18 of

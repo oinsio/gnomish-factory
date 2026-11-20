@@ -17,7 +17,7 @@ class ContainerResumePreparationSpec extends Specification {
     SandboxRunSupport support = Mock(SandboxRunSupport)
 
     static PendingVerification snapshot() {
-        new PendingVerification('sha-1', 'build', 0, RoundToken.of('0a1b2c'), Optional.empty())
+        new PendingVerification('sha-1', 'build', 0, RoundToken.of('0a1b2c'), Optional.empty(), 'sha-1', ['sha-1'])
     }
 
     // FR18, FR6: the ordinary interrupted visit — the snapshot check first, then the box is made
@@ -101,5 +101,21 @@ class ContainerResumePreparationSpec extends Specification {
         0 * support.salvageLeftovers(_)
         0 * support.disposeExistingEnvironment()
         pending == null
+    }
+
+    // FR19 of migrate-verify-to-executor-contract: past the pipeline's end nothing is reattached or
+    // settled, and the register's interrupted verification is still handed to the drive.
+    def "at the pipeline end hands a registered snapshot to the drive, salvaging nothing"() {
+        given:
+        def recorded = snapshot()
+
+        when:
+        def pending = ContainerResumePreparation.prepare(support, false, new Position.PipelineEnd(), 'PROJ-1')
+
+        then:
+        1 * support.pendingVerification() >> Optional.of(recorded)
+        0 * support.reattachFor(_)
+        0 * support.salvageLeftovers(_)
+        pending.is(recorded)
     }
 }

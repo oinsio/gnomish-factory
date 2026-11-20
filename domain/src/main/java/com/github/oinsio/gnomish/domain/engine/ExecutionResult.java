@@ -1,7 +1,9 @@
 package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.DoNotMutate;
+import com.github.oinsio.gnomish.pendingkey.PendingKey;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.time.Duration;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -23,19 +25,19 @@ import org.jspecify.annotations.Nullable;
  * type itself: {@code :domain} may reach JDK-only leafs only, and {@code :executor-contract}
  * carries Jackson on its surface, so an adapter maps the contract's result into this one.
  *
- * <p>Kept in sync with {@code
- * com.github.oinsio.gnomish.executorcontract.Status} and {@code
- * com.github.oinsio.gnomish.executorcontract.FailureClass}: every contract status and failure
- * class has exactly one counterpart here (no shared classpath — the registry row in {@code
- * manual-sync-pairs.md} is the index). The {@link ToolTrace} has no wire twin: it stays the
- * two-level telemetry of design D5 of add-stage-engine, correlated by {@link AttemptKey}.
+ * <p>Kept in sync with {@code com.github.oinsio.gnomish.executorcontract.Status}, {@code
+ * com.github.oinsio.gnomish.executorcontract.FailureClass} and {@code
+ * com.github.oinsio.gnomish.executorcontract.PendingState}: every contract status, failure class
+ * and pending state ({@link PendingState}) has exactly one counterpart here (no shared classpath —
+ * the registry row in {@code manual-sync-pairs.md} is the index). The {@link ToolTrace} has no wire
+ * twin: it stays the two-level telemetry of design D5 of add-stage-engine, keyed by {@link AttemptKey}.
  *
  * <p>The {@code denials} are observability only: the engine carries them onto the round's {@code
  * AttemptRecord} and never lets them touch a verdict (FR2 of fix-denial-report-attachment). Inert
  * value data compared by content.
  *
  * <p>Implements FR7 of define-executor-contract; FR6, FR13 of add-stage-engine; FR3 of
- * fix-denial-report-attachment.
+ * fix-denial-report-attachment; FR1, FR2 of migrate-verify-to-executor-contract.
  *
  * @param status the round's status; never null
  * @param answer the round's structured answer, or {@code null} when it gave none
@@ -98,13 +100,19 @@ public record ExecutionResult(
     /**
      * The executor reports a failure of the given class. {@code findings} are what a {@code
      * quality} failure feeds forward to later attempts; {@code reason} names the failure for an
-     * operator.
+     * operator; {@code details} is what the executor wrote beside it (design D18, D19 of
+     * migrate-verify-to-executor-contract).
      *
      * @param failureClass the failure's class; never null
      * @param reason the executor's words for the failure; never blank
      * @param findings what the round found wrong; defensively copied, unmodifiable, possibly empty
+     * @param details what the executor wrote beside the reason, or {@code null} for none
      */
-    public record Failed(FailureClass failureClass, UntrustedText reason, List<Finding> findings) implements Status {
+    public record Failed(
+            FailureClass failureClass,
+            UntrustedText reason,
+            List<Finding> findings,
+            @Nullable UntrustedText details) implements Status {
 
         public Failed {
             reason = requireNonBlank(reason);
@@ -114,8 +122,11 @@ public record ExecutionResult(
         /**
          * Fails fast on a blank {@code reason}: a failure that names nothing gives the operator
          * nothing to act on. An explicit static method, not inline in the compact constructor, so
-         * PIT's record-constructor filter does not exempt the guard from the mutation gate.
+         * PIT's record-constructor filter does not exempt the guard. {@code @DoNotMutate}, the JVMTI
+         * reason of {@code testing.md}: since the {@code @Nullable details} component (task 4.0b) its
+         * one mutant is a RUN_ERROR (hcoles/pitest#1285, two runs); covered by ExecutionResultSpec.
          */
+        @DoNotMutate
         private static UntrustedText requireNonBlank(UntrustedText value) {
             if (value.isBlank()) {
                 throw new IllegalArgumentException("ExecutionResult.Failed.reason must not be blank");
@@ -125,11 +136,23 @@ public record ExecutionResult(
     }
 
     /**
-     * The executor has not finished and names a key to poll by.
+     * The executor has not finished and names a key to poll by, with the two facts the engine
+     * decides on (design D19 of migrate-verify-to-executor-contract) and its texts, shown only.
      *
-     * @param key the executor's opaque continuation key; never null
+     * @param key the executor's opaque continuation key, the {@code :pendingkey} leaf's type (design
+     *     D20 of migrate-verify-to-executor-contract); never null
+     * @param pollAfter the wait hint, a lower bound on the next poll, or {@code null} for none
+     * @param state the pending state a timeout is classified by; {@code RUNNING} when unsaid
+     * @param reason the executor's words for what is awaited, or {@code null} for none
+     * @param details what the executor wrote beside the reason, or {@code null} for none
      */
-    public record Pending(String key) implements Status {}
+    public record Pending(
+            PendingKey key,
+            @Nullable Duration pollAfter,
+            PendingState state,
+            @Nullable UntrustedText reason,
+            @Nullable UntrustedText details)
+            implements Status {}
 
     /** The class of a {@link Failed} status. */
     public enum FailureClass {
@@ -141,8 +164,11 @@ public record ExecutionResult(
         LIMIT
     }
 
-    /** A round's structured answer; the stage engine reads only a {@link DecisionRequest}. */
-    public sealed interface Answer permits DecisionRequest {}
+    /** A round's answer: a {@link DecisionRequest} (the stage engine's) or a {@link VerdictReply}. */
+    public sealed interface Answer permits DecisionRequest, VerdictReply {}
+
+    /** A check round's verdict answer (D18 of migrate-verify-to-executor-contract); built by one mapping. */
+    public record VerdictReply(VerdictAnswer answer) implements Answer {}
 
     /**
      * The executor asks a human (design D6 of add-stage-engine). The {@code options} are free text

@@ -43,8 +43,8 @@ class TakeFinishReportRunUrlSpec extends Specification {
     // Scenario: verification/github-external-check / A green check is auditable from the tracker
     def "NFR-O2: the finish comment surfaces the run URL a passing external check carried"() {
         given: 'a task whose one round passed an external check carrying the run URL'
-        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('external:ci')), new Verdict.Pass(RUN_URL),
-                Duration.ofSeconds(3))
+        def check = new CheckResult(new CheckRef(0, UntrustedText.manifest('external:ci')), new Verdict.Pass(RUN_URL, []),
+        Duration.ofSeconds(3))
         def round = AttemptRecords.of(0, AttemptRecord.Result.PASSED, Instant.EPOCH, [check], ExecutorUsage.none(),
         [], Stop.none())
         def state = new TaskState(new Position.PipelineEnd(), 1, [round], UsageSnapshot.EMPTY, ExecutorVersions.none())

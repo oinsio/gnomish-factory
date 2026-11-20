@@ -10,7 +10,7 @@ import org.jspecify.annotations.Nullable;
  * {@code minLength: 1} string, a {@code minimum} integer, a {@code minItems} array, an environment
  * variable name.
  *
- * <p>Implements FR1 of define-executor-contract.
+ * <p>Implements FR1 of define-executor-contract; FR2 of migrate-verify-to-executor-contract.
  */
 final class WireChecks {
 
@@ -50,6 +50,15 @@ final class WireChecks {
         if (value != null && value < minimum) {
             throw new IllegalArgumentException(field + " must be at least " + minimum + ", was " + value);
         }
+    }
+
+    /**
+     * Whether {@code millis} lies outside the range a wait hint takes, 0 to {@link
+     * ExecutorResult#MAX_POLL_AFTER_MILLIS} (design D19 of migrate-verify-to-executor-contract); here
+     * rather than on the record, whose methods the mutation engine cannot redefine.
+     */
+    static boolean outOfHintRange(long millis) {
+        return millis < 0 || millis > ExecutorResult.MAX_POLL_AFTER_MILLIS;
     }
 
     static void positiveOrAbsent(@Nullable Integer value, String field) {

@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
 import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch;
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner;
 import com.github.oinsio.gnomish.adapter.git.OriginRemote;
@@ -13,6 +12,7 @@ import com.github.oinsio.gnomish.app.serve.SandboxLifecyclePass;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
+import com.github.oinsio.gnomish.sandbox.SandboxEgress;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.Segment;
 import com.github.oinsio.gnomish.sandbox.environment.BoxGitLink;
@@ -22,7 +22,6 @@ import com.github.oinsio.gnomish.sandbox.environment.OwnershipMode;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import org.jspecify.annotations.NullMarked;
 
@@ -30,9 +29,8 @@ import org.jspecify.annotations.NullMarked;
  * Builds a run's {@link ContainerRunSupport} — the production {@link ContainerSupportFactory} the
  * container runners call per run. An instance over the fixed part of the construction (design D7,
  * D10 of collapse-composition-roots; D12 of make-checkpoint-gate-durable): the installation's
- * child-environment allowlist (passthrough, the check credentials the configured providers
- * declared, the secrets port as its value source), the check-client registry the pipeline's own check
- * declarations are read through, the ownership label, the tenure record, the two property sets,
+ * child-environment allowlist (passthrough, the built-ins' credential names, the secrets port as its
+ * value source), the built-ins' subsections the pipeline's own check credentials are read through, the ownership label, the tenure record, the two property sets,
  * the installation's {@link ContainerEnvironmentFactory} and the sandbox lifecycle pass — each
  * fixed for the process. What varies per run — the clone, the task, the segment plan, the pipeline
  * and the tracker credentials — is the seam's own five parameters, so a runner has no property set
@@ -46,12 +44,12 @@ import org.jspecify.annotations.NullMarked;
  * supervise-daemon-loops-and-embed-dashboard; NFR-S3 of tighten-spec-contract.
  *
  * @param childEnv the installation's child-environment allowlist: the operator passthrough,
- *     the credential names the configured check providers declared through the SPI (FR17,
- *     design D11 of add-plugin-architecture) — no vendor constant is named here — and the
+ *     the SCM built-ins' credential names (FR17, design D11 of add-plugin-architecture) — no
+ *     vendor constant is named here — and the
  *     secrets port as the source of every value it admits (NFR-S3 of tighten-spec-contract);
  *     each run widens it by its own credential names
- * @param checkClientRegistry the discovered check providers, asked what the pipeline's own
- *     check declarations name (FR11 of add-plugin-architecture)
+ * @param subsections the operator's built-in check subsections, asked what the pipeline's own
+ *     checks name (FR11 of add-plugin-architecture; task 5.2 of migrate-verify-to-executor-contract)
  * @param ownershipMode the ownership label to stamp on every object a run creates (FR2 of
  *     add-serve-sandbox-lifecycle) — this factory never decides it
  * @param epochs the tenure a run's commits are stamped with (FR13 of
@@ -72,7 +70,7 @@ import org.jspecify.annotations.NullMarked;
 @NullMarked
 record ContainerRunSupportFactory(
         ChildEnvAllowlist childEnv,
-        Map<String, CheckClientFactory> checkClientRegistry,
+        BuiltInCheckSubsections subsections,
         OwnershipMode ownershipMode,
         ClaimEpochSource epochs,
         SandboxProperties sandboxProperties,
@@ -92,7 +90,7 @@ record ContainerRunSupportFactory(
      */
     ContainerRunSupportFactory(
             ChildEnvAllowlist childEnv,
-            Map<String, CheckClientFactory> checkClientRegistry,
+            BuiltInCheckSubsections subsections,
             OwnershipMode ownershipMode,
             ClaimEpochSource epochs,
             SandboxProperties sandboxProperties,
@@ -100,13 +98,14 @@ record ContainerRunSupportFactory(
             TimeEquipment time) {
         this(
                 childEnv,
-                checkClientRegistry,
+                subsections,
                 ownershipMode,
                 epochs,
                 sandboxProperties,
                 factoryProperties,
                 new ContainerEnvironmentFactory(
                         sandboxProperties,
+                        new SandboxEgress(factoryProperties.egress().sandbox()),
                         new BoxTiming(time, factoryProperties.dockerCommandTimeout()),
                         Path.of(Objects.requireNonNull(System.getProperty("java.io.tmpdir")), "gnomish-guard"),
                         ownershipMode),
@@ -116,8 +115,9 @@ record ContainerRunSupportFactory(
     /**
      * Builds the run's container support. The child-env allowlist mirrors {@link
      * RunAssembly#assemble}'s own composition — operator passthrough plus the declared credential
-     * names: the tracker's, the configured check providers', and those the pipeline's own checks
-     * name (FR11, FR17, design D11 of add-plugin-architecture), its values from the secrets port —
+     * names: the tracker's and the built-ins' — each SCM built-in's token name and each {@code http}
+     * check's own credential (FR11, FR17, design D11 of add-plugin-architecture) — its values from the
+     * secrets port —
      * because the environments compose exec children before the assembly exists. A {@code program}
      * executor's credentials are deliberately not declared here: declared names are what every child
      * is denied, and the program's child takes them as its own resolved layer through the allowlist's
@@ -133,7 +133,7 @@ record ContainerRunSupportFactory(
         // Per run, not a component: the runner holds no state, only the property-bounded deadline.
         var runner = new GitProcessRunner(factoryProperties.gitNetworkTimeout());
         List<String> credentials = new ArrayList<>(credentialEnvVarsToScrub);
-        credentials.addAll(CheckProviderSeam.checkCredentialEnvVars(definition, checkClientRegistry));
+        credentials.addAll(subsections.credentialNames(definition));
         var allowlist = childEnv.declaring(credentials);
         // The stamped identity alone, never the sweep's wider scope: the write side stays
         // single-valued, so no object this run creates carries a legacy project label (FR3 of

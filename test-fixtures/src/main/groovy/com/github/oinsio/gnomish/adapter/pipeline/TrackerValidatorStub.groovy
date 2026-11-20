@@ -1,8 +1,11 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
-import com.github.oinsio.gnomish.app.CheckParamsValidator
+import com.github.oinsio.gnomish.app.ConnectionProfiles
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
+import com.github.oinsio.gnomish.domain.egress.EndpointDeclaration
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
+import com.github.oinsio.gnomish.httpegress.OperatorEgress
 
 /**
  * Test helper: an accept-anything {@link TrackerSubsectionValidator} registry, reproducing the
@@ -15,14 +18,11 @@ import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
  * loader is covered instead by {@code TrackerAdapterConfigurationSpec} (FR17 of add-tracker-port),
  * which lives in {@code adapter.tracker} where importing the concrete validator is permitted.
  *
- * <p>It plays the same role for the check port (FR6, FR13 of add-plugin-architecture):
- * {@link #discoveredGithubCheckProvider} stands in for a classpath that discovered the github check
- * provider, so a fixture whose {@code external} check resolves to {@code github} loads without the
- * real plugin jar. A spec about provider discovery itself builds its own registry instead.
- * {@link #configuredGithubCheckProvider} is the matching operator side — a {@code
- * factory.check.github} section — for a loader spec whose fixture runs such a check (FR3 of
- * remove-interactive-console). The two sources configure no provider, as their callers' factory
- * properties carry no {@code factory.check} section.
+ * <p>It plays the same role for the check seam (FR6, FR13 of add-plugin-architecture; task 5.2 of
+ * migrate-verify-to-executor-contract): {@link #acceptingGithubActions} grades a {@code
+ * github-actions} check's settings with nothing, so a fixture whose {@code external} check maps to
+ * that built-in loads without the real validator, which lives in {@code :adapters:scm}. No load
+ * rule reads the operator's {@code factory.check} configuration, so no fixture configures one.
  */
 class TrackerValidatorStub {
 
@@ -33,17 +33,11 @@ class TrackerValidatorStub {
             } as TrackerSubsectionValidator]
     }
 
-    /**
-     * A check-provider registry standing in for a classpath that discovered only {@code github},
-     * grading no params — the keys are the discovered provider set the load seam reads.
-     */
-    static Map<String, CheckParamsValidator> discoveredGithubCheckProvider() {
-        [github: CheckParamsValidator.none()]
-    }
-
-    /** The configured-provider set of an operator who wrote a {@code factory.check.github} section. */
-    static Set<String> configuredGithubCheckProvider() {
-        ['github'] as Set
+    /** Settings validators keyed by built-in name: {@code github-actions}, accepting any settings. */
+    static Map<String, CheckSettingsValidator> acceptingGithubActions() {
+        [(BuiltInExecutors.GITHUB_ACTIONS): { String file, String where, Map settings ->
+                []
+            } as CheckSettingsValidator]
     }
 
     /**
@@ -51,11 +45,30 @@ class TrackerValidatorStub {
      * callers that inject the port rather than the registry (task 4.4 of split-into-modules).
      */
     static PipelineSource acceptingGithubSource() {
-        new GnomishDirPipelineSource(acceptingGithub(), discoveredGithubCheckProvider(), [] as Set)
+        new GnomishDirPipelineSource(acceptingGithub(), acceptingGithubActions(), loopbackGranted())
+    }
+
+    /**
+     * The GitHub adapter's endpoint declaration as the bundle's factory makes it ({@code
+     * TrackerEndpointRegistrySpec} in {@code :bootstrap} pins the two equal): the fixtures cannot
+     * load the bundle, whose jar reaches the test classpath at runtime only.
+     */
+    static EndpointDeclaration githubEndpoint() {
+        new EndpointDeclaration('api-url', 'api.github.com')
+    }
+
+    /**
+     * What the fixtures' operator file grants (FR17, design D16 of migrate-verify-to-executor-contract,
+     * "Test posture"): no connection profile, the GitHub adapter's endpoint declaration, and {@code
+     * loopback} under {@code factory.egress.in-process} — the WireMock and Gitea fixtures' URLs are
+     * the law's inline {@code api-url} on loopback, admitted by configuration and by no switch.
+     */
+    static ConnectionAdmission loopbackGranted() {
+        new ConnectionAdmission(ConnectionProfiles.none(), [github: githubEndpoint()], new OperatorEgress(['loopback']))
     }
 
     /** The real {@code .gnomish/} {@link PipelineSource} with no subsection validator registered. */
     static PipelineSource plainSource() {
-        new GnomishDirPipelineSource([:], discoveredGithubCheckProvider(), [] as Set)
+        new GnomishDirPipelineSource([:], acceptingGithubActions())
     }
 }

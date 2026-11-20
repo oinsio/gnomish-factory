@@ -4,15 +4,9 @@ import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.app.project.ProjectName
 import com.github.oinsio.gnomish.app.project.ProjectRegistry
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
-import java.util.concurrent.Callable
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import java.util.concurrent.Future
-import java.util.concurrent.TimeUnit
 
 /**
  * Spawns the real {@code gnomish run} process for the E2E layer (task 9.1, M1):
@@ -139,6 +133,20 @@ final class E2eProcessHarness {
             List<String> scriptedInputLines,
             boolean keepStdinOpen = false,
             Map<String, String> extraEnv = [:]) {
+        E2eFactoryProcess.start(builder(subcommand, workingDirectory, extraArgs, extraEnv), scriptedInputLines, keepStdinOpen)
+                .await(DEFAULT_TIMEOUT)
+    }
+
+    /**
+     * {@link #execute} without the wait, stdin closed at once: the live process, for a spec that ends
+     * it itself — a kill-point spec kills it inside a window ({@link E2eFactoryProcess#killed}).
+     */
+    E2eFactoryProcess launch(String subcommand, Path workingDirectory, List<String> extraArgs, Map<String, String> extraEnv = [:]) {
+        E2eFactoryProcess.start(builder(subcommand, workingDirectory, extraArgs, extraEnv), [], false)
+    }
+
+    /** {@code java -jar <jar> <subcommand> <extraArgs...>} over the test child baseline, every {@code --dir} registered. */
+    private ProcessBuilder builder(String subcommand, Path workingDirectory, List<String> extraArgs, Map<String, String> extraEnv) {
         List<String> command = new ArrayList<>([
             'java',
             '-jar',
@@ -160,35 +168,7 @@ final class E2eProcessHarness {
             register(Path.of(it.substring('--dir='.length())))
         }
         environment.putAll(extraEnv)
-
-        Process process = builder.start()
-        ExecutorService pumps = Executors.newFixedThreadPool(3)
-        try {
-            // Explicit Callable<String> cast: ExecutorService#submit is overloaded for
-            // Callable and Runnable, and a bare Groovy closure satisfies both — without the
-            // cast, Groovy's overload resolution picks the Runnable overload here, silently
-            // discarding the closure's return value and handing back a Future whose get()
-            // always yields null.
-            Future<String> stdoutFuture = pumps.submit({
-                readAll(process.inputStream)
-            } as Callable<String>)
-            Future<String> stderrFuture = pumps.submit({
-                readAll(process.errorStream)
-            } as Callable<String>)
-            pumps.submit({
-                writeStdin(process, scriptedInputLines, keepStdinOpen)
-            } as Runnable)
-
-            boolean finished = process.waitFor(DEFAULT_TIMEOUT.toSeconds(), TimeUnit.SECONDS)
-            if (!finished) {
-                process.destroyForcibly()
-                throw new IllegalStateException(
-                "gnomish ${subcommand} did not exit within ${DEFAULT_TIMEOUT} — command: ${command}")
-            }
-            return new E2eProcessResult(process.exitValue(), stdoutFuture.get(), stderrFuture.get())
-        } finally {
-            pumps.shutdownNow()
-        }
+        builder
     }
 
     /**
@@ -203,15 +183,24 @@ final class E2eProcessHarness {
         }
         if (!registered) {
             registry.add(new ProjectName("e2e-${registry.projects().size() + 1}"), clone)
+            Path file = ProjectRegistry.scan(HOME).resolve(clone).layout().config()
+            Files.writeString(file, Files.readString(file).stripTrailing() + '\n' + LOOPBACK_GRANT)
         }
     }
+
+    /**
+     * The operator grant every registered project's file carries (FR17, design D16 of
+     * migrate-verify-to-executor-contract, "Test posture"): the specs' trackers are the law's inline
+     * {@code api-url} on loopback, which the factory admits only when the operator grants it.
+     */
+    static final String LOOPBACK_GRANT = 'factory:\n  egress:\n    in-process:\n      - loopback\n'
 
     /**
      * Registers {@code dir} like {@link #run} does and writes {@code factoryBlock} as its project's
      * {@code factory:} configuration — the only place a sandbox-boundary key such as {@code
      * factory.bindings.default} is accepted from (design D8, NFR-S1 of add-project-registry). The
-     * block is appended to the {@code project.yaml} the production registry wrote; a project that
-     * already carries one is refused, so two specs never merge their keys by accident.
+     * block's keys join the registration's {@link #LOOPBACK_GRANT} under its {@code factory:}; a
+     * project a spec already configured is refused, so two specs never merge their keys by accident.
      *
      * @param dir the clone a later {@link #run} passes as {@code --dir}
      * @param factoryBlock YAML whose top-level key is {@code factory:}
@@ -220,27 +209,7 @@ final class E2eProcessHarness {
         register(dir)
         Path file = ProjectRegistry.scan(HOME).resolve(dir.toAbsolutePath().normalize()).layout().config()
         String text = Files.readString(file)
-        assert !(text =~ /(?m)^factory:/): "${file} already carries a factory: block"
-        Files.writeString(file, (text.endsWith('\n') ? text : text + '\n') + factoryBlock)
-    }
-
-    private static void writeStdin(Process process, List<String> lines, boolean keepOpen) {
-        OutputStream stdin = process.outputStream
-        try {
-            for (String line : lines) {
-                stdin.write((line + '\n').getBytes(StandardCharsets.UTF_8))
-                stdin.flush()
-            }
-            if (!keepOpen) {
-                stdin.close()
-            }
-        } catch (IOException ignored) {
-            // The process may have already exited (e.g. usage/pipeline-load errors before any
-            // prompt) and closed its side of the pipe — nothing left to feed, nothing to report.
-        }
-    }
-
-    private static String readAll(InputStream stream) {
-        new String(stream.readAllBytes(), StandardCharsets.UTF_8)
+        assert text.endsWith(LOOPBACK_GRANT): "${file} already carries a factory: block of a spec"
+        Files.writeString(file, text + factoryBlock.replaceFirst(/\Afactory:\n/, ''))
     }
 }

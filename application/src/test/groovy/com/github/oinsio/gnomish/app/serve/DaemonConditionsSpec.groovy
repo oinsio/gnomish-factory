@@ -77,7 +77,8 @@ class DaemonConditionsSpec extends Specification {
         DaemonConditionKind.CLONE_REF_FORMAT,
         DaemonConditionKind.CONTAINER_RUNTIME,
         DaemonConditionKind.IMAGE_CONTRACT,
-        DaemonConditionKind.BOX_GIT_FLOOR
+        DaemonConditionKind.BOX_GIT_FLOOR,
+        DaemonConditionKind.EGRESS
     ]
 
     private static TakeResult.OperatorPreconditionUnmet refusal(DaemonConditionKind kind, String reason = "${kind} refused") {
@@ -90,7 +91,8 @@ class DaemonConditionsSpec extends Specification {
         (OperatorEvent.CONDITION_CLONE_REF_FORMAT_OPENED.code()) : DaemonConditionKind.CLONE_REF_FORMAT,
         (OperatorEvent.CONDITION_CONTAINER_RUNTIME_OPENED.code()) : DaemonConditionKind.CONTAINER_RUNTIME,
         (OperatorEvent.CONDITION_IMAGE_CONTRACT_OPENED.code()) : DaemonConditionKind.IMAGE_CONTRACT,
-        (OperatorEvent.CONDITION_BOX_GIT_FLOOR_OPENED.code()) : DaemonConditionKind.BOX_GIT_FLOOR
+        (OperatorEvent.CONDITION_BOX_GIT_FLOOR_OPENED.code()) : DaemonConditionKind.BOX_GIT_FLOOR,
+        (OperatorEvent.CONDITION_EGRESS_OPENED.code()) : DaemonConditionKind.EGRESS
     ]
 
     private static Set<DaemonConditionKind> opened(def logs) {

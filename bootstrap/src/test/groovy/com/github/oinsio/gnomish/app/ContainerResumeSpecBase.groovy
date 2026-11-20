@@ -60,7 +60,7 @@ abstract class ContainerResumeSpecBase extends Specification implements BareGitR
     Path tempDir
 
     def docker = new ScriptedSandboxDocker()
-    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], false, null, null, null, null)
     Path cloneDir
     GitObjects gitObjects
     TaskLifecycleStore repository

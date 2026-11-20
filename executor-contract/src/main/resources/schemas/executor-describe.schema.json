@@ -72,6 +72,11 @@
     "reportsUsage": {
       "description": "Whether results carry REPORTED usage. An executor that reports none cannot serve a stage with a money bound.",
       "type": "boolean"
+    },
+    "checkIdIsPinnedPath": {
+      "description": "Whether a check's checkId is a repository-relative path the pin-check guard adds to that check's pin set before the executor's first start. Static per executor; absent reads as false. Implements FR16 of migrate-verify-to-executor-contract (design D17).",
+      "type": "boolean",
+      "default": false
     }
   },
   "$defs": {
@@ -105,7 +110,8 @@
       "egress": [],
       "policyDisablingFlags": [],
       "enforcementLevel": "OS_SANDBOX",
-      "reportsUsage": false
+      "reportsUsage": false,
+      "checkIdIsPinnedPath": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.HostRoundPersistence
 import com.github.oinsio.gnomish.adapter.git.ServiceCommitMessages
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.git.state.StateJsonMapper
@@ -99,7 +100,7 @@ class GitKillResumeSalvageCompletionSpec extends Specification implements BareGi
     /** Persists one real round via GitAttemptPersistence so state.json exists, as a live task would. */
     private void persistOneRound(String taskId, TaskState state) {
         def worktree = expectedWorktree(taskId)
-        def persistence = new GitAttemptPersistence(gitRunner, worktree, taskId, ClaimEpochSource.NONE)
+        def persistence = HostRoundPersistence.over(gitRunner, worktree, taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, 'build', 0),
                 [
                     new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(50))

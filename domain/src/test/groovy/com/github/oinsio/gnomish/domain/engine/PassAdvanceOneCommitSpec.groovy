@@ -26,8 +26,8 @@ class PassAdvanceOneCommitSpec extends PersistenceOrderingSpecBase {
         given: 'two AUTO stages, the first passing on its only round'
         def build = stage('build', 5, [builtin('files_exist')])
         def test = stage('test', 5, [builtin('files_exist')])
-        builtinRunner.scripted << new Verdict.Pass()
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed()
         executor.scripted << completed()
 
@@ -54,7 +54,7 @@ class PassAdvanceOneCommitSpec extends PersistenceOrderingSpecBase {
         given: 'the state a passing round of `build` persisted — position already at `test`'
         def build = stage('build', 5, [builtin('files_exist')])
         def test = stage('test', 5, [builtin('files_exist')])
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed()
         def recorded = TaskState.atStageStart('build')
                 .recordPassAndAdvance(passedRound(), new Position.AtStage('test'), ExecutorVersions.none())

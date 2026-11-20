@@ -79,7 +79,8 @@ class ProgramPollConcurrencySpec extends Specification {
         def executor = new ProgramExecutor(ProgramFixtures.declaration([
             StandIn.executor('reference').toString()
         ]),
-        ProgramFixtures.describe([Capability.POLL]), [], environment, ProgramFixtures.equipment(stderrParent))
+        ProgramFixtures.describe([Capability.POLL]), [], environment, ProgramFixtures.equipment(stderrParent),
+        PendingScope.unscoped(new PendingRuns()))
         def request = deferred()
         def key = executor.start(request).pendingKey()
 

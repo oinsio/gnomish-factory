@@ -4,7 +4,12 @@ Status: accepted (2026-10-29, introduced by `define-executor-contract`; its desi
 D13–D15 took these decisions, recorded here because a change's `design.md` archives with the
 change and governs nothing afterwards); amended 2026-11-01 (D2, D3 and D18 of the same change,
 as revised: the poll wire form of a program, and `cancel` as a declared capability without an
-operation)
+operation); amended 2026-11-13 (D11, D14 of `migrate-verify-to-executor-contract`: the pending
+key is persisted, stays pollable until its run ends, and a re-poll is idempotent); amended
+2026-11-16 (D4, D16 and D18 of `migrate-verify-to-executor-contract`: what makes an executor a
+built-in, the egress guard of the built-ins' HTTP, and a registry of entries bound at resolution;
+provenance: the escalation of task #121 of 2026-11-06 and the blocker of its task 3.6 of
+2026-11-10)
 
 ## Context
 
@@ -36,6 +41,20 @@ taxonomy, executors that declare their capabilities, and a process boundary for 
    are the single source of truth. A process boundary buys language independence, crash
    isolation and a contract that evolves by schema rather than by Java signature. Trackers are
    not executors and keep their in-process plugin interface.
+   *(Amended 2026-11-16, D4 of `migrate-verify-to-executor-contract`.)* A built-in executor is
+   **compiled into and named by core**: its name is one of the closed set `BuiltInExecutors`
+   holds in `:domain`, and core registers it, as it registers `command`. A provider that a
+   discovered jar contributes is never a built-in, whatever the jar ships with: the `github-actions`
+   and `scm-status` built-ins live in core's `adapters/scm` module, and removing the GitHub vendor
+   bundle (`adapters/github`, the tracker only) leaves both available. The plugin rule
+   "distribution is not mechanism" — a bundled provider is discovered like any third-party one
+   and gets no privileged shortcut — governs tracker plugins only; it does not apply to
+   executors, whose second kind is a program, not a Java plugin. Before this amendment the GitHub
+   check provider sat in the vendor bundle and was called a built-in, so one component carried
+   two incompatible meanings of the word. An executor SPI that a bundle could contribute through
+   `ServiceLoader` was rejected: it would make `Executor` a published Java surface that evolves by
+   signature, which this decision exists to avoid, and keep a Java and a wire contract in step by
+   hand. Provenance: the escalation of task #121, 2026-11-06.
 2. **Built-ins implement the mirror interface of the JSON contract.** One DTO set — request,
    result, describe — is the only Java image of the schema. A built-in implements `Executor`
    (`describe`, `start`, `poll`) over those DTOs; the external adapter implements the same
@@ -48,12 +67,45 @@ taxonomy, executors that declare their capabilities, and a process boundary for 
    (`ProgramChannel` owns the words and the variable names). The request schema does not change:
    the key travels in the environment, as the result paths do, so one request document serves
    every operation. A poll of a program that declares no `poll`, or with a key this executor did
-   not receive from its own `start`, is `failed/infrastructure` and spawns no process; pending
-   keys are not persisted, so a poll across factory instances has nothing to resume. For a
+   not receive from its own `start`, is `failed/infrastructure` and spawns no process. For a
    `verdict` or `decision` run that goes pending, the working-copy check of decision 6 is judged
    at the poll that ends the run, against the view taken before its `start`; a pending answer is
    not judged. Before this amendment `ProgramExecutor.poll` answered `failed/infrastructure` for
    every call, and the kit's pending-then-poll case had no wire form to pass through.
+   *(Amended 2026-11-13, D11 and D14 of `migrate-verify-to-executor-contract`.)* The 2026-11-01
+   sentence "pending keys are not persisted, so a poll across factory instances has nothing to
+   resume" no longer holds. A pending key is persisted: the verify round's pending record carries
+   it, in one commit with its register, pushed before the next poll, and a resuming instance adopts
+   the recorded key into its program executor and polls it with no second `start`. Within a factory
+   run the table of issued keys belongs to the run, shared by every binding of the program, so a key
+   is "received" from any binding's `start` or `poll`, or adopted from the record on resume. In
+   return the contract asks of every executor declaring `poll`: each key it issued for a run, from
+   `start` or from an earlier `poll`, stays pollable until the run ends, and a superseded key reaches
+   the same run; a poll of an ended run's key answers that run's terminal status and answer again,
+   unchanged, and never starts the run anew (the idempotent re-poll). The factory's own adapter
+   keeps the ended run's key too, so a re-poll reaches the program. The conformance kit pins the
+   obligation with its thirteenth case, `pending-repoll`: start, poll to a terminal status, poll
+   the same key once more, pass only on the same status and answer.
+   *(Amended 2026-11-16, D18 of `migrate-verify-to-executor-contract` as amended 2026-11-10.)*
+   One registry serves stage rounds and check rounds, and it holds **entries bound at
+   resolution**, never executors built before the round or the check exists. An entry is built
+   once per run, at run assembly, from what run assembly has: the executor's name, its
+   `describe` answer and its long-lived collaborators (a git runner, an HTTP client, the SCM
+   connection the operator supplied). The executor itself is bound when it is resolved, by the
+   one value that does not exist earlier: the open round's execution environment for a stage
+   round, the check and its working copy for a check round (`RegistryEntry` in `:bootstrap`).
+   Nothing bound is kept in the registry, so a bound executor lives for its round or its one
+   request, and resolving with no open round is impossible by construction. The wire carries
+   only what every implementer can honour: the attempt commit a check verifies is read from the
+   working copy, never sent as a request field. An external verdict program stands in a fresh
+   box checked out at the attempt commit and reads `HEAD`; an SCM built-in reads the same commit
+   from the engine's workspace handle, `AttemptCommitWorkspace` in `:domain`. A field that only
+   in-process implementers could honour would be a contract every reader comes to depend on
+   while external programs cannot meet it. The premise this replaces, a registry of ready
+   executors built at startup from the law and the built-ins, was refuted by the code: every
+   built-in takes its check's declaration and working copy in its constructor, and `command` and
+   a law's programs bind to an environment that exists only once a round is open. Provenance:
+   the blocker of task 3.6 of task #121, 2026-11-10.
 3. **Results travel in factory-named files; stdout and stderr are logs.** The request is the
    child's standard input, handed to the launch owner as a file the child inherits — never a
    pipe a factory thread writes into (ADR 0018, `lock-scope.md`). It carries no secret:
@@ -102,7 +154,8 @@ taxonomy, executors that declare their capabilities, and a process boundary for 
    conformance case. No factory path sends a cancel — an expired bound kills the process tree —
    and the mirror interface (decision 2) has no cancel, so a cancel case could be driven neither
    through `Executor` nor in process. The operation is added by the first change whose engine
-   path prefers a cooperative stop to a kill. The conformance kit keeps twelve cases; an
+   path prefers a cooperative stop to a kill. The conformance kit kept twelve cases (thirteen since
+   the re-poll case of decision 2's 2026-11-13 amendment); an
    undeclared role took the place of `cancel`: the kit requests a role the `describe` does not
    list, and the case passes when the candidate writes no `completed` result for it.
 6. **Policy is abstract, compiled by the executor, verified by the factory.** The request
@@ -186,9 +239,14 @@ flowchart LR
 
 - **An in-process plugin interface, like the tracker's** — couples every executor to the
   factory's release cadence and loads third-party code with the factory's credentials.
-- **Everything is a process** — loses in-process egress control of the HTTP client for the SCM
-  and HTTP built-ins and spawns a process for a file-existence check; the one idea borrowed from
-  it is decision 2.
+- **Everything is a process** — loses the `:httpegress` allowlist that every built-in's HTTP
+  passes in process, and spawns a process for a file-existence check; the one idea borrowed from
+  it is decision 2. *(Amended 2026-11-16, D16 of `migrate-verify-to-executor-contract`.)* The
+  first wording, "in-process egress control of the HTTP client for the SCM built-ins", claimed a
+  control the GitHub client did not have: it built its own JDK client, following redirects, with
+  no allowlist. Since that change the `http` built-in and the GitHub client of the SCM built-ins
+  both send through the guarded exchange of `:httpegress`, admitted against the operator's
+  grants.
 - **Role-specific Java interfaces for built-ins** — brings back five result types.
 - **The result as NDJSON on stdout** — every stdout protocol has stray prints as its first bug,
   and the factory's checks emit megabytes; every executor would have to capture its children.

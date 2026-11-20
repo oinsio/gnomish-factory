@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext
 import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -27,8 +28,8 @@ class RunCheckRunContextSpec extends Specification {
         def context = RunCheckRunContext.of(TASK, holderAt('implement'))
 
         expect:
-        context.value(CheckRunContext.TASK_ID).get() == 'PROJ-42'
-        context.value(CheckRunContext.TASK_BRANCH).get() == 'gnomish/PROJ-42'
+        context.value(HttpRunContext.TASK_ID).get() == 'PROJ-42'
+        context.value(HttpRunContext.TASK_BRANCH).get() == 'gnomish/PROJ-42'
     }
 
     def "reads the stage name live, as the position moves"() {
@@ -37,13 +38,13 @@ class RunCheckRunContextSpec extends Specification {
         def context = RunCheckRunContext.of(TASK, holder)
 
         expect:
-        context.value(CheckRunContext.STAGE_NAME).get() == 'implement'
+        context.value(HttpRunContext.STAGE_NAME).get() == 'implement'
 
         when:
         holder.updateState(TaskState.atStageStart('review'))
 
         then:
-        context.value(CheckRunContext.STAGE_NAME).get() == 'review'
+        context.value(HttpRunContext.STAGE_NAME).get() == 'review'
     }
 
     // NFR-S2: at the pipeline's end nothing is under verification, so the lookup is empty and a check
@@ -54,7 +55,7 @@ class RunCheckRunContextSpec extends Specification {
         holder.updateState(new TaskState(new Position.PipelineEnd(), 0, [], TaskState.atStageStart('x').totals(), ExecutorVersions.none()))
 
         expect:
-        RunCheckRunContext.of(TASK, holder).value(CheckRunContext.STAGE_NAME).isEmpty()
+        RunCheckRunContext.of(TASK, holder).value(HttpRunContext.STAGE_NAME).isEmpty()
     }
 
     // FR1 of make-checkpoint-gate-durable: at a gate the stage already passed and nothing is under
@@ -65,7 +66,7 @@ class RunCheckRunContextSpec extends Specification {
         holder.updateState(new TaskState(new Position.AwaitingApproval('release'), 0, [], TaskState.atStageStart('x').totals(), ExecutorVersions.none()))
 
         expect:
-        RunCheckRunContext.of(TASK, holder).value(CheckRunContext.STAGE_NAME).isEmpty()
+        RunCheckRunContext.of(TASK, holder).value(HttpRunContext.STAGE_NAME).isEmpty()
     }
 
     // The allowlist is closed: a name outside it is not a lookup this context can answer.

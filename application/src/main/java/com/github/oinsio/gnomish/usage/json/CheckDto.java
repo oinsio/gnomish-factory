@@ -8,12 +8,14 @@ import org.jspecify.annotations.Nullable;
  * checks} array — mirrors {@code state.json}'s {@code StateCheckDto} field-for-field (design D5),
  * as a distinct class in this package.
  *
- * <p>Implements FR14, NFR-C1 of add-git-workflow.
+ * <p>Implements FR14, NFR-C1 of add-git-workflow; FR7 of migrate-verify-to-executor-contract.
  *
  * @param ref the label of the check that ran
  * @param verdict the lowerCamel verdict discriminator ({@code pass}/{@code fail}/{@code
  *     cannotVerify})
- * @param findings the check's structured findings; empty for {@code pass}/{@code cannotVerify}
+ * @param findings the check's structured findings: a {@code fail}'s, or a {@code pass}'s results
+ *     below the threshold (possibly empty; design D5 as amended of
+ *     migrate-verify-to-executor-contract); empty for {@code cannotVerify}
  * @param durationMillis the wall time the check took, in milliseconds
  * @param reason the {@code cannotVerify} short cause, or {@code null} otherwise
  * @param details the {@code cannotVerify} free-text detail, or {@code null} otherwise

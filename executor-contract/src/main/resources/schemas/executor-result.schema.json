@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/oinsio/gnomish-factory/schemas/executor-contract/1/executor-result.schema.json",
   "title": "Executor result",
-  "description": "The outcome of one executor run, written to the factory-named GNOMISH_RESULT_FILE and read through the one capped result reader; stdout and stderr are logs, never this document. Readers ignore unknown properties (additive evolution, protocol version 1). Implements FR1, FR2, FR6 of define-executor-contract.",
+  "description": "The outcome of one executor run, written to the factory-named GNOMISH_RESULT_FILE and read through the one capped result reader; stdout and stderr are logs, never this document. Readers ignore unknown properties (additive evolution, protocol version 1). Implements FR1, FR2, FR6 of define-executor-contract; FR2, FR5, NFR-R2 of migrate-verify-to-executor-contract.",
   "type": "object",
   "required": ["status", "usage"],
   "properties": {
@@ -25,6 +25,20 @@
       "description": "Optional free text explaining the status; untrusted text.",
       "type": "string"
     },
+    "details": {
+      "description": "Optional free text carried apart from the reason, such as a log tail or an endpoint's answer; untrusted text. Allowed on any status; the engine reads it for a failed or pending result and ignores it on completed, whose details travel on its SARIF results (design D19 of migrate-verify-to-executor-contract).",
+      "type": "string"
+    },
+    "pollAfterMillis": {
+      "description": "The wait hint: with status pending only, the fewest milliseconds after this answer before the key is polled again. A lower bound beside the check's interval, never a faster poll, never past the check's timeout; relative, never an instant. Any other place or value reads as failed/infrastructure naming the field.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 86400000
+    },
+    "pendingState": {
+      "description": "The pending state: with status pending only. running — every awaited subject seen, one still running; unreported — an awaited subject never appeared on the polled commit; unobserved — the source could not be read this time, such as a rate limit. A timeout whose last pending answer was unreported or unobserved cannot verify. On another status it reads as failed/infrastructure naming the field. Unknown-token arm: read as absent.",
+      "enum": ["running", "unreported", "unobserved"]
+    },
     "answer": { "$ref": "executor-answer.schema.json" },
     "usage": { "$ref": "#/$defs/usage" },
     "denials": {
@@ -35,7 +49,11 @@
   },
   "allOf": [
     { "if": { "properties": { "status": { "const": "failed" } } }, "then": { "required": ["failureClass"] } },
-    { "if": { "properties": { "status": { "const": "pending" } } }, "then": { "required": ["pendingKey"] } }
+    { "if": { "properties": { "status": { "const": "pending" } } }, "then": { "required": ["pendingKey"] } },
+    {
+      "if": { "not": { "properties": { "status": { "const": "pending" } } } },
+      "then": { "not": { "anyOf": [ { "required": ["pollAfterMillis"] }, { "required": ["pendingState"] } ] } }
+    }
   ],
   "$defs": {
     "usage": {
@@ -121,7 +139,17 @@
     {
       "status": "pending",
       "pendingKey": "build-8812",
-      "usage": { "provenance": "ABSENT" }
+      "reason": "waiting on 'build' (running)",
+      "usage": { "provenance": "ABSENT" },
+      "pollAfterMillis": 30000,
+      "pendingState": "running"
+    },
+    {
+      "status": "failed",
+      "failureClass": "quality",
+      "reason": "command timed out before it exited and its process tree was killed",
+      "usage": { "provenance": "ABSENT" },
+      "details": "> Task :test\n3 tests failed"
     }
   ]
 }

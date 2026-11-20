@@ -30,50 +30,6 @@ Verify checks SHALL run strictly in manifest order; the first non-Pass verdict s
 - **WHEN** the second of four checks returns Fail
 - **THEN** checks three and four are never invoked and the attempt is a quality failure
 
-### Requirement: External check poll loop
-The engine SHALL poll an `external` check via single-poll port calls
-returning `PollStatus` (Pass with an optional platform run URL | Fail
-with findings | Running | CannotVerify with reason and details) at the
-manifest interval until a verdict or the manifest timeout, using an
-injected sleeper/clock.
-**Implements**: FR3, NFR-R3 of add-stage-engine; FR9 of add-external-check-github-actions; FR21, NFR-O2 of add-sandbox-core
-**Notes**: A passing poll's run URL is kept so reporting publishes it through the same channel a failing check's findings travel; submitting external checks is deferred (add-stage-engine NG8).
-
-#### Scenario: The engine never submits an external check
-- **WHEN** the verify chain reaches an `external` check
-- **THEN** the engine issues no submission call — the check is assumed to be triggered by the task-branch push — and only polls
-
-#### Scenario: Delivery is confirmed before the first poll
-- **WHEN** the verify chain reaches an `external` check and the attempt commit is not yet on the remote
-- **THEN** the engine re-attempts the push and issues the first poll only after the attempt commit is confirmed on the remote
-
-#### Scenario: Verdict within timeout
-- **WHEN** the poll port returns Running twice and then Pass
-- **THEN** the engine sleeps the manifest interval between polls and the
-  check passes
-
-#### Scenario: A passing poll's run link is recorded
-- **WHEN** the poll returns Pass carrying a platform run URL
-- **THEN** the recorded check result carries that URL for the task report
-
-#### Scenario: Undelivered attempt commit never burns an attempt
-- **WHEN** the attempt commit cannot be pushed to the remote and the
-  re-attempted push also fails
-- **THEN** the external check resolves as CannotVerify naming the
-  undelivered commit, no poll is issued, and no stage attempt is burned
-
-#### Scenario: Timeout burns the attempt by default
-- **WHEN** the poll port still returns Running when the timeout elapses
-  (per the injected clock) and the check declares no timeout class
-- **THEN** the check fails as a quality failure with a timeout finding
-
-#### Scenario: Infrastructure-classed timeout burns no attempt
-- **WHEN** the poll port still returns Running when the timeout elapses
-  and the check declares its timeout class `infrastructure`
-- **THEN** the check resolves as CannotVerify naming the elapsed timeout
-- **AND** no stage attempt is burned and the task escalates with a
-  "cannot verify" report
-
 ### Requirement: Judge majority voting
 The engine SHALL cast up to the manifest `votes` count of sequential single-vote calls, stopping as soon as the majority is mathematically decided, and resolve the check by that majority; findings of failing cast votes are aggregated; any CannotVerify among cast votes SHALL fail the whole check as infrastructure.
 **Implements**: FR3 of add-stage-engine
@@ -251,8 +207,8 @@ The engine SHALL call `AttemptPersistence.persist(taskId, state, trace)` synchro
 - **THEN** the single persist call for that round receives a state already positioned past the passed stage, and a resume from that persisted state starts at the next stage
 
 ### Requirement: Engine events
-The engine SHALL emit sealed events — RunStarted, AttemptStarted, ExecutionFinished, CheckStarted, CheckFinished, AttemptFinished (new state + trace), TaskFinished — each self-contained with the (taskId, stage, attempt) key shared with logs and telemetry, delivered synchronously; every run, including pre-flight escalations, emits at least RunStarted and TaskFinished; listener exceptions SHALL be logged and swallowed.
-**Implements**: FR12, NFR-O2, UX2 of add-stage-engine
+The engine SHALL emit sealed events — RunStarted, AttemptStarted, ExecutionFinished, CheckStarted, CheckPolled, CheckTimedOut, CheckFinished, AttemptFinished (new state + trace), TaskFinished — each self-contained with the (taskId, stage, attempt) key shared with logs and telemetry, delivered synchronously; every run, including pre-flight escalations, emits at least RunStarted and TaskFinished; listener exceptions SHALL be logged and swallowed.
+**Implements**: FR12, NFR-O2, UX2 of add-stage-engine; NFR-O1, UX1 of migrate-verify-to-executor-contract
 
 #### Scenario: Status reconstructed from events alone
 - **WHEN** a recording listener observes a run with a retry
@@ -460,3 +416,40 @@ to no change; lifecycle rewrites carry the snapshot unchanged.
 - **WHEN** a task on a bare origin passes a stage, fails a round, takes a decision reset and is
   resumed by a second instance
 - **THEN** folding every round `gnomish usage` walks equals the `totals` recorded at the tip
+
+### Requirement: Verify chain runs through the executor contract
+The engine SHALL run every `builtin`, `command` and `external` check through the executor
+contract in role `verdict`: the same registry, result shape and outcome classifier as stage
+rounds. `EnginePorts` SHALL expose no `BuiltinCheckRunner`, `CommandCheckRunner` or
+`ExternalCheckClient`; `JudgeVoter` remains until the agent dialect migrates.
+**Implements**: FR1, FR2, G1 of migrate-verify-to-executor-contract
+
+#### Scenario: Ordered fail-fast is preserved
+- **WHEN** a stage declares three checks and the second fails
+- **THEN** the third is not started and the round records the first two results in order
+
+#### Scenario: Check infrastructure failure burns no attempt
+- **WHEN** a verdict executor returns `failed/infrastructure`
+- **THEN** the check is cannot-verify, the attempt counter is unchanged and the task escalates
+  after the engine's retries
+
+### Requirement: Verdict derivation is one component
+The pass/fail of a check SHALL be derived in one engine component from the SARIF answer and the
+check's threshold; no adapter and no built-in SHALL construct a verdict.
+**Implements**: FR7, M2 of migrate-verify-to-executor-contract
+
+#### Scenario: Threshold table verified
+- **WHEN** each combination of result level and threshold is produced by a fake executor
+- **THEN** the derived verdict matches the table (data-driven spec, one row per case)
+
+### Requirement: Pending check events
+The engine SHALL emit one CheckPolled for each poll of a pending check, none for the check's start, and SHALL emit CheckTimedOut once when a pending check's wait reaches its timeout, as the wait's last event, carrying the failure the wait resolved to.
+**Implements**: NFR-O1, UX1 of migrate-verify-to-executor-contract
+
+#### Scenario: Each poll of a pending check is one event
+- **WHEN** a started check answers pending on its start and on its first poll, then passes on its second poll
+- **THEN** the run emits two CheckPolled events, one per poll, none for the start, and no CheckTimedOut
+
+#### Scenario: A pending check's timeout is its last event
+- **WHEN** a pending check's wait reaches its timeout
+- **THEN** CheckTimedOut is emitted once, after the last CheckPolled, and carries the failure the wait resolved to

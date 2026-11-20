@@ -16,7 +16,7 @@ import java.time.Instant;
  * not caught and surfaces at once, so a fault never loops for ten minutes.
  *
  * <p>Time is injected as the {@link TimeEquipment} (the same carrier the external-poll loop uses,
- * {@code ExternalPolling}): the virtual equipment, whose sleeper advances its clock, makes the bound
+ * {@code PendingPoll}): the virtual equipment, whose sleeper advances its clock, makes the bound
  * and the backoff deterministic and instant under test (no real sleeping), while the composition
  * root hands the one real equipment it builds (design D20 of
  * supervise-daemon-loops-and-embed-dashboard) — no factory here wires real time.

@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -18,6 +17,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -35,16 +35,15 @@ abstract class BrokenListenerSpecBase extends Specification {
 
     // A fresh port set: the throwing run and the silent control run each get their own
     // identical fakes so nothing but the listener's throwOnEvent flag differs.
-    static EnginePorts portsFor(ScriptedExecutor executor, ScriptedBuiltinCheckRunner builtinRunner,
+    static EnginePorts portsFor(ScriptedExecutor executor, ScriptedCheckRounds builtinRunner,
             InMemoryAttemptPersistence persistence, RecordingEventListener listener) {
         def clock = new VirtualClock()
-        new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), listener, persistence,
                 VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 
-    static VerifyCheck.Builtin builtin(String name) {
-        new VerifyCheck.Builtin(name, [:])
+    static VerifyCheck.Executor builtin(String name) {
+        VerifyChecks.builtin(name, [:])
     }
 
     static StageDefinition stage(String name, List<VerifyCheck> verify) {
@@ -70,9 +69,9 @@ abstract class BrokenListenerSpecBase extends Specification {
     // A non-trivial pipeline: one AUTO stage, one check, executor Fails-then-Passes so many
     // events fire across two rounds and the run reaches Completed. Both the throwing run and
     // the control run script the same sequence into their own fresh fakes.
-    protected static void scriptFailThenPass(ScriptedExecutor executor, ScriptedBuiltinCheckRunner builtinRunner) {
+    protected static void scriptFailThenPass(ScriptedExecutor executor, ScriptedCheckRounds builtinRunner) {
         builtinRunner.scripted << fail('nope')
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed(0)
         executor.scripted << completed(1)
     }

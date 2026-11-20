@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentBinary
 import com.github.oinsio.gnomish.sandbox.environment.SandboxBaseImage
+import com.github.oinsio.gnomish.testfixtures.standin.StandIn
 
 /**
  * Builds (once per JVM and scenario) the container-mode E2E sandbox image: the
@@ -88,6 +89,45 @@ class FakeAgentSandboxImage {
         build('gnomish-sandbox-e2e-credential-capture:latest', 'plain-round', """
             RUN echo '${encoded}' | base64 -d > ${CREDENTIAL_CAPTURING_BINARY} \\
              && chmod a+rx ${CREDENTIAL_CAPTURING_BINARY}""")
+    }
+
+    /** The in-box verdict program of {@link #ensureBuiltWithVerdictProgram}, run as {@code sh <path> <operation>}. */
+    static final String VERDICT_PROGRAM = '/opt/gnomish-fake/judge-bot.sh'
+
+    /**
+     * Builds (once per JVM) the {@code plain-round} image with a pollable verdict program at {@link
+     * #VERDICT_PROGRAM} (task 5.3 of migrate-verify-to-executor-contract): it describes as the
+     * stand-in reference executor does and keeps its run in its keys, which name the {@code HEAD} each
+     * request's box stood on — the test resource {@code fake-verdict-program/judge-bot.sh}, embedded
+     * as the argv-checking one is. A container spec declares it as a law's program.
+     */
+    static synchronized String ensureBuiltWithVerdictProgram() {
+        String encoded = encodedResource('/fake-verdict-program/judge-bot.sh')
+        String describe = StandIn.data('executor-describe#reference').bytes.encodeBase64().toString()
+        build('gnomish-sandbox-e2e-verdict-program:latest', 'plain-round', """
+            RUN echo '${encoded}' | base64 -d > ${VERDICT_PROGRAM} \\
+             && echo '${describe}' | base64 -d > /opt/gnomish-fake/judge-describe.json \\
+             && chmod a+r ${VERDICT_PROGRAM} /opt/gnomish-fake/judge-describe.json""")
+    }
+
+    /** The in-box SonarQube-shaped verdict program of {@link #ensureBuiltWithSonarGate}, run as {@code sh <path> <operation>}. */
+    static final String SONAR_GATE_PROGRAM = '/opt/gnomish-sonar/sonar-gate.sh'
+
+    /**
+     * Builds (once per JVM and server address) the {@code plain-round} image with the SonarQube-shaped
+     * reference verdict program at {@link #SONAR_GATE_PROGRAM} (task 7.1 of
+     * migrate-verify-to-executor-contract, M3), installed for the server at {@code host}: the test
+     * resource {@code fake-verdict-program/sonar-gate.sh}, embedded as the judge-bot one is, and the
+     * address in {@code /opt/gnomish-sonar/host} — an installation's configuration, which its describe
+     * declares as its egress. A packaged-jar spec declares it as a law's program.
+     */
+    static synchronized String ensureBuiltWithSonarGate(String host) {
+        String encoded = encodedResource('/fake-verdict-program/sonar-gate.sh')
+        String address = "${host}\n".bytes.encodeBase64().toString()
+        build("gnomish-sandbox-e2e-sonar-gate-${host.replace('.', '-')}:latest", 'plain-round', """
+            RUN mkdir -p /opt/gnomish-sonar && echo '${encoded}' | base64 -d > ${SONAR_GATE_PROGRAM} \\
+             && echo '${address}' | base64 -d > /opt/gnomish-sonar/host \\
+             && chmod -R a+rX /opt/gnomish-sonar""")
     }
 
     /** A test resource's bytes, base64-encoded for an image {@code RUN} step with no build-context file. */

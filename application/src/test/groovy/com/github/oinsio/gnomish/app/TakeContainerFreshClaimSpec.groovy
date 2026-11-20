@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -30,7 +31,6 @@ import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 
 /**
@@ -50,7 +50,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         }
         new ContainerTakeSupport(new SandboxModeSelector(
                         new BindingProperties(null, [:]),
-                        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                        new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                         AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
                         { -> false } as ContainerRuntimeProbe),
                 factory)
@@ -65,13 +65,13 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         def branches = Mock(TaskBranchGit)
         def git = new TaskGit(
                 Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
         def repository = Mock(TaskLifecycleStore)
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
         tracker.fetchTask(_) >> heldByUs()
 
@@ -111,12 +111,12 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         def tracker = Mock(Tracker)
         def git = new TaskGit(
                 Stub(TaskStoreGit), freshBranches(), Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> Mock(TaskLifecycleStore)
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
         def executor = new ScriptedExecutor([completedRound()])
         tracker.fetchTask(_) >> heldByUs()
@@ -147,13 +147,13 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
                     }
                     classifyShape(_, _) >> new BranchShape.Delivered()
                 }, Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
         def repository = Mock(TaskLifecycleStore)
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
         tracker.fetchTask(_) >> heldByUs('PROJ-9')
 
@@ -180,7 +180,7 @@ class TakeContainerFreshClaimSpec extends Specification implements RunChainFakes
         def tracker = Mock(Tracker)
         def git = new TaskGit(
                 Stub(TaskStoreGit), freshBranches(), Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
         def repository = Mock(TaskLifecycleStore)
         def support = Stub(SandboxRunSupport) {
             taskRepository() >> repository

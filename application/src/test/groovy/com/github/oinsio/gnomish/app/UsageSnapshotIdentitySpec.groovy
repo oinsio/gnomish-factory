@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
+import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.git.HostRoundPersistence
 import com.github.oinsio.gnomish.adapter.git.SeedTransferFixture
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
@@ -179,7 +181,7 @@ class UsageSnapshotIdentitySpec extends Specification implements BareGitRepoFixt
     private void persist(RegisteredClone at, TaskState state) {
         Path worktree = TaskWorktreePath.resolve(at, TASK)
         AttemptRecord last = state.attempts().last()
-        git.store().attemptPersistence(worktree, TASK)
+        git.store().attemptPersistence(worktree, TASK, HostRoundPersistence.openedAtHead(new GitProcessRunner(), worktree))
                 .persist(TASK, state, new ToolTrace(new AttemptKey(TASK, last.stage(), last.round()), []))
         git.branches().pushClosingBestEffort(worktree, TASK)
     }

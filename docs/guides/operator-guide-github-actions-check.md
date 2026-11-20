@@ -1,18 +1,39 @@
-# Operator Guide: GitHub Actions External Check
+# Operator Guide: GitHub Actions Check
 
-<!-- implements UX1, UX2, NG6, FR9 of add-external-check-github-actions -->
+<!-- implements UX1, UX2, NG6, FR9 of add-external-check-github-actions; FR6, FR8, FR13, NFR-S2 of migrate-verify-to-executor-contract -->
 
-This is the reference for the `external` check's GitHub Actions adapter
-(`add-external-check-github-actions`): the platform-authored verdict source
-for a stage's Quality Control (`.claude/rules/stage-description.md` §6). It
-assumes the single-task workflow in
-[`operator-guide.md`](operator-guide.md); this document covers what the
-adapter needs from the operator and the CI-hygiene trade-offs it does not
-cover for you.
+This is the reference for the `github-actions` verdict executor: the
+platform-authored verdict source for a stage's Quality Control
+(`.claude/rules/stage-description.md` §6), which reads the GitHub Actions
+workflow runs of the commit under verification. It is a built-in executor,
+compiled into the factory and answering the executor contract like any verdict
+program ([ADR 0020](../adr/0020-executor-contract.md)); it does not come from
+the github vendor bundle, and removing that bundle does not remove it. This
+guide assumes the single-task workflow in [`operator-guide.md`](operator-guide.md)
+and covers what the check needs from the operator and the CI-hygiene trade-offs
+it does not cover for you.
+
+A stage declares the check in its `verify` list. An `external` check with no
+`provider` names `github-actions`; its `checkId` is the workflow file:
+
+```yaml
+verify:
+  - type: external
+    checkId: .github/workflows/build.yml   # the workflow file, repository-relative
+    interval: 30s
+    timeout: 20m
+```
+
+The executor answers `pending` while the workflow run of the attempt commit is
+in progress, its pending key being that commit; the engine records the key on
+the task branch and polls it every `interval` until the run ends or the
+`timeout` passes, and any factory instance resumes the poll from the recorded
+key. A finished run is the verdict: one `error` finding per failed job, with the
+run link and the job log's tail, none for a green run.
 
 ## Token scope
 
-The adapter reads its credential from `GNOMISH_GITHUB_ACTIONS_TOKEN`, a
+The check reads its credential from `GNOMISH_GITHUB_ACTIONS_TOKEN`, a
 **separate** environment variable from `GNOMISH_GITHUB_TOKEN` (the tracker
 token). Two tokens, not one, is a deliberate blast-radius boundary: the
 tracker token can write issues and labels, while the check token needs to do
@@ -38,59 +59,97 @@ Set the token on the machine running the factory exactly like
 `GNOMISH_GITHUB_TOKEN` — a file named `GNOMISH_GITHUB_ACTIONS_TOKEN` in the
 project's or the host's secrets folder, or an environment variable (see
 [`operator-guide.md` → *Setting up a project*](operator-guide.md#setting-up-a-project))
-— never in `.gnomish/`
-(anything under `.gnomish/` is gnome-writable and lands on the task branch;
-see `GithubCheckToken`'s javadoc for the resolution mechanics). The token is
-resolved once at wiring time and never re-read or logged (FR8).
+— never in `.gnomish/` (anything under `.gnomish/` is gnome-writable and lands
+on the task branch). The factory resolves it through its secrets port, under
+`GNOMISH_GITHUB_ACTIONS_TOKEN` or under the name the connection's `credential`
+key gives (below), never through the tracker's subsection. It is resolved when
+the task's run is assembled, never logged, and it enters no box: the check runs
+in the factory process. Listing the token's name as a child-environment
+passthrough variable is refused at startup.
 
-## Base URL config: what exists today
+## Base URL config: the `factory.check.github-actions` connection
 
-UX2 promises that enabling the adapter needs no factory configuration
-beyond the token and, for GitHub Enterprise or a Gitea remote, a base URL —
-mirroring the tracker adapter's `tracker.github.api-url` key. **That wiring
-does not exist yet.** The adapter's classes
-(`GithubCheckExternalClient`, `GithubCheckToken`, the shared
-`GithubHttpClient`) are built and unit/contract-tested, but there is no
-factory-assembly class that reads a pipeline config, resolves the token, and
-constructs a `GithubHttpClient(apiUrl, token)` for the check adapter — the
-equivalent of `GithubTrackerAdapterFactory` for the tracker side. Task 5.2 of
-`add-external-check-github-actions` explicitly left this unbuilt.
+<!-- implements FR13, FR17, NFR-S2 of migrate-verify-to-executor-contract -->
 
-Concretely, as of this writing:
+The check's base URL, repository and token name are the operator's
+connection, never the target repository's: the subsection `factory.check.github-actions` in the project file
+(`~/.gnomish/projects/<name>/project.yaml`), never `.gnomish/` in the target
+repository.
 
-- There is **no `check.github.api-url` (or similar) YAML key** — nothing
-  under `.gnomish/config.yaml` configures this adapter. Do not add one; it
-  would be ignored.
-- There is **no CLI entry point** that constructs and injects a
-  `GithubCheckExternalClient` into the stage engine's `ExternalCheckClient`
-  port. An operator cannot make an `external` check backed by this adapter
-  run end-to-end today, regardless of how the token or base URL are set.
-- `GithubHttpClient` already accepts an `apiUrl` constructor parameter
-  (`GithubHttpClient(String apiUrl, String token)`), the same shape the
-  tracker adapter uses for `tracker.github.api-url` — so once wiring lands,
-  a `check.github.api-url` key following that exact precedent is the
-  expected shape. Until then, treat any such key as unsupported.
+```yaml
+factory:
+  check:
+    github-actions:
+      api-url: https://api.github.com   # GitHub Enterprise: https://ghe.example.com/api/v3
+      repo: acme/widgets                # owner/name the workflows run in
+      # credential: GHE_ACTIONS_TOKEN   # optional: the token's name, when not the default
+```
 
-What **is** real and usable today is the pipeline-config declaration syntax
-for an `external` check itself (`load-pipeline-config` FR2/FR11, task 6.1 of
-this change) — see the timeout-class section below for the full field set.
-That declaration loads and validates correctly; only the adapter that would
-service it is not yet wired into a runnable command.
+The subsection may instead reference a shared connection profile with
+`connection: <name>`, the same profile a github tracker may reference
+(`factory.connections.<name>`); a key declared both inline and in the profile
+is a configuration error.
+
+**Egress.** Every call the built-in makes passes the factory's HTTP egress
+guard, and a redirect is judged like a first request. A connection's
+admitted hosts are the union of:
+
+- the host of its `api-url`;
+- the built-in's own declared hosts: `api.github.com`,
+  `results-receiver.actions.githubusercontent.com` and
+  `*.blob.core.windows.net` — the hosts GitHub serves job logs from, which the
+  API redirects a log download to;
+- the connection's own `egress` list, in the factory's egress entry grammar;
+- `factory.egress.in-process`.
+
+A GitHub Enterprise Server stores job logs on a host of its own; name it in
+the connection's `egress` list, inline or in the profile:
+
+```yaml
+factory:
+  connections:
+    ghe:
+      api-url: https://ghe.example.com/api/v3
+      credential: GHE_ACTIONS_TOKEN
+      egress:
+        - store.ghe.example             # the enterprise's job-log store
+  check:
+    github-actions:
+      connection: ghe
+      repo: acme/widgets
+```
+
+A redirect to a host no admitted set names is refused before any connection
+to it, and the check is `failed/infrastructure` with a reason naming the
+refused host and the connection's key (`factory.check.github-actions…`) — the
+place to grant it. A refusal is a configuration fault: it is not retried and
+burns no stage attempt. A job log larger than the GitHub client's 16 MiB
+response bound is read as its last 16 MiB, so the finding still carries the
+log's tail and the check still reaches its verdict.
+
+The connection is read only from `factory.check.github-actions`: the former
+`factory.check.github` key connects nothing, and startup refuses it as a
+subsection no built-in reads. A check naming `github-actions` with no
+connection configured is refused when its task's run is assembled — the task
+is parked (`take`, `serve`) or the run exits as for an invalid law (`run`) —
+with a located error naming the check and `github-actions`.
 
 ## CI hygiene for the residual threat (NG6)
 
-The adapter's pin-set contribution is narrow by design (design D3): it pins
-only the one workflow file named by the check's `checkId`. Any *other* file
-under `.github/workflows/` is outside that pin. If a gnome edits or adds
-another workflow, that workflow still runs on push with the repository's CI
-token, unpinned and unwitnessed by any check — the adapter never reads it
+The executor's describe declares that its `checkId` is a pinned path, so the
+pin-check guard keeps the one workflow file the check names byte-identical to
+the base branch, with no pin path in the manifest: a gnome that edits that
+file fails the check before any call to GitHub. The pin is narrow by design:
+any *other* file under `.github/workflows/` is outside it. If a gnome edits or
+adds another workflow, that workflow still runs on push with the repository's
+CI token, unpinned and unwitnessed by any check — the executor never reads it
 and cannot detect a substitution there.
 
 ```mermaid
 flowchart TB
     subgraph Repo["repository .github/workflows/"]
         Pinned["checkId workflow<br/>(pinned, verdict-trusted)"]
-        Other["other workflow files<br/>(NOT pinned by this adapter)"]
+        Other["other workflow files<br/>(NOT pinned by this check)"]
     end
 
     Pinned -->|"guarded by the pin-check guard"| Verdict["stage verdict"]
@@ -99,7 +158,7 @@ flowchart TB
 
 This is deliberate: pinning the whole `workflows/` directory would
 permanently fail any task whose job is legitimately editing CI. The
-trade-off is documented for operators rather than closed by the adapter
+trade-off is documented for operators rather than closed by the check
 (proposal NG6, design D3's residual-threat paragraph). Mitigate it at the
 repository level:
 
@@ -129,25 +188,20 @@ until it lands.
 
 ## Timeout class: `quality` vs `infrastructure`
 
-An `external` check declaration may set `timeout-class`, alongside the
-existing `checkId`, `interval`, and `timeout` fields:
+An `external` check declaration may set `timeout-class`, alongside its
+`checkId`, `interval`, and `timeout` fields:
 
 ```yaml
 verify:
   - type: external
-    checkId: ci/build
+    checkId: .github/workflows/build.yml
     interval: 30s
     timeout: 5m
     timeout-class: infrastructure   # optional; default is `quality`
 ```
 
-(`checkId`/`interval`/`timeout` are real, loadable syntax per
-`load-pipeline-config` FR11; `timeout-class` is the field this change adds,
-task 6.1 — this is the same declaration syntax discussed above, independent
-of whether the GitHub Actions adapter itself is wired to service it yet.)
-
-At the poll deadline, the stage engine (`ExternalPolling`, task 6.2)
-resolves a still-`Running` check per the declared class:
+When the `timeout` passes while the executor still answers `pending`, the
+stage engine's poll ends the check per the declared class:
 
 - **`quality` (default, unchanged behavior).** A timeout becomes a quality
   `Fail` carrying a timeout finding — it burns a stage attempt, exactly like
@@ -156,7 +210,7 @@ resolves a still-`Running` check per the declared class:
   workflow itself is stuck (an infinite loop or a hang introduced by the
   gnome's change), which *is* a quality signal worth burning an attempt
   over.
-- **`infrastructure`.** A timeout becomes `CannotVerify`, naming the elapsed
+- **`infrastructure`.** A timeout becomes a cannot-verify, naming the elapsed
   timeout — no stage attempt is burned, and the task escalates to a human
   immediately instead of retrying.
 
@@ -174,17 +228,18 @@ there is worth treating as the gnome's problem.
 
 ## When the check can't be verified
 
-Separate from a timeout, a poll can fail to reach a verdict at all. Both
-shapes below become `CannotVerify` — the task escalates to a human and **no
-stage attempt is burned** — but they differ in how the adapter gets there,
-and the escalation reason tells them apart.
+Separate from a timeout, a poll can fail to reach a verdict at all. The
+executor then answers `failed` with the failure class `infrastructure`, which
+the engine reads as a cannot-verify: the task escalates to a human and **no
+stage attempt is burned**. The two shapes below differ in how the executor gets
+there, and the escalation reason tells them apart.
 
 <!-- implements NFR-R1, NFR-R3 of add-external-check-github-actions -->
 
 - **Infrastructure failure (transient).** A network error, a `5xx`, a `429`,
   or a `403` carrying GitHub's rate-limit signal (primary or secondary
-  limit). The shared HTTP client retries these with backoff first; only after
-  the retry budget is exhausted does the poll report `CannotVerify` with a
+  limit). The GitHub client retries these with backoff first; only after
+  the retry budget is exhausted does the poll report a cannot-verify with a
   generic "runs query failed" reason (NFR-R1). Waiting and re-running the task
   later is the right response — the platform was momentarily unavailable.
 
@@ -192,14 +247,14 @@ and the escalation reason tells them apart.
   expired), a non-rate-limited `403` (the token lacks **Actions: Read** on
   this repo — see [Token scope](#token-scope)), or a `404` (no workflow by the
   `checkId` file name exists). These are **not** retried and **not** polled to
-  the timeout: the adapter fails fast, reporting `CannotVerify` immediately
+  the timeout: the executor fails fast, reporting a cannot-verify immediately
   with a reason that names the check and the likely cause (NFR-R3). The fix is
   a config change — correct the token or the `checkId` — not a re-run.
 
-**The `404` caveat.** The adapter resolves `checkId` by workflow **file
+**The `404` caveat.** The executor resolves `checkId` by workflow **file
 name**, and treats a `404` as "that workflow does not exist." A workflow that
 simply hasn't run for this commit yet returns an empty list (`200`), which
-reads as still-`Running` — so a `404` genuinely means the file name is wrong
+reads as still `pending` — so a `404` genuinely means the file name is wrong
 *or* the workflow isn't registered on the platform. GitHub registers a
 workflow by filename only once it exists on the repository's **default
 branch**. If you add a brand-new CI workflow inside a task branch and never

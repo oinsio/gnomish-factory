@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import java.nio.file.Path;
+import java.util.Optional;
 
 /**
  * The worktree-level git capabilities a use case needs: materialize a task's worktree, reconcile it
@@ -16,7 +17,8 @@ import java.nio.file.Path;
  * backend calls it.
  *
  * <p>Implements FR9, FR10, FR15, NFR-R3 of add-git-workflow; FR12b of split-into-modules; FR9,
- * NFR-R2 of add-project-registry; FR8 of fix-terminal-receipt-convergence.
+ * NFR-R2 of add-project-registry; FR8 of fix-terminal-receipt-convergence; FR19 of
+ * migrate-verify-to-executor-contract.
  */
 public interface TaskWorktreeGit {
 
@@ -57,6 +59,17 @@ public interface TaskWorktreeGit {
      * @return the salvage handle; never null
      */
     WorktreeSalvager salvage(Path worktreeRoot);
+
+    /**
+     * The interrupted verification the task's register names, read through the one recogniser of
+     * both media (design D22 of migrate-verify-to-executor-contract): a registered snapshot, or a
+     * registered pending commit above one. The register is the clone's, shared by its worktrees.
+     *
+     * @param worktreeRoot the task's worktree; never null
+     * @param taskId the tracker's original taskId; never blank
+     * @return the interrupted verification, or empty when the register names none
+     */
+    Optional<PendingVerification> interruptedVerification(Path worktreeRoot, String taskId);
 
     /**
      * Disposes of a task's worktree as {@code outcome} requires.

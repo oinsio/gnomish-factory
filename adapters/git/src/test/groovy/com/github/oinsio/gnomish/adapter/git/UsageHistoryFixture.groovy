@@ -37,8 +37,8 @@ trait UsageHistoryFixture implements SeededCloneFixture {
                 .taskRepository(registeredClone)
     }
 
-    GitAttemptPersistence persistenceFor(String taskId) {
-        new GitAttemptPersistence(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE)
+    HostRoundPersistence persistenceFor(String taskId) {
+        HostRoundPersistence.over(runner, worktreeFor(taskId), taskId, ClaimEpochSource.NONE)
     }
 
     void persistRound(String taskId, TaskState state, String stage, int round) {

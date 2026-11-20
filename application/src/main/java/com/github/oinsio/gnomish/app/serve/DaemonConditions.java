@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app.serve;
 
+import com.github.oinsio.gnomish.app.OperatorPreconditionRefusals;
 import com.github.oinsio.gnomish.app.take.DaemonConditionKind;
 import com.github.oinsio.gnomish.app.take.TakeResult;
 import java.util.ArrayList;
@@ -75,6 +76,17 @@ public final class DaemonConditions {
             throw new IllegalArgumentException("no condition on " + refusal.kind());
         }
         condition.openOnFailure(refusal.reason().forLog());
+    }
+
+    /**
+     * Opens the condition a typed refusal names, as {@link #report} does — the feed's entry for a
+     * refusal its tracker read met (design D16 of migrate-verify-to-executor-contract, FR18).
+     *
+     * @param failure a failure the feed's outage retry rethrew; never null
+     * @throws RuntimeException {@code failure} itself, when no operator precondition classifies it
+     */
+    void reportRefusal(RuntimeException failure) {
+        report(OperatorPreconditionRefusals.unmet(failure).orElseThrow(() -> failure));
     }
 
     /**

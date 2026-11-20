@@ -1,0 +1,32 @@
+# Executor stand-ins that answer the describe operation alone (design D18 of define-executor-contract):
+# a describe answer, a failing or silent describe, an oversized one; the describe preflight's subjects.
+# Grammar: the header of ../stand-in.sh. One section per preset; StandIn makes its link.
+
+[reference-recorded]
+# The reference executor's describe, every invocation recorded in the per-run log with the result
+# path it was handed: a spec counts the describes a run spawned and finds where the answer went
+# (DescribePreflightSpec, RunDescribeSpec).
+* record GNOMISH_RESULT_FILE
+describe result data/executor-describe#reference
+describe exit 0
+
+[describe-as]
+# An executor whose describe answers the section of data/executor-describe its per-run link is named
+# after: one preset for every describe a spec needs (version-2, protocol-2, verdict-only, transform-only,
+# effect-only, effect-and-verdict, no-role, malformed, control-chars, strict-settings, strict-verdict,
+# remote-schema, grants, bad-egress), the name its link carries.
+describe result data/executor-describe#@name
+describe exit 0
+
+[describe-failing]
+# An executor whose describe exits 3 with a line on stderr and writes no result file.
+describe refuse 3 data/stderr-executor#describe-failed
+
+[describe-silent]
+# An executor whose describe exits 0 and writes no result file.
+describe exit 0
+
+[describe-oversized]
+# An executor whose describe writes more than the factory's describe cap into the result file.
+describe run steps/oversized-result.sh
+describe exit 0

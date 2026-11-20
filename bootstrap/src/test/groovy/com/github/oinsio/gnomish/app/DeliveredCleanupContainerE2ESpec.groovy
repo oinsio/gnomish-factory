@@ -88,7 +88,7 @@ class DeliveredCleanupContainerE2ESpec extends Specification implements AppAssem
     private int take(DeliveredCleanupWorld world) {
         def agent = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def sandbox = new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'),
-                null, null, null, [], [], false, null, null, null, null)
+                null, null, null, [], false, null, null, null, null)
         def registry = AdapterBindingRegistry.ratified([
             new ContainerBindingProvider()
         ], BindingTrustTable.firstParty())

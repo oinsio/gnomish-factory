@@ -95,9 +95,9 @@ final class DoctorSpecSupport {
         def registry = (options.registry ?: [(TRACKER_TYPE): factory]) as Map<String, TrackerAdapterFactory>
         def wiring = new TrackerWiring(registry, secretsPort,
                 (options.source ?: TrackerValidatorStub.plainSource()) as PipelineSource, time)
-        def checks = new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(time.clock()), [:],
-        secretsPort, new FactoryProperties(null, null, null, null), time)
-        def sandbox = new SandboxProperties(null, null, null, null, [], (options.passthrough ?: []) as List<String>,
+        def checks = new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(time.clock()),
+                secretsPort, new FactoryProperties(null, null, null, null))
+        def sandbox = new SandboxProperties(null, null, null, null, (options.passthrough ?: []) as List<String>,
         false, null, null, null, null)
         new DoctorProjectReadings(wiring, checks, (options.bindings ?: new BindingProperties('host', [:])) as BindingProperties,
         DiscoveredBindings.real(), sandbox)

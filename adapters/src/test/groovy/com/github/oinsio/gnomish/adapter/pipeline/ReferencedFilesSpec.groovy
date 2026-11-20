@@ -8,6 +8,7 @@ import static com.github.oinsio.gnomish.adapter.pipeline.ReferencedFilesFixtures
 
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -91,8 +92,8 @@ class ReferencedFilesSpec extends Specification implements GnomishTreeWriter {
         def stages = [
             stage('plan', 'stages/plan/instructions.md', [
                 command(),
-                new VerifyCheck.Builtin('files_exist', [:]),
-                new VerifyCheck.External('ci', 'github', Duration.ofSeconds(5), Duration.ofSeconds(60), VerifyCheck.TimeoutClass.QUALITY)
+                VerifyChecks.builtin('files_exist', [:]),
+                VerifyChecks.external('ci', 'github', Duration.ofSeconds(5), Duration.ofSeconds(60), VerifyCheck.TimeoutClass.QUALITY)
             ] as List<VerifyCheck>)
         ]
 

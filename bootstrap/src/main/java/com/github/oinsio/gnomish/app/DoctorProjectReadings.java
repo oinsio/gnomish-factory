@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment;
 import java.io.IOException;
 import java.util.List;
+import java.util.stream.Stream;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
@@ -101,7 +102,11 @@ public final class DoctorProjectReadings {
      * @throws UsageException if the {@code tracker} section names an unregistered adapter type
      */
     public List<String> declaredSecrets(PipelineDefinition definition) {
-        return checks.credentialNames(definition, trackerCredentials(definition)).stream()
+        // The tracker's names unioned with the built-ins' from their one owner (the D9 row of
+        // BuiltInCheckSubsections, migrate-verify-to-executor-contract), as the run's allowlist does.
+        return Stream.concat(
+                        trackerCredentials(definition).stream(),
+                        checks.subsections().credentialNames(definition).stream())
                 .distinct()
                 .toList();
     }

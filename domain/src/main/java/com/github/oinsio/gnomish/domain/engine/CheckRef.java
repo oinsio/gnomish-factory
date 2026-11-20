@@ -35,18 +35,20 @@ public record CheckRef(int index, UntrustedText label) {
     /**
      * Derives a {@code CheckRef} for a check at {@code index} in a stage's verify
      * list, computing its label by an exhaustive switch over the sealed
-     * {@link VerifyCheck} variants (design D3): {@code Builtin} → {@code builtin:<name>},
-     * {@code Command} → {@code command:<command>}, {@code External} →
-     * {@code external:<provider>:<checkId>}, {@code Judge} → {@code judge:<criteriaFile>}. No
-     * {@code default} arm, so a new variant fails to compile until its label mapping is added.
+     * {@link VerifyCheck} variants (design D3): an executor check by the token it was
+     * declared with — {@code builtin:<name>}, {@code command:<command>}, {@code
+     * external:<executor>:<checkId>}, {@code executor:<executor>:<checkId>} — and {@code Judge}
+     * → {@code judge:<criteriaFile>}. No {@code default} arm, so a new variant or token fails
+     * to compile until its label mapping is added.
      *
-     * <p>An {@code external} check's label carries its {@code provider} as well as its
-     * {@code checkId} because the identity findings are correlated under across attempts is the
-     * pair, not the id alone (FR8 of add-plugin-architecture): two providers may each serve a
-     * check named {@code ci/build}, and merging their findings would attribute one platform's
-     * failures to the other.
+     * <p>A polled check's label carries its executor as well as its {@code checkId} because
+     * the identity findings are correlated under across attempts is the pair, not the id alone
+     * (FR8 of add-plugin-architecture): two executors may each serve a check named {@code
+     * ci/build}, and merging their findings would attribute one platform's failures to the
+     * other.
      *
-     * <p>Implements FR4 of add-stage-engine; FR8 of add-plugin-architecture.
+     * <p>Implements FR4 of add-stage-engine; FR8 of add-plugin-architecture; FR1 of
+     * migrate-verify-to-executor-contract.
      *
      * @param index the zero-based position in the stage's ordered verify list
      * @param check the check whose type and salient field derive the label
@@ -55,16 +57,27 @@ public record CheckRef(int index, UntrustedText label) {
     public static CheckRef of(int index, VerifyCheck check) {
         String label =
                 switch (check) {
-                    case VerifyCheck.Builtin(String name, var _) -> "builtin:" + name;
-                    case VerifyCheck.Command(String command, var _) -> "command:" + command;
-                    case VerifyCheck.External(String checkId, String provider, var _, var _, var _, var _, var _) ->
-                        "external:" + provider + ":" + checkId;
+                    case VerifyCheck.Executor executor -> executorLabel(executor);
                     case VerifyCheck.Judge(String criteriaFile, var _, var _, var _) -> "judge:" + criteriaFile;
                 };
         // The manifest mint (design D3): every discriminator in the label — a builtin's name, a
         // command line, a provider and check id, a criteria file — is text the target repository's
         // own `.gnomish/` wrote, so the label leaves the manifest as manifest text.
         return new CheckRef(index, UntrustedText.manifest(label));
+    }
+
+    /**
+     * The label of an executor check, prefixed by the token it was declared with, so a
+     * legacy check keeps the label shape it had before the tokens became sugar (FR1, UX2
+     * of migrate-verify-to-executor-contract).
+     */
+    private static String executorLabel(VerifyCheck.Executor check) {
+        return switch (check.token()) {
+            case BUILTIN -> "builtin:" + check.checkId();
+            case COMMAND -> "command:" + check.checkId();
+            case EXTERNAL -> "external:" + check.executorName() + ":" + check.checkId();
+            case EXECUTOR -> "executor:" + check.executorName() + ":" + check.checkId();
+        };
     }
 
     /**

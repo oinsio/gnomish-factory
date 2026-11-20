@@ -102,7 +102,8 @@ class EffectiveConfigurationSpec extends Specification {
             'factory.bindings.stages.build',
             'factory.gitNetworkTimeout',
             'factory.check',
-            'factory.sandbox.egress-allowlist'
+            'factory.egress.sandbox',
+            'factory.egress.in-process'
         ])
         !keys.contains('factory.bindings.stages')
         !keys.contains('factory.git-network-timeout')
@@ -110,6 +111,8 @@ class EffectiveConfigurationSpec extends Specification {
         row('factory.bindings.stages.build').level() == 'sandbox-boundary'
         row('factory.bindings.stages.build').origin() == 'test'
         row('factory.check').value() == '{}'
+        row('factory.egress.sandbox').level() == 'sandbox-boundary'
+        row('factory.egress.in-process').level() == 'project'
     }
 
     // FR4, FR12: a key no record defines is shown with an unknown level

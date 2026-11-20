@@ -81,6 +81,11 @@ A collaborator the host adds later is a new accessor on the context, never an ov
 overload chain lets an implementor override an older link and keep stamping with time it builds
 itself, which is the FR19 defect inside a plugin.
 
+*2026-11-19:* the check SPI was removed by `migrate-verify-to-executor-contract` (FR8, design D4):
+`CheckClientFactory`, `CheckClientContext` and `FixedCheckClientContext` are gone, and the checks
+they served are built-in executors, which take their time from the host's wiring like any other
+component; the decision above now applies to `TrackerAdapterFactory` alone.
+
 ### Wall time and monotonic time stay two seams (D19)
 
 `InstantSource` is wall time: stamps, and intervals a human reads or that are measured against a

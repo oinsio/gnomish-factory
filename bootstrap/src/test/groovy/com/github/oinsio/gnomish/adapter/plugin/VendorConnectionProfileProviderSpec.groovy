@@ -1,14 +1,14 @@
 package com.github.oinsio.gnomish.adapter.plugin
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.check.CheckClientConfiguration
-import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam
-import com.github.oinsio.gnomish.adapter.check.github.GithubCheckClientFactory
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineLoader
+import com.github.oinsio.gnomish.adapter.scm.ScmConnectionReader
+import com.github.oinsio.gnomish.adapter.scm.builtin.ScmBuiltIns
 import com.github.oinsio.gnomish.adapter.tracker.TrackerAdapterConfiguration
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerAdapterFactory
 import com.github.oinsio.gnomish.app.ConnectionProfiles
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
+import com.github.oinsio.gnomish.httpegress.OperatorEgress
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
@@ -36,7 +36,7 @@ class VendorConnectionProfileProviderSpec extends Specification {
         given: 'a profile whose data even carries a type naming another tracker provider'
         def profiles = [(PROFILE): [('api-url'): 'https://api.github.com', credential: 'SHARED_TOKEN', type: InMemoryTrackerAdapterFactory.TYPE]]
         def properties = new FactoryProperties(null, null, null,
-                [github: [connection: PROFILE, repo: 'acme/widgets']], profiles)
+                [('github-actions'): [connection: PROFILE, repo: 'acme/widgets']], profiles)
         writeTree("""\
 tracker:
   type: github
@@ -47,8 +47,10 @@ tracker:
 
         when:
         def outcome = PipelineLoader.load(
-                gnomishRoot, trackerValidators(), [:], [] as Set, ConnectionProfiles.of(profiles))
-        def registry = new CheckClientConfiguration().checkClientRegistry(properties)
+                gnomishRoot, trackerValidators(), [:], ConnectionProfiles.of(profiles))
+        def connection = ScmBuiltIns.admit(
+                new ScmConnectionReader(ConnectionProfiles.of(profiles), new OperatorEgress([])),
+                'github-actions', properties.check()['github-actions'])
 
         then: 'the tracker port keeps the provider its own type selects, the profile only lending it data'
         outcome instanceof LoadOutcome.Loaded
@@ -57,9 +59,10 @@ tracker:
         tracker.subsection()['api-url'] == 'https://api.github.com'
         tracker.subsection()['type'] == InMemoryTrackerAdapterFactory.TYPE
 
-        and: 'the check port is served by the provider its own subsection key names'
-        registry['github'] instanceof GithubCheckClientFactory
-        CheckProviderSeam.resolve(properties.check(), ConnectionProfiles.of(profiles)).keySet() == ['github'] as Set
+        and: 'the check side is read by the built-in its own subsection key names, the profile lending it data only'
+        connection.endpoint().url() == URI.create('https://api.github.com')
+        connection.endpoint().key() == 'factory.check.github-actions.api-url'
+        connection.settings().repo == 'acme/widgets'
     }
 
     // FR16: what a subsection without a reference lacks, only its provider knows
@@ -74,7 +77,7 @@ tracker:
 ''')
 
         when:
-        def outcome = PipelineLoader.load(gnomishRoot, trackerValidators(), [:], [] as Set,
+        def outcome = PipelineLoader.load(gnomishRoot, trackerValidators(), [:],
         ConnectionProfiles.of([(PROFILE): [('api-url'): 'https://api.github.com']]))
 
         then: 'the provider reports the keys it is missing, and nothing names the connection key'

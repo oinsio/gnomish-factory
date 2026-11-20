@@ -42,7 +42,8 @@ import java.nio.file.Path
  *
  * <p>Each stop is also asserted on the durable medium: the task branch on the bare origin gains, per
  * process, exactly the commits that stop implies — the park before the exit, the two rounds of the
- * quality retry, and — when the paused task completes — the approval commit that moves it past the
+ * quality retry, each on the snapshot it was verified at (D22 of migrate-verify-to-executor-contract;
+ * the round that asks a decision is not verified and takes none), and — when the paused task completes — the approval commit that moves it past the
  * checkpoint (FR3, FR4 of make-checkpoint-gate-durable) and no round at all.
  *
  * <p>Git mode works in a worktree under the factory home, so the operator's clone must gain
@@ -55,6 +56,8 @@ import java.nio.file.Path
 class ReferenceE2ESessionSpec extends AbstractE2eProcessSpec {
 
     private static final String TASK = 'reference-session'
+
+    private static final String TOKEN_MASK = '<round token>'
 
     def "M3: escalate, decide and resume, retry, pause, resume, complete — three processes with empty stdin exit 10, 11, 0"() {
         given: 'a published clone bound to the host, and the fake agent as gnome and judge'
@@ -93,10 +96,12 @@ class ReferenceE2ESessionSpec extends AbstractE2eProcessSpec {
         and: 'the question is not asked again'
         !second.stdout().contains('The gnome asked:')
 
-        and: 'the decision resume reset the attempts, round 0 failed the command check, the retry passed, and the pause is parked'
+        and: 'the decision resume reset the attempts, round 0 failed the command check, the retry passed, and the pause is parked; each completed round was verified at its snapshot (D22 of migrate-verify-to-executor-contract)'
         pushedSubjects(clone).drop(3) == [
             taskEvent(RESUMED),
+            snapshotSubject('work', 0),
             roundSubject('work', 0),
+            snapshotSubject('work', 1),
             roundSubject('work', 1),
             taskEvent(PAUSED)
         ]
@@ -114,7 +119,7 @@ class ReferenceE2ESessionSpec extends AbstractE2eProcessSpec {
         third.stdout().contains('use approach A (by operator) [stage: work]')
 
         and: 'FR5 (make-run-headless), FR4 (make-checkpoint-gate-durable): no round ran past the checkpoint — the approval moved the task past it, then it completed and cleaned up'
-        pushedSubjects(clone).drop(7) == [
+        pushedSubjects(clone).drop(9) == [
             taskEvent(APPROVED),
             taskEvent(COMPLETED),
             ServiceCommitMessages.cleanup()
@@ -146,13 +151,24 @@ class ReferenceE2ESessionSpec extends AbstractE2eProcessSpec {
         words.drop(2)
     }
 
-    /** @return the subjects of the task branch's commits on the bare origin, oldest first, above {@code main} */
     private static String roundSubject(String stage, int round) {
         ServiceCommitMessages.round(RoundStates.roundOf(new AttemptKey(TASK, stage, round)))
     }
 
+    /** @return a snapshot subject with its round token masked, as {@link #pushedSubjects} renders it */
+    private static String snapshotSubject(String stage, int round) {
+        "gnomish: snapshot ${stage}#${round} ${TOKEN_MASK}"
+    }
+
+    /**
+     * @return the subjects of the task branch's commits on the bare origin, oldest first, above
+     *     {@code main}; a snapshot subject's round token (a commit name minted per run) is masked
+     */
     private static List<String> pushedSubjects(Path clone) {
         E2eGitTree.git(clone.resolveSibling('origin.git'), 'log', '--reverse', '--format=%s', '--branches', '--not', 'main')
                 .readLines()
+                .collect {
+                    it.replaceFirst(/^(gnomish: snapshot \S+) [0-9a-f]{40}$/, '$1 ' + TOKEN_MASK)
+                }
     }
 }

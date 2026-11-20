@@ -13,7 +13,7 @@ class GuardImageDoctorCheckSpec extends Specification {
 
     SandboxImageReadiness readiness = Mock()
     def check = new GuardImageDoctorCheck(readiness,
-    new com.github.oinsio.gnomish.sandbox.SandboxProperties(null, null, GUARD, null, [], [], false, null, null, null, null))
+    new com.github.oinsio.gnomish.sandbox.SandboxProperties(null, null, GUARD, null, [], false, null, null, null, null))
 
     def "FR1: a guard image held locally passes, by one presence inspection"() {
         when:

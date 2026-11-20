@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.git.TaskWorktreePath;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.app.port.git.BasePin;
 import com.github.oinsio.gnomish.app.port.git.GitTaskRepositoryException;
+import com.github.oinsio.gnomish.app.port.git.RunRound;
 import com.github.oinsio.gnomish.app.port.git.TaskGit;
 import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -122,13 +123,16 @@ record GitModeRunner(RunAssembly assembly, TaskGit git, RegisteredClone register
                 new BasePin(baseDecision.ref(), null, baseDecision.rule()),
                 initialState);
 
-        var persistence = git.store().attemptPersistence(worktree, taskId);
+        // The run's one round cell (design D22 of migrate-verify-to-executor-contract): built before
+        // both its readers, the persistence and the host-git decoration; a fresh run resumes nothing.
+        var run = RunRound.of(null);
+        var persistence = git.store().attemptPersistence(worktree, taskId, run.rounds());
         var workspace = assembly.workspaceAt(worktree);
         // The host half of the mid-round push (FR1, FR3, design D3 of wire-host-mid-round-push):
         // this runner is git-mode by type, so attaching here needs no flag; in-place mode never
         // reaches this line and keeps the assembly's identity default.
         var described = ManualRunDescribe.described(assembly, order, new DescribeMedium.Host(worktree), law.binding());
-        var assembled = assembly.withHostGitPush(git.midRoundPush())
+        var assembled = assembly.withHostGitPush(git.midRoundPush(), run)
                 .assemble(order, context, initialState, persistence, List.of(), described);
 
         var returnPath = new TerminalOutcomeRender.ReturnPath(cloneDir, taskId);

@@ -63,6 +63,13 @@ dependencies {
     // every module compiling against them needs its class, or javac reports its constants unknown.
     api project(':operatorconfig')
 
+    // The HTTP egress leaf (FR17, design D16 of migrate-verify-to-executor-contract): the one egress
+    // entry grammar, `EgressEntries`, lives there; `SandboxEgress`, the operator's grant to every box,
+    // holds its entries to the grammar's `sandbox` subset. `implementation`, not `api`: no signature
+    // of this module names a type of the leaf, and the modules that parse entries themselves (the
+    // box guard, the law loader, the describe preflight) declare the leaf directly.
+    implementation project(':httpegress')
+
     // The capture specs' `CannedExecHandle` mints its `ChildOutput` from the one `Process` double,
     // `FakeProcess` (design D6 of make-pipe-reads-non-parking): a stream double can no longer be
     // handed to the port.
@@ -75,6 +82,9 @@ dependencies {
 layering {
     allowedProjects = [
         ':domain',
+        // The HTTP egress leaf (design D16 of migrate-verify-to-executor-contract): declared
+        // directly above — the one egress entry grammar the box guard and the law loader parse.
+        ':httpegress',
         // The operator-configuration level leaf (design D4 of add-project-registry): declared
         // directly above — the configuration records carry `@ConfigLevel`.
         ':operatorconfig',
@@ -83,6 +93,9 @@ layering {
         // source in this module names it; the layering gate walks the transitive graph, so the
         // reach is listed where it arrives.
         ':operatorevent',
+        // The pending-key leaf (design D20 of migrate-verify-to-executor-contract): transitive via `:domain`, whose
+        // pending result and pending turn carry it. No source in this module names it.
+        ':pendingkey',
         // The subprocess leaf (design D9 of bound-subprocess-commands; D17 of
         // fix-terminal-receipt-convergence): declared directly above — `CapturedExec` joins its
         // drain on it. Dependency-free, so this edge reaches nothing further.

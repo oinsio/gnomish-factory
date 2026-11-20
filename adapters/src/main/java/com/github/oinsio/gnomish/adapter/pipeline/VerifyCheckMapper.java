@@ -1,103 +1,101 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
+import com.github.oinsio.gnomish.domain.pipeline.Threshold;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Maps a stage's ordered {@code verify} DTO list into the sealed domain
- * {@link VerifyCheck} variants (task 5.3, design D2/D5), preserving check order.
- * The {@code type} discriminator is already valid (task 5.2, FR5), so the switch
- * is total.
+ * Maps a stage's ordered {@code verify} DTO list into the sealed domain {@link VerifyCheck}
+ * variants (task 5.3, design D2/D5), preserving check order. Every {@code builtin}, {@code
+ * command}, {@code external} and {@code executor:} entry becomes one {@link
+ * VerifyCheck.Executor}; the tokens are sugar for executor names (design D1 of
+ * migrate-verify-to-executor-contract): {@code builtin} → {@code files-exist}, {@code command}
+ * → {@code shell}, {@code external} → its {@code provider}, with an absent provider and the
+ * legacy {@code github} both → {@code github-actions}. The token itself is kept on the check.
  *
- * <p>This mapper owns one piece of parsing task 5.1 deferred: the
- * {@code external} check's raw {@code interval}/{@code timeout} strings become
- * {@link Duration}s here via the shared {@link DurationConfig#parse}. A
- * malformed string is a located {@link ConfigError} appended to the caller's
- * error list (so {@link PipelineMapper} aborts the definition and the loader
- * aggregates it — task 6.5); a {@code null} (absent) string maps to
- * {@link Duration#ZERO}, which {@code StageSanityRule} (task 4.4) then flags as
- * non-positive — timing-range sanity stays a domain concern.
- *
- * <p>Opaque {@code params}/{@code settings} maps flow through as defensive
- * plain-JDK copies (FR11, D5a) via {@link OpaqueSettings#copy}.
- *
- * <p>This mapper also parses the {@code external} check's optional raw
- * {@code timeout-class} string into {@link VerifyCheck.TimeoutClass}: absent
- * defaults to {@code QUALITY} (unchanged behavior), and an unrecognized value
- * is a located {@link ConfigError} (task 6.1, FR9 of
- * add-external-check-github-actions).
- *
- * <p>This mapper also parses the {@code command} check's optional raw
- * {@code verifyIn} string into {@link VerifyCheck.VerifyIn} (absent defaults to
- * {@code SAME_BOX}, unknown is a located error) and copies the {@code external}
- * check's law-declared pin paths across verbatim (FR13, FR16 of
- * add-sandbox-core).
- *
- * <p>This mapper also carries the {@code external} check's provider selection into the
- * model: a declared {@code provider} verbatim, an absent one as {@link #DEFAULT_PROVIDER}
- * (FR13 of add-plugin-architecture), with the provider-owned {@code params} copied across
- * as an opaque plain-JDK map. Grading either — that the provider exists, that its params
- * are well-formed — belongs to the load seam that holds the discovered registry
+ * <p>Raw {@code interval}/{@code timeout} strings become {@link Duration}s via {@link
+ * DurationConfig#parse}: a malformed string is a located {@link ConfigError} appended to the
+ * caller's list (so {@link PipelineMapper} aborts the definition), an absent one is {@link
+ * Duration#ZERO}, which {@code StageSanityRule} flags on a polled check. The enum knobs are
+ * parsed by {@link VerifyCheckKnobs}. An {@code external} or {@code executor:} check naming a
+ * law executor granted credentials runs in a fresh box unless it declares otherwise (NFR-S1 of
+ * migrate-verify-to-executor-contract, design D6); a {@code builtin} or {@code command} check names a
+ * built-in, which a law never declares, so its default stays {@code same-box}. Opaque {@code params}/{@code settings} flow through as
+ * defensive plain-JDK copies via {@link OpaqueSettings#copy}. Whether a named executor exists,
+ * and whether its settings are well-formed, belongs to the load seam that holds the registry
  * ({@link ExternalCheckSeamValidator}), not here.
  *
  * <p>Implements FR2, FR11, D2, D5, D5a of load-pipeline-config; FR9 of
  * add-external-check-github-actions; FR13, FR16 of add-sandbox-core; FR7, FR13 of
- * add-plugin-architecture.
+ * add-plugin-architecture; FR1, UX2, NFR-S1 of migrate-verify-to-executor-contract.
  */
 final class VerifyCheckMapper {
 
     /**
-     * The provider an {@code external} check resolves to when its manifest names none — the
-     * migration default of FR13 (add-plugin-architecture), so every manifest written before
-     * providers existed keeps selecting the provider it was written against (M4).
-     *
-     * <p>The default is <em>recorded</em> in the mapped model rather than applied later at
-     * dispatch: a defaulted selection is then visible in the typed model, in reports and to the
-     * load seam that grades it against the discovered registry — never a silent guess.
+     * The executor an {@code external} check names when its manifest names no provider (FR13, M4
+     * of add-plugin-architecture) — recorded in the model, so the load seam grades it, never a
+     * silent guess at dispatch.
      */
-    static final String DEFAULT_PROVIDER = "github";
+    static final String DEFAULT_PROVIDER = VerifyCheck.Executor.GITHUB_ACTIONS;
+
+    /**
+     * The check SPI's provider name for GitHub Actions, mapped to {@code github-actions} so legacy
+     * manifests load unchanged (UX2 of migrate-verify-to-executor-contract).
+     */
+    static final String LEGACY_GITHUB_PROVIDER = "github";
 
     private VerifyCheckMapper() {}
 
     /**
-     * Maps every verify DTO in order, appending any malformed-duration error to
-     * {@code errors}. When a duration is malformed the produced check still holds
-     * {@link Duration#ZERO} for that field, but the accumulated error means
-     * {@link PipelineMapper} discards the definition anyway.
+     * Maps every verify DTO in order, appending each located error to {@code errors}, which makes
+     * {@link PipelineMapper} discard the definition.
      *
      * @param manifest the stage manifest path, stamped into any located error
-     * @param checks the ordered verify DTOs, or {@code null} when the stage
-     *     declares none
+     * @param checks the ordered verify DTOs, or {@code null} when the stage declares none
+     * @param credentialed the law's executor declarations granted credentials, by name (NFR-S1)
      * @param errors the caller's mutable error accumulator (FR8 aggregation)
-     * @return the mapped checks in declaration order; empty when {@code checks}
-     *     is {@code null}
+     * @return the mapped checks in declaration order; empty when {@code checks} is {@code null}
      */
-    static List<VerifyCheck> mapAll(String manifest, @Nullable List<VerifyCheckDto> checks, List<ConfigError> errors) {
+    static List<VerifyCheck> mapAll(
+            String manifest,
+            @Nullable List<VerifyCheckDto> checks,
+            Set<String> credentialed,
+            List<ConfigError> errors) {
         if (checks == null) {
             return List.of();
         }
         List<VerifyCheck> mapped = new ArrayList<>();
         for (int index = 0; index < checks.size(); index++) {
-            mapped.add(mapCheck(manifest, index, checks.get(index), errors));
+            mapped.add(mapCheck(manifest, index, checks.get(index), credentialed, errors));
         }
         return mapped;
     }
 
-    private static VerifyCheck mapCheck(String manifest, int index, VerifyCheckDto dto, List<ConfigError> errors) {
+    private static VerifyCheck mapCheck(
+            String manifest, int index, VerifyCheckDto dto, Set<String> credentialed, List<ConfigError> errors) {
         return switch (dto) {
             case VerifyCheckDto.Builtin builtin ->
-                new VerifyCheck.Builtin(
+                inProcess(
+                        VerifyCheck.Token.BUILTIN,
+                        VerifyCheck.Executor.FILES_EXIST,
                         PipelineMapper.orEmpty(builtin.name()),
-                        OpaqueSettings.copy(manifest, "verify[%d].params".formatted(index), builtin.params(), errors));
+                        OpaqueSettings.copy(manifest, "verify[%d].params".formatted(index), builtin.params(), errors),
+                        VerifyCheck.VerifyIn.SAME_BOX);
             case VerifyCheckDto.Command command ->
-                new VerifyCheck.Command(
+                inProcess(
+                        VerifyCheck.Token.COMMAND,
+                        VerifyCheck.Executor.SHELL,
                         PipelineMapper.orEmpty(command.command()),
-                        mapVerifyIn(manifest, index, command.verifyIn(), errors));
-            case VerifyCheckDto.External external -> mapExternal(manifest, index, external, errors);
+                        Map.of(),
+                        VerifyCheckKnobs.verifyIn(manifest, index, command.verifyIn(), false, errors));
+            case VerifyCheckDto.External external -> mapExternal(manifest, index, external, credentialed, errors);
+            case VerifyCheckDto.Executor executor -> mapExecutor(manifest, index, executor, credentialed, errors);
             case VerifyCheckDto.Judge judge ->
                 new VerifyCheck.Judge(
                         PipelineMapper.orEmpty(judge.criteriaFile()),
@@ -107,90 +105,94 @@ final class VerifyCheckMapper {
         };
     }
 
+    /**
+     * A {@code builtin} or {@code command} check: an in-process built-in with no polling, so its
+     * timing is {@link Duration#ZERO}, which no sanity rule reads for it.
+     */
+    private static VerifyCheck inProcess(
+            VerifyCheck.Token token,
+            String executorName,
+            String checkId,
+            Map<String, Object> settings,
+            VerifyCheck.VerifyIn verifyIn) {
+        return new VerifyCheck.Executor(
+                token,
+                executorName,
+                checkId,
+                settings,
+                Duration.ZERO,
+                Duration.ZERO,
+                VerifyCheck.TimeoutClass.QUALITY,
+                List.of(),
+                verifyIn,
+                Threshold.DEFAULT,
+                List.of());
+    }
+
     private static VerifyCheck mapExternal(
-            String manifest, int index, VerifyCheckDto.External external, List<ConfigError> errors) {
+            String manifest,
+            int index,
+            VerifyCheckDto.External external,
+            Set<String> credentialed,
+            List<ConfigError> errors) {
+        String executorName = mapProvider(external.provider());
         Duration interval =
                 DurationConfig.parse(manifest, "verify[%d].interval".formatted(index), external.interval(), errors);
         Duration timeout =
                 DurationConfig.parse(manifest, "verify[%d].timeout".formatted(index), external.timeout(), errors);
-        VerifyCheck.TimeoutClass timeoutClass = mapTimeoutClass(manifest, index, external.timeoutClass(), errors);
-        return new VerifyCheck.External(
+        VerifyCheck.TimeoutClass timeoutClass =
+                VerifyCheckKnobs.timeoutClass(manifest, index, external.timeoutClass(), errors);
+        return new VerifyCheck.Executor(
+                VerifyCheck.Token.EXTERNAL,
+                executorName,
                 PipelineMapper.orEmpty(external.checkId()),
-                mapProvider(external.provider()),
                 OpaqueSettings.copy(manifest, "verify[%d].params".formatted(index), external.params(), errors),
                 interval,
                 timeout,
                 timeoutClass,
-                copyPinPaths(external));
+                copy(external.pinPaths()),
+                VerifyCheckKnobs.verifyIn(manifest, index, null, credentialed.contains(executorName), errors),
+                Threshold.DEFAULT,
+                List.of());
     }
 
     /**
-     * Resolves the check's provider selection (FR13 of add-plugin-architecture): an absent {@code
-     * provider} becomes {@link #DEFAULT_PROVIDER}, any declared one is carried verbatim — including
-     * one no discovered jar serves, which the load seam reports as a located error naming it
-     * (task 3.6). Whether a provider exists is registry knowledge the mapper does not hold.
+     * The explicit {@code executor: <name>} form (FR1 of migrate-verify-to-executor-contract): the
+     * name is carried verbatim — whether an executor of that name exists, and whether its settings
+     * fit its schema, is registry knowledge the mapper does not hold.
+     */
+    private static VerifyCheck mapExecutor(
+            String manifest,
+            int index,
+            VerifyCheckDto.Executor executor,
+            Set<String> credentialed,
+            List<ConfigError> errors) {
+        String executorName = PipelineMapper.orEmpty(executor.executor());
+        return new VerifyCheck.Executor(
+                VerifyCheck.Token.EXECUTOR,
+                executorName,
+                PipelineMapper.orEmpty(executor.checkId()),
+                OpaqueSettings.copy(manifest, "verify[%d].settings".formatted(index), executor.settings(), errors),
+                DurationConfig.parse(manifest, "verify[%d].interval".formatted(index), executor.interval(), errors),
+                DurationConfig.parse(manifest, "verify[%d].timeout".formatted(index), executor.timeout(), errors),
+                VerifyCheckKnobs.timeoutClass(manifest, index, executor.timeoutClass(), errors),
+                copy(executor.pinPaths()),
+                VerifyCheckKnobs.verifyIn(
+                        manifest, index, executor.verifyIn(), credentialed.contains(executorName), errors),
+                VerifyCheckKnobs.threshold(manifest, index, executor.threshold(), errors),
+                copy(executor.expected()));
+    }
+
+    /**
+     * The executor a {@code provider} names (FR13 of add-plugin-architecture): absent or the legacy
+     * {@code github} is {@link #DEFAULT_PROVIDER}, any other carried verbatim for the load seam.
      */
     private static String mapProvider(@Nullable String provider) {
-        return provider == null ? DEFAULT_PROVIDER : provider;
+        return provider == null || provider.equals(LEGACY_GITHUB_PROVIDER) ? DEFAULT_PROVIDER : provider;
     }
 
-    /**
-     * Parses the raw {@code verifyIn} string (FR13 of add-sandbox-core):
-     * {@code null} (absent) defaults to {@link VerifyCheck.VerifyIn#SAME_BOX} —
-     * unchanged behavior; {@code "same-box"}/{@code "fresh-box"} map to their
-     * enum constants; any other value is a located {@link ConfigError}, still
-     * returning the safe {@code SAME_BOX} fallback (mirroring
-     * {@link #mapTimeoutClass}) since the accumulated error discards the whole
-     * definition anyway.
-     */
-    private static VerifyCheck.VerifyIn mapVerifyIn(
-            String manifest, int index, @Nullable String raw, List<ConfigError> errors) {
-        if (raw == null || raw.equals("same-box")) {
-            return VerifyCheck.VerifyIn.SAME_BOX;
-        }
-        if (raw.equals("fresh-box")) {
-            return VerifyCheck.VerifyIn.FRESH_BOX;
-        }
-        errors.add(new ConfigError(
-                manifest,
-                "verify[%d].verifyIn".formatted(index),
-                "unknown verify-in '%s'; use 'same-box' or 'fresh-box'".formatted(raw)));
-        return VerifyCheck.VerifyIn.SAME_BOX;
-    }
-
-    /**
-     * Copies the external check's law-declared pin paths across as a defensive
-     * plain-JDK list (FR16 of add-sandbox-core); {@code null}/absent maps to
-     * empty. Pin paths are carried verbatim — lexical-form validation is the
-     * domain {@code StageSanityRule}'s concern, and the loader never reads them.
-     */
-    private static List<String> copyPinPaths(VerifyCheckDto.External external) {
-        List<String> pinPaths = external.pinPaths();
-        return pinPaths == null ? List.of() : List.copyOf(pinPaths);
-    }
-
-    /**
-     * Parses the raw {@code timeout-class} string (FR9): {@code null} (absent)
-     * defaults to {@link VerifyCheck.TimeoutClass#QUALITY} — unchanged behavior
-     * for checks that declare nothing (D7); {@code "quality"}/{@code
-     * "infrastructure"} map to their enum constants; any other value is a
-     * located {@link ConfigError}, mirroring {@link DurationConfig#parse}'s
-     * convention of still returning a safe fallback ({@code QUALITY}) since the
-     * accumulated error means {@link PipelineMapper} discards the whole
-     * definition anyway.
-     */
-    private static VerifyCheck.TimeoutClass mapTimeoutClass(
-            String manifest, int index, @Nullable String raw, List<ConfigError> errors) {
-        if (raw == null || raw.equals("quality")) {
-            return VerifyCheck.TimeoutClass.QUALITY;
-        }
-        if (raw.equals("infrastructure")) {
-            return VerifyCheck.TimeoutClass.INFRASTRUCTURE;
-        }
-        errors.add(new ConfigError(
-                manifest,
-                "verify[%d].timeout-class".formatted(index),
-                "unknown timeout class '%s'; use 'quality' or 'infrastructure'".formatted(raw)));
-        return VerifyCheck.TimeoutClass.QUALITY;
+    /** A declared list (pin paths, expected contexts) as a defensive copy; absent maps to empty. */
+    private static List<String> copy(@Nullable List<String> declared) {
+        return declared == null ? List.of() : List.copyOf(declared);
     }
 }

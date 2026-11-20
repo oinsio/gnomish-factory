@@ -304,6 +304,18 @@ class UntrustedTextSinkGateSpec extends Specification {
         // `staleStage` left (no carrier answers to it, only the wire DTOs' String), and `stage`,
         // `executor`, `recorded` and `current` joined — carriers on the two causes, plain Strings
         // on the `task.json` / `status.json` records and on every stage or executor name elsewhere.
+        // Task 4.5 of migrate-verify-to-executor-contract added `resumedKey`: a carrier on
+        // `CheckOutcome` and `RoundOutcomeLine` (the prefix of a pending key a resume read from the
+        // round's pending record, branch-document text), a plain String on `RoundOutcomeLineDto`,
+        // the ledger's wire record it is written into raw by the `@UntrustedExit` mapper — the
+        // carrier/wire-DTO twin `bound` and `cause` already are, and like them it stays decided
+        // wherever the receiver's type is declared.
+        // Task 4.0d of migrate-verify-to-executor-contract (design D23) added `runUrl`: a carrier on
+        // `SarifRun` (the platform run's URL a verdict answer carries, the executor's text), a
+        // plain String on `Verdict.Pass`, `VerdictAnswer.Sarif`, `PollStatus.Pass` and the
+        // `state.json` / `status --json` / usage-report DTOs (`StateCheckDto`, `status/json/CheckDto`,
+        // `usage/json/CheckDto`) — the carrier/String twin `details` and `resumedKey` already are,
+        // and like them it stays decided wherever the receiver's type is declared.
         // What this list no longer means is "rule (c) is silent here": since the qualified
         // vocabulary landed, a name on it is still decided wherever the receiver's type is
         // declared in the same source (`CarrierAccessors.qualifiedNamesIn`, the three features
@@ -331,6 +343,8 @@ class UntrustedTextSinkGateSpec extends Specification {
             'render',
             'report',
             'result',
+            'resumedKey',
+            'runUrl',
             'stage',
             'stderr',
             'stdout',

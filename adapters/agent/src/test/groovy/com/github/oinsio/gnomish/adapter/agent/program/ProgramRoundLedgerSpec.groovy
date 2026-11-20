@@ -11,10 +11,9 @@ import com.github.oinsio.gnomish.domain.engine.ExecutorCredentialNames
 import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskState
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -75,12 +74,12 @@ class ProgramRoundLedgerSpec extends Specification {
         ProgramFixtures.describe(), ['ACME_API_KEY'])
         def executor = new ProgramStageExecutor(new ProgramExecutorFactory(
                         PipelineLaw.ofContent(['instructions.md': 'build it\n']), described,
-                        ProgramFixtures.equipment(stderrParent, ProgramBounds.DEFAULTS, VirtualTimeEquipment.on(clock))),
+                        ProgramFixtures.equipment(stderrParent, ProgramBounds.DEFAULTS, VirtualTimeEquipment.on(clock)),
+                        new PendingRuns()),
                 CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()))
         def versions = new DescribedExecutors(
                 new ExecutorVersions([acme: UntrustedText.subprocess('1')]), ExecutorCredentialNames.none())
-        def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner(), new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), writer, new InMemoryAttemptPersistence(),
+        def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), writer, new InMemoryAttemptPersistence(),
                 VirtualTimeEquipment.on(clock), AttemptDelivery.assumedDelivered(), versions,
                 CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()).identity())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(1), [ProgramFixtures.stage()]),

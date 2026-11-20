@@ -3,8 +3,9 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO;
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds;
+import com.github.oinsio.gnomish.app.port.git.RunRound;
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier;
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
@@ -13,7 +14,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import com.github.oinsio.gnomish.domain.engine.port.EngineEventListener;
-import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.gitobjects.ObjectId;
@@ -22,8 +22,6 @@ import com.github.oinsio.gnomish.status.SummaryAccumulatorListener;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
-import java.util.function.UnaryOperator;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -77,9 +75,11 @@ public final class ManualRunAssembly implements RunAssembly {
     final SandboxProperties sandboxProperties;
     final @Nullable EngineEventListener extraListener;
     final @Nullable SandboxRunPieces sandbox;
-    // Identity by default (design D3 of wire-host-mid-round-push): consumers apply the decoration
-    // unconditionally, so "no decoration" needs no null check and no mode conditional.
-    final UnaryOperator<RoundEnvironmentSource> hostGitPush;
+    // NONE by default (design D3 of wire-host-mid-round-push): the in-place run carries no
+    // decoration and no run cell; a git-mode host run attaches both together (design D22 of
+    // migrate-verify-to-executor-contract), so the selector decorates exactly when hostRun is set.
+    final HostGitRounds hostGitPush;
+    final @Nullable RunRound hostRun;
     // Attached per invocation by take/serve (FR13 of add-base-ref-resolution); a manual run never
     // reads a task tier by binding, so it stays unattached and bindTaskTier is never reached.
     final @Nullable PipelineSource pipelineSource;
@@ -109,16 +109,18 @@ public final class ManualRunAssembly implements RunAssembly {
         this.workspaces = workspaces;
         this.extraListener = null;
         this.sandbox = null;
-        this.hostGitPush = UnaryOperator.identity();
+        this.hostGitPush = HostGitRounds.NONE;
+        this.hostRun = null;
         this.pipelineSource = null;
     }
 
-    /** Copy construction: {@code base}'s collaborators carried over, the four optional seams supplied. */
+    /** Copy construction: {@code base}'s collaborators carried over, the five optional seams supplied. */
     private ManualRunAssembly(
             ManualRunAssembly base,
             @Nullable EngineEventListener extraListener,
             @Nullable SandboxRunPieces sandbox,
-            UnaryOperator<RoundEnvironmentSource> hostGitPush,
+            HostGitRounds hostGitPush,
+            @Nullable RunRound hostRun,
             @Nullable PipelineSource pipelineSource) {
         this.systemConsoleIO = base.systemConsoleIO;
         this.errorConsole = base.errorConsole;
@@ -130,6 +132,7 @@ public final class ManualRunAssembly implements RunAssembly {
         this.extraListener = extraListener;
         this.sandbox = sandbox;
         this.hostGitPush = hostGitPush;
+        this.hostRun = hostRun;
         this.pipelineSource = pipelineSource;
     }
 
@@ -142,7 +145,7 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withExtraListener(EngineEventListener listener) {
-        return new ManualRunAssembly(this, listener, sandbox, hostGitPush, pipelineSource);
+        return new ManualRunAssembly(this, listener, sandbox, hostGitPush, hostRun, pipelineSource);
     }
 
     /**
@@ -178,22 +181,24 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withSandbox(SandboxRunPieces pieces) {
-        return new ManualRunAssembly(this, extraListener, pieces, hostGitPush, pipelineSource);
+        return new ManualRunAssembly(this, extraListener, pieces, hostGitPush, hostRun, pipelineSource);
     }
 
     /**
-     * Returns a copy of this assembly whose host executor rounds are decorated by {@code
-     * decoration} (FR1, FR3, design D3 of wire-host-mid-round-push) — the git-mode host control
-     * flows attach the composition root's mid-round push operator here; see {@link
-     * RunAssembly#withHostGitPush}. {@link ExecutorAdapterSelector} applies it only on the
-     * host branch, so sandbox pieces win by construction.
+     * Returns a copy of this assembly whose host executor rounds and host stage chain are decorated
+     * by {@code decoration} over {@code run}'s cell (FR1, FR3, design D3 of wire-host-mid-round-push;
+     * design D22 of migrate-verify-to-executor-contract) — the git-mode host control flows attach
+     * the composition root's decoration and their run's round identity here; see {@link
+     * RunAssembly#withHostGitPush}. {@link ExecutorAdapterSelector} applies it only on the host
+     * branch, so sandbox pieces win by construction.
      *
-     * @param decoration the round-source decoration the composition root built; never null
-     * @return a new assembly identical but for the decoration; never null
+     * @param decoration the host-git decoration the composition root built; never null
+     * @param run the run's round identity; never null
+     * @return a new assembly identical but for the decoration and the run; never null
      */
     @Override
-    public ManualRunAssembly withHostGitPush(UnaryOperator<RoundEnvironmentSource> decoration) {
-        return new ManualRunAssembly(this, extraListener, sandbox, decoration, pipelineSource);
+    public ManualRunAssembly withHostGitPush(HostGitRounds decoration, RunRound run) {
+        return new ManualRunAssembly(this, extraListener, sandbox, decoration, run, pipelineSource);
     }
 
     /**
@@ -205,7 +210,7 @@ public final class ManualRunAssembly implements RunAssembly {
      */
     @Override
     public ManualRunAssembly withPipelineSource(PipelineSource source) {
-        return new ManualRunAssembly(this, extraListener, sandbox, hostGitPush, source);
+        return new ManualRunAssembly(this, extraListener, sandbox, hostGitPush, hostRun, source);
     }
 
     /**
@@ -257,15 +262,6 @@ public final class ManualRunAssembly implements RunAssembly {
     public LawDescription describe(
             RunOrder order, DescribeMedium medium, List<String> credentialEnvVarsToScrub, LawBinding lawBinding) {
         return RunDescribe.describe(this, order, medium, credentialEnvVarsToScrub, lawBinding);
-    }
-
-    /**
-     * Selects and pin-guards the run's {@link ExternalCheckClient}. Delegated to {@link
-     * CheckEquipment#externalCheckClient}; package-private testing seam: specs inject a {@code
-     * registry} of hand-built providers over a fake secrets provider.
-     */
-    ExternalCheckClient externalCheckClient(LawBinding lawBinding, Map<String, CheckClientFactory> registry) {
-        return checks.externalCheckClient(RunLaw.open(lawBinding), CheckRunContext.none(), registry);
     }
 
     /**

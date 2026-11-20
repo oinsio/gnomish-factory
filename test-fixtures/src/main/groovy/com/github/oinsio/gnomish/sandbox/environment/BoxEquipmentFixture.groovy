@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
+import com.github.oinsio.gnomish.sandbox.SandboxEgress
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Path
 import java.time.Duration
@@ -37,8 +38,8 @@ final class BoxEquipmentFixture {
             ResourceLimits limits,
             InstantSource clock,
             OwnershipMode mode = OwnershipMode.TRACKED) {
-        def sandbox = new SandboxProperties(image, 'runc', null, limits, null, null, false, null, null, null, null)
+        def sandbox = new SandboxProperties(image, 'runc', null, limits, null, false, null, null, null, null)
         def timing = new BoxTiming(VirtualTimeEquipment.on(clock, { Duration d -> } as Sleeper), DockerCli.DEFAULT_COMMAND_TIMEOUT)
-        new BoxEquipment(docker, sandbox, timing, GUARD_CONFIG_ROOT, mode, ImageContractCheck.current())
+        new BoxEquipment(docker, sandbox, SandboxEgress.none(), timing, GUARD_CONFIG_ROOT, mode, ImageContractCheck.current())
     }
 }

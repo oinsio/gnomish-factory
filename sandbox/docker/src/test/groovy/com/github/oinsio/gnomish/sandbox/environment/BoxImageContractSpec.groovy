@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.port.run.ImageContractRefusedException
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
+import com.github.oinsio.gnomish.sandbox.SandboxEgress
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import java.nio.file.Path
 import spock.lang.Specification
@@ -52,7 +53,7 @@ class BoxImageContractSpec extends Specification {
     private ContainerTaskExecutionEnvironment box() {
         def fixture = BoxEquipmentFixture.forBox(
                 docker, IMAGE, new ResourceLimits('2', '2g', 512L, '10g'), new VirtualClock(), OWNERSHIP.mode())
-        def equipment = new BoxEquipment(fixture.docker(), fixture.sandbox(), fixture.timing(),
+        def equipment = new BoxEquipment(fixture.docker(), fixture.sandbox(), SandboxEgress.none(), fixture.timing(),
                 fixture.guardConfigRoot(), fixture.ownershipMode(),
                 new ImageContractCheck(REQUIRES_TWO, Optional.of(new BaseTag('0.3'))))
         new ContainerTaskExecutionEnvironment(equipment, KEY,

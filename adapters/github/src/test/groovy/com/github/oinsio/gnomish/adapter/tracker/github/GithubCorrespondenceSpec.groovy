@@ -7,10 +7,11 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -58,7 +59,7 @@ class GithubCorrespondenceSpec extends Specification {
     }
 
     private GithubCorrespondence newCorrespondence(String instanceId = 'gnomish-factory-x7k2q1') {
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', fastRetryConfig())
         new GithubCorrespondence(markerWriter(httpClient, instanceId))
     }
 

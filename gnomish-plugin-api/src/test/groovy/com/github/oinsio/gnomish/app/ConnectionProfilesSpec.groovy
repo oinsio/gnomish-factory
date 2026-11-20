@@ -18,7 +18,7 @@ import spock.lang.Specification
 class ConnectionProfilesSpec extends Specification {
 
     private static final String FILE = 'application.yaml'
-    private static final String WHERE = 'factory.check.github'
+    private static final String WHERE = 'factory.check.github-actions'
 
     private static final Map GITHUB_MAIN = [('api-url'): 'https://api.github.com', credential: 'GNOMISH_GH_MAIN']
 
@@ -115,7 +115,7 @@ class ConnectionProfilesSpec extends Specification {
         then:
         errors.size() == 1
         errors[0].file() == FILE
-        errors[0].where() == 'factory.check.github.connection'
+        errors[0].where() == 'factory.check.github-actions.connection'
         errors[0].message().contains("undefined connection profile 'nope'")
         errors[0].message().contains('github-main')
     }
@@ -124,7 +124,7 @@ class ConnectionProfilesSpec extends Specification {
     def "a malformed reference value is a located error"() {
         expect:
         profiles().validateReference(FILE, WHERE, [connection: value]) == [
-            new ConfigError(FILE, 'factory.check.github.connection', 'connection must be a non-blank profile name')
+            new ConfigError(FILE, 'factory.check.github-actions.connection', 'connection must be a non-blank profile name')
         ]
 
         where:
@@ -143,8 +143,8 @@ class ConnectionProfilesSpec extends Specification {
 
         then: 'the two keys the profile also defines, in key order; repo is not one of them'
         errors*.where() == [
-            'factory.check.github.api-url',
-            'factory.check.github.credential'
+            'factory.check.github-actions.api-url',
+            'factory.check.github-actions.credential'
         ]
         errors*.message().every {
             it.contains("declares both 'connection: github-main'")
@@ -154,46 +154,34 @@ class ConnectionProfilesSpec extends Specification {
     // FR16, design D12: the SPI's connection-aware validator form resolves the reference and hands
     //     the adapter one shape, so an adapter states its key rules once for both forms — and the
     //     adapter's own verdict travels back out, or the seam would aggregate silence.
-    def "the tracker and check validator defaults grade the resolved subsection and return its verdict"() {
-        given: 'validators that report back whichever endpoint they were handed'
+    def "the tracker validator default grades the resolved subsection and returns its verdict"() {
+        given: 'a validator that reports back whichever endpoint it was handed'
         TrackerSubsectionValidator tracker = { String file, String where, Map subsection ->
             [
                 new ConfigError(file, where, "tracker saw '${subsection['api-url']}'".toString())
             ]
         }
-        CheckSubsectionValidator check = { String file, String where, Map subsection ->
-            [
-                new ConfigError(file, where, "check saw '${subsection['api-url']}'".toString())
-            ]
-        }
 
-        when:
-        def trackerErrors = tracker.validate(FILE, WHERE, [connection: 'github-main'], profiles())
-        def checkErrors = check.validate(FILE, WHERE, [connection: 'github-main'], profiles())
-
-        then: 'both graded the profile-resolved endpoint, and their verdicts reached the caller'
-        trackerErrors == [
+        expect: 'it graded the profile-resolved endpoint, and its verdict reached the caller'
+        tracker.validate(FILE, WHERE, [connection: 'github-main'], profiles()) == [
             new ConfigError(FILE, WHERE, "tracker saw 'https://api.github.com'")
-        ]
-        checkErrors == [
-            new ConfigError(FILE, WHERE, "check saw 'https://api.github.com'")
         ]
     }
 
     // FR16: an inline subsection reaches the same validator untouched, so an adapter that never
     //     heard of profiles keeps grading exactly what the operator wrote.
-    def "the validator defaults pass an inline subsection through unchanged"() {
+    def "the validator default passes an inline subsection through unchanged"() {
         given:
-        CheckSubsectionValidator check = { String file, String where, Map subsection ->
+        TrackerSubsectionValidator tracker = { String file, String where, Map subsection ->
             [
-                new ConfigError(file, where, "check saw '${subsection['api-url']}'".toString())
+                new ConfigError(file, where, "tracker saw '${subsection['api-url']}'".toString())
             ]
         }
 
         expect:
-        check.validate(FILE, WHERE, [('api-url'): 'https://ghe.acme.test'], ConnectionProfiles.none()) ==
+        tracker.validate(FILE, WHERE, [('api-url'): 'https://ghe.acme.test'], ConnectionProfiles.none()) ==
         [
-            new ConfigError(FILE, WHERE, "check saw 'https://ghe.acme.test'")
+            new ConfigError(FILE, WHERE, "tracker saw 'https://ghe.acme.test'")
         ]
     }
 }

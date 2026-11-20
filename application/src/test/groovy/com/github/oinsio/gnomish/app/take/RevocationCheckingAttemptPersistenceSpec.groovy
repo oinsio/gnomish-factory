@@ -238,7 +238,7 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
     def "a recordProgress throw is swallowed and the round proceeds as if it succeeded"() {
         given:
         tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
-        def logs = LogCaptureSupport.attach(RevocationCheckingAttemptPersistence)
+        def logs = LogCaptureSupport.attach(ClaimBoundaryCheck)
 
         when:
         persistence.persist('PROJ-1', STATE, TRACE)
@@ -272,5 +272,65 @@ class RevocationCheckingAttemptPersistenceSpec extends Specification {
 
         cleanup:
         logs.detach()
+    }
+
+    // FR20 of migrate-verify-to-executor-contract (design D21): the pending write is bracketed by the
+    // same judgement as the round's
+    def "FR20: persistPending delegates first, then passes when the task is still ours"() {
+        given:
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Working(INSTANCE.value()))
+
+        when:
+        persistence.persistPending('PROJ-1', STATE)
+
+        then:
+        1 * delegate.persistPending('PROJ-1', STATE)
+        noExceptionThrown()
+        persistence.revocation().isEmpty()
+    }
+
+    def "FR20: a revocation found at a pending write is recorded, and no later write reaches the delegate"() {
+        given:
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Gone())
+
+        when:
+        persistence.persistPending('PROJ-1', STATE)
+
+        then:
+        1 * delegate.persistPending('PROJ-1', STATE)
+        def found = thrown(RevocationDetectedException)
+        persistence.revocation().get() == found
+
+        when: 'a check\'s cannot-verify would close the round'
+        persistence.persist('PROJ-1', STATE, TRACE)
+
+        then: 'the write throws the recorded revocation before its delegate'
+        0 * delegate.persist(*_)
+        0 * tracker.fetchTask(_)
+        def again = thrown(RevocationDetectedException)
+        again.is(found)
+
+        when:
+        persistence.persistPending('PROJ-1', STATE)
+
+        then:
+        0 * delegate.persistPending(*_)
+        thrown(RevocationDetectedException)
+    }
+
+    def "FR20: a frozen claim that is no longer ours writes no pending commit"() {
+        given:
+        def flag = new ClaimLossFlag()
+        flag.claimUnconfirmed(REF)
+        def frozen = new RevocationCheckingAttemptPersistence(delegate, tracker, REF, INSTANCE, flag)
+        tracker.fetchTask(REF) >> TrackerTaskFixtures.taskWith(REF, new TrackerTaskState.Gone())
+
+        when:
+        frozen.persistPending('PROJ-1', STATE)
+
+        then:
+        0 * delegate.persistPending(*_)
+        thrown(RevocationDetectedException)
+        frozen.revocation().isPresent()
     }
 }

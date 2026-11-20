@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 
 /**
  * FR13, D12, UX3 of add-tracker-port (task 5.8): {@link TakeEngineExecution} must call {@code
@@ -39,7 +40,7 @@ class TakeEngineExecutionEscalationSpec extends TakeResumeSpecBase {
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
                 [
-                    new VerifyCheck.Builtin('files_exist', [files: ['missing-file.txt']])
+                    VerifyChecks.builtin('files_exist', [files: ['missing-file.txt']])
                 ],
                 new AutonomyLimits(1), AdvancementMode.AUTO)
         def failingPipeline = new PipelineDefinition('1', new AutonomyLimits(1), [failingStage])

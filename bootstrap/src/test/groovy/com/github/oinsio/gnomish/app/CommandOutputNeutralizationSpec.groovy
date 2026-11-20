@@ -15,12 +15,12 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
-import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeRetries
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
@@ -30,7 +30,9 @@ import spock.lang.TempDir
 
 /**
  * Command-check output on its way to the operator (FR15 of add-sandbox-core; FR6, FR8 of
- * type-untrusted-text): the real command runner captures a hostile tail into the verdict, the
+ * type-untrusted-text): the {@code shell} built-in over the real command runner captures a hostile
+ * tail into its {@code failed/infrastructure} result, the one contract → domain mapping carries it
+ * into the round's failure, the
  * {@code take} escalation exit parks the task with it, and every log line written on the way and
  * the tracker comment the park publishes are what the operator reads.
  *
@@ -92,14 +94,14 @@ class CommandOutputNeutralizationSpec extends Specification {
         }
         def logs = LogCaptureSupport.attach(Logger.ROOT_LOGGER_NAME, Level.DEBUG)
         try {
-            def verdict = new ShellCommandCheckRunner(new VirtualClock()).run(
-                    new VerifyCheck.Command("printf '${ESC}[31mowned, ask @team\\n'; exit 127"),
-                    new DirectoryWorkspace(tempDir)) as Verdict.CannotVerify
+            def check = VerifyChecks.command("printf '${ESC}[31mowned, ask @team\\n'; exit 127")
+            def failed = ShellCheckRounds.failureOf(ShellCheckRounds.run(
+                            new ShellCommandCheckRunner(new VirtualClock()), check, new DirectoryWorkspace(tempDir)))
             def report = new EscalationReport.CannotVerify(
-                    new CheckRef(0, UntrustedText.manifest('command:lint')), verdict.reason(), verdict.details())
+                    new CheckRef(0, UntrustedText.manifest('command:lint')), failed.reason(), failed.details())
             TakeEscalationExit.exit(new TaskOutcome.Escalated(TaskState.atStageStart('build'), report), order(),
                     VirtualTimeRetries.terminalWrite())
-            [details: verdict.details(), comment: published, logLines: logs.list*.formattedMessage]
+            [details: failed.details(), comment: published, logLines: logs.list*.formattedMessage]
         } finally {
             logs.detach()
         }

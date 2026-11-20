@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.app.killpoint
 
+import com.github.oinsio.gnomish.EgressProperties
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
@@ -7,6 +9,7 @@ import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitObjectsTaskRepository
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.HostRoundPersistence
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
@@ -48,15 +51,26 @@ trait TakeKillPointWorlds implements BareGitRepoFixture {
 
     /** The host medium: worktrees, {@link GitTaskRepository}, the host take routes. */
     TakeKillPointWorld takeHostWorld(Path root, PipelineDefinition definition) {
+        takeHostWorld(root, definition, [])
+    }
+
+    /**
+     * The host medium whose factory process may reach {@code inProcessEgress} — the operator's
+     * {@code factory.egress.in-process} scope an {@code http} check is judged under (design D16 of
+     * migrate-verify-to-executor-contract).
+     */
+    TakeKillPointWorld takeHostWorld(Path root, PipelineDefinition definition, List<String> inProcessEgress) {
         Path clone = takeClone(root)
         def registered = RegisteredCloneFixture.registered(root.resolve('home'), clone)
         def git = TaskGitFixture.real()
         Path argv = root.resolve('plain-round.log')
-        def agent = FakeAgentSupport.propertiesCapturingArgv('plain-round', argv)
+        def binary = FakeAgentSupport.propertiesCapturingArgv('plain-round', argv)
+        def agent = new FactoryProperties(binary.instanceName(), binary.agentCliBinary(), null, null, null, null, null,
+                null, new EgressProperties([], inProcessEgress))
         // The second instance's git is the recording stand-in, so a row can bound what its pickup
         // spends on reads of the worktree's own HEAD (NFR-P1 of fix-envelope-medium).
         Path gitStandIn = recordingGit(root.resolve('git-invocations.log'))
-        def world = new TakeKillPointWorld(definition: definition, repoDir: clone, epochs: git.epochs(),
+        def world = new TakeKillPointWorld(definition: definition, repoDir: clone, epochs: git.epochs(), ownGit: git,
         worktree: registered.worktrees().resolve(TAKE_TASK_ID), gitStandIn: gitStandIn,
         secondGit: TaskGitFixture.real(new GitProcessRunner(gitStandIn.toString())),
         agentRounds: {
@@ -65,12 +79,20 @@ trait TakeKillPointWorlds implements BareGitRepoFixture {
         world.store = RegisteringStore.of(
                 new GitTaskRepository(new GitProcessRunner(), registered, git.epochs(), new VirtualClock()), new GitProcessRunner(), registered.clonePath())
         world.roundWriter = { TaskState expected ->
-            new GitAttemptPersistence(new GitProcessRunner(), world.worktree, TAKE_TASK_ID, git.epochs())
+            HostRoundPersistence.over(new GitProcessRunner(), world.worktree, TAKE_TASK_ID, git.epochs())
             .persist(TAKE_TASK_ID, RoundStates.withRound(expected, trace(expected).key()), trace(expected))
         }
         seedClaim(world)
         world.routes = new KillPointTakeRoutes().host(registered, git, world.tracker, definition, agent)
         world.secondRoutes = new KillPointTakeRoutes().host(registered, world.secondGit, world.tracker, definition, agent)
+        world.secondOnAnotherClone = { Path elsewhere ->
+            Path other = seedClone(Files.createDirectories(elsewhere), clone.resolveSibling('origin.git').toString(), elsewhere.resolve('my-project'))
+            def otherRegistered = RegisteredCloneFixture.registered(elsewhere.resolve('home'), other)
+            world.secondGit = TaskGitFixture.real()
+            world.secondRoutes = new KillPointTakeRoutes().host(otherRegistered, world.secondGit, world.tracker, definition, agent)
+            // Every later read of the world, and the second instance's take order, names that clone.
+            world.repoDir = other
+        }
         createTask(world)
     }
 

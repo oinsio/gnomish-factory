@@ -15,8 +15,9 @@ import java.util.Arrays;
  * properties must hold before the admission may move the branch to it.
  *
  * <ul>
- *   <li><b>parent-check</b> — the round's snapshot commit must be the harvested state commit's
- *       <em>only</em> parent; a commit inserted inside the environment (a daemon, a gnome that
+ *   <li><b>parent-check</b> — the round's last registered commit (its snapshot, or the last
+ *       pending commit landed on it; design D21 of migrate-verify-to-executor-contract) must be the
+ *       harvested commit's <em>only</em> parent; a commit inserted inside the environment (a daemon, a gnome that
  *       kept running) aborts the round, and so does a second parent, which an in-box {@code
  *       MERGE_HEAD} could otherwise attach to the factory's own commit to carry unreviewed
  *       history onto the branch while both read-backs still pass;
@@ -38,7 +39,10 @@ import java.util.Arrays;
  * read-back to exactly the channel-delivered files (design D16); a wider guarantee would need a
  * snapshot-to-state tree diff this check deliberately does not run.
  *
- * <p>Implements FR22 of add-sandbox-core.
+ * <p>The same two properties judge a harvested <b>pending commit</b> ({@link #verifyPending}), whose
+ * one channel-delivered file is {@code state.json}.
+ *
+ * <p>Implements FR22 of add-sandbox-core; FR20 of migrate-verify-to-executor-contract.
  */
 final class HarvestedStateCommitCheck {
 
@@ -57,15 +61,16 @@ final class HarvestedStateCommitCheck {
      *
      * @param taskId the task being checked, for the violation message
      * @param tip the harvested state commit
-     * @param snapshot the round's snapshot commit, the only permitted parent of {@code tip}
+     * @param expectedParent the round's last registered commit, the only permitted parent of {@code tip}
      * @param tracePath the branch-relative path the round's trace was written to
      * @param stateBytes the {@code state.json} bytes the factory wrote through the channel
      * @param traceBytes the trace bytes the factory wrote through the channel
      * @throws RoundBoundaryViolationException if the parent is wrong, unreadable or not the only
      *     one, or if either harvested blob differs from what the factory wrote
      */
-    void verify(String taskId, String tip, String snapshot, String tracePath, byte[] stateBytes, byte[] traceBytes) {
-        verifyParent(taskId, tip, snapshot);
+    void verify(
+            String taskId, String tip, String expectedParent, String tracePath, byte[] stateBytes, byte[] traceBytes) {
+        verifyParent(taskId, tip, expectedParent);
         // Resolved once for both read-backs rather than per blob. It cannot be empty here:
         // verifyParent has already resolved tip^, which no unresolvable tip has.
         ObjectId tipCommit = gitObjects.resolveRef(tip).orElseThrow();
@@ -73,25 +78,40 @@ final class HarvestedStateCommitCheck {
         readBack(taskId, tipCommit, tracePath, traceBytes);
     }
 
-    private void verifyParent(String taskId, String tip, String snapshot) {
+    /**
+     * The parent-check and the {@code state.json} read-back of a harvested pending commit.
+     *
+     * @param taskId the task being checked, for the violation message
+     * @param tip the harvested pending commit
+     * @param expectedParent the round's last registered commit, the only permitted parent
+     * @param stateBytes the {@code state.json} bytes the factory wrote into the box
+     * @throws RoundBoundaryViolationException as {@link #verify}
+     */
+    void verifyPending(String taskId, String tip, String expectedParent, byte[] stateBytes) {
+        verifyParent(taskId, tip, expectedParent);
+        readBack(taskId, gitObjects.resolveRef(tip).orElseThrow(), EnvelopePaths.STATE_JSON_PATH, stateBytes);
+    }
+
+    private void verifyParent(String taskId, String tip, String expectedParent) {
         String parent = gitObjects
                 .resolveRef(tip + "^")
                 .map(ObjectId::hex)
                 .orElseThrow(() -> new RoundBoundaryViolationException(
-                        taskId, UntrustedText.factory("harvested state commit " + tip + " has no readable parent")));
-        if (!parent.equals(snapshot)) {
+                        taskId, UntrustedText.factory("harvested commit " + tip + " has no readable parent")));
+        if (!parent.equals(expectedParent)) {
             throw new RoundBoundaryViolationException(
                     taskId,
-                    UntrustedText.factory("harvested state commit's parent " + parent + " is not the snapshot commit "
-                            + snapshot + " (a commit was inserted inside the environment)"));
+                    UntrustedText.factory("harvested commit's parent " + parent
+                            + " is not the round's last registered commit " + expectedParent
+                            + " (a commit was inserted inside the environment)"));
         }
         // "The parent", singular (FR22): git commits whatever MERGE_HEAD names as a second parent,
         // so a first parent that matches is not yet proof that nothing else was attached in-box.
         if (gitObjects.resolveRef(tip + "^2").isPresent()) {
             throw new RoundBoundaryViolationException(
                     taskId,
-                    UntrustedText.factory("harvested state commit " + tip + " has a second parent besides the"
-                            + " snapshot commit (history was merged in inside the environment)"));
+                    UntrustedText.factory("harvested commit " + tip + " has a second parent besides the"
+                            + " round's last registered commit (history was merged in inside the environment)"));
         }
     }
 

@@ -16,7 +16,8 @@ import org.jspecify.annotations.Nullable;
  * tokens — the engine's status read back into the contract's vocabulary, never a third one.
  *
  * <p>The role is the use site's: a stage round is a {@code transform} (the law has no role field;
- * the stage implies it). The protocol version is named only for an executor that answered describe,
+ * the stage implies it), and an executor check a {@code verdict} (NFR-O1 of
+ * migrate-verify-to-executor-contract). The protocol version is named only for an executor that answered describe,
  * and is the one version the factory speaks, since the describe preflight refuses any other. The
  * bound is the reason a {@code failed/limit} round reported — the bound it reached.
  *
@@ -24,12 +25,15 @@ import org.jspecify.annotations.Nullable;
  * {@link Status} and {@link FailureClass} by exhaustive switches; {@code RoundOutcomeWordsSpec}
  * asserts every engine constant reads back to its namesake contract constant.
  *
- * <p>Implements NFR-O2, UX3 of define-executor-contract.
+ * <p>Implements NFR-O2, UX3 of define-executor-contract; NFR-O1 of migrate-verify-to-executor-contract.
  */
 public final class RoundOutcomeWords {
 
     /** The role of every stage round: the stage use site implies {@code transform} (FR1, D1). */
     public static final String STAGE_ROLE = Role.TRANSFORM.wire();
+
+    /** The role of every executor check: the {@code verify} use site implies {@code verdict} (NFR-O1). */
+    public static final String CHECK_ROLE = Role.VERDICT.wire();
 
     private RoundOutcomeWords() {}
 

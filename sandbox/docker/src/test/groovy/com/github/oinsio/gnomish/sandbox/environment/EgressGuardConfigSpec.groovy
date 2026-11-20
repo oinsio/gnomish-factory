@@ -67,13 +67,15 @@ class EgressGuardConfigSpec extends Specification {
         EgressGuardConfig.allowlistJson([]) == '[]'
     }
 
-    def "FR7: an entry outside the host grammar is rejected naming the entry"() {
+    // FR17 of migrate-verify-to-executor-contract: the guard renders the sandbox subset only, so a
+    //     CIDR block or a class word — which the addon cannot match — is refused like a typo
+    def "FR7, FR17: an entry outside the sandbox subset is rejected naming the entry"() {
         when:
         EgressGuardConfig.allowlistJson([entry])
 
         then:
         def failure = thrown(IllegalArgumentException)
-        failure.message.contains('factory.sandbox.egress-allowlist')
+        failure.message.contains("'${entry}'")
 
         where:
         entry << [
@@ -83,7 +85,10 @@ class EgressGuardConfigSpec extends Specification {
             'host"quote',
             'host,comma',
             'a/b',
-            'evil*.example.com'
+            'evil*.example.com',
+            '10.0.0.0/8',
+            'private',
+            'loopback'
         ]
     }
 

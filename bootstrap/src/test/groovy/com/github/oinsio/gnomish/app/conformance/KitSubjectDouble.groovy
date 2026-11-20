@@ -10,13 +10,13 @@ import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult
 import com.github.oinsio.gnomish.executorcontract.FailureClass
-import com.github.oinsio.gnomish.executorcontract.PendingKey
 import com.github.oinsio.gnomish.executorcontract.Role
 import com.github.oinsio.gnomish.executorcontract.Status
 import com.github.oinsio.gnomish.executorcontract.Usage
 import com.github.oinsio.gnomish.executorcontract.WireDocument
 import com.github.oinsio.gnomish.executorcontract.WireViolation
 import com.github.oinsio.gnomish.executorcontract.Workspace
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
 /**
@@ -37,6 +37,7 @@ class KitSubjectDouble implements KitSubject {
     static final String QUESTION = '{"kind":"decision-request","question":"q","options":["a","b"]}'
 
     boolean wire = true
+    Map<String, Object> ordinary = [:]
     Described described = new Described(describeOf(), tree('{"settingsSchema":{}}'), [], [])
     Closure<ExecutorResult> answer = { ExecutorRequest r, PendingKey k ->
         conforming(r)
@@ -46,6 +47,10 @@ class KitSubjectDouble implements KitSubject {
 
     boolean onWire() {
         wire
+    }
+
+    Map<String, Object> settings() {
+        ordinary
     }
 
     Described describe() {
@@ -64,10 +69,13 @@ class KitSubjectDouble implements KitSubject {
                 describe
             }, start: start, poll: poll] as Executor
         def workspace = new Workspace("/w/${kase.word()}")
+        def polling = new PollBinding(executor, new Workspace("/w/poll/${kase.word()}"))
         [executor: {
                 executor
             }, workspace: {
                 workspace
+            }, poll: { Role role ->
+                polling
             }, violations: {
                 subject.breaches[kase] ?: []
             }, close: {}] as CaseRun
@@ -92,7 +100,7 @@ class KitSubjectDouble implements KitSubject {
 
     static Describe describeOf(List<Role> roles = LIVE, List<Capability> capabilities = [Capability.POLL]) {
         new Describe(1, UntrustedText.subprocess('1'), roles, capabilities, JsonNodeFactory.instance.objectNode(), [], [],
-        null, [], EnforcementLevel.PROMPT_ONLY, false)
+        null, [], EnforcementLevel.PROMPT_ONLY, false, false)
     }
 
     static ExecutorResult result(Status status, String answer = null, String key = null) {

@@ -1,6 +1,10 @@
 package com.github.oinsio.gnomish.adapter.check
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.app.port.check.SarifResultReading
+import com.github.oinsio.gnomish.domain.engine.Finding
+import com.github.oinsio.gnomish.domain.engine.ResultLevel
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
 import com.github.oinsio.gnomish.executorcontract.ResultFileReader
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -9,8 +13,9 @@ import java.nio.charset.StandardCharsets
 import spock.lang.Specification
 
 /**
- * FR15 of harden-logging-observability; FR6 of define-executor-contract: {@link CheckFindings} reads
- * the findings channel through the executor contract's result reader and degrades every
+ * FR15 of harden-logging-observability; FR6 of define-executor-contract; FR5 of
+ * migrate-verify-to-executor-contract: {@link CheckFindings} reads the findings channel through the
+ * executor contract's result reader — a SARIF log or the legacy findings object — and degrades every
  * malformed shape to "no findings" (the caller's synthetic finding). Each degradation silently
  * replaces the check's own findings, so the operator's only route from "the report says something
  * odd" back to "the check wrote a bad channel" is the WARN — its catalog code, its level, and the
@@ -38,8 +43,8 @@ class CheckFindingsSpec extends Specification {
         }
     }
 
-    private List findingsOf(String content) {
-        CheckFindings.findings(CHECK, CheckFindings.read(holding(content), PATH))
+    private List<ShellResult> findingsOf(String content) {
+        CheckFindings.results(CHECK, CheckFindings.read(holding(content), PATH))
     }
 
     def "a findings object with no findings array is a coded WARN naming the check, and no findings"() {
@@ -50,7 +55,7 @@ class CheckFindingsSpec extends Specification {
         def findings = findingsOf('{"other":[]}')
 
         then: 'the caller falls back to a synthetic finding'
-        findings == null
+        findings.isEmpty()
 
         and:
         def warned = logs.list.find {
@@ -72,7 +77,7 @@ class CheckFindingsSpec extends Specification {
         def findings = findingsOf(content)
 
         then:
-        findings == null
+        findings.isEmpty()
 
         and:
         def warned = logs.list.find {
@@ -93,7 +98,7 @@ class CheckFindingsSpec extends Specification {
         ]
     }
 
-    // Scenario: cli/manual-run / A malformed findings file is logged
+    // Scenario: verification/verdict-executors / A malformed findings file is logged
     def "content that is not JSON at all is a coded WARN carrying the parser's reason"() {
         given:
         def logs = LogCaptureSupport.attach(CheckFindings)
@@ -102,7 +107,7 @@ class CheckFindingsSpec extends Specification {
         def findings = findingsOf('not json at all')
 
         then:
-        findings == null
+        findings.isEmpty()
 
         and:
         def warned = logs.list.find {
@@ -124,10 +129,10 @@ class CheckFindingsSpec extends Specification {
         when:
         def findings = findingsOf('{"findings":[{"message":"a real finding","location":"a.txt:3","details":"d"}]}')
 
-        then:
-        findings*.message() == ['a real finding']
-        findings*.location() == ['a.txt:3']
-        findings*.details() == ['d']
+        then: 'one error result: the legacy file names no level'
+        findings.collect { SarifResultReading.toDomain(it.asSarif()) } == [
+            new VerdictAnswer.Result(ResultLevel.ERROR, new Finding('a real finding', 'a.txt:3', 'd'))
+        ]
         logs.list.every { it.level != Level.WARN }
 
         cleanup:
@@ -142,7 +147,7 @@ class CheckFindingsSpec extends Specification {
         def findings = findingsOf(content)
 
         then:
-        findings == null
+        findings.isEmpty()
         logs.list.every { it.level != Level.WARN }
 
         cleanup:
@@ -166,38 +171,12 @@ class CheckFindingsSpec extends Specification {
         asked == [cap + 1L]
 
         and: 'the cut JSON is malformed: the caller falls back to its synthetic finding'
-        findings == null
+        findings.isEmpty()
         logs.list.any {
             it.formattedMessage.startsWith(OperatorEvent.FINDINGS_FILE_MALFORMED.head())
         }
 
         cleanup:
         logs.detach()
-    }
-
-    def "content on a passing check is noted at DEBUG, and nothing is noted for an empty channel"() {
-        given:
-        def logs = LogCaptureSupport.attach(CheckFindings, Level.DEBUG)
-
-        when:
-        CheckFindings.noteIgnoredOnPass(CHECK, CheckFindings.read(holding(content), PATH))
-        def noted = logs.list.any {
-            it.formattedMessage.contains('has content but the command exited 0')
-        }
-
-        then:
-        noted == expected
-
-        cleanup:
-        logs.detach()
-
-        where:
-        content | expected
-        '{"findings":[]}' | true
-        'not json' | true
-        '{"x":"' + ('y' * 300_000) + '"}' | true
-        '' | false
-        '   ' | false
-        null | false
     }
 }

@@ -27,9 +27,9 @@ class ScriptedJudgeVoterContractSpec extends JudgeVoterContract {
     private static JudgeVoter.Vote scriptedVote(VoteShape shape) {
         return switch (shape) {
                     case VoteShape.PASS_WITH_TOKENS ->
-                    new JudgeVoter.Vote(new Verdict.Pass(), Unpriced.of(['model-a': new TokenUsage(100, 50, 0, 0)]))
+                    new JudgeVoter.Vote(new Verdict.Pass(null, []), Unpriced.of(['model-a': new TokenUsage(100, 50, 0, 0)]))
                     case VoteShape.PASS_WITHOUT_TOKENS ->
-                    new JudgeVoter.Vote(new Verdict.Pass(), [:])
+                    new JudgeVoter.Vote(new Verdict.Pass(null, []), [:])
                     case VoteShape.FAIL ->
                     new JudgeVoter.Vote(new Verdict.Fail([
                         new Finding('criteria not met', null, null)

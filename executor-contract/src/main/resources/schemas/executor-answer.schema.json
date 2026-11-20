@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/oinsio/gnomish-factory/schemas/executor-contract/1/executor-answer.schema.json",
   "title": "Executor answer",
-  "description": "The optional structured answer of a result, written to the factory-named GNOMISH_ANSWER_FILE or carried in the result's answer slot, and read through the one capped result reader. A malformed answer is never read as a pass. Unknown-token arm: an unknown kind is a malformed answer (failed/infrastructure for transform, cannot-verify for verdict). Readers ignore unknown properties. Implements FR3, NFR-S2 of define-executor-contract.",
+  "description": "The optional structured answer of a result, written to the factory-named GNOMISH_ANSWER_FILE or carried in the result's answer slot, and read through the one capped result reader. A malformed answer is never read as a pass. Unknown-token arm: an unknown kind is a malformed answer (failed/infrastructure for transform, cannot-verify for verdict). Readers ignore unknown properties. Implements FR3, NFR-S2 of define-executor-contract; FR5 of migrate-verify-to-executor-contract.",
   "type": "object",
   "required": ["kind"],
   "properties": {
@@ -24,7 +24,7 @@
       }
     },
     "sarifLog": {
-      "description": "The subset of SARIF 2.1.0 the engine reads: runs[].results[] with their level and message. Every other SARIF property is allowed and ignored.",
+      "description": "The subset of SARIF 2.1.0 the engine reads: runs[].results[] with their level and message, and runs[].properties.runUrl. Every other SARIF property is allowed and ignored.",
       "type": "object",
       "required": ["version", "runs"],
       "properties": {
@@ -42,7 +42,14 @@
                   "driver": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } }
                 }
               },
-              "results": { "type": "array", "items": { "$ref": "#/$defs/sarifResult" } }
+              "results": { "type": "array", "items": { "$ref": "#/$defs/sarifResult" } },
+              "properties": {
+                "description": "SARIF's property bag on the run. The engine reads one member, runUrl: the URL of the platform run that produced the answer, recorded with a pass, when a non-blank string; a blank runUrl or one of another type is ignored, never malformed. Optional and additive: no protocolVersion change (design D23 of migrate-verify-to-executor-contract).",
+                "type": "object",
+                "properties": {
+                  "runUrl": { "description": "The platform run's URL, read when a non-blank string." }
+                }
+              }
             }
           }
         }
@@ -62,7 +69,14 @@
           "required": ["text"],
           "properties": { "text": { "type": "string" } }
         },
-        "locations": { "type": "array" }
+        "locations": { "type": "array" },
+        "properties": {
+          "description": "SARIF's property bag. The engine reads one member, details: the result's details apart from its message, when a string; a details of another type is a third-party tool's own and is ignored, never malformed (design D19 of migrate-verify-to-executor-contract).",
+          "type": "object",
+          "properties": {
+            "details": { "description": "The result's details, read when a string." }
+          }
+        }
       }
     },
     "select": {
@@ -97,7 +111,8 @@
           {
             "tool": { "driver": { "name": "example-judge" } },
             "results": [
-              { "ruleId": "javadoc", "level": "warning", "message": { "text": "Foo.bar has no javadoc" } }
+              { "ruleId": "javadoc", "level": "warning", "message": { "text": "Foo.bar has no javadoc" } },
+              { "level": "error", "message": { "text": "command exited with status 1" }, "properties": { "details": "> Task :test FAILED" } }
             ]
           }
         ]

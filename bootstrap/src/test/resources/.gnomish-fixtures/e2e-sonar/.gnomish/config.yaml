@@ -1,0 +1,11 @@
+schemaVersion: "1"
+autonomy:
+  attemptLimit: 3
+# The SonarQube-shaped reference verdict program, installed in the box image for one server
+# (FakeAgentSandboxImage.ensureBuiltWithSonarGate). Its egress grant is the server's address, known
+# only when the spec has started the server, so the spec appends it below before it publishes the law.
+executors:
+  sonarqube:
+    type: program
+    program: [sh, /opt/gnomish-sonar/sonar-gate.sh]
+    credentials: [SONAR_TOKEN]

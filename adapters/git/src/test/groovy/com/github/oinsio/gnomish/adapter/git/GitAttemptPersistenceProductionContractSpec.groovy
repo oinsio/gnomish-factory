@@ -39,7 +39,7 @@ class GitAttemptPersistenceProductionContractSpec extends AttemptPersistenceCont
         runner.run(repo, 'add', 'seed.txt')
         runner.run(repo, '-c', 'user.email=a@b.c', '-c', 'user.name=a', 'commit', '-m', 'init')
         runner.run(repo, 'checkout', '-q', '-b', 'gnomish/TASK-1')
-        Optional.of(new GitAttemptPersistence(runner, repo, 'TASK-1', ClaimEpochSource.NONE))
+        Optional.of(HostRoundPersistence.over(runner, repo, 'TASK-1', ClaimEpochSource.NONE))
     }
 
     @Override

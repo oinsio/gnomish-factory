@@ -28,7 +28,7 @@ final class ContainerTakeSupportFixture {
     static ContainerTakeSupport hostOnly() {
         def registry = AdapterBindingRegistry.ratified([new HostBindingProvider()], BindingTrustTable.firstParty())
         def bindings = new BindingProperties(BindingNames.HOST, [:])
-        def sandboxProperties = new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null)
+        def sandboxProperties = new SandboxProperties(null, null, null, null, null, false, null, null, null, null)
         def probe = {
             throw new IllegalStateException('a host-only selector never probes the container runtime')
         } as ContainerRuntimeProbe

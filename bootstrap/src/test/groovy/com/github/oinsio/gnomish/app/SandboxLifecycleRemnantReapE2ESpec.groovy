@@ -94,7 +94,7 @@ class SandboxLifecycleRemnantReapE2ESpec extends Specification implements BareGi
     def "an aged network-only remnant is reaped, not silently skipped"() {
         given: 'a materialized box, then container, guard and volume all removed — the network alone survives'
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def tinyAges = new SandboxProperties(image, null, null, null, [], [], false, null,
+        def tinyAges = new SandboxProperties(image, null, null, null, [], false, null,
         Duration.ofMillis(1), Duration.ofMillis(1), Duration.ofHours(24))
         def project = cloneWithOrigin('remnant-project')
         taskId = "CTN-REMNANT-${System.nanoTime() % 100000}"

@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
@@ -19,6 +18,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -35,13 +35,12 @@ class ExecutorVersionPinSpec extends Specification {
     static final def TRACE = new ToolTrace(new AttemptKey('TASK-1', 'build', 0), [])
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
+    def builtinRunner = new ScriptedCheckRounds()
     def persistence = new InMemoryAttemptPersistence()
     def listener = new RecordingEventListener()
 
     EnginePorts ports(DescribedExecutors described) {
-        new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
-                new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(new VirtualClock()),
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(new VirtualClock()),
                 AttemptDelivery.assumedDelivered(), described, RoundIdentity.inPlace())
     }
 
@@ -55,7 +54,7 @@ class ExecutorVersionPinSpec extends Specification {
                 : new StageDefinition.Executor(ExecutorType.PROGRAM, '', [:], Sandbox.none(), named)
         new StageDefinition(name, 'purpose', [], [], executor,
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ], new AutonomyLimits(3), AdvancementMode.AUTO)
     }
 
@@ -82,7 +81,7 @@ class ExecutorVersionPinSpec extends Specification {
     void passes(int rounds) {
         rounds.times {
             executor.scripted << ExecutionResult.completed(ExecutorUsage.none(), TRACE, [])
-            builtinRunner.scripted << new Verdict.Pass()
+            builtinRunner.scripted << new Verdict.Pass(null, [])
         }
     }
 

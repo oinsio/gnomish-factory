@@ -1,0 +1,51 @@
+// Build script for the `:httpegress` module (FR15, design D16 of
+// migrate-verify-to-executor-contract): the factory's one HTTP egress owner — the allowlist of
+// hosts an in-process HTTP call may reach (scheme, host and address-class rules), the guarded
+// exchange that re-judges every redirect hop against it, and the one JDK `HttpClient` the
+// factory's production code constructs. A request in, a bounded response or a refusal out.
+//
+// The module depends on `:domain` and on nothing else — no other factory module, no Spring, no
+// Jackson, no logging API, no external library. The one edge carries the egress values it admits
+// and refuses with (`EgressMedium`, `ConnectionEndpoint`, `AdmittedEndpoint`, the refusal type, in
+// `domain.egress`; design D16 of migrate-verify-to-executor-contract as amended 2026-11-09): every
+// consumer of the leaf already reaches `:domain`, so the edge adds no reach to any of them. The
+// narrowness is otherwise the *security* property `:gittransfer` has (NFR-S2 of
+// add-plugin-architecture; FR15 of migrate-verify-to-executor-contract): the egress guard can be
+// handed no tracker, secrets provider or configuration format, so the only things a caller can vary
+// are the admitted set and the request. It is also load-bearing for the layering: the `http`
+// built-in in `:adapters` and the first-party GitHub HTTP core reach this leaf from different
+// modules, so any dependency added here would be pushed into both.
+//
+// What stays outside: composing a request from a manifest, resolving its credential and judging
+// the verdict (`HttpCheckProbe` in `:adapters`), and logging a refusal, which needs the
+// logging API this leaf does not carry, are the callers'.
+//
+// The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and the PIT mutation
+// gate all come from the convention plugins.
+plugins {
+    id 'library-conventions'
+    // The FR2 direction gate of split-into-modules; the permitted reach is stated below.
+    id 'layering-conventions'
+}
+
+description = 'HTTP egress owner: admission by medium, the guarded exchange, the one JDK HTTP client.'
+
+dependencies {
+    // `api`: `EgressAdmission.admit` takes and returns the `domain.egress` values on its signature.
+    api project(':domain')
+}
+
+// `:httpegress` reaches the domain and, through it, the two JDK-only leafs the domain carries; no
+// other project (design D16 as amended 2026-11-09; module-layering scenario "The egress module
+// depends only on the domain").
+layering {
+    allowedProjects = [
+        ':domain',
+        // The operator-event catalog leaf: transitive via `:domain`. No source here names it.
+        ':operatorevent',
+        // The pending-key leaf (design D20): transitive via `:domain`. No source here names it.
+        ':pendingkey',
+        // The untrusted-text leaf: transitive via `:domain`. No source here names it.
+        ':untrustedtext',
+    ]
+}

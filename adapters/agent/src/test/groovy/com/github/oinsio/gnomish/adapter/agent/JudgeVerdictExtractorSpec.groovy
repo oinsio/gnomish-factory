@@ -31,7 +31,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def verdict = extractor.extract(UntrustedText.agent(message))
 
         then: 'FR8: passed:true maps to Pass'
-        verdict == new Verdict.Pass()
+        verdict == new Verdict.Pass(null, [])
     }
 
     // Scenario: executor/agent-executor / Fenced verdict accepted
@@ -67,7 +67,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def verdict = extractor.extract(UntrustedText.agent(message))
 
         then:
-        verdict == new Verdict.Pass()
+        verdict == new Verdict.Pass(null, [])
     }
 
     def "leading and trailing prose around a valid JSON object still parses"() {
@@ -78,18 +78,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def verdict = extractor.extract(UntrustedText.agent(message))
 
         then: 'D5: first JSON object is taken even with surrounding prose'
-        verdict == new Verdict.Pass()
-    }
-
-    def "passed true with non-empty findings still yields Pass, findings discarded"() {
-        given:
-        def message = '{"passed": true, "findings": ["irrelevant"]}'
-
-        when:
-        def verdict = extractor.extract(UntrustedText.agent(message))
-
-        then: 'Pass carries no findings field'
-        verdict == new Verdict.Pass()
+        verdict == new Verdict.Pass(null, [])
     }
 
     def "failing verdict with absent findings yields Fail with empty findings"() {
@@ -149,7 +138,7 @@ class JudgeVerdictExtractorSpec extends Specification {
         def verdict = extractor.extract(UntrustedText.agent(message))
 
         then: 'D5: depth tracking finds the true matching outer brace, not the inner one'
-        verdict == new Verdict.Pass()
+        verdict == new Verdict.Pass(null, [])
     }
 
     def "JSON present but missing the passed field yields CannotVerify"() {

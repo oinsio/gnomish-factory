@@ -194,7 +194,7 @@ class GitObjectsTaskRepositoryResumeFromSpec extends Specification implements Ba
             Path stateJson = dir.resolve('state.json')
             def dto = StateJsonMapper.readDto(UntrustedText.branchDocument(Files.readString(stateJson)))
             Files.writeString(stateJson, TaskStateJson.mapper().writeValueAsString(
-                            new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor, null)))
+                            new StateJsonDto(dto.version(), dto.position(), dto.attemptsUsed(), dto.attempts(), dto.totals(), cursor, null, null)))
         }
 
         when:

@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.adapter.git.ContainerHarvestFetch
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import com.github.oinsio.gnomish.sandbox.*
+import com.github.oinsio.gnomish.sandbox.SandboxEgress
 import com.github.oinsio.gnomish.sandbox.environment.*
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -63,7 +64,8 @@ class ContainerModeIsolationE2ESpec extends Specification implements BareGitRepo
     private ContainerEnvironments environments(String taskKey) {
         key = taskKey
         new ContainerEnvironmentFactory(
-                new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'), null, null, null, [], [], false, null, null, null, null),
+                new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'), null, null, null, [], false, null, null, null, null),
+                SandboxEgress.none(),
                 // real-time-wiring: a real Docker box, whose guard readiness the self-check's pause must
                 //     really wait for (end-to-end layer); the time source is not the subject here.
                 new BoxTiming(new TimeEquipment(InstantSource.system(), new ThreadSleeper()), Duration.ofMinutes(5)),

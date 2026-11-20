@@ -36,7 +36,7 @@ class HostRoundEnvelopeSpec extends Specification implements RegisteredRoundFixt
 
     /** The round's persistence, built as the run builds it: before the gnome works. */
     private def persistence() {
-        store.attemptPersistence(worktree(), TASK)
+        store.attemptPersistence(worktree(), TASK, HostRoundPersistence.openedAtHead(runner, worktree()))
     }
 
     private static void persistRound(def persistence, int attempt) {
@@ -135,7 +135,7 @@ class HostRoundEnvelopeSpec extends Specification implements RegisteredRoundFixt
 
     def "FR13: a restore that fails fails the round as infrastructure"() {
         given:
-        def persistence = new GitAttemptPersistence(
+        def persistence = HostRoundPersistence.over(
                 new ScriptedRestoreFailure(runner), worktree(), TASK, ClaimEpochSource.NONE)
 
         when:

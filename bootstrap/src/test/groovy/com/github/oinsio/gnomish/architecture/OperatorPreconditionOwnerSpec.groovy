@@ -28,6 +28,8 @@ class OperatorPreconditionOwnerSpec extends Specification {
         'ContainerRuntimeUnavailableException',
         'BoxGitVersionRefusedException',
         'ImageContractRefusedException',
+        // FR18 of migrate-verify-to-executor-contract: the egress guard's refusal of a tracker call
+        'EgressRefusedException',
     ]
 
     // Scenario: tracker/tracker-take / Operator precondition refused after the claim exits 8

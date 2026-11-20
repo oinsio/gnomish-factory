@@ -44,7 +44,7 @@ class ContainerTerminalDriveDisposalSpec extends Specification implements RunCha
         support.readFinalState() >> TaskState.atStageStart('build')
     }
 
-    private void drive(ScriptedConsoleIO io = new ScriptedConsoleIO(), Verdict verdict = new Verdict.Pass()) {
+    private void drive(ScriptedConsoleIO io = new ScriptedConsoleIO(), Verdict verdict = new Verdict.Pass(null, [])) {
         ContainerTerminalDrive.run(assemblyRunningLoop(executor, io, verdict), support,
                 new RunOrder(CLONE_DIR, null, completingPipeline(), false),
                 CONTEXT, TaskState.atStageStart('build'), LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD), null)

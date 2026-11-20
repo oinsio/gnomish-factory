@@ -45,7 +45,7 @@ class TakeContainerRevocationSpec extends Specification implements RunChainFakes
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
         def execution = new TakeContainerEngineExecution(
                 assemblyRunning(new ScriptedExecutor([completedRound()])),
@@ -69,5 +69,41 @@ class TakeContainerRevocationSpec extends Specification implements RunChainFakes
 
         and:
         result instanceof TakeResult.Revoked
+    }
+
+    // FR19 of migrate-verify-to-executor-contract (design D22): over a registered snapshot or pending
+    // commit the box's stop salvages nothing — the support answers that the leftovers were kept out —
+    // still pushes, and the one stop note names the discard instead of a salvage commit.
+    def "a sandboxed run revoked during a verification names the discard in its stop note, #kept"() {
+        given:
+        def tracker = Mock(Tracker)
+        tracker.fetchTask(_) >> trackerTask(new TrackerTaskState.Gone())
+        def support = Mock(SandboxRunSupport) {
+            persistence() >> new InMemoryAttemptPersistence()
+            workspace() >> new FakeWorkspace()
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
+        }
+        def execution = new TakeContainerEngineExecution(
+                assemblyRunning(new ScriptedExecutor([completedRound()])),
+                Stub(TaskBranchGit),
+                new TakeOutcomeDispatch(VirtualTimeRetries.terminalWrite(), new AbortFuse(new AbortHandler(tracker, FIXED_CLOCK), 3)),
+                [], new ClaimLossFlag(), LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))
+
+        when:
+        def result = execution.run(
+                takeOrder(heldByUs(), tracker, runOrder(completingPipeline())), support, new BranchAdoption.AlreadyLocal('PROJ-1'),
+                new TaskContext('PROJ-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
+                TaskState.atStageStart('build'), null)
+
+        then:
+        1 * support.revocationSalvageAndPush('PROJ-1') >> kept
+        1 * tracker.postNote(_, { String note -> note.contains(sentence) })
+        1 * tracker.release(_)
+        (result as TakeResult.Revoked).note().contains(sentence)
+
+        where:
+        kept || sentence
+        true || 'its leftovers were discarded, no salvage commit landed'
+        false || 'Uncommitted work was salvage-committed'
     }
 }

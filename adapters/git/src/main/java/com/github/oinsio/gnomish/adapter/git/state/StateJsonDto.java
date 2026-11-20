@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git.state;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.github.oinsio.gnomish.executorcontract.usagewire.UsageSnapshotDto;
 import java.util.List;
 import java.util.Map;
@@ -26,8 +27,15 @@ import org.jspecify.annotations.Nullable;
  * written before the field existed, and {@code null} whenever the writing
  * environment had no denial source (host mode) or had not read one yet.
  *
+ * <p>{@code pendingPolls} is the open round's list of pending polls, one element per pending
+ * check, each naming its round by attempt and token ({@link StatePendingPollDto}; design D20 as
+ * amended 2026-11-12, D21 of migrate-verify-to-executor-contract). Additive under contract v1 and
+ * written only when the list is not empty: absent in every document written before the field
+ * existed and in every state with no pending poll, and an absent array reads as an empty list.
+ *
  * <p>Implements FR3, FR4 of add-git-workflow; FR5 of
- * fix-denial-report-attachment; FR13 of define-executor-contract.
+ * fix-denial-report-attachment; FR13 of define-executor-contract; FR2, FR20 of
+ * migrate-verify-to-executor-contract.
  *
  * @param version the state-file contract version, {@code 1}
  * @param position where the task sits in its pipeline
@@ -41,6 +49,7 @@ import org.jspecify.annotations.Nullable;
  * @param executorVersions the task's executor version pin, executor name to describe version (FR13
  *     of define-executor-contract); always written, {@code null} only when read from a document
  *     written before the field existed, which reads as no pin
+ * @param pendingPolls the open round's pending polls; {@code null} (omitted) when there is none
  */
 public record StateJsonDto(
         int version,
@@ -49,4 +58,5 @@ public record StateJsonDto(
         List<StateAttemptDto> attempts,
         UsageSnapshotDto totals,
         @Nullable EgressCursorDto egressCursor,
-        @Nullable Map<String, String> executorVersions) {}
+        @Nullable Map<String, String> executorVersions,
+        @JsonInclude(JsonInclude.Include.NON_NULL) @Nullable List<StatePendingPollDto> pendingPolls) {}

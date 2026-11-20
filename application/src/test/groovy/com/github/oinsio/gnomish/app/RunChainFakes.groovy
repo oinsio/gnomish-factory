@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.lease.ClaimLossFlag
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.*
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.pipeline.BoundTaskTier
 import com.github.oinsio.gnomish.app.port.tracker.*
 import com.github.oinsio.gnomish.app.project.RegisteredClone
@@ -18,13 +19,15 @@ import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.branch.BranchShape
 import com.github.oinsio.gnomish.domain.engine.*
 import com.github.oinsio.gnomish.domain.engine.fake.*
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.*
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.gitobjects.ObjectId
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 /**
  * The run chains' collaborators — take, git-mode and container-mode — built from PORT fakes only:
  * no git binary, no tracker HTTP, no Docker, no composition root (design D13(c) of
@@ -148,7 +151,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         def stage = new StageDefinition('build', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ],
         new AutonomyLimits(1), AdvancementMode.AUTO)
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])
@@ -163,7 +166,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
         def stage = new StageDefinition('startup-only', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ],
         new AutonomyLimits(1), AdvancementMode.AUTO)
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])
@@ -174,16 +177,14 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * that keeps a whole-run scenario a unit spec. The persistence the caller assembled with is
      * passed straight through, so the run's own revocation-checking wrapper still applies.
      */
-    RunAssembly assemblyRunning(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass(),
+    RunAssembly assemblyRunning(ScriptedExecutor executor, Verdict verdict = new Verdict.Pass(null, []),
             List hostGitPushAttached = []) {
         def time = VirtualTimeEquipment.create()
         // A hand-written fake rather than a Spock Stub: mock creation is only legal inside a
         // feature's own lifetime, and this is built by a trait helper.
         [
             assemble: { RunOrder order, context, state, AttemptPersistence persistence, credentials, lawBinding ->
-                def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
-                new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
-                new ScriptedJudgeVoter(), new RecordingEventListener(),
+                def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds([verdict]), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), new RecordingEventListener(),
                 persistence, time, RoundIdentity.inPlace())
                 new Run(null, ports)
             },
@@ -198,8 +199,8 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             withSandbox: { pieces ->
                 assemblyRunning(executor, verdict, hostGitPushAttached)
             },
-            withHostGitPush: { decoration ->
-                hostGitPushAttached << decoration
+            withHostGitPush: { decoration, run ->
+                hostGitPushAttached << [decoration, run]
                 assemblyRunning(executor, verdict, hostGitPushAttached)
             },
             withPipelineSource: { source ->
@@ -234,16 +235,14 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
      * specs that assert WHICH tree a resumed run binds its law from.
      */
     RunAssembly assemblyRunningLoop(ScriptedExecutor executor, ScriptedConsoleIO io = new ScriptedConsoleIO(),
-            Verdict verdict = new Verdict.Pass(), List hostGitPushAttached = [], List lawBindings = []) {
+            Verdict verdict = new Verdict.Pass(null, []), List hostGitPushAttached = [], List lawBindings = []) {
         def time = VirtualTimeEquipment.create()
         def console = new DialogConsole(io)
         def self = null
         self = [
             assemble: { RunOrder order, context, state, AttemptPersistence persistence, credentials, lawBinding ->
                 lawBindings << lawBinding.binding()
-                def ports = new EnginePorts(executor, new ScriptedBuiltinCheckRunner([verdict]),
-                new ScriptedCommandCheckRunner(), new ScriptedExternalCheckClient(),
-                new ScriptedJudgeVoter(), new RecordingEventListener(),
+                def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds([verdict]), new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), new RecordingEventListener(),
                 persistence, time, RoundIdentity.inPlace())
                 new Run(new RunnerOutcomeLoop(new Engine(), console, LiveConsoleIO.onStderr()), ports)
             },
@@ -251,8 +250,8 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             timeEquipment: { -> time },
             withExtraListener: { listener -> self },
             withSandbox: { pieces -> self },
-            withHostGitPush: { decoration ->
-                hostGitPushAttached << decoration
+            withHostGitPush: { decoration, run ->
+                hostGitPushAttached << [decoration, run]
                 self
             },
             withPipelineSource: { source -> self },
@@ -301,7 +300,7 @@ trait RunChainFakes implements TaskRecordFakes, FactoryPropertiesFixture {
             },
         ] as TaskBranchGit
         new TaskGit([:] as TaskStoreGit, branchGit, [:] as TaskWorktreeGit,
-        UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+        HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
     }
 
     /** A take order for {@code task}, claimed through {@code tracker} under {@link #INSTANCE}. */

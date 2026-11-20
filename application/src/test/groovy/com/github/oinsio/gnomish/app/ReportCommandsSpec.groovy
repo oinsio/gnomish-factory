@@ -46,7 +46,7 @@ class ReportCommandsSpec extends Specification implements SeededCloneFixture {
 
     private TrackerWiring wiringFailingOn(String command) {
         def source = Stub(PipelineSource) {
-            loadReadOnly(_) >> {
+            load(_) >> {
                 throw new IOException("pipeline load for ${command}")
             }
         }

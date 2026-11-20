@@ -27,7 +27,7 @@ import java.util.Objects;
  *       virtual sleeper advances the virtual clock.
  *   <li><b>(b) Behavior beyond accessors.</b> {@link #remaining(Instant)} is the deadline test every
  *       bounded loop spelled privately ({@code !clock.instant().isBefore(deadline)} in {@code
- *       TerminalWriteRetry} and {@code ExternalPolling}, which now ask this value); {@link
+ *       TerminalWriteRetry} and {@code PendingPoll}, which now ask this value); {@link
  *       #sleepUntil(Instant)} is the two-member computation — sleep on the one half for what the
  *       other half says is left — that a deadline-bounded wait needs and that only the pair can do.
  *   <li><b>(c) A name the reader already has.</b> The glossary's feed-assembly and box-timing

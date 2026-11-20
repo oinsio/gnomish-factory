@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.git.ClosedRound
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
@@ -50,7 +51,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         def read = request == null ? Optional.<RoundDecisionRequest> empty() : DecisionRequestRead.read({ long limit ->
             Optional.of(request.getBytes(StandardCharsets.UTF_8))
         } as ResultSource)
-        new PendingVerification('abc123', 'work', 2, RECORDED, read)
+        new PendingVerification('abc123', 'work', 2, RECORDED, read, 'abc123', ['abc123'])
     }
 
     private static StageExecutor.Request request(String stageName, int attempt) {
@@ -88,7 +89,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
         (result.status() instanceof ExecutionResult.Completed && result.answer() == null)
 
         and: "the cell holds the recorded round: the snapshot subject's token and the snapshot commit"
-        ref.closed() == new ClosedRound(RECORDED, 'abc123')
+        ref.closed() == new ClosedRound(RECORDED, 'abc123', 'abc123', RoundClose.VERIFIABLE)
         ref.opened() == RECORDED
         result.trace() == new ToolTrace(new AttemptKey('T-1', 'work', 2), [])
         result.usage() == new ExecutorUsage(Duration.ZERO, [], [:])
@@ -171,7 +172,7 @@ class ResumeVerificationStageExecutorSpec extends Specification {
 
         then: "the agent never runs, and the cell holds the recorded round"
         0 * delegate.execute(_)
-        ref.closed() == new ClosedRound(RECORDED, 'abc123')
+        ref.closed() == new ClosedRound(RECORDED, 'abc123', 'abc123', RoundClose.VERIFIABLE)
 
         and: "the snapshot's question, mapped through the same reader a live round uses"
         def needed = result.answer() as ExecutionResult.DecisionRequest

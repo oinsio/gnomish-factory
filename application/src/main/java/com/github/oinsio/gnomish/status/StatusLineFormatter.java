@@ -105,8 +105,8 @@ final class StatusLineFormatter {
     static List<String> runUrlLines(AttemptRecord record, ReportPlane plane) {
         List<String> lines = new ArrayList<>();
         for (CheckResult check : record.checkResults()) {
-            if (check.verdict() instanceof Verdict.Pass(String runUrl) && runUrl != null) {
-                lines.add(plane.render(check.checkRef().label()) + " passed: " + plane.line(runUrl));
+            if (check.verdict() instanceof Verdict.Pass pass && pass.runUrl() != null) {
+                lines.add(plane.render(check.checkRef().label()) + " passed: " + plane.line(pass.runUrl()));
             }
         }
         return lines;

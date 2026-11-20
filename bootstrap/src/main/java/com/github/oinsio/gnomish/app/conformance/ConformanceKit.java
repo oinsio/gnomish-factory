@@ -7,14 +7,11 @@ import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
-import com.github.oinsio.gnomish.executorcontract.PendingKey;
 import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.executorcontract.Status;
-import java.time.Duration;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -24,26 +21,23 @@ import org.jspecify.annotations.Nullable;
  * a program and a built-in run through the same cases. The describe and settings-schema cases judge
  * what describing the candidate yielded ({@link DescribeCases}); every other case opens a run of its
  * own and starts one request — in its role, in a role the describe does not list, or in the first
- * role it lists — judged by {@link CaseJudgement}. A role the describe does not list, the pending
- * case of a candidate without {@code poll}, and a wire-only case of a subject off the wire are not
+ * role it lists — judged by {@link CaseJudgement}, the two pending cases continuing their run by poll
+ * ({@link PendingCases}). A role the describe does not list, a pending case of a candidate without
+ * {@code poll}, and a wire-only case of a subject off the wire are not
  * applicable; when the factory refused the describe answer, no run reaches the candidate. An
  * executor that throws from {@code start} or {@code poll} fails the case: the contract reports every
  * outcome as a result.
  *
- * <p>The pending case starts under the operator's pending settings and polls the same executor —
- * the pending key is that instance's (FR23) — waiting {@link #POLL_INTERVAL} between polls, at most
- * {@link #POLL_LIMIT} of them. Every other request carries empty settings.
+ * <p>The pending cases start under the operator's pending settings. Every other request carries the
+ * subject's ordinary settings — empty for a program; an in-process built-in's own, which its
+ * settings-schema case judges in place of the pending settings a program's is judged against (design
+ * D18 of migrate-verify-to-executor-contract).
  *
- * <p>Implements FR8, FR12, FR23, FR24, M4 of define-executor-contract.
+ * <p>Implements FR8, FR12, FR23, FR24, M4 of define-executor-contract; FR1, FR11, FR12, FR13 of
+ * migrate-verify-to-executor-contract.
  */
 @NullMarked
 public final class ConformanceKit {
-
-    /** The most polls the pending case sends before it calls the run unfinished. */
-    static final int POLL_LIMIT = 5;
-
-    /** The wait between two polls of a run still pending. */
-    static final Duration POLL_INTERVAL = Duration.ofSeconds(1);
 
     private static final List<Role> LIVE_ROLES = List.of(Role.TRANSFORM, Role.VERDICT, Role.DECISION);
 
@@ -51,7 +45,7 @@ public final class ConformanceKit {
             List.of(Role.EFFECT, Role.TRANSFORM, Role.VERDICT, Role.DECISION);
 
     private final Map<String, Object> pendingSettings;
-    private final Sleeper sleeper;
+    private final PendingCases pending;
 
     /**
      * @param pendingSettings the settings under which the candidate goes pending, the command's
@@ -60,7 +54,7 @@ public final class ConformanceKit {
      */
     public ConformanceKit(Map<String, ?> pendingSettings, Sleeper sleeper) {
         this.pendingSettings = Map.<String, Object>copyOf(pendingSettings);
-        this.sleeper = sleeper;
+        this.pending = new PendingCases(sleeper);
     }
 
     /**
@@ -72,7 +66,8 @@ public final class ConformanceKit {
     public KitReport run(KitSubject subject) {
         Map<KitCase, CaseVerdict> verdicts = new EnumMap<>(KitCase.class);
         KitSubject.Described described = subject.describe();
-        CaseVerdict settings = DescribeCases.settings(described, pendingSettings);
+        CaseVerdict settings =
+                DescribeCases.settings(described, subject.onWire() ? pendingSettings : subject.settings());
         verdicts.put(KitCase.DESCRIBE, DescribeCases.describe(described, settings));
         verdicts.put(KitCase.SETTINGS_SCHEMA, settings);
         Describe answer = described.answer();
@@ -106,7 +101,7 @@ public final class ConformanceKit {
         if (kase.wireOnly() && !subject.onWire()) {
             return new CaseVerdict.NotApplicable("the case exists only on the wire, and this executor runs in process");
         }
-        if (kase == KitCase.PENDING_POLL && !answer.capabilities().contains(Capability.POLL)) {
+        if (kase.pending() && !answer.capabilities().contains(Capability.POLL)) {
             return new CaseVerdict.NotApplicable("the describe declares no poll capability");
         }
         Role role = role(kase, answer);
@@ -120,9 +115,9 @@ public final class ConformanceKit {
                                             : kase.role().wire()));
         }
         try (KitSubject.CaseRun run = subject.open(kase, answer)) {
-            ObjectNode settings = kase == KitCase.PENDING_POLL
+            ObjectNode settings = kase.pending()
                     ? ExecutorContractJson.settingsTree(pendingSettings)
-                    : ExecutorContractJson.settingsTree(Map.of());
+                    : ExecutorContractJson.settingsTree(subject.settings());
             ExecutorRequest request = CaseJudgement.request(role, run.workspace(), settings);
             ExecutorResult result;
             try {
@@ -136,31 +131,11 @@ public final class ConformanceKit {
                                 "answered completed in role " + role.wire() + ", which its describe does not list")
                         : new CaseVerdict.Passed();
             }
-            if (kase == KitCase.PENDING_POLL) {
-                if (result.status() != Status.PENDING) {
-                    return new CaseVerdict.Failed("a start under the pending settings answered "
-                            + result.status().wire() + " instead of pending");
-                }
-                try {
-                    result = polled(run, request, result);
-                } catch (RuntimeException e) {
-                    return new CaseVerdict.Failed(CaseJudgement.threw("Executor.poll", e));
-                }
+            if (kase.pending()) {
+                return pending.judge(kase, run, request, result);
             }
             return CaseJudgement.judge(request, result, run.violations());
         }
-    }
-
-    private ExecutorResult polled(KitSubject.CaseRun run, ExecutorRequest request, ExecutorResult pending) {
-        ExecutorResult result = pending;
-        for (int polls = 0; polls < POLL_LIMIT && result.status() == Status.PENDING; polls++) {
-            if (polls > 0) {
-                sleeper.sleep(POLL_INTERVAL);
-            }
-            PendingKey key = Objects.requireNonNull(result.pendingKey(), "a pending result carries its key");
-            result = run.executor().poll(request, key);
-        }
-        return result;
     }
 
     private static @Nullable Role role(KitCase kase, Describe answer) {

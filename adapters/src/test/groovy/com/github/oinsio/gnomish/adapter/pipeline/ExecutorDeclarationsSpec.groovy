@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorDeclaration
 import spock.lang.Specification
@@ -66,8 +67,25 @@ class ExecutorDeclarationsSpec extends Specification {
         field | value || message
         'credentials' | 'acme_key' || "invalid credential name 'acme_key'; a credential is an environment variable name matching [A-Z_][A-Z0-9_]*"
         'credentials' | null || "invalid credential name ''; a credential is an environment variable name matching [A-Z_][A-Z0-9_]*"
-        'egress' | 'https://api.acme.com' || "invalid egress host 'https://api.acme.com'; an egress entry is a host name, an IP literal or a *.suffix wildcard"
-        'egress' | null || "invalid egress host ''; an egress entry is a host name, an IP literal or a *.suffix wildcard"
+        'egress' | 'https://api.acme.com' || "invalid egress host 'https://api.acme.com'; an executor's egress is a grant to the box guard, which matches names only: an exact host, an IP literal or a *.suffix wildcard, never a CIDR block or an address-class word"
+        'egress' | null || "invalid egress host ''; an executor's egress is a grant to the box guard, which matches names only: an exact host, an IP literal or a *.suffix wildcard, never a CIDR block or an address-class word"
+    }
+
+    // FR17 of migrate-verify-to-executor-contract: a law's executor egress is the box guard's grant,
+    //     so it takes the sandbox subset of the one grammar and refuses what the guard cannot apply
+    // Scenario: sandbox/sandbox-egress / The sandbox scope refuses what the box guard cannot apply
+    def "an executor egress entry '#entry' the box guard cannot apply is a located error naming the entry"() {
+        expect:
+        ExecutorDeclarations.check([acme: new ExecutorDeclarationDto('program', ['a'], null, null, ['ok.example', entry])]) == [
+            error('executors.acme.egress[1]', "invalid egress host '${entry}'; an executor's egress is a grant to the box guard, which matches names only: an exact host, an IP literal or a *.suffix wildcard, never a CIDR block or an address-class word" as String)
+        ]
+
+        where:
+        entry << [
+            '10.0.0.0/8',
+            'private',
+            'loopback'
+        ]
     }
 
     // FR9: the name follows the one executor-name grammar
@@ -76,6 +94,19 @@ class ExecutorDeclarationsSpec extends Specification {
         ExecutorDeclarations.check([Acme: program(['a'])]) == [
             error('executors.Acme', "invalid executor name 'Acme'; a name matches [a-z][a-z0-9_-]{0,63}")
         ]
+    }
+
+    // FR1, FR13 of migrate-verify-to-executor-contract (design D18): a law never declares a built-in,
+    //     so a declaration under any of the six names is refused at load, listing them
+    def "a declaration under the built-in name '#name' is a located error listing the six"() {
+        expect:
+        ExecutorDeclarations.check([(name): program(['a'])]) == [
+            error("executors.${name}".toString(), "executor '${name}' is a built-in's name, which a law cannot declare; "
+            + 'built-in names are files-exist, shell, github-actions, scm-status, http, command')
+        ]
+
+        where:
+        name << BuiltInExecutors.NAMES
     }
 
     // FR9, UX1: every problem of every declaration in one pass, in declaration order; an empty body

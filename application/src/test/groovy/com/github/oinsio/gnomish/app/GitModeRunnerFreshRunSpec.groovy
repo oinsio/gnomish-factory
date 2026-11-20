@@ -3,9 +3,9 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TrackerWrite
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.BasePin
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -23,7 +23,6 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -43,6 +42,9 @@ import spock.lang.TempDir
  */
 class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, StdoutCaptureFixture {
 
+    /** Every round cell the run preparation handed the store's persistence (design D22). */
+    List cellsHanded = []
+
     @TempDir
     Path tempDir
 
@@ -60,7 +62,9 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
         Files.createDirectories(cloneDir)
         Files.createDirectories(TaskWorktreePath.resolve(registeredClone, 'PROJ-1'))
         store.taskRepository(_) >> lifecycleStore
-        store.attemptPersistence(_, _) >> { persistence }
+        store.attemptPersistence(_, _, _) >> { args ->
+            cellsHanded << args[2]; persistence
+        }
         store.readRecordedState(_, _) >> { stateRead.call() }
     }
 
@@ -93,11 +97,9 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
     def "attaches the task-git mid-round push decoration to the run assembly"() {
         given:
         def attached = []
-        UnaryOperator<RoundEnvironmentSource> marker = { rounds ->
-            rounds
-        } as UnaryOperator<RoundEnvironmentSource>
+        HostGitRounds marker = Stub(HostGitRounds)
         def runner = new GitModeRunner(
-                assemblyRunningLoop(executor, new ScriptedConsoleIO(), new Verdict.Pass(), attached),
+                assemblyRunningLoop(executor, new ScriptedConsoleIO(), new Verdict.Pass(null, []), attached),
                 new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), registeredClone, liveConsole())
 
         when:
@@ -106,7 +108,12 @@ class GitModeRunnerFreshRunSpec extends Specification implements RunChainFakes, 
 
         then:
         attached.size() == 1
-        attached[0].is(marker)
+        attached[0][0].is(marker)
+
+        and: 'the run\'s one round cell reaches both the decoration and the persistence (design D22 of migrate-verify-to-executor-contract)'
+        cellsHanded.size() == 1
+        attached[0][1].rounds().is(cellsHanded[0])
+        attached[0][1].pending() == null
     }
 
     private String runCapturingStdout(String base = null) {

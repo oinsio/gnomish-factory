@@ -81,6 +81,14 @@ pitest {
         //     kill-point matrix (TransitionKillPointSpec)
         'com.github.oinsio.gnomish.app.RunParkKillPointContainerE2ESpec',
         'com.github.oinsio.gnomish.app.RunParkRecordingContainerE2ESpec',
+        //   PendingPollOtherCloneContainerE2ESpec, PendingPollRecordedOtherCloneContainerE2ESpec (task 4.3b of migrate-verify-to-executor-contract;
+        //     real Docker, a guard image and a Gitea remote) — the :bootstrap classes it reaches:
+        //     ContainerRunSupport, ExecutorAdapterSelector, CheckDispatch, CheckRoundRoute:
+        //     ContainerRunSupportSpec, ExecutorAdapterSelectorSpec, CheckDispatchSpec,
+        //     CheckRoundRouteSpec and the daemon-free container rows of ContainerPendingPollKillPointSpec
+        //     and ContainerPendingPollRecordedSpec
+        'com.github.oinsio.gnomish.app.PendingPollOtherCloneContainerE2ESpec',
+        'com.github.oinsio.gnomish.app.PendingPollRecordedOtherCloneContainerE2ESpec',
         //   SandboxLifecycle{CrossInstance,LegacyIdentity,RemnantReap}E2ESpec —
         //     SandboxLifecyclePassFactory: SandboxLifecyclePassFactorySpec
         'com.github.oinsio.gnomish.app.SandboxLifecycleCrossInstanceE2ESpec',

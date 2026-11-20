@@ -45,7 +45,7 @@ class SandboxModeSelectorSpec extends Specification implements SandboxBindingFix
     }
 
     private static SandboxProperties sandbox(String image) {
-        new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
     }
 
     /**

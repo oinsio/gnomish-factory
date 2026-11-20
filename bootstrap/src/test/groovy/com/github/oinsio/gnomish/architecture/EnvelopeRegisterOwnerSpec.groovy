@@ -61,6 +61,11 @@ class EnvelopeRegisterOwnerSpec extends Specification {
         'TaskLifecycleCommitWriter.java': 'writer and writer base of the container medium, at the clone\'s branch',
         'GitObjectsTerminalCommits.java': 'writer guard of the bare-object tail commits: is the envelope still there to clear',
         'HarvestedStateCommitCheck.java': 'writer self-check: the harvested state commit carries what was written',
+        // FR20 of migrate-verify-to-executor-contract (design D21): the pending commit's two writers and
+        // the host round close's reader of its lag, which reads the round's own registered commits.
+        'HostPendingCommit.java': 'writer: the host pending commit\'s state.json, on the round\'s last registered commit',
+        'InBoxPendingCommit.java': 'writer: the in-box pending commit\'s state.json, on the round\'s last registered commit',
+        'PendingStateLag.java': 'register reader: state.json at the round\'s registered commits, restored from the register',
     ].collectEntries { k, v -> [(GIT + k): v] }
 
     // FR13: the envelope is read at the registered commit — a new reader of an envelope file in

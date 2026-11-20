@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 
 /**
  * The two pipelines whose first run parks, shared by every spec that drives a {@code gnomish run}
@@ -23,7 +24,7 @@ final class ParkPipelines {
     static PipelineDefinition escalating(String stageName = 'build') {
         new PipelineDefinition('1', new AutonomyLimits(1), [
             stage(stageName, AdvancementMode.AUTO, [
-                new VerifyCheck.Builtin('files_exist', [files: ['never-written.txt']])
+                VerifyChecks.builtin('files_exist', [files: ['never-written.txt']])
             ])
         ])
     }
@@ -35,7 +36,7 @@ final class ParkPipelines {
     static PipelineDefinition cannotVerifying(String stageName = 'build') {
         new PipelineDefinition('1', new AutonomyLimits(1), [
             stage(stageName, AdvancementMode.AUTO, [
-                new VerifyCheck.Command('exit 127')
+                VerifyChecks.command('exit 127')
             ])
         ])
     }

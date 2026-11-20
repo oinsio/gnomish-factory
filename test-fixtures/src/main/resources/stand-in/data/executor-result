@@ -10,6 +10,9 @@
 [limit]
 {"status":"failed","failureClass":"limit","reason":"turn bound of 20 reached","usage":{"provenance":"REPORTED","models":{}}}
 
+[infrastructure]
+{"status":"failed","failureClass":"infrastructure","reason":"lint service unavailable: 503","usage":{"provenance":"ABSENT"}}
+
 [decision]
 {"status":"completed","answer":{"kind":"decision-request","question":"Which build tool?","options":["gradle","maven"]},"usage":{"provenance":"ABSENT"}}
 
@@ -33,3 +36,6 @@
 
 [malformed-answer]
 {"status":"completed","answer":{"kind":"decision-request","question":"Which build tool?","options":["gradle"]},"usage":{"provenance":"ABSENT"}}
+
+[pending-bad-hint]
+{"status":"pending","pendingKey":"reference-deferred","pollAfterMillis":-1,"usage":{"provenance":"ABSENT"}}

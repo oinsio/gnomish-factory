@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.RefusingLaunch
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
@@ -27,7 +28,7 @@ class CommandProcessRunnerLauncherRefusalSpec extends Specification {
                 workingCopy, new VirtualClock(), TestChildEnvironment.hostAllowlist(), new RefusingLaunch())
 
         when:
-        def outcome = new CommandProcessRunner('sh', new VirtualClock()).run(new VerifyCheck.Command('true'), environment)
+        def outcome = new CommandProcessRunner('sh', new VirtualClock()).run(VerifyChecks.command('true'), environment)
 
         then:
         outcome.exitCode() == 127

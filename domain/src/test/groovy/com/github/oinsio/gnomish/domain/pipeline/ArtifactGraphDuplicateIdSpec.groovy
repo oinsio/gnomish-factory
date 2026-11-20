@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import spock.lang.Specification
 
 /**
@@ -25,7 +27,7 @@ class ArtifactGraphDuplicateIdSpec extends Specification {
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:]),
                 "stages/$name/instructions.md",
                 [
-                    new VerifyCheck.Command('./gradlew check')
+                    VerifyChecks.command('./gradlew check')
                 ],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
     }

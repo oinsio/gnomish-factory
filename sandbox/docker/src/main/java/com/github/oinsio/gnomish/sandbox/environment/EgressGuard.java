@@ -61,8 +61,8 @@ public final class EgressGuard {
      * @param docker the docker subprocess seam; never null
      * @param key the sanitized environment key naming this task's objects; never blank
      * @param guardImage the operator-configured {@code factory.sandbox.guard-image}; never blank
-     * @param allowlist the operator egress allowlist ({@code factory.sandbox.egress-allowlist});
-     *     never null, may be empty (default-deny with nothing allowed)
+     * @param allowlist the box's admitted names — the operator's {@code factory.egress.sandbox} and
+     *     the law's executor egress; never null, may be empty (default-deny with nothing allowed)
      * @param configDir the factory-private directory the guard config renders into and the guard
      *     container mounts read-only; never inside a working copy or scratch area
      * @param ownership the mode and project identity stamped on the guard container at creation

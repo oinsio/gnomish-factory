@@ -74,7 +74,7 @@ advancement: auto
 
     private void runInPlace(def properties, String taskId) {
         newManualRunRunner(projectRoot, homeDir,
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]), TaskGitFixture.real(), properties)
                 .run(new DefaultApplicationArguments("--dir=${projectRoot}".toString(), '--task=do the thing',
                 "--task-id=${taskId}".toString(), '--mode=in-place'))

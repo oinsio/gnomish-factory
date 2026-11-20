@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import java.time.InstantSource
-import java.util.function.UnaryOperator
 
 /**
  * The real git-backed {@link TaskGit} a spec passes wherever production wiring injects the bean
@@ -78,7 +77,9 @@ final class TaskGitFixture {
         // The base-ref capability is real too (FR5, FR6 of add-base-ref-resolution): serve/take
         // startup reads origin's default branch through it. Its retry runs on virtual time, so a
         // dead origin in a spec exhausts the production bound instantly instead of sleeping.
-        GitTaskBackend.taskGit(runner, VirtualTimeGitRetries.gitInfrastructure(), clock,
-                UnaryOperator.identity(), epochs)
+        // The production host-git decoration (design D22 of migrate-verify-to-executor-contract):
+        // every git-mode host run opens its rounds in the run's cell and snapshots a completed
+        // round, so a fixture without it would run a shape production never runs.
+        GitTaskBackend.taskGit(runner, VirtualTimeGitRetries.gitInfrastructure(), clock, epochs)
     }
 }

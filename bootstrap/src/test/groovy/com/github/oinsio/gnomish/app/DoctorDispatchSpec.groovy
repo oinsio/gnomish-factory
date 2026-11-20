@@ -162,7 +162,7 @@ class DoctorDispatchSpec extends Specification implements AppAssemblyFixture {
         newManualRunRunner(
                 clonePath,
                 homeDir,
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]),
                 TaskGitFixture.real(git),
                 testProperties(),

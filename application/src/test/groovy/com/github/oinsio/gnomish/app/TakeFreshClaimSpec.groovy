@@ -3,11 +3,11 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TrackerWrite
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.git.BasePin
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -30,7 +30,6 @@ import com.github.oinsio.gnomish.domain.pipeline.ConfigError
 import com.github.oinsio.gnomish.domain.pipeline.LoadOutcome
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -49,6 +48,9 @@ import spock.lang.TempDir
  * <p>Added by task 8.7 of split-into-modules.
  */
 class TakeFreshClaimSpec extends Specification implements RunChainFakes {
+
+    /** Every round cell the run preparation handed the store's persistence (design D22). */
+    List cellsHanded = []
 
     @TempDir
     Path tempDir
@@ -76,22 +78,29 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def lifecycleStore = Mock(TaskLifecycleStore)
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> lifecycleStore
-            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            attemptPersistence(_, _, _) >> { args ->
+                cellsHanded << args[2]; new InMemoryAttemptPersistence()
+            }
             readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
         tracker.fetchTask(_) >> heldByUs()
         def attached = []
-        UnaryOperator<RoundEnvironmentSource> marker = { rounds -> rounds }
+        HostGitRounds marker = Stub(HostGitRounds)
         def git = new TaskGit(store, freshBranches(), Mock(TaskWorktreeGit), marker, refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         new TakeFreshClaim(slotWiring(
-                        assemblyRunning(new ScriptedExecutor([completedRound()]), new Verdict.Pass(), attached), git, tracker, registeredClone)).claim(
+                        assemblyRunning(new ScriptedExecutor([completedRound()]), new Verdict.Pass(null, []), attached), git, tracker, registeredClone)).claim(
                 takeOrder(readyTask(), tracker, runOrder(completingPipeline(), cloneDir)))
 
         then:
         attached.size() == 1
-        attached[0].is(marker)
+        attached[0][0].is(marker)
+
+        and: 'the run\'s one round cell reaches both the decoration and the persistence (design D22 of migrate-verify-to-executor-contract)'
+        cellsHanded.size() == 1
+        attached[0][1].rounds().is(cellsHanded[0])
+        attached[0][1].pending() == null
     }
 
     // FR9, FR11: the whole fresh path, end to end. The three things only this class sequences are
@@ -107,7 +116,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def disposal = Mock(TaskEnvironmentDisposal)
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> lifecycleStore
-            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
             // Scripted, not defaulted: the port returns a record, which Spock cannot invent.
             readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
@@ -118,7 +127,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         and:
         def git = new TaskGit(
-                store, branches, worktrees, UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                store, branches, worktrees, HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         def result = new TakeFreshClaim(slotWiring(
@@ -168,13 +177,13 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def tracker = Mock(Tracker)
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> Mock(TaskLifecycleStore)
-            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
         def executor = new ScriptedExecutor([completedRound()])
         tracker.fetchTask(_) >> heldByUs()
         def git = new TaskGit(
-                store, freshBranches(), Mock(TaskWorktreeGit), UnaryOperator.identity(),
+                store, freshBranches(), Mock(TaskWorktreeGit), HostGitRounds.NONE,
                 refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
@@ -195,7 +204,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def lifecycleStore = Mock(TaskLifecycleStore)
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> lifecycleStore
-            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
             // Scripted, not defaulted: the port returns a record, which Spock cannot invent.
             readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
@@ -213,7 +222,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
                         new BranchAdoption.AlreadyLocal(taskId)
                     }
                     classifyShape(_, _) >> new BranchShape.CompletedUncleaned()
-                }, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                }, Stub(TaskWorktreeGit), HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         new TakeFreshClaim(slotWiring(
@@ -237,12 +246,12 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
         def tracker = Mock(Tracker)
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> Mock(TaskLifecycleStore)
-            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_, _) >> Optional.empty()
         }
         tracker.fetchTask(_) >> heldByUs()
         def git = new TaskGit(
-                store, freshBranches(), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                store, freshBranches(), Mock(TaskWorktreeGit), HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         new TakeFreshClaim(slotWiring(
@@ -281,7 +290,7 @@ class TakeFreshClaimSpec extends Specification implements RunChainFakes {
 
         and:
         def git = new TaskGit(
-                store, freshBranches(), Mock(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                store, freshBranches(), Mock(TaskWorktreeGit), HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
 
         when:
         def result = new TakeFreshClaim(slotWiring(

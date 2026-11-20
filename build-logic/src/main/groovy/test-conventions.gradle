@@ -175,10 +175,10 @@ tasks.withType(Test).configureEach {
 def testTimeInjection = tasks.register('checkTestTimeInjection', TestTimeInjectionCheck) {
     group = 'verification'
     description = 'Fails when a test source wires production real time instead of injecting it.'
-    testSources.from(fileTree('src/test') {
-        include '**/*.groovy'
-        include '**/*.java'
-    })
+    // `src/testFixtures` too: a `java-test-fixtures` set is test code other modules' specs run.
+    ['src/test', 'src/testFixtures'].each { root ->
+        testSources.from(fileTree(root) { include '**/*.groovy', '**/*.java' })
+    }
     // `:test-fixtures` keeps its shared fakes in `src/main`, so scan that too where it exists.
     testSources.from(fileTree('src/main') {
         include '**/fake/**/*.groovy'

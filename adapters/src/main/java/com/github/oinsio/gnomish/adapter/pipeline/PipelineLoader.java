@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.pipeline;
 import com.github.oinsio.gnomish.adapter.law.LawSource;
 import com.github.oinsio.gnomish.adapter.law.WorkingTreeLawSource;
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishFiles.RawConfig;
-import com.github.oinsio.gnomish.app.CheckParamsValidator;
 import com.github.oinsio.gnomish.app.ConnectionProfiles;
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator;
 import com.github.oinsio.gnomish.app.port.pipeline.ConfiguredDesignatorKinds;
@@ -65,16 +64,14 @@ import java.util.Set;
  *       add-command-executor), run
  *       only when a {@link PipelineDefinition} was produced;</li>
  *   <li><b>check-seam</b> — {@link ExternalCheckSeamValidator} (FR6, FR13 of
- *       add-plugin-architecture): each {@code external} check's provider against the
- *       discovered registry, and its provider-owned {@code params} against that
- *       provider's own validator; like the other model-dependent tiers it runs only
- *       when a {@link PipelineDefinition} was produced.</li>
+ *       add-plugin-architecture): each check's settings against the params validator its
+ *       built-in executor owns; like the other model-dependent tiers it runs only when a
+ *       {@link PipelineDefinition} was produced.</li>
  * </ol>
  *
- * <p>The domain-validate tier is handed the providers this factory has a {@code factory.check}
- * section for, beside the discovered registry the check seam grades against: an {@code external}
- * check on a provider that is discovered but unconfigured is a located load error (exit 3) rather
- * than a run whose verification can never start (FR3, design D3 of remove-interactive-console).
+ * <p>No tier reads the operator's {@code factory.check} configuration: whether a credentialed
+ * built-in a check names is connected is judged once, at run assembly (design D18 of
+ * migrate-verify-to-executor-contract, "Where a refusal at run assembly goes").
  *
  * <p><b>Aggregation order (deterministic, NFR-R1).</b> Errors are concatenated
  * coarsest-file-first, in tier order: parse (config, pipeline, then stages in
@@ -107,10 +104,8 @@ public final class PipelineLoader {
      * <p>Implements FR1, FR8 of load-pipeline-config; FR17 of add-tracker-port.
      *
      * <p>The check seam is delegated the same way (FR6, FR13 of add-plugin-architecture): {@code
-     * checkProviders} is keyed by every discovered check provider, so an {@code external} check
-     * naming one nobody serves — including the {@code github} the loader defaults to when a
-     * manifest names none — is a located load error, and a served check's provider-owned {@code
-     * params} are graded by that provider's own validator.
+     * checkProviders} maps a built-in executor's name to the validator that grades a check's
+     * settings for it.
      *
      * <p>Implements FR1, FR8 of load-pipeline-config; FR17 of add-tracker-port; FR6, FR13 of
      * add-plugin-architecture.
@@ -118,12 +113,8 @@ public final class PipelineLoader {
      * @param gnomishRoot the {@code .gnomish/} directory root
      * @param trackerValidators known adapter subsection validators, keyed by {@code tracker.type};
      *     an empty map means no adapters are known and every declared type is reported unknown
-     * @param checkProviders known check providers' params validators, keyed by {@code provider}; an
-     *     empty map means no provider is known and every {@code external} check's provider is
-     *     reported unknown
-     * @param configuredCheckProviders the providers this factory has a {@code
-     *     factory.check.<provider>} section for (FR3, design D3 of remove-interactive-console); an
-     *     {@code external} check on any other provider is a located load error
+     * @param checkProviders the params validators keyed by built-in executor name; an empty map
+     *     grades no check's settings
      * @return {@link LoadOutcome.Loaded} with the validated model when the tree has
      *     no problem, else {@link LoadOutcome.Invalid} with every located error
      * @throws IOException when a required file cannot be read (an I/O fault, never a
@@ -132,11 +123,9 @@ public final class PipelineLoader {
     public static LoadOutcome load(
             Path gnomishRoot,
             Map<String, TrackerSubsectionValidator> trackerValidators,
-            Map<String, CheckParamsValidator> checkProviders,
-            Set<String> configuredCheckProviders)
+            Map<String, CheckSettingsValidator> checkProviders)
             throws IOException {
-        return load(
-                gnomishRoot, trackerValidators, checkProviders, configuredCheckProviders, ConnectionProfiles.none());
+        return load(gnomishRoot, trackerValidators, checkProviders, ConnectionProfiles.none());
     }
 
     /**
@@ -151,12 +140,11 @@ public final class PipelineLoader {
     public static LoadOutcome load(
             Path gnomishRoot,
             Map<String, TrackerSubsectionValidator> trackerValidators,
-            Map<String, CheckParamsValidator> checkProviders,
-            Set<String> configuredCheckProviders,
+            Map<String, CheckSettingsValidator> checkProviders,
             ConnectionProfiles profiles)
             throws IOException {
         return loadConfiguration(
-                        gnomishRoot, trackerValidators, checkProviders, configuredCheckProviders, profiles, Set.of())
+                        gnomishRoot, trackerValidators, checkProviders, ConnectionAdmission.of(profiles), Set.of())
                 .outcome();
     }
 
@@ -177,6 +165,9 @@ public final class PipelineLoader {
      * {@link Path} overload below is the working-tree boundary for a caller holding a directory.
      *
      * @param law the law source rooted at the {@code .gnomish/} tree
+     * @param connections the operator's connection profiles, the adapters' endpoint declarations and
+     *     the operator's in-process egress, which admit the tracker's endpoint (FR17, design D16 of
+     *     migrate-verify-to-executor-contract)
      * @param configuredDesignatorKinds the designator kinds the configured tracker adapter reports
      *     it extracts (design D5); empty when none is configured, under which the seam check has
      *     nothing to hold a selection against
@@ -187,18 +178,11 @@ public final class PipelineLoader {
     public static ConfigurationLoad loadConfiguration(
             LawSource law,
             Map<String, TrackerSubsectionValidator> trackerValidators,
-            Map<String, CheckParamsValidator> checkProviders,
-            Set<String> configuredCheckProviders,
-            ConnectionProfiles profiles,
+            Map<String, CheckSettingsValidator> checkProviders,
+            ConnectionAdmission connections,
             Set<String> configuredDesignatorKinds)
             throws IOException {
-        return loadConfiguration(
-                law,
-                trackerValidators,
-                checkProviders,
-                configuredCheckProviders,
-                profiles,
-                _ -> configuredDesignatorKinds);
+        return loadConfiguration(law, trackerValidators, checkProviders, connections, _ -> configuredDesignatorKinds);
     }
 
     /**
@@ -213,9 +197,8 @@ public final class PipelineLoader {
     public static ConfigurationLoad loadConfiguration(
             LawSource law,
             Map<String, TrackerSubsectionValidator> trackerValidators,
-            Map<String, CheckParamsValidator> checkProviders,
-            Set<String> configuredCheckProviders,
-            ConnectionProfiles profiles,
+            Map<String, CheckSettingsValidator> checkProviders,
+            ConnectionAdmission connections,
             ConfiguredDesignatorKinds designatorKinds)
             throws IOException {
         RawConfig raw = GnomishFiles.read(law);
@@ -226,13 +209,13 @@ public final class PipelineLoader {
         TrustedTierSections trusted = new TrustedTierSections(tree.configDto());
         BaseDefinition base = BaseConfigMapper.map(trusted.baseSection(), errors);
         errors.addAll(DesignatorAllowedBasesSeam.check(
-                trusted.trackerType(), trusted.designatorKinds(profiles, designatorKinds), base));
+                trusted.trackerType(), trusted.designatorKinds(connections, designatorKinds), base));
 
         tree.checkShape(errors);
         errors.addAll(StageConsistency.check(tree.pipelineStageNames(), raw.stages()));
 
-        PipelineDefinition model = PipelineModelBuilder.mapAndValidate(
-                law, tree, trackerValidators, checkProviders, configuredCheckProviders, profiles, errors);
+        PipelineDefinition model =
+                PipelineModelBuilder.mapAndValidate(law, tree, trackerValidators, checkProviders, connections, errors);
 
         LoadOutcome outcome =
                 errors.isEmpty() && model != null ? new LoadOutcome.Loaded(model) : new LoadOutcome.Invalid(errors);
@@ -251,17 +234,15 @@ public final class PipelineLoader {
     public static ConfigurationLoad loadConfiguration(
             Path gnomishRoot,
             Map<String, TrackerSubsectionValidator> trackerValidators,
-            Map<String, CheckParamsValidator> checkProviders,
-            Set<String> configuredCheckProviders,
-            ConnectionProfiles profiles,
+            Map<String, CheckSettingsValidator> checkProviders,
+            ConnectionAdmission connections,
             Set<String> configuredDesignatorKinds)
             throws IOException {
         return loadConfiguration(
                 new WorkingTreeLawSource(gnomishRoot),
                 trackerValidators,
                 checkProviders,
-                configuredCheckProviders,
-                profiles,
+                connections,
                 configuredDesignatorKinds);
     }
 

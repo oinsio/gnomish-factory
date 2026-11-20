@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.port.git;
 import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead;
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.domain.engine.RoundToken;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -30,6 +31,16 @@ import java.util.Optional;
  * state commit is judged against the identity the round opened under and never against a re-read
  * tip (FR13, FR15 of make-checkpoint-gate-durable, design D10 as amended 2026-10-07).
  *
+ * <p>Two commits, as the round's {@link ClosedRound} holds them (design D21 of
+ * migrate-verify-to-executor-contract): the snapshot the checks judge, and the round's last
+ * registered commit — the snapshot itself, or the last pending commit landed on it, which carries the
+ * round's pending entries. The restored round's close sits on {@code registered}. Beside them, the
+ * round's registered chain the resume's one walk passed ({@code PendingChain}, design D14 as amended
+ * 2026-11-13): {@code registered} first, {@code attemptCommit} last — so the run's round cell holds
+ * the chain from the record and nothing walks it again (crash-consistency item 14).
+ *
+ * <p>Implements FR21 of add-sandbox-core; FR3, FR20 of migrate-verify-to-executor-contract.
+ *
  * @param attemptCommit the sha of the snapshot (attempt) commit to verify; never null
  * @param stage the stage the interrupted round belonged to; never null
  * @param round the interrupted round's number within that stage
@@ -37,6 +48,32 @@ import java.util.Optional;
  *     null
  * @param request the decision request the snapshot's tree holds under the round's token, read
  *     tolerantly, or empty when the round asked nothing; never null
+ * @param registered the round's last registered commit: {@code attemptCommit} when the register
+ *     names the snapshot, else the registered pending commit above it; never null
+ * @param chain the round's registered commits as the walk passed them, {@code registered} first and
+ *     {@code attemptCommit} last; copied; never empty
  */
 public record PendingVerification(
-        String attemptCommit, String stage, int round, RoundToken token, Optional<RoundDecisionRequest> request) {}
+        String attemptCommit,
+        String stage,
+        int round,
+        RoundToken token,
+        Optional<RoundDecisionRequest> request,
+        String registered,
+        List<String> chain) {
+
+    /** Copies the chain, and refuses one that does not run from {@code registered} to the snapshot. */
+    public PendingVerification {
+        chain = List.copyOf(chain);
+        requireSpans(chain, registered, attemptCommit);
+    }
+
+    private static void requireSpans(List<String> chain, String registered, String attemptCommit) {
+        if (chain.isEmpty()
+                || !chain.getFirst().equals(registered)
+                || !chain.getLast().equals(attemptCommit)) {
+            throw new IllegalArgumentException(
+                    "PendingVerification.chain must run from the registered commit down to the snapshot: " + chain);
+        }
+    }
+}

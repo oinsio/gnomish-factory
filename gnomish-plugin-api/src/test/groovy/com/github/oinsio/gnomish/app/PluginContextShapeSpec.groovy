@@ -6,7 +6,8 @@ import spock.lang.Specification
 
 /**
  * How the host grows what it hands a plugin (FR23 of supervise-daemon-loops-and-embed-dashboard):
- * each provider factory's one {@code create} takes a context interface and nothing else, and the
+ * the provider factory's one {@code create} — the tracker's, the only SPI factory since task 6.1 of
+ * migrate-verify-to-executor-contract — takes a context interface and nothing else, and the
  * context is made of no-argument accessors only. A new collaborator is therefore one more accessor
  * on the context — a member no factory signature names, so an existing implementor compiles against
  * the grown context unchanged, and the api gate accepts the addition as compatible (its functional
@@ -39,6 +40,5 @@ class PluginContextShapeSpec extends Specification {
         where:
         factory | context
         TrackerAdapterFactory | TrackerAdapterContext
-        CheckClientFactory | CheckClientContext
     }
 }

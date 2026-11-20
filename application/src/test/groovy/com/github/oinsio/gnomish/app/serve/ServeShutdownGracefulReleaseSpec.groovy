@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app.serve
 import ch.qos.logback.classic.spi.ILoggingEvent
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
+import com.github.oinsio.gnomish.adapter.git.HostRoundPersistence
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTracker
 import com.github.oinsio.gnomish.adapter.tracker.inmemory.InMemoryTrackerHarness
 import com.github.oinsio.gnomish.app.TaskGitFixture
@@ -61,8 +62,8 @@ class ServeShutdownGracefulReleaseSpec extends ServeShutdownSpecBase implements 
     /** A slot between rounds: its next round boundary meets the flag, and the stop releases the claim. */
     private Runnable slot(TaskRef ref, Path worktree) {
         def persistence = new RevocationCheckingAttemptPersistence(
-                taskGit.store().attemptPersistence(worktree, ref.id()), tracker, ref, INSTANCE, flag)
-        def handler = new RevocationHandler(tracker, taskGit.worktrees().salvage(worktree), taskGit.branches())
+                taskGit.store().attemptPersistence(worktree, ref.id(), HostRoundPersistence.openedAtHead(new GitProcessRunner(), worktree)), tracker, ref, INSTANCE, flag)
+        def handler = new RevocationHandler(tracker, taskGit.worktrees(), taskGit.branches())
         return {
             while (!flag.isLost(ref)) {
                 Thread.sleep(5)

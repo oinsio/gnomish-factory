@@ -50,7 +50,7 @@ final class KillPointTakeRoutes implements AppAssemblyFixture, BareGitRepoFixtur
     private static final String MDC_KEY = 'taskId'
 
     private static final SandboxProperties SANDBOX =
-    new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+    new SandboxProperties('gnomish/img', null, null, null, [], false, null, null, null, null)
 
     /**
      * @param clone the registered factory clone the task's worktree lives under

@@ -13,7 +13,7 @@ import java.util.List;
  *   <li>the Mechanism section's executor identity — its {@code model} and
  *       {@code command} per executor type — by {@link StageMechanismRule};</li>
  *   <li>the resolved attempt limit must be at least 1 (FR7);</li>
- *   <li>each {@code external} check must have a non-blank {@code checkId}, a
+ *   <li>each polled executor check must have a non-blank {@code checkId}, a
  *       positive {@code interval}, a positive {@code timeout}, and
  *       {@code interval <= timeout} (equal is valid) (FR11); and each of its
  *       pin paths must be a normalized relative path — no absolute prefix, no
@@ -23,9 +23,9 @@ import java.util.List;
  *       {@code votes} that are &ge; 1 and odd (FR11).</li>
  * </ol>
  *
- * <p>Restraint (no validation creep): {@code Builtin} and {@code Command}
+ * <p>Restraint (no validation creep): {@code files-exist} and {@code shell}
  * checks carry no FR11 sanity rule and are never flagged — FR11 lists only
- * {@code external} and {@code judge}. Executor and judge {@code settings} are
+ * polled checks and {@code judge}. Executor and judge {@code settings} are
  * an opaque pass-through map (Q1/D5a), accepted without inspecting keys,
  * values, or ranges. The {@code judge} {@code criteriaFile} existence is an
  * I/O-bound adapter concern (FR6, task 6.3), not checked here. Target liveness
@@ -42,7 +42,8 @@ import java.util.List;
  * <p>Implements FR11 (and the FR7 attempt-limit clause) of load-pipeline-config;
  * FR16 of add-sandbox-core (the external-check pin-path form rule); FR10 of
  * define-executor-contract (the model rule's agent-type scope); FR2, UX2 of
- * add-command-executor (the command stage's mechanism rules).
+ * add-command-executor (the command stage's mechanism rules); FR1 of
+ * migrate-verify-to-executor-contract (the executor check).
  */
 public final class StageSanityRule {
 
@@ -86,19 +87,29 @@ public final class StageSanityRule {
 
     private static void validateCheck(String manifest, int index, VerifyCheck check, List<ConfigError> errors) {
         switch (check) {
-            case VerifyCheck.External external -> validateExternal(manifest, index, external, errors);
+            case VerifyCheck.Executor executor -> validateExecutor(manifest, index, executor, errors);
             case VerifyCheck.Judge judge -> validateJudge(manifest, index, judge, errors);
-            case VerifyCheck.Builtin ignored -> {
-                // No FR11 sanity rule for builtin checks (no validation creep).
-            }
-            case VerifyCheck.Command ignored -> {
-                // No FR11 sanity rule for command checks (no validation creep).
-            }
+        }
+    }
+
+    /**
+     * An {@code executor:} entry names its executor; only a polled check gets the FR11 timing,
+     * identifier and pin-path rules (FR1, UX2 of migrate-verify-to-executor-contract).
+     */
+    private static void validateExecutor(
+            String manifest, int index, VerifyCheck.Executor executor, List<ConfigError> errors) {
+        if (executor.executorName().isBlank()) {
+            errors.add(new ConfigError(
+                    manifest, "verify[%d].executor".formatted(index), "missing required verify check executor name"));
+            return;
+        }
+        if (executor.polled()) {
+            validateExternal(manifest, index, executor, errors);
         }
     }
 
     private static void validateExternal(
-            String manifest, int index, VerifyCheck.External external, List<ConfigError> errors) {
+            String manifest, int index, VerifyCheck.Executor external, List<ConfigError> errors) {
         if (external.checkId().isBlank()) {
             errors.add(new ConfigError(
                     manifest, "verify[%d].checkId".formatted(index), "missing required external check identifier"));
@@ -132,15 +143,14 @@ public final class StageSanityRule {
     /**
      * Rejects any pin path that is not in normalized relative form (FR16 of
      * add-sandbox-core): absolute, or containing a {@code .} or {@code ..}
-     * segment. Pin paths are repo-relative <em>data</em> the loader never reads,
-     * so this is purely lexical — no filesystem, no traversal guard (they point
-     * outside {@code .gnomish/} by design). A malformed path can never match a
+     * segment. Pin paths are repo-relative data the loader never reads, so this is
+     * purely lexical (they point outside {@code .gnomish/} by design). A malformed path can never match a
      * repo object and would only pass the pin vacuously, so it is a located
      * error naming the offending check and path index. Errors are appended in
      * declaration order, after the timing errors of the same check.
      */
     private static void validatePinPaths(
-            String manifest, int index, VerifyCheck.External external, List<ConfigError> errors) {
+            String manifest, int index, VerifyCheck.Executor external, List<ConfigError> errors) {
         List<String> pinPaths = external.pinPaths();
         for (int pathIndex = 0; pathIndex < pinPaths.size(); pathIndex++) {
             String pinPath = pinPaths.get(pathIndex);

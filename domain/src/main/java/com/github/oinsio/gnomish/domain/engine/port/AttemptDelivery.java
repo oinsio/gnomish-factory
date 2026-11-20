@@ -3,14 +3,15 @@ package com.github.oinsio.gnomish.domain.engine.port;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 
 /**
- * The engine's precondition seam for external checks (FR21 of add-sandbox-core): before the
- * poll loop of an {@code external} check starts, the engine confirms the attempt commit under
- * verification is delivered to the remote — external checks are triggered by the task-branch
- * push (submission is deferred, add-stage-engine NG8), so polling an undelivered commit could
- * only ever expire as a bogus poll-timeout quality failure. An implementation re-attempts the
- * push when the commit is not yet on the remote; a commit that cannot be delivered reports
- * {@link Outcome.Undeliverable}, which the engine resolves as CannotVerify — an infrastructure
- * failure, no stage attempt burned.
+ * The engine's precondition seam for polled checks (FR21 of add-sandbox-core): before {@code
+ * PendingPoll} asks the executor of a polled check anything — an {@code external} check, or any
+ * executor other than {@code files_exist} and {@code shell} — it confirms the attempt commit under
+ * verification is delivered to the remote. A polled check is triggered by the task-branch push
+ * (submission is deferred, add-stage-engine NG8), so asking about an undelivered commit could only
+ * ever expire as a bogus timeout quality failure. An implementation re-attempts the push when the
+ * commit is not yet on the remote; a commit that cannot be delivered reports {@link
+ * Outcome.Undeliverable}, which {@code PendingPoll} resolves as an infrastructure failure — no
+ * stage attempt burned.
  *
  * <p>Implements FR21 of add-sandbox-core.
  */

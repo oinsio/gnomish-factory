@@ -108,11 +108,11 @@ class OperatorConfigViolationsSpec extends Specification {
     // Scenario: operator/operator-configuration / A violation names its location, key, reason and fix
     def "UX1: a boundary key in the host file names the file, line and the project files it belongs in"() {
         given:
-        harness.hostConfig('factory:\n  sandbox:\n    egress-allowlist:\n      - example.com\n')
+        harness.hostConfig('factory:\n  egress:\n    sandbox:\n      - example.com\n')
 
         expect:
         violations(['project', 'list']) == [
-            "factory.sandbox.egress-allowlist is not allowed here — found in ${harness.home.hostConfig()}:4" +
+            "factory.egress.sandbox is not allowed here — found in ${harness.home.hostConfig()}:4" +
             " — it is a sandbox-boundary key, read only from a project's own file — move it to" +
             " ${harness.home.projects().resolve('<name>').resolve('project.yaml')} (registered: widgets)"
         ]*.toString()

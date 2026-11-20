@@ -4,8 +4,8 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorDeclaration;
 import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.executorcontract.ReadResult;
 import com.github.oinsio.gnomish.executorcontract.ResultFileReader;
+import com.github.oinsio.gnomish.httpegress.EgressEntries;
 import com.github.oinsio.gnomish.sandbox.BoundedCapture;
-import com.github.oinsio.gnomish.sandbox.EgressEntries;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
@@ -117,8 +117,9 @@ final class ProgramDescribe {
      * is untrusted"): the version, an egress host and a policy-disabling flag are each quoted to the
      * operator and handed on, and a control character in any of them is no value the program could
      * mean. Credential and configuration-directory names were already held to the variable grammar.
-     * An egress host is then held to the one host grammar the guard renders ({@link EgressEntries}),
-     * so the law's hosts are compared with the describe's in one spelling.
+     * An egress host is then held to the one egress grammar ({@link EgressEntries#isEntry}, the full
+     * grammar: design D16 of migrate-verify-to-executor-contract), so the law's hosts are compared with
+     * the describe's in one spelling.
      */
     private static Describe inert(String name, Describe describe) {
         List<String> texts = new ArrayList<>();
@@ -133,8 +134,8 @@ final class ProgramDescribe {
             if (!EgressEntries.isEntry(host)) {
                 throw ExecutorDescribeRefusedException.configuration(
                         name,
-                        "its describe declares an egress host that is not a host name, an IP literal or a *.suffix"
-                                + " wildcard",
+                        "its describe declares an egress host that is not an egress entry (a host name, an IP"
+                                + " literal, a *.suffix wildcard, a CIDR block or an address-class word)",
                         UntrustedText.subprocess(host));
             }
         }

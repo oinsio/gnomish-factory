@@ -14,7 +14,8 @@ import spock.lang.Specification
  * which rebuilds a recorded round's token from {@code state.json} through the same parse
  * ({@code crash-consistency.md} item 14) and opens no round. The per-run {@code CurrentRound} cell
  * has exactly three writers: {@code open} at round open (the two minting sources), {@code
- * snapshotted} at the snapshot, {@code restore} on the resume path. The types make a consumer of a closed round unable
+ * snapshotted} at the snapshot — the one round snapshot step, for the box and the host worktree alike
+ * (design D22 of migrate-verify-to-executor-contract) — {@code restore} on the resume path. The types make a consumer of a closed round unable
  * to compile against an open one; what they cannot stop is a fourth writer — a second minting of
  * the token from some other tip read, or a component recording a round it did not open — and that
  * is the two-recovery-owners shape {@code crash-consistency.md} item 3 forbids. This scan stops it.
@@ -50,6 +51,12 @@ class CurrentRoundWriterSpec extends Specification {
     private static final String STATE_READER = GIT + 'state/StateJsonMapper.java'
 
     /**
+     * The pending entries' reader (task 4.1 of migrate-verify-to-executor-contract, design D21):
+     * rebuilds an entry's token from {@code state.json} through the same parse, and mints no round.
+     */
+    private static final String PENDING_READER = GIT + 'state/StatePendingPollMapper.java'
+
+    /**
      * The usage snapshot's wire reader (task 5.4 of define-executor-contract): rebuilds the
      * snapshot's {@code through} — a token a recorded round already carried — through the same
      * parse, and mints no round's identity.
@@ -57,7 +64,8 @@ class CurrentRoundWriterSpec extends Specification {
     private static final String SNAPSHOT_READER =
     'application/src/main/java/com/github/oinsio/gnomish/usage/wire/UsageSnapshotWire.java'
 
-    private static final String SNAPSHOT = GIT + 'EnvironmentRoundSnapshot.java'
+    /** The one round snapshot step of both media (design D22 of migrate-verify-to-executor-contract). */
+    private static final String SNAPSHOT = GIT + 'RoundSnapshot.java'
 
     private static final String RESUME =
     'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/ResumeVerificationStageExecutor.java'
@@ -68,7 +76,7 @@ class CurrentRoundWriterSpec extends Specification {
 
     // FR13, FR15; FR21 of define-executor-contract: one parse, three producers — a fresh round mints
     // in either branch mode, a resumed one reuses its record — and the record's reader
-    def "FR13, FR15, FR21: RoundToken.of is called in production only by the two round sources, the snapshot check and the two record readers"() {
+    def "FR13, FR15, FR21: RoundToken.of is called in production only by the two round sources, the snapshot check and the three record readers"() {
         given:
         def sources = scanned()
 
@@ -86,6 +94,7 @@ class CurrentRoundWriterSpec extends Specification {
             SOURCE,
             HOST_GIT,
             STATE_READER,
+            PENDING_READER,
             SNAPSHOT_READER
         ].sort()
     }
@@ -114,6 +123,30 @@ class CurrentRoundWriterSpec extends Specification {
         'open' | [SOURCE, HOST_GIT]
         'snapshotted' | [SNAPSHOT]
         'restore' | [RESUME]
+    }
+
+    // FR19 of migrate-verify-to-executor-contract (design D22, "The run's round cell has one
+    // owner"): a cell is constructed once per run, by the run's owner only — the host run's round
+    // identity and the container's per-run support — so no reader of a round holds a second cell
+    def "FR19: a CurrentRound is constructed in production only by the two per-run owners"() {
+        given:
+        def sources = scanned()
+
+        expect: 'the scan really reached the tree'
+        sources.size() >= RepoSourceTree.KNOWN_PRODUCTION_SOURCES
+
+        when:
+        def constructors = sources.findAll {
+            RepoSourceTree.code(it) =~ /\bnew\s+CurrentRound\s*\(/
+        }
+        .collect { RepoSourceTree.relative(it) }
+        .sort()
+
+        then:
+        constructors == [
+            'application/src/main/java/com/github/oinsio/gnomish/app/port/git/RunRound.java',
+            'bootstrap/src/main/java/com/github/oinsio/gnomish/app/ContainerRunSupport.java'
+        ]
     }
 
     // The detectors are the gate — seeded calls must be found, comments and other receivers must not

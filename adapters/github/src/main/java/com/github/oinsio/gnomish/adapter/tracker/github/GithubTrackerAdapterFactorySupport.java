@@ -1,15 +1,15 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubCredential;
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig;
+import com.github.oinsio.gnomish.githubapi.GithubCredential;
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Subsection reading for {@link GithubTrackerAdapterFactory}: the connection halves every entry
- * point needs (the credential, {@code api-url} as an {@link GithubHttpClient}, {@code repo} as a
+ * point needs (the credential, the admitted endpoint as an {@link GithubHttpClient}, {@code repo} as a
  * {@link GithubRepoRef}) plus the label-definition defaults and their config-driven resolution (FR5) —
  * the four default label defs, names {@code gnomish:ready}/{@code working}/{@code
  * needs-human}/{@code delivered}; colors from GitHub's common palette — {@code 2ea44f}/{@code
@@ -62,9 +62,18 @@ final class GithubTrackerAdapterFactorySupport {
         return GithubRepoRef.parse(requireStringValue(subsection, "repo"));
     }
 
-    /** An HTTP client bound to the configured {@code tracker.github.api-url} and {@code token}. */
-    static GithubHttpClient httpClientFor(Map<String, Object> subsection, String token) {
-        return new GithubHttpClient(requireStringValue(subsection, "api-url"), token);
+    /**
+     * An HTTP client bound to the tracker's admitted endpoint and {@code token} (FR15, FR17, design
+     * D16 of migrate-verify-to-executor-contract): the loader admitted {@code tracker.github.api-url}
+     * by the medium it was written in and carries the result on the config, so the client never
+     * reads the subsection's string.
+     */
+    static GithubHttpClient httpClientFor(TrackerConfig config, String token) {
+        return new GithubHttpClient(
+                config.endpoint()
+                        .orElseThrow(() -> new GithubTrackerConfigException(
+                                "tracker.github.api-url has no admitted endpoint to build the GitHub tracker on")),
+                token);
     }
 
     private static String requireStringValue(Map<String, Object> subsection, String key) {

@@ -2,7 +2,6 @@ package com.github.oinsio.gnomish.domain.pipeline;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * The pure validation aggregator (design D6): runs every pure rule over a
@@ -30,10 +29,14 @@ import java.util.Set;
  *       fail-fast before any dialog (FR10, UX2, D6 of add-agent-executor);</li>
  *   <li>{@link ExecutorReferenceRule} — per-stage {@code executor.name} against the
  *       {@code executors:} declarations (FR9, FR10 of define-executor-contract);</li>
- *   <li>{@link UnconfiguredCheckProviderRule} — per-check rejection of an
- *       {@code external} check whose provider this factory has no
- *       {@code factory.check} section for (FR3, D3 of remove-interactive-console).</li>
+ *   <li>{@link VerdictCheckRule} — per-check {@code scm-status} expected contexts and the
+ *       credentialed check's box (FR4, NFR-S1 of migrate-verify-to-executor-contract).</li>
  * </ol>
+ *
+ * <p>No rule here reads the operator's {@code factory.check} configuration: whether a credentialed
+ * built-in a check names is connected is the task's precondition, judged once at run assembly
+ * (design D18 of migrate-verify-to-executor-contract, "Where a refusal at run assembly goes"), so
+ * the former unconfigured-provider rule is gone.
  *
  * <p>Each delegated rule keeps its own internal ordering and reporting contract;
  * this aggregator only concatenates and never re-orders across rules. Every rule
@@ -45,10 +48,9 @@ import java.util.Set;
  *
  * <p>Implements FR8 of load-pipeline-config; the {@code TrackerConfigRule} tier
  * additionally implements FR17 of add-tracker-port; the {@code ApiExecutorRule}
- * tier additionally implements FR10, UX2, D6 of add-agent-executor; the
- * {@code UnconfiguredCheckProviderRule} tier implements FR3, D3 of
- * remove-interactive-console; the {@code ExecutorReferenceRule} tier implements FR9, FR10 of
- * define-executor-contract.
+ * tier additionally implements FR10, UX2, D6 of add-agent-executor; the {@code ExecutorReferenceRule} tier implements FR9, FR10 of
+ * define-executor-contract; the {@code VerdictCheckRule} tier implements FR4, NFR-S1 of
+ * migrate-verify-to-executor-contract.
  */
 public final class PipelineValidator {
 
@@ -62,13 +64,10 @@ public final class PipelineValidator {
      * <p>Implements FR8 of load-pipeline-config.
      *
      * @param model the typed pipeline model to validate
-     * @param configuredCheckProviders the providers this factory instance has a
-     *     {@code factory.check.<provider>} section for — a fact of the instance,
-     *     not of the model, so it is an input (D3 of remove-interactive-console)
      * @return every pure-rule error, concatenated in the documented order;
      *     immutable and possibly empty
      */
-    public static List<ConfigError> validate(PipelineDefinition model, Set<String> configuredCheckProviders) {
+    public static List<ConfigError> validate(PipelineDefinition model) {
         List<ConfigError> errors = new ArrayList<>();
         errors.addAll(SchemaVersionRule.validate(model.schemaVersion()));
         errors.addAll(TrackerConfigRule.validate(model.tracker()));
@@ -77,7 +76,7 @@ public final class PipelineValidator {
         errors.addAll(StageSanityRule.validate(model.stages()));
         errors.addAll(ApiExecutorRule.validate(model.stages()));
         errors.addAll(ExecutorReferenceRule.validate(model));
-        errors.addAll(UnconfiguredCheckProviderRule.validate(model.stages(), configuredCheckProviders));
+        errors.addAll(VerdictCheckRule.validate(model));
         return List.copyOf(errors);
     }
 }

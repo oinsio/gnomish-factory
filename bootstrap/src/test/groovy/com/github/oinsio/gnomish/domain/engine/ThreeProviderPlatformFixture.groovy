@@ -4,27 +4,26 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.check.CheckClientConfiguration
-import com.github.oinsio.gnomish.adapter.check.CheckClientDiscovery
-import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam
 import com.github.oinsio.gnomish.adapter.check.LoopbackTlsFixture
-import com.github.oinsio.gnomish.adapter.check.ProviderDispatchingExternalCheckClient
-import com.github.oinsio.gnomish.app.ConnectionProfiles
-import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient
+import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import java.nio.file.Path
 import java.time.Duration
+import java.time.InstantSource
 import javax.net.ssl.SSLContext
 
 /**
  * The two third-party platforms {@link ThreeProviderVerifyChainSpec} verifies against, and the
  * production wiring that reaches them: one WireMock serving a GitHub Actions API over plain http and
- * a SonarQube quality gate over TLS, plus the {@code RunAssembler}-shaped check-client assembly over
- * the real discovered registry.
+ * a SonarQube quality gate over TLS, plus the run assembly's check rounds over them: the built-ins'
+ * registry entries, the {@code github-actions} connection admitted from the operator's subsection,
+ * and the check dispatch behind the pin-check of a law commit whose workflow both attempt commits
+ * keep (task 4.2f of migrate-verify-to-executor-contract).
  *
  * <p>Extracted from the spec so the acceptance claim and its staging are read separately — the
  * staging is the uninteresting half, and the file-size rule is the reminder.
@@ -36,9 +35,11 @@ class ThreeProviderPlatformFixture {
     static final String QUALITY_GATE = '/api/qualitygates/project_status'
     static final String STUCK_QUALITY_GATE = '/api/qualitygates/stuck_status'
     static final String RUNS_PATH = "/repos/${REPO}/actions/workflows/${WORKFLOW}/runs"
-    static final String GREEN_SHA = 'abc123'
-    static final String RED_SHA = 'def456'
-    static final List<String> LOOPBACK_ALLOWLIST = ['127.0.0.1']
+    /** The operator's in-process egress scope granting the WireMock stub: the {@code loopback} class word. */
+    static final List<String> LOOPBACK_ALLOWLIST = ['loopback']
+
+    /** The green run's id; {@link #runPage} is the page its run list names as its {@code html_url}. */
+    static final int GREEN_RUN = 1
 
     private static final String SCENARIO = 'quality-gate'
     private static final int RED_RUN = 2
@@ -46,9 +47,19 @@ class ThreeProviderPlatformFixture {
 
     WireMockServer wireMock
     private SSLContext previousSslContext
+    private final PlatformCheckRounds attempts = new PlatformCheckRounds()
+
+    /** The attempt commit whose workflow run is green. */
+    String greenSha
+
+    /** The attempt commit whose workflow run is red. */
+    String redSha
 
     /** Starts both listeners and stubs both platforms; TLS is trusted for the fixture's lifetime. */
     void start(Path tempDir) {
+        attempts.seed(tempDir.resolve('law'), WORKFLOW)
+        greenSha = attempts.attempt('green')
+        redSha = attempts.attempt('red')
         def keystore = LoopbackTlsFixture.keystore(tempDir)
         previousSslContext = LoopbackTlsFixture.install(keystore)
         wireMock = new WireMockServer(WireMockConfiguration.options()
@@ -59,8 +70,8 @@ class ThreeProviderPlatformFixture {
                 .keystorePassword(LoopbackTlsFixture.PASSWORD)
                 .keyManagerPassword(LoopbackTlsFixture.PASSWORD))
         wireMock.start()
-        stubRun(GREEN_SHA, 1, 'success')
-        stubRun(RED_SHA, RED_RUN, 'failure')
+        stubRun(greenSha, GREEN_RUN, 'success')
+        stubRun(redSha, RED_RUN, 'failure')
         stubFailedJobs()
         stubQualityGate()
         stubStuckQualityGate()
@@ -77,28 +88,15 @@ class ThreeProviderPlatformFixture {
         wireMock.resetScenarios()
     }
 
-    /**
-     * The check client the composition root builds (see {@code CheckEquipment.externalCheckClient}):
-     * the discovered registry, the operator subsections passed through the real startup gate, and
-     * the production dispatching composite — no provider stood in for.
-     */
-    ExternalCheckClient checkClient(List<String> allowlist) {
-        def subsections = [
-            github: ['api-url': wireMock.baseUrl(), repo: REPO],
-            http: [allowlist: allowlist],
-        ]
-        def registry = CheckClientDiscovery.discover(CheckClientDiscovery.class.classLoader)
-        CheckClientConfiguration.requireValidSubsections(subsections, registry, ConnectionProfiles.none())
-        new ProviderDispatchingExternalCheckClient(
-                registry,
-                CheckProviderSeam.resolve(subsections, ConnectionProfiles.none()), { name ->
-                    Optional.of('tok')
-                } as SecretsProvider, VirtualTimeEquipment.create())
+    /** The run assembly's check rounds over the two platforms; see {@link PlatformCheckRounds#of}. */
+    StageExecutor checkRounds(List<VerifyCheck> checks, List<String> inProcessEgress, ShellCommandCheckRunner shell,
+            InstantSource clock) {
+        attempts.of(checks, wireMock.baseUrl(), inProcessEgress, shell, clock)
     }
 
     /** A SonarQube quality gate: pending on the first poll, OK on the next (FR10's poll loop). */
-    VerifyCheck.External qualityGate() {
-        new VerifyCheck.External(
+    VerifyCheck.Executor qualityGate() {
+        VerifyChecks.external(
                 'quality-gate', 'http',
                 [
                     url: "https://127.0.0.1:${wireMock.httpsPort()}${QUALITY_GATE}?projectKey=widgets".toString(),
@@ -113,8 +111,8 @@ class ThreeProviderPlatformFixture {
      * poll loop keeps waiting until the (deliberately tiny) timeout elapses, so the http provider's
      * timeout really is driven end to end and classified by the check's own {@code timeoutClass}.
      */
-    VerifyCheck.External stuckQualityGate(VerifyCheck.TimeoutClass timeoutClass) {
-        new VerifyCheck.External(
+    VerifyCheck.Executor stuckQualityGate(VerifyCheck.TimeoutClass timeoutClass) {
+        VerifyChecks.external(
                 'stuck-gate', 'http',
                 [
                     url: "https://127.0.0.1:${wireMock.httpsPort()}${STUCK_QUALITY_GATE}".toString(),
@@ -124,16 +122,21 @@ class ThreeProviderPlatformFixture {
                 Duration.ofMillis(20), Duration.ofMillis(120), timeoutClass, [])
     }
 
-    static VerifyCheck.External actionsRun() {
-        new VerifyCheck.External(
-                WORKFLOW, 'github', Duration.ofMillis(50), Duration.ofSeconds(30), VerifyCheck.TimeoutClass.QUALITY)
+    static VerifyCheck.Executor actionsRun() {
+        VerifyChecks.external(WORKFLOW, BuiltInExecutors.GITHUB_ACTIONS, Duration.ofMillis(50), Duration.ofSeconds(30),
+                VerifyCheck.TimeoutClass.QUALITY)
+    }
+
+    /** The platform's web page of run {@code runId}: the {@code html_url} its run list names. */
+    static String runPage(int runId) {
+        "https://github.example/${REPO}/actions/runs/${runId}".toString()
     }
 
     private void stubRun(String sha, int runId, String conclusion) {
         wireMock.stubFor(get(urlEqualTo("${RUNS_PATH}?head_sha=${sha}&per_page=100"))
                 .willReturn(aResponse().withStatus(200).withBody("""
                     {"workflow_runs":[{"id":${runId},"head_sha":"${sha}","path":"${WORKFLOW}","run_attempt":1,
-                     "status":"completed","conclusion":"${conclusion}"}]}
+                     "status":"completed","conclusion":"${conclusion}","html_url":"${runPage(runId)}"}]}
                     """)))
     }
 

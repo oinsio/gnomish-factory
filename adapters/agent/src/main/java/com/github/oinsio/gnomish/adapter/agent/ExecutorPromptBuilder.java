@@ -93,10 +93,18 @@ public record ExecutorPromptBuilder(PipelineLaw law) {
 
     private String describe(VerifyCheck check) {
         return switch (check) {
-            case VerifyCheck.Builtin builtin -> "builtin: " + builtin.name() + " " + builtin.params();
-            case VerifyCheck.Command command -> "command: " + command.command();
-            case VerifyCheck.External external -> "external: " + external.checkId();
+            case VerifyCheck.Executor executor -> describeExecutor(executor);
             case VerifyCheck.Judge judge -> describeJudge(judge);
+        };
+    }
+
+    /** A check by the token it was declared with, so a legacy check reads as it was written. */
+    private static String describeExecutor(VerifyCheck.Executor check) {
+        return switch (check.token()) {
+            case BUILTIN -> "builtin: " + check.checkId() + " " + check.settings();
+            case COMMAND -> "command: " + check.checkId();
+            case EXTERNAL -> "external: " + check.checkId();
+            case EXECUTOR -> "executor " + check.executorName() + ": " + check.checkId();
         };
     }
 

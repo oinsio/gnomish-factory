@@ -101,7 +101,7 @@ class SandboxLifecycleCrossInstanceE2ESpec extends Specification implements Bare
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
         // Thresholds at 1ms remove the minimum-age protection entirely, so nothing but the oracle
         // can account for the box surviving the first tick.
-        def tinyAges = new SandboxProperties(image, null, null, null, [], [], false, null,
+        def tinyAges = new SandboxProperties(image, null, null, null, [], false, null,
         Duration.ofMillis(1), Duration.ofMillis(1), Duration.ofHours(24))
         def project = cloneWithOrigin('cross-instance-project')
         taskId = "CTN-SIBLING-${System.nanoTime() % 100000}"

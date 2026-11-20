@@ -66,14 +66,19 @@ public interface RoundEnvironmentSource {
         /**
          * Closes the gnome half of the round after the agent process exited:
          * the sandboxed source executes the snapshot commit and harvest here,
-         * recording the attempt commit (FR21, D15); the host source does
-         * nothing. Runs before {@link #readDecision()}.
+         * recording the attempt commit (FR21, D15) under the subject {@code close}
+         * names (design D22 of migrate-verify-to-executor-contract); the host
+         * source does nothing, and ignores {@code close}: the git-mode host
+         * snapshot is taken after a {@code completed} result only. Runs before
+         * {@link #readDecision()}.
+         *
+         * @param close whether the round's executor completed; never null
          */
-        void closeRound();
+        void closeRound(RoundClose close);
 
         /**
          * The decision request the agent wrote this round, if any — read after {@link
-         * #closeRound()} through the one tolerant {@link DecisionRequestRead}, so no
+         * #closeRound} through the one tolerant {@link DecisionRequestRead}, so no
          * implementation hands raw decision content on for a second parse (FR6 of
          * define-executor-contract).
          */

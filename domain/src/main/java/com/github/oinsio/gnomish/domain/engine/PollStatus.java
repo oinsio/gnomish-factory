@@ -5,21 +5,20 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The result of a single poll of an {@code external} verify check, modeled as one
- * of exactly four sealed variants so the engine's poll loop can switch
- * exhaustively over one poll's outcome (design D2). It mirrors {@link Verdict} —
- * {@link Pass}, {@link Fail} (a quality failure carrying findings), {@link
- * CannotVerify} (an infrastructure failure where no verdict could be obtained) —
- * plus one extra variant, {@link Running}, meaning the third party has not yet
- * reached a verdict and the engine should keep polling.
+ * The result of a single observation of a polled verify check — one HTTP probe, one read of a
+ * commit's workflow runs — modeled as one of exactly four sealed variants so a reader can switch
+ * exhaustively over it (design D2). It mirrors {@link Verdict} — {@link Pass}, {@link Fail} (a
+ * quality failure carrying findings), {@link CannotVerify} (an infrastructure failure where no
+ * verdict could be obtained) — plus one extra variant, {@link Running}, meaning the third party has
+ * not yet reached a verdict.
  *
- * <p>Unlike {@link Verdict}, which is a terminal outcome, a {@code PollStatus} is
- * a single observation: the engine owns the poll loop and collapses a sequence of
- * poll statuses into one {@link Verdict}. A {@code Running} seen at or past the
- * check's timeout is turned by the engine into a quality {@link Verdict.Fail}
- * (task 4.3); the other three variants map straight through to the matching
- * {@code Verdict}. These value types only model the observation, they classify
- * nothing.
+ * <p>The engine no longer polls on it. It is the observation type the two polling built-in
+ * executors share: produced by {@code HttpCheckProbe} ({@code http}) and {@code
+ * GithubWorkflowRunPoll} ({@code github-actions}), and rendered as the executor contract's result
+ * by {@code HttpResults} and {@code GithubActionsResults}, a {@link Running} becoming a {@code
+ * pending} answer. The wait between polls and the timeout belong to the engine's {@link
+ * PendingPoll} (design D2, D19 of migrate-verify-to-executor-contract).
+ * These value types only model the observation, they classify nothing.
  *
  * <p>Implements FR3, D2 of add-stage-engine.
  */

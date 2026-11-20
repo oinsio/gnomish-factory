@@ -63,4 +63,50 @@ class PushBestEffortAttemptPersistenceSpec extends Specification implements Bare
         }
         thrown(GitPersistFailedException)
     }
+
+    // FR20 of migrate-verify-to-executor-contract (design D21): a pending commit is pushed with its
+    // register, so every clone reads it alike after its fetch
+    def "FR20: the push follows a landed pending commit, branch and register together"() {
+        given:
+        def cloneDir = initTaskWorkingRepo(tempDir, 'T-1')
+        def origin = initBareRepo(tempDir, 'origin')
+        addRemote(cloneDir, 'origin', origin.toString())
+        def git = new GitProcessRunner()
+        def delegate = Mock(AttemptPersistence)
+        def persistence = new PushBestEffortAttemptPersistence(delegate, new BestEffortClosingPush(git), cloneDir)
+        def state = TaskState.atStageStart('work')
+
+        when:
+        persistence.persistPending('T-1', state)
+
+        then:
+        1 * delegate.persistPending('T-1', state) >> {
+            git.run(cloneDir, 'update-ref', 'refs/gnomish-factory/T-1', 'refs/heads/gnomish/T-1')
+        }
+        def landed = git.run(cloneDir, 'ls-remote', origin.toString(), 'refs/heads/gnomish/T-1')
+                .stdout().forParsing().trim()
+        landed
+        git.run(cloneDir, 'ls-remote', origin.toString(), 'refs/gnomish-factory/T-1').stdout().forParsing().trim()
+                .split('\t')[0] == landed.split('\t')[0]
+    }
+
+    def "FR20: a refused pending write pushes nothing"() {
+        given:
+        def cloneDir = initTaskWorkingRepo(tempDir, 'T-1')
+        def origin = initBareRepo(tempDir, 'origin')
+        addRemote(cloneDir, 'origin', origin.toString())
+        def git = new GitProcessRunner()
+        def delegate = Mock(AttemptPersistence)
+        def persistence = new PushBestEffortAttemptPersistence(delegate, new BestEffortClosingPush(git), cloneDir)
+
+        when:
+        persistence.persistPending('T-1', TaskState.atStageStart('work'))
+
+        then:
+        1 * delegate.persistPending(_, _) >> {
+            throw new GitPersistFailedException('T-1', 'work', 0, 'boom', UntrustedText.subprocess('x'))
+        }
+        thrown(GitPersistFailedException)
+        git.run(cloneDir, 'ls-remote', origin.toString(), 'refs/heads/gnomish/T-1').stdout().isBlank()
+    }
 }

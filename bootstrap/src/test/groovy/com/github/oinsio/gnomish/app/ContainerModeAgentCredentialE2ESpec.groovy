@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
 import com.github.oinsio.gnomish.sandbox.BindingNames
@@ -107,8 +108,8 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
                 (List<VerifyCheck>) [
-                    new VerifyCheck.Command(CREDENTIALS_ABSENT, VerifyCheck.VerifyIn.SAME_BOX),
-                    new VerifyCheck.Command(CREDENTIALS_ABSENT, VerifyCheck.VerifyIn.FRESH_BOX),
+                    VerifyChecks.command(CREDENTIALS_ABSENT, VerifyCheck.VerifyIn.SAME_BOX),
+                    VerifyChecks.command(CREDENTIALS_ABSENT, VerifyCheck.VerifyIn.FRESH_BOX),
                 ],
                 new AutonomyLimits(1), AdvancementMode.AUTO)
     }
@@ -136,7 +137,7 @@ class ContainerModeAgentCredentialE2ESpec extends Specification implements BareG
 
         and: 'a container-mode runner passing through only the two probe names, over the credential-capturing agent'
         def image = FakeAgentSandboxImage.ensureBuiltCapturingCredentials()
-        def sandbox = new SandboxProperties(image, null, null, null, [], [
+        def sandbox = new SandboxProperties(image, null, null, null, [
             PRESENT_PASSTHROUGH,
             ABSENT_PASSTHROUGH
         ], false,

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment;
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.sandbox.DenialRestoration;
+import com.github.oinsio.gnomish.sandbox.SandboxEgress;
 import com.github.oinsio.gnomish.sandbox.SandboxProperties;
 import java.nio.file.Path;
 import java.util.List;
@@ -32,7 +33,10 @@ public final class ContainerEnvironmentFactory {
     private final BoxEquipment equipment;
 
     /**
-     * @param sandbox the operator sandbox config: image, runtime, limits, allowlist; never null
+     * @param sandbox the operator sandbox config: image, runtime, limits; never null
+     * @param egress the operator's grant to every box, {@code factory.egress.sandbox}, admitted by
+     *     every guard beside a task's executor egress (design D16 of
+     *     migrate-verify-to-executor-contract); never null
      * @param timing the exec clock, the self-check pause and the docker command bound — the
      *     installation's {@code factory.docker-command-timeout}; never null
      * @param guardConfigRoot the factory-private directory guard configs render under (per
@@ -41,10 +45,15 @@ public final class ContainerEnvironmentFactory {
      *     add-serve-sandbox-lifecycle); never null
      */
     public ContainerEnvironmentFactory(
-            SandboxProperties sandbox, BoxTiming timing, Path guardConfigRoot, OwnershipMode ownershipMode) {
+            SandboxProperties sandbox,
+            SandboxEgress egress,
+            BoxTiming timing,
+            Path guardConfigRoot,
+            OwnershipMode ownershipMode) {
         this.equipment = new BoxEquipment(
                 new DockerCli(timing.dockerCommandTimeout()),
                 sandbox,
+                egress,
                 timing,
                 guardConfigRoot,
                 ownershipMode,
@@ -66,7 +75,7 @@ public final class ContainerEnvironmentFactory {
      *     never null
      * @param executorEgress the hosts the law's {@code program} executors are granted (design D10 of
      *     define-executor-contract), admitted by every box guard of this task beside the operator's
-     *     egress allowlist; never null, may be empty
+     *     {@code factory.egress.sandbox}; never null, may be empty
      * @return the per-task environment seam; never null
      */
     public ContainerEnvironments forTask(

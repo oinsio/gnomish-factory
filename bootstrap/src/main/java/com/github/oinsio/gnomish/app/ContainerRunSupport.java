@@ -146,10 +146,13 @@ final class ContainerRunSupport implements SandboxRunSupport {
     /** The adapter bundle {@link RunAssembly#withSandbox} swaps in. */
     @Override
     public SandboxRunPieces pieces(@Nullable PendingVerification pendingVerification) {
+        // One source serves a command check's box and each request's box of a program check.
+        var checkEnvironments = new SandboxCheckEnvironmentSource(lease, environments, branch);
         return new SandboxRunPieces(
                 new SandboxRoundEnvironmentSource(lease, runner, cloneDir, taskId, rounds, time.clock()),
                 judgeEnvironments,
-                new SandboxCheckEnvironmentSource(lease, environments, branch),
+                checkEnvironments,
+                checkEnvironments,
                 gitObjects,
                 new RemoteAttemptDelivery(runner, cloneDir, taskId),
                 rounds,
@@ -292,7 +295,8 @@ final class ContainerRunSupport implements SandboxRunSupport {
     }
 
     /**
-     * The tracker-take revocation salvage protocol (FR15 of add-tracker-port).
+     * The tracker-take revocation salvage protocol (FR15 of add-tracker-port), its leftovers settled
+     * by the one no-salvage rule (design D22 of migrate-verify-to-executor-contract).
      *
      * <p>{@code @DoNotMutate} for the "out-of-process delegation" reason of
      * `.claude/rules/testing.md`: both calls are real Docker/git subprocess delegations whose
@@ -306,8 +310,9 @@ final class ContainerRunSupport implements SandboxRunSupport {
      */
     @Override
     @DoNotMutate
-    public void revocationSalvageAndPush(String taskId) {
-        salvage().salvage(taskId);
+    public boolean revocationSalvageAndPush(String taskId) {
+        boolean kept = NoSalvageOverVerification.keptOutInBox(this, taskId);
         push.pushBestEffort(cloneDir, taskId);
+        return kept;
     }
 }

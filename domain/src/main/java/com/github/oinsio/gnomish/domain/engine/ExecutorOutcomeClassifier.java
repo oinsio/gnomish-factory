@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.util.Optional;
 
 /**
  * The one mapping from an executor result's status to attempt accounting and escalation (FR7 of
@@ -28,11 +29,17 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * an {@link ExecutionResult}'s status, and the only constructor of {@link
  * EscalationReport.CannotExecute} outside the state mappers that rebuild one from the wire.
  *
+ * <p>A reader that needs a fact of the status asks this class rather than reading the status itself
+ * (design D21, D22 of migrate-verify-to-executor-contract, human decision 2026-11-12, keeping G4 of
+ * define-executor-contract): {@link #verifiable} for the host snapshot, {@link #pending} for the
+ * poll, {@link #failure} for a check round's answer. Each query is the table read once, never a
+ * second table.
+ *
  * <p>Pure and stateless (NFR-R1).
  *
- * <p>Implements FR7, FR2 of define-executor-contract.
+ * <p>Implements FR7, FR2 of define-executor-contract; FR2, FR19 of migrate-verify-to-executor-contract.
  */
-final class ExecutorOutcomeClassifier {
+public final class ExecutorOutcomeClassifier {
 
     /**
      * The reason a {@code pending} result escalates with: no caller of a stage round can poll in
@@ -43,6 +50,37 @@ final class ExecutorOutcomeClassifier {
             UntrustedText.factory("the executor returned pending, which this stage cannot poll (unsupported pending)");
 
     private ExecutorOutcomeClassifier() {}
+
+    /**
+     * Whether the engine goes on to verify the round: it completed and asked no question — the
+     * table's {@link AttemptAccounting.Proceed} row, read from {@link #classify} itself.
+     *
+     * @param result the round's result; never null
+     * @return true exactly when the result classifies as proceed
+     */
+    public static boolean verifiable(ExecutionResult result) {
+        return classify(result) instanceof AttemptAccounting.Proceed;
+    }
+
+    /**
+     * The facts of a round that has not finished: its key, wait hint, state and texts.
+     *
+     * @param result the round's result; never null
+     * @return the pending status, or empty when the round ended
+     */
+    public static Optional<ExecutionResult.Pending> pending(ExecutionResult result) {
+        return result.status() instanceof ExecutionResult.Pending pending ? Optional.of(pending) : Optional.empty();
+    }
+
+    /**
+     * The failure a round reports: its class, reason, findings and details.
+     *
+     * @param result the round's result; never null
+     * @return the failed status, or empty when the round completed or is pending
+     */
+    static Optional<ExecutionResult.Failed> failure(ExecutionResult result) {
+        return result.status() instanceof ExecutionResult.Failed failed ? Optional.of(failed) : Optional.empty();
+    }
 
     /**
      * Classifies one executor result. Exhaustive switches, no {@code default}, so a new status or
@@ -58,7 +96,7 @@ final class ExecutorOutcomeClassifier {
                         ? new AttemptAccounting.EndStage(
                                 AttemptRecord.Result.DECISION_NEEDED, new Stop.DecisionNeeded(question, options))
                         : new AttemptAccounting.Proceed();
-            case ExecutionResult.Failed(var failureClass, var reason, var findings) ->
+            case ExecutionResult.Failed(var failureClass, var reason, var findings, var details) ->
                 switch (failureClass) {
                     case QUALITY -> new AttemptAccounting.BurnAttempt(findings);
                     case INFRASTRUCTURE ->

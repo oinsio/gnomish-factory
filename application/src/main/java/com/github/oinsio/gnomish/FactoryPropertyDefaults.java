@@ -84,8 +84,8 @@ final class FactoryPropertyDefaults {
      * Resolves the unset case to an empty map (no check provider configured, no connection profile
      * defined) and defends the map's immutability. No key or value is interpreted here: both {@code
      * factory.check} and {@code factory.connections} are open-ended sets of named subsections whose
-     * content only the provider's own {@code CheckSubsectionValidator} may grade (FR4, FR5, FR16,
-     * design D12 of add-plugin-architecture) — which is why the vendor-shaped {@code Check.Github}
+     * content only the built-in's own subsection validator may grade (FR4, FR5, FR16, design D12 of
+     * add-plugin-architecture) — which is why the vendor-shaped {@code Check.Github}
      * record with its both-or-neither constructor is gone from core. The one reshaping done here is
      * structural, not interpretive: a list the Binder turned into an index-keyed map is a list again
      * ({@link IndexedLists}, finding F130 of tighten-spec-contract), so every raw subsection reaches

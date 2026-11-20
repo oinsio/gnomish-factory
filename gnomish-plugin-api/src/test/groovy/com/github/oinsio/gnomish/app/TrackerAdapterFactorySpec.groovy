@@ -102,4 +102,45 @@ class TrackerAdapterFactorySpec extends Specification {
         verdict == new TrackerReadVerdict.NotApplicable()
         0 * secrets._
     }
+
+    // FR14 of migrate-verify-to-executor-contract (task 6.1): the tracker SPI factory bears its
+    //     declared members, each with a real default, and the contract holds no other SPI factory —
+    //     a check's settings schema, credentials and pin contribution are declared by the
+    //     executor's describe, so no check SPI type is left in the api.
+    // Scenario: plugin/plugin-api-contract / The SPI factories bear their declared members
+    def "FR14: the tracker SPI factory bears its declared members, and no check SPI type is left"() {
+        given:
+        def factory = new MinimalFactory(Stub(Tracker))
+        def members = TrackerAdapterFactory.declaredMethods*.name as Set
+
+        expect: 'the declared members'
+        members.containsAll([
+            'type',
+            'subsectionValidator',
+            'credentialEnvVars',
+            'endpoint'
+        ])
+
+        and: 'each optional member defaults to a real empty answer rather than null'
+        factory.subsectionValidator() == Optional.empty()
+        factory.credentialEnvVars(config()) == []
+        factory.endpoint() == Optional.empty()
+
+        and: 'no check SPI type, validator, pin hook or workspace capability ships in the api'
+        CHECK_SPI.every { name ->
+            TrackerAdapterFactory.classLoader.getResource(name.replace('.', '/') + '.class') == null
+        }
+    }
+
+    /** The check SPI the api carried until task 6.1 of migrate-verify-to-executor-contract. */
+    private static final List<String> CHECK_SPI = [
+        'com.github.oinsio.gnomish.app.CheckClientFactory',
+        'com.github.oinsio.gnomish.app.CheckClientContext',
+        'com.github.oinsio.gnomish.app.CheckParamsValidator',
+        'com.github.oinsio.gnomish.app.CheckSubsectionValidator',
+        'com.github.oinsio.gnomish.app.CheckRunContext',
+        'com.github.oinsio.gnomish.app.port.check.ExternalCheckClient',
+        'com.github.oinsio.gnomish.app.port.check.ExternalCheckPinContributor',
+        'com.github.oinsio.gnomish.app.port.check.AttemptCommitWorkspace',
+    ]
 }

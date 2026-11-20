@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException;
 
 /**
  * Thrown by {@link GithubIndexRepair} when a read or write of the repair sequence returns a non-2xx
- * response outside the retry budget {@link com.github.oinsio.gnomish.adapter.github.GithubHttpClient}
+ * response outside the retry budget {@link com.github.oinsio.gnomish.githubapi.GithubHttpClient}
  * already applied.
  *
  * <p>Extends {@link TrackerUnavailableException} (FR18 of harden-task-branch-contract): a repair

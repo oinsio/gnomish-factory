@@ -40,7 +40,7 @@ class ManualRunRelativeDirSpec extends Specification implements AppAssemblyFixtu
         System.out = new PrintStream(capturedOut, true, 'UTF-8')
         // The gnome is the fake agent (FR6 of remove-interactive-console); no dialog is reached.
         def runner = newManualRunRunner(projectRoot, homeDir,
-                new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                 new BindingProperties('host', [:]), TaskGitFixture.real(), FakeAgentSupport.propertiesFor('plain-round'))
         def args = new DefaultApplicationArguments(
                 "--dir=${relative}".toString(),

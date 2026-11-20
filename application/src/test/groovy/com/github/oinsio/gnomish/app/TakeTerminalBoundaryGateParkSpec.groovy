@@ -79,7 +79,7 @@ class TakeTerminalBoundaryGateParkSpec extends Specification implements RunChain
         def branches = Mock(TaskBranchGit)
         def store = Stub(TaskStoreGit) {
             taskRepository(CLONE) >> lifecycleStore
-            attemptPersistence(worktree, 'PROJ-1') >> persistence
+            attemptPersistence(worktree, 'PROJ-1', _) >> persistence
         }
         def git = new TaskGit(store, branches, Mock(TaskWorktreeGit), new ClaimEpochBook())
         def bootstrap = new ResumeBootstrap('PROJ-1', CheckpointMechanicsFixtures.context(), null, null, worktree,
@@ -88,7 +88,7 @@ class TakeTerminalBoundaryGateParkSpec extends Specification implements RunChain
         LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))
 
         when:
-        def result = execution.run(order(), bootstrap, CheckpointMechanicsFixtures.context(), gated)
+        def result = execution.run(order(), bootstrap, CheckpointMechanicsFixtures.context(), gated, null)
 
         then: 'the durable intent: one park record owing the tracker write, then the delivery fence'
         1 * lifecycleStore.recordOutcome('PROJ-1', {
@@ -114,7 +114,7 @@ class TakeTerminalBoundaryGateParkSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> persistence
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
         def execution = new TakeContainerEngineExecution(assemblyRunning(executor), Stub(TaskBranchGit), dispatch(), [], new ClaimLossFlag(),
         LawBinding.atRevision(CLONE_DIR, GitObjects.HEAD))

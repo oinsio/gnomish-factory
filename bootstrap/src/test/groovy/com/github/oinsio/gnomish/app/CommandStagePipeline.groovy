@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 
 /**
  * The mixed pipeline the host and container command-stage flow specs of add-command-executor run
@@ -49,7 +50,7 @@ final class CommandStagePipeline {
         def build = new StageDefinition('build', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.COMMAND, '', [:], Sandbox.none(), null, new CommandLine(COMMAND)),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [files: [RESULT]])
+            VerifyChecks.builtin('files_exist', [files: [RESULT]])
         ], new AutonomyLimits(3),
         AdvancementMode.AUTO)
         def review = new StageDefinition('review', 'purpose', [], [],

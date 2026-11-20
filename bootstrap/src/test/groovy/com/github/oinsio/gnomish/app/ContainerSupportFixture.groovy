@@ -21,6 +21,9 @@ import java.time.InstantSource
  */
 final class ContainerSupportFixture {
 
+    /** No operator factory.check section: no built-in is connected, so none declares its token name. */
+    private static final BuiltInCheckSubsections NO_SUBSECTIONS = new BuiltInCheckSubsections([:], ConnectionProfiles.none())
+
     private ContainerSupportFixture() {}
 
     /**
@@ -52,12 +55,12 @@ final class ContainerSupportFixture {
 
     private static ContainerSupportFactory forOwnership(
             OwnershipMode ownershipMode, ClaimEpochSource epochs, SandboxProperties sandbox, FactoryProperties factory) {
-        // The check providers' credential declarations are resolved by the composition root and
-        // handed down (FR17, D11 of add-plugin-architecture); these specs configure no check
-        // provider, so the declared set and the registry are empty. The allowlist's values are the
+        // The built-ins' credential names are resolved by the composition root and handed down
+        // (FR17, D11 of add-plugin-architecture); these specs configure no factory.check section,
+        // so the installation allowlist declares none and the subsections are empty. The allowlist's values are the
         // test JVM's environment, the stand-in for the root's secrets port (NFR-S3 of
         // tighten-spec-contract).
-        new ContainerRunSupportFactory(TestChildEnvironment.hostAllowlist(sandbox.envPassthrough(), []), [:],
+        new ContainerRunSupportFactory(TestChildEnvironment.hostAllowlist(sandbox.envPassthrough(), []), NO_SUBSECTIONS,
         ownershipMode, epochs, sandbox, factory, realTime())
     }
 
@@ -74,16 +77,16 @@ final class ContainerSupportFixture {
 
     /**
      * One run's real container support, built directly rather than through a runner — for the
-     * lifecycle specs that drive the bundle's own environments. No check provider is configured
-     * unless {@code checkCredentialEnvVars} names one; the pipeline declares no check, so it
+     * lifecycle specs that drive the bundle's own environments. No built-in credential is scrubbed
+     * unless {@code builtInCredentialNames} names one; the pipeline declares no check, so it
      * contributes none either. {@code epochs} is the caller's to choose, as for {@link #real}: a
      * spec that never claims says so by passing {@code ClaimEpochSource.NONE} itself.
      */
     static ContainerRunSupport direct(Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox,
             FactoryProperties factory, OwnershipMode ownershipMode, ClaimEpochSource epochs,
-            List<String> checkCredentialEnvVars = []) {
+            List<String> builtInCredentialNames = []) {
         (ContainerRunSupport) new ContainerRunSupportFactory(
-                TestChildEnvironment.hostAllowlist(sandbox.envPassthrough(), checkCredentialEnvVars), [:],
+                TestChildEnvironment.hostAllowlist(sandbox.envPassthrough(), builtInCredentialNames), NO_SUBSECTIONS,
                 ownershipMode, epochs, sandbox, factory, realTime())
                 .create(cloneDir, taskId, segments, new PipelineDefinition('1', new AutonomyLimits(3), []), [])
     }
@@ -92,12 +95,14 @@ final class ContainerSupportFixture {
      * As {@link #direct}, over the installation allowlist {@code installation} and the law {@code
      * definition} the run's box is built for — for the specs whose subject is what the allowlist and
      * the law's executor declarations do to a real box (NFR-S1, FR10 of define-executor-contract).
-     * {@code epochs} is the caller's to choose, as for {@link #direct}.
+     * {@code epochs} is the caller's to choose, as for {@link #direct}; {@code factory} carries the
+     * operator's egress block, whose {@code sandbox} scope every box guard admits.
      */
     static ContainerRunSupport directFor(Path cloneDir, String taskId, List<Segment> segments, SandboxProperties sandbox,
-            ClaimEpochSource epochs, ChildEnvAllowlist installation, PipelineDefinition definition) {
-        (ContainerRunSupport) new ContainerRunSupportFactory(installation, [:], OwnershipMode.MANUAL,
-        epochs, sandbox, new FactoryProperties(null, null, null, null), realTime())
-        .create(cloneDir, taskId, segments, definition, [])
+            FactoryProperties factory, ClaimEpochSource epochs, ChildEnvAllowlist installation,
+            PipelineDefinition definition) {
+        (ContainerRunSupport) new ContainerRunSupportFactory(installation, NO_SUBSECTIONS, OwnershipMode.MANUAL,
+                epochs, sandbox, factory, realTime())
+                .create(cloneDir, taskId, segments, definition, [])
     }
 }

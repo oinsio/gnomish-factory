@@ -135,6 +135,19 @@ public final class ContainerEnvironments {
         return environment(baseKey + "-v");
     }
 
+    /**
+     * A fresh verification-box environment ({@code <key>-v}) for one request of a {@code program}
+     * verdict check (design D6, D11 as amended 2026-11-14 of migrate-verify-to-executor-contract):
+     * its guard admits the operator's {@code factory.egress.sandbox} and {@code grant}, the hosts the
+     * law grants that one executor, and no other executor's.
+     *
+     * @param grant the executor's granted hosts, in the guard's spelling; never null, may be empty
+     * @return the environment, pinned by its caller at the attempt commit; never null
+     */
+    public SelfCheckedEnvironment verificationEnvironment(List<String> grant) {
+        return builder.buildGranted(baseKey + "-v", grant);
+    }
+
     /** The sanitized key of the round environment, for keep/dispose bookkeeping. */
     public String baseKey() {
         return baseKey;

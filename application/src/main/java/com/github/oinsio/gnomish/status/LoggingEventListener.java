@@ -8,8 +8,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The {@link EngineEventListener} adapter that logs one structured INFO line per {@link
- * EngineEvent} to the rolling file appender (task 8.1), so a "days-horizon post-mortem" (design
+ * The {@link EngineEventListener} adapter that logs one structured line per {@link EngineEvent} to
+ * the rolling file appender (task 8.1) — INFO for every event but a pending check's poll, which is
+ * DEBUG since it is emitted once per poll of a loop (the level table of the logging rule; NFR-O1 of
+ * migrate-verify-to-executor-contract), so a "days-horizon post-mortem" (design
  * D9's stated audience) can reconstruct a run's shape straight from the log file without replaying
  * the JSON status contract. Every line is logged through SLF4J with parameterized arguments — never
  * string concatenation — matching the established idiom in {@code
@@ -37,7 +39,8 @@ import org.slf4j.LoggerFactory;
  * itself, so — like {@link MdcEventListener} and {@link StatusEventListener} — this class needs no
  * defensive exception handling to satisfy the port's "never throw past {@code onEvent}" contract.
  *
- * <p>Implements NFR-O2 of add-manual-run; NFR-O2, UX3 of define-executor-contract.
+ * <p>Implements NFR-O2 of add-manual-run; NFR-O2, UX3 of define-executor-contract; NFR-O1, UX1 of
+ * migrate-verify-to-executor-contract.
  */
 public final class LoggingEventListener implements EngineEventListener {
 
@@ -47,7 +50,7 @@ public final class LoggingEventListener implements EngineEventListener {
     private static final String ABSENT = "-";
 
     /**
-     * Logs one structured INFO line for {@code event}, with content specific to its kind, by an
+     * Logs one structured line for {@code event} (DEBUG for a poll, INFO otherwise), with content specific to its kind, by an
      * exhaustive switch over the sealed {@link EngineEvent} variants — no {@code default} arm, so a
      * new variant fails to compile here until its log line is added.
      *
@@ -64,6 +67,15 @@ public final class LoggingEventListener implements EngineEventListener {
             case EngineEvent.ExecutionFinished finished -> logExecutionFinished(finished);
             case EngineEvent.CheckStarted started ->
                 log.info("check started: {}", started.check().label().forLog());
+            case EngineEvent.CheckPolled polled ->
+                log.debug(
+                        "pending poll: executor={}, key={}, turn={}, elapsed={}, remaining={}",
+                        polled.executor(),
+                        polled.keyPrefix().forLog(),
+                        polled.turn(),
+                        polled.elapsed(),
+                        polled.remaining());
+            case EngineEvent.CheckTimedOut timedOut -> logTimedOut(timedOut);
             case EngineEvent.CheckFinished finished ->
                 log.info(
                         "check finished: {} -> {}",
@@ -99,6 +111,24 @@ public final class LoggingEventListener implements EngineEventListener {
                 bound == null ? ABSENT : bound.forLog(),
                 finished.usage().wallTime(),
                 finished.usage().byModel());
+    }
+
+    /**
+     * The timeout's line (NFR-O1, UX1 of migrate-verify-to-executor-contract): the executor, the last
+     * key's prefix, the elapsed wait, the class the engine resolved the wait to and its details —
+     * for an {@code scm-status} check every expected context still absent. INFO, not WARN: a
+     * timeout is a verdict the verify chain classifies, and the attempt's own outcome is the line an
+     * operator acts on.
+     */
+    private void logTimedOut(EngineEvent.CheckTimedOut timedOut) {
+        var details = timedOut.failure().details();
+        log.info(
+                "pending poll timed out: executor={}, key={}, elapsed={}, class={}, awaiting={}",
+                timedOut.executor(),
+                timedOut.keyPrefix().forLog(),
+                timedOut.elapsed(),
+                timedOut.failure().failureClass(),
+                details == null ? ABSENT : details.forLog());
     }
 
     private static Object orDash(@Nullable Object value) {

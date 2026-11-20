@@ -6,8 +6,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
 import com.github.oinsio.gnomish.app.port.tracker.BoundaryKind
 import com.github.oinsio.gnomish.app.port.tracker.ClaimFacts
 import com.github.oinsio.gnomish.app.port.tracker.ClaimVersion
@@ -15,6 +13,9 @@ import com.github.oinsio.gnomish.app.port.tracker.ParkReason
 import com.github.oinsio.gnomish.app.port.tracker.StateLabels
 import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import io.github.resilience4j.core.IntervalFunction
 import io.github.resilience4j.retry.RetryConfig
@@ -65,7 +66,7 @@ class GithubOpenQuerySpec extends Specification {
     }
 
     private GithubOpenQuery newOpenQuery() {
-        def httpClient = new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig())
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', fastRetryConfig())
         def cache = new GithubConditionalRequestCache(httpClient)
         new GithubOpenQuery(cache, 'acme', 'widgets', new GithubStateLabels('gnomish:ready', 'gnomish:working', 'gnomish:needs-human', 'gnomish:delivered'))
     }

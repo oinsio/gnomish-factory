@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -18,6 +17,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -34,8 +34,8 @@ abstract class ResumeMatrixSpecBase extends Specification {
     static final def WORKSPACE = new FakeWorkspace()
     static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
-    static VerifyCheck.Builtin builtin(String name) {
-        new VerifyCheck.Builtin(name, [:])
+    static VerifyCheck.Executor builtin(String name) {
+        VerifyChecks.builtin(name, [:])
     }
 
     static StageDefinition stage(String name, AdvancementMode advancement, int attemptLimit, List<VerifyCheck> verify) {
@@ -59,11 +59,10 @@ abstract class ResumeMatrixSpecBase extends Specification {
     }
 
     /** A fresh port bundle with independent fakes, so each run in a scenario is isolated. */
-    static EnginePorts freshPorts(ScriptedExecutor executor, ScriptedBuiltinCheckRunner builtin,
+    static EnginePorts freshPorts(ScriptedExecutor executor, ScriptedCheckRounds builtin,
             InMemoryAttemptPersistence persistence, RecordingEventListener listener) {
         def clock = new VirtualClock()
-        new EnginePorts(executor, builtin, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence,
+        new EnginePorts(CheckRouting.of(executor, builtin, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), listener, persistence,
                 VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 }

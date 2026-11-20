@@ -32,6 +32,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
@@ -61,7 +62,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def stage = new StageDefinition('build', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ],
         new AutonomyLimits(1), AdvancementMode.MANUAL)
         new PipelineDefinition('1', new AutonomyLimits(3), [stage])
@@ -89,7 +90,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
             taskRepository() >> store
         }
         def branches = Stub(TaskBranchGit) {
@@ -130,7 +131,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
 
         when:
@@ -204,7 +205,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
 
         when:
@@ -238,7 +239,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence(failOnCall: 1)
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
 
         when:
@@ -268,7 +269,7 @@ class TakeContainerEngineExecutionSpec extends Specification implements RunChain
         def support = Mock(SandboxRunSupport) {
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> new FakeWorkspace()
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
 
         when:

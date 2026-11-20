@@ -1,14 +1,15 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
 
 /**
  * EngineEvent cross-cutting supertype behaviour: {@code taskId()} is reachable
- * for every one of the seven sealed variants (key-carrying events delegate to
+ * for every one of the nine sealed variants (key-carrying events delegate to
  * {@code key.taskId()}), letting a consumer filter the whole stream by task
- * (UX2), and an exhaustive switch resolves all seven variants (design D7).
+ * (UX2), and an exhaustive switch resolves all nine variants (design D7).
  * Implements FR12 of add-stage-engine.
  */
 class EngineEventTaskIdSpec extends Specification {
@@ -22,7 +23,18 @@ class EngineEventTaskIdSpec extends Specification {
     }
 
     private static CheckResult sampleCheckResult() {
-        new CheckResult(sampleCheckRef(), new Verdict.Pass(), Duration.ofMillis(5))
+        new CheckResult(sampleCheckRef(), new Verdict.Pass(null, []), Duration.ofMillis(5))
+    }
+
+    private static EngineEvent.CheckPolled samplePolled(AttemptKey key = sampleKey()) {
+        new EngineEvent.CheckPolled(key, sampleCheckRef(), 'scm-status', UntrustedText.subprocess('k-1'),
+                PendingTurn.Origin.ISSUED, Duration.ofSeconds(30), Duration.ofMinutes(9))
+    }
+
+    private static EngineEvent.CheckTimedOut sampleTimedOut(AttemptKey key = sampleKey()) {
+        new EngineEvent.CheckTimedOut(key, sampleCheckRef(), 'scm-status', UntrustedText.subprocess('k-1'),
+                Duration.ofMinutes(10), new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY,
+                UntrustedText.factory('timed out'), [], null))
     }
 
     private static TaskState sampleState() {
@@ -37,7 +49,7 @@ class EngineEventTaskIdSpec extends Specification {
         new TaskOutcome.Completed(sampleState())
     }
 
-    // FR12: taskId() is reachable via the EngineEvent supertype for all seven variants (UX2)
+    // FR12: taskId() is reachable via the EngineEvent supertype for all nine variants (UX2)
     def "taskId() is reachable via the EngineEvent supertype for #description"() {
         expect: 'the shared accessor returns the run-correlating task id'
         (event as EngineEvent).taskId() == 't1'
@@ -48,7 +60,9 @@ class EngineEventTaskIdSpec extends Specification {
         'AttemptStarted' | new EngineEvent.AttemptStarted(sampleKey())
         'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
-        'CheckFinished' | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult())
+        'CheckPolled' | samplePolled()
+        'CheckTimedOut' | sampleTimedOut()
+        'CheckFinished' | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult(), null)
         'AttemptFinished' | new EngineEvent.AttemptFinished(sampleKey(), sampleState(), sampleTrace())
         'TaskFinished' | new EngineEvent.TaskFinished('t1', sampleOutcome())
     }
@@ -66,12 +80,14 @@ class EngineEventTaskIdSpec extends Specification {
         'AttemptStarted' | new EngineEvent.AttemptStarted(new AttemptKey('t1', 'build', 0))
         'ExecutionFinished' | new EngineEvent.ExecutionFinished(new AttemptKey('t1', 'build', 0), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(new AttemptKey('t1', 'build', 0), sampleCheckRef())
-        'CheckFinished' | new EngineEvent.CheckFinished(new AttemptKey('t1', 'build', 0), sampleCheckResult())
+        'CheckPolled' | samplePolled(new AttemptKey('t1', 'build', 0))
+        'CheckTimedOut' | sampleTimedOut(new AttemptKey('t1', 'build', 0))
+        'CheckFinished' | new EngineEvent.CheckFinished(new AttemptKey('t1', 'build', 0), sampleCheckResult(), null)
         'AttemptFinished' | new EngineEvent.AttemptFinished(new AttemptKey('t1', 'build', 0), sampleState(), sampleTrace())
     }
 
-    // FR12: an exhaustive switch over EngineEvent handles all seven variants
-    def "an exhaustive switch over EngineEvent handles all seven variants for #description"() {
+    // FR12: an exhaustive switch over EngineEvent handles all nine variants
+    def "an exhaustive switch over EngineEvent handles all nine variants for #description"() {
         expect: 'the switch resolves each variant to its label'
         label(event as EngineEvent) == description
 
@@ -81,7 +97,9 @@ class EngineEventTaskIdSpec extends Specification {
         'AttemptStarted' | new EngineEvent.AttemptStarted(sampleKey())
         'ExecutionFinished' | new EngineEvent.ExecutionFinished(sampleKey(), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
         'CheckStarted' | new EngineEvent.CheckStarted(sampleKey(), sampleCheckRef())
-        'CheckFinished' | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult())
+        'CheckPolled' | samplePolled()
+        'CheckTimedOut' | sampleTimedOut()
+        'CheckFinished' | new EngineEvent.CheckFinished(sampleKey(), sampleCheckResult(), null)
         'AttemptFinished' | new EngineEvent.AttemptFinished(sampleKey(), sampleState(), sampleTrace())
         'TaskFinished' | new EngineEvent.TaskFinished('t1', sampleOutcome())
     }
@@ -92,6 +110,8 @@ class EngineEventTaskIdSpec extends Specification {
             case EngineEvent.AttemptStarted: return 'AttemptStarted'
             case EngineEvent.ExecutionFinished: return 'ExecutionFinished'
             case EngineEvent.CheckStarted: return 'CheckStarted'
+            case EngineEvent.CheckPolled: return 'CheckPolled'
+            case EngineEvent.CheckTimedOut: return 'CheckTimedOut'
             case EngineEvent.CheckFinished: return 'CheckFinished'
             case EngineEvent.AttemptFinished: return 'AttemptFinished'
             case EngineEvent.TaskFinished: return 'TaskFinished'

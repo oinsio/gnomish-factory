@@ -8,6 +8,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 
 /**
  * Shared minimal, valid {@link StageDefinition} builder for segment-related
@@ -27,7 +28,7 @@ trait StageFixture {
                         ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], new Sandbox([], requiresFresh)),
                 "stages/$name/instructions.md",
                 [
-                    new VerifyCheck.Command('./gradlew check')
+                    VerifyChecks.command('./gradlew check')
                 ],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
     }

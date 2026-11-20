@@ -1,65 +1,67 @@
 package com.github.oinsio.gnomish.app;
 
 import com.github.oinsio.gnomish.FactoryProperties;
-import com.github.oinsio.gnomish.adapter.check.CheckProviderSeam;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
-import com.github.oinsio.gnomish.adapter.check.ProviderDispatchingExternalCheckClient;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
+import com.github.oinsio.gnomish.adapter.check.http.HttpCheckProbe;
+import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext;
+import com.github.oinsio.gnomish.adapter.scm.ScmConnectionReader;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
-import com.github.oinsio.gnomish.domain.engine.port.ExternalCheckClient;
-import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
+import com.github.oinsio.gnomish.httpegress.OperatorEgress;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
+import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The check equipment one installation runs every stage's checks with (design D11 and the {@code
- * CheckEquipment} row of collapse-composition-roots): the two built-in check runners, the
- * discovered check-client registry and the credential seam, over the operator's {@code
- * factory.check.<provider>} configuration. {@link RunAssembler} asks it for a run's three check
- * ports and for the run's child-environment allowlist, built over the credential names those ports'
- * providers declare and over the secrets port; nothing reads a member back out.
+ * CheckEquipment} row of collapse-composition-roots): the two in-process check runners, the
+ * operator's {@code factory.check.<built-in>} subsections ({@link BuiltInCheckSubsections}) and the
+ * credential seam. The run's assembly asks it for the built-ins' registry collaborators and
+ * connections, and the child-environment allowlist; the check-provider registry it once held left
+ * with task 5.2 of migrate-verify-to-executor-contract.
  *
- * <p>The {@link SecretsProvider} is a member with no accessor (NFR-S1): a holder of the equipment
- * can have a provider resolve a credential on first poll, or a child environment resolve its values
- * (NFR-S3 of tighten-spec-contract), but cannot obtain the seam or hand it on.
- * The {@link FactoryProperties} it holds are read for the check subsections and the connection
- * profiles only; the executor and judge settings the assembly reads from the same bean are no
- * concern of this class. The host's {@link TimeEquipment} is handed on to every check provider it
- * builds, on the provider's context (design D21 of supervise-daemon-loops-and-embed-dashboard).
+ * <p>The {@link SecretsProvider} is a member with no accessor (NFR-S1): a holder can have a provider,
+ * a built-in or a child environment resolve a credential (NFR-S3 of tighten-spec-contract), but
+ * cannot obtain the seam. The {@link FactoryProperties} are read for the check subsections, the
+ * connection profiles and the {@code in-process} egress only.
  *
  * <p>Implements FR16, FR26 of add-sandbox-core; FR5, FR6, FR16, FR17 of add-plugin-architecture;
  * FR1, FR4, NFR-S1 of collapse-composition-roots; FR23 of supervise-daemon-loops-and-embed-dashboard;
- * NFR-S3 of tighten-spec-contract.
+ * NFR-S3 of tighten-spec-contract; FR13, NFR-S2 of migrate-verify-to-executor-contract.
  */
 @NullMarked
 public final class CheckEquipment {
 
     private final FilesExistCheckRunner filesExistCheckRunner;
     private final ShellCommandCheckRunner shellCommandCheckRunner;
-    private final Map<String, CheckClientFactory> checkClientRegistry;
     private final SecretsProvider secretsProvider;
     private final FactoryProperties factoryProperties;
-    private final TimeEquipment timeEquipment;
+    private final BuiltInCheckSubsections subsections;
 
     CheckEquipment(
             FilesExistCheckRunner filesExistCheckRunner,
             ShellCommandCheckRunner shellCommandCheckRunner,
-            Map<String, CheckClientFactory> checkClientRegistry,
             SecretsProvider secretsProvider,
-            FactoryProperties factoryProperties,
-            TimeEquipment timeEquipment) {
+            FactoryProperties factoryProperties) {
         this.filesExistCheckRunner = filesExistCheckRunner;
         this.shellCommandCheckRunner = shellCommandCheckRunner;
-        this.checkClientRegistry = checkClientRegistry;
         this.secretsProvider = secretsProvider;
         this.factoryProperties = factoryProperties;
-        this.timeEquipment = timeEquipment;
+        this.subsections = new BuiltInCheckSubsections(
+                factoryProperties.check(), ConnectionProfiles.of(factoryProperties.connections()));
+    }
+
+    /**
+     * The operator's {@code factory.check.<built-in>} subsections this equipment reads: graded once
+     * at startup by the composition root, and the source of the built-ins' credential names.
+     */
+    BuiltInCheckSubsections subsections() {
+        return subsections;
     }
 
     /**
@@ -83,7 +85,11 @@ public final class CheckEquipment {
 
     /**
      * The run's child-environment allowlist (D6, FR9 of add-sandbox-core): the operator's {@code
-     * passthroughNames}, the declared credential names below, and the secrets port as the source of
+     * passthroughNames}, the declared credential names the allowlist refuses in passthrough and
+     * scrubs from every composed child environment (FR17, design D11 of add-plugin-architecture) —
+     * the active tracker adapter's, unioned here with the built-ins' from their one owner, {@link
+     * BuiltInCheckSubsections#credentialNames(PipelineDefinition)} (each SCM built-in's token name and
+     * each {@code http} check's own {@code auth} credential, FR11) — and the secrets port as the source of
      * every value it admits — base set, passthrough and the agent's AI seam variables alike — so no
      * child environment reads the process environment around the port (NFR-S3, finding F107 of
      * tighten-spec-contract). The port is handed into the allowlist as its value source and is not
@@ -93,97 +99,48 @@ public final class CheckEquipment {
      */
     ChildEnvAllowlist childEnv(
             List<String> passthroughNames, PipelineDefinition definition, List<String> credentialEnvVarsToScrub) {
-        return ChildEnvAllowlist.of(
-                passthroughNames, credentialNames(definition, credentialEnvVarsToScrub), secretsProvider::find);
+        var names = new ArrayList<>(credentialEnvVarsToScrub);
+        names.addAll(subsections.credentialNames(definition));
+        return ChildEnvAllowlist.of(passthroughNames, names, secretsProvider::find);
     }
 
     /**
      * The installation's child-environment allowlist for container runs: the operator's {@code
-     * passthroughNames}, the credential names the configured check providers declare (the same
-     * declaration {@link #credentialNames} reads), and the secrets port as its value source (NFR-S3
-     * of tighten-spec-contract). A container run widens it with its own tracker and pipeline
-     * credential names ({@link ChildEnvAllowlist#declaring}).
+     * passthroughNames}, the SCM built-ins' credential names ({@link
+     * BuiltInCheckSubsections#credentialNames()}, the installation half of the run's names),
+     * and the secrets port as its value source (NFR-S3 of tighten-spec-contract). A container run
+     * widens it with its own tracker and pipeline credential names ({@link
+     * ChildEnvAllowlist#declaring}).
      *
-     * @throws IllegalArgumentException if a passthrough name is a configured provider's credential
+     * @throws IllegalArgumentException if a passthrough name is a built-in's credential
      */
     ChildEnvAllowlist installationChildEnv(List<String> passthroughNames) {
-        return ChildEnvAllowlist.of(
-                passthroughNames,
-                CheckProviderSeam.credentialEnvVars(checkSubsections(), checkClientRegistry),
-                secretsProvider::find);
+        return ChildEnvAllowlist.of(passthroughNames, subsections.credentialNames(), secretsProvider::find);
     }
 
     /**
-     * The declared credential names the run's {@link ChildEnvAllowlist} refuses in passthrough
-     * and scrubs from every composed child environment: the active tracker adapter's (supplied by
-     * the caller) unioned with every configured check provider's own SPI declaration (FR17, design
-     * D11 of add-plugin-architecture).
-     *
-     * <p>This used to name {@code GithubCheckClientFactory.TOKEN_ENV_VAR} here, in core. It cannot:
-     * once github is a discovered plugin, core has no vendor constant to name, and a credential
-     * name supplied as configuration data by a connection profile is invisible to a compile-time
-     * constant anyway. So the names come from the providers themselves, and a plugin's credential
-     * is scrubbed — and barred from the passthrough allowlist — with no core source naming it.
-     *
-     * <p>Two declarations are unioned, because credentials reach a provider two ways: from its
-     * configured connection subsection, and — for the built-in {@code http} provider, which serves
-     * arbitrary endpoints — from each check's own manifest params (FR11). A manifest-named
-     * credential is therefore scrubbed and refused in passthrough exactly like a configured one.
-     * {@code doctor}'s secrets check reads the same union (FR1 of add-doctor-command).
+     * The run's built-in registry entries' collaborators (design D18 of
+     * migrate-verify-to-executor-contract): the run's two in-process runners, the {@code http}
+     * judgement guarded by the operator's {@code in-process} scope over the run's variables, and the
+     * secrets port the SCM tokens resolve through, never readable back out.
      */
-    List<String> credentialNames(PipelineDefinition definition, List<String> credentialEnvVarsToScrub) {
-        var names = new ArrayList<>(credentialEnvVarsToScrub);
-        names.addAll(CheckProviderSeam.credentialEnvVars(checkSubsections(), checkClientRegistry));
-        names.addAll(CheckProviderSeam.checkCredentialEnvVars(definition, checkClientRegistry));
-        return names;
+    BuiltInEntries builtIns(
+            ChildEnvAllowlist childEnv,
+            @Nullable SandboxRunPieces sandbox,
+            HttpRunContext runContext,
+            InstantSource clock) {
+        var http = HttpCheckProbe.guarded(operatorEgress(), secretsProvider, runContext);
+        return new BuiltInEntries(
+                builtinRunner(sandbox), commandRunner(childEnv, sandbox), http, secretsProvider, clock);
     }
 
-    /**
-     * Builds and pin-guards the run's {@link ExternalCheckClient} over the discovered registry;
-     * see {@link #externalCheckClient(RunLaw, CheckRunContext, Map)}.
-     */
-    ExternalCheckClient externalCheckClient(RunLaw runLaw, CheckRunContext runContext) {
-        return externalCheckClient(runLaw, runContext, checkClientRegistry);
+    /** The run-assembly admission of the SCM built-ins' operator connections (design D18). */
+    BuiltInConnections connections() {
+        var reader = new ScmConnectionReader(ConnectionProfiles.of(factoryProperties.connections()), operatorEgress());
+        return new BuiltInConnections(factoryProperties.check(), reader, secretsProvider);
     }
 
-    /**
-     * Builds and pin-guards the run's {@link ExternalCheckClient} (task 8.4 of add-sandbox-core;
-     * FR5, FR6, design D10 of add-plugin-architecture): a {@link
-     * ProviderDispatchingExternalCheckClient} over {@code registry} and the operator's {@code
-     * factory.check.<provider>} subsections — each check routed to its provider's client, built
-     * lazily on first selection so a dormant provider resolves no credential.
-     *
-     * <p>The composite is built unconditionally, even over an empty configuration (FR3, FR4, design
-     * D3 of remove-interactive-console): the pipeline load has already refused every {@code
-     * external} check whose provider has no subsection, so a check reaching this client always has
-     * one, and no console stands in for a provider that is not there. A pipeline with no {@code
-     * external} check never selects a provider, and so never resolves a credential.
-     *
-     * <p>The engine port is unchanged: the composite <em>is</em> an {@code ExternalCheckClient}, so
-     * per-check provider selection stays wiring rather than engine semantics. It is pin-guarded by
-     * {@code runLaw} (FR16, D10; D12 of add-base-ref-resolution) against the very commit the law
-     * was frozen from, and its pin contribution dispatches per provider, so the guard unions the
-     * selected provider's paths (NFR-S1 of remove-interactive-console).
-     *
-     * <p>The {@code registry} parameter is the package-private testing seam: specs reach it through
-     * {@link ManualRunAssembly#externalCheckClient} with a hand-built registry.
-     */
-    ExternalCheckClient externalCheckClient(
-            RunLaw runLaw, CheckRunContext runContext, Map<String, CheckClientFactory> registry) {
-        var dispatching = new ProviderDispatchingExternalCheckClient(
-                registry, checkSubsections(), secretsProvider, runContext, timeEquipment);
-        return runLaw.pinGuarded(dispatching, dispatching.pinContributor());
-    }
-
-    /**
-     * The operator's {@code factory.check.<provider>} subsections with every {@code connection:
-     * <name>} reference resolved against {@code factory.connections} (FR16, design D8 of
-     * add-plugin-architecture), so a provider is built — and asked for its credential names — over
-     * the same inline-shaped connection data whether the operator inlined it or shared a profile
-     * between the ports one vendor serves.
-     */
-    private Map<String, Map<String, Object>> checkSubsections() {
-        return CheckProviderSeam.resolve(
-                factoryProperties.check(), ConnectionProfiles.of(factoryProperties.connections()));
+    private OperatorEgress operatorEgress() {
+        return new OperatorEgress(factoryProperties.egress().inProcess());
     }
 }

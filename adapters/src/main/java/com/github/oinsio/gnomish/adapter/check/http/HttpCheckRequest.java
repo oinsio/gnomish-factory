@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.check.http;
 
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
+import com.github.oinsio.gnomish.httpegress.JdkHttpCheckExchange;
 import java.net.URI;
 import java.net.http.HttpRequest;
 

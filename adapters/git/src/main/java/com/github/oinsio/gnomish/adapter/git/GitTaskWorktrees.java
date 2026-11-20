@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.DivergenceOutcome;
 import com.github.oinsio.gnomish.app.port.git.LocalTaskBranch;
+import com.github.oinsio.gnomish.app.port.git.PendingVerification;
 import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit;
 import com.github.oinsio.gnomish.app.port.git.WorktreeSalvager;
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource;
@@ -9,6 +10,7 @@ import com.github.oinsio.gnomish.app.project.RegisteredClone;
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import java.nio.file.Path;
+import java.util.Optional;
 
 /**
  * The git-subprocess implementation of {@link TaskWorktreeGit} (FR12b, design D12 of
@@ -59,6 +61,11 @@ public final class GitTaskWorktrees implements TaskWorktreeGit {
     @Override
     public WorktreeSalvager salvage(Path worktreeRoot) {
         return new WorktreeSalvage(runner, worktreeRoot, epochs);
+    }
+
+    @Override
+    public Optional<PendingVerification> interruptedVerification(Path worktreeRoot, String taskId) {
+        return new SnapshotTipCheck(runner, worktreeRoot).inspect(taskId);
     }
 
     @Override

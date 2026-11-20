@@ -84,24 +84,25 @@ record FeedCycle(
 
     /**
      * Polls the tracker once and applies the eligibility filter (design D2), at instant {@code
-     * now}. The tracker reads run through {@link FeedOutageRetry} (NFR-R3): a sustained outage
-     * retries with backoff instead of propagating.
+     * now}. The reads run through {@link FeedOutageRetry} (NFR-R3): an outage retries with backoff,
+     * and an operator precondition refusal opens its condition and reads as an empty poll (FR18 of
+     * migrate-verify-to-executor-contract). Every observed {@code finished} entry is declined
+     * best-effort ({@link FinishedDecline#declineObserved}, design D4 of enforce-finish-terminality).
      *
-     * <p>Right after the read, every {@code finished} entry observed in {@code readyTasks} is
-     * declined via {@link FinishedDecline#declineObserved} (design D4 of
-     * enforce-finish-terminality) — best-effort per entry, so one failing decline is logged and
-     * left for the next poll cycle rather than counting as an outage or aborting this poll.
-     *
-     * @throws InterruptedException if the feed thread is interrupted mid-outage-retry (SIGTERM
-     *     shutdown stop signal, FR11) — see {@link FeedOutageRetry#run}
+     * @throws InterruptedException if the feed thread is interrupted mid-outage-retry (FR11)
      */
     Poll poll(Instant now) throws InterruptedException {
-        return Objects.requireNonNull(resilience.outageRetry().run("feed poll", () -> {
-            List<ReadyTask> readyTasks = feed.listReady();
-            resilience.finishedDecline().declineObserved(feed.tracker(), readyTasks);
-            int openFrontCount = feed.openFrontCount();
-            return new Poll(readyTasks, openFrontCount, now, selection.candidates(readyTasks, now, openFrontCount));
-        }));
+        Poll held = new Poll(List.of(), 0, now, List.of());
+        return Objects.requireNonNull(resilience
+                .outageRetry()
+                .runHolding("feed poll", () -> read(now), resilience.conditions()::reportRefusal, held));
+    }
+
+    private Poll read(Instant now) {
+        List<ReadyTask> readyTasks = feed.listReady();
+        resilience.finishedDecline().declineObserved(feed.tracker(), readyTasks);
+        int openFrontCount = feed.openFrontCount();
+        return new Poll(readyTasks, openFrontCount, now, selection.candidates(readyTasks, now, openFrontCount));
     }
 
     /**
@@ -112,25 +113,23 @@ record FeedCycle(
      * per-candidate {@code listOpen} re-check) runs through {@link FeedOutageRetry} (NFR-R3), so a
      * sustained outage there retries with backoff instead of propagating. The permit accounting that
      * follows ({@code assign}/{@code abandon}, slot launch, log) is deliberately kept <em>outside</em>
-     * the retry: those are deterministic in-process side effects, not tracker calls, so a bug in one
-     * must surface as an exception rather than be misclassified as an outage and retried forever —
-     * and, critically, a re-run of the claim walk after a permit was already assigned would see this
-     * instance's own claim answer {@code Held}, drop through as a lost race, {@code abandon()} the
-     * permit, and strand the tracker claim until its TTL/reaper.
+     * the retry: a bug there must surface rather than be retried as an outage, and a re-run of the
+     * walk after an assign would read this instance's own claim as {@code Held} and strand it. A
+     * refusal of the walk opens its condition and abandons the permit (FR18 of
+     * migrate-verify-to-executor-contract).
      *
-     * @throws InterruptedException if the feed thread is interrupted mid-outage-retry (SIGTERM
-     *     shutdown stop signal, FR11) — see {@link FeedOutageRetry#run}
+     * @throws InterruptedException if the feed thread is interrupted mid-outage-retry (FR11)
      */
     void claimOrAbandon(List<ReadyTask> candidates) throws InterruptedException {
-        // FR14, NFR-R3 of add-base-ref-resolution: an open gate abandons the reserved permit with
-        // NO call into attemptClaim at all — outageRetry.run is never entered, so feed.claim is
-        // never invoked while the remote is down.
+        // FR14, NFR-R3 of add-base-ref-resolution: an open gate abandons the permit with no claim.
         if (resilience.conditions().anyOpen()) {
             resilience.conditions().claimReleasedWhileOpen();
             slotLedger.abandon();
             return;
         }
-        TaskRef claimed = resilience.outageRetry().run("feed claim", () -> attemptClaim(candidates));
+        TaskRef claimed = resilience
+                .outageRetry()
+                .runHolding("feed claim", () -> attemptClaim(candidates), resilience.conditions()::reportRefusal, null);
         if (claimed == null) {
             slotLedger.abandon();
         } else {

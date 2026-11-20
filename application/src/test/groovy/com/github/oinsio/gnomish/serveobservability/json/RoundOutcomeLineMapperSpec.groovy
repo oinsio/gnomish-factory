@@ -23,7 +23,15 @@ class RoundOutcomeLineMapperSpec extends Specification {
         new RoundOutcomeLine(
                 new InstanceInfo("gnomish-factory-x7k2q1", "worker-1.internal", "0.1.0-SNAPSHOT"),
                 Instant.parse("2026-08-02T21:20:00Z"), "task-101", "verify", 2, "lint-bot", version, "transform",
-                "failed/limit")
+                "failed/limit", null, null)
+    }
+
+    /** An executor check's line: the check's index, and the key a resume took up when given. */
+    static RoundOutcomeLine checkLine(UntrustedText resumedKey) {
+        new RoundOutcomeLine(
+                new InstanceInfo("gnomish-factory-x7k2q1", "worker-1.internal", "0.1.0-SNAPSHOT"),
+                Instant.parse("2026-08-02T21:25:00Z"), "task-101", "verify", 2, "scm-status", null, "verdict",
+                "failed/infrastructure", 1, resumedKey)
     }
 
     // UX3: version 1, the type discriminator, the round's key and the three words
@@ -34,7 +42,26 @@ class RoundOutcomeLineMapperSpec extends Specification {
         then:
         dto == new RoundOutcomeLineDto(
                 1, "roundOutcome", new InstanceDto("gnomish-factory-x7k2q1", "worker-1.internal", "0.1.0-SNAPSHOT"),
-                "2026-08-02T21:20:00Z", "task-101", "verify", 2, "lint-bot@2.3.1", "transform", "failed/limit")
+                "2026-08-02T21:20:00Z", "task-101", "verify", 2, "lint-bot@2.3.1", "transform", "failed/limit", null, null)
+    }
+
+    // NFR-O1, UX3 of migrate-verify-to-executor-contract: a check's line names its index and the resumed key
+    def "an executor check's line carries the verdict role, the check's index and the resumed key verbatim"() {
+        when:
+        def dto = RoundOutcomeLineMapper.toDto(checkLine(UntrustedText.branchDocument('sonar-AY12...')))
+
+        then:
+        dto == new RoundOutcomeLineDto(
+                1, "roundOutcome", new InstanceDto("gnomish-factory-x7k2q1", "worker-1.internal", "0.1.0-SNAPSHOT"),
+                "2026-08-02T21:25:00Z", "task-101", "verify", 2, "scm-status", "verdict", "failed/infrastructure", 1,
+                "sonar-AY12...")
+        RoundOutcomeLineMapper.toDto(checkLine(null)).resumedKey() == null
+    }
+
+    // UX3 of migrate-verify-to-executor-contract: the key is the executor's text, escaped into one line
+    def "a resumed key carrying a quote stays one escaped JSON line"() {
+        expect:
+        mapper.serialize(checkLine(UntrustedText.branchDocument('k"1'))).contains('"resumedKey":"k\\"1"')
     }
 
     // UX3: an executor with no describe is named alone

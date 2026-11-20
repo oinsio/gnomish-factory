@@ -69,7 +69,7 @@ class FirstBoxPreconditionFlowSpec extends Specification implements BareGitRepoF
     // One bundle, so a support stamps from the tenure record the take's claim fills.
     def git = TaskGitFixture.real()
     def docker = new ScriptedSandboxDocker(imageConfig: UNLABELLED_IMAGE)
-    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+    def sandbox = new SandboxProperties('gnomish/img', null, null, null, [], false, null, null, null, null)
     Path cloneDir
 
     def setup() {

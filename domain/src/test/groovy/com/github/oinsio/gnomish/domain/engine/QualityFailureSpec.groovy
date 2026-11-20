@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -18,6 +17,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -43,9 +43,9 @@ class QualityFailureSpec extends Specification {
     static final def CONTEXT = new TaskContext('TASK-1', UntrustedText.tracker('title'), UntrustedText.tracker('body'), [])
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
-    def commandRunner = new ScriptedCommandCheckRunner()
-    def externalClient = new ScriptedExternalCheckClient()
+    def builtinRunner = new ScriptedCheckRounds()
+    def commandRunner = new ScriptedCheckRounds()
+    def externalClient = new ScriptedCheckRounds()
     def judgeVoter = new ScriptedJudgeVoter()
     def persistence = new InMemoryAttemptPersistence()
     def listener = new RecordingEventListener()
@@ -53,12 +53,12 @@ class QualityFailureSpec extends Specification {
     def sleeper = new VirtualSleeper(clock)
 
     EnginePorts ports() {
-        new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter,
                 listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
-    static VerifyCheck.Builtin builtin(String name) {
-        new VerifyCheck.Builtin(name, [:])
+    static VerifyCheck.Executor builtin(String name) {
+        VerifyChecks.builtin(name, [:])
     }
 
     static StageDefinition stage(String name, int attemptLimit, List<VerifyCheck> verify) {
@@ -142,13 +142,13 @@ class QualityFailureSpec extends Specification {
         and: 'attempt 1 (round 1) feedback carries only attempt 0\'s failed check result'
         def feedback1 = executor.requests[1].feedback()
         feedback1.size() == 1
-        feedback1[0].verdict().is(failA)
+        feedback1[0].verdict() == failA
 
         and: 'attempt 2 (round 2) feedback carries the failed check results of BOTH attempts 0 and 1, in round order'
         def feedback2 = executor.requests[2].feedback()
         feedback2.size() == 2
-        feedback2[0].verdict().is(failA)
-        feedback2[1].verdict().is(failB)
+        feedback2[0].verdict() == failA
+        feedback2[1].verdict() == failB
 
         and: 'two quality failures were burned; the CannotVerify round is recorded but unburned'
         def finalState = outcome.finalState()

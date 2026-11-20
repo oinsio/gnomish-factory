@@ -47,7 +47,7 @@ class TakeEngineExecutionDescribeSpec extends Specification implements RunChainF
                 "executor 'acme' could not be described (external failure): the environment refused to start the program")
 
         when:
-        def result = execution(new LawDescription.Refused([error])).run(order(), bootstrap(), bootstrap().context(), state)
+        def result = execution(new LawDescription.Refused([error])).run(order(), bootstrap(), bootstrap().context(), state, null)
 
         then:
         mediums == [
@@ -67,7 +67,7 @@ class TakeEngineExecutionDescribeSpec extends Specification implements RunChainF
         def described = new DescribedLaw(binding, [:])
 
         when:
-        execution(described).run(order(), bootstrap(), bootstrap().context(), state)
+        execution(described).run(order(), bootstrap(), bootstrap().context(), state, null)
 
         then:
         thrown(UnsupportedOperationException)
@@ -77,7 +77,7 @@ class TakeEngineExecutionDescribeSpec extends Specification implements RunChainF
     private TakeEngineExecution execution(LawDescription answer) {
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> Stub(TaskLifecycleStore)
-            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
         }
         def git = new TaskGit(store, Stub(TaskBranchGit), Mock(TaskWorktreeGit), new ClaimEpochBook())
         def self = null
@@ -87,7 +87,7 @@ class TakeEngineExecutionDescribeSpec extends Specification implements RunChainF
                 answer
             },
             workspaceAt: { Path root -> null },
-            withHostGitPush: { decoration -> self },
+            withHostGitPush: { decoration, run -> self },
             assemble: { order, context, initial, persistence, credentials, law ->
                 assembledWith << law
                 // The engine is not this spec's subject: stop here, once the law was handed on.

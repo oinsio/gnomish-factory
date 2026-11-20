@@ -1,0 +1,96 @@
+package com.github.oinsio.gnomish.adapter.scm.actions
+
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
+import static com.github.tomakehurst.wiremock.client.WireMock.get
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
+
+import com.github.oinsio.gnomish.domain.engine.PollStatus
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
+import com.github.oinsio.gnomish.logtext.RepeatSuppressor
+import com.github.tomakehurst.wiremock.WireMockServer
+import io.github.resilience4j.core.IntervalFunction
+import io.github.resilience4j.retry.RetryConfig
+import java.net.http.HttpResponse
+import java.time.Duration
+import java.time.Instant
+import spock.lang.Specification
+
+/**
+ * Regression proof for the "Token never leaks into findings" scenario of the "Token resolution
+ * and hygiene" requirement (github-external-check spec): a {@link GithubWorkflowRunPoll} that
+ * fails with {@link PollStatus.CannotVerify} never lets the raw token value — sent only as the
+ * {@code Authorization: Bearer <token>} header by {@link GithubHttpClient#send} — reach the
+ * {@code reason()}/{@code details()} strings the tracker report renders. Both {@link
+ * com.github.oinsio.gnomish.githubapi.GithubHttpException} and {@link
+ * GithubWorkflowRunInfrastructureException} build their messages from the request URI or the
+ * response status code only, never from the request object itself, so this is a regression proof
+ * rather than a fix.
+ *
+ * <p>Implements FR8, NFR-S1 of add-external-check-github-actions.
+ */
+class GithubTokenHygieneSpec extends Specification {
+
+    private static final String SECRET_TOKEN = 'ghp_super-secret-token-value-do-not-leak'
+    private static final String RUNS_URL = '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'
+
+    WireMockServer wireMock
+
+    def setup() {
+        wireMock = new WireMockServer(0)
+        wireMock.start()
+    }
+
+    def cleanup() {
+        wireMock.stop()
+    }
+
+    private static RetryConfig fastRetryConfig() {
+        RetryConfig.custom()
+                .maxAttempts(2)
+                .intervalFunction(IntervalFunction.of(10))
+                .retryOnException({ true })
+                .retryOnResult({ HttpResponse<?> r ->
+                    r.statusCode() >= 500 || r.statusCode() == 429
+                })
+                .build()
+    }
+
+    private static GithubWorkflowRunPoll pollFor(String baseUrl) {
+        def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(baseUrl)), SECRET_TOKEN, fastRetryConfig())
+        def cache = new GithubConditionalRequestCache(httpClient)
+        new GithubWorkflowRunPoll(
+                new GithubWorkflowRunQuery(cache, 'acme', 'widgets'),
+                new GithubWorkflowJobsFetcher(cache, 'acme', 'widgets'),
+                new RepeatSuppressor(new VirtualClock(Instant.EPOCH), Duration.ofMinutes(5)))
+    }
+
+    // Scenario: verification/github-external-check / Token never leaks into findings
+    def "a persistent 5xx CannotVerify carries no token material in reason or details"() {
+        given:
+        wireMock.stubFor(get(urlEqualTo(RUNS_URL)).willReturn(aResponse().withStatus(503).withBody('service unavailable')))
+        def poll = pollFor(wireMock.baseUrl())
+
+        when:
+        def status = poll.poll('ci.yml', 'abc123') as PollStatus.CannotVerify
+
+        then:
+        !status.reason().contains(SECRET_TOKEN)
+        !status.details().contains(SECRET_TOKEN)
+    }
+
+    // Scenario: verification/github-external-check / Token never leaks into findings
+    def "a network error CannotVerify carries no token material in reason or details"() {
+        given:
+        def poll = pollFor('http://localhost:1')
+
+        when:
+        def status = poll.poll('ci.yml', 'abc123') as PollStatus.CannotVerify
+
+        then:
+        !status.reason().contains(SECRET_TOKEN)
+        !status.details().contains(SECRET_TOKEN)
+    }
+}

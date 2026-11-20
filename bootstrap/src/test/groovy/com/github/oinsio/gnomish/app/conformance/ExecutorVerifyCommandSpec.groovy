@@ -38,7 +38,7 @@ class ExecutorVerifyCommandSpec extends Specification {
     }
 
     // Scenario: executor/conformance-kit / Reference executor passes every case
-    def "UX2: the reference executor gets twelve pass lines and the command returns, exit code zero"() {
+    def "UX2: the reference executor gets thirteen pass lines and the command returns, exit code zero"() {
         given:
         def before = scratchDirectories()
 
@@ -67,11 +67,11 @@ class ExecutorVerifyCommandSpec extends Specification {
         def failed = thrown(ExecutorVerifyFailedException)
         failed.message == 'the candidate failed 1 conformance case'
         new RunExitCodeMapper().getExitCode(failed) == 1
-        console.printed.size() == 12
+        console.printed.size() == 13
         console.printed.find {
             it.startsWith('FAIL transform: ')
         }.contains('wrote no result')
-        console.printed.findAll { it.startsWith('pass ') }.size() == 11
+        console.printed.findAll { it.startsWith('pass ') }.size() == 12
         scratchDirectories() == before
     }
 

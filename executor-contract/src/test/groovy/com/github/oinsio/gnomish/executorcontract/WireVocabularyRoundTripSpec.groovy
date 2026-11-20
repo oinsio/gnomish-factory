@@ -24,7 +24,8 @@ class WireVocabularyRoundTripSpec extends Specification {
         UsageProvenance,
         EnforcementLevel,
         AnswerKind,
-        SarifLevel
+        SarifLevel,
+        PendingState
     ]
 
     private static List<Enum> everyConstant() {
@@ -105,6 +106,10 @@ class WireVocabularyRoundTripSpec extends Specification {
             WireJson.answer(WireJson.readTree('{"kind":"verdict","sarif":{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"j"}},' +
             '"results":[{"level":"fatal","message":{"text":"m"}}]}]}}'))
         } || new AnswerReading.Malformed(t("unknown SARIF level 'fatal'"))
+        'pending state' | {
+            WireJson.readValue('{"status":"pending","pendingKey":"k","pendingState":"stalled"}', ExecutorResult)
+            .with { [status(), pendingState()] }
+        } || [Status.PENDING, null]
         'role' | { WireJson.readValue('"publish"', Role) } || null
         'capability' | { WireJson.readValue('"teleport"', Capability) } || null
     }

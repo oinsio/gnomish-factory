@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.e2e.gitea.GiteaContainerFixture
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
 import com.github.oinsio.gnomish.sandbox.BindingNames
@@ -105,7 +106,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
                 [
-                    new VerifyCheck.Builtin('files_exist', [files: ['output.txt']])
+                    VerifyChecks.builtin('files_exist', [files: ['output.txt']])
                 ],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
     }
@@ -124,7 +125,7 @@ class SandboxLifecycleZombieE2ESpec extends Specification implements BareGitRepo
     // runs, and the real operator default (2m) exists to protect a slot still mid-launch — not
     // something this spec is proving (that is SandboxLifecycleLaunchRaceE2ESpec's job, task 7.3).
     private static SandboxProperties sandboxProperties(String scenario) {
-        new SandboxProperties(FakeAgentSandboxImage.ensureBuilt(scenario), null, null, null, [], [], false, null,
+        new SandboxProperties(FakeAgentSandboxImage.ensureBuilt(scenario), null, null, null, [], false, null,
         Duration.ofMillis(1), Duration.ofDays(7), Duration.ofHours(24))
     }
 

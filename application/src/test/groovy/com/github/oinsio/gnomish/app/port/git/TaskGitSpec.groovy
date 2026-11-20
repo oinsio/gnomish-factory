@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.app.port.git
 
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
-import java.util.function.UnaryOperator
+import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import spock.lang.Specification
 
 /**
@@ -17,23 +17,26 @@ class TaskGitSpec extends Specification {
     def branches = Stub(TaskBranchGit)
     def worktrees = Stub(TaskWorktreeGit)
 
-    // FR3: the three-component constructor defaults the decoration to identity, so a TaskGit
-    // built without one decorates nothing — the source passes through unchanged.
-    def "the convenience constructor defaults the mid-round push decoration to identity"() {
+    // FR3: the three-component constructor defaults the decoration to NONE, so a TaskGit built
+    // without one decorates nothing — the source and the stage chain pass through unchanged.
+    def "the convenience constructor defaults the host-git decoration to one that decorates nothing"() {
         given:
         def source = Stub(RoundEnvironmentSource)
+        def chain = Stub(StageExecutor)
+        def cell = new CurrentRound()
+        def decoration = new TaskGit(store, branches, worktrees, new ClaimEpochBook()).midRoundPush()
 
         expect:
-        new TaskGit(store, branches, worktrees, new ClaimEpochBook()).midRoundPush().apply(source).is(source)
+        decoration.is(HostGitRounds.NONE)
+        decoration.decorate(source, cell).is(source)
+        decoration.snapshotting(chain, cell).is(chain)
     }
 
     // FR1: a supplied operator rides the bundle verbatim — what the composition root built is
     // exactly what the attachment sites hand to the run assembly.
     def "a supplied decoration is carried verbatim"() {
         given:
-        def marker = { rounds ->
-            rounds
-        } as UnaryOperator<RoundEnvironmentSource>
+        def marker = Stub(HostGitRounds)
 
         expect:
         new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()).midRoundPush().is(marker)
@@ -43,9 +46,7 @@ class TaskGitSpec extends Specification {
     // decoration of the base reads never detaches the other capabilities from their backend.
     def "withBaseRefs replaces only the base-ref capability"() {
         given:
-        def marker = { rounds ->
-            rounds
-        } as UnaryOperator<RoundEnvironmentSource>
+        def marker = Stub(HostGitRounds)
         def original = new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook())
         def replacement = Stub(BaseRefGit)
 

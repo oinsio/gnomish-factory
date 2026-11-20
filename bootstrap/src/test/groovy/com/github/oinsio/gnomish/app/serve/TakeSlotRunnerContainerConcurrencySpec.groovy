@@ -17,6 +17,7 @@ import com.github.oinsio.gnomish.app.take.AbortHandler
 import com.github.oinsio.gnomish.baseref.BaseDefinition
 import com.github.oinsio.gnomish.baseref.DefaultBranch
 import com.github.oinsio.gnomish.domain.pipeline.*
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.sandbox.*
 import com.github.oinsio.gnomish.sandbox.environment.ContainerBindingProvider
 import com.github.oinsio.gnomish.sandbox.environment.DockerRuntimeProbe
@@ -117,7 +118,7 @@ autonomy:
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'model-x', [:]),
                 'instructions.md',
                 [
-                    new VerifyCheck.Builtin('files_exist', [files: ['output.txt']])
+                    VerifyChecks.builtin('files_exist', [files: ['output.txt']])
                 ],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
     }
@@ -128,7 +129,7 @@ autonomy:
 
     private TakeSlotRunner newContainerSlotRunner(Tracker tracker) {
         def image = FakeAgentSandboxImage.ensureBuilt('plain-round')
-        def sandbox = new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        def sandbox = new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
         def properties = testProperties(agentCliBinary: FakeAgentSandboxImage.BINARY)
         def registry = AdapterBindingRegistry.ratified([
             new ContainerBindingProvider()

@@ -58,7 +58,7 @@ class TimeSourceOwnerBoundarySpec extends Specification {
             '.system'
         ] as Set,
         // Not time: the egress allowlist's DNS resolver, HostResolver.system() (design D17).
-        'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/http/EgressAllowlist.java': ['.system'] as Set,
+        'httpegress/src/main/java/com/github/oinsio/gnomish/httpegress/EgressAllowlist.java': ['.system'] as Set,
     ]
 
     /** The factory's production sources, comments stripped later; see the class javadoc for the three exclusions. */

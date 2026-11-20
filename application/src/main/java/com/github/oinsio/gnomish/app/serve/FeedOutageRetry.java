@@ -1,11 +1,13 @@
 package com.github.oinsio.gnomish.app.serve;
 
+import com.github.oinsio.gnomish.app.OperatorPreconditionRefusals;
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper;
 import com.github.oinsio.gnomish.logtext.FailureReason;
 import com.github.oinsio.gnomish.logtext.RepeatOccurrence;
 import com.github.oinsio.gnomish.logtext.RepeatSuppressor;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import java.time.Duration;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -38,7 +40,12 @@ import org.slf4j.LoggerFactory;
  * <p>Extracted from {@link FeedCycle} to keep that class within the file-size limit
  * (process-invariants.md).
  *
- * <p>Implements NFR-R3 of add-factory-serve.
+ * <p><b>A refusal is not an outage.</b> A failure the operator-precondition classifier names — the
+ * egress guard's refusal of a tracker call (design D16 of migrate-verify-to-executor-contract,
+ * FR18) — is the operator's configuration, the same for every retry: it is rethrown at once, never
+ * retried, and {@link #runHolding} hands it to the daemon's conditions.
+ *
+ * <p>Implements NFR-R3 of add-factory-serve; FR18, NFR-R5 of migrate-verify-to-executor-contract.
  */
 record FeedOutageRetry(Sleeper sleeper, Supplier<Duration> backoffSupplier, RepeatSuppressor suppressor) {
 
@@ -70,6 +77,7 @@ record FeedOutageRetry(Sleeper sleeper, Supplier<Duration> backoffSupplier, Repe
      * @param what a short label for the WARN log (e.g. {@code "feed poll"}); never blank
      * @param attempt the tracker call to protect; never null
      * @return the first successful result of {@code attempt}
+     * @throws RuntimeException an operator precondition refusal, at once and unretried
      * @throws InterruptedException if the feed thread is interrupted while an outage retry is in
      *     progress — the shutdown stop signal (FR11)
      */
@@ -80,6 +88,9 @@ record FeedOutageRetry(Sleeper sleeper, Supplier<Duration> backoffSupplier, Repe
                 recovered(what);
                 return value;
             } catch (RuntimeException e) {
+                if (OperatorPreconditionRefusals.kindOf(e).isPresent()) {
+                    throw e;
+                }
                 // Thread.interrupted() reads AND clears the flag, converting the pending interrupt
                 // into a single InterruptedException signal (the idiomatic hand-off) rather than
                 // leaving both the flag set and the exception thrown; runFeedLoop re-sets it.
@@ -89,6 +100,23 @@ record FeedOutageRetry(Sleeper sleeper, Supplier<Duration> backoffSupplier, Repe
                 logFailure(what, e);
                 sleeper.sleep(backoffSupplier.get());
             }
+        }
+    }
+
+    /**
+     * {@link #run}, with a refusal handed to {@code onRefusal} — the daemon's conditions, which open
+     * the condition it names — and {@code held} returned in place of a result: a held feed reads
+     * nothing more from the tracker until the condition's probe passes (ADR 0019 d.3).
+     *
+     * @throws InterruptedException as {@link #run}
+     */
+    <T> @Nullable T runHolding(String what, Supplier<T> attempt, Consumer<RuntimeException> onRefusal, @Nullable T held)
+            throws InterruptedException {
+        try {
+            return run(what, attempt);
+        } catch (RuntimeException refusal) {
+            onRefusal.accept(refusal);
+            return held;
         }
     }
 

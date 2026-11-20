@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.executorcontract;
 
 import com.fasterxml.jackson.annotation.JsonValue;
+import com.github.oinsio.gnomish.pendingkey.PendingKey;
 import java.util.Optional;
 
 /**

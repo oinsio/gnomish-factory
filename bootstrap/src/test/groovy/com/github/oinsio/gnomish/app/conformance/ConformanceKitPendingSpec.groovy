@@ -4,14 +4,15 @@ import static com.github.oinsio.gnomish.app.conformance.KitSubjectDouble.*
 
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
 import com.github.oinsio.gnomish.executorcontract.Status
+import com.github.oinsio.gnomish.executorcontract.WireDocument
 import java.time.Duration
 import spock.lang.Specification
 
 /**
  * FR12, FR23 of define-executor-contract (design D18): the pending-then-poll case on one executor
  * instance — a start under the pending settings must go pending, each poll carries the key the last
- * answer returned, a wait of {@link ConformanceKit#POLL_INTERVAL} separates two polls, and a run
- * still pending after {@link ConformanceKit#POLL_LIMIT} polls fails.
+ * answer returned, a wait of {@link PendingCases#POLL_INTERVAL} separates two polls, and a run
+ * still pending after {@link PendingCases#POLL_LIMIT} polls fails.
  */
 class ConformanceKitPendingSpec extends Specification {
 
@@ -20,7 +21,7 @@ class ConformanceKitPendingSpec extends Specification {
     private CaseVerdict pending(List<Closure> answers) {
         def queue = new ArrayDeque<Closure>(answers)
         def subject = new KitSubjectDouble(answer: { r, k ->
-            r.settings().path('defer').asBoolean() ? queue.poll().call(k) : conforming(r)
+            r.workspace().path().endsWith('/pending-poll') ? queue.poll().call(k) : conforming(r)
         })
         last = subject
         new ConformanceKit([defer: true], { Duration d ->
@@ -45,12 +46,12 @@ class ConformanceKitPendingSpec extends Specification {
         then:
         verdict instanceof CaseVerdict.Passed
         last.polledKeys() == ['k1', 'k2']
-        slept == [ConformanceKit.POLL_INTERVAL]
+        slept == [PendingCases.POLL_INTERVAL]
     }
 
     def "FR23: a run still pending after the poll limit fails the case"() {
         when:
-        def verdict = pending((0..ConformanceKit.POLL_LIMIT).collect { n ->
+        def verdict = pending((0..PendingCases.POLL_LIMIT).collect { n ->
             { k ->
                 result(Status.PENDING, null, "k$n")
             }
@@ -58,9 +59,9 @@ class ConformanceKitPendingSpec extends Specification {
 
         then:
         verdict.line(KitCase.PENDING_POLL) == 'FAIL pending-poll: answered pending to a request that asked for no pending run'
-        last.polledKeys().size() == ConformanceKit.POLL_LIMIT
-        slept.size() == ConformanceKit.POLL_LIMIT - 1
-        ConformanceKit.POLL_LIMIT == 5 && ConformanceKit.POLL_INTERVAL == Duration.ofSeconds(1)
+        last.polledKeys().size() == PendingCases.POLL_LIMIT
+        slept.size() == PendingCases.POLL_LIMIT - 1
+        PendingCases.POLL_LIMIT == 5 && PendingCases.POLL_INTERVAL == Duration.ofSeconds(1)
     }
 
     def "FR12: a start under the pending settings that does not go pending fails the case without a poll"() {
@@ -72,6 +73,26 @@ class ConformanceKitPendingSpec extends Specification {
         then:
         verdict.line(KitCase.PENDING_POLL) == 'FAIL pending-poll: a start under the pending settings answered completed instead of pending'
         last.polledKeys() == []
+    }
+
+    // FR2 of migrate-verify-to-executor-contract (design D19): a start whose pending answer the reader
+    //     failed closed is judged as CaseJudgement judges, the schema breach first, so the case names
+    //     the field the document broke rather than the status it was read as.
+    def "FR2: a start under the pending settings that broke its schema fails the case on the breach"() {
+        given:
+        def subject = new KitSubjectDouble(answer: { r, k ->
+            failed('pollAfterMillis is not an integer')
+        })
+        def planted = breach(WireDocument.RESULT)
+        subject.breaches[KitCase.PENDING_POLL] = [planted]
+
+        when:
+        def verdict = new ConformanceKit([defer: true], { Duration d -> } as Sleeper).run(subject)
+        .verdicts()[KitCase.PENDING_POLL]
+
+        then:
+        verdict == new CaseVerdict.Failed(planted.detail())
+        subject.polledKeys() == []
     }
 
     def "FR23: the poll that ends the run is judged as a start would be"() {

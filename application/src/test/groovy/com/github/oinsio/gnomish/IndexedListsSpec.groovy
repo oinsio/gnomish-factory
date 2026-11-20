@@ -21,12 +21,12 @@ class IndexedListsSpec extends Specification {
     def "a list bound by the Binder into a raw subsection is a list in index order"() {
         when:
         def properties = bind([
-            'factory.check.http.allowlist[1]': 'ci.example.com',
-            'factory.check.http.allowlist[0]': 'sonar.example.com',
+            'factory.check.acme.hosts[1]': 'ci.example.com',
+            'factory.check.acme.hosts[0]': 'sonar.example.com',
             'factory.connections.acme.scopes[0]': 'repo'])
 
         then:
-        properties.check().http.allowlist == [
+        properties.check().acme.hosts == [
             'sonar.example.com',
             'ci.example.com'
         ]

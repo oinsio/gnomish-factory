@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.executorcontract;
 
+import com.github.oinsio.gnomish.pendingkey.PendingKey;
+
 /**
  * The Java mirror of the executor contract: the one interface every executor of the factory is
  * driven through. A built-in executor implements it in process over the contract's DTOs; the

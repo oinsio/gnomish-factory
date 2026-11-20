@@ -10,6 +10,8 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
+import com.github.oinsio.gnomish.domain.pipeline.Threshold
+import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.executorcontract.Describe
 import com.github.oinsio.gnomish.executorcontract.EnforcementLevel
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest
@@ -18,6 +20,7 @@ import com.github.oinsio.gnomish.executorcontract.Role
 import com.github.oinsio.gnomish.executorcontract.RoleInputs
 import com.github.oinsio.gnomish.executorcontract.Workspace
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import java.time.Duration
 import java.time.InstantSource
 
 /**
@@ -61,7 +64,7 @@ final class ProgramInBox {
 
     static Describe describe() {
         new Describe(1, UntrustedText.subprocess('1'), [Role.TRANSFORM], [], JsonNodeFactory.instance.objectNode(),
-        ['ACME_API_KEY'], ['api.acme.example'], null, [], EnforcementLevel.PROMPT_ONLY, false)
+        ['ACME_API_KEY'], ['api.acme.example'], null, [], EnforcementLevel.PROMPT_ONLY, false, false)
     }
 
     static ExecutorRequest request() {
@@ -73,5 +76,26 @@ final class ProgramInBox {
         // real-time-wiring: the box stamps an exec's start on the wall clock its fixture runs on, and
         //     the program's wall time is measured against it; the time source is not the subject here.
         new TimeEquipment(InstantSource.system(), new ThreadSleeper())
+    }
+
+    /** {@link #law}, its stage verified by acme in a fresh box and by the github-actions built-in. */
+    static PipelineDefinition verdictLaw() {
+        def base = ProgramInBox.law()
+        def checks = [
+            new VerifyCheck.Executor(VerifyCheck.Token.EXECUTOR, 'acme', 'judge', [:], Duration.ofSeconds(30), Duration.ofMinutes(5),
+            VerifyCheck.TimeoutClass.QUALITY, [], VerifyCheck.VerifyIn.FRESH_BOX, Threshold.ERROR, []),
+            new VerifyCheck.Executor(VerifyCheck.Token.EXECUTOR, 'github-actions', 'ci', [:], Duration.ofSeconds(30), Duration.ofMinutes(5),
+            VerifyCheck.TimeoutClass.QUALITY, [], VerifyCheck.VerifyIn.FRESH_BOX, Threshold.ERROR, []),
+        ]
+        def stage = base.stages()[0]
+        new PipelineDefinition('1', base.defaultLimits(), [
+            new StageDefinition(stage.name(), stage.purpose(), stage.inputs(), stage.outputs(), stage.executor(),
+            stage.instructionsRef(), checks, stage.limits(), stage.advancement())
+        ], null, base.executors())
+    }
+
+    static ExecutorRequest verdict() {
+        new ExecutorRequest(Role.VERDICT, new Workspace('.'), new Policy.ReadOnly(), RoleInputs.verdict('check \'judge\''),
+                JsonNodeFactory.instance.objectNode(), ProgramBounds.DEFAULTS.hints(), [], null)
     }
 }

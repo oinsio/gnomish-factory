@@ -183,7 +183,9 @@ class TakeDecisionResumeSpec extends TakeResumeSpecBase {
         def subjects = gitOutput(cloneDir, 'log', '--reverse', '--format=%s', "gnomish/${taskId}").readLines()
         subjects.count('gnomish: task resumed') == 1
         subjects.indexOf('gnomish: task resumed') == subjects.indexOf('gnomish: task escalated') + 1
-        subjects[subjects.indexOf('gnomish: task resumed') + 1].startsWith('gnomish: round build#')
+        // the next commit is the round's own: its snapshot (design D22 of migrate-verify-to-executor-contract)
+        // or, for a round with none, its round commit
+        subjects[subjects.indexOf('gnomish: task resumed') + 1] ==~ /gnomish: (snapshot|round) build#.*/
         def resumed = gitOutput(cloneDir, 'log', '--format=%H %s', "gnomish/${taskId}").readLines()
                 .find { it.endsWith(' gnomish: task resumed') }.split(' ')[0]
         def json = new ObjectMapper()

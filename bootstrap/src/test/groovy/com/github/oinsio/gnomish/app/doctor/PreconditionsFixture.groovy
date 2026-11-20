@@ -22,7 +22,7 @@ final class PreconditionsFixture {
     private PreconditionsFixture() {}
 
     static SandboxProperties sandbox(String image = IMAGE) {
-        new SandboxProperties(image, null, null, null, [], [], false, null, null, null, null)
+        new SandboxProperties(image, null, null, null, [], false, null, null, null, null)
     }
 
     static ServePreconditions preconditions(
@@ -30,6 +30,6 @@ final class PreconditionsFixture {
             String binding = BindingNames.CONTAINER, String image = IMAGE) {
         def selector = new SandboxModeSelector(new BindingProperties(binding, [:]), sandbox(image), DiscoveredBindings.real(),
         { -> runtimeAnswers } as ContainerRuntimeProbe)
-        new ServePreconditions(branches, selector, readiness, sandbox(image))
+        new ServePreconditions(branches, selector, readiness, sandbox(image), { endpoint -> } as com.github.oinsio.gnomish.app.EgressProbe)
     }
 }

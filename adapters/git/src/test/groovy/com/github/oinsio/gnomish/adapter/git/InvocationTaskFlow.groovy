@@ -60,7 +60,7 @@ final class InvocationTaskFlow {
     void persistRound(String stage) {
         Path worktree = registeredClone.worktrees().resolve(TASK)
         new File(worktree.toFile(), 'gnome.txt').text = 'gnome wrote this'
-        new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE)
+        HostRoundPersistence.over(runner, worktree, TASK, ClaimEpochSource.NONE)
                 .persist(TASK, RoundStates.recorded(new ToolTrace(new AttemptKey(TASK, stage, 1), []).key()), new ToolTrace(new AttemptKey(TASK, stage, 1), []))
     }
 

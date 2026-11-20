@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces
 import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
@@ -29,10 +28,8 @@ class CheckEquipmentCommandRunnerSpec extends Specification {
     private final CheckEquipment equipment = new CheckEquipment(
     new FilesExistCheckRunner(),
     new ShellCommandCheckRunner(new VirtualClock()),
-    [:],
     MapSecretsProvider.NONE,
-    new FactoryProperties('check-equipment', null, null, null),
-    VirtualTimeEquipment.create())
+    new FactoryProperties('check-equipment', null, null, null))
 
     private final ChildEnvAllowlist childEnv = TestChildEnvironment.hostAllowlist(['PATH'], ['TRACKER_TOKEN'])
 
@@ -51,7 +48,7 @@ class CheckEquipmentCommandRunnerSpec extends Specification {
     def "container mode: the runner runs checks in the sandbox pieces' check environments"() {
         given:
         def checkEnvironments = Mock(CheckEnvironmentSource)
-        def pieces = new SandboxRunPieces(null, null, checkEnvironments, null, null, new CurrentRound(), null)
+        def pieces = new SandboxRunPieces(null, null, checkEnvironments, null, null, null, new CurrentRound(), null)
 
         when:
         def runner = equipment.commandRunner(childEnv, pieces)
@@ -67,8 +64,8 @@ class CheckEquipmentCommandRunnerSpec extends Specification {
     def "NFR-S3: the run's child-environment allowlist resolves through the equipment's secrets port"() {
         given:
         def secrets = new MapSecretsProvider([PATH: '/from-the-port', TOOL: 'tool-from-port', TRACKER_TOKEN: 'never'])
-        def ported = new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(new VirtualClock()), [:],
-        secrets, new FactoryProperties('check-equipment', null, null, null), VirtualTimeEquipment.create())
+        def ported = new CheckEquipment(new FilesExistCheckRunner(), new ShellCommandCheckRunner(new VirtualClock()),
+                secrets, new FactoryProperties('check-equipment', null, null, null))
 
         when:
         def allowlist = ported.childEnv(['TOOL'], new PipelineDefinition('1', new AutonomyLimits(3), []), ['TRACKER_TOKEN'])

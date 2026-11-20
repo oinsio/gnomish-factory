@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
  * <p>A condition with no extractor is the {@link #alwaysMatching() bare} one: it asserts nothing
  * about the body, which is what makes the default {@code pass-when} "HTTP 2xx and nothing else" and
  * lets the whole {@code params} block stay optional for a plain probe. Whether the status counts is
- * the caller's business, not this predicate's — {@link HttpExternalCheckClient} requires 2xx for a
+ * the caller's business, not this predicate's — {@link HttpCheckProbe} requires 2xx for a
  * pass and ignores it for pending, so a service that reports "still running" with a non-2xx status
  * is still pollable.
  *

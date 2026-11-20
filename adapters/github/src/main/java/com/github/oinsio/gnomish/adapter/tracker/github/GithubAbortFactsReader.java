@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubConditionalRequestCache;
 import com.github.oinsio.gnomish.app.port.tracker.AbortFacts;
+import com.github.oinsio.gnomish.githubapi.GithubConditionalRequestCache;
 import java.util.List;
 
 /**

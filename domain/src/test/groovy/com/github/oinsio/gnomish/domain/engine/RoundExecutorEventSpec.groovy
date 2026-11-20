@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
@@ -22,7 +23,7 @@ class RoundExecutorEventSpec extends EventEmissionSpecBase {
     static final UntrustedText V1 = UntrustedText.subprocess('1')
 
     EnginePorts ports(DescribedExecutors described) {
-        new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter, listener, persistence,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter, listener, persistence,
                 VirtualTimeEquipment.on(clock, sleeper), AttemptDelivery.assumedDelivered(), described, RoundIdentity.inPlace())
     }
 
@@ -34,7 +35,7 @@ class RoundExecutorEventSpec extends EventEmissionSpecBase {
 
     EngineEvent.ExecutionFinished finishedOf(StageDefinition stage, DescribedExecutors described) {
         executor.scripted << completed()
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         new Engine().run(pipeline(stage), CONTEXT, TaskState.atStageStart('build'), WORKSPACE, ports(described))
         def finished = listener.events.findAll {
             it instanceof EngineEvent.ExecutionFinished

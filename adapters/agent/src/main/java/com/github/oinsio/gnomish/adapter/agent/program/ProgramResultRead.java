@@ -91,15 +91,7 @@ final class ProgramResultRead {
                 ANSWER_READER.readJson(limit -> environment.readFile(answerFile, limit), JsonNode.class);
         return switch (read) {
             case ReadResult.Absent<JsonNode> ignored -> result;
-            case ReadResult.Parsed<JsonNode> parsed ->
-                new ExecutorResult(
-                        result.status(),
-                        result.failureClass(),
-                        result.pendingKey(),
-                        result.reason(),
-                        parsed.value(),
-                        result.usage(),
-                        result.denials());
+            case ReadResult.Parsed<JsonNode> parsed -> result.withAnswer(parsed.value());
             case ReadResult.Malformed<JsonNode> malformed ->
                 context.failure(
                         "wrote a malformed answer file: " + malformed.reason().excerpt(512));
@@ -114,14 +106,7 @@ final class ProgramResultRead {
             return result;
         }
         Usage measured = new Usage(usage.provenance(), wallTime.toMillis(), usage.models(), usage.tools());
-        return new ExecutorResult(
-                result.status(),
-                result.failureClass(),
-                result.pendingKey(),
-                result.reason(),
-                result.answer(),
-                measured,
-                result.denials());
+        return result.withUsage(measured);
     }
 
     /** Who ran and what its stderr said last: what a failure's reason names. */

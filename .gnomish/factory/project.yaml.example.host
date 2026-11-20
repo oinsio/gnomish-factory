@@ -7,7 +7,7 @@
 #   cat .gnomish/factory/project.yaml.example.host >> ~/.gnomish/projects/gnomish-factory/project.yaml
 #   .gnomish/factory/gnomish project show gnomish-factory     # every setting with its origin
 #
-# The sandbox-boundary keys (factory.bindings.*, factory.sandbox.image, egress-allowlist,
+# The sandbox-boundary keys (factory.bindings.*, factory.sandbox.image, factory.egress.sandbox,
 # env-passthrough) are read from this file and nowhere else — not from the command line,
 # not from the environment (docs/adr/0011-operator-configuration-levels.md).
 #

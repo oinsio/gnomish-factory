@@ -1,11 +1,10 @@
 package com.github.oinsio.gnomish.domain.engine
 
 import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -19,7 +18,9 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
@@ -41,9 +42,9 @@ class ExecutorReportedFailureSpec extends Specification {
     static final def FINDING = new Finding('the migration drops a column', 'V3.sql:12', 'irreversible')
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
-    def commandRunner = new ScriptedCommandCheckRunner()
-    def externalClient = new ScriptedExternalCheckClient()
+    def builtinRunner = new ScriptedCheckRounds()
+    def commandRunner = new ScriptedCheckRounds()
+    def externalClient = new ScriptedCheckRounds()
     def judgeVoter = new ScriptedJudgeVoter()
     def clock = new VirtualClock()
     List<Object> timeline = []
@@ -57,7 +58,7 @@ class ExecutorReportedFailureSpec extends Specification {
     } as AttemptPersistence
 
     EnginePorts ports() {
-        new EnginePorts(executor, builtinRunner, commandRunner, externalClient, judgeVoter,
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, commandRunner, externalClient), judgeVoter,
                 listener, persistence, VirtualTimeEquipment.on(clock, new VirtualSleeper(clock)), RoundIdentity.inPlace())
     }
 
@@ -65,7 +66,7 @@ class ExecutorReportedFailureSpec extends Specification {
         new StageDefinition('build', 'purpose', [], [],
         new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
         'instructions.md', [
-            new VerifyCheck.Builtin('files_exist', [:])
+            VerifyChecks.builtin('files_exist', [:])
         ], new AutonomyLimits(attemptLimit),
         AdvancementMode.AUTO)
     }
@@ -75,7 +76,7 @@ class ExecutorReportedFailureSpec extends Specification {
     }
 
     static ExecutionResult failed(ExecutionResult.FailureClass failureClass, int round, List<Finding> findings = [FINDING]) {
-        new ExecutionResult(new ExecutionResult.Failed(failureClass, UntrustedText.agent('reported ' + failureClass), findings),
+        new ExecutionResult(new ExecutionResult.Failed(failureClass, UntrustedText.agent('reported ' + failureClass), findings, null),
                 null, ExecutorUsage.none(), trace(round), [])
     }
 
@@ -91,7 +92,7 @@ class ExecutorReportedFailureSpec extends Specification {
         given: 'attempt 1 reports failed/quality with one finding; attempt 2 completes and its check passes'
         executor.scripted << failed(ExecutionResult.FailureClass.QUALITY, 0)
         executor.scripted << ExecutionResult.completed(ExecutorUsage.none(), trace(1), [])
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
         def outcome = run(3)
@@ -192,8 +193,8 @@ class ExecutorReportedFailureSpec extends Specification {
 
         where:
         status | cause
-        new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, UntrustedText.agent('box gone'), []) | UntrustedText.agent('box gone')
-        new ExecutionResult.Pending('k-1') | ExecutorOutcomeClassifier.UNPOLLABLE
+        new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, UntrustedText.agent('box gone'), [], null) | UntrustedText.agent('box gone')
+        new ExecutionResult.Pending(new PendingKey('k-1'), null, PendingState.RUNNING, null, null) | ExecutorOutcomeClassifier.UNPOLLABLE
     }
 
     // FR7: the pending reason names the unsupported pending and does not quote the executor's key

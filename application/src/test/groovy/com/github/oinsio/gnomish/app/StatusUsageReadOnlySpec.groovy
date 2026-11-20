@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.adapter.git.GitAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.GitTaskRepository
+import com.github.oinsio.gnomish.adapter.git.HostRoundPersistence
 import com.github.oinsio.gnomish.adapter.git.SeededCloneFixture
 import com.github.oinsio.gnomish.adapter.git.TaskStart
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
@@ -69,7 +70,7 @@ class StatusUsageReadOnlySpec extends Specification implements SeededCloneFixtur
         ])
         def passed = round(taskId, 'implement', 0, AttemptRecord.Result.PASSED, 500, 100)
         def state = TaskState.atStageStart('implement').recordUnburnedRound(passed, ExecutorVersions.none())
-        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, RoundStates.withRound(state, trace.key()), trace)
+        HostRoundPersistence.over(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, RoundStates.withRound(state, trace.key()), trace)
     }
 
     private Map snapshot() {

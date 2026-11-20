@@ -4,23 +4,25 @@ import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
+import com.github.oinsio.gnomish.executorcontract.FailureClass
+import com.github.oinsio.gnomish.executorcontract.Status
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
-import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
-import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import com.github.oinsio.gnomish.untrustedtext.Provenance
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR7, FR8, NFR-R2, NFR-S1, D6 of add-manual-run: the real command runner classifies a
- * completed command run: exit 0 &rarr; Pass (a findings file is ignored with a warning); exit
- * 126/127 &rarr; CannotVerify (shell convention for not-executable / not-found, the findings
- * file plays no role); any other non-zero exit &rarr; Fail with either the structured findings
- * the command wrote, or one synthetic finding carrying the output tail if none were written or
- * they were malformed. Process-spawning mechanics (cwd, environment, output tail bounding) are
- * covered by {@code CommandProcessRunnerSpec}.
+ * FR7, D6 of add-manual-run; FR5 of migrate-verify-to-executor-contract: the real command runner
+ * judges a completed run's exit code as status, never as a verdict ({@link ShellOutcome}, which
+ * {@link ShellExecutor} renders as the executor contract's result). A green command with no
+ * findings is an empty SARIF answer; a red one that wrote no valid result answers one synthetic
+ * {@code error} result carrying its output tail; exit 126/127 (shell convention for not-executable
+ * / not-found) is no answer at all. What the findings path carries is pinned by {@code
+ * ShellCommandCheckRunnerFindingsSpec}, the child environment by {@code
+ * ShellCommandCheckRunnerEnvironmentSpec}; process-spawning mechanics by {@code CommandRunSpec}.
  */
 class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandCheckRunnerTestSupport {
 
@@ -29,93 +31,104 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
 
     def runner = new ShellCommandCheckRunner(new VirtualClock())
 
-    def "run(...) maps exit 0 to a Pass verdict"() {
+    def "probe(...) answers a green command with no findings as an empty answer"() {
         given:
         def check = command('exit 0')
 
         when:
-        def verdict = runner.run(check, workspace())
+        def outcome = runner.probe(check, workspace())
 
         then:
-        verdict instanceof Verdict.Pass
+        outcome == new ShellOutcome.Answered([])
+        derived(outcome) == new Verdict.Pass(null, [])
     }
 
-    // Scenario: cli/manual-run / Red check carries feedback
-    def "run(...) maps a non-zero exit other than 126/127 to Fail with one synthetic finding carrying the output tail"() {
+    // Scenario: verification/verdict-executors / A red command without a findings file carries its output tail
+    def "probe(...) answers a red command without a findings file with one error result carrying the output tail"() {
         given: 'a command that exits 1 and writes a distinctive tail without a findings file'
         def check = command('echo boom-output; exit 1')
 
         when:
-        def verdict = runner.run(check, workspace())
+        def outcome = runner.probe(check, workspace())
 
-        then:
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
-        fail.findings().size() == 1
-        fail.findings()[0].message().contains('1')
-        fail.findings()[0].details().contains('boom-output')
+        then: 'one error result whose details hold the tail'
+        def results = answerOf(outcome).results()
+        results.size() == 1
+        results[0].level().name() == 'ERROR'
+        results[0].finding().message() == 'command exited with status 1'
+        results[0].finding().details().contains('boom-output')
+
+        and: 'the check fails'
+        derived(outcome) == new Verdict.Fail([results[0].finding()])
     }
 
-    def "run(...) maps exit 126 to CannotVerify"() {
+    def "probe(...) judges exit 126 unanswerable"() {
         given: 'a command that prints a distinctive tail before exiting 126'
         def check = command('echo tail-126-output; exit 126')
 
         when:
-        def verdict = runner.run(check, workspace())
+        def outcome = runner.probe(check, workspace())
 
         then:
-        verdict instanceof Verdict.CannotVerify
-        def cannotVerify = verdict as Verdict.CannotVerify
-        cannotVerify.reason().forLog().contains('126')
+        outcome instanceof ShellOutcome.Unanswerable
+        def cannotVerify = outcome as ShellOutcome.Unanswerable
+        cannotVerify.reason().forLog() == 'command not executable (exit 126)'
+        cannotVerify.details().forLog().contains('tail-126-output')
 
         and: 'the sentence is the factory\'s own — what the command printed is nowhere in it (design D3)'
-        !cannotVerify.reason().forLog().contains('tail-126-output')
         cannotVerify.reason().provenance() == Provenance.FACTORY
     }
 
-    // Scenario: cli/manual-run / Missing binary is infrastructure
-    def "run(...) maps exit 127 to CannotVerify"() {
+    // Scenario: verification/verdict-executors / A missing binary is an infrastructure failure
+    def "probe(...) judges exit 127 unanswerable, which the shell executor answers failed/infrastructure"() {
         given: 'a command that prints a distinctive tail before exiting 127'
         def check = command('echo tail-127-output; exit 127')
 
         when:
-        def verdict = runner.run(check, workspace())
+        def outcome = runner.probe(check, workspace())
 
         then:
-        verdict instanceof Verdict.CannotVerify
-        def cannotVerify = verdict as Verdict.CannotVerify
-        cannotVerify.reason().forLog().contains('127')
+        outcome instanceof ShellOutcome.Unanswerable
+        def cannotVerify = outcome as ShellOutcome.Unanswerable
+        cannotVerify.reason().forLog() == 'command not found (exit 127)'
+
+        and: 'the executor contract result the mapping turns into CannotVerify (ShellExecutorVerdictContractSpec)'
+        def result = new ShellExecutor(runner, check, workspace()).start(ShellExecutorDescribeSpec.verdict())
+        result.status() == Status.FAILED
+        result.failureClass() == FailureClass.INFRASTRUCTURE
 
         and: 'the sentence is the factory\'s own — what the command printed is nowhere in it (design D3)'
         !cannotVerify.reason().forLog().contains('tail-127-output')
         cannotVerify.reason().provenance() == Provenance.FACTORY
     }
 
-    def "a workspace that is not a DirectoryWorkspace yields CannotVerify"() {
+    def "a workspace that is not a DirectoryWorkspace is unanswerable"() {
         given:
         def check = command('pwd')
         def opaqueWorkspace = new Workspace() {}
 
         when:
-        def verdict = runner.run(check, opaqueWorkspace)
+        def outcome = runner.probe(check, opaqueWorkspace)
 
         then:
-        verdict instanceof Verdict.CannotVerify
+        outcome instanceof ShellOutcome.Unanswerable
     }
 
-    def "a shell start failure is caught and yields CannotVerify"() {
+    def "a shell start failure is caught and is unanswerable"() {
         given: 'a runner configured with a nonexistent shell executable'
         def failingRunner = new ShellCommandCheckRunner('/no/such/shell-binary', new VirtualClock())
         def check = command('pwd')
 
         when:
-        Verdict verdict = null
+        ShellOutcome outcome = null
         def events = capture(ShellCommandCheckRunner) {
-            verdict = failingRunner.run(check, workspace())
+            outcome = failingRunner.probe(check, workspace())
         }
 
         then:
-        verdict instanceof Verdict.CannotVerify
+        outcome == new ShellOutcome.Unanswerable(
+                UntrustedText.manifest('failed to start command: pwd'),
+                NoCheckDetails.NO_DETAILS)
 
         and: 'FR5 of harden-logging-observability: the degradation names the check it happened to'
         def warning = events.find { it.level.levelStr == 'WARN' }
@@ -136,13 +149,14 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
         def check = command('pwd')
 
         when:
-        Verdict verdict = null
+        ShellOutcome outcome = null
         def events = capture(ShellCommandCheckRunner) {
-            verdict = runner.withEnvironments(unavailable).run(check, workspace())
+            outcome = runner.withEnvironments(unavailable).probe(check, workspace())
         }
 
         then:
-        verdict instanceof Verdict.CannotVerify
+        outcome instanceof ShellOutcome.Unanswerable
+        (outcome as ShellOutcome.Unanswerable).reason().forLog() == 'fresh box could not be materialized'
 
         and:
         def warning = events.find { it.level.levelStr == 'WARN' }
@@ -157,241 +171,31 @@ class ShellCommandCheckRunnerSpec extends Specification implements ShellCommandC
 
     // Scenario: cli/manual-run / Host findings files stay outside the worktree
     def "GNOMISH_FINDINGS_FILE is passed as a path outside the workspace root"() {
-        given: 'a command that echoes the env var so the test can inspect its value, run through run() so the runner creates the temp path itself'
+        given: 'a command that echoes the env var so the test can inspect its value, run through probe() so the runner creates the temp path itself'
         def check = command('echo $GNOMISH_FINDINGS_FILE; exit 1')
 
         when:
-        def verdict = runner.run(check, workspace())
+        def outcome = runner.probe(check, workspace())
 
-        then: 'the synthetic finding carries the output tail, which contains the echoed path'
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
-        def path = fail.findings()[0].details().trim()
+        then: 'the synthetic result carries the output tail, which contains the echoed path'
+        def path = findingsOf(outcome)[0].details().trim()
         !path.isEmpty()
         !path.startsWith(tempDir.toRealPath().toString())
     }
 
-    // Scenario: cli/manual-run / Structured findings win
-    def "structured findings win: exit 1 with two valid findings written replaces the synthetic finding"() {
-        given: 'a command that exits 1 and writes two valid findings to the findings file'
-        def check = command('''cat > "$GNOMISH_FINDINGS_FILE" <<'EOF'
-{"findings":[{"message":"first problem","location":"a.txt:1"},{"message":"second problem","details":"more info"}]}
-EOF
-exit 1''')
-
-        when:
-        def verdict = runner.run(check, workspace())
-
-        then:
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
-        fail.findings().size() == 2
-        fail.findings()[0].message() == 'first problem'
-        fail.findings()[0].location() == 'a.txt:1'
-        fail.findings()[1].message() == 'second problem'
-        fail.findings()[1].details() == 'more info'
-    }
-
-    // Scenario: cli/manual-run / Broken reporter cannot mask a red check
-    // Scenario: cli/manual-run / A malformed findings file is logged
-    def "broken reporter cannot mask a red check: malformed findings file degrades to the synthetic finding, verdict stays Fail"() {
-        given: 'a command that exits 1 and writes unparseable JSON to the findings file'
-        def check = command('echo boom-output; echo "not valid json {{{" > "$GNOMISH_FINDINGS_FILE"; exit 1')
-
-        when:
-        def verdict = runner.run(check, workspace())
-
-        then: 'the verdict is Fail, not CannotVerify - a broken reporter never masks a red check'
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
-        fail.findings().size() == 1
-        fail.findings()[0].message().contains('1')
-        fail.findings()[0].details().contains('boom-output')
-    }
-
-    def "valid JSON missing the findings array is malformed and degrades to the synthetic finding"() {
-        given: 'a command that exits 1, echoes a distinctive tail, and writes well-formed JSON with no findings key'
-        def check = command('''echo boom-output; cat > "$GNOMISH_FINDINGS_FILE" <<'EOF'
-{"unrelated":true}
-EOF
-exit 1''')
-
-        when:
-        def verdict = runner.run(check, workspace())
-
-        then:
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
-        fail.findings().size() == 1
-        fail.findings()[0].message().contains('1')
-        fail.findings()[0].details().contains('boom-output')
-    }
-
-    def "a findings entry with a blank message is malformed and degrades to the synthetic finding"() {
-        given:
-        def check = command('''cat > "$GNOMISH_FINDINGS_FILE" <<'EOF'
-{"findings":[{"message":""}]}
-EOF
-exit 1''')
-
-        when:
-        def verdict = runner.run(check, workspace())
-
-        then:
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
-        fail.findings().size() == 1
-        fail.findings()[0].message().contains('1')
-    }
-
-    def "no findings file content at all falls back to the synthetic finding (regression)"() {
-        given:
-        def check = command('echo boom-output; exit 1')
-
-        when:
-        def verdict = runner.run(check, workspace())
-
-        then:
-        verdict instanceof Verdict.Fail
-        def fail = verdict as Verdict.Fail
-        fail.findings().size() == 1
-        fail.findings()[0].details().contains('boom-output')
-    }
-
-    // FR12 of harden-logging-observability: a check that writes findings unconditionally is its
-    //     author's habit, not a degradation of this run — noted at DEBUG, not warned about.
-    // Scenario: cli/manual-run / A findings file on a green check is ignored
-    def "a findings file with content on exit 0 is ignored - verdict stays Pass, and it is noted"() {
-        given: 'a command that exits 0 but still writes findings-shaped content'
-        def check = command('''cat > "$GNOMISH_FINDINGS_FILE" <<'EOF'
-{"findings":[{"message":"should be ignored"}]}
-EOF
-exit 0''')
-
-        when:
-        Verdict verdict = null
-        def events = capture(CheckFindings) {
-            verdict = runner.run(check, workspace())
-        }
-
-        then:
-        verdict instanceof Verdict.Pass
-        events.any {
-            it.formattedMessage.contains('has content but the command exited 0')
-        }
-
-        and: 'FR5 of harden-logging-observability: the note names the check that wrote the channel'
-        events.any {
-            it.formattedMessage.contains('should be ignored')
-        }
-
-        and: 'the multi-line command reaches the line as one line (FR6)'
-        events.every { !it.formattedMessage.contains('\n') }
-    }
-
-    def "exit 0 with no findings file content logs no warning"() {
-        given: 'a command that exits 0 and writes nothing to the findings file'
-        def check = command('exit 0')
-
-        when:
-        Verdict verdict = null
-        def events = capture(CheckFindings) {
-            verdict = runner.run(check, workspace())
-        }
-
-        then:
-        verdict instanceof Verdict.Pass
-        events.every {
-            !it.formattedMessage.contains('has content but the command exited 0')
-        }
-    }
-
     // FR1, NFR-S3 of add-sandbox-core (task 7.3): the findings path lives in the environment's
     // scratch area, and dispose removes the whole scratch with it after the verdict is classified.
-    def "run(...) allocates the findings path in scratch and disposes it after classifying the verdict"() {
+    def "probe(...) allocates the findings path in scratch and disposes it after classifying the verdict"() {
         given: 'a command that echoes the findings-file path so the test can inspect it afterward'
         def check = command('echo $GNOMISH_FINDINGS_FILE > "$PWD/.path-marker"; exit 0')
 
         when:
-        runner.run(check, workspace())
+        runner.probe(check, workspace())
         def markerPath = tempDir.resolve('.path-marker')
         def findingsPath = Path.of(Files.readString(markerPath).trim())
 
         then:
         !Files.exists(findingsPath)
         !Files.exists(findingsPath.parent)
-    }
-
-    // FR11, NFR-S1, D11 of add-claim-heartbeat; FR9 of add-sandbox-core: withChildEnv yields a
-    // runner whose check process never sees a declared credential name. Observed through the
-    // exit-1 synthetic finding's output tail (the runner exposes no env otherwise) and proven
-    // against real, always-present base vars (HOME/USER): HOME is in the host base set, so its
-    // absence can only come from the credential exclusion.
-    // Scenario: cli/manual-run / No factory variable leaks into a check
-    def "FR11: withChildEnv excludes the declared credential var from a check's environment"() {
-        given: 'an allowlist declaring HOME a credential and a check that reports HOME and USER, then exits 1'
-        def credentialAwareRunner = runner.withChildEnv(TestChildEnvironment.hostAllowlist([], ['HOME']))
-        def check = command('if [ -n "${HOME:-}" ]; then echo HOME=present; else echo HOME=absent; fi; '
-                + 'if [ -n "${USER:-}" ]; then echo USER=present; else echo USER=absent; fi; exit 1')
-
-        when:
-        def verdict = credentialAwareRunner.run(check, workspace())
-
-        then: 'the credential name is absent, an untouched base name still reaches the check'
-        verdict instanceof Verdict.Fail
-        def details = (verdict as Verdict.Fail).findings()[0].details()
-        details.readLines().contains('HOME=absent')
-        details.readLines().contains('USER=present')
-    }
-
-    // FR9 of add-sandbox-core: the base set reaches a check with no tracker and no passthrough.
-    //     NFR-S3 of tighten-spec-contract: its values resolve through the run's allowlist (the
-    //     secrets port, in production; the test JVM's environment here), which the root always binds
-    def "FR9: with no tracker configured a base variable still reaches the check"() {
-        given: 'a runner over an allowlist with no passthrough and no credential, and a check reporting HOME, then exiting 1'
-        def check = command('if [ -n "${HOME:-}" ]; then echo HOME=present; else echo HOME=absent; fi; exit 1')
-
-        when:
-        def verdict = runner.withChildEnv(TestChildEnvironment.hostAllowlist()).run(check, workspace())
-
-        then:
-        verdict instanceof Verdict.Fail
-        (verdict as Verdict.Fail).findings()[0].details().readLines().contains('HOME=present')
-    }
-
-    // FR9, M3 of add-sandbox-core (task 7.2): a check's process environment holds ONLY the
-    // allowlisted variables — whatever the factory JVM environment holds, nothing outside the host
-    // base set plus the factory-set findings variable (plus the shell's own names) leaks in.
-    // Scenario: sandbox/execution-environment / Typical host project needs no env configuration
-    // Scenario: cli/manual-run / No factory variable leaks into a check
-    // Scenario: cli/manual-run / A check inherits no factory variable implicitly
-    def "M3: no factory environment variable outside the allowlist leaks into a check"() {
-        given: 'a check that dumps every environment variable name it sees, then exits 1'
-        def check = command('env | cut -d= -f1; exit 1')
-        def shellSelfSet = [
-            'PWD',
-            'OLDPWD',
-            'SHLVL',
-            '_',
-            'IFS',
-            'OPTIND',
-            'PS1',
-            'PS2',
-            'PS4',
-            'PPID'
-        ] as Set
-
-        when:
-        // The root's allowlist shape (no passthrough, no credential) over the test JVM's real
-        // environment, so the base set is really consulted (NFR-S3 of tighten-spec-contract).
-        def verdict = runner.withChildEnv(TestChildEnvironment.hostAllowlist()).run(check, workspace())
-
-        then: 'every observed name is allowlisted or shell-internal'
-        verdict instanceof Verdict.Fail
-        def names = (verdict as Verdict.Fail).findings()[0].details().readLines().findAll {
-            !it.isEmpty()
-        } as Set
-        def allowed = (HostTaskExecutionEnvironment.BASE_ENV_NAMES as Set) + ['GNOMISH_FINDINGS_FILE'] + shellSelfSet
-        names.every { allowed.contains(it) }
     }
 }

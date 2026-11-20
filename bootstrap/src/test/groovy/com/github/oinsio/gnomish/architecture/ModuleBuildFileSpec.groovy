@@ -94,7 +94,11 @@ class ModuleBuildFileSpec extends Specification {
      * reach it from opposite sides of the module tree, so any edge it acquired would land in both.
      * {@code :operatorconfig} (FR6, design D4 of add-project-registry) declares nothing for the
      * same layering reason: the records it annotates live in {@code :application} and in {@code
-     * :sandbox:core}.
+     * :sandbox:core}. {@code :httpegress} (FR15, design D16 of migrate-verify-to-executor-contract)
+     * declares {@code :domain} and nothing else, for the security reason of {@code :gittransfer}: the
+     * egress guard every in-process HTTP call passes can be handed no tracker, secrets provider or
+     * configuration format; its one edge carries the egress values it admits and refuses with (D16
+     * as amended 2026-11-09), and every consumer of the leaf already reaches the domain.
      *
      * <p>This map is a named registry: it pins the leafs whose emptiness the layering depends on,
      * whether or not anything reaches them today. {@link DomainLeafPuritySpec} asks the companion
@@ -117,6 +121,10 @@ class ModuleBuildFileSpec extends Specification {
         operatorevent: [] as Set,
         operatorconfig: [] as Set,
         gittransfer: [] as Set,
+        pendingkey: [] as Set,
+        httpegress: [
+            "api project(':domain')"
+        ] as Set,
     ]
 
     /**
@@ -129,6 +137,13 @@ class ModuleBuildFileSpec extends Specification {
     private static final Map<String, Set<String>> LEAF_ALLOWED_PROJECTS = [
         logtext: [':untrustedtext'] as Set,
         baseref: [':untrustedtext'] as Set,
+        // the domain, and the JDK-only leafs the domain carries (design D16 as amended 2026-11-09; D20)
+        httpegress: [
+            ':domain',
+            ':operatorevent',
+            ':pendingkey',
+            ':untrustedtext'
+        ] as Set,
     ]
 
     // FR6: a shared leaf stays consumable from every layer only while it drags nothing behind it,
@@ -138,9 +153,11 @@ class ModuleBuildFileSpec extends Specification {
     // Scenario: build-system/module-layering / The atomicfile leaf stays empty of dependencies
     // Scenario: build-system/module-layering / The untrustedtext and operatorevent leafs stay empty of dependencies
     // Scenario: build-system/module-layering / The gittransfer leaf stays empty of dependencies
+    // Scenario: build-system/module-layering / The pendingkey leaf stays empty of dependencies
     // Scenario: build-system/module-layering / The logtext leaf carries only the logging API
     // Scenario: build-system/module-layering / The baseref leaf depends only on the untrustedtext leaf
     // Scenario: build-system/module-layering / The dependency-free leafs depend on nothing internal
+    // Scenario: build-system/module-layering / The egress module depends only on the domain
     def "the shared leaf #module declares only its permitted production dependencies"() {
         given: 'the module build file, read as data'
         def code = ModuleBuildFile.textOf(module)

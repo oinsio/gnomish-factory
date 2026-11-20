@@ -44,7 +44,7 @@ final class RoundFailures {
     static ExecutionResult thrown(AttemptKey key, RuntimeException ex) {
         log.error(OperatorEvent.EXECUTOR_THREW.head() + "executor threw for {}", key, ex);
         var status = new ExecutionResult.Failed(
-                ExecutionResult.FailureClass.INFRASTRUCTURE, StackTraces.render(ex), List.of());
+                ExecutionResult.FailureClass.INFRASTRUCTURE, StackTraces.render(ex), List.of(), null);
         return new ExecutionResult(status, null, ExecutorUsage.none(), new ToolTrace(key, List.of()), List.of());
     }
 

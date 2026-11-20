@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.FakeProcess
@@ -50,7 +51,7 @@ class CommandProcessRunnerCutTailSpec extends Specification {
 
         when:
         long startedAt = System.nanoTime()
-        def outcome = runner.run(new VerifyCheck.Command('check'), environment)
+        def outcome = runner.run(VerifyChecks.command('check'), environment)
         def elapsed = Duration.ofNanos(System.nanoTime() - startedAt)
 
         then: 'the join let go after the handle\'s bound, well inside the two seconds the runner once held'
@@ -85,7 +86,7 @@ class CommandProcessRunnerCutTailSpec extends Specification {
         }
 
         when:
-        def outcome = runner.run(new VerifyCheck.Command('check'), environment)
+        def outcome = runner.run(VerifyChecks.command('check'), environment)
 
         then: 'the drain ended on its own after the exit: the tail is the check\'s whole output, with no notice'
         outcome.outputTail() == 'whole-output'
@@ -111,7 +112,7 @@ class CommandProcessRunnerCutTailSpec extends Specification {
         }
 
         when:
-        def outcome = runner.run(new VerifyCheck.Command('check'), environment)
+        def outcome = runner.run(VerifyChecks.command('check'), environment)
 
         then:
         outcome.outputTail() == 'whole-output'

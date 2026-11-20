@@ -73,7 +73,8 @@ tracker:
         ProjectRegistry.scan(home).add(new ProjectName(PROJECT), clone)
         project = tmp.resolve('home/projects').resolve(PROJECT)
         Path projectFile = project.resolve('project.yaml')
-        Files.writeString(projectFile, Files.readString(projectFile) + 'factory:\n  bindings:\n    default: host\n')
+        Files.writeString(projectFile, Files.readString(projectFile)
+                + E2eProcessHarness.LOOPBACK_GRANT + '  bindings:\n    default: host\n')
     }
 
     def cleanup() {

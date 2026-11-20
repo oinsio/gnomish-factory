@@ -130,47 +130,6 @@ The `files_exist` runner SHALL check existence of the literal workspace-relative
 - **WHEN** a configured path resolves outside the workspace root
 - **THEN** the verdict is CannotVerify naming the offending path
 
-### Requirement: Command check runner
-The command runner SHALL execute the manifest command via `sh -c` through `exec()` of the bound task environment, with the working copy as working directory, merging stderr into stdout and retaining a bounded output tail (~200 lines / 10 KB). Exit 0 → Pass; exit 126/127 → CannotVerify (shell convention for not-executable / not-found); any other non-zero exit → Fail.
-**Implements**: FR7 of add-manual-run; FR11, NFR-S1 of add-claim-heartbeat; FR4, FR9 of add-sandbox-core
-**Notes**: The check's allowlist is the execution-environment capability's layered one: adapter base set, operator passthrough, factory-set variables.
-
-#### Scenario: Red check carries feedback
-- **WHEN** the command exits 1 without a findings file
-- **THEN** the verdict is Fail with one synthetic finding whose details contain the output tail
-
-#### Scenario: Missing binary is infrastructure
-- **WHEN** the command exits 127
-- **THEN** the verdict is CannotVerify, honoring the engine's classification table
-
-#### Scenario: No factory variable leaks into a check
-- **WHEN** a command check runs while `GNOMISH_GITHUB_TOKEN` and unrelated host variables are set in the factory environment
-- **THEN** the check's process environment contains only the allowlisted variables
-
-#### Scenario: A check inherits no factory variable implicitly
-- **WHEN** a variable is set in the factory process and is in none of the allowlist's layers
-- **THEN** it is absent from the check's environment, so a tracker credential cannot reach a check by construction
-
-### Requirement: Findings-JSON wire format
-Before starting the command, the runner SHALL allocate a findings-file path in the environment's scratch area — outside the working copy but inside the bound task environment — and pass it as `GNOMISH_FINDINGS_FILE`; after process exit the file SHALL be read back through the environment. After a non-zero exit (other than 126/127), a valid `{"findings":[{message, location?, details?}]}` file SHALL replace the synthetic finding.
-**Implements**: FR8, NFR-R2 of add-manual-run; FR1, FR4 of add-sandbox-core
-
-#### Scenario: Structured findings win
-- **WHEN** the command exits 1 and wrote two valid findings
-- **THEN** the verdict is Fail with exactly those two findings
-
-#### Scenario: Broken reporter cannot mask a red check
-- **WHEN** the command exits 1 and the findings file is unparseable
-- **THEN** the verdict is Fail (not CannotVerify) with the synthetic tail finding
-
-#### Scenario: A malformed findings file is logged
-- **WHEN** the command exits 1 and the findings file is malformed
-- **THEN** a warning is logged and the exit-code verdict stands with the synthetic finding
-
-#### Scenario: A findings file on a green check is ignored
-- **WHEN** the command exits 0 and wrote a findings file
-- **THEN** the verdict is Pass, the file is ignored, and it is noted in the log at DEBUG, not warned about
-
 ### Requirement: Outcome loop with in-process resume
 The runner SHALL handle every `TaskOutcome` exhaustively and SHALL never read the console: each outcome is rendered and ends the process — `Escalated` with exit code 10, `Paused` with 11, `Completed` with 0, `Aborted` with 12, and `PipelineMismatch` (unreachable in-process) as an internal error. In git mode an `Escalated` or `Paused` outcome SHALL be recorded on the task branch as a park before the process exits.
 **Implements**: FR1, FR2, FR7, FR8, FR10, NFR-R3 of make-run-headless

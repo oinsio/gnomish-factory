@@ -63,7 +63,7 @@ class ServeCommandPreconditionsSpec extends ServeCommandSpecBase {
     }
 
     private ServeCommand command(boolean runtimeAnswers, SandboxImageReadiness readiness) {
-        def sandbox = new SandboxProperties(IMAGE, null, null, null, null, null, false, null, null, null, null)
+        def sandbox = new SandboxProperties(IMAGE, null, null, null, null, false, null, null, null, null)
         def selector = new SandboxModeSelector(new BindingProperties(BindingNames.CONTAINER, [:]), sandbox,
         AdapterBindingRegistry.ratified([
             new ContainerBindingProvider()

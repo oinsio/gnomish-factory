@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.TrackerWrite
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -74,7 +75,7 @@ class TaskJsonChannelSpec extends Specification implements BareGitRepoFixture {
         when: 'a round closes, then the task parks — a task.json change'
         def rounds = new CurrentRound()
         new EnvironmentRoundSnapshot(box, runner, cloneDir, OpenedRound.reopen(rounds, cloneDir, BRANCH))
-                .snapshot(TASK, 'implement', 0)
+                .snapshot(TASK, 'implement', 0, RoundClose.VERIFIABLE)
         new EnvironmentAttemptPersistence(box, runner, cloneDir, gitObjects, rounds, ClaimEpochSource.NONE)
                 .persist(TASK, RoundStates.recorded(new ToolTrace(new AttemptKey(TASK, 'implement', 0), [
                     new ToolCall(0, 'bash', Instant.parse('2026-08-08T09:00:00Z'), Duration.ofMillis(100))

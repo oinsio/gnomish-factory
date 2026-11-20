@@ -38,6 +38,19 @@ class ExecutorEgressSpec extends Specification {
         ExecutorEgress.union(new PipelineDefinition('1', new AutonomyLimits(2), [], null, [])) == []
     }
 
+    def "NFR-S1 of migrate-verify-to-executor-contract: one executor's grant, normalized and each once, never another's"() {
+        expect:
+        ExecutorEgress.of(declaration('acme', [
+            ' API.Acme.Example ',
+            'api.acme.example',
+            '*.cdn.example'
+        ])) == [
+            'api.acme.example',
+            '*.cdn.example'
+        ]
+        ExecutorEgress.of(declaration('quiet', [])) == []
+    }
+
     private static ExecutorDeclaration declaration(String name, List<String> egress) {
         new ExecutorDeclaration(name, ExecutorDeclaration.Type.PROGRAM, ['/opt/' + name], [:], [], egress)
     }

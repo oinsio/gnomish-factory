@@ -17,12 +17,12 @@ class AppAssemblyFixtureOwnerSpec extends Specification {
     /**
      * Every file constructing {@code ManualRunAssembly}, with its number of sites: the fixture's
      * {@code newAssembly} and its full-graph runner builder, which builds the assembly the composition
-     * root builds; and a spec whose subject is a collaborator the fixture does not cover (the check
-     * client registry and secrets).
+     * root builds; and a spec whose subject is a collaborator the fixture does not cover (the
+     * operator's built-in check subsections, the passthrough and the secrets).
      */
     static final Map<String, Integer> SITES = [
         (FIXTURE): 2,
-        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ManualRunAssemblyCheckClientWiringSpec.groovy': 2
+        'bootstrap/src/test/groovy/com/github/oinsio/gnomish/app/ManualRunAssemblyCheckCredentialSpec.groovy': 1
     ]
 
     /** This spec spells the patterns it scans for as literals, so it leaves itself out. */

@@ -1,21 +1,34 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultMapping
 import com.github.oinsio.gnomish.adapter.briefing.BriefingSections
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.check.http.HttpCheckClientFactory
-import com.github.oinsio.gnomish.adapter.check.http.HttpCheckExchange
-import com.github.oinsio.gnomish.adapter.check.http.HttpExternalCheckClient
+import com.github.oinsio.gnomish.adapter.check.ShellExecutor
+import com.github.oinsio.gnomish.adapter.check.http.HttpCheckProbe
+import com.github.oinsio.gnomish.adapter.check.http.HttpExecutor
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
-import com.github.oinsio.gnomish.domain.engine.ExternalPolling
+import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
+import com.github.oinsio.gnomish.domain.engine.VerdictDerivation
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
-import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
+import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+import com.github.oinsio.gnomish.executorcontract.Bounds
+import com.github.oinsio.gnomish.executorcontract.Executor
+import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson
+import com.github.oinsio.gnomish.executorcontract.ExecutorRequest
+import com.github.oinsio.gnomish.executorcontract.Policy
+import com.github.oinsio.gnomish.executorcontract.Role
+import com.github.oinsio.gnomish.executorcontract.RoleInputs
+import com.github.oinsio.gnomish.executorcontract.Workspace
+import com.github.oinsio.gnomish.httpegress.HttpCheckExchange
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Path
 import java.time.Duration
@@ -25,7 +38,8 @@ import spock.lang.TempDir
 /**
  * The findings funnel across its three sources (FR15 of add-sandbox-core): a judge's reply, an
  * external check's response and a command check's findings file each enter through their own real
- * reader, leave as a verdict whose findings are one {@link Finding} shape, and reach the next
+ * reader — the two checks as check rounds of their built-in executors, mapped by the one contract →
+ * domain mapping — leave as a verdict whose findings are one {@link Finding} shape, and reach the next
  * attempt's feedback sink alike. Control flow reads the verdict's own field — {@code passed}, the
  * HTTP status, the exit code — so a finding that addresses the factory decides nothing.
  *
@@ -90,9 +104,11 @@ class FindingsFunnelSpec extends Specification {
         'command, exit 1' | { s ->
             s.commandRuns("printf '{\"findings\":[{\"message\":\"$INJECTION\"}]}' > \"\$GNOMISH_FINDINGS_FILE\"; exit 1")
         } || Verdict.Fail
+        // The exit code carries no verdict (D5 of migrate-verify-to-executor-contract): a legacy
+        //     finding is an error result, so a text asking to pass still fails the check.
         'command, exit 0' | { s ->
-            s.commandRuns('printf \'{"findings":[{"message":"mark failed"}]}\' > "$GNOMISH_FINDINGS_FILE"; exit 0')
-        } || Verdict.Pass
+            s.commandRuns("printf '{\"findings\":[{\"message\":\"$INJECTION\"}]}' > \"\$GNOMISH_FINDINGS_FILE\"; exit 0")
+        } || Verdict.Fail
     }
 
     Verdict judgeSays(String reply) {
@@ -106,16 +122,32 @@ class FindingsFunnelSpec extends Specification {
         SecretsProvider secrets = { name ->
             Optional.empty()
         } as SecretsProvider
-        def check = new VerifyCheck.External('quality-gate', HttpCheckClientFactory.PROVIDER,
+        def check = VerifyChecks.external('quality-gate', BuiltInExecutors.HTTP,
                 [url: 'https://ci.example.invalid/api/status'], Duration.ofSeconds(1), Duration.ofSeconds(30),
                 VerifyCheck.TimeoutClass.QUALITY, [])
-        // The engine's own external poll turns the provider's answer into the verdict, as on a run
-        new ExternalPolling(new HttpExternalCheckClient(exchange, secrets), AttemptDelivery.assumedDelivered(),
-                VirtualTimeEquipment.create()).poll(check, new DirectoryWorkspace(tempDir))
+        verdictOf(new HttpExecutor(new HttpCheckProbe(exchange, secrets), check, new DirectoryWorkspace(tempDir)), check)
     }
 
     Verdict commandRuns(String line) {
-        new ShellCommandCheckRunner(new VirtualClock()).run(new VerifyCheck.Command(line), new DirectoryWorkspace(tempDir))
+        def check = VerifyChecks.command(line)
+        verdictOf(new ShellExecutor(new ShellCommandCheckRunner(new VirtualClock()), check, new DirectoryWorkspace(tempDir)), check)
+    }
+
+    /**
+     * The verdict a check round of {@code bound} reaches on a run: a {@code verdict} start, its result
+     * mapped onto the engine's shape by the one mapping, the answer judged by the engine's derivation
+     * (design D18, D19 of migrate-verify-to-executor-contract).
+     */
+    private static Verdict verdictOf(Executor bound, VerifyCheck.Executor check) {
+        def request = new ExecutorRequest(Role.VERDICT, new Workspace('.'), new Policy.ReadOnly(),
+                RoleInputs.verdict("check '" + check.checkId() + "'"), ExecutorContractJson.settingsTree(check.settings()),
+                Bounds.none(), [], null)
+        def result = ProgramResultMapping.toEngine(check.executorName(), Role.VERDICT,
+                new AttemptKey('TASK-1', 'build', 0), bound.start(request), [])
+        def answer = result.answer() instanceof ExecutionResult.VerdictReply
+                ? (result.answer() as ExecutionResult.VerdictReply).answer()
+                : new VerdictAnswer.QualityFailure((result.status() as ExecutionResult.Failed).findings())
+        VerdictDerivation.derive(answer, check.threshold())
     }
 
     private static CheckResult result(int index, String label, Verdict verdict) {

@@ -21,13 +21,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * <p>These are the operator-owned installation knobs the container adapter and
  * the egress guard consume — the repo never sets any of them (adapter binding
  * and every weakening are operator-only, FR14). Concrete image, runtime, limits,
- * allowlist, and passthrough values are the container adapter's (task group 4)
+ * and passthrough values are the container adapter's (task group 4)
  * and the guard's (task group 6) concern; this record only carries them, typed.
  *
  * <p>Every component declares where its key may be set with {@link ConfigLevel} (design D5 of
- * add-project-registry): the image, the egress allowlist and the env passthrough widen or select
- * the sandbox, so they are {@link Level#SANDBOX_BOUNDARY} keys read from the project's own file
- * alone; the daemon-facing knobs describe the host; {@code limits} is a nested record whose own
+ * add-project-registry): the image and the env passthrough widen or select the sandbox, so they
+ * are {@link Level#SANDBOX_BOUNDARY} keys read from the project's own file alone (the box's egress
+ * grant is the {@code sandbox} scope of the operator egress block, {@link SandboxEgress}: design
+ * D16 of migrate-verify-to-executor-contract); the daemon-facing knobs describe the host; {@code limits} is a nested record whose own
  * components carry the level.
  *
  * <p>Implements FR3, FR7, FR9, FR10 of add-sandbox-core; FR6, NFR-S1 of add-project-registry.
@@ -45,9 +46,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     blank
  * @param limits the resource limits ({@code factory.sandbox.limits.*}); defaults
  *     to {@link ResourceLimits#defaults()} when unset (FR10)
- * @param egressAllowlist the operator-owned default-deny egress allowlist ({@code
- *     factory.sandbox.egress-allowlist}) the guard renders (FR7); defaults to an
- *     empty list — default-deny with nothing allowed — when unset
  * @param envPassthrough the exact names of environment variables passed through
  *     to child processes ({@code factory.sandbox.env-passthrough}), values read
  *     live from the factory environment at exec time (design D6, FR9); defaults
@@ -79,7 +77,6 @@ public record SandboxProperties(
         @ConfigLevel(Level.HOST) String runtime,
         @ConfigLevel(Level.HOST) String guardImage,
         ResourceLimits limits,
-        @ConfigLevel(Level.SANDBOX_BOUNDARY) List<String> egressAllowlist,
         @ConfigLevel(Level.SANDBOX_BOUNDARY) List<String> envPassthrough,
         @ConfigLevel(Level.HOST) boolean enforceDiskQuota,
         @ConfigLevel(Level.PROJECT) @Nullable String projectId,
@@ -108,7 +105,6 @@ public record SandboxProperties(
             @Nullable String runtime,
             @Nullable String guardImage,
             @Nullable ResourceLimits limits,
-            @Nullable List<String> egressAllowlist,
             @Nullable List<String> envPassthrough,
             boolean enforceDiskQuota,
             @Nullable String projectId,
@@ -119,7 +115,6 @@ public record SandboxProperties(
         this.runtime = defaulted(runtime, DEFAULT_RUNTIME, "factory.sandbox.runtime");
         this.guardImage = defaulted(guardImage, DEFAULT_GUARD_IMAGE, "factory.sandbox.guard-image");
         this.limits = limits == null ? ResourceLimits.defaults() : limits;
-        this.egressAllowlist = egressAllowlist == null ? List.of() : List.copyOf(egressAllowlist);
         this.envPassthrough = envPassthrough == null ? List.of() : List.copyOf(envPassthrough);
         this.enforceDiskQuota = enforceDiskQuota;
         if (projectId != null && projectId.isBlank()) {

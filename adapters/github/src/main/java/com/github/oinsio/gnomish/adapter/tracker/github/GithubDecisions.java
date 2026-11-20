@@ -1,9 +1,9 @@
 package com.github.oinsio.gnomish.adapter.tracker.github;
 
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient;
 import com.github.oinsio.gnomish.app.port.tracker.HumanReply;
 import com.github.oinsio.gnomish.app.port.tracker.TaskRef;
 import com.github.oinsio.gnomish.domain.branch.ClaimEpoch;
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient;
 import java.time.InstantSource;
 import java.util.ArrayList;
 import java.util.List;

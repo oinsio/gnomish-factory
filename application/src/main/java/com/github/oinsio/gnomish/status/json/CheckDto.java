@@ -13,7 +13,9 @@ import org.jspecify.annotations.Nullable;
  * findings}/{@code durationMillis}, not a nested object):
  *
  * <ul>
- *   <li>{@code Verdict.Pass} — {@code verdict = "pass"}, {@code findings = []},
+ *   <li>{@code Verdict.Pass} — {@code verdict = "pass"}, {@code findings} carrying
+ *       the results below the threshold (possibly empty; design D5 as amended of
+ *       migrate-verify-to-executor-contract),
  *       {@code reason}/{@code details} both {@code null}, {@code runUrl} carrying
  *       the platform run link when the verdict has one
  *   <li>{@code Verdict.Fail} — {@code verdict = "fail"}, {@code findings} populated,
@@ -23,12 +25,13 @@ import org.jspecify.annotations.Nullable;
  *       {@code runUrl} {@code null}
  * </ul>
  *
- * <p>Implements FR11, M3 of add-manual-run; NFR-O2 of add-sandbox-core.
+ * <p>Implements FR11, M3 of add-manual-run; NFR-O2 of add-sandbox-core; FR7 of
+ * migrate-verify-to-executor-contract.
  *
  * @param ref the label of the check that ran
  * @param verdict the lowerCamel verdict discriminator
- * @param findings the check's structured findings; empty for {@code pass}/{@code
- *     cannotVerify}
+ * @param findings the check's structured findings: a {@code fail}'s, or a {@code
+ *     pass}'s results below the threshold; empty for {@code cannotVerify}
  * @param durationMillis the wall time the check took, in milliseconds
  * @param reason the {@code cannotVerify} short cause, or {@code null} otherwise
  * @param details the {@code cannotVerify} free-text detail, or {@code null}

@@ -5,9 +5,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlMatching
 
-import com.github.oinsio.gnomish.adapter.github.GithubCallInterruptedException
-import com.github.oinsio.gnomish.adapter.github.InterruptMidRequest
 import com.github.oinsio.gnomish.app.port.tracker.TrackerUnavailableException
+import com.github.oinsio.gnomish.githubapi.GithubCallInterruptedException
+import com.github.oinsio.gnomish.githubapi.InterruptMidRequest
 import spock.lang.Specification
 
 /**

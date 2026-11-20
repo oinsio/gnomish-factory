@@ -42,8 +42,9 @@ final class E2eFixture {
 
     /**
      * @return the {@code e2e-unconfigured-provider} fixture root — one stage whose only check is
-     *     an {@code external} check on provider {@code github}, run with no
-     *     {@code factory.check.github} section (FR3 of remove-interactive-console)
+     *     an {@code external} check mapping to the {@code github-actions} built-in, run with no
+     *     {@code factory.check.github-actions} connection (FR3 of remove-interactive-console; D18
+     *     of migrate-verify-to-executor-contract)
      */
     static Path unconfiguredProviderRoot() {
         UNCONFIGURED_PROVIDER_ROOT

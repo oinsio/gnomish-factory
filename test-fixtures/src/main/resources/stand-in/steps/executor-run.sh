@@ -5,15 +5,16 @@
 #           `transform` completed, `verdict` an empty SARIF log, `decision` a `select` of the first
 #           option; a request in a role the describe does not list is refused (exit 2, a line on
 #           stderr, no result)
-#   poll    the role's answer: the deferred run is finished; a poll whose GNOMISH_PENDING_KEY is not
-#           the key the start returned (`reference-deferred`) is refused (exit 2, a line on stderr,
-#           no result)
+#   poll    the role's answer: the deferred run is finished, and every poll of its key, a re-poll
+#           of the ended run included, answers it alike (design D11 of
+#           migrate-verify-to-executor-contract); a poll whose GNOMISH_PENDING_KEY is not the key the
+#           start returned (`reference-deferred`) is refused (exit 2, a line on stderr, no result)
 #
 # The misbehaving fake: BROKEN, which the [break] preset exports as its link's name `break-<case>`,
 # names the one conformance case to break, and only that case's run breaks — the kit runs each case
 # in a workspace named after it, so a start breaks when its request's workspace ends in `/<case>`.
-# The twelve cases are the conformance kit's (task 8.2 of define-executor-contract), which owns the
-# names; this list follows them. Kept in sync with
+# The thirteen cases are the conformance kit's (task 8.2 of define-executor-contract; the re-poll case
+# task 4.7 of migrate-verify-to-executor-contract), which owns the names; this list follows them. Kept in sync with
 # bootstrap/src/main/java/com/github/oinsio/gnomish/app/conformance/KitCase.java: the names below and
 # the BROKEN switch are exactly its cases (KitCaseScriptIdentitySpec):
 #   describe                the describe answer carries an enforcement level no schema accepts
@@ -26,6 +27,12 @@
 #   stderr-noise            the result goes to stderr instead of the result file
 #   non-json-stdout         the result goes to stdout instead of the result file
 #   pending-poll            the poll writes no result
+#   pending-repoll          the run forgets it ended: the first poll of its key answers as the
+#                           reference does and appends its request's working copy to the file
+#                           ENDED_RUNS names (`<link>.ended-runs` beside the fake's link, outside
+#                           every working copy, the one file this script writes besides the result
+#                           file), and a poll from a working copy listed there is refused (exit 2, a
+#                           line on stderr naming the key, no result)
 #   unknown-request-fields  the start refuses a request carrying the kit's probe field (exit 2, a
 #                           line on stderr) and answers one without it as the reference does
 #   malformed-answer        the start answers a decision request with one option
@@ -46,7 +53,8 @@ if [ -n "${BROKEN:-}" ]; then
     broken=${BROKEN#break-}
     case "$broken" in
         describe | settings-schema | transform | verdict | decision | unknown-role | oversized-output | \
-            stderr-noise | non-json-stdout | pending-poll | unknown-request-fields | malformed-answer) ;;
+            stderr-noise | non-json-stdout | pending-poll | pending-repoll | unknown-request-fields | \
+            malformed-answer) ;;
         *)
             echo "stand-in: '$BROKEN' names no conformance case (steps/executor-run.sh)" >&2
             exit 97
@@ -72,6 +80,15 @@ role=$(printf '%s' "$request" | grep -o '"role":"[a-z]*"' | head -n 1 | cut -d '
 
 if [ "$operation" = poll ] && [ "$broken" = pending-poll ]; then
     exit 0
+fi
+if [ "$operation" = poll ] && [ "$broken" = pending-repoll ]; then
+    copy=$(printf '%s' "$workspace" | cut -d '"' -f 6)
+    if [ -e "${ENDED_RUNS:?}" ] && grep -q -x -F "$copy" "$ENDED_RUNS"; then
+        echo "executor: no pending run has the key '${GNOMISH_PENDING_KEY:-}'" >&2
+        exit 2
+    fi
+    printf '%s\n' "$copy" >> "$ENDED_RUNS" \
+        || { echo "stand-in: cannot mark the ended run in $ENDED_RUNS (steps/executor-run.sh)" >&2; exit 97; }
 fi
 if [ "$operation" = poll ] && [ "${GNOMISH_PENDING_KEY:-}" != reference-deferred ]; then
     echo "executor: no pending run has the key '${GNOMISH_PENDING_KEY:-}'" >&2

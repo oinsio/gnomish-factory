@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -22,7 +23,6 @@ import com.github.oinsio.gnomish.sandbox.BindingProperties
 import com.github.oinsio.gnomish.sandbox.BindingTrustTable
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 
 /**
@@ -43,7 +43,7 @@ class TakeContainerFreshClaimFirstBoxSpec extends Specification implements RunCh
         support.taskRepository() >> repository
         support.persistence() >> new InMemoryAttemptPersistence()
         support.workspace() >> new FakeWorkspace()
-        support.pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+        support.pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         tracker.fetchTask(_) >> heldByUs()
         branches.locate(CLONE_DIR, 'PROJ-1') >> new BranchLocation.Local('refs/heads/gnomish/PROJ-1')
         branches.adopt(CLONE_DIR, 'PROJ-1', _) >> new BranchAdoption.AlreadyLocal('PROJ-1')
@@ -101,7 +101,7 @@ class TakeContainerFreshClaimFirstBoxSpec extends Specification implements RunCh
     private TakeResult claim() {
         def git = new TaskGit(
                 Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
         new TakeContainerFreshClaim(slotWiring(
                         assemblyRunning(new ScriptedExecutor([completedRound()])), git, tracker, CLONE,
                         containerTakeSupport())).claim(
@@ -115,7 +115,7 @@ class TakeContainerFreshClaimFirstBoxSpec extends Specification implements RunCh
         }
         new ContainerTakeSupport(new SandboxModeSelector(
                         new BindingProperties(null, [:]),
-                        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                        new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                         AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
                         { -> false } as ContainerRuntimeProbe),
                 factory)

@@ -3,10 +3,10 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.TrackerWrite
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.port.console.fake.ScriptedConsoleIO
 import com.github.oinsio.gnomish.app.port.git.*
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.project.RegisteredClone
 import com.github.oinsio.gnomish.app.serve.TaskEnvironmentDisposal
 import com.github.oinsio.gnomish.domain.branch.BranchShape
@@ -22,7 +22,6 @@ import com.github.oinsio.gnomish.gitobjects.GitObjects
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 /**
@@ -41,6 +40,9 @@ import spock.lang.TempDir
  * <p>Added by task 8.7 of split-into-modules.
  */
 class GitResumeRoutingSpec extends Specification implements RunChainFakes {
+
+    /** Every round cell the run preparation handed the store's persistence (design D22). */
+    List cellsHanded = []
 
     @TempDir
     Path tempDir
@@ -90,8 +92,11 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
         worktrees.ensureWorktree(_, _) >> worktree
         worktrees.environmentDisposal(registeredClone) >> worktreeDisposal
         worktrees.salvage(_) >> salvager
+        worktrees.interruptedVerification(_, _) >> Optional.empty()
         store.taskRepository(_) >> lifecycleStore
-        store.attemptPersistence(_, _) >> { persistence }
+        store.attemptPersistence(_, _, _) >> { args ->
+            cellsHanded << args[2]; persistence
+        }
         store.readRecordedState(_, _) >> { stateRead.call() }
         store.readTaskRecord(_, _) >> { Optional.ofNullable(record) }
         branches.readDelivered(_, _) >> new DeliveredBranchState(freshRecord().context(), TaskState.atStageStart('build'))
@@ -114,12 +119,10 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
     def "attaches the task-git mid-round push decoration on resume"() {
         given:
         def attached = []
-        UnaryOperator<RoundEnvironmentSource> marker = { rounds ->
-            rounds
-        } as UnaryOperator<RoundEnvironmentSource>
+        HostGitRounds marker = Stub(HostGitRounds)
         def runner = new GitResumeRunner(
                 assemblyRunningLoop(executor, unreadableConsole(),
-                new Verdict.Pass(), attached),
+                new Verdict.Pass(null, []), attached),
                 new TaskGit(store, branches, worktrees, marker, new ClaimEpochBook()), registeredClone, 'taskId')
 
         when:
@@ -128,14 +131,19 @@ class GitResumeRoutingSpec extends Specification implements RunChainFakes {
 
         then:
         attached.size() == 1
-        attached[0].is(marker)
+        attached[0][0].is(marker)
+
+        and: 'the run\'s one round cell reaches both the decoration and the persistence (design D22 of migrate-verify-to-executor-contract)'
+        cellsHanded.size() == 1
+        attached[0][1].rounds().is(cellsHanded[0])
+        attached[0][1].pending() == null
     }
 
     /** Every law binding the resumed chain assembled with, in order (FR12 of add-base-ref-resolution). */
     List lawBindings = []
 
     /** Resumes PROJ-1 with the given {@code --decision} ({@code null} for none) over a console that is never read. */
-    private String resume(String decision = null, boolean discardWork = false, Verdict verdict = new Verdict.Pass()) {
+    private String resume(String decision = null, boolean discardWork = false, Verdict verdict = new Verdict.Pass(null, [])) {
         console = unreadableConsole()
         def runner = new GitResumeRunner(assemblyRunningLoop(executor, console, verdict, [], lawBindings),
         new TaskGit(store, branches, worktrees, new ClaimEpochBook()), registeredClone, 'taskId')

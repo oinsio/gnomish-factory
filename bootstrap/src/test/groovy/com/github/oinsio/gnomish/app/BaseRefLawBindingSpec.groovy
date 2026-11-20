@@ -14,6 +14,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
@@ -68,7 +69,7 @@ class BaseRefLawBindingSpec extends Specification implements BareGitRepoFixture,
                 new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'claude-fake-main-1', [:]),
                 'instructions.md',
                 [
-                    new VerifyCheck.Builtin('files_exist', [files: ['output.txt']])
+                    VerifyChecks.builtin('files_exist', [files: ['output.txt']])
                 ],
                 new AutonomyLimits(3), AdvancementMode.AUTO)
     }

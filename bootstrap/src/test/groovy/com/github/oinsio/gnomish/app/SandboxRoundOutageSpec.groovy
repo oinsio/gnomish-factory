@@ -6,7 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.LocalBoxEnvironment
 import com.github.oinsio.gnomish.domain.engine.EscalationReport
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.Verdict
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ResourceLimits
@@ -46,7 +46,7 @@ class SandboxRoundOutageSpec extends RoundFlowSpecBase {
         }
 
         when:
-        def outcome = run(pipeline(3), box, 'plain-round', ScriptedCommandCheckRunner.fixed(new Verdict.Fail([])))
+        def outcome = run(pipeline(3), box, 'plain-round', ScriptedCheckRounds.fixed(new Verdict.Fail([])))
 
         then: 'the second round could not execute and was not retried: the task escalates at once as cannot-execute'
         launches == 2
@@ -66,7 +66,7 @@ class SandboxRoundOutageSpec extends RoundFlowSpecBase {
         box.guardDiesAtProbe = 3
 
         when:
-        def outcome = run(pipeline(3), box, 'plain-round', ScriptedCommandCheckRunner.fixed(new Verdict.Fail([])))
+        def outcome = run(pipeline(3), box, 'plain-round', ScriptedCheckRounds.fixed(new Verdict.Fail([])))
 
         then: 'the second round was probed at its close and not graded: the task escalates as cannot-execute'
         box.guardProbes == 4
@@ -91,7 +91,7 @@ class SandboxRoundOutageSpec extends RoundFlowSpecBase {
 
         when:
         def started = System.nanoTime()
-        def outcome = run(pipeline(3), box, 'plain-round', new ScriptedCommandCheckRunner())
+        def outcome = run(pipeline(3), box, 'plain-round', new ScriptedCheckRounds())
         def elapsed = Duration.ofNanos(System.nanoTime() - started)
 
         then: 'the take came back within a few docker deadlines, not the stall'
@@ -110,7 +110,7 @@ class SandboxRoundOutageSpec extends RoundFlowSpecBase {
         box.denialSourceUnreadable = true
 
         when:
-        def outcome = run(pipeline(1), box, 'plain-round', ScriptedCommandCheckRunner.fixed(new Verdict.Fail([])))
+        def outcome = run(pipeline(1), box, 'plain-round', ScriptedCheckRounds.fixed(new Verdict.Fail([])))
 
         then: 'the attempt was recorded and the stage exhausted normally'
         outcome instanceof TaskOutcome.Escalated
@@ -129,7 +129,7 @@ class SandboxRoundOutageSpec extends RoundFlowSpecBase {
         box.denialSourceUnreadable = true
 
         when: 'the round cannot execute — the agent ends without a result'
-        def outcome = run(pipeline(3), box, 'missing-result-event', new ScriptedCommandCheckRunner())
+        def outcome = run(pipeline(3), box, 'missing-result-event', new ScriptedCheckRounds())
 
         then:
         outcome instanceof TaskOutcome.Escalated

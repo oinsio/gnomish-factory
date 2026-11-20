@@ -90,7 +90,7 @@ class FrozenTimeEquipmentRunSpec extends Specification implements BareGitRepoFix
                 projectRoot,
                 tempDir.resolve('home'),
                 new SandboxProperties(FakeAgentSandboxImage.ensureBuilt('plain-round'),
-                null, null, null, [], [], false, null, null, null, null),
+                null, null, null, [], false, null, null, null, null),
                 new BindingProperties(null, [:]),
                 new ManualRunConfiguration().taskGit(new GitProcessRunner(), new ClaimEpochBook(), frozen),
                 factoryProps,

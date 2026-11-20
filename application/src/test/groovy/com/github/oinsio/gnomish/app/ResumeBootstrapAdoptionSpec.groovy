@@ -130,7 +130,7 @@ class ResumeBootstrapAdoptionSpec extends Specification implements RunChainFakes
         }
         def console = new ScriptedConsoleIO()
         def runner = new ContainerResumeRunner(
-                assemblyRunningLoop(new ScriptedExecutor([]), console, new Verdict.Pass(), [], []),
+                assemblyRunningLoop(new ScriptedExecutor([]), console, new Verdict.Pass(null, []), [], []),
                 git(), 'taskId', { _c, _t, _s, _def, _cred ->
                     support
                 } as ContainerSupportFactory)

@@ -1,6 +1,9 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.domain.egress.ConnectionEndpoint;
+import com.github.oinsio.gnomish.domain.egress.EgressMedium;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -8,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The named per-vendor connection profiles an operator declares as {@code factory.connections.<name>}
@@ -26,12 +30,19 @@ import java.util.TreeMap;
  *
  * <p>A profile carries a credential <em>name</em>, never a value (NFR-S1).
  *
- * <p>Implements FR16, FR17 of add-plugin-architecture.
+ * <p>It is the one place a {@link ConnectionEndpoint} is minted ({@link #endpoint}; FR17, design D16
+ * of migrate-verify-to-executor-contract): only here is a URL's medium known, since after {@link
+ * #resolve} merges a profile into the subsection no reader can tell whose URL it holds.
+ *
+ * <p>Implements FR16, FR17 of add-plugin-architecture; FR17 of migrate-verify-to-executor-contract.
  */
 public final class ConnectionProfiles {
 
     /** The engine-defined key a port subsection references a profile by ({@code connection: <name>}). */
     public static final String REFERENCE_KEY = "connection";
+
+    /** The key of a connection's own egress grants, in the one egress entry grammar (FR17). */
+    public static final String EGRESS_KEY = "egress";
 
     private static final ConnectionProfiles NONE = new ConnectionProfiles(Map.of());
 
@@ -98,13 +109,56 @@ public final class ConnectionProfiles {
     }
 
     /**
+     * The endpoint {@code subsection} names under {@code key}, with the medium it was written in
+     * (FR17, design D16 of migrate-verify-to-executor-contract): a value the referenced profile holds
+     * is the operator's; a value written in the subsection itself takes {@code inlineMedium} — the
+     * law's for a tracker subsection, the operator's for a {@code factory.check.<name>} one. The
+     * connection's {@value #EGRESS_KEY} grants travel with it when the operator wrote them: the
+     * profile's always, the subsection's own only under an operator {@code inlineMedium}.
+     *
+     * @param subsection the raw subsection, before {@link #resolve}; never null
+     * @param key the subsection key holding the endpoint, e.g. {@code api-url}; never null
+     * @param inlineMedium the medium of a value written in the subsection itself; never null
+     * @return the endpoint, or empty when neither form names one
+     * @throws IllegalArgumentException when the named value is not a URI
+     */
+    public Optional<ConnectionEndpoint> endpoint(
+            Map<String, Object> subsection, String key, EgressMedium inlineMedium) {
+        Map<String, Object> profile = referenceIn(subsection)
+                .map(name -> profiles.getOrDefault(name, Map.of()))
+                .orElse(Map.of());
+        List<String> egress = new ArrayList<>(entries(profile.get(EGRESS_KEY)));
+        if (inlineMedium == EgressMedium.OPERATOR) {
+            egress.addAll(entries(subsection.get(EGRESS_KEY)));
+        }
+        if (subsection.get(key) instanceof String inline && !inline.isBlank()) {
+            return Optional.of(new ConnectionEndpoint(URI.create(inline), inlineMedium, egress));
+        }
+        if (profile.get(key) instanceof String granted && !granted.isBlank()) {
+            return Optional.of(new ConnectionEndpoint(URI.create(granted), EgressMedium.OPERATOR, egress));
+        }
+        return Optional.empty();
+    }
+
+    /** The string entries of an {@value #EGRESS_KEY} list; anything else grants nothing. */
+    private static List<String> entries(@Nullable Object list) {
+        if (!(list instanceof List<?> values)) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .toList();
+    }
+
+    /**
      * Grades the {@code connection:} reference itself (FR16): a malformed name, a name no profile
      * defines, and the ambiguous case where a subsection declares both the reference and, inline, a
      * key the referenced profile also carries. What a subsection declaring <em>neither</em> form is
      * missing only the provider knows — that stays its own validator's missing-key error.
      *
      * @param file the offending configuration file
-     * @param where the located field prefix of this subsection (e.g. {@code factory.check.github})
+     * @param where the located field prefix of this subsection (e.g. {@code factory.check.github-actions})
      * @param subsection the raw subsection, before {@link #resolve}
      * @return every located problem with the reference, in key order; empty when there is none
      */

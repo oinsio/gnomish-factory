@@ -28,7 +28,7 @@ class TrackedImageReadinessSpec extends Specification implements BareGitRepoFixt
     private TrackedImageReadiness readiness(Path clone, String configuredProjectId) {
         new TrackedImageReadiness(
                 RegisteredCloneFixture.provider(RegisteredCloneFixture.registered(tempDir.resolve('home'), clone)),
-                new SandboxProperties(null, null, null, null, null, null, false, configuredProjectId, null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, configuredProjectId, null, null, null),
                 new FactoryProperties(null, null, null, null))
     }
 
@@ -73,7 +73,7 @@ class TrackedImageReadinessSpec extends Specification implements BareGitRepoFixt
                 RegisteredCloneFixture.lazy({
                     -> throw new AssertionError('the inspection read the clone')
                 }),
-                new SandboxProperties(null, null, null, null, null, null, false, 'acme-widgets', null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, 'acme-widgets', null, null, null),
                 new FactoryProperties(null, null, null, null))
 
         when:
@@ -90,7 +90,7 @@ class TrackedImageReadinessSpec extends Specification implements BareGitRepoFixt
                 RegisteredCloneFixture.lazy({
                     -> throw new AssertionError('the inspection read the clone')
                 }),
-                new SandboxProperties(null, null, null, null, null, null, false, 'acme-widgets', null, null, null),
+                new SandboxProperties(null, null, null, null, null, false, 'acme-widgets', null, null, null),
                 new FactoryProperties(null, null, null, null))
 
         when:

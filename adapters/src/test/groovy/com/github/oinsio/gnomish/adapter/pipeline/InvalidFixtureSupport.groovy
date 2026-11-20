@@ -55,7 +55,7 @@ advancement: auto
 
     /** Loads the built tree and asserts the outcome is Invalid, returning its error list. */
     List<ConfigError> loadInvalid() {
-        def outcome = PipelineLoader.load(getRoot(), [:], TrackerValidatorStub.discoveredGithubCheckProvider(), TrackerValidatorStub.configuredGithubCheckProvider())
+        def outcome = PipelineLoader.load(getRoot(), [:], TrackerValidatorStub.acceptingGithubActions())
         assert outcome instanceof LoadOutcome.Invalid
         (outcome as LoadOutcome.Invalid).errors()
     }

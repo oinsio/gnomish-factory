@@ -13,6 +13,7 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.Verdict
+import com.github.oinsio.gnomish.domain.engine.port.PendingTurn
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import spock.lang.Specification
@@ -59,7 +60,7 @@ abstract class EngineEventListenerContract extends Specification implements Port
      */
     protected abstract List<EngineEvent> observedEvents(Object adapter)
 
-    /** One of each of the seven sealed {@link EngineEvent} variants, in a fixed order. */
+    /** One of each of the nine sealed {@link EngineEvent} variants, in a fixed order. */
     static List<EngineEvent> everyVariant() {
         def key = new AttemptKey('TASK-1', 'build', 0)
         def state = TaskState.atStageStart('build')
@@ -69,8 +70,13 @@ abstract class EngineEventListenerContract extends Specification implements Port
             new EngineEvent.AttemptStarted(key),
             new EngineEvent.ExecutionFinished(key, Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()),
             new EngineEvent.CheckStarted(key, new CheckRef(0, UntrustedText.manifest('files_exist'))),
+            new EngineEvent.CheckPolled(key, new CheckRef(0, UntrustedText.manifest('files_exist')), 'scm-status',
+            UntrustedText.subprocess('k-1'), PendingTurn.Origin.ISSUED, Duration.ofSeconds(30), Duration.ofMinutes(9)),
+            new EngineEvent.CheckTimedOut(key, new CheckRef(0, UntrustedText.manifest('files_exist')), 'scm-status',
+            UntrustedText.subprocess('k-1'), Duration.ofMinutes(10), new ExecutionResult.Failed(
+                    ExecutionResult.FailureClass.QUALITY, UntrustedText.factory('timed out'), [], null)),
             new EngineEvent.CheckFinished(key,
-            new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(), Duration.ZERO)),
+            new CheckResult(new CheckRef(0, UntrustedText.manifest('files_exist')), new Verdict.Pass(null, []), Duration.ZERO), null),
             new EngineEvent.AttemptFinished(key, state, trace),
             new EngineEvent.TaskFinished('TASK-1', new TaskOutcome.Completed(state)),
         ]

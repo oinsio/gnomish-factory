@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext;
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
@@ -7,7 +8,7 @@ import com.github.oinsio.gnomish.status.StatusSnapshotHolder;
 import java.util.Optional;
 
 /**
- * The run's answer to {@link CheckRunContext}: the three allowlisted values a check provider may
+ * The run's answer to {@link HttpRunContext}: the three allowlisted values a check provider may
  * substitute into a request it composes (NFR-S2, design D5 of add-plugin-architecture).
  *
  * <p>The task id is the tracker's own, and the branch is derived from it by the same {@link
@@ -23,7 +24,7 @@ import java.util.Optional;
  *
  * <p>Implements NFR-S2 of add-plugin-architecture.
  */
-final class RunCheckRunContext implements CheckRunContext {
+final class RunCheckRunContext implements HttpRunContext {
 
     private final String taskId;
     private final String branch;
@@ -42,7 +43,7 @@ final class RunCheckRunContext implements CheckRunContext {
      * @param holder the live status holder the current stage is read from; never null
      * @return the run's allowlisted values; never null
      */
-    static CheckRunContext of(TaskContext context, StatusSnapshotHolder holder) {
+    static HttpRunContext of(TaskContext context, StatusSnapshotHolder holder) {
         return new RunCheckRunContext(context.taskId(), holder);
     }
 

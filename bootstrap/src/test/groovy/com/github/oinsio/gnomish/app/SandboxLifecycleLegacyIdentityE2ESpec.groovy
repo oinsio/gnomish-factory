@@ -87,7 +87,7 @@ class SandboxLifecycleLegacyIdentityE2ESpec extends Specification implements Bar
 
     /** A sandbox config whose minimum-age guard is effectively off; {@code projectId} may override. */
     private static SandboxProperties props(String image, String projectId = null) {
-        new SandboxProperties(image, null, null, null, [], [], false, projectId,
+        new SandboxProperties(image, null, null, null, [], false, projectId,
         Duration.ofMillis(1), Duration.ofDays(7), Duration.ofHours(24))
     }
 

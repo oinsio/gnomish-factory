@@ -10,6 +10,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import com.github.oinsio.gnomish.app.FixedTrackerAdapterContext
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import java.nio.file.Files
@@ -75,6 +76,7 @@ class GithubTrackerSecretsBackendSwitchSpec extends Specification {
         } as SecretsProvider
         def factory = new GithubTrackerAdapterFactory()
         def config = new TrackerConfig('github', 3, ['api-url': wireMock.baseUrl(), repo: "$OWNER/$REPO".toString()])
+        .withEndpoint(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())))
 
         when: 'the same factory assembles a tracker under each backend in turn'
         def underMap = factory.create(new FixedTrackerAdapterContext(mapBacked, config, INSTANCE_ID))

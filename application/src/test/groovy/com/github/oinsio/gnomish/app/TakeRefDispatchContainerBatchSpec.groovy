@@ -60,7 +60,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
             taskRepository() >> repository
             persistence() >> new InMemoryAttemptPersistence()
             workspace() >> ({} as Workspace)
-            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null)
+            pieces(_) >> new SandboxRunPieces(null, null, null, null, null, null, null, null)
         }
     }
 
@@ -69,7 +69,7 @@ class TakeRefDispatchContainerBatchSpec extends Specification implements RunChai
     private ContainerTakeSupport containerTakeSupport(Map<String, TaskRepository> repositories) {
         def registry = AdapterBindingRegistry.ratified([containerProvider()], BindingTrustTable.firstParty())
         def bindings = new BindingProperties(null, [:])
-        def sandbox = new SandboxProperties('an-image', null, null, null, [], [], false, null, null, null, null)
+        def sandbox = new SandboxProperties('an-image', null, null, null, [], false, null, null, null, null)
         ContainerSupportFactory containerSupport = { Path clone, String id, List<Segment> segments, PipelineDefinition definition, List<String> creds ->
             stubSupport(repositories[id])
         }

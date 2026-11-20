@@ -2,7 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 
 /**
@@ -23,7 +23,7 @@ class BrokenListenerPreflightSpec extends BrokenListenerSpecBase {
     def "a pre-flight PipelineEnd run still fires both bookends despite a throwing listener"() {
         given: 'a state already parked at pipeline end and a listener that throws on every event'
         def executor = new ScriptedExecutor()
-        def builtinRunner = new ScriptedBuiltinCheckRunner()
+        def builtinRunner = new ScriptedCheckRounds()
         def persistence = new InMemoryAttemptPersistence()
         def listener = new RecordingEventListener(throwOnEvent: true)
         def state = new TaskState(new Position.PipelineEnd(), 0, [], UsageSnapshot.EMPTY, ExecutorVersions.none())
@@ -53,7 +53,7 @@ class BrokenListenerPreflightSpec extends BrokenListenerSpecBase {
     def "a pre-flight PipelineMismatch run still fires both bookends despite a throwing listener"() {
         given: 'a state pointing at a stage absent from the pipeline and a throwing listener'
         def executor = new ScriptedExecutor()
-        def builtinRunner = new ScriptedBuiltinCheckRunner()
+        def builtinRunner = new ScriptedCheckRounds()
         def persistence = new InMemoryAttemptPersistence()
         def listener = new RecordingEventListener(throwOnEvent: true)
         def state = TaskState.atStageStart('ghost-stage')

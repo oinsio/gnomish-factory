@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
 import com.github.oinsio.gnomish.app.port.git.BranchTipUnavailableException
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
@@ -43,7 +44,6 @@ import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 import spock.lang.TempDir
 
@@ -107,12 +107,12 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         worktrees.ensureWorktree(_, _) >> worktree
         worktrees.salvage(_) >> Stub(WorktreeSalvager)
         store.taskRepository(_) >> lifecycleStore
-        store.attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+        store.attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
         store.readRecordedState(_, _) >> { stateRead.call() }
     }
 
     private TaskGit git() {
-        new TaskGit(store, branches, worktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
+        new TaskGit(store, branches, worktrees, HostGitRounds.NONE, baseRefGit, new ClaimEpochBook())
     }
 
     /** The real routing chain, over the ports above. */
@@ -454,7 +454,7 @@ class TakeResumeRoutingSpec extends Specification implements RunChainFakes {
         }
         store.readTaskRecord(_, _) >> Optional.of(recordWith(null, null, false))
         tracker.fetchTask(_) >> heldByUs()
-        def ownGit = new TaskGit(store, branches, ownWorktrees, UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
+        def ownGit = new TaskGit(store, branches, ownWorktrees, HostGitRounds.NONE, baseRefGit, new ClaimEpochBook())
         def runner = new TakeResumeRunner(
                 slotWiring(assemblyRunning(new ScriptedExecutor([completedRound()])), ownGit, tracker, registeredClone))
         def chain = chainOver(runner, ownGit)

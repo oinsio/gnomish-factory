@@ -19,6 +19,7 @@ import com.github.oinsio.gnomish.app.port.tracker.TrackerTaskState
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.pipeline.TrackerConfig
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration
 import java.time.Instant
@@ -65,8 +66,11 @@ class GithubTrackerAdapterFactorySpec extends Specification {
         wireMock.stop()
     }
 
+    /** The section as the loader maps it: the subsection, and its api-url admitted on loopback. */
     private static TrackerConfig configFor(Map<String, Object> subsection) {
-        new TrackerConfig('github', 3, subsection)
+        def config = new TrackerConfig('github', 3, subsection)
+        subsection['api-url'] == null ? config
+                : config.withEndpoint(GithubTestEndpoints.loopback(URI.create(subsection['api-url'] as String)))
     }
 
     private Map<String, Object> subsection() {
@@ -312,5 +316,20 @@ class GithubTrackerAdapterFactorySpec extends Specification {
     def "configuredDesignatorKinds reports none when no rule is declared"() {
         expect:
         new GithubTrackerAdapterFactory().configuredDesignatorKinds(configFor(subsection())).isEmpty()
+    }
+
+    // FR17 of migrate-verify-to-executor-contract, design D16: the adapter names its endpoint, and
+    //     builds its client from the admitted one only
+    def "the factory declares api-url on GitHub's own host, and refuses to build on a config with no admitted endpoint"() {
+        expect:
+        new GithubTrackerAdapterFactory().endpoint().get() ==
+                new com.github.oinsio.gnomish.domain.egress.EndpointDeclaration('api-url', 'api.github.com')
+
+        when:
+        new GithubTrackerAdapterFactory().create(new TrackerConfig('github', 3, subsection()), INSTANCE_ID, 'tok', new VirtualClock())
+
+        then:
+        def failure = thrown(GithubTrackerConfigException)
+        failure.message.contains('tracker.github.api-url')
     }
 }

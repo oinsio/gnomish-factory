@@ -6,14 +6,19 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.engine.InMemoryAttemptPersistence
+import com.github.oinsio.gnomish.adapter.git.GitHostRounds
 import com.github.oinsio.gnomish.adapter.git.MidRoundPushRounds
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishDirPipelineSource
 import com.github.oinsio.gnomish.app.ThreadSleeper
 import com.github.oinsio.gnomish.app.console.SystemConsoleIO
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
+import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
+import com.github.oinsio.gnomish.app.port.secrets.fake.MapSecretsProvider
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.port.Sleeper
+import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment
 import java.nio.file.Path
 import java.time.InstantSource
@@ -128,42 +133,66 @@ class ManualRunConfigurationSpec extends Specification {
         context.getBeansOfType(ApplicationRunner).size() == 1
     }
 
-    // FR6, FR13, design D10 of add-plugin-architecture: provider validation must be uniform across
-    // run modes — manual run replaces the external seam wholesale with the interactive client, but
-    // it loads through this same PipelineSource, so a manifest naming an undiscovered provider
-    // fails at load there exactly as in a real run.
-    def "the wired PipelineSource carries the discovered check providers, in every run mode"() {
+    // FR6, FR13, design D10 of add-plugin-architecture: settings validation must be uniform across
+    // run modes — every mode loads through this same PipelineSource, so a check's malformed settings
+    // fail at load in manual run exactly as in a real run (task 5.2 of
+    // migrate-verify-to-executor-contract: the validators are the built-ins', keyed by their names).
+    def "the wired PipelineSource carries the built-ins' params validators, in every run mode"() {
         given:
         def source = context.getBean(PipelineSource) as GnomishDirPipelineSource
 
-        expect: 'the discovered providers reached the loader, github among them'
-        source.checkProviderRegistry().containsKey('github')
-        source.checkProviderRegistry().keySet() == context.getBean('checkClientRegistry', Map).keySet()
+        expect: 'the built-ins\' validators reached the loader, github-actions among them'
+        source.checkProviderRegistry().containsKey('github-actions')
+        source.checkProviderRegistry().keySet() == context.getBean('checkParamsValidatorRegistry', Map).keySet()
     }
 
-    // FR3, design D3 of remove-interactive-console: the configured set the load grades `external`
-    // checks against is the operator's `factory.check` sections — the one fact this root alone holds.
-    def "the PipelineSource grades external checks against the configured factory.check sections"() {
+    // FR6, FR13 of add-plugin-architecture; task 5.2 of migrate-verify-to-executor-contract: the
+    // load grades each check's settings with its built-in's own validator, the map the root holds,
+    // and reads no factory.check section (design D18, "Where a refusal at run assembly goes").
+    def "the PipelineSource closes the built-ins' params validators over the load"() {
         given:
-        def properties = new FactoryProperties('instance', null, null, [github: [:], http: [:]])
+        def validators = new BuiltInCheckConfiguration().checkParamsValidatorRegistry()
 
         when:
-        def source = new ManualRunConfiguration().pipelineSource([:], [:], properties) as GnomishDirPipelineSource
+        def source = new ManualRunConfiguration().pipelineSource([:], [:], validators,
+        new FactoryProperties('instance', null, null, [:])) as GnomishDirPipelineSource
 
         then:
-        source.configuredCheckProviders() == ['github', 'http'] as Set
+        source.checkProviderRegistry().keySet() == ['http', 'github-actions'] as Set
     }
 
-    // FR1, design D3 of wire-host-mid-round-push: the TaskGit bean carries the real mid-round
-    // push decoration — applying it to a round source yields the MidRoundPushRounds decorator,
-    // never null and never the undecorated source.
-    def "the TaskGit bean's mid-round push decoration builds the push decorator"() {
+    // FR4 of add-plugin-architecture; task 5.2 of migrate-verify-to-executor-contract: the check
+    // equipment bean grades the operator's factory.check subsections, so a key no built-in reads —
+    // the former `github` provider key among them — stops startup with a located error.
+    def "the check equipment bean refuses a factory.check key no built-in reads"() {
+        given:
+        def properties = new FactoryProperties('instance', null, null, [github: ['api-url': 'https://api.github.com']])
+
+        when:
+        new ManualRunConfiguration().checkEquipment(new FilesExistCheckRunner(),
+                new ShellCommandCheckRunner(new VirtualClock()), MapSecretsProvider.NONE, properties)
+
+        then:
+        def e = thrown(IllegalStateException)
+        e.message.contains('factory.check.github')
+        e.message.contains('github-actions')
+    }
+
+    // FR1, design D3 of wire-host-mid-round-push; design D22 of migrate-verify-to-executor-contract:
+    // the TaskGit bean carries the real host-git decoration — over a run's cell it builds the push
+    // decorator around a round source and the snapshotting decoration around the stage chain,
+    // never the undecorated pieces.
+    def "the TaskGit bean's host-git decoration builds the push decorator and the snapshot decoration"() {
         given:
         def git = context.getBean(TaskGit)
         def source = Stub(RoundEnvironmentSource)
+        def chain = Stub(StageExecutor)
+        def cell = new CurrentRound()
 
         expect:
-        git.midRoundPush().apply(source) instanceof MidRoundPushRounds
+        git.midRoundPush() instanceof GitHostRounds
+        git.midRoundPush().decorate(source, cell) instanceof MidRoundPushRounds
+        !git.midRoundPush().snapshotting(chain, cell).is(chain)
     }
 
     def "context-independent beans are singletons: repeated lookups return the same instance"() {

@@ -1,9 +1,11 @@
 package com.github.oinsio.gnomish.adapter.check.http;
 
-import com.github.oinsio.gnomish.app.CheckRunContext;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  * the manifest nor operator config can widen it; a reference to anything else is a located
  * validation error at load ({@link HttpCheckParamsValidator}), so it never reaches a request.
  *
- * <p>Three values come from the run's {@link CheckRunContext}; the attempt commit comes from the
+ * <p>Three values come from the run's {@link HttpRunContext}; the attempt commit comes from the
  * workspace the engine hands the client at poll time, since it changes with every round.
  *
  * <p>A reference whose value this run cannot supply fails the check closed rather than substituting
@@ -35,7 +37,7 @@ final class HttpCheckVariables {
 
     /** Every variable a manifest may write; nothing else is substitutable. */
     static final Set<String> ALLOWLIST =
-            Set.of(CheckRunContext.TASK_ID, CheckRunContext.TASK_BRANCH, ATTEMPT_COMMIT, CheckRunContext.STAGE_NAME);
+            Set.of(HttpRunContext.TASK_ID, HttpRunContext.TASK_BRANCH, ATTEMPT_COMMIT, HttpRunContext.STAGE_NAME);
 
     private static final Pattern REFERENCE = Pattern.compile("\\$\\{([^}]*)}");
 
@@ -52,7 +54,7 @@ final class HttpCheckVariables {
      * @param attemptCommit the current round's attempt commit, or null when the workspace carries
      *     none (a manual run over a plain directory)
      */
-    static HttpCheckVariables of(CheckRunContext runContext, @Nullable String attemptCommit) {
+    static HttpCheckVariables of(HttpRunContext runContext, @Nullable String attemptCommit) {
         Map<String, String> values = new LinkedHashMap<>();
         for (String name : ALLOWLIST) {
             runContext.value(name).ifPresent(value -> values.put(name, value));
@@ -89,6 +91,27 @@ final class HttpCheckVariables {
      */
     static String erase(String text) {
         return REFERENCE.matcher(text).replaceAll("x");
+    }
+
+    /**
+     * Whether {@code url} carries a reference in its authority — its host, port or user part — so
+     * load cannot know the host a run will request (design D16 of
+     * migrate-verify-to-executor-contract: such a target is judged at connect, on the substituted
+     * URL). Told by erasing the references two ways: the authority differs exactly when one of
+     * them lies in it.
+     *
+     * @param url one manifest-declared url; never null
+     * @return true when a reference lies in the authority; false otherwise, or when the url does
+     *     not parse (the params validator reports that)
+     */
+    static boolean templatesAuthority(String url) {
+        try {
+            String one = new URI(REFERENCE.matcher(url).replaceAll("a")).getRawAuthority();
+            String other = new URI(REFERENCE.matcher(url).replaceAll("b")).getRawAuthority();
+            return !Objects.equals(one, other);
+        } catch (URISyntaxException e) {
+            return false;
+        }
     }
 
     /**

@@ -24,8 +24,8 @@ import java.util.List;
  *
  * <p>It replaces the declared pair of the host round-boundary check and the harvested-ref check
  * (deleted by task 9.13c), preference 1 of {@code manual-sync-pairs.md}: one rule, two callers — the harvest
- * admission ({@link HarvestAdmission}) over {@code register..quarantine}, and the host round close
- * ({@link GitAttemptPersistence}) over {@code previousTip..HEAD}.
+ * admission ({@link HarvestAdmission}) over {@code register..quarantine}, and the host round boundary
+ * ({@link HostRoundBoundary}, for the round close and the host snapshot) over {@code base..HEAD}.
  *
  * <p>Implements FR13, NFR-S2 of tighten-spec-contract; FR21, FR23 of add-sandbox-core; FR12 of
  * add-git-workflow; FR13 of harden-logging-observability; FR13, FR16 of make-checkpoint-gate-durable.
@@ -55,7 +55,7 @@ final class GnomeRangeInspection {
     /**
      * Judges {@code base..top} under {@code rule}.
      *
-     * @param base the commit the range starts above — the register, or the host's previous tip
+     * @param base the commit the range starts above — the register, or the host round's base
      * @param top the commit the range ends at — the quarantined harvest, or {@code HEAD}
      * @param rule what the range may contain
      * @return clean, the first violation found, or cannot-verify

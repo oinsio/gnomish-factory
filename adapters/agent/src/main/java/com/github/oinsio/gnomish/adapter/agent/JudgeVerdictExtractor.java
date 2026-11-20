@@ -28,7 +28,10 @@ import org.slf4j.LoggerFactory;
  * net itself, so its degradation default is inverted from the executor's).
  * This is the strict verdict schema of the findings funnel: a judge reply
  * that fails it classifies as an infrastructure failure of the check, never
- * as a quality verdict (FR15 of add-sandbox-core).
+ * as a quality verdict (FR15 of add-sandbox-core). The schema is the same for a pass and a
+ * failure: a {@code passed: true} verdict carries its parsed findings, and a malformed
+ * {@code findings} array makes it {@code CannotVerify} too (FR7, D5 as amended of
+ * migrate-verify-to-executor-contract).
  *
  * <p>The first-JSON-object scan is a simple bracket-matching heuristic, not a
  * full JSON tokenizer: it does not distinguish braces inside string literals
@@ -93,14 +96,13 @@ public final class JudgeVerdictExtractor {
             return cannotVerify("judge verdict JSON is missing a boolean \"passed\" field", message);
         }
 
-        if (passedNode.asBoolean()) {
-            return new Verdict.Pass();
-        }
+        // One strict read for both outcomes: a pass keeps its findings (D5 as amended of
+        // migrate-verify-to-executor-contract), so a malformed array is never a pass either.
         List<Finding> findings = findings(node);
         if (findings == null) {
             return cannotVerify("judge verdict \"findings\" entries must be non-blank strings", message);
         }
-        return new Verdict.Fail(findings);
+        return passedNode.asBoolean() ? new Verdict.Pass(null, findings) : new Verdict.Fail(findings);
     }
 
     /**

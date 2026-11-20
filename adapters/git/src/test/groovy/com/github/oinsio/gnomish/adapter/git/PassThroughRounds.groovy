@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.git
 
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
@@ -58,7 +59,7 @@ final class PassThroughRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        void closeRound() {
+        void closeRound(RoundClose close) {
             closed = true
         }
 

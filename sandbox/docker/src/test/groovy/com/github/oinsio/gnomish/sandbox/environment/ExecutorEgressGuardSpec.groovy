@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.sandbox.environment
 
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.DenialRestoration
+import com.github.oinsio.gnomish.sandbox.SandboxEgress
 import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import java.nio.file.Files
 import java.nio.file.Path
@@ -23,8 +24,8 @@ class ExecutorEgressGuardSpec extends Specification implements ContainerEnvironm
     Path guardRoot
 
     def setup() {
-        sandbox = new SandboxProperties('gnomish/img', null, null, null, ['registry.example.com'], null, false,
-        null, null, null, null)
+        sandbox = new SandboxProperties('gnomish/img', null, null, null, null, false,
+                null, null, null, null)
         docker.onRun = { List<String> args ->
             def declared = RecordingDockerCli.answerDeclaredVolumes(args, '{"/cache":{}}')
             declared != null ? declared : (args[0] == 'inspect' ? DockerResult.of(1, '', 'No such object') : DockerResult.of(0, '', ''))
@@ -34,7 +35,7 @@ class ExecutorEgressGuardSpec extends Specification implements ContainerEnvironm
     def "FR10: the #role guard admits the operator's hosts, then the executors' granted hosts"() {
         given:
         def environments = new ContainerEnvironments(
-                new BoxEquipment(docker, sandbox, timing, guardRoot, OwnershipMode.TRACKED, ImageContractCheck.current()),
+                new BoxEquipment(docker, sandbox, new SandboxEgress(['registry.example.com']), timing, guardRoot, OwnershipMode.TRACKED, ImageContractCheck.current()),
                 KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), ChildEnvAllowlist.none(), 'proj-1',
                 { -> DenialRestoration.none() }, ['api.acme.example'])
 
@@ -57,5 +58,29 @@ class ExecutorEgressGuardSpec extends Specification implements ContainerEnvironm
         'verification' | '-v' | { ContainerEnvironments e ->
             e.verificationEnvironment()
         }
+    }
+
+    // Scenario: verification/verdict-executors / Secret never enters the gnome's box
+    def "NFR-S1, D6: a program check's fresh box admits the operator's hosts and that executor's grant, no other's"() {
+        given:
+        def environments = new ContainerEnvironments(
+                new BoxEquipment(docker, sandbox, new SandboxEgress(['registry.example.com']), timing, guardRoot, OwnershipMode.TRACKED, ImageContractCheck.current()),
+                KEY, new BoxGitLink(Path.of('/factory/clone'), harvester), ChildEnvAllowlist.none(), 'proj-1', {
+                    -> DenialRestoration.none()
+                }, [
+                    'api.acme.example',
+                    'api.other.example'
+                ])
+
+        when:
+        try {
+            environments.verificationEnvironment(['api.acme.example']).materialize('gnomish/task-9', 'a' * 40)
+        } catch (RuntimeException ignored) {
+            // the self-check after the guard is up needs a running box; not this spec's subject
+        }
+
+        then:
+        Files.readString(guardRoot.resolve(KEY + '-v').resolve('allowlist.json')) ==
+                '["registry.example.com","api.acme.example"]'
     }
 }

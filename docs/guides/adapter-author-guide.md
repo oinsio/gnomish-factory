@@ -15,12 +15,53 @@ When your adapter is ready, announce it through the
 and it is listed in [`docs/community-plugins.md`](../community-plugins.md), the community
 plugin registry, under your own license.
 
+The tracker is the pluginizable port: it is the one port a third party extends
+with a Java plugin. Your adapter is a jar that implements `TrackerAdapterFactory`
+from `gnomish-plugin-api` and registers it in
+`META-INF/services/com.github.oinsio.gnomish.app.TrackerAdapterFactory`; the
+factory finds it through `ServiceLoader` and selects it by the `type()` it
+declares, with no factory source edited. The sandbox port stays first-party,
+and a verification check is not a plugin at all (next section).
+
 Two adapters ship today: `adapter/tracker/inmemory` (the executable reference,
-`InMemoryTracker`) and `adapter/tracker/github` (the production GitHub
-binding). Both live in `src/main/java/com/github/oinsio/gnomish/` alongside the
-port itself in `app/port/tracker`. A third adapter — Redmine — is sketched
-later in this guide purely as a worked design exercise; it is **not**
-implemented.
+`InMemoryTracker`, in core's `adapters` module) and `adapter/tracker/github`
+(the production GitHub binding). The GitHub adapter is the **vendor bundle**,
+the `adapters/github` jar, discovered through exactly the path your jar takes.
+It carries the tracker only: the `github-actions` and `scm-status` checks are
+built-in executors compiled into core, and removing the jar leaves them
+available. Both adapters implement the port in `app/port/tracker`. A third
+adapter — Redmine — is sketched later in this guide purely as a worked design
+exercise; it is **not** implemented.
+
+## Writing a check instead? Write a verdict program
+
+<!-- implements FR8 of migrate-verify-to-executor-contract -->
+
+A verification check is **not** a Java plugin, and `gnomish-plugin-api` carries
+no check SPI. A check is a **verdict program**: any executable, in any language,
+that speaks the executor contract — the operation (`describe`, `start`, `poll`)
+as its last argument, the request as JSON on standard input, the result written
+to the file `GNOMISH_RESULT_FILE` names, a SARIF log as its findings. It needs no
+factory dependency at all: the attempt commit under verification is `HEAD` of
+the working copy its request names (`git rev-parse HEAD`). A target repository
+declares it under `executors:` in `.gnomish/config.yaml` and names it in a
+stage's `verify` list; the contract and its decisions are in
+[ADR 0020](../adr/0020-executor-contract.md).
+
+The worked example is
+[`gnomish-plugin-api/sample/verdict/sample-verdict.sh`](../../gnomish-plugin-api/sample/verdict/sample-verdict.sh),
+a POSIX shell script that answers `pending` and then the verdict on `poll`, as a
+check of an external system does. Prove a program conforms before you ship it:
+
+```bash
+gnomish executor verify ./sample-verdict.sh --pending-settings='{"defer":true}'
+```
+
+The command runs the conformance kit, one line per case, and exits 1 when a case
+fails. `--pending-settings` names the settings under which your program answers
+`pending`, so the kit can drive the poll cases. A verdict program needs no Java
+registration and no row in the community plugin registry to be used; the rest
+of this guide is about tracker adapters.
 
 ## 1. The state dictionary and the three-level distinction
 

@@ -33,8 +33,22 @@ public record Usage(
         tools = List.copyOf(tools);
     }
 
+    // @DoNotMutate, JVMTI redefinition limit (testing.md): PIT's "replaced return value with null"
+    // mutant of this factory ends its minion with "class redefinition failed: attempted to change the
+    // class ... Record ... attribute" (RUN_ERROR, hcoles/pitest#1285), so no test can observe it. The
+    // factory holds no decision; ExecutorResultReadSpec pins its fields one by one.
     /** The usage of an executor that reports none. */
+    @DoNotMutate
     public static Usage absent() {
         return new Usage(UsageProvenance.ABSENT, null, Map.of(), List.of());
+    }
+
+    /**
+     * The usage of an executor that mediates no model: a known zero — provenance {@code REPORTED},
+     * no wall time, no model, no tool — so a task's usage fold stays complete and no per-model zero
+     * is written (design D13 of migrate-verify-to-executor-contract; D8 of add-command-executor).
+     */
+    public static Usage knownZero() {
+        return new Usage(UsageProvenance.REPORTED, null, Map.of(), List.of());
     }
 }

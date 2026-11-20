@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.domain.engine
 
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
 import java.time.Duration
 
 /**
@@ -15,15 +15,15 @@ class VerifyEventsAndTimingSpec extends VerifyOrchestratorSpecBase {
     // FR2: a CheckStarted/CheckFinished pair is emitted per executed check, matching its CheckRef
     def "emits a CheckStarted and CheckFinished pair per executed check"() {
         given: 'a passing builtin followed by a failing command'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Fail([])])
+        def builtinRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
+        def commandRunner = new ScriptedCheckRounds([new Verdict.Fail([])])
         def checks = [
             builtin('files_exist'),
             command('./gradlew test')
         ]
 
         when: 'the chain is verified'
-        orchestrator(builtinRunner, commandRunner).verify(checks, CONTEXT, WORKSPACE, KEY)
+        orchestrator(builtinRunner, commandRunner).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'both checks ran, so four events fire in started/finished order'
         listener.events.size() == 4
@@ -43,15 +43,15 @@ class VerifyEventsAndTimingSpec extends VerifyOrchestratorSpecBase {
     // FR2: no events fire for the check after the chain stops
     def "emits no events for a check that never runs"() {
         given: 'a failing first check that stops the chain'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Fail([])])
-        def commandRunner = new ScriptedCommandCheckRunner([new Verdict.Pass()])
+        def builtinRunner = new ScriptedCheckRounds([new Verdict.Fail([])])
+        def commandRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
         def checks = [
             builtin('files_exist'),
             command('./gradlew test')
         ]
 
         when: 'the chain is verified'
-        orchestrator(builtinRunner, commandRunner).verify(checks, CONTEXT, WORKSPACE, KEY)
+        orchestrator(builtinRunner, commandRunner).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'only the single executed check produced its two events'
         listener.events.size() == 2
@@ -62,12 +62,12 @@ class VerifyEventsAndTimingSpec extends VerifyOrchestratorSpecBase {
     // FR2: each CheckResult captures a non-null clock-measured duration
     def "captures a per-check duration from the injected clock"() {
         given: 'a clock that does not advance during a passing check'
-        def builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
-        def commandRunner = new ScriptedCommandCheckRunner()
+        def builtinRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
+        def commandRunner = new ScriptedCheckRounds()
         def checks = [builtin('files_exist')]
 
         when: 'the chain is verified'
-        def result = orchestrator(builtinRunner, commandRunner).verify(checks, CONTEXT, WORKSPACE, KEY)
+        def result = orchestrator(builtinRunner, commandRunner).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
 
         then: 'the duration is the zero the non-advancing clock implies, never null'
         result.results[0].duration() != null

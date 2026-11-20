@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.git.TaskWorktreePath
 import com.github.oinsio.gnomish.app.lease.ClaimEpochBook
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.BranchLocation
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
 import com.github.oinsio.gnomish.app.port.git.TaskGit
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleStore
@@ -32,7 +33,6 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
-import java.util.function.UnaryOperator
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -86,7 +86,7 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
     private TakeDispatcher dispatcher(RunAssembly assembly, TakeHeartbeat heartbeat) {
         def store = Stub(TaskStoreGit) {
             taskRepository(_) >> Stub(TaskLifecycleStore)
-            attemptPersistence(_, _) >> new InMemoryAttemptPersistence()
+            attemptPersistence(_, _, _) >> new InMemoryAttemptPersistence()
             readTaskRecord(_, _) >> Optional.of(freshRecord())
         }
         def branches = Stub(TaskBranchGit) {
@@ -97,7 +97,7 @@ class TakeSummaryAnchorSpec extends Specification implements RunChainFakes {
             classifyShape(_, _) >> new BranchShape.Bare()
         }
         def git = new TaskGit(
-                store, branches, Stub(TaskWorktreeGit), UnaryOperator.identity(), refreshingBaseRefGit(), new ClaimEpochBook())
+                store, branches, Stub(TaskWorktreeGit), HostGitRounds.NONE, refreshingBaseRefGit(), new ClaimEpochBook())
         new TakeDispatcher(
                 slotWiring(assembly, git, tracker, registeredClone, ContainerTakeSupportFixture.hostOnly(), heartbeat.tenure()),
                 testProperties(),

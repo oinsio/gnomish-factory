@@ -25,7 +25,7 @@ class LawRootBoundarySpec extends Specification {
     /** The law-source and pin wiring: where a {@code "HEAD"} literal would re-introduce the old pin. */
     private static final List<String> LAW_AND_PIN_WIRING = [
         'adapters/src/main/java/com/github/oinsio/gnomish/adapter/law/',
-        'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/PinCheckedExternalCheckClient.java',
+        'adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/PinCheck.java',
         'application/src/main/java/com/github/oinsio/gnomish/app/LawBinding.java',
         'application/src/main/java/com/github/oinsio/gnomish/app/ManualRunLawBinding.java',
         'bootstrap/src/main/java/com/github/oinsio/gnomish/app/RunAssembler.java',

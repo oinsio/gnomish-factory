@@ -9,6 +9,7 @@ import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.sandbox.AdapterBinding
 import com.github.oinsio.gnomish.sandbox.BindingNames
 import com.github.oinsio.gnomish.sandbox.CapabilityPassport
@@ -17,6 +18,7 @@ import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.sandbox.environment.EnvironmentLease
 import com.github.oinsio.gnomish.sandbox.environment.SelfCheckFailedException
 import java.nio.file.Path
+import java.util.function.Function
 import java.util.function.Supplier
 import spock.lang.Specification
 import spock.lang.TempDir
@@ -42,6 +44,12 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
         } as Supplier<TaskExecutionEnvironment>
     }
 
+    private static Function<List<String>, TaskExecutionEnvironment> noGrantedBox() { {
+            List<String> grant ->
+            throw new IllegalStateException('no granted box expected')
+        } as Function<List<String>, TaskExecutionEnvironment>
+    }
+
     private static Workspace attemptWorkspace() {
         def ref = ClosedRounds.at(SHA)
         new RecordedAttemptCommitWorkspace(ref)
@@ -62,10 +70,10 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
     def "same-box checks run in the leased environment and close() releases nothing"() {
         given:
         def env = Mock(TaskExecutionEnvironment)
-        def source = new SandboxCheckEnvironmentSource(leased(env), noFreshBox(), 'gnomish/t')
+        def source = new SandboxCheckEnvironmentSource(leased(env), noFreshBox(), noGrantedBox(), 'gnomish/t')
 
         when:
-        def acquired = source.acquire(new VerifyCheck.Command('true'), new DirectoryWorkspace(tempDir))
+        def acquired = source.acquire(VerifyChecks.command('true'), new DirectoryWorkspace(tempDir))
         acquired.close()
 
         then:
@@ -76,11 +84,11 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
     def "fresh-box without an attempt-commit workspace refuses fail-closed (never a same-box downgrade)"() {
         given:
         def source = new SandboxCheckEnvironmentSource(
-                leased(Mock(TaskExecutionEnvironment)), noFreshBox(), 'gnomish/t')
+                leased(Mock(TaskExecutionEnvironment)), noFreshBox(), noGrantedBox(), 'gnomish/t')
 
         when:
         source.acquire(
-                new VerifyCheck.Command('true', VerifyCheck.VerifyIn.FRESH_BOX),
+                VerifyChecks.command('true', VerifyCheck.VerifyIn.FRESH_BOX),
                 new DirectoryWorkspace(tempDir))
 
         then:
@@ -95,12 +103,14 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
         def fresh = Mock(TaskExecutionEnvironment)
         def source = new SandboxCheckEnvironmentSource(
                 leased(Mock(TaskExecutionEnvironment)),
-                ({ -> fresh } as Supplier<TaskExecutionEnvironment>),
+                ({
+                    -> fresh
+                } as Supplier<TaskExecutionEnvironment>), noGrantedBox(),
                 'gnomish/t')
 
         when:
         def acquired = source.acquire(
-                new VerifyCheck.Command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
+                VerifyChecks.command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
 
         then:
         1 * fresh.materialize('gnomish/t', SHA)
@@ -121,11 +131,13 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
         def fresh = Mock(TaskExecutionEnvironment)
         def source = new SandboxCheckEnvironmentSource(
                 leased(Mock(TaskExecutionEnvironment)),
-                ({ -> fresh } as Supplier<TaskExecutionEnvironment>),
+                ({
+                    -> fresh
+                } as Supplier<TaskExecutionEnvironment>), noGrantedBox(),
                 'gnomish/t')
 
         when:
-        source.acquire(new VerifyCheck.Command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
+        source.acquire(VerifyChecks.command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
 
         then:
         1 * fresh.materialize('gnomish/t', SHA) >> {
@@ -144,11 +156,13 @@ class SandboxCheckEnvironmentSourceSpec extends Specification {
         def fresh = Mock(TaskExecutionEnvironment)
         def source = new SandboxCheckEnvironmentSource(
                 leased(Mock(TaskExecutionEnvironment)),
-                ({ -> fresh } as Supplier<TaskExecutionEnvironment>),
+                ({
+                    -> fresh
+                } as Supplier<TaskExecutionEnvironment>), noGrantedBox(),
                 'gnomish/t')
 
         when:
-        source.acquire(new VerifyCheck.Command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
+        source.acquire(VerifyChecks.command('true', VerifyCheck.VerifyIn.FRESH_BOX), attemptWorkspace())
 
         then:
         1 * fresh.materialize('gnomish/t', SHA) >> {

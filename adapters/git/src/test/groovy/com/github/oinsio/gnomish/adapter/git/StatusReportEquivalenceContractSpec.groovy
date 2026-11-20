@@ -96,7 +96,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def trace = new ToolTrace(new AttemptKey(taskId, 'implement', 1), [
             new ToolCall(0, 'Edit', Instant.parse('2026-07-16T14:35:10Z'), Duration.ofMillis(2100))
         ])
-        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, RoundStates.withRound(state, trace.key()), trace)
+        HostRoundPersistence.over(runner, worktree, taskId, ClaimEpochSource.NONE).persist(taskId, RoundStates.withRound(state, trace.key()), trace)
 
         when: 'both are rendered through the same JSON mapper'
         def memoryJson = mapper.serialize(memoryReport)
@@ -123,7 +123,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def denial = Denial.unidentified(new Finding(
                         'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST'))
         def check = new CheckResult(
-                new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(), Duration.ofMillis(3))
+                new CheckRef(0, UntrustedText.manifest('builtin:files_exist')), new Verdict.Pass(null, []), Duration.ofMillis(3))
         def attempt = AttemptRecords.of(
                 0, AttemptRecord.Result.PASSED, Instant.parse('2026-07-16T14:35:10Z'),
                 [check], ExecutorUsage.none(), [denial], Stop.none())
@@ -135,7 +135,7 @@ class StatusReportEquivalenceContractSpec extends Specification implements BareG
         def taskRepository = new GitTaskRepository(runner, registeredClone, ClaimEpochSource.NONE, new VirtualClock())
         taskRepository.createTask(context, TaskStart.commit(cloneDir, 'HEAD'), TaskStart.pin('HEAD', BaseRule.LOCAL_HEAD), TaskState.atStageStart('build'))
         def worktree = registeredClone.worktrees().resolve(taskId)
-        new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
+        HostRoundPersistence.over(runner, worktree, taskId, ClaimEpochSource.NONE)
                 .persist(taskId, RoundStates.withRound(state, new AttemptKey(taskId, 'implement', 0)),
                 new ToolTrace(new AttemptKey(taskId, 'implement', 0), []))
 

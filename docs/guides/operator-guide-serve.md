@@ -371,20 +371,27 @@ ref's commit, offline.
 A precondition can also be lost while the daemon runs: the operator migrates the
 clone, Docker stops, the image is rebuilt on the wrong base. The daemon keeps one
 **daemon condition** per precondition — the remote (below), the container runtime,
-the clone's ref format, the image contract and the image's git floor — and the
+the clone's ref format, the image contract, the image's git floor and the tracker's
+egress (`EGRESS`: the factory's egress guard refused a tracker call, because your
+grants no longer admit where the tracker's `api-url` leads) — and the
 feed reads them all before every claim: while any is open the feed claims nothing,
 reads nothing from the tracker and waits the idle interval (a `--drain` stops as
 on an empty queue). A slot or the janitor that meets a typed refusal opens its
 condition — the slot's task is released plain, with no abort marker; a failure
 nothing classifies stays the slot's crash, with its abort accounting. An open
 condition is probed by its own startup check on the same growing, capped cadence
-as the remote, and only a passing probe closes it.
+as the remote, and only a passing probe closes it. The `EGRESS` probe repeats the
+guard's judgement of the tracker's endpoint — its host resolved, every address
+judged against your grants — and sends no request; a refusal met on a redirect is
+judged on a host the probe does not visit, so the next claim may meet it once more.
+The heartbeat and the reaper keep their own degradation on a refused call: a
+claim nobody can beat expires through the lease path.
 
 | Signal          | What you see                                                                                                                                                                     |
 |-----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Log — open      | one WARN per episode, its own code per condition — `[GF174]` runtime, `[GF176]` ref format, `[GF178]` image contract, `[GF180]` git floor — with the check's message and the fix |
+| Log — open      | one WARN per episode, its own code per condition — `[GF174]` runtime, `[GF176]` ref format, `[GF178]` image contract, `[GF180]` git floor, `[GF188]` egress — with the check's message and the fix |
 | Log — during    | DEBUG only, roll-up-suppressed; a refusal a second slot meets is no second WARN                                                                                                  |
-| Log — sustained | one ERROR past the sustained-open threshold: `[GF175]`, `[GF177]`, `[GF179]`, `[GF181]`                                                                                          |
+| Log — sustained | one ERROR past the sustained-open threshold: `[GF175]`, `[GF177]`, `[GF179]`, `[GF181]`, `[GF189]`                                                                               |
 | Log — close     | one INFO naming the condition, the duration and the probe count                                                                                                                  |
 | Snapshot        | a `conditions` section, one entry per condition (`condition`, `state`, `openSince`, `lastError`, `nextProbeAt`, `consecutiveFailures`, `lastSuccessAt`), the remote's first      |
 | Ledger          | one `daemonCondition` line per closed episode, naming its `condition`                                                                                                            |

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
@@ -72,7 +73,7 @@ class HostRoundEnvironmentSourceSpec extends Specification {
         Files.isDirectory(scratch)
 
         when:
-        ending == 'close' ? round.closeRound() : round.discard()
+        ending == 'close' ? round.closeRound(RoundClose.VERIFIABLE) : round.discard()
 
         then:
         !Files.exists(scratch)

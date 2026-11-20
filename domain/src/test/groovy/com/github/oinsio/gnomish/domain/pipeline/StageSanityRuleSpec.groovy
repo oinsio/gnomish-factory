@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.pipeline
 
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
+
 import java.time.Duration
 import spock.lang.Specification
 
@@ -45,7 +47,7 @@ class StageSanityRuleSpec extends Specification {
     private static StageDefinition stage(String name, ExecutorType type, String model,
             Map<String, Object> settings, int attemptLimit) {
         stage(name, type, model, settings, attemptLimit, [
-            new VerifyCheck.Command('./gradlew check')
+            VerifyChecks.command('./gradlew check')
         ])
     }
 
@@ -79,11 +81,11 @@ class StageSanityRuleSpec extends Specification {
     }
 
     private static VerifyCheck ext(String checkId, Duration interval, Duration timeout) {
-        new VerifyCheck.External(checkId, 'ci-platform', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
+        VerifyChecks.external(checkId, 'ci-platform', interval, timeout, VerifyCheck.TimeoutClass.QUALITY)
     }
 
     private static VerifyCheck extPins(String checkId, List<String> pinPaths) {
-        new VerifyCheck.External(checkId, 'ci-platform', Duration.ofSeconds(30), Duration.ofMinutes(1),
+        VerifyChecks.external(checkId, 'ci-platform', Duration.ofSeconds(30), Duration.ofMinutes(1),
                 VerifyCheck.TimeoutClass.QUALITY, pinPaths)
     }
 
@@ -289,8 +291,8 @@ class StageSanityRuleSpec extends Specification {
         expect: 'validating the stage yields an empty error list'
         StageSanityRule.validate([
             stage('review', ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], 3, [
-                new VerifyCheck.Builtin('files_exist', [paths: ['x']]),
-                new VerifyCheck.Command('./gradlew check'),
+                VerifyChecks.builtin('files_exist', [paths: ['x']]),
+                VerifyChecks.command('./gradlew check'),
                 ext('ci/build', interval, timeout),
             ])
         ]) == []
@@ -430,7 +432,7 @@ class StageSanityRuleSpec extends Specification {
         expect: 'the blank-checkId and interval errors precede the pin-path error'
         StageSanityRule.validate([
             stage('review', ExecutorType.AGENT_CLI, 'claude-sonnet-4-5', [:], 3, [
-                new VerifyCheck.External('', 'ci-platform', Duration.ZERO, Duration.ofSeconds(1),
+                VerifyChecks.external('', 'ci-platform', Duration.ZERO, Duration.ofSeconds(1),
                 VerifyCheck.TimeoutClass.QUALITY, ['/abs.yml'])
             ])
         ]) == [
@@ -509,9 +511,9 @@ class StageSanityRuleSpec extends Specification {
         given: 'a stage whose 2nd and 4th checks are faulty'
         def stages = [
             stage('review', ExecutorType.API, 'claude-sonnet-4-5', [:], 3, [
-                new VerifyCheck.Command('./gradlew check'),
+                VerifyChecks.command('./gradlew check'),
                 ext('', Duration.ofSeconds(30), Duration.ofMinutes(1)),
-                new VerifyCheck.Builtin('files_exist', [:]),
+                VerifyChecks.builtin('files_exist', [:]),
                 judge('claude-opus-4-1', 2),
             ])
         ]

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.executorcontract
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.ObjectNode
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.untrustedtext.Provenance
 import spock.lang.Specification
 

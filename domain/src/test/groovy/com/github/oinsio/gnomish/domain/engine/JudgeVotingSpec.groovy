@@ -84,6 +84,34 @@ class JudgeVotingSpec extends JudgeVotingSpecBase {
         voter.voteCount == 2
     }
 
+    // FR7, D5 as amended of migrate-verify-to-executor-contract: a passing check carries the
+    //      passing votes' findings in vote order, as a failing one carries the failing votes'
+    def "a passing majority carries the passing votes' findings in vote order"() {
+        given: 'votes Pass(p1), Fail(f), Pass(p2) and, for the tie, Pass(p1), Fail(f)'
+        def p1 = new Finding('pass note one', null, null)
+        def p2 = new Finding('pass note two', null, null)
+        def f = new Finding('failing note', null, null)
+        def voter = new ScriptedJudgeVoter(votes.collect {
+            it == 'p1' ? pass([p1]) : it == 'p2' ? pass([p2]) : fail([f])
+        })
+
+        when:
+        def result = voting(voter).vote(judge(votes.size()), CONTEXT, WORKSPACE)
+
+        then: 'the pass keeps only the passing votes findings, never the failing vote'
+        result.verdict() == new Verdict.Pass(null, expected)
+
+        where:
+        votes || expected
+        ['p1', 'f', 'p2'] || [
+            new Finding('pass note one', null, null),
+            new Finding('pass note two', null, null)
+        ]
+        ['p1', 'f'] || [
+            new Finding('pass note one', null, null)
+        ]
+    }
+
     // NFR-C1, D4: every cast vote's token map surfaces in perVote in vote order,
     //             including an empty map for a vote that reported nothing
     def "captures per-vote token maps in vote order, including empty maps"() {

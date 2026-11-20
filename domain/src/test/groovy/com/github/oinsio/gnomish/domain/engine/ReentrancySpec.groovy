@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -18,6 +17,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.util.concurrent.Callable
 import java.util.concurrent.CyclicBarrier
@@ -49,8 +49,8 @@ class ReentrancySpec extends Specification {
 
     static final def WORKSPACE = new FakeWorkspace()
 
-    static VerifyCheck.Builtin builtin(String name) {
-        new VerifyCheck.Builtin(name, [:])
+    static VerifyCheck.Executor builtin(String name) {
+        VerifyChecks.builtin(name, [:])
     }
 
     static StageDefinition stage(List<VerifyCheck> verify) {
@@ -73,7 +73,7 @@ class ReentrancySpec extends Specification {
     static class Run {
         String taskId
         ScriptedExecutor executor
-        ScriptedBuiltinCheckRunner builtinRunner
+        ScriptedCheckRounds builtinRunner
         InMemoryAttemptPersistence persistence
         RecordingEventListener listener
         TaskOutcome outcome
@@ -82,7 +82,7 @@ class ReentrancySpec extends Specification {
     Run newRun(String taskId, CyclicBarrier barrier) {
         def run = new Run(taskId: taskId)
         run.executor = new ScriptedExecutor([completed(taskId)])
-        run.builtinRunner = new ScriptedBuiltinCheckRunner([new Verdict.Pass()])
+        run.builtinRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
         if (barrier != null) {
             run.builtinRunner.onRun = { check, workspace ->
                 barrier.await(5, TimeUnit.SECONDS)
@@ -95,8 +95,7 @@ class ReentrancySpec extends Specification {
 
     EnginePorts portsOf(Run run) {
         def clock = new VirtualClock()
-        new EnginePorts(run.executor, run.builtinRunner, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), run.listener,
+        new EnginePorts(CheckRouting.of(run.executor, run.builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), run.listener,
                 run.persistence, VirtualTimeEquipment.on(clock), RoundIdentity.inPlace())
     }
 

@@ -7,13 +7,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Every configuration violation of one startup, collected rather than thrown at the first (FR7,
  * NFR-O2): each becomes one line of the form {@code <what> — found in <where> — <why> — <fix>}
  * (UX1). A key reported twice from one place — the elements of one list, say — is one line.
  *
- * <p>Implements FR6, FR7, FR12, NFR-S1, NFR-S2, NFR-O2, UX1 of add-project-registry.
+ * <p>Implements FR6, FR7, FR12, NFR-S1, NFR-S2, NFR-O2, UX1 of add-project-registry; FR17 of
+ * migrate-verify-to-executor-contract.
  */
 public final class ConfigViolations {
 
@@ -33,10 +35,25 @@ public final class ConfigViolations {
      * Checks one {@code factory.*} key set in {@code source}: an unknown key, or a key whose level
      * {@code source} does not admit, is a violation.
      *
-     * @param key the key as the source spells it, e.g. {@code factory.sandbox.egress-allowlist[0]}
+     * <p>A removed key that names its replacement ({@link RemovedKeys}) is reported as removed, with
+     * the key to move its value to (FR17 of migrate-verify-to-executor-contract).
+     *
+     * @param key the key as the source spells it, e.g. {@code factory.egress.sandbox[0]}
      * @param location where it was found, e.g. {@code /home/op/.gnomish/factory.yaml:7}
      */
     public void key(SettingSource source, String key, String location) {
+        Optional<RemovedKeys.Removed> removed = RemovedKeys.of(key);
+        if (removed.isPresent()) {
+            String old = removed.get().key();
+            add(
+                    source + old,
+                    old + " is a removed key",
+                    location,
+                    "the factory's egress lists are one block now, factory.egress, and this list is its "
+                            + removed.get().replacement() + " scope",
+                    "move the list to " + removed.get().replacement());
+            return;
+        }
         Optional<ConfigKey> found = levels.find(key);
         if (found.isEmpty()) {
             String unknown = key.replaceAll("\\[\\d+]", "");
@@ -57,6 +74,31 @@ public final class ConfigViolations {
                     "it is " + article(known) + ConfigPlaces.label(known.level()) + " key, read only from "
                             + places.readFrom(known.level()),
                     places.moveTo(known.level()));
+        }
+    }
+
+    /**
+     * Checks the value one {@code factory.*} key was set to, where a key's values have a grammar of
+     * their own: an entry of the operator egress block (FR17 of migrate-verify-to-executor-contract,
+     * {@link EgressScopes}). A key with no value grammar, and an unknown key, add nothing here.
+     *
+     * @param key the key as the source spells it, e.g. {@code factory.egress.sandbox[0]}
+     * @param value the value it was set to; a comma-separated list when the key carries no index
+     * @param location where it was found
+     */
+    public void value(String key, @Nullable Object value, String location) {
+        Optional<ConfigKey> found = levels.find(key);
+        if (found.isEmpty() || value == null) {
+            return;
+        }
+        String bound = found.get().toString();
+        List<String> entries = key.endsWith("]")
+                ? List.of(String.valueOf(value))
+                : List.of(String.valueOf(value).split(",", -1));
+        for (String entry : entries) {
+            EgressScopes.refusal(bound, entry)
+                    .ifPresent(refusal ->
+                            add(location + bound + entry, refusal.what(), location, refusal.why(), refusal.fix()));
         }
     }
 

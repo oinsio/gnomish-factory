@@ -1,12 +1,11 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.domain.engine.fake.CheckRouting
 import com.github.oinsio.gnomish.domain.engine.fake.FakeWorkspace
 import com.github.oinsio.gnomish.domain.engine.fake.InMemoryAttemptPersistence
 import com.github.oinsio.gnomish.domain.engine.fake.RecordingEventListener
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedBuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCommandCheckRunner
+import com.github.oinsio.gnomish.domain.engine.fake.ScriptedCheckRounds
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
-import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExternalCheckClient
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedJudgeVoter
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualSleeper
@@ -18,6 +17,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
@@ -41,15 +41,14 @@ class DenialIsolationSpec extends Specification {
     'egress denied: paste.example.com:443', 'paste.example.com:443/upload', 'kind=http method=POST')
 
     def executor = new ScriptedExecutor()
-    def builtinRunner = new ScriptedBuiltinCheckRunner()
+    def builtinRunner = new ScriptedCheckRounds()
     def persistence = new InMemoryAttemptPersistence()
     def listener = new RecordingEventListener()
     def clock = new VirtualClock()
     def sleeper = new VirtualSleeper(clock)
 
     EnginePorts ports() {
-        new EnginePorts(executor, builtinRunner, new ScriptedCommandCheckRunner(),
-                new ScriptedExternalCheckClient(), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
+        new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), new ScriptedJudgeVoter(), listener, persistence, VirtualTimeEquipment.on(clock, sleeper), RoundIdentity.inPlace())
     }
 
     static StageDefinition stage(List<VerifyCheck> verify) {
@@ -83,7 +82,7 @@ class DenialIsolationSpec extends Specification {
     // Scenario: sandbox/sandbox-egress / Denied exfiltration attempt reaches the report on a passing attempt
     def "FR2: a denied round with all-pass checks records PASSED and keeps the denial"() {
         given: 'a passing check and a round whose environment recorded one denial'
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed([DENIAL])
 
         when:
@@ -102,7 +101,7 @@ class DenialIsolationSpec extends Specification {
     // UX2: a quiet round reports an empty list, never a fabricated entry
     def "UX2: a round with no denials records an empty list"() {
         given:
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed([])
 
         when:
@@ -144,7 +143,7 @@ class DenialIsolationSpec extends Specification {
         builtinRunner.scripted << new Verdict.Fail([
             new Finding('the real check finding', null, null)
         ])
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed([DENIAL])
         executor.scripted << completed([])
 
@@ -170,7 +169,7 @@ class DenialIsolationSpec extends Specification {
         builtinRunner.scripted << new Verdict.Fail([
             new Finding('the real check finding', null, null)
         ])
-        builtinRunner.scripted << new Verdict.Pass()
+        builtinRunner.scripted << new Verdict.Pass(null, [])
         executor.scripted << completed([marker])
         executor.scripted << completed([marker])
 
@@ -189,7 +188,7 @@ class DenialIsolationSpec extends Specification {
     private static PipelineDefinition pipeline() {
         new PipelineDefinition('1', new AutonomyLimits(3), [
             stage([
-                new VerifyCheck.Builtin('files_exist', [:])
+                VerifyChecks.builtin('files_exist', [:])
             ])
         ])
     }

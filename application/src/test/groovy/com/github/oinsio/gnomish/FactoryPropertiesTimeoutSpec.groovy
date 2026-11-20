@@ -91,15 +91,15 @@ class FactoryPropertiesTimeoutSpec extends Specification {
         [
             { Duration d ->
                 new FactoryProperties(
-                'factory-01', 'claude', noTracker, noSections, noSections, d, none, none)
+                'factory-01', 'claude', noTracker, noSections, noSections, d, none, none, null)
             },
             { Duration d ->
                 new FactoryProperties(
-                'factory-01', 'claude', noTracker, noSections, noSections, none, d, none)
+                'factory-01', 'claude', noTracker, noSections, noSections, none, d, none, null)
             },
             { Duration d ->
                 new FactoryProperties(
-                'factory-01', 'claude', noTracker, noSections, noSections, none, none, d)
+                'factory-01', 'claude', noTracker, noSections, noSections, none, none, d, null)
             }
         ]
     }

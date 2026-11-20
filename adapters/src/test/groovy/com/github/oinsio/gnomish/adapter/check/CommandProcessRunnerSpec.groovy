@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.check
 
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
 import com.github.oinsio.gnomish.subprocess.ProcessLaunch
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
@@ -27,8 +28,8 @@ class CommandProcessRunnerSpec extends Specification {
         new HostTaskExecutionEnvironment(tempDir, new VirtualClock(), TestChildEnvironment.hostAllowlist(), ProcessLaunch.grouped())
     }
 
-    private static VerifyCheck.Command command(String line) {
-        new VerifyCheck.Command(line)
+    private static VerifyCheck.Executor command(String line) {
+        VerifyChecks.command(line)
     }
 
     def "command runs with cwd set to the working copy root"() {

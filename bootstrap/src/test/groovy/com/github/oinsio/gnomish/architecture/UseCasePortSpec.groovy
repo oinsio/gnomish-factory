@@ -7,8 +7,6 @@ import com.github.oinsio.gnomish.app.port.git.TaskWorktreeGit
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
 import com.github.oinsio.gnomish.app.port.run.ContainerRuntimeProbe
 import com.github.oinsio.gnomish.app.port.workspace.WorkspaceFactory
-import com.github.oinsio.gnomish.domain.engine.port.BuiltinCheckRunner
-import com.github.oinsio.gnomish.domain.engine.port.CommandCheckRunner
 import com.github.oinsio.gnomish.domain.engine.port.Workspace
 import com.tngtech.archunit.core.domain.JavaClass
 import com.tngtech.archunit.core.domain.JavaClasses
@@ -20,8 +18,7 @@ import spock.lang.Specification
 
 /**
  * The seams FR12 of split-into-modules inverted: a use case in {@code :application} that needs a
- * git subprocess, the console, pipeline loading, a workspace, a check runner or the
- * container-availability probe names a port its own layer owns, and an adapter outside the use-case
+ * git subprocess, the console, pipeline loading, a workspace or the container-availability probe names a port its own layer owns, and an adapter outside the use-case
  * layers realizes it. {@code ApplicationLayeringSpec} keeps the adapters out of {@code :application};
  * this spec pins the other half — the ports exist where the use cases are, and adapters fill them.
  */
@@ -33,8 +30,6 @@ class UseCasePortSpec extends Specification {
         TaskBranchGit,
         TaskWorktreeGit,
         PipelineSource,
-        CommandCheckRunner,
-        BuiltinCheckRunner,
         ContainerRuntimeProbe
     ]
 

@@ -34,23 +34,23 @@ class AnswerReadSpec extends Specification {
         verdict('{"message":{"text":"m"}}') || new Answer.Verdict([
             new SarifRun(t('j'), [
                 new SarifResult(null, SarifLevel.WARNING, t('m'), null, null)
-            ])
+            ], null)
         ])
         verdict('''{"ruleId":"r","level":"error","message":{"text":"m"},"locations":[{"physicalLocation":
             {"artifactLocation":{"uri":"src/Foo.java"},"region":{"startLine":12}}}],"fingerprints":{}}''') || new Answer.Verdict([
                     new SarifRun(t('j'), [
                         new SarifResult(t('r'), SarifLevel.ERROR, t('m'), t('src/Foo.java'), 12)
-                    ])
+                    ], null)
                 ])
         verdict('{"level":"note","message":{"text":"m"},"locations":[{"physicalLocation":{"region":{"startLine":3}}}]}') || new Answer.Verdict([
             new SarifRun(t('j'), [
                 new SarifResult(null, SarifLevel.NOTE, t('m'), null, 3)
-            ])
+            ], null)
         ])
         verdict('{"message":{"text":"m"},"locations":[{"physicalLocation":{"region":{"startLine":1}}}]}') || new Answer.Verdict([
             new SarifRun(t('j'), [
                 new SarifResult(null, SarifLevel.WARNING, t('m'), null, 1)
-            ])
+            ], null)
         ])
         '{"kind":"verdict","sarif":{"version":"2.1.0","runs":[]}}' || new Answer.Verdict([])
     }
@@ -119,7 +119,7 @@ class AnswerReadSpec extends Specification {
         given:
         def run = new SarifRun(t('j'), (1..600).collect {
             new SarifResult(null, SarifLevel.NOTE, t('m'), null, null)
-        })
+        }, null)
 
         when:
         new Answer.Verdict([run, run])

@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.app.port.agent.RoundClose;
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
@@ -128,8 +129,10 @@ final class ExecutorRoundExecution {
 
                 // The sandboxed snapshot commit + harvest close the gnome half of the round here
                 // (FR21, D15) — before the decision read, so a pending decision request rides the
-                // snapshot (D17).
-                round.closeRound();
+                // snapshot (D17). An agent round reaches its close only after the agent exited, and
+                // its result is completed or a decision request the snapshot carries: it closes
+                // verifiable (design D22 of migrate-verify-to-executor-contract).
+                round.closeRound(RoundClose.VERIFIABLE);
 
                 // FR3, D1 of fix-denial-report-attachment: the environment's denials are
                 // round-close data, read once the gnome half is over and carried out on the

@@ -8,7 +8,8 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.put
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.adapter.github.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubHttpClient
+import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock
 import io.github.resilience4j.core.IntervalFunction
@@ -52,7 +53,7 @@ class GithubLabelOpsSpec extends Specification {
     }
 
     private GithubLabelOps newOps() {
-        new GithubLabelOps(new GithubHttpClient(wireMock.baseUrl(), 'tok', fastRetryConfig()))
+        new GithubLabelOps(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok', fastRetryConfig()))
     }
 
     def "addLabel posts a point-add to the issue labels endpoint naming only the new label"() {

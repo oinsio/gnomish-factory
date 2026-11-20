@@ -66,7 +66,7 @@ trait SeededCloneFixture implements BareGitRepoFixture, RegisteredBranchFixture 
                 TaskState.atStageStart('implement'))
         registerTip(cloneDir, taskId)
         def worktree = worktreeFor(taskId)
-        def persistence = new GitAttemptPersistence(runner, worktree, taskId, ClaimEpochSource.NONE)
+        def persistence = HostRoundPersistence.over(runner, worktree, taskId, ClaimEpochSource.NONE)
         def trace = new ToolTrace(new AttemptKey(taskId, stage, round), [
             new ToolCall(0, 'bash', Instant.parse('2026-07-18T09:00:00Z'), Duration.ofMillis(100))
         ])

@@ -15,7 +15,7 @@ pipeline (UX1).
 Every setting on this page lives in the factory home (see
 [`operator-guide.md` → *Setting up a project*](operator-guide.md#setting-up-a-project)).
 The ones that shape the sandbox — `factory.bindings.*`, `factory.sandbox.image`,
-`factory.sandbox.egress-allowlist`, `factory.sandbox.env-passthrough` — are
+`factory.egress.sandbox`, `factory.sandbox.env-passthrough` — are
 **sandbox-boundary keys**: they are read from the project's own
 `~/.gnomish/projects/<name>/project.yaml` and nowhere else. Set on the command
 line, in the host file or as a `FACTORY_*` environment variable, they stop
@@ -32,7 +32,8 @@ project file are enough:
 factory:
   sandbox:
     image: my-project-sandbox:1
-    egress-allowlist:
+  egress:
+    sandbox:
       - api.anthropic.com
       - repo.maven.apache.org
 ```
@@ -212,7 +213,7 @@ base wrote it:
 ENV GNOMISH_MAVEN_MIRROR=https://maven.example.com/maven2
 ```
 
-The mirror's host must still be on `factory.sandbox.egress-allowlist`: the
+The mirror's host must still be on `factory.egress.sandbox`: the
 mirror chooses where Maven asks, the allowlist decides whether the box may
 reach it.
 
@@ -448,8 +449,8 @@ export CLAUDE_CODE_OAUTH_TOKEN=...   # from `claude setup-token`
 ```yaml
 # ~/.gnomish/projects/<name>/project.yaml
 factory:
-  sandbox:
-    egress-allowlist:
+  egress:
+    sandbox:
       - api.anthropic.com
 ```
 
@@ -489,17 +490,31 @@ treat a change to that file in a gnome's diff as a finding.
 ## Egress allowlist maintenance
 
 The allowlist is default-deny and operator-owned; a repo may *ask* for
-entries in its docs, only you grant them:
+entries in its docs, only you grant them. It is the `sandbox` scope of the
+operator egress block, `factory.egress` (the block and its grammar are in
+[`operator-guide.md` → *The egress block*](operator-guide.md#setting-up-a-project)):
 
 ```yaml
 # ~/.gnomish/projects/<name>/project.yaml — a list is replaced whole, never merged
 factory:
-  sandbox:
-    egress-allowlist:
+  egress:
+    sandbox:
       - api.anthropic.com
       - repo.maven.apache.org
-      - registry.npmjs.org
+      - '*.npmjs.org'          # every subdomain, never npmjs.org itself
 ```
+
+An entry here is an exact host, an IP literal or a `*.suffix` wildcard. The
+box's guard matches the destination's name and resolves nothing, so a CIDR
+block or an address-class word (`loopback`, `private`) — which the factory's
+own `in-process` scope accepts — cannot be applied here and stops startup
+naming its line. The same subset holds for the hosts a law grants a `program`
+executor under `executors.<name>.egress`.
+
+**Migrating from `factory.sandbox.egress-allowlist`.** That key is removed: a
+project file that still sets it stops startup naming its line and
+`factory.egress.sandbox`. Move the list, unchanged, from
+`factory.sandbox.egress-allowlist` to `factory.egress.sandbox`.
 
 Every denial is logged as structured metadata (host, path, method — never
 bodies) and attached to the round that caused it. Where to look:

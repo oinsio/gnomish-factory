@@ -10,6 +10,9 @@
 [verdict-only]
 {"protocolVersion":1,"version":"1","roles":["verdict"],"capabilities":[],"settingsSchema":{},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
 
+[transform-only]
+{"protocolVersion":1,"version":"1","roles":["transform"],"capabilities":[],"settingsSchema":{},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
+
 [malformed]
 {"protocolVersion":1,"version":"1","roles":
 
@@ -18,6 +21,9 @@
 
 [strict-settings]
 {"protocolVersion":1,"version":"1","roles":["transform"],"capabilities":[],"settingsSchema":{"type":"object","properties":{"maxTurns":{"type":"integer","minimum":1}},"additionalProperties":false},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
+
+[strict-verdict]
+{"protocolVersion":1,"version":"1","roles":["verdict"],"capabilities":[],"settingsSchema":{"type":"object","properties":{"maxTurns":{"type":"integer","minimum":1}},"additionalProperties":false},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
 
 [remote-schema]
 {"protocolVersion":1,"version":"1","roles":["transform"],"capabilities":[],"settingsSchema":{"$ref":"https://schemas.example/acme-settings.json"},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
@@ -42,3 +48,9 @@
 
 [break-settings-schema]
 {"protocolVersion":1,"version":"1","roles":["transform","verdict","decision"],"capabilities":["poll"],"settingsSchema":{"$ref":"https://schemas.example/reference-settings.json"},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
+
+[pin-flag-string]
+{"protocolVersion":1,"version":"1","roles":["verdict"],"capabilities":[],"settingsSchema":{},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false,"checkIdIsPinnedPath":"yes"}
+
+[verdict-poll]
+{"protocolVersion":1,"version":"1","roles":["verdict"],"capabilities":["poll"],"settingsSchema":{"type":"object","properties":{"defer":{"type":"boolean"}}},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}

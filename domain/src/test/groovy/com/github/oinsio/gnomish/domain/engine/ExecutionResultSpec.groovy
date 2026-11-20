@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Duration
 import java.time.Instant
@@ -106,7 +107,7 @@ class ExecutionResultSpec extends Specification {
 
         when:
         def failed = new ExecutionResult.Failed(
-                ExecutionResult.FailureClass.QUALITY, UntrustedText.agent('tests fail'), source)
+                ExecutionResult.FailureClass.QUALITY, UntrustedText.agent('tests fail'), source, null)
         source.add(new Finding('sneaked in', null, null))
 
         then:
@@ -124,7 +125,7 @@ class ExecutionResultSpec extends Specification {
     // FR7: a failure that names nothing gives the operator nothing to act on
     def "a failed status rejects a blank reason with the component named"() {
         when:
-        new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, UntrustedText.agent(reason), [])
+        new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, UntrustedText.agent(reason), [], null)
 
         then:
         def failure = thrown(IllegalArgumentException)
@@ -147,7 +148,7 @@ class ExecutionResultSpec extends Specification {
     // FR7: a pending status carries the executor's key
     def "a pending status carries its key"() {
         expect:
-        new ExecutionResult.Pending('k-1').key() == 'k-1'
+        new ExecutionResult.Pending(new PendingKey('k-1'), null, PendingState.RUNNING, null, null).key() == new PendingKey('k-1')
     }
 
     // FR3 of fix-denial-report-attachment: the denials are copied — a later mutation of the
@@ -157,7 +158,7 @@ class ExecutionResultSpec extends Specification {
         def source = [denial()]
 
         when:
-        def result = new ExecutionResult(new ExecutionResult.Pending('k'), null, ExecutorUsage.none(), sampleTrace(), source)
+        def result = new ExecutionResult(new ExecutionResult.Pending(new PendingKey('k'), null, PendingState.RUNNING, null, null), null, ExecutorUsage.none(), sampleTrace(), source)
         source.add(denial())
 
         then:

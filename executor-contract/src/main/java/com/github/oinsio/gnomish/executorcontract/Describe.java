@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
@@ -13,7 +14,7 @@ import org.jspecify.annotations.Nullable;
  * An executor's answer to {@code describe}, read by the describe preflight before the first round.
  * Wire shape ({@code executor-describe.schema.json}): {@code {"protocolVersion", "version",
  * "roles", "capabilities", "settingsSchema", "credentials", "egress", "configDirVariable"?,
- * "policyDisablingFlags", "enforcementLevel", "reportsUsage"}}.
+ * "policyDisablingFlags", "enforcementLevel", "reportsUsage", "checkIdIsPinnedPath"?}}.
  *
  * <p>Unknown tokens follow their enums' arms: an unknown role or capability is dropped from its list
  * (so a use site that needs the role is refused as undeclared), an unknown enforcement level reads
@@ -26,7 +27,16 @@ import org.jspecify.annotations.Nullable;
  * are identifiers handed on to the egress guard and to the executor's own argv, never shown as
  * prose, and stay strings too. The settings schema node is shared, not copied: no holder mutates it.
  *
- * <p>Implements FR4, FR13, NFR-S2 of define-executor-contract.
+ * <p>{@code checkIdIsPinnedPath} is the executor's static pin contribution (design D17 of
+ * migrate-verify-to-executor-contract): when true, the engine's pin-check guard adds a check's
+ * {@code checkId} — a repository-relative path — to that check's pin set. It is optional on the
+ * wire and an absent one reads as {@code false}, so a describe written before the field existed
+ * reads and validates unchanged; a JSON {@code null} or a non-boolean fails the read
+ * ({@link AbsentFalseFlagDeserializer}). A {@code false} is written as no field, so such a describe
+ * also writes back as itself.
+ *
+ * <p>Implements FR4, FR13, NFR-S2 of define-executor-contract; FR16 of
+ * migrate-verify-to-executor-contract.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record Describe(
@@ -40,7 +50,10 @@ public record Describe(
         @Nullable String configDirVariable,
         List<String> policyDisablingFlags,
         EnforcementLevel enforcementLevel,
-        @JsonProperty(required = true) boolean reportsUsage) {
+        @JsonProperty(required = true) boolean reportsUsage,
+
+        @JsonInclude(JsonInclude.Include.NON_DEFAULT) @JsonDeserialize(using = AbsentFalseFlagDeserializer.class)
+        boolean checkIdIsPinnedPath) {
 
     /**
      * The one protocol version the factory speaks (FR4 of define-executor-contract): the describe

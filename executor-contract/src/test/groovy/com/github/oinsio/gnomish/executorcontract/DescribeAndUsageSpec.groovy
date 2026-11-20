@@ -51,7 +51,7 @@ class DescribeAndUsageSpec extends Specification {
         def egress = ['h']
         def flags = ['--f']
         def describe = new Describe(1, t('1'), roles, capabilities, WireSamples.object('{}'), credentials, egress,
-                'C_DIR', flags, EnforcementLevel.OS_SANDBOX, false)
+                'C_DIR', flags, EnforcementLevel.OS_SANDBOX, false, false)
 
         when:
         [
@@ -117,5 +117,18 @@ class DescribeAndUsageSpec extends Specification {
         then:
         usage.models().size() == 1
         usage.tools().size() == 1
+    }
+
+    // NFR-C1 of migrate-verify-to-executor-contract (design D13): the one known zero of an executor
+    //     that mediates no model, stated field by field
+    def "NFR-C1: the known zero is REPORTED with no wall time, no model and no tool"() {
+        when:
+        def zero = Usage.knownZero()
+
+        then:
+        zero.provenance() == UsageProvenance.REPORTED
+        zero.wallMillis() == null
+        zero.models().isEmpty()
+        zero.tools().isEmpty()
     }
 }

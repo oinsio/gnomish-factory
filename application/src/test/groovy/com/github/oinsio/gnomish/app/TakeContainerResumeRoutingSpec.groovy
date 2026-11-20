@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.git.BaseRefGit
 import com.github.oinsio.gnomish.app.port.git.BaseRefKind
 import com.github.oinsio.gnomish.app.port.git.BranchAdoption
 import com.github.oinsio.gnomish.app.port.git.DeliveredBranchState
+import com.github.oinsio.gnomish.app.port.git.HostGitRounds
 import com.github.oinsio.gnomish.app.port.git.ParkDeliveryVerdict
 import com.github.oinsio.gnomish.app.port.git.RecordedOutcome
 import com.github.oinsio.gnomish.app.port.git.TaskBranchGit
@@ -47,7 +48,6 @@ import com.github.oinsio.gnomish.sandbox.SandboxProperties
 import com.github.oinsio.gnomish.sandbox.Segment
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
-import java.util.function.UnaryOperator
 import spock.lang.Specification
 
 
@@ -67,7 +67,7 @@ import spock.lang.Specification
 class TakeContainerResumeRoutingSpec extends Specification implements RunChainFakes {
 
     private static SandboxRunPieces pieces() {
-        new SandboxRunPieces(null, null, null, null, null, null, null)
+        new SandboxRunPieces(null, null, null, null, null, null, null, null)
     }
 
     private TakeDispositionResume disposition(TaskGit git) {
@@ -76,7 +76,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
         } as ContainerSupportFactory
         def containerTakeSupport = new ContainerTakeSupport(new SandboxModeSelector(
                         new BindingProperties(null, [:]),
-                        new SandboxProperties(null, null, null, null, null, null, false, null, null, null, null),
+                        new SandboxProperties(null, null, null, null, null, false, null, null, null, null),
                         AdapterBindingRegistry.ratified([], BindingTrustTable.firstParty()),
                         { -> false } as ContainerRuntimeProbe),
                 containerSupportFactory)
@@ -108,7 +108,7 @@ class TakeContainerResumeRoutingSpec extends Specification implements RunChainFa
 
     private TaskGit gitWith(TaskBranchGit branches) {
         new TaskGit(Stub(TaskStoreGit), branches, Stub(TaskWorktreeGit),
-                UnaryOperator.identity(), baseRefGit, new ClaimEpochBook())
+                HostGitRounds.NONE, baseRefGit, new ClaimEpochBook())
     }
 
     // FR3 of fix-lifecycle-push: resume start is a touchpoint — once the local branch is reconciled

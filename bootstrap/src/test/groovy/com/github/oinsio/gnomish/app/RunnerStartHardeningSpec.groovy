@@ -194,6 +194,6 @@ class RunnerStartHardeningSpec extends Specification implements BareGitRepoFixtu
     }
 
     private static SandboxProperties sandboxProperties() {
-        new SandboxProperties('gnomish/img', null, null, null, [], [], false, null, null, null, null)
+        new SandboxProperties('gnomish/img', null, null, null, [], false, null, null, null, null)
     }
 }

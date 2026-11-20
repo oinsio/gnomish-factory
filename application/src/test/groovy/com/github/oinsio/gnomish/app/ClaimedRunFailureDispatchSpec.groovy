@@ -76,6 +76,8 @@ class ClaimedRunFailureDispatchSpec extends Specification implements RunChainFak
     // Scenario: sandbox/execution-environment / A refused image releases the claimed task
     // Scenario: serve/factory-serve / A slot's ref-format refusal is a result, not a crash
     // Scenario: tracker/tracker-take / Operator precondition refused after the claim exits 8
+    // FR18 of migrate-verify-to-executor-contract: the egress guard's refusal is one of the kinds
+    // Scenario: serve/factory-serve / A refusal mid-run is a precondition result, not a crash
     @Unroll
     def "a #expectedKind refusal ends the claimed run on the typed result after a plain release"() {
         given:

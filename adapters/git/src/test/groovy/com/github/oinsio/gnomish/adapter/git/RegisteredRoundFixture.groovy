@@ -50,7 +50,7 @@ trait RegisteredRoundFixture implements BareGitRepoFixture, RegisteredBranchFixt
                 TaskState.atStageStart('implement'))
         def round = AttemptRecords.of(0, AttemptRecord.Result.QUALITY_FAILURE, Instant.EPOCH, [],
         ExecutorUsage.none(), [], Stop.none())
-        store.attemptPersistence(worktree(), TASK).persist(TASK,
+        store.attemptPersistence(worktree(), TASK, HostRoundPersistence.openedAtHead(runner, worktree())).persist(TASK,
                 TaskState.atStageStart('implement').recordQualityFailure(round, ExecutorVersions.none()),
                 new ToolTrace(new AttemptKey(TASK, 'implement', 0), []))
     }

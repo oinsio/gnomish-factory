@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.executorcontract
 
 import com.fasterxml.jackson.databind.exc.ValueInstantiationException
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import spock.lang.Specification
 
 /**
