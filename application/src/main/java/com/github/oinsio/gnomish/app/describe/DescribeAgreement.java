@@ -21,8 +21,11 @@ import java.util.stream.Collectors;
  * with its describe ({@link GrantAgreement}), and it serves the role each use site
  * needs — a stage needs {@code transform}, a verify check {@code verdict} (FR1 of
  * migrate-verify-to-executor-contract); the law has no role field, the use site implies it. A
- * describe that lists only {@code effect} is refused with that role named as reserved (NG4). Only a
- * described executor is judged: a check naming a built-in has no answer here. Each disagreement is a
+ * describe that lists only {@code effect} is refused with that role named as reserved (NG4). A verify
+ * check's own settings are held to its executor's schema too ({@link SettingsAgreement#checkErrors}).
+ * Only a described executor is judged: a check naming a built-in has no answer here — the {@code
+ * http} and {@code github-actions} built-ins grade their check settings at load
+ * ({@code ExternalCheckSeamValidator}). Each disagreement is a
  * located {@link ConfigError}, as a law error found at load is. Pure.
  *
  * <p>Implements FR1, FR4, FR9, FR13, NFR-S1, UX1, NG4 of define-executor-contract; FR1 of
@@ -90,7 +93,9 @@ final class DescribeAgreement {
 
     /**
      * The check use site: each executor check of {@code stage} whose executor was described must serve
-     * {@code verdict}; the error is located at the field that names the executor.
+     * {@code verdict}, the error located at the field that names the executor; and, when the answer is
+     * in the protocol this factory speaks, the check's settings must satisfy the executor's schema
+     * (FR1 of migrate-verify-to-executor-contract).
      */
     private static void checkErrors(StageDefinition stage, Map<String, Describe> answers, List<ConfigError> errors) {
         List<VerifyCheck> checks = stage.verify();
@@ -107,6 +112,9 @@ final class DescribeAgreement {
                                     "check '%s' of stage '%s'".formatted(check.checkId(), stage.name()),
                                     Role.VERDICT,
                                     describe)));
+                }
+                if (describe != null && describe.protocolVersion() == Describe.SPOKEN_PROTOCOL_VERSION) {
+                    errors.addAll(SettingsAgreement.checkErrors(stage, index, check, describe));
                 }
             }
         }

@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorSettings;
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
+import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.executorcontract.SettingsJudgement;
 import com.github.oinsio.gnomish.executorcontract.SettingsSchema;
@@ -29,9 +30,15 @@ import org.jspecify.annotations.Nullable;
  * the law error the task parks with, before the first round. One error stated by several stages
  * (a declaration's value every one of them sends) is reported once. A schema the factory cannot
  * use is the program's configuration error, reported as every other describe the program answered
- * wrongly. Pure.
+ * wrongly.
  *
- * <p>Implements FR9, UX1 of define-executor-contract.
+ * <p>A verify check naming the executor is judged the same way on the settings its request carries
+ * — the check's own, alone ({@link #checkErrors}; FR1 of migrate-verify-to-executor-contract,
+ * pipeline-config "Explicit executor form") — each violation located at the check's {@code
+ * verify[<i>].settings[.<path>]}, or {@code verify[<i>].params[.<path>]} for the {@code external}
+ * form. Pure.
+ *
+ * <p>Implements FR9, UX1 of define-executor-contract; FR1 of migrate-verify-to-executor-contract.
  */
 final class SettingsAgreement {
 
@@ -64,6 +71,36 @@ final class SettingsAgreement {
         return List.copyOf(errors);
     }
 
+    /**
+     * The located errors of the settings verify check {@code index} of {@code stage} sends its
+     * executor: the check's own settings, which are the whole of what its verdict request carries.
+     * A schema the factory cannot use yields nothing here: {@link #errors} has already reported it
+     * once, at the declaration every described executor has.
+     *
+     * @param stage the stage whose verify list holds the check; never null
+     * @param index the check's position in that list
+     * @param check the check; it names a described executor; never null
+     * @param describe that executor's describe answer, in the protocol this factory speaks; never null
+     * @return every located error, in the validator's order; immutable, possibly empty
+     */
+    static List<ConfigError> checkErrors(
+            StageDefinition stage, int index, VerifyCheck.Executor check, Describe describe) {
+        if (!(SettingsSchema.judge(describe.settingsSchema(), check.settings())
+                instanceof SettingsJudgement.Rejected rejected)) {
+            return List.of();
+        }
+        String manifest = "stages/%s/stage.yaml".formatted(stage.name());
+        String where =
+                "verify[%d].%s".formatted(index, check.token() == VerifyCheck.Token.EXTERNAL ? "params" : "settings");
+        List<ConfigError> located = new ArrayList<>();
+        for (SettingsViolation violation : rejected.violations()) {
+            String path = violation.path();
+            located.add(new ConfigError(
+                    manifest, path.isEmpty() ? where : where + "." + path, message(check.executorName(), violation)));
+        }
+        return List.copyOf(located);
+    }
+
     private static List<ConfigError> judged(
             String name, @Nullable StageDefinition stage, ExecutorSettings settings, Describe describe) {
         return switch (SettingsSchema.judge(describe.settingsSchema(), settings.values())) {
@@ -87,11 +124,7 @@ final class SettingsAgreement {
     private static ConfigError located(
             String name, @Nullable StageDefinition stage, ExecutorSettings settings, SettingsViolation violation) {
         String path = violation.path();
-        String message = "executor '%s' settings break its schema's rule '%s': %s"
-                .formatted(
-                        name,
-                        violation.rule(),
-                        violation.explanation().excerpt(ExecutorDescribeRefusedException.DETAIL_CAP_CHARS));
+        String message = message(name, violation);
         ExecutorSettings.Origin origin = settings.originOf(path);
         if (stage == null || origin == ExecutorSettings.Origin.DECLARATION) {
             String where = "executors." + name + ".settings";
@@ -102,5 +135,13 @@ final class SettingsAgreement {
             return new ConfigError(manifest, "executor.model", message);
         }
         return new ConfigError(manifest, "executor.settings." + path, message);
+    }
+
+    private static String message(String name, SettingsViolation violation) {
+        return "executor '%s' settings break its schema's rule '%s': %s"
+                .formatted(
+                        name,
+                        violation.rule(),
+                        violation.explanation().excerpt(ExecutorDescribeRefusedException.DETAIL_CAP_CHARS));
     }
 }

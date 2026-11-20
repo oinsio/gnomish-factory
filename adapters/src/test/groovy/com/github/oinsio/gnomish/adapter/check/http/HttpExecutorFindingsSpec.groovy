@@ -14,21 +14,21 @@ class HttpExecutorFindingsSpec extends Specification implements HttpCheckFixture
     // NFR-O1: a huge body would swamp the tracker report, so the finding carries an excerpt.
     def "a failing response's body is excerpted into the findings"() {
         given:
-        def body = 'x' * (HttpExternalCheckClient.BODY_EXCERPT_LIMIT + 100)
+        def body = 'x' * (HttpCheckProbe.BODY_EXCERPT_LIMIT + 100)
 
         when:
         def status = run([url: URL], new ScriptedExchange(500, body))
 
         then:
         def details = results(status)[0].details().raw()
-        details.length() == HttpExternalCheckClient.BODY_EXCERPT_LIMIT + 1
+        details.length() == HttpCheckProbe.BODY_EXCERPT_LIMIT + 1
         details.endsWith('…')
     }
 
     // NFR-O1: a body exactly at the limit is carried whole — only a longer one is cut.
     def "a body at the excerpt limit is carried whole"() {
         given:
-        def body = 'x' * HttpExternalCheckClient.BODY_EXCERPT_LIMIT
+        def body = 'x' * HttpCheckProbe.BODY_EXCERPT_LIMIT
 
         when:
         def status = run([url: URL], new ScriptedExchange(500, body))

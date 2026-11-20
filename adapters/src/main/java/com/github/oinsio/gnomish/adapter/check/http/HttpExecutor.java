@@ -20,8 +20,7 @@ import java.util.Map;
  * The {@code http} built-in verdict executor (FR6 of migrate-verify-to-executor-contract, design
  * D4): the status-code probe with declared conditions, answering the executor contract. It is built
  * over the check it judges and the check's working copy, as the other verdict built-ins are, and
- * over the judgement it shares with the single-poll rendering ({@link
- * HttpExternalCheckClient#probe}), so a check is judged once.
+ * over the one judgement of a request ({@link HttpCheckProbe#probe}).
  *
  * <p>A {@code verdict} run sends the request its settings declare, the run variables interpolated
  * (NFR-S2 of add-plugin-architecture), through the guarded exchange: the substituted target is
@@ -44,17 +43,17 @@ public final class HttpExecutor implements Executor {
     /** The built-in's name in the executor registry, the one a {@code provider: http} check maps to. */
     public static final String NAME = BuiltInExecutors.HTTP;
 
-    private final HttpExternalCheckClient client;
+    private final HttpCheckProbe client;
     private final VerifyCheck.Executor check;
     private final Workspace workspace;
 
     /**
-     * @param client the judgement over the guarded exchange ({@link HttpExternalCheckClient#guarded});
+     * @param client the judgement over the guarded exchange ({@link HttpCheckProbe#guarded});
      *     never null
      * @param check the check this executor judges; never null
      * @param workspace the check's working copy, carrying the attempt commit; never null
      */
-    public HttpExecutor(HttpExternalCheckClient client, VerifyCheck.Executor check, Workspace workspace) {
+    public HttpExecutor(HttpCheckProbe client, VerifyCheck.Executor check, Workspace workspace) {
         this.client = client;
         this.check = check;
         this.workspace = workspace;

@@ -36,10 +36,13 @@ plugins {
 // move — `TrackerConfig` carries the admitted tracker endpoint; `TrackerAdapterFactory.endpoint()`,
 // `ConnectionProfiles.endpoint`, `domain.egress` and GF188/GF189 added (D16); the pending key of
 // `ExecutionResult.Pending` and `PendingTurn` retyped to the `:pendingkey` leaf's `PendingKey`, which
-// joins the published jar graph (D20); `AttemptRecord` gained the `pendingPoll` component and
-// `PendingPollRecord` was added (D7 as amended, task 4.1); the check SPI was removed and
+// joins the published jar graph (D20); `TaskState` gained the `pendingPolls` component (the open
+// round's list) and `PendingPollRecord` was added, naming its round by a nullable `RoundToken`
+// (D21, task 4.1r; `AttemptRecord` is unchanged); the check SPI was removed and
 // `AttemptCommitWorkspace` moved to `:domain` (FR14, D16, D18, task 6.1 — absorbed into this same
-// bump, no second one); `compat-baseline/` regenerated over the five jars.
+// bump, no second one); `VerdictAnswer.Sarif` lost its one-argument constructor, so every producer
+// states its run URL (D23, task 4.0d — absorbed into the same bump); `compat-baseline/` regenerated
+// over the five jars.
 //
 // D4, D11, D13, D14 of define-executor-contract: 0.13.0 -> 0.14.0, the twelfth BREAKING move — the
 // engine's result, usage and state shapes (README, "Versioning"); `compat-baseline/` regenerated.

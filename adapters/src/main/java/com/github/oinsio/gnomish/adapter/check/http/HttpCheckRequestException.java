@@ -7,7 +7,7 @@ import java.io.Serial;
  * ever sent: a credential that will not resolve ({@link HttpCheckCredentialException}) and a {@code
  * ${...}} reference this run cannot supply ({@link HttpCheckVariableException}).
  *
- * <p>Both fail closed the same way — {@link HttpExternalCheckClient} turns either into a {@code
+ * <p>Both fail closed the same way — {@link HttpCheckProbe} turns either into a {@code
  * CannotVerify} carrying {@link #reason()}, so no request leaves unauthenticated or addressing the
  * wrong thing, and the run reports "cannot verify" instead of burning a stage attempt on a
  * configuration gap. Sharing the supertype is what keeps that one classification in one place

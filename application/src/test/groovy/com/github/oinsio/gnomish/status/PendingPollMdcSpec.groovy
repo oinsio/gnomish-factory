@@ -53,7 +53,7 @@ class PendingPollMdcSpec extends Specification {
         given:
         def checks = new ScriptedExecutor([
             result(new ExecutionResult.Pending(new PendingKey('k-1'), null, PendingState.RUNNING, null, null), null),
-            result(new ExecutionResult.Completed(), new ExecutionResult.VerdictReply(new VerdictAnswer.Sarif([])))
+            result(new ExecutionResult.Completed(), new ExecutionResult.VerdictReply(new VerdictAnswer.Sarif([], null)))
         ])
         def stage = new StageDefinition('build', 'purpose', [], [], new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
         'instructions.md', [

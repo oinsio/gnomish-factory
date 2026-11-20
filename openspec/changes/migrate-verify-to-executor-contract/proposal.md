@@ -472,7 +472,8 @@ by the engine and persisted on the branch.
   unknown-provider and defaulted-provider scenarios are stated against the executor registry.
 - `executor/wire-contract`: ADDED — the describe field of FR16; ADDED "A pending result may
   carry a wait hint", "A pending state classifies the timeout" and "A result carries details apart
-  from its message" (design D19); ADDED "The factory's own pending commit is not a change of the
+  from its message" (design D19); ADDED "A verdict answer carries its run URL on the SARIF run"
+  (FR6, NFR-O2 of `add-sandbox-core`, design D23); ADDED "The factory's own pending commit is not a change of the
   run" (FR20, D21).
 - `verification/verdict-executors`: ADDED "The SCM status reader names what it awaits" (D19).
 - `plugin/github-plugin`: ADDED "The GitHub core waits out a rate limit it was told about"
@@ -532,6 +533,9 @@ by the engine and persisted on the branch.
   retyped `TaskState` and `PendingPollRecord` ride the one MINOR bump (0.15.0).
   `extract-agent-round-runner` (its D11) takes `persistPending` and the entry list with a `Round`
   subject when it is applied; two of its premises are refuted (D21, cross-change note).
+- The run URL of a pass (design D23): the executor contract's `SarifRun` carries it, and
+  `VerdictAnswer.Sarif` (`:domain`) loses its one-argument constructor — a binary break of the
+  domain jar under the same one MINOR bump (0.15.0), with the compatibility baseline regenerated.
 - Sequenced after `tighten-spec-contract`: its deltas carry the `**Implements**:` lines and the
   500-character requirement bodies that change introduces; it has no MODIFIED block to layer, and
   the markers and exemption lines of the scenarios its REMOVED requirements take with them are

@@ -24,7 +24,7 @@
       }
     },
     "sarifLog": {
-      "description": "The subset of SARIF 2.1.0 the engine reads: runs[].results[] with their level and message. Every other SARIF property is allowed and ignored.",
+      "description": "The subset of SARIF 2.1.0 the engine reads: runs[].results[] with their level and message, and runs[].properties.runUrl. Every other SARIF property is allowed and ignored.",
       "type": "object",
       "required": ["version", "runs"],
       "properties": {
@@ -42,7 +42,14 @@
                   "driver": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } }
                 }
               },
-              "results": { "type": "array", "items": { "$ref": "#/$defs/sarifResult" } }
+              "results": { "type": "array", "items": { "$ref": "#/$defs/sarifResult" } },
+              "properties": {
+                "description": "SARIF's property bag on the run. The engine reads one member, runUrl: the URL of the platform run that produced the answer, recorded with a pass, when a non-blank string; a blank runUrl or one of another type is ignored, never malformed. Optional and additive: no protocolVersion change (design D23 of migrate-verify-to-executor-contract).",
+                "type": "object",
+                "properties": {
+                  "runUrl": { "description": "The platform run's URL, read when a non-blank string." }
+                }
+              }
             }
           }
         }

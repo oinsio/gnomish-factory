@@ -14,7 +14,7 @@
  * com.github.oinsio.gnomish.adapter.scm.actions.GithubWorkflowRunPoll}, and
  * rendered as the executor contract's result by {@link
  * com.github.oinsio.gnomish.adapter.scm.actions.GithubActionsExecutor} over {@link
- * com.github.oinsio.gnomish.adapter.scm.actions.GithubCheckExternalClient}, built
+ * com.github.oinsio.gnomish.adapter.scm.actions.GithubWorkflowRuns}, built
  * once per run by its registry entry over the connection {@link
  * com.github.oinsio.gnomish.adapter.scm.ScmConnectionReader} admitted. Implements UX2 of
  * add-external-check-github-actions.

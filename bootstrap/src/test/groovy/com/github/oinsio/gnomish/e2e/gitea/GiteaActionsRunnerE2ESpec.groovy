@@ -3,18 +3,13 @@ package com.github.oinsio.gnomish.e2e.gitea
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
-import com.github.oinsio.gnomish.adapter.scm.actions.GithubCheckExternalClient
-import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
-import com.github.oinsio.gnomish.app.workspace.fake.ClosedRounds
+import com.github.oinsio.gnomish.adapter.scm.actions.GithubWorkflowRuns
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
 import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
 import java.util.concurrent.TimeUnit
 import spock.lang.AutoCleanup
 import spock.lang.IgnoreIf
@@ -28,7 +23,7 @@ import spock.util.concurrent.PollingConditions
  * Task 7.1, M1 of add-external-check-github-actions: proves the Testcontainers Gitea + Actions
  * runner fixture actually works end to end — a real {@code act_runner} container executes a real
  * workflow after a push, and the run is reachable through this change's own {@link
- * GithubCheckExternalClient} adapter (the exact query path production code uses), not a
+ * GithubWorkflowRuns} adapter (the exact query path production code uses), not a
  * hand-rolled REST probe. This is a FIXTURE smoke proof only; task 7.2 builds the pass/fail stage
  * assertions on top of it.
  *
@@ -96,18 +91,10 @@ class GiteaActionsRunnerE2ESpec extends Specification implements BareGitRepoFixt
 
         and: 'the adapter this change built eventually observes the run passing (real runner, real async delay)'
         def httpClient = new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(gitea.apiBaseUrl())), gitea.adminToken())
-        def client = new GithubCheckExternalClient(httpClient, GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, new VirtualClock())
-        def check = VerifyChecks.external(
-                CHECK_ID, 'github', Duration.ofSeconds(5), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
-        def workspace = workspaceAt(headSha)
-
+        def client = new GithubWorkflowRuns(httpClient, GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, new VirtualClock())
         new PollingConditions(timeout: 480, initialDelay: 5, delay: 5).eventually {
-            def status = client.poll(check, workspace)
+            def status = client.runsOf(CHECK_ID, headSha)
             assert status instanceof PollStatus.Pass: "latest poll was ${status} — runner logs: ${runner.logs()}"
         }
-    }
-    private static RecordedAttemptCommitWorkspace workspaceAt(String sha) {
-        def ref = ClosedRounds.at(sha)
-        new RecordedAttemptCommitWorkspace(ref)
     }
 }

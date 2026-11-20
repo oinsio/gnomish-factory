@@ -4,20 +4,15 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.get
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 
-import com.github.oinsio.gnomish.app.workspace.fake.AttemptCommitWorkspaces
 import com.github.oinsio.gnomish.domain.engine.PollStatus
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.AttemptCommitWorkspace
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
-import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import com.github.oinsio.gnomish.githubapi.GithubHttpClient
 import com.github.oinsio.gnomish.githubapi.GithubTestEndpoints
 import com.github.tomakehurst.wiremock.WireMockServer
-import java.time.Duration
 import spock.lang.Specification
 
 /**
- * {@link GithubCheckExternalClient} re-poll/takeover case (NFR-R2 of
+ * {@link GithubWorkflowRuns} re-poll/takeover case (NFR-R2 of
  * add-external-check-github-actions, "Polling is stateless and takeover-safe" of the
  * github-external-check spec, scenario "Another instance resumes mid-poll"): the attempt SHA
  * keying (design D2) makes the run match, and therefore the verdict, independent of which client
@@ -26,7 +21,7 @@ import spock.lang.Specification
  *
  * <p>Implements NFR-R2 of add-external-check-github-actions.
  */
-class GithubCheckExternalClientStatelessPollSpec extends Specification {
+class GithubWorkflowRunsStatelessPollSpec extends Specification {
 
     private static final String RUNS_URL = '/repos/acme/widgets/actions/workflows/ci.yml/runs?head_sha=abc123&per_page=100'
 
@@ -46,27 +41,15 @@ class GithubCheckExternalClientStatelessPollSpec extends Specification {
         wireMock.stop()
     }
 
-    private static VerifyCheck.Executor sampleCheck() {
-        VerifyChecks.external('ci.yml', 'github', Duration.ofSeconds(30), Duration.ofMinutes(5), VerifyCheck.TimeoutClass.QUALITY)
-    }
-
-    // Through the shared fixture, whose declared return type is the domain's
-    // `AttemptCommitWorkspace` capability: this module's test source names no `:application`
-    // type either, matching its production classpath (FR3, design D6 of
-    // close-plugin-api-compilability-gap).
-    private static AttemptCommitWorkspace sampleWorkspace() {
-        AttemptCommitWorkspaces.at('abc123')
-    }
-
     // Scenario: verification/github-external-check / Another instance resumes mid-poll
     def "a second instance polling after a simulated crash-and-takeover reaches the same verdict with no shared state"() {
         given: 'the first instance polls the attempt commit before a simulated crash'
-        def firstInstance = new GithubCheckExternalClient(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok'), 'acme', 'widgets', new VirtualClock())
-        def firstPoll = firstInstance.poll(sampleCheck(), sampleWorkspace())
+        def firstInstance = new GithubWorkflowRuns(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok'), 'acme', 'widgets', new VirtualClock())
+        def firstPoll = firstInstance.runsOf('ci.yml', 'abc123')
 
         when: 'a second, independently constructed instance resumes the poll after takeover'
-        def secondInstance = new GithubCheckExternalClient(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok'), 'acme', 'widgets', new VirtualClock())
-        def secondPoll = secondInstance.poll(sampleCheck(), sampleWorkspace())
+        def secondInstance = new GithubWorkflowRuns(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(wireMock.baseUrl())), 'tok'), 'acme', 'widgets', new VirtualClock())
+        def secondPoll = secondInstance.runsOf('ci.yml', 'abc123')
 
         then: 'both instances observe the same run set and reach the same verdict'
         firstPoll instanceof PollStatus.Pass

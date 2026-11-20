@@ -44,7 +44,7 @@ class PendingPollRotationSpec extends PendingPollSpecBase {
         def answer = poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
 
         then: 'the second write came after the poll that returned k-2 and before the poll of k-2'
-        answer == new VerdictAnswer.Sarif([])
+        answer == new VerdictAnswer.Sarif([], null)
         turns(executor) == [
             null,
             [ISSUED, 'k-1'],

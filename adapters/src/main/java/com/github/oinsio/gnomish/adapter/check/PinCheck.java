@@ -165,7 +165,7 @@ public final class PinCheck {
                 checkId,
                 diffs.size(),
                 lawCommit.hex());
-        var verdict = new Answer.Verdict(List.of(new SarifRun(UntrustedText.factory("pin-check"), diffs)));
+        var verdict = new Answer.Verdict(List.of(new SarifRun(UntrustedText.factory("pin-check"), diffs, null)));
         return new ExecutorResult(
                 Status.COMPLETED,
                 null,

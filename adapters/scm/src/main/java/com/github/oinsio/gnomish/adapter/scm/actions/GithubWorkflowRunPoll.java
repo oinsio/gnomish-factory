@@ -34,11 +34,12 @@ import org.jspecify.annotations.Nullable;
  * ({@link ExchangeLimitException}), whose reason names the limit; neither is retried.
  *
  * <p>Every poll outcome is logged with the run id and, when known, the run's platform URL
- * (task 4.2, NFR-O1). A Pass verdict has no field to carry the run URL onward — {@link
- * PollStatus.Pass} is a bare marker and stays that way (a domain-model change is out of this
- * change's scope) — so for Pass the log line is the only place the run link surfaces; for Fail
- * the URL additionally rides in each finding's {@code details} via {@link
- * GithubWorkflowJobsFetcher}, which is what reaches the tracker report (UX1).
+ * (task 4.2, NFR-O1). A pass carries the run URL onward: {@link PollStatus.Pass#runUrl} is the
+ * run's {@code html_url}, which {@code GithubActionsResults} writes as the SARIF run's {@code
+ * properties.runUrl} and the engine records with the pass, so a green check is auditable from the
+ * tracker (design D23 of migrate-verify-to-executor-contract); for Fail the URL rides in each
+ * finding's {@code details} via {@link GithubWorkflowJobsFetcher}, which is what reaches the
+ * tracker report (UX1).
  *
  * <p>What an operator is told about each outcome — including the level policy for a check that
  * keeps failing to answer — belongs to {@link GithubWorkflowPollLog}, which owns the poll's log

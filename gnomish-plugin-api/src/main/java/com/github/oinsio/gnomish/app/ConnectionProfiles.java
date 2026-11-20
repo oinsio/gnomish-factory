@@ -30,10 +30,9 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>A profile carries a credential <em>name</em>, never a value (NFR-S1).
  *
- * <p>It is also where the medium of a connection's URL is known, so it is the one place a {@link
- * ConnectionEndpoint} is minted ({@link #endpoint}; FR17, design D16 of
- * migrate-verify-to-executor-contract): {@link #resolve} merges a profile into the subsection on
- * purpose, and after the merge no reader can tell whose URL it holds.
+ * <p>It is the one place a {@link ConnectionEndpoint} is minted ({@link #endpoint}; FR17, design D16
+ * of migrate-verify-to-executor-contract): only here is a URL's medium known, since after {@link
+ * #resolve} merges a profile into the subsection no reader can tell whose URL it holds.
  *
  * <p>Implements FR16, FR17 of add-plugin-architecture; FR17 of migrate-verify-to-executor-contract.
  */

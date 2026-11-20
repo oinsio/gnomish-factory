@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment
 import com.github.oinsio.gnomish.adapter.git.LocalBoxEnvironment
 import com.github.oinsio.gnomish.app.BuiltInEntriesFixture
-import com.github.oinsio.gnomish.app.CheckDispatchFixture
 import com.github.oinsio.gnomish.app.DescribedLaws
+import com.github.oinsio.gnomish.app.HandAssembledCheckDispatch
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.check.CheckEnvironmentSource
@@ -97,7 +97,7 @@ final class ContainerProgramChecks {
         def time = VirtualTimeEquipment.on(new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)))
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, time,
                 TestChildEnvironment.hostAllowlist().programGrant(), Files.createTempDirectory(root, 'stderr'), cell)
-        CheckDispatchFixture.routedBoxed(resume, DescribedLaws.described([(NAME): describe()]), world.definition,
+        HandAssembledCheckDispatch.routedBoxed(resume, DescribedLaws.described([(NAME): describe()]), world.definition,
         world.repoDir, BuiltInEntriesFixture.of(new VirtualClock()), equipment, boxes(world))
     }
 

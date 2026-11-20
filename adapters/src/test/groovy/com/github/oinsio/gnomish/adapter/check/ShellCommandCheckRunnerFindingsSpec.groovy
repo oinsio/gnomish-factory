@@ -113,7 +113,7 @@ exit 1''')
         def finding = new Finding('reported on green', 'src/A.java:3', null)
         answerOf(outcome) == new VerdictAnswer.Sarif([
             new VerdictAnswer.Result(answered, finding)
-        ])
+        ], null)
         derived(outcome) == expected
 
         where:
@@ -154,7 +154,7 @@ exit 0''')
         def finding = new Finding('reported on green', 'src/A.java:3', null)
         answerOf(outcome) == new VerdictAnswer.Sarif([
             new VerdictAnswer.Result(ResultLevel.ERROR, finding)
-        ])
+        ], null)
         derived(outcome) == new Verdict.Fail([finding])
     }
 

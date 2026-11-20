@@ -12,7 +12,8 @@ import spock.lang.Specification
 /**
  * FR6, NFR-C1 of migrate-verify-to-executor-contract, design D5, D13: the runs judgement rendered as
  * the executor contract's result — each poll status to its status, a failed job to an {@code error}
- * result that carries the finding's details apart from its message (design D19), and a known-zero usage.
+ * result that carries the finding's details apart from its message (design D19), a green run's link
+ * carried on the SARIF run (design D23), and a known-zero usage.
  */
 class GithubActionsResultsSpec extends Specification {
 
@@ -60,5 +61,20 @@ class GithubActionsResultsSpec extends Specification {
         'details' | new Finding('job failed', 'build', 'the tail') || 'the tail' | 'build'
         'no details' | new Finding('job failed', null, null) || null | null
         'blank details' | new Finding('job failed', 'lint', '  ') || null | 'lint'
+    }
+
+    // D23: a green run's link crosses the contract as the run's properties.runUrl, minted tracker.
+    def "a green run writes its run URL as the SARIF run's properties.runUrl, and a pass without one writes none"() {
+        expect:
+        def run = GithubActionsResults.of(new PollStatus.Pass(url), 'abc123').answer().path('sarif').path('runs')[0]
+        run.path('results').isEmpty()
+        run.has('properties') == (url != null)
+        run.path('properties').path('runUrl').textValue() == url
+
+        where:
+        url << [
+            'https://github.example/acme/widgets/actions/runs/1',
+            null
+        ]
     }
 }

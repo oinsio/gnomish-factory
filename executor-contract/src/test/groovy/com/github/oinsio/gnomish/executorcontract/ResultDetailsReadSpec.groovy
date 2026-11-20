@@ -46,7 +46,6 @@ class ResultDetailsReadSpec extends Specification {
                 .contains('details')
     }
 
-    // the marker of "SARIF details reach the finding's details" goes with task 5.1, which completes it
     def "FR5: a string properties.details reads into the SARIF result's details, its message unchanged"() {
         when:
         def reading = WireJson.answer(WireJson.readTree(RESULT +
@@ -56,7 +55,7 @@ class ResultDetailsReadSpec extends Specification {
         reading == new AnswerReading.Parsed(new Answer.Verdict([
             new SarifRun(t('lint'), [
                 new SarifResult(null, SarifLevel.ERROR, t('exited 1'), null, null, t('the tail'))
-            ])
+            ], null)
         ]))
     }
 
@@ -91,7 +90,7 @@ class ResultDetailsReadSpec extends Specification {
             new SarifRun(t('lint'), [
                 new SarifResult(null, SarifLevel.ERROR, t('exited 1'), null, null, t('the tail')),
                 new SarifResult(null, SarifLevel.NOTE, t('fine'), null, null)
-            ])
+            ], null)
         ])
 
         when:

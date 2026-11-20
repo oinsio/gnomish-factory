@@ -566,6 +566,75 @@
   turn's or a result's `.key()`/`.value()`; `grep -rn "String key" domain/src/main` → no pending
   key. PIT scope: the leaf, `ExecutorContractJson`, `ResultReading`, `ProgramResultMapping`,
   `CheckRound` (FR2, FR3, D20)
+- [x] 4.0d The run URL of a pass crosses the contract (design D23; human decision 2026-11-20,
+  option A; runs after every ticked task, on the shape of 4.0a's `properties.details`). Contract:
+  `SarifRun(UntrustedText tool, List<SarifResult> results)` (`SarifRun.java:12`) gains `@Nullable
+  UntrustedText runUrl` and keeps only its canonical three-component constructor — no
+  `SarifRun(tool, results)` convenience form, which would be the escape hatch that hid this
+  regression (D23, `implementation.md` item 3); its seven production construction sites each pass
+  their URL or `null` explicitly: `SarifReader.java:56`, `GithubActionsResults.java:76`,
+  `HttpResults.java:90`, `ScmStatusResults.java:74`, `ShellExecutor.java:142`,
+  `FilesExistExecutor.java:122`, `PinCheck.java:168`, and the thirteen test constructions
+  (`AnswerReadSpec`, `WireSamples`, `AnswerTreeSpec`, `VerdictThresholdSpec`,
+  `ResultDetailsReadSpec`, `SarifLogReadSpec`) likewise; `SarifReader.run` (`SarifReader.java:50-57`) reads the run's
+  `properties.runUrl` when a non-blank string, minted in the writer's family through
+  `WrittenTexts`, and ignores a blank value or another type (never malformed); `AnswerWriter.sarif`
+  writes it as the run's `properties.runUrl` when present; `executor-answer.schema.json` gains the
+  run's `properties` with a `runUrl` member and no type constraint, its description naming D23; no
+  `protocolVersion` change (additive, D23). Built-ins: `GithubActionsResults.of`
+  (`GithubActionsResults.java:42`) and `HttpResults.of` (`HttpResults.java:48`) render
+  `PollStatus.Pass pass` as a completed answer whose one run carries `pass.runUrl()` (minted
+  `tracker` and `manifest` respectively, like each one's findings), a `null` URL writing none; the
+  javadoc of both classes and the "bare marker" paragraph of `GithubWorkflowRunPoll`
+  (`GithubWorkflowRunPoll.java:38-42`) are rewritten to say the pass carries the run URL onward.
+  Engine side: `SarifResultReading` (`app.port.check`, already `@UntrustedExit`) gains the reading
+  of the run URL off a verdict answer — the first run, in the order written, carrying one, as a
+  `@Nullable String` — and `ProgramCompletedAnswer.toEngine` (`ProgramCompletedAnswer.java:54`)
+  builds the canonical `VerdictAnswer.Sarif(List<Result> results, @Nullable String runUrl)` from
+  it. `VerdictAnswer.Sarif`'s one-argument constructor (`VerdictAnswer.java:45-47`) is deleted
+  (D23): its one production caller, `RoundRecords.java:107` (the empty chain's vacuous pass),
+  passes `null` explicitly, and so do its test constructions (about 37, in `:domain`,
+  `:application`, `:adapters`, `:adapters:agent`, `:adapters:scm`, `:bootstrap` specs and
+  `ScriptedAnswers` in `:test-fixtures`). Plugin API: `VerdictAnswer` is a re-exposed `:domain`
+  type and `compat-baseline/` already holds this branch's `0.15.0` domain jar, so the removal is a
+  binary break `japicmpApiGate` reports — absorbed into this change's one unreleased `0.15.0` bump
+  (D20, as 4.0c (f) and 4.1r were): `./gradlew :gnomish-plugin-api:updateApiCompatibilityBaseline`
+  over the five-jar set, the version comment of `gnomish-plugin-api/build.gradle` and the README's
+  "Versioning" `0.15.0` row naming D23 (`VerdictAnswer.Sarif` lost its one-argument
+  constructor), `japicmpApiGate` green. Gates: `UntrustedTextGateSpec`'s pinned exit set does not
+  change; `UntrustedTextSinkGateSpec`'s pinned ambiguous-name list ("FR7: the names the scan must
+  stay silent about are exactly these") gains `runUrl`, with a comment in the shape of the
+  `resumedKey`/`details` entries: a carrier on `SarifRun`, a plain String on `Verdict.Pass`,
+  `VerdictAnswer.Sarif`, `PollStatus.Pass` and the `state.json`/`status --json`/usage DTOs
+  (`StateCheckDto`, `status/json/CheckDto`, `usage/json/CheckDto`); it stays decided wherever the
+  receiver's type is declared. Exemption (D9 row): `CheckFindings.relayed` (a `shell` check's
+  relayed SARIF findings file) reads runs through `SarifReader` and keeps their results only — the
+  `shell` built-in's verdict is its own one run, and a relayed log's run URL is not carried (FR6
+  covers `github-actions` and `http` only). Conformance: no kit case; the kit
+  accepts a run with or without the property and rejects nothing new (D23). Specs, one feature per
+  scenario, markers included: `executor/wire-contract` "A completed answer carries its run URL"
+  (contract → engine: a SARIF answer with a run URL and no result at the threshold, through
+  `ProgramResultMapping` and `VerdictDerivation`, records `Verdict.Pass.runUrl`), "The first run's
+  URL is recorded" and "A malformed run URL is ignored" (`SarifReader` over an object, the answer
+  still a verdict); `AnswerTreeSpec`'s round trip gains a run carrying a URL; `GithubActionsResults`
+  and `HttpResults` specs assert the written `properties.runUrl` for a pass and none for a pass
+  without a URL. Flow spec (the D9 row's identity spec): in `ThreeProviderVerifyChainSpec`
+  (`:bootstrap`, `ThreeProviderPlatformFixture`, whose `stubRun` (`:127-133`) gains an `html_url`
+  member, `…/actions/runs/<runId>`, which the feature asserts against), a feature asserting that the `github-actions` check's `Verdict.Pass.runUrl` equals
+  the stubbed run's `html_url` and the `http` check's equals its target URL, through the real
+  registry, `CheckRound`, `ProgramResultMapping` and `VerdictDerivation`, carrying `// Scenario:
+  verification/github-external-check / A green check is auditable from the tracker` beside the two
+  existing half markers (`GithubWorkflowRunVerdictWireMockSpec`, `TakeFinishReportRunUrlSpec`).
+  Old-way sweep, in the report with its hits: `grep -rn "case PollStatus.Pass pass -> completed(List.of())"
+  adapters` → zero; `grep -rn "new VerdictAnswer.Sarif(" --include='*.java' */src/main
+  */*/src/main` → `ProgramCompletedAnswer` and `RoundRecords.java:107` (the empty pass, `null`),
+  both with two arguments, only (no one-argument form is left to call, nor a two-argument
+  `SarifRun`: the compiler is the gate); `grep -rn "bare marker" adapters/scm/src/main` → zero.
+  PIT scope: `SarifRun`, `SarifReader`, `AnswerWriter` (`:executor-contract`),
+  `SarifResultReading` (`:application`), `ProgramCompletedAnswer` (`:adapters:agent`),
+  `GithubActionsResults` (`:adapters:scm`), `HttpResults` (`:adapters`), `VerdictAnswer`,
+  `RoundRecords` (`:domain`); then the final root
+  `./gradlew check` of 7.2 runs again (FR6, FR7, D23; NFR-O2 of add-sandbox-core)
 - [x] 4.1 Add `PendingPollRecord` to the attempt state (`StateAttemptDto`, `StateJsonMapper`,
   round-trip spec, size cap on the key) (FR2, D7 and D20 as amended 2026-11-12). Carried from Q1
   of `define-executor-contract`, closed by D20: the record is `PendingPollRecord(CheckRef check,

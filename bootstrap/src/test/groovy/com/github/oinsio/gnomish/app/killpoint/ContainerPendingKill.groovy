@@ -17,7 +17,7 @@ import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.git.SnapshotTipCheck
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.BuiltInEntriesFixture
-import com.github.oinsio.gnomish.app.CheckDispatchFixture
+import com.github.oinsio.gnomish.app.HandAssembledCheckDispatch
 import com.github.oinsio.gnomish.app.KillPointTakeRoutes
 import com.github.oinsio.gnomish.app.TaskGitFixture
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
@@ -142,7 +142,7 @@ final class ContainerPendingKill {
         def clock = new VirtualClock()
         def resume = new ResumeVerificationStageExecutor(counted, cell, found.orElse(null))
         def port = programs != null ? programs.port(resume, world, cell)
-                : CheckDispatchFixture.routed(resume, world.definition, world.repoDir, BuiltInEntriesFixture.of(clock, [:], ['loopback']))
+                : HandAssembledCheckDispatch.routed(resume, world.definition, world.repoDir, BuiltInEntriesFixture.of(clock, [:], ['loopback']))
         // A program's fresh box reads the attempt commit off the run's cell, as the container run's workspace does.
         def workspace = programs != null ? new RecordedAttemptCommitWorkspace(cell)
                 : new DirectoryWorkspace(Files.createTempDirectory(root, 'workspace'))

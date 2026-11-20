@@ -310,6 +310,12 @@ class UntrustedTextSinkGateSpec extends Specification {
         // the ledger's wire record it is written into raw by the `@UntrustedExit` mapper — the
         // carrier/wire-DTO twin `bound` and `cause` already are, and like them it stays decided
         // wherever the receiver's type is declared.
+        // Task 4.0d of migrate-verify-to-executor-contract (design D23) added `runUrl`: a carrier on
+        // `SarifRun` (the platform run's URL a verdict answer carries, the executor's text), a
+        // plain String on `Verdict.Pass`, `VerdictAnswer.Sarif`, `PollStatus.Pass` and the
+        // `state.json` / `status --json` / usage-report DTOs (`StateCheckDto`, `status/json/CheckDto`,
+        // `usage/json/CheckDto`) — the carrier/String twin `details` and `resumedKey` already are,
+        // and like them it stays decided wherever the receiver's type is declared.
         // What this list no longer means is "rule (c) is silent here": since the qualified
         // vocabulary landed, a name on it is still decided wherever the receiver's type is
         // declared in the same source (`CarrierAccessors.qualifiedNamesIn`, the three features
@@ -338,6 +344,7 @@ class UntrustedTextSinkGateSpec extends Specification {
             'report',
             'result',
             'resumedKey',
+            'runUrl',
             'stage',
             'stderr',
             'stdout',

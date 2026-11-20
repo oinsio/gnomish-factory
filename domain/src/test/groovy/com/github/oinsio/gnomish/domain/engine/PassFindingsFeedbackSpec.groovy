@@ -58,7 +58,7 @@ class PassFindingsFeedbackSpec extends Specification {
         def warnings = new VerdictAnswer.Sarif([
             new VerdictAnswer.Result(ResultLevel.WARNING, new Finding('w1', 'src/A.java:1', null)),
             new VerdictAnswer.Result(ResultLevel.WARNING, new Finding('w2', 'src/B.java:2', null)),
-        ])
+        ], null)
         def failed = new Verdict.Fail([
             new Finding('red test', null, null)
         ])

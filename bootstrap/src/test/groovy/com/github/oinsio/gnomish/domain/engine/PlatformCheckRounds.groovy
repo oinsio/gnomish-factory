@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner
 import com.github.oinsio.gnomish.adapter.check.PinCheck
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
-import com.github.oinsio.gnomish.adapter.check.http.HttpExternalCheckClient
+import com.github.oinsio.gnomish.adapter.check.http.HttpCheckProbe
 import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.scm.ScmConnectionReader
@@ -70,7 +70,7 @@ class PlatformCheckRounds implements GitObjectsFixture {
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, VirtualTimeEquipment.create(),
                 TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'), LastRegisteredCommit.NONE)
         def builtIns = new BuiltInEntries(new FilesExistCheckRunner(), shell,
-                HttpExternalCheckClient.guarded(new OperatorEgress(inProcessEgress), secrets, HttpRunContext.none()), secrets, clock)
+                HttpCheckProbe.guarded(new OperatorEgress(inProcessEgress), secrets, HttpRunContext.none()), secrets, clock)
         def registry = ExecutorRegistry.of(DescribedLaws.connected((admission as BuiltInConnections.Admission.Admitted).connections()),
                 definition, PipelineLaw.ofContent([:]), equipment, builtIns, null)
         def stages = { request ->

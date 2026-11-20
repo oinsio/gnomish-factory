@@ -1,9 +1,7 @@
 package com.github.oinsio.gnomish.httpegress;
 
-import java.io.ByteArrayOutputStream;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -15,8 +13,8 @@ import org.jspecify.annotations.Nullable;
  * timeout bounds the whole exchange"): it counts the bytes the client hands it on the client's own
  * selector thread, so no factory thread parks in a read ({@code lock-scope.md}, "The read side is no
  * exception"). Past the bound it either cancels its subscription and fails with {@link
- * ExchangeLimitException} or, for a tail read, keeps only the last bytes. {@link #cancel} lets the
- * exchange end a body the timeout outran.
+ * ExchangeLimitException} or, for a tail read, keeps only the last bytes ({@link BodyChunks}, at the
+ * cost of the chunk that arrived). {@link #cancel} lets the exchange end a body the timeout outran.
  *
  * <p>The client delivers {@code onSubscribe}, {@code onNext}, {@code onError} and {@code onComplete}
  * serially (Reactive Streams §1.3), so the buffer needs no lock; {@link #cancel} only reaches the
@@ -29,7 +27,7 @@ final class BoundedBody implements HttpResponse.BodySubscriber<byte[]> {
     private final ExchangeBounds bounds;
     private final String target;
     private final CompletableFuture<byte[]> body = new CompletableFuture<>();
-    private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+    private final BodyChunks buffer = new BodyChunks();
     private volatile Flow.@Nullable Subscription subscription;
     private volatile boolean cancelled;
 
@@ -56,17 +54,13 @@ final class BoundedBody implements HttpResponse.BodySubscriber<byte[]> {
     @Override
     public void onNext(List<ByteBuffer> items) {
         for (ByteBuffer item : items) {
-            byte[] bytes = new byte[item.remaining()];
-            item.get(bytes);
-            buffer.writeBytes(bytes);
+            buffer.append(item);
         }
         if (buffer.size() <= bounds.maxBodyBytes()) {
             return;
         }
         if (bounds.tail()) {
-            byte[] all = buffer.toByteArray();
-            buffer.reset();
-            buffer.writeBytes(Arrays.copyOfRange(all, all.length - bounds.maxBodyBytes(), all.length));
+            buffer.keepLast(bounds.maxBodyBytes());
             return;
         }
         // The limit is the body's answer before the subscription is cancelled: on HTTP/2 the cancel

@@ -102,7 +102,7 @@ dependencies {
     // the dependency-analysis gate establishes.
     api project(':untrustedtext')
     // The pending-key leaf (FR2, design D7 as amended, D20 of migrate-verify-to-executor-contract):
-    // `StatePendingPollMapper` rebuilds the attempt's `pendingPoll` key through the leaf's
+    // `StatePendingPollMapper` rebuilds each `pendingPolls` entry's key through the leaf's
     // constructor, so the state file's cap is `PendingKey.MAX_LENGTH`. `implementation`: the
     // mapper is package-private and the public `StatePendingPollDto` carries the key as a string.
     implementation project(':pendingkey')
@@ -158,7 +158,7 @@ layering {
         // also reached through `:domain`, whose engine emitters take their head from it.
         ':operatorevent',
         // The pending-key leaf (design D20 of migrate-verify-to-executor-contract): declared
-        // directly above, because the state file's `pendingPoll` mapper builds the key (task 4.1).
+        // directly above, because the state file's `pendingPolls` mapper builds the key (task 4.1r).
         ':pendingkey',
         ':sandbox:core',
         ':sandbox:docker',

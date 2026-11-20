@@ -22,7 +22,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code scm-status} read rendered as the executor contract's result (FR4, FR9, NFR-R2, NFR-C1
  * of migrate-verify-to-executor-contract): {@code pending} on the attempt SHA while any expected
- * context is absent or running, its reason naming each such context and why; once every expected
+ * context is absent or running, its reason naming each such context and why — an absent one also
+ * naming how many reports the SCM counted and the read did not list, when any; once every expected
  * context has a verdict, {@code completed} with one {@code error} result per failed context and one
  * {@code warning} result per warned one — the engine derives pass or fail against the check's
  * threshold (design D5), and a context the check does not expect is not read. A rate-limit answer
@@ -58,7 +59,7 @@ final class ScmStatusResults {
         for (String name : expected) {
             Optional<ScmContext> verdict = contexts.of(name);
             if (verdict.isEmpty()) {
-                waiting.add("'" + name + "' (absent)");
+                waiting.add("'" + name + "' " + absent(contexts.unread()));
                 state = PendingState.UNREPORTED;
             } else if (verdict.get().state() == ScmContextState.RUNNING) {
                 waiting.add("'" + name + "' (running)");
@@ -70,9 +71,19 @@ final class ScmStatusResults {
             // The names are the manifest's own expected entries; no byte of the platform's.
             return pending(sha, UntrustedText.manifest("waiting on " + String.join(", ", waiting)), null, state);
         }
-        var verdict = new Answer.Verdict(List.of(new SarifRun(UntrustedText.factory(ScmStatusExecutor.NAME), results)));
+        var verdict =
+                new Answer.Verdict(List.of(new SarifRun(UntrustedText.factory(ScmStatusExecutor.NAME), results, null)));
         return new ExecutorResult(
                 Status.COMPLETED, null, null, null, ExecutorContractJson.answerTree(verdict), usage(), List.of());
+    }
+
+    /**
+     * Why an expected context counts as absent: plainly, or — when the listings counted reports the
+     * read did not list — with that count, so a timeout names the read's limit, not only the
+     * context's silence.
+     */
+    private static String absent(int unread) {
+        return unread > 0 ? "(absent; " + unread + " of the SCM's reports on the SHA were not read)" : "(absent)";
     }
 
     /**

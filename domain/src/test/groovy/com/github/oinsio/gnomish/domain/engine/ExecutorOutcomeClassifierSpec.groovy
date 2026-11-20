@@ -78,7 +78,7 @@ class ExecutorOutcomeClassifierSpec extends Specification {
 
     static final def PENDING = new ExecutionResult.Pending(new PendingKey('k-1'), null, PendingState.RUNNING, null, null)
     static final def QUESTION = new ExecutionResult.DecisionRequest(UntrustedText.agent('which db?'), [UntrustedText.agent('pg')])
-    static final def REPLY = new ExecutionResult.VerdictReply(new VerdictAnswer.Sarif([]))
+    static final def REPLY = new ExecutionResult.VerdictReply(new VerdictAnswer.Sarif([], null))
 
     // FR19, FR2 of migrate-verify-to-executor-contract (D21, D22; human decision 2026-11-12): the
     // readers ask the owner instead of reading the status, and each answer is the table read once

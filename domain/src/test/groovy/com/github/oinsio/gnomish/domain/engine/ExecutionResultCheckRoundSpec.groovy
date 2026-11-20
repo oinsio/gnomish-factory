@@ -55,7 +55,7 @@ class ExecutionResultCheckRoundSpec extends Specification {
         given:
         def answer = new VerdictAnswer.Sarif([
             new VerdictAnswer.Result(ResultLevel.ERROR, new Finding('red', null, 'tail'))
-        ])
+        ], null)
 
         when:
         def result = new ExecutionResult(new ExecutionResult.Completed(), new ExecutionResult.VerdictReply(answer),

@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.oinsio.gnomish.executorcontract.Answer;
-import com.github.oinsio.gnomish.executorcontract.AnswerReading;
 import com.github.oinsio.gnomish.executorcontract.ReadResult;
 import com.github.oinsio.gnomish.executorcontract.ResultFileReader;
+import com.github.oinsio.gnomish.executorcontract.SarifLogReading;
 import com.github.oinsio.gnomish.executorcontract.SarifResult;
 import com.github.oinsio.gnomish.executorcontract.SarifRun;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
@@ -28,9 +28,10 @@ import org.slf4j.LoggerFactory;
  * reported {@link ShellResult}s, or none, so the caller answers without them (NFR-R2: a broken
  * reporter never degrades the answer to CannotVerify). Absent or blank content degrades silently;
  * malformed content — not JSON, neither shape, a SARIF log the contract refuses, a legacy entry with
- * a blank or missing {@code message}, more legacy entries than a verdict may carry — degrades with
- * a WARN naming the check (FR5 of harden-logging-observability); a file cut at the cap parses as
- * what its first bytes are.
+ * a blank or missing {@code message} — degrades with a WARN naming the check (FR5 of
+ * harden-logging-observability); a file cut at the cap parses as what its first bytes are. More
+ * results than one verdict may carry are capped by {@link ResultCap#shell}, never dropped: the file
+ * is read on exit 0 too, so a dropped list would pass a check its results fail.
  *
  * <p>The fields of the file arrive from the result reader as carriers and stay carriers in the
  * {@link ShellResult}s, which are the exit where they leave them.
@@ -88,7 +89,7 @@ final class CheckFindings {
 
     private static List<ShellResult> parsed(String checkIdentity, FindingsFile file) {
         if (file.findings() != null) {
-            return legacy(checkIdentity, file.findings());
+            return ResultCap.shell(legacy(checkIdentity, file.findings()));
         }
         if (file.version() == null && file.runs() == null) {
             log.warn(
@@ -102,18 +103,17 @@ final class CheckFindings {
         sarifLog.set("version", file.version());
         sarifLog.set("runs", file.runs());
         return switch (Answer.readSarif(sarifLog, UntrustedText::subprocess)) {
-            // A parsed SARIF log is a verdict by the reading's own contract.
-            case AnswerReading.Parsed parsed -> relayed((Answer.Verdict) parsed.answer());
-            case AnswerReading.Malformed malformed -> {
+            case SarifLogReading.Parsed parsed -> ResultCap.shell(relayed(parsed.runs()));
+            case SarifLogReading.Malformed malformed -> {
                 warnMalformed(checkIdentity, malformed.reason());
                 yield List.of();
             }
         };
     }
 
-    private static List<ShellResult> relayed(Answer.Verdict verdict) {
+    private static List<ShellResult> relayed(List<SarifRun> runs) {
         List<ShellResult> results = new ArrayList<>();
-        for (SarifRun run : verdict.runs()) {
+        for (SarifRun run : runs) {
             for (SarifResult result : run.results()) {
                 results.add(new ShellResult(result, null));
             }
@@ -122,13 +122,6 @@ final class CheckFindings {
     }
 
     private static List<ShellResult> legacy(String checkIdentity, List<@Nullable FindingWire> entries) {
-        if (entries.size() > Answer.Verdict.MAX_RESULTS) {
-            warnMalformed(
-                    checkIdentity,
-                    UntrustedText.factory(entries.size() + " findings, more than the " + Answer.Verdict.MAX_RESULTS
-                            + " results one verdict may carry"));
-            return List.of();
-        }
         List<ShellResult> results = new ArrayList<>(entries.size());
         for (FindingWire entry : entries) {
             if (entry == null || entry.message() == null || entry.message().isBlank()) {

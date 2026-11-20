@@ -54,7 +54,7 @@ class HttpExecutorCannotVerifySpec extends Specification implements HttpCheckFix
         def guard = new GuardedHttpCheckExchange(platform, new EgressAllowlist(['*.example.invalid'], { host ->
             throw new UnknownHostException(host)
         }, EgressAllowlist.IN_PROCESS_KEY, false))
-        def logs = LogCaptureSupport.attach(HttpExternalCheckClient)
+        def logs = LogCaptureSupport.attach(HttpCheckProbe)
 
         when:
         def result = executor(guard, [:], HttpRunContext.none(), null).start(verdict([url: URL]))

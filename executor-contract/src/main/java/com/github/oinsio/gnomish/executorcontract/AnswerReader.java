@@ -26,11 +26,11 @@ final class AnswerReader {
         }
     }
 
-    static AnswerReading readSarif(JsonNode sarifLog, Function<String, UntrustedText> mint) {
+    static SarifLogReading readSarif(JsonNode sarifLog, Function<String, UntrustedText> mint) {
         try {
-            return new AnswerReading.Parsed(SarifReader.verdict(sarifLog, new WrittenTexts(mint)));
+            return new SarifLogReading.Parsed(SarifReader.runs(sarifLog, new WrittenTexts(mint)));
         } catch (IllegalArgumentException malformed) {
-            return new AnswerReading.Malformed(mint.apply(String.valueOf(malformed.getMessage())));
+            return new SarifLogReading.Malformed(mint.apply(String.valueOf(malformed.getMessage())));
         }
     }
 

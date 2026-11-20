@@ -119,7 +119,7 @@ public final class FilesExistExecutor implements Executor {
                     path == null ? null : UntrustedText.manifest(path),
                     null));
         }
-        var verdict = new Answer.Verdict(List.of(new SarifRun(UntrustedText.factory(NAME), results)));
+        var verdict = new Answer.Verdict(List.of(new SarifRun(UntrustedText.factory(NAME), results, null)));
         return new ExecutorResult(
                 Status.COMPLETED, null, null, null, ExecutorContractJson.answerTree(verdict), usage(), List.of());
     }

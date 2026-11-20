@@ -41,17 +41,19 @@ public sealed interface Answer {
     }
 
     /**
-     * The verdict a bare SARIF 2.1.0 log states, or why it is malformed; never throws on a written
+     * The runs a bare SARIF 2.1.0 log states, or why it is malformed; never throws on a written
      * document. The log is read exactly as the {@code sarif} member of a verdict answer is — the same
-     * version, levels, cap and refusals — for an executor that relays a SARIF file a tool wrote rather
+     * version, levels and refusals — for an executor that relays a SARIF file a tool wrote rather
      * than writing an answer document itself (the {@code shell} built-in's findings path, FR5 of
-     * migrate-verify-to-executor-contract).
+     * migrate-verify-to-executor-contract). The runs are not counted against {@link
+     * Verdict#MAX_RESULTS}: the relaying executor caps them before it builds its verdict, since a log
+     * refused whole for its size would let an unread file pass a check its results fail.
      *
      * @param sarifLog the SARIF log as the tool wrote it
      * @param mint the capture family of its writer, e.g. {@code UntrustedText::subprocess}
-     * @return the reading, a {@link Verdict} when parsed; never null
+     * @return the reading, the runs when parsed; never null
      */
-    static AnswerReading readSarif(JsonNode sarifLog, Function<String, UntrustedText> mint) {
+    static SarifLogReading readSarif(JsonNode sarifLog, Function<String, UntrustedText> mint) {
         return AnswerReader.readSarif(sarifLog, mint);
     }
 

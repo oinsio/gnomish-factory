@@ -18,8 +18,8 @@
 // gate all come from the convention plugins.
 plugins {
     id 'library-conventions'
-    // The FR2 direction gate of split-into-modules; the permitted reach — no internal project yet —
-    // is stated below.
+    // The FR2 direction gate of split-into-modules; the permitted reach — two JDK-only leafs — is
+    // stated below.
     id 'layering-conventions'
 }
 

@@ -3,7 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.FactoryProperties;
 import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
-import com.github.oinsio.gnomish.adapter.check.http.HttpExternalCheckClient;
+import com.github.oinsio.gnomish.adapter.check.http.HttpCheckProbe;
 import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext;
 import com.github.oinsio.gnomish.adapter.scm.ScmConnectionReader;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
@@ -129,7 +129,7 @@ public final class CheckEquipment {
             @Nullable SandboxRunPieces sandbox,
             HttpRunContext runContext,
             InstantSource clock) {
-        var http = HttpExternalCheckClient.guarded(operatorEgress(), secretsProvider, runContext);
+        var http = HttpCheckProbe.guarded(operatorEgress(), secretsProvider, runContext);
         return new BuiltInEntries(
                 builtinRunner(sandbox), commandRunner(childEnv, sandbox), http, secretsProvider, clock);
     }

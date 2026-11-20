@@ -52,7 +52,7 @@ class CheckDispatchSpec extends Specification {
             new StageDefinition('build', 'p', [], [], new StageDefinition.Executor(ExecutorType.AGENT_CLI, 'm', [:]),
             'i.md', checks, new AutonomyLimits(3), AdvancementMode.AUTO)
         ])
-        CheckDispatchFixture.dispatch(definition, workingCopy)
+        HandAssembledCheckDispatch.dispatch(definition, workingCopy)
     }
 
     private static StageExecutor.Request request(VerifyCheck.Executor check = FILES, PendingTurn turn = null) {
@@ -71,7 +71,7 @@ class CheckDispatchSpec extends Specification {
 
         then:
         result.status() instanceof ExecutionResult.Completed
-        (result.answer() as ExecutionResult.VerdictReply).answer() == new VerdictAnswer.Sarif([])
+        (result.answer() as ExecutionResult.VerdictReply).answer() == new VerdictAnswer.Sarif([], null)
         result.trace().key().stage() == 'build'
         result.trace().key().attempt() == 2
     }
@@ -126,7 +126,7 @@ class CheckDispatchSpec extends Specification {
         sent.policy() instanceof Policy.ReadOnly
         (result.answer() as ExecutionResult.VerdictReply).answer() == new VerdictAnswer.Sarif([
             new VerdictAnswer.Result(ResultLevel.ERROR, new Finding('red', null, 'tail'))
-        ])
+        ], null)
 
         where:
         origin << PendingTurn.Origin.values()

@@ -15,7 +15,7 @@ import spock.lang.Specification
  * The exchange's own behaviour is {@code JdkHttpCheckExchangeSpec} in the leaf (FR15, design D16 of
  * migrate-verify-to-executor-contract).
  */
-class HttpExternalCheckClientLiveSpec extends Specification implements HttpCheckFixture {
+class HttpCheckProbeLiveSpec extends Specification implements HttpCheckFixture {
 
     HttpServer server
 
@@ -44,7 +44,7 @@ class HttpExternalCheckClientLiveSpec extends Specification implements HttpCheck
     //     as a header, and the declared pass_when decides the verdict.
     def "an authorized http check passes against a live endpoint"() {
         given:
-        def client = new HttpExternalCheckClient(
+        def client = new HttpCheckProbe(
                 new JdkHttpCheckExchange(), providing([SONAR_TOKEN: 's3cret']))
         def params = [
             url: url(),
@@ -53,7 +53,7 @@ class HttpExternalCheckClientLiveSpec extends Specification implements HttpCheck
         ]
 
         when:
-        def status = client.poll(check(params), null)
+        def status = judge(client, params, null)
 
         then:
         status instanceof PollStatus.Pass
@@ -64,13 +64,13 @@ class HttpExternalCheckClientLiveSpec extends Specification implements HttpCheck
     //     path, reached by pointing at a port nothing listens on.
     def "an unreachable endpoint raises, and the client classifies it as CannotVerify"() {
         given:
-        def client = new HttpExternalCheckClient(new JdkHttpCheckExchange(), providing([:]))
+        def client = new HttpCheckProbe(new JdkHttpCheckExchange(), providing([:]))
         def deadPort = server.address.port
         server.stop(0)
         server = null
 
         when:
-        def status = client.poll(check([url: "http://127.0.0.1:${deadPort}/status" as String]), null)
+        def status = judge(client, [url: "http://127.0.0.1:${deadPort}/status" as String], null)
 
         then:
         status instanceof PollStatus.CannotVerify

@@ -138,7 +138,7 @@ class PendingPollCheckRoundSpec extends Specification {
         scm.verify(2, getRequestedFor(urlEqualTo(STATUS_PATH)))
 
         and: 'the green context passes'
-        answer == new VerdictAnswer.Sarif([])
+        answer == new VerdictAnswer.Sarif([], null)
     }
 
     // Scenario: executor/wire-contract / Unknown pending state keeps the declared class

@@ -38,6 +38,9 @@ class ThreeProviderPlatformFixture {
     /** The operator's in-process egress scope granting the WireMock stub: the {@code loopback} class word. */
     static final List<String> LOOPBACK_ALLOWLIST = ['loopback']
 
+    /** The green run's id; {@link #runPage} is the page its run list names as its {@code html_url}. */
+    static final int GREEN_RUN = 1
+
     private static final String SCENARIO = 'quality-gate'
     private static final int RED_RUN = 2
     private static final int RED_JOB = 20
@@ -67,7 +70,7 @@ class ThreeProviderPlatformFixture {
                 .keystorePassword(LoopbackTlsFixture.PASSWORD)
                 .keyManagerPassword(LoopbackTlsFixture.PASSWORD))
         wireMock.start()
-        stubRun(greenSha, 1, 'success')
+        stubRun(greenSha, GREEN_RUN, 'success')
         stubRun(redSha, RED_RUN, 'failure')
         stubFailedJobs()
         stubQualityGate()
@@ -124,11 +127,16 @@ class ThreeProviderPlatformFixture {
                 VerifyCheck.TimeoutClass.QUALITY)
     }
 
+    /** The platform's web page of run {@code runId}: the {@code html_url} its run list names. */
+    static String runPage(int runId) {
+        "https://github.example/${REPO}/actions/runs/${runId}".toString()
+    }
+
     private void stubRun(String sha, int runId, String conclusion) {
         wireMock.stubFor(get(urlEqualTo("${RUNS_PATH}?head_sha=${sha}&per_page=100"))
                 .willReturn(aResponse().withStatus(200).withBody("""
                     {"workflow_runs":[{"id":${runId},"head_sha":"${sha}","path":"${WORKFLOW}","run_attempt":1,
-                     "status":"completed","conclusion":"${conclusion}"}]}
+                     "status":"completed","conclusion":"${conclusion}","html_url":"${runPage(runId)}"}]}
                     """)))
     }
 

@@ -54,11 +54,11 @@ final class GithubActionsRig {
     }
 
     /** The runs judgement over the admitted connection to the platform at {@code server}. */
-    static GithubCheckExternalClient runs(WireMockServer server) {
+    static GithubWorkflowRuns runs(WireMockServer server) {
         def connection = new ScmConnectionReader(ConnectionProfiles.none(), new OperatorEgress(['loopback']))
         .read(GithubActionsExecutor.NAME, [('api-url'): server.baseUrl(), repo: 'acme/widgets'],
         GithubActionsExecutor.ENDPOINT, GithubActionsExecutor.EGRESS)
-        new GithubCheckExternalClient(new GithubHttpClient(connection.endpoint(), 'tok'), 'acme', 'widgets',
+        new GithubWorkflowRuns(new GithubHttpClient(connection.endpoint(), 'tok'), 'acme', 'widgets',
                 new VirtualClock(Instant.EPOCH))
     }
 

@@ -11,7 +11,7 @@ import spock.lang.Specification
  * {@link HttpServer} stands in for the third-party service, so the one seam that actually opens a
  * connection — status, body, the body bound and the unfollowed redirect — is exercised end to end
  * without a container or a network dependency. The {@code http} built-in's whole client over this
- * exchange is {@code HttpExternalCheckClientLiveSpec} in {@code :adapters} (FR15, design D16 of
+ * exchange is {@code HttpCheckProbeLiveSpec} in {@code :adapters} (FR15, design D16 of
  * migrate-verify-to-executor-contract).
  */
 class JdkHttpCheckExchangeSpec extends Specification {

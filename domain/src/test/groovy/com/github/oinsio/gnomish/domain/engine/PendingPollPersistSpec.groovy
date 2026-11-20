@@ -38,7 +38,7 @@ class PendingPollPersistSpec extends PendingPollSpecBase {
         then: 'the start went first, the poll of its key after exactly one pending write'
         turns(executor) == [null, [ISSUED, 'k-1']]
         writesBefore == [0, 1]
-        answer == new VerdictAnswer.Sarif([])
+        answer == new VerdictAnswer.Sarif([], null)
 
         and: 'the write is the last persisted state with the entry, and no trace'
         persistence.pending*.taskId == ['TASK-1']
@@ -63,7 +63,7 @@ class PendingPollPersistSpec extends PendingPollSpecBase {
         def answer = poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
 
         then:
-        answer == new VerdictAnswer.Sarif([])
+        answer == new VerdictAnswer.Sarif([], null)
         turns(executor) == [null]
         persistence.pending.isEmpty()
     }
@@ -154,7 +154,7 @@ class PendingPollPersistSpec extends PendingPollSpecBase {
         def answer = poll(executor, delivery).answer(shell, ref(0, shell), round([shell])).answer()
 
         then:
-        answer == new VerdictAnswer.Sarif([])
+        answer == new VerdictAnswer.Sarif([], null)
         0 * delivery._
         turns(executor) == [null]
     }

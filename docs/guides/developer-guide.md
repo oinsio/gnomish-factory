@@ -16,7 +16,7 @@ The build is a layered Gradle module tree with a one-way dependency direction. N
 ```mermaid
 flowchart TB
     bootstrap[":bootstrap<br/>main(), @Configuration, assemblies"]
-    adapters[":adapters:github · :adapters:git · :adapters:agent<br/>:adapters (console, pipeline, secrets, ...) · :sandbox:docker"]
+    adapters[":adapters:github · :adapters:scm · :adapters:git · :adapters:agent<br/>:adapters (console, pipeline, secrets, ...) · :sandbox:docker"]
     application[":application<br/>use cases + ports"]
     api[":gnomish-plugin-api"]
     sandboxcore[":sandbox:core"]
@@ -45,7 +45,8 @@ The diagram shows the layers, not every edge. Notable specifics: `:adapters:gith
 | `:sandbox:core`       | the execution-environment port, capability passport and reconciliation                                                                                                                             |
 | `:sandbox:docker`     | the docker-CLI and host backends behind that port                                                                                                                                                  |
 | `:application`        | the use cases (`run`, `take`, `serve`, `status`, `usage`, `board`, `dashboard`) and the ports they drive adapters through                                                                          |
-| `:adapters:github`    | the GitHub vendor bundle: tracker and external-check clients over the `:githubapi` core                                                                                                            |
+| `:adapters:github`    | the GitHub vendor bundle: the GitHub tracker provider only, over the `:githubapi` core                                                                                                             |
+| `:adapters:scm`       | core's SCM verdict built-ins `github-actions` and `scm-status` and their one operator connection reader, over the `:githubapi` core                                                               |
 | `:githubapi`          | the first-party GitHub HTTP core: client, credential rules, conditional-request cache, rate limit, retry — shared by the bundle and core's GitHub built-ins, not part of the plugin api           |
 | `:adapters:git`       | the git-subprocess adapter: task repository, attempt persistence, state-file mappers                                                                                                               |
 | `:adapters:agent`     | the agent-CLI executor and judge voter                                                                                                                                                             |

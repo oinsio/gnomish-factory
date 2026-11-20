@@ -6,8 +6,8 @@ import com.github.oinsio.gnomish.adapter.check.FilesExistCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.FilesExistExecutor;
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.ShellExecutor;
+import com.github.oinsio.gnomish.adapter.check.http.HttpCheckProbe;
 import com.github.oinsio.gnomish.adapter.check.http.HttpExecutor;
-import com.github.oinsio.gnomish.adapter.check.http.HttpExternalCheckClient;
 import com.github.oinsio.gnomish.adapter.scm.ScmConnection;
 import com.github.oinsio.gnomish.adapter.scm.builtin.ScmBuiltIn;
 import com.github.oinsio.gnomish.adapter.scm.builtin.ScmBuiltIns;
@@ -48,7 +48,7 @@ final class BuiltInEntries {
 
     private final FilesExistCheckRunner filesExist;
     private final ShellCommandCheckRunner shell;
-    private final HttpExternalCheckClient http;
+    private final HttpCheckProbe http;
     private final SecretsProvider secrets;
     private final InstantSource clock;
 
@@ -62,7 +62,7 @@ final class BuiltInEntries {
     BuiltInEntries(
             FilesExistCheckRunner filesExist,
             ShellCommandCheckRunner shell,
-            HttpExternalCheckClient http,
+            HttpCheckProbe http,
             SecretsProvider secrets,
             InstantSource clock) {
         this.filesExist = filesExist;

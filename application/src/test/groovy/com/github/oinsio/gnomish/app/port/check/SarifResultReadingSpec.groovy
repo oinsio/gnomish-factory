@@ -3,16 +3,18 @@ package com.github.oinsio.gnomish.app.port.check
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.ResultLevel
 import com.github.oinsio.gnomish.domain.engine.VerdictAnswer
+import com.github.oinsio.gnomish.executorcontract.Answer
 import com.github.oinsio.gnomish.executorcontract.SarifLevel
 import com.github.oinsio.gnomish.executorcontract.SarifResult
+import com.github.oinsio.gnomish.executorcontract.SarifRun
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
- * FR5, FR7 of migrate-verify-to-executor-contract (design D18, D19): the one reading of a SARIF
- * result onto the engine's verdict answer — every level to the engine level of its name, the location
- * as the URI with its start line, and the result's own details as the finding's details, the message
- * unchanged.
+ * FR5, FR6, FR7 of migrate-verify-to-executor-contract (design D18, D19, D23): the one reading of a
+ * SARIF result onto the engine's verdict answer — every level to the engine level of its name, the
+ * location as the URI with its start line, and the result's own details as the finding's details, the
+ * message unchanged — and of a verdict answer's run URL, the first run's that carries one.
  */
 class SarifResultReadingSpec extends Specification {
 
@@ -42,5 +44,29 @@ class SarifResultReadingSpec extends Specification {
         SarifResultReading.toDomain(new SarifResult(UntrustedText.subprocess('r1'), SarifLevel.ERROR,
                 UntrustedText.subprocess('build red'), null, null, UntrustedText.subprocess('last lines'))) ==
                 new VerdictAnswer.Result(ResultLevel.ERROR, new Finding('build red', null, 'last lines'))
+    }
+
+    def "FR6: a verdict answer's run URL is the first run's, in the order written, that carries one: #why"() {
+        given:
+        def verdict = new Answer.Verdict(urls.collect {
+            new SarifRun(UntrustedText.subprocess('ci'), [], it == null ? null : UntrustedText.subprocess(it))
+        })
+
+        expect:
+        SarifResultReading.runUrl(verdict) == expected
+
+        where:
+        why | urls || expected
+        'no run' | [] || null
+        'no run carries one' | [null, null] || null
+        'the first carries one' | [
+            'https://ci/1',
+            'https://ci/2'
+        ] || 'https://ci/1'
+        'a later run carries one' | [
+            null,
+            'https://ci/2',
+            'https://ci/3'
+        ] || 'https://ci/2'
     }
 }

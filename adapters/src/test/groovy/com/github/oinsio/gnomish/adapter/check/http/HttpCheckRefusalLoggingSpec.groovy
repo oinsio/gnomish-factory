@@ -20,7 +20,7 @@ class HttpCheckRefusalLoggingSpec extends Specification implements HttpCheckFixt
     /** The escape a forged redirect target would open a colour sequence with. */
     private static final String ESC = Character.toString(0x1B)
 
-    LogCaptureSupport logs = LogCaptureSupport.attach(HttpExternalCheckClient)
+    LogCaptureSupport logs = LogCaptureSupport.attach(HttpCheckProbe)
 
     def cleanup() {
         logs.detach()
@@ -41,7 +41,7 @@ class HttpCheckRefusalLoggingSpec extends Specification implements HttpCheckFixt
                 'factory.egress.in-process')
 
         when:
-        poll([url: URL], new ScriptedExchange(new EgressRefusedException(refusal)))
+        probe([url: URL], new ScriptedExchange(new EgressRefusedException(refusal)))
 
         then:
         def line = refusalLine()
@@ -57,7 +57,7 @@ class HttpCheckRefusalLoggingSpec extends Specification implements HttpCheckFixt
                 EgressRefusal.Reason.SCHEME, forged, 'a redirect downgrades https', 'factory.egress.in-process')
 
         when:
-        poll([url: URL], new ScriptedExchange(new EgressRefusedException(refusal)))
+        probe([url: URL], new ScriptedExchange(new EgressRefusedException(refusal)))
 
         then:
         def line = refusalLine()

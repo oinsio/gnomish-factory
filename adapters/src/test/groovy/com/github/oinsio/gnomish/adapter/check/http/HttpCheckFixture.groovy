@@ -40,14 +40,20 @@ trait HttpCheckFixture {
                 Duration.ofSeconds(30), VerifyCheck.TimeoutClass.QUALITY, [])
     }
 
-    /** Runs the provider against a scripted exchange, outside any run context or workspace. */
-    PollStatus poll(Map<String, Object> params, ScriptedExchange exchange) {
-        poll(params, exchange, [:])
+    /** Judges the check once against a scripted exchange, outside any run context or workspace. */
+    PollStatus probe(Map<String, Object> params, ScriptedExchange exchange) {
+        probe(params, exchange, [:])
     }
 
-    /** The same run, with the named secrets the manifest's auth section may resolve against. */
-    PollStatus poll(Map<String, Object> params, ScriptedExchange exchange, Map<String, String> secrets) {
-        new HttpExternalCheckClient(exchange, providing(secrets)).poll(check(params), null)
+    /** The same judgement, with the named secrets the manifest's auth section may resolve against. */
+    PollStatus probe(Map<String, Object> params, ScriptedExchange exchange, Map<String, String> secrets) {
+        judge(new HttpCheckProbe(exchange, providing(secrets)), params, null)
+    }
+
+    /** One judgement by {@code probe} of a check carrying {@code params}, as the built-in executor asks it. */
+    PollStatus judge(HttpCheckProbe probe, Map<String, Object> params, Workspace workspace) {
+        def check = check(params)
+        probe.probe(check.checkId(), check.settings(), workspace)
     }
 
     /** Runs the built-in executor against a scripted exchange, outside any run context or workspace. */
@@ -58,7 +64,7 @@ trait HttpCheckFixture {
     /** The built-in executor over a scripted exchange, with the given run context and working copy. */
     HttpExecutor executor(HttpCheckExchange exchange, Map<String, String> secrets, HttpRunContext runContext,
             Workspace workspace) {
-        new HttpExecutor(new HttpExternalCheckClient(exchange, providing(secrets), runContext), check([:]), workspace)
+        new HttpExecutor(new HttpCheckProbe(exchange, providing(secrets), runContext), check([:]), workspace)
     }
 
     /** A {@code verdict} request carrying {@code settings} as the law loader maps them. */

@@ -34,7 +34,7 @@ class CheckRoundRouteSpec extends Specification {
 
     def stages = Mock(StageExecutor)
     def route = new CheckRoundRoute(stages,
-    CheckDispatchFixture.dispatch(new PipelineDefinition('1', new AutonomyLimits(3), [stage]), workingCopy))
+    HandAssembledCheckDispatch.dispatch(new PipelineDefinition('1', new AutonomyLimits(3), [stage]), workingCopy))
 
     def "FR1, FR2: a check request is a check round of the dispatch, and the stage chain is never asked"() {
         when:
@@ -64,7 +64,7 @@ class CheckRoundRouteSpec extends Specification {
 
     def "a route over no stage chain or no dispatch is refused at construction"() {
         given:
-        def dispatch = CheckDispatchFixture.dispatch(new PipelineDefinition('1', new AutonomyLimits(3), [stage]), workingCopy)
+        def dispatch = HandAssembledCheckDispatch.dispatch(new PipelineDefinition('1', new AutonomyLimits(3), [stage]), workingCopy)
 
         when:
         new CheckRoundRoute(noStages ? null : stages, noStages ? dispatch : null)

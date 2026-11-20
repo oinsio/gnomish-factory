@@ -75,4 +75,64 @@ class DescribeCheckPreflightSpec extends DescribePreflightSpecBase {
             'verify[0].executor'
         ]
     }
+
+    // Scenario: pipeline/pipeline-config / Explicit executor form
+    def "FR1: a check naming a law-declared executor passes when its settings fit that executor's schema, and is a located error when they break it"() {
+        given:
+        def program = describeAs('strict-verdict')
+        def law = { Map settings ->
+            law(['acme': program], verifying(withSettings(check(VerifyCheck.Token.EXECUTOR, 'acme'), settings)))
+        }
+
+        expect: 'settings the schema accepts pass the preflight'
+        preflight().describe(environment, law([maxTurns: 3])) instanceof DescribeOutcome.Described
+
+        and: 'settings the schema refuses are a located error at the check\'s settings path'
+        preflight().describe(environment, law([maxTurn: 3])) == new DescribeOutcome.Invalid([
+            new ConfigError('stages/build/stage.yaml', 'verify[0].settings.maxTurn',
+            "executor 'acme' settings break its schema's rule 'additionalProperties': "
+            + "property 'maxTurn' is not defined in the schema and the schema does not allow additional properties")
+        ])
+    }
+
+    // FR1: the external form carries its settings under params, so the error points there
+    def "FR1: an external check's settings breaking its executor's schema are located under params"() {
+        when:
+        def outcome = preflight().describe(environment, law(['acme': describeAs('strict-verdict')], verifying(
+                withSettings(check(VerifyCheck.Token.EXTERNAL, 'acme'), [maxTurns: 0]))))
+
+        then:
+        ((DescribeOutcome.Invalid) outcome).errors()*.where() == ['verify[0].params.maxTurns']
+    }
+
+    // FR1: a schema the factory cannot use is reported once, at the declaration, not again per check
+    def "FR1: an unusable settings schema is reported at the declaration only, not at each check naming it"() {
+        when:
+        def outcome = preflight().describe(environment, law(['acme': describeAs('remote-schema')],
+        verifying(withSettings(check(VerifyCheck.Token.EXECUTOR, 'acme'), [maxTurns: 3]))))
+
+        then:
+        ((DescribeOutcome.Invalid) outcome).errors()*.where() == [
+            'executors.acme.program',
+            'verify[0].executor'
+        ]
+    }
+
+    // FR1, FR4: an answer in another protocol is not held to its settings schema at the check either
+    def "FR1: a check naming an executor that speaks another protocol is not judged against its schema"() {
+        when:
+        def outcome = preflight().describe(environment, law(['acme': describeAs('protocol-2')],
+        verifying(withSettings(check(VerifyCheck.Token.EXECUTOR, 'acme'), [anything: 1]))))
+
+        then:
+        ((DescribeOutcome.Invalid) outcome).errors()*.where() == [
+            'executors.acme',
+            'verify[0].executor'
+        ]
+    }
+
+    private static VerifyCheck.Executor withSettings(VerifyCheck.Executor check, Map<String, Object> settings) {
+        new VerifyCheck.Executor(check.token(), check.executorName(), check.checkId(), settings, check.interval(),
+                check.timeout(), check.timeoutClass(), check.pinPaths(), check.verifyIn(), check.threshold(), check.expected())
+    }
 }

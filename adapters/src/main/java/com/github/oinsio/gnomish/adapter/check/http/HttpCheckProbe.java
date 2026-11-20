@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.domain.egress.EgressRefusedException;
 import com.github.oinsio.gnomish.domain.engine.Finding;
 import com.github.oinsio.gnomish.domain.engine.PollStatus;
 import com.github.oinsio.gnomish.domain.engine.port.Workspace;
-import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.httpegress.EgressAllowlist;
 import com.github.oinsio.gnomish.httpegress.ExchangeLimitException;
 import com.github.oinsio.gnomish.httpegress.GuardedHttpCheckExchange;
@@ -29,9 +28,8 @@ import org.slf4j.LoggerFactory;
 /**
  * The judgement of the built-in {@code http} check: one poll is one request, and the verdict is
  * read off the response by the check's own declared conditions (FR9, FR10, design D4 of
- * add-plugin-architecture). {@link #probe} judges once; {@link #poll} renders the {@link
- * PollStatus} as it stands (no engine port since task 5.2 of migrate-verify-to-executor-contract) and {@link HttpExecutor} renders it as the executor contract's result
- * (FR6 of migrate-verify-to-executor-contract), so the two differ only in their medium.
+ * add-plugin-architecture). {@link #probe} judges once, and {@link HttpExecutor} renders that
+ * {@link PollStatus} as the executor contract's result (FR6 of migrate-verify-to-executor-contract).
  *
  * <p>{@code pending-when} matching means "not terminal yet" ({@link PollStatus.Running}); it is
  * asked before the pass question, so a service reporting "still running" with a non-2xx status is
@@ -54,12 +52,12 @@ import org.slf4j.LoggerFactory;
  * @param runContext the run's allowlisted interpolation values (NFR-S2); {@link
  *     HttpRunContext#none()} outside a run, which makes any interpolating check fail closed
  */
-public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvider secrets, HttpRunContext runContext) {
+public record HttpCheckProbe(HttpCheckExchange exchange, SecretsProvider secrets, HttpRunContext runContext) {
 
-    private static final Logger log = LoggerFactory.getLogger(HttpExternalCheckClient.class);
+    private static final Logger log = LoggerFactory.getLogger(HttpCheckProbe.class);
 
     /** A client for a run that supplies no variables — every non-interpolating check is unaffected. */
-    public HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvider secrets) {
+    public HttpCheckProbe(HttpCheckExchange exchange, SecretsProvider secrets) {
         this(exchange, secrets, HttpRunContext.none());
     }
 
@@ -74,28 +72,16 @@ public record HttpExternalCheckClient(HttpCheckExchange exchange, SecretsProvide
      * @param runContext the run's allowlisted interpolation values; never null
      * @return the guarded client; never null
      */
-    public static HttpExternalCheckClient guarded(
-            OperatorEgress inProcess, SecretsProvider secrets, HttpRunContext runContext) {
+    public static HttpCheckProbe guarded(OperatorEgress inProcess, SecretsProvider secrets, HttpRunContext runContext) {
         var exchange = new GuardedHttpCheckExchange(new JdkHttpCheckExchange(), EgressAllowlist.of(inProcess));
-        return new HttpExternalCheckClient(exchange, secrets, runContext);
+        return new HttpCheckProbe(exchange, secrets, runContext);
     }
 
     /** How much of a failing response's body travels into the findings, so a report stays readable. */
     static final int BODY_EXCERPT_LIMIT = 2000;
 
     /**
-     * Polls the check's endpoint once and classifies what came back.
-     *
-     * @param check the external check to poll; its {@code params} carry the whole target
-     * @param workspace the check's working copy, the attempt commit's source; may be null
-     * @return the status this single poll observed; never null
-     */
-    public PollStatus poll(VerifyCheck.Executor check, Workspace workspace) {
-        return probe(check.checkId(), check.settings(), workspace);
-    }
-
-    /**
-     * Sends the check's request once and judges the response, the one judgement both renderings share.
+     * Sends the check's request once and judges the response.
      *
      * @param checkId the check's identity, for the finding and the refusal line; never null
      * @param settings the check's settings, graded at load; never null

@@ -10,13 +10,13 @@ import spock.lang.Specification
  * target"; the admitted set of an in-process call): a manifest target is the law's request, judged
  * against the {@code http} built-in's own admitted set — the operator's {@code
  * factory.egress.in-process} scope — and never against another consumer's connection. The judgement
- * is built as its registry entry builds it ({@link HttpExternalCheckClient#guarded}) over the
+ * is built as its registry entry builds it ({@link HttpCheckProbe#guarded}) over the
  * production exchange; no feature opens a socket.
  */
 class ManifestTargetAdmissionSpec extends Specification implements HttpCheckFixture {
 
-    private static HttpExternalCheckClient provider(List<String> inProcess) {
-        HttpExternalCheckClient.guarded(new OperatorEgress(inProcess), { name ->
+    private static HttpCheckProbe provider(List<String> inProcess) {
+        HttpCheckProbe.guarded(new OperatorEgress(inProcess), { name ->
             Optional.empty()
         } as SecretsProvider, HttpRunContext.none())
     }
@@ -25,7 +25,7 @@ class ManifestTargetAdmissionSpec extends Specification implements HttpCheckFixt
     // Scenario: verification/factory-egress-allowlist / A manifest target is never admitted by a connection
     def "a manifest target on the tracker connection's host is refused before any connection, naming the missing entry"() {
         when: 'the tracker connects to api.github.com, and the in-process scope does not name it'
-        def status = provider(['sonar.example.com']).poll(check([url: 'https://api.github.com/repos/acme/widgets']), null)
+        def status = judge(provider(['sonar.example.com']), [url: 'https://api.github.com/repos/acme/widgets'], null)
 
         then:
         status instanceof PollStatus.CannotVerify

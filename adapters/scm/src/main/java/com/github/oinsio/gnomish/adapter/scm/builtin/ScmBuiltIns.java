@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.adapter.scm.ScmConnection;
 import com.github.oinsio.gnomish.adapter.scm.ScmConnectionReader;
 import com.github.oinsio.gnomish.adapter.scm.ScmRepository;
 import com.github.oinsio.gnomish.adapter.scm.actions.GithubActionsExecutor;
-import com.github.oinsio.gnomish.adapter.scm.actions.GithubCheckExternalClient;
+import com.github.oinsio.gnomish.adapter.scm.actions.GithubWorkflowRuns;
 import com.github.oinsio.gnomish.adapter.scm.status.ScmStatusExecutor;
 import com.github.oinsio.gnomish.adapter.scm.status.ScmStatusReader;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
@@ -101,7 +101,7 @@ public final class ScmBuiltIns {
     public static ScmBuiltIn actions(ScmConnection connection, SecretsProvider secrets, InstantSource clock) {
         ScmRepository repository =
                 ScmRepository.of(ScmConnectionReader.PREFIX + GithubActionsExecutor.NAME, connection.settings());
-        var runs = new GithubCheckExternalClient(
+        var runs = new GithubWorkflowRuns(
                 new GithubHttpClient(
                         connection.endpoint(), connection.token(secrets, GithubActionsExecutor.TOKEN_ENV_VAR)),
                 repository.owner(),
@@ -123,7 +123,7 @@ public final class ScmBuiltIns {
         return new Statuses(ScmStatusReader.connect(connection, secrets));
     }
 
-    private record Actions(GithubCheckExternalClient runs) implements ScmBuiltIn {
+    private record Actions(GithubWorkflowRuns runs) implements ScmBuiltIn {
 
         @Override
         public Describe describe() {

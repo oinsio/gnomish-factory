@@ -13,7 +13,9 @@ import java.util.Map;
  * http} and {@code github-actions} built-ins each grade their own per-check settings, which core
  * never interprets. The validators are keyed by built-in executor name and handed in by the
  * composition root; a check whose executor has no validator — the built-ins with no per-check
- * selectors, or a law's program — is graded by nothing here.
+ * selectors, or a law's program — is graded by nothing here. A law's program is graded once its
+ * describe answers: the describe preflight holds each check's settings to that executor's settings
+ * schema ({@code SettingsAgreement} in {@code :application}).
  *
  * <p>Whether the executor a check names exists is not this seam's question: the law's load
  * validation ({@code ExecutorDeclarations}) refuses a name outside the six built-ins and the law's

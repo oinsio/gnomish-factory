@@ -15,9 +15,9 @@ import spock.lang.Specification
 
 /**
  * FR5 of migrate-verify-to-executor-contract: {@link CheckFindings} reads a SARIF log on the findings
- * channel through the contract's own SARIF reading, and bounds a legacy file by the results one
- * verdict may carry. A refusal of either is a coded WARN naming the check, and no findings — the
- * caller's synthetic result. Driven against a stub environment, as {@code CheckFindingsSpec} is.
+ * channel through the contract's own SARIF reading, and caps a legacy file at the results one
+ * verdict may carry ({@link ResultCap#shell}). A refusal of either is a coded WARN naming the check,
+ * and no findings — the caller's synthetic result. Driven against a stub environment, as {@code CheckFindingsSpec} is.
  */
 class CheckFindingsSarifSpec extends Specification {
 
@@ -93,7 +93,7 @@ class CheckFindingsSarifSpec extends Specification {
         '{"version":"2.1.0"}' || 'runs'
     }
 
-    def "FR5: more legacy findings than one verdict may carry are a coded WARN, and no findings"() {
+    def "FR5: more legacy findings than one verdict may carry are capped without a warning, never dropped"() {
         given:
         def logs = LogCaptureSupport.attach(CheckFindings)
         def entries = (1..(Answer.Verdict.MAX_RESULTS + 1)).collect {
@@ -103,17 +103,14 @@ class CheckFindingsSarifSpec extends Specification {
         when:
         def findings = findingsOf('{"findings":[' + entries + ']}')
 
-        then:
-        findings.isEmpty()
-        logs.list.any {
-            it.level == Level.WARN &&
-            it.formattedMessage.startsWith(OperatorEvent.FINDINGS_FILE_MALFORMED.head()) &&
-            it.formattedMessage.contains("${Answer.Verdict.MAX_RESULTS + 1} findings")
-        }
+        then: 'the cap is filled, its last result standing for the two unlisted findings'
+        findings.size() == Answer.Verdict.MAX_RESULTS
+        findings.last().sarif().message().forLog() == ResultCap.moreResults(2)
+        logs.list.every { it.level != Level.WARN }
 
-        and: 'exactly the cap is still read'
-        findingsOf('{"findings":[' + entries.substring('{"message":"m"},'.length()) + ']}').size() ==
-                Answer.Verdict.MAX_RESULTS
+        and: 'exactly the cap is still read whole'
+        findingsOf('{"findings":[' + entries.substring('{"message":"m"},'.length()) + ']}')*.sarif()*.message()*.forLog()
+                .every { it == 'm' }
 
         cleanup:
         logs.detach()

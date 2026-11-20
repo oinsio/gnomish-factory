@@ -58,6 +58,7 @@ The engine SHALL emit sealed events — RunStarted, AttemptStarted, ExecutionFin
 ### Requirement: External check poll loop
 **Reason**: The single-poll port and its delivery precondition are replaced by the engine-owned
 pending/poll lifecycle over the executor contract (`verification/pending-poll`), which keeps
-the delivery precondition, the interval, the timeout class and the run-URL preservation.
+the delivery precondition, the interval, the timeout class and the run-URL preservation (the run
+URL on the SARIF run, `executor/wire-contract`, design D23).
 **Migration**: `external` checks map to the `github-actions` or `http` built-in; the attempt
 commit delivery check runs before the first `start` of any verdict executor.

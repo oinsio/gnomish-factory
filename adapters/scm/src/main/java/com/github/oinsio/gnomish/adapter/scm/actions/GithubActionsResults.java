@@ -14,10 +14,13 @@ import com.github.oinsio.gnomish.executorcontract.Usage;
 import com.github.oinsio.gnomish.pendingkey.PendingKey;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code github-actions} runs judgement rendered as the executor contract's result (FR6, NFR-C1
- * of migrate-verify-to-executor-contract): a green run is {@code completed} with no result, a red
+ * of migrate-verify-to-executor-contract): a green run is {@code completed} with no result, its one
+ * SARIF run carrying the workflow run's page as its {@code properties.runUrl} (design D23) so the
+ * pass is auditable from the tracker — none when the platform named no page — a red
  * one {@code completed} with one {@code error} result per failed job — its message, the job as its
  * location, and the run link and log tail as the result's details ({@code properties.details},
  * design D19), apart from the message — a run in progress {@code pending} on
@@ -39,11 +42,13 @@ final class GithubActionsResults {
      */
     static ExecutorResult of(PollStatus status, String attemptCommit) {
         return switch (status) {
-            case PollStatus.Pass pass -> completed(List.of());
+            case PollStatus.Pass pass -> completed(List.of(), tracker(pass.runUrl()));
             case PollStatus.Fail fail ->
-                completed(fail.findings().stream()
-                        .map(GithubActionsResults::error)
-                        .toList());
+                completed(
+                        fail.findings().stream()
+                                .map(GithubActionsResults::error)
+                                .toList(),
+                        null);
             case PollStatus.Running running ->
                 new ExecutorResult(Status.PENDING, null, new PendingKey(attemptCommit), null, null, usage(), List.of());
             case PollStatus.CannotVerify cannot -> failed(cannot.reason());
@@ -71,9 +76,14 @@ final class GithubActionsResults {
                 details == null || details.isBlank() ? null : UntrustedText.tracker(details));
     }
 
-    private static ExecutorResult completed(List<SarifResult> results) {
-        var verdict =
-                new Answer.Verdict(List.of(new SarifRun(UntrustedText.factory(GithubActionsExecutor.NAME), results)));
+    /** The platform's run page, minted in the tracker family like the findings' texts. */
+    private static @Nullable UntrustedText tracker(@Nullable String runUrl) {
+        return runUrl == null ? null : UntrustedText.tracker(runUrl);
+    }
+
+    private static ExecutorResult completed(List<SarifResult> results, @Nullable UntrustedText runUrl) {
+        var verdict = new Answer.Verdict(
+                List.of(new SarifRun(UntrustedText.factory(GithubActionsExecutor.NAME), results, runUrl)));
         return new ExecutorResult(
                 Status.COMPLETED, null, null, null, ExecutorContractJson.answerTree(verdict), usage(), List.of());
     }

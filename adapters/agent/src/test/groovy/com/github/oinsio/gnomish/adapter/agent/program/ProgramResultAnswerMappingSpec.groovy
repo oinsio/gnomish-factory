@@ -64,7 +64,7 @@ class ProgramResultAnswerMappingSpec extends Specification {
         (mapped.answer() as ExecutionResult.VerdictReply).answer() == new VerdictAnswer.Sarif([
             new VerdictAnswer.Result(ResultLevel.ERROR, new Finding('build red', 'src/A.java:3', 'last 40 lines')),
             new VerdictAnswer.Result(ResultLevel.NOTE, new Finding('fyi', null, null))
-        ])
+        ], null)
     }
 
     // FR6, D18: a malformed verdict answer crosses as a malformed reply, which the derivation resolves as cannot-verify

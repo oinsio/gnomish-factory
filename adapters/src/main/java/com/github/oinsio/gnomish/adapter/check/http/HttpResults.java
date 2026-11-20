@@ -18,7 +18,9 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code http} judgement rendered as the executor contract's result (FR6, NFR-C1 of
- * migrate-verify-to-executor-contract): a pass is {@code completed} with no result, a failure
+ * migrate-verify-to-executor-contract): a pass is {@code completed} with no result, its one SARIF
+ * run carrying the target URL as its {@code properties.runUrl} (design D23) so the pass is auditable
+ * from the tracker — none when the judgement named no URL — a failure
  * {@code completed} with one {@code error} result — the unmet condition as its message, the target
  * as its location and the body excerpt as its details ({@code properties.details}, design D19) — a
  * {@code pending-when} match {@code pending}, and an exchange no verdict could be read from {@code
@@ -45,9 +47,9 @@ final class HttpResults {
      */
     static ExecutorResult of(PollStatus status) {
         return switch (status) {
-            case PollStatus.Pass pass -> completed(List.of());
+            case PollStatus.Pass pass -> completed(List.of(), manifest(pass.runUrl()));
             case PollStatus.Fail fail ->
-                completed(fail.findings().stream().map(HttpResults::error).toList());
+                completed(fail.findings().stream().map(HttpResults::error).toList(), null);
             case PollStatus.Running running ->
                 new ExecutorResult(Status.PENDING, null, PENDING, null, null, usage(), List.of());
             case PollStatus.CannotVerify cannot -> failed(cannot.reason(), cannot.details());
@@ -86,8 +88,14 @@ final class HttpResults {
                 details == null || details.isBlank() ? null : UntrustedText.manifest(details));
     }
 
-    private static ExecutorResult completed(List<SarifResult> results) {
-        var verdict = new Answer.Verdict(List.of(new SarifRun(UntrustedText.factory(HttpExecutor.NAME), results)));
+    /** The target URL, minted in the manifest family like a failure's location. */
+    private static @Nullable UntrustedText manifest(@Nullable String runUrl) {
+        return runUrl == null ? null : UntrustedText.manifest(runUrl);
+    }
+
+    private static ExecutorResult completed(List<SarifResult> results, @Nullable UntrustedText runUrl) {
+        var verdict =
+                new Answer.Verdict(List.of(new SarifRun(UntrustedText.factory(HttpExecutor.NAME), results, runUrl)));
         return new ExecutorResult(
                 Status.COMPLETED, null, null, null, ExecutorContractJson.answerTree(verdict), usage(), List.of());
     }

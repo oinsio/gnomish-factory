@@ -41,7 +41,8 @@ start exec-sh steps/executor-run.sh
 
 [run-as]
 # The reference executor's describe, and a start that answers the section of data/executor-result
-# its per-run link is named after (completed, quality, limit, decision, unknown-status, malformed):
+# its per-run link is named after (completed, quality, limit, infrastructure, decision, unknown-status,
+# malformed):
 # one preset for every result a ProgramExecutor spec reads (task 7.1 of define-executor-contract;
 # task 8.1 extends the reference preset itself). A line on stdout and one on stderr show that both
 # are logs, never the result.

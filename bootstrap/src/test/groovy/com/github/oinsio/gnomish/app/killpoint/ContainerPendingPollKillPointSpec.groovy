@@ -162,5 +162,8 @@ class ContainerPendingPollKillPointSpec extends ContainerPendingPollSpecBase {
         ]
         close.attemptsUsed() == 0
         (close.attempts()[0].stop() as Stop.CannotVerify).reason().toString().contains('never pending')
+
+        and:
+        secondPassIsNoOp(world)
     }
 }

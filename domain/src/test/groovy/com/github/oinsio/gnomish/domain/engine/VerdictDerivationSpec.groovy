@@ -17,7 +17,7 @@ class VerdictDerivationSpec extends Specification {
         def finding = new Finding("result at ${level}", 'src/A.java:3', null)
         def answer = new VerdictAnswer.Sarif([
             new VerdictAnswer.Result(level, finding)
-        ])
+        ], null)
 
         when:
         def verdict = VerdictDerivation.derive(answer, threshold)
@@ -62,7 +62,7 @@ class VerdictDerivationSpec extends Specification {
     // FR7: an answer with no results passes under every threshold
     def "FR7: an empty SARIF answer passes under threshold #threshold"() {
         expect:
-        VerdictDerivation.derive(new VerdictAnswer.Sarif([]), threshold) == new Verdict.Pass(null, [])
+        VerdictDerivation.derive(new VerdictAnswer.Sarif([], null), threshold) == new Verdict.Pass(null, [])
 
         where:
         threshold << Threshold.values()
@@ -91,7 +91,7 @@ class VerdictDerivationSpec extends Specification {
             result(ResultLevel.WARNING, 'w'),
             result(ResultLevel.NONE, 'x'),
             result(ResultLevel.NOTE, 'n'),
-        ])
+        ], null)
 
         when:
         def verdict = VerdictDerivation.derive(answer, Threshold.ERROR)
@@ -109,7 +109,7 @@ class VerdictDerivationSpec extends Specification {
         expect:
         VerdictDerivation.derive(new VerdictAnswer.Sarif([
             new VerdictAnswer.Result(ResultLevel.ERROR, finding)
-        ]),
+        ], null),
         Threshold.DEFAULT) == new Verdict.Fail([finding])
     }
 
@@ -120,7 +120,7 @@ class VerdictDerivationSpec extends Specification {
             result(ResultLevel.NOTE, 'n'),
             result(ResultLevel.ERROR, 'e'),
             result(ResultLevel.WARNING, 'w'),
-        ])
+        ], null)
 
         when:
         def verdict = VerdictDerivation.derive(answer, Threshold.ERROR)
@@ -136,7 +136,7 @@ class VerdictDerivationSpec extends Specification {
         def answer = new VerdictAnswer.Sarif([
             result(ResultLevel.ERROR, 'e'),
             result(ResultLevel.NOTE, 'n'),
-        ])
+        ], null)
 
         expect:
         VerdictDerivation.derive(answer, Threshold.ERROR) instanceof Verdict.Fail
@@ -165,7 +165,7 @@ class VerdictDerivationSpec extends Specification {
     def "FR7: a SARIF answer is inert once constructed"() {
         given:
         def results = [result(ResultLevel.NOTE, 'n')]
-        def answer = new VerdictAnswer.Sarif(results)
+        def answer = new VerdictAnswer.Sarif(results, null)
 
         when:
         results << result(ResultLevel.ERROR, 'e')

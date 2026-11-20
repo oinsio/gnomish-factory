@@ -4,8 +4,8 @@ import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultMapping
 import com.github.oinsio.gnomish.adapter.briefing.BriefingSections
 import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner
 import com.github.oinsio.gnomish.adapter.check.ShellExecutor
+import com.github.oinsio.gnomish.adapter.check.http.HttpCheckProbe
 import com.github.oinsio.gnomish.adapter.check.http.HttpExecutor
-import com.github.oinsio.gnomish.adapter.check.http.HttpExternalCheckClient
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
@@ -125,7 +125,7 @@ class FindingsFunnelSpec extends Specification {
         def check = VerifyChecks.external('quality-gate', BuiltInExecutors.HTTP,
                 [url: 'https://ci.example.invalid/api/status'], Duration.ofSeconds(1), Duration.ofSeconds(30),
                 VerifyCheck.TimeoutClass.QUALITY, [])
-        verdictOf(new HttpExecutor(new HttpExternalCheckClient(exchange, secrets), check, new DirectoryWorkspace(tempDir)), check)
+        verdictOf(new HttpExecutor(new HttpCheckProbe(exchange, secrets), check, new DirectoryWorkspace(tempDir)), check)
     }
 
     Verdict commandRuns(String line) {

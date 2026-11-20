@@ -51,7 +51,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         def answer = poll(executor).answer(ci, ref(0, ci), round([ci], STATE.withPendingPolls([stale]), roundToken)).answer()
 
         then:
-        answer == new VerdictAnswer.Sarif([])
+        answer == new VerdictAnswer.Sarif([], null)
         turns(executor) == [null, [ISSUED, 'k-new']]
         persistence.pending[0].state.pendingPolls()*.key()*.value() == ['k-new']
 
@@ -126,7 +126,7 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         def answer = poll(executor).answer(ci, ref(0, ci), round([ci], state)).answer()
 
         then:
-        answer == new VerdictAnswer.Sarif([])
+        answer == new VerdictAnswer.Sarif([], null)
         turns(executor) == [
             [RECORDED, 'k-1'],
             [ISSUED, 'k-2']

@@ -64,6 +64,50 @@ class VerifyChainOrderSpec extends VerifyOrchestratorSpecBase {
         result.results[0].verdict instanceof Verdict.Fail
     }
 
+    // FR1, FR2 of migrate-verify-to-executor-contract: with every check a verdict-executor round,
+    //     a failing second check of three stops the chain — the third is never started, and the
+    //     two results that ran are recorded in manifest order
+    // Scenario: pipeline/stage-engine / Ordered fail-fast is preserved
+    def "of three checks, a failing second one leaves the third unstarted and records the first two in order"() {
+        given: 'a builtin that passes, a command that fails, then a builtin whose round has no answer scripted'
+        def builtinRunner = new ScriptedCheckRounds([new Verdict.Pass(null, [])])
+        def commandRunner = new ScriptedCheckRounds([
+            new Verdict.Fail([
+                new Finding('red', null, null)
+            ])
+        ])
+        def checks = [
+            builtin('files_exist'),
+            command('./gradlew test'),
+            builtin('files_exist')
+        ]
+
+        when: 'the chain is verified'
+        def result = orchestrator(builtinRunner, commandRunner).verify(VerifyingStages.of(checks), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
+
+        then: 'the third check was never started'
+        builtinRunner.calls == [checks[0]]
+        commandRunner.calls == [checks[1]]
+        listener.events.findAll {
+            it instanceof EngineEvent.CheckStarted
+        }*.check() == [
+            CheckRef.of(0, checks[0]),
+            CheckRef.of(1, checks[1])
+        ]
+
+        and: 'the first two results are recorded, in manifest order'
+        result.results*.checkRef == [
+            CheckRef.of(0, checks[0]),
+            CheckRef.of(1, checks[1])
+        ]
+        result.results*.verdict == [
+            new Verdict.Pass(null, []),
+            new Verdict.Fail([
+                new Finding('red', null, null)
+            ])
+        ]
+    }
+
     // FR2: a CannotVerify verdict also stops the chain (any non-Pass breaks)
     def "stops the chain on a CannotVerify verdict too"() {
         given: 'a command that cannot verify, then a builtin that would pass'

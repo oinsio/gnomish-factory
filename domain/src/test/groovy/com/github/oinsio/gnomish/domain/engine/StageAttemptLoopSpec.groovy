@@ -79,7 +79,10 @@ class StageAttemptLoopSpec extends Specification {
 
     // FR4, FR13: a check that CannotVerify escalates without burning an attempt, and the
     //     round is still recorded with its check results and usages (recorded, not counted)
+    //     The scripted cannot-verify is answered by the check's round as `failed/infrastructure`
+    //     (ScriptedCheckRounds through ScriptedAnswers), the verdict executor's own status.
     // Scenario: pipeline/stage-engine / Unburned round is still recorded
+    // Scenario: pipeline/stage-engine / Check infrastructure failure burns no attempt
     // Scenario: verification/verification-hardening / Malformed judge verdict burns no attempt
     def "escalates CannotVerify recording the round without counting it"() {
         given: 'a stage whose single builtin check cannot be verified, run by a Completed executor'

@@ -157,6 +157,27 @@ them.
 - **WHEN** a SARIF result's `properties.details` is an object
 - **THEN** the answer reads as a verdict and the finding carries no details
 
+### Requirement: A verdict answer carries its run URL on the SARIF run
+A SARIF run of a verdict answer MAY carry the URL of the platform run that produced it as
+`properties.runUrl`, a string. The engine SHALL take the first run, in the order written, whose
+`runUrl` is a non-blank string, and SHALL record it with the check's verdict when the check
+passes; a blank value or a value of another type SHALL be ignored, never read as a malformed
+answer.
+**Implements**: FR6 of migrate-verify-to-executor-contract; NFR-O2 of add-sandbox-core
+**Notes**: Design D23; the `github-actions` built-in writes its workflow run's page and the `http` built-in its target URL, and a failing check's links travel in its findings' details.
+
+#### Scenario: A completed answer carries its run URL
+- **WHEN** a verdict answer's run carries `properties.runUrl` and none of its results reaches the check's threshold
+- **THEN** the check passes and the recorded check result carries that URL
+
+#### Scenario: The first run's URL is recorded
+- **WHEN** a passing verdict answer has two runs that each carry `properties.runUrl`
+- **THEN** the recorded check result carries the URL of the run written first
+
+#### Scenario: A malformed run URL is ignored
+- **WHEN** a SARIF run's `properties.runUrl` is an object
+- **THEN** the answer reads as a verdict and the pass carries no run URL
+
 ## MODIFIED Requirements
 
 ### Requirement: Poll of a program is refused without its preconditions

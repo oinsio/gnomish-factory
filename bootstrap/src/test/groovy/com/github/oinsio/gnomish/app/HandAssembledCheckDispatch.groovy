@@ -13,18 +13,26 @@ import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import java.nio.file.Path
 
 /**
- * The run's check dispatch for a spec that assembles an engine by hand, through its production owners
- * ({@code testing.md}, "Fixtures assemble through production owners"): the {@link ExecutorRegistry}
- * of the definition's checks over the built-ins' entries ({@link BuiltInEntriesFixture}), the {@link
+ * A check dispatch assembled by hand, NOT through the run's production owner, {@link
+ * ExecutorAdapterSelector#stageRounds} ({@code testing.md}, "Fixtures assemble through production
+ * owners"): the {@link ExecutorRegistry} of the definition's checks over the built-ins' entries
+ * ({@link BuiltInEntriesFixture}) — not the run's own, from its check equipment — the {@link
  * RunLaw}'s pin-check over the law at {@code lawRoot}, and the {@link CheckRoundRoute} that hands the
  * engine's check rounds to it outside the stage chain (task 4.2f of
- * migrate-verify-to-executor-contract).
+ * migrate-verify-to-executor-contract). The equipment's last registered commit is the in-place run's
+ * ({@link LastRegisteredCommit#NONE}) unless a caller hands its own.
+ *
+ * <p>For the specs whose subject is the dispatch or the route itself, and for the container kill-point
+ * media, whose stage chains are their own hand-built rounds over a local box and which carry no
+ * {@code SandboxRunPieces} the selector could assemble from. A spec that claims the run's check
+ * dispatch end to end builds it through the selector instead ({@code RoundFlowSpecBase.runHostAssembled}).
+ * {@code CheckDispatchAssemblyBoundarySpec} keeps every other hand assembly out of the test tree.
  *
  * <p>Test fixture; not production code, never PIT-mutated.
  */
-final class CheckDispatchFixture {
+final class HandAssembledCheckDispatch {
 
-    private CheckDispatchFixture() {}
+    private HandAssembledCheckDispatch() {}
 
     /** The check dispatch of a run of {@code definition}, its pins compared against the law at {@code lawRoot}. */
     static CheckDispatch dispatch(PipelineDefinition definition, Path lawRoot, BuiltInEntries builtIns = null) {
@@ -46,14 +54,6 @@ final class CheckDispatchFixture {
         new CheckRoundRoute(stages, new CheckDispatch(ExecutorRegistry.of(described, definition,
                 PipelineLaw.ofContent([:]), equipment, builtIns, freshBoxes),
                 RunLaw.open(LawBinding.workingTree(lawRoot)).pinCheck()))
-    }
-
-    /** The check rounds of a run of {@code definition}: each bound by the dispatch at its request. */
-    static StageExecutor checkRounds(PipelineDefinition definition, Path lawRoot) {
-        def dispatch = dispatch(definition, lawRoot)
-        return { StageExecutor.Request request ->
-            dispatch.bind(request.check(), request.checkRef(), request.workspace()).execute(request)
-        } as StageExecutor
     }
 
     /**

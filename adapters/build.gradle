@@ -68,7 +68,7 @@ dependencies {
 
     // The HTTP egress leaf (FR15, design D16 of migrate-verify-to-executor-contract): the `http`
     // built-in sends every request through its guarded exchange and its allowlist. `api`, not
-    // `implementation`: `HttpExternalCheckClient` takes the leaf's `HttpCheckExchange` on its
+    // `implementation`: `HttpCheckProbe` takes the leaf's `HttpCheckExchange` on its
     // public constructor.
     api project(':httpegress')
 

@@ -42,7 +42,7 @@ trait ShellCommandCheckRunnerTestSupport {
         assert outcome instanceof ShellOutcome.Answered
         new VerdictAnswer.Sarif((outcome as ShellOutcome.Answered).results().collect {
             SarifResultReading.toDomain(it.asSarif())
-        })
+        }, null)
     }
 
     /** The findings of an answered run's results, in the order written. */

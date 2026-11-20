@@ -97,7 +97,7 @@ class RawCaptureOwners {
         ],
         [
             'httpegress/src/main/java/com/github/oinsio/gnomish/httpegress/JdkHttpCheckExchange.java',
-            'MANIFEST/check (transport): streams the body under a byte cap into the check exchange; HttpExternalCheckClient matches it against the manifest\'s patterns and excerpts it through the carrier',
+            'MANIFEST/check (transport): streams the body under a byte cap into the check exchange; HttpCheckProbe matches it against the manifest\'s patterns and excerpts it through the carrier',
         ],
         // --- document file reads ---
         // The four host-side envelope readers that used to sit here — GitTaskStore,

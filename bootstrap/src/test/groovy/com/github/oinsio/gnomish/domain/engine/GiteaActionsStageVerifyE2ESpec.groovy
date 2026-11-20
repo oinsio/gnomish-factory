@@ -4,7 +4,7 @@ import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.FixtureGitConfig
 import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.adapter.scm.actions.GithubActionsExecutor
-import com.github.oinsio.gnomish.adapter.scm.actions.GithubCheckExternalClient
+import com.github.oinsio.gnomish.adapter.scm.actions.GithubWorkflowRuns
 import com.github.oinsio.gnomish.app.CheckRound
 import com.github.oinsio.gnomish.app.ThreadSleeper
 import com.github.oinsio.gnomish.app.workspace.RecordedAttemptCommitWorkspace
@@ -36,7 +36,7 @@ import spock.util.concurrent.PollingConditions
 /**
  * Task 7.2 (M1, G1, G4 of add-external-check-github-actions): the capstone live stage-level E2E.
  * Building on task 7.1's proven Gitea + {@code act_runner} fixture, this drives the real {@link
- * GithubCheckExternalClient} adapter, as the {@code github-actions} built-in's check round, <em>through
+ * GithubWorkflowRuns} adapter, as the {@code github-actions} built-in's check round, <em>through
  * the engine's own verify orchestration</em> — the real {@link VerifyOrchestrator} + {@link
  * PendingPoll} with a production {@link InstantSource}/{@link ThreadSleeper}, exactly as the engine
  * wires them in production (task 4.2f of migrate-verify-to-executor-contract) — rather than calling
@@ -172,7 +172,7 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
         //     really wait for it between polls; one equipment for the whole chain.
         def time = new TimeEquipment(InstantSource.system(), new ThreadSleeper())
         def clock = time.clock()
-        def client = new GithubCheckExternalClient(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(gitea.apiBaseUrl())), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, clock)
+        def client = new GithubWorkflowRuns(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(gitea.apiBaseUrl())), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, clock)
         // The check round of the github-actions built-in over the live client, through the wrapper
         //     and the one contract → domain mapping (task 4.2f of migrate-verify-to-executor-contract).
         def rounds = { StageExecutor.Request request ->
@@ -198,10 +198,9 @@ class GiteaActionsStageVerifyE2ESpec extends Specification implements BareGitRep
     // (see setupSpec) from ever reaching the green run. Host-mode `echo ok` concludes in about a
     // second once picked up; the generous timeout only absorbs runner registration and job pickup.
     private void awaitGreenConcluded(String sha) {
-        def client = new GithubCheckExternalClient(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(gitea.apiBaseUrl())), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, new VirtualClock())
-        def workspace = workspaceAt(sha)
+        def client = new GithubWorkflowRuns(new GithubHttpClient(GithubTestEndpoints.loopback(URI.create(gitea.apiBaseUrl())), gitea.adminToken()), GiteaContainerFixture.ADMIN_USER, GiteaContainerFixture.REPO_NAME, new VirtualClock())
         new PollingConditions(timeout: 300, initialDelay: 5, delay: 5).eventually {
-            def status = client.poll(check(), workspace)
+            def status = client.runsOf(CHECK_ID, sha)
             assert status instanceof PollStatus.Pass: "green run not concluded green yet: ${status} — runner logs: ${runner.logs()}"
         }
     }

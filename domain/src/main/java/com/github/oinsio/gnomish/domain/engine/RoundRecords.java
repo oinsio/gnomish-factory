@@ -104,7 +104,7 @@ final class RoundRecords {
     static Verdict overallVerdict(VerificationResult verification) {
         var results = verification.results();
         if (results.isEmpty()) {
-            return VerdictDerivation.derive(new VerdictAnswer.Sarif(List.of()), Threshold.DEFAULT);
+            return VerdictDerivation.derive(new VerdictAnswer.Sarif(List.of(), null), Threshold.DEFAULT);
         }
         return results.getLast().verdict();
     }

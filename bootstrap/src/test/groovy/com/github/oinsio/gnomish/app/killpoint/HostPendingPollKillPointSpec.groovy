@@ -129,6 +129,9 @@ class HostPendingPollKillPointSpec extends HostPendingPollSpecBase {
         at(world.repoDir, close).position() == new Position.PipelineEnd()
         below == (recorded ? pending : snapshot)
 
+        and:
+        secondPassIsNoOp(world)
+
         where:
         window | recorded | does
         'W0' | false | 'starts the check and writes it'
@@ -158,5 +161,8 @@ class HostPendingPollKillPointSpec extends HostPendingPollSpecBase {
         ]
         close.attemptsUsed() == 0
         (close.attempts()[0].stop() as Stop.CannotVerify).reason().toString().contains('never pending')
+
+        and:
+        secondPassIsNoOp(world)
     }
 }

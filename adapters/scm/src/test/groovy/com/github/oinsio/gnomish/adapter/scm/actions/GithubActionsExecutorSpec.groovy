@@ -57,6 +57,7 @@ class GithubActionsExecutorSpec extends Specification {
         describe.checkIdIsPinnedPath()
     }
 
+    // Scenario: verification/github-external-check / The adapter consumes the engine workspace type
     def "a run in progress is pending on the attempt commit, and a poll of the key polls that commit again"() {
         given:
         GithubActionsRig.run(platform, 'in_progress', null)

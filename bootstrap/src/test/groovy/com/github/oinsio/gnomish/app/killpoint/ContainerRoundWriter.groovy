@@ -9,7 +9,7 @@ import com.github.oinsio.gnomish.adapter.git.LocalBoxEnvironment
 import com.github.oinsio.gnomish.adapter.git.PushBestEffortAttemptPersistence
 import com.github.oinsio.gnomish.adapter.git.SandboxRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
-import com.github.oinsio.gnomish.app.CheckDispatchFixture
+import com.github.oinsio.gnomish.app.HandAssembledCheckDispatch
 import com.github.oinsio.gnomish.app.KillPointTakeRoutes
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
@@ -77,7 +77,7 @@ final class ContainerRoundWriter {
         def clock = new VirtualClock()
         // The engine's check rounds through the run's check dispatch, as the run assembly routes them
         // (task 4.2f of migrate-verify-to-executor-contract).
-        def ports = new EnginePorts(CheckDispatchFixture.routed(executor, world.definition, world.repoDir), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
+        def ports = new EnginePorts(HandAssembledCheckDispatch.routed(executor, world.definition, world.repoDir), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
                 VirtualTimeEquipment.on(clock), source.identity())
         new Engine().run(world.definition, context(),
                 TaskState.atStageStart(world.definition.stages().first().name()),

@@ -16,7 +16,9 @@ import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
  * The identity spec of the contract → domain mapping's details (design D9, D19 of
  * migrate-verify-to-executor-contract): a {@code shell} check through the real host environment —
  * the engine, the run's check dispatch, the {@code shell} built-in, the one mapping, the host
- * persistence — whose command writes no findings file and exits red. The built-in writes the output
+ * persistence, all assembled as a git-mode {@code run} assembles them ({@link
+ * ExecutorAdapterSelector#stageRounds}'s port over the run's own built-ins and round cell) — whose
+ * command writes no findings file and exits red. The built-in writes the output
  * tail as the SARIF result's {@code properties.details}; read back from the state file at the round
  * commit, it is the finding's details, and the finding's message is the result's message unchanged.
  */
@@ -41,8 +43,7 @@ class ShellDetailsFlowSpec extends RoundFlowSpecBase {
         def definition = pipeline()
 
         when:
-        def outcome = runHost(definition, worktree, FakeAgentSupport.propertiesFor('plain-round'),
-                CheckDispatchFixture.checkRounds(definition, clone))
+        def outcome = runHostAssembled(definition, worktree, FakeAgentSupport.propertiesFor('plain-round'))
 
         then: 'the one attempt failed its check'
         outcome instanceof TaskOutcome.Escalated

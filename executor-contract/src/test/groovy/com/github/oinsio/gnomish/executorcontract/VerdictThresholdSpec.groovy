@@ -13,10 +13,10 @@ class VerdictThresholdSpec extends Specification {
 
     private static Answer.Verdict verdict(List<SarifLevel> levels) {
         new Answer.Verdict([
-            new SarifRun(t('a'), []),
+            new SarifRun(t('a'), [], null),
             new SarifRun(t('b'), levels.collect {
                 new SarifResult(null, it, t('finding'), null, null)
-            })
+            }, null)
         ])
     }
 

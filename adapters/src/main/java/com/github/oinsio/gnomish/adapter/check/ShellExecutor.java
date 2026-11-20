@@ -141,7 +141,8 @@ public final class ShellExecutor implements Executor {
     private static ExecutorResult answered(List<ShellResult> results) {
         var verdict = new Answer.Verdict(List.of(new SarifRun(
                 UntrustedText.factory(NAME),
-                results.stream().map(ShellResult::asSarif).toList())));
+                results.stream().map(ShellResult::asSarif).toList(),
+                null)));
         return new ExecutorResult(
                 Status.COMPLETED, null, null, null, ExecutorContractJson.answerTree(verdict), usage(), List.of());
     }

@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app
 import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
+import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.adapter.git.DenialCursorSource
 import com.github.oinsio.gnomish.adapter.git.EnvironmentAttemptPersistence
@@ -16,6 +17,7 @@ import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
+import com.github.oinsio.gnomish.app.port.git.RunRound
 import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.baseref.BaseRule
@@ -65,7 +67,7 @@ import spock.lang.TempDir
  * check rounds are the ones a spec hands in — scripted, or the run's check dispatch — the rounds and
  * their commits are real. Claimless, as a {@code run} is.
  */
-abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFixture {
+abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
     static final String TASK = FakeAgentSupport.defaultTaskContext().taskId()
     static final String BRANCH = TaskIdSanitizer.branchName(TASK)
@@ -113,7 +115,8 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
         def executor = new CliStageExecutor(FakeAgentSupport.propertiesFor(scenario),
                 new VirtualClock(LocalBoxEnvironment.EXEC_STAMP.plusSeconds(3600)), { e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, source)
         def persistence = new EnvironmentAttemptPersistence(box, runner, clone, objects(), rounds, ClaimEpochSource.NONE)
-        engine(definition, executor, persistence, checks, Files.createDirectories(tempDir.resolve('workspace')), source.identity())
+        engine(definition, CheckRouting.of(executor, checks), persistence, Files.createDirectories(tempDir.resolve('workspace')),
+                source.identity())
     }
 
     /** A git worktree of the factory clone on the task branch: the host adapter's working copy. */
@@ -137,13 +140,39 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
         def rounds = hostGit.decorate(CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()), cell)
         def executor = hostGit.snapshotting(new CliStageExecutor(agent, clock, { e -> } as AgentProgressListener,
         TestChildEnvironment.hostAllowlist(), LAW, rounds), cell)
-        engine(definition, executor, new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE, cell, clock), checks, worktree,
-                rounds.identity())
+        engine(definition, CheckRouting.of(executor, checks),
+                new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE, cell, clock), worktree, rounds.identity())
     }
 
-    private static TaskOutcome engine(PipelineDefinition definition, StageExecutor executor,
-            AttemptPersistence persistence, StageExecutor checks, Path workspace, RoundIdentity identity) {
-        def ports = new EnginePorts(CheckRouting.of(executor, checks), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(new VirtualClock()), identity)
+    /**
+     * Runs the pipeline in host mode over {@code worktree} as a git-mode {@code run} assembles it,
+     * through the production owners (testing.md, "Fixtures assemble through production owners"): the
+     * assembly over {@code agent} with the bundle's host-git decoration and the run's one round cell,
+     * the law described by {@link ManualRunAssembly#describe}, the run's child environment from the
+     * check equipment, and {@link ExecutorAdapterSelector#stageRounds}'s one port — so the stage
+     * chain, the check dispatch, its registry, the run's built-ins and the round equipment (the cell
+     * as the last registered commit) are the ones the run builds. The law's pins are read from the
+     * clone's working tree.
+     */
+    TaskOutcome runHostAssembled(PipelineDefinition definition, Path worktree, FactoryProperties agent) {
+        def clock = new VirtualClock()
+        def run = RunRound.of(null)
+        def assembly = newAssembly(agent, VirtualTimeEquipment.on(clock))
+                .withHostGitPush(TaskGitFixture.real(runner).midRoundPush(), run)
+        def binding = LawBinding.workingTree(clone)
+        def described = assembly.describe(new RunOrder(worktree, null, definition, false), new DescribeMedium.Host(worktree),
+                [], binding) as DescribedLaw
+        def childEnv = assembly.checks.childEnv(assembly.sandboxProperties.envPassthrough(), definition, [])
+        def rounds = ExecutorAdapterSelector.stageRounds(assembly, childEnv, LAW, described, definition,
+                HttpRunContext.none(), RunLaw.open(binding).pinCheck())
+        engine(definition, rounds.port(), new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE,
+                run.rounds(), clock), worktree, rounds.identity())
+    }
+
+    /** Runs the pipeline to its outcome through {@code port}, the engine's one port for stage and check rounds. */
+    static TaskOutcome engine(PipelineDefinition definition, StageExecutor port, AttemptPersistence persistence,
+            Path workspace, RoundIdentity identity) {
+        def ports = new EnginePorts(port, new ScriptedJudgeVoter(), new RecordingEventListener(), persistence, VirtualTimeEquipment.on(new VirtualClock()), identity)
         new Engine().run(definition, FakeAgentSupport.defaultTaskContext(), TaskState.atStageStart('build'),
                 new DirectoryWorkspace(workspace), ports)
     }

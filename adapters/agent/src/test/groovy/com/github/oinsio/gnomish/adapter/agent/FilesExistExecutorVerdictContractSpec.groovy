@@ -77,7 +77,7 @@ class FilesExistExecutorVerdictContractSpec extends CheckRunnerContract {
         answer(check) == new VerdictAnswer.Sarif([
             new VerdictAnswer.Result(ResultLevel.ERROR, new Finding('missing file: missing.txt', 'missing.txt', null)),
             new VerdictAnswer.Result(ResultLevel.ERROR, new Finding('missing file: gone.txt', 'gone.txt', null))
-        ])
+        ], null)
     }
 
     // FR1, D5 (human decision 2026-11-10): the engine receives the answer within the result cap

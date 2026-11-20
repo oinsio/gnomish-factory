@@ -11,9 +11,9 @@ import spock.lang.Specification
  * and headers travel from the manifest verbatim, authorization is a credential resolved by name at
  * request time, and the allowlisted run variables are interpolated so a check addresses exactly
  * this run's result. The fail-closed halves of these rules live in
- * {@link HttpExternalCheckClientCannotVerifySpec}.
+ * {@link HttpExecutorCannotVerifySpec}.
  */
-class HttpExternalCheckClientRequestSpec extends Specification implements HttpCheckFixture {
+class HttpCheckProbeRequestSpec extends Specification implements HttpCheckFixture {
 
     // FR10: the declared method and headers travel onto the request verbatim.
     def "the declared method and non-secret headers are sent"() {
@@ -22,7 +22,7 @@ class HttpExternalCheckClientRequestSpec extends Specification implements HttpCh
         def exchange = new ScriptedExchange(200, 'ok')
 
         when:
-        poll(params, exchange)
+        probe(params, exchange)
 
         then:
         exchange.lastRequest.method() == 'POST'
@@ -37,7 +37,7 @@ class HttpExternalCheckClientRequestSpec extends Specification implements HttpCh
         def exchange = new ScriptedExchange(200, 'ok')
 
         when:
-        def status = poll(params, exchange, [GNOMISH_SONAR_TOKEN: 's3cret'])
+        def status = probe(params, exchange, [GNOMISH_SONAR_TOKEN: 's3cret'])
 
         then:
         status instanceof PollStatus.Pass
@@ -51,7 +51,7 @@ class HttpExternalCheckClientRequestSpec extends Specification implements HttpCh
         def exchange = new ScriptedExchange(200, 'ok')
 
         when:
-        poll(params, exchange, [TOKEN: 'raw-value'])
+        probe(params, exchange, [TOKEN: 'raw-value'])
 
         then:
         exchange.lastRequest.headers().firstValue('X-Api-Key').get() == 'raw-value'
@@ -71,8 +71,8 @@ class HttpExternalCheckClientRequestSpec extends Specification implements HttpCh
             headers: ['X-Stage': '${stage.name}']]
 
         when:
-        def status = new HttpExternalCheckClient(exchange, providing([:]), runContext)
-        .poll(check(params), new RecordedAttemptCommitWorkspace(commitRef('c0ffee')))
+        def status = judge(new HttpCheckProbe(exchange, providing([:]), runContext), params,
+        new RecordedAttemptCommitWorkspace(commitRef('c0ffee')))
 
         then:
         exchange.lastRequest.uri().toString() ==

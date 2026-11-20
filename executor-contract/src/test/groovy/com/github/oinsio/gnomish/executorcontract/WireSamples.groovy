@@ -78,8 +78,8 @@ final class WireSamples {
                     new SarifResult(null, SarifLevel.ERROR, t('exited 1'), null, null, t('the output tail')),
                     new SarifResult(null, SarifLevel.NOTE, t('only a file'), t('build.gradle'), null),
                     new SarifResult(null, SarifLevel.NONE, t('only a line'), null, 3)
-                ]),
-                new SarifRun(t('lint'), [])
+                ], null),
+                new SarifRun(t('lint'), [], null)
             ]),
             new Answer.Verdict([]),
             new Answer.Select(t('main'), [], null),

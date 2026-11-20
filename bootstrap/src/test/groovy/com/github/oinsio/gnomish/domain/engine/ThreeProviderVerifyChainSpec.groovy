@@ -1,10 +1,12 @@
 package com.github.oinsio.gnomish.domain.engine
 
+import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.GREEN_RUN
 import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.LOOPBACK_ALLOWLIST
 import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.QUALITY_GATE
 import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.RUNS_PATH
 import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.WORKFLOW
 import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.actionsRun
+import static com.github.oinsio.gnomish.domain.engine.ThreeProviderPlatformFixture.runPage
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 
@@ -42,7 +44,7 @@ import spock.lang.TempDir
  * live case.
  *
  * <p>Implements M3, FR6 of add-plugin-architecture; FR1, FR2, FR6 of
- * migrate-verify-to-executor-contract.
+ * migrate-verify-to-executor-contract (design D23).
  */
 class ThreeProviderVerifyChainSpec extends Specification {
 
@@ -86,6 +88,24 @@ class ThreeProviderVerifyChainSpec extends Specification {
             'command:true',
             'external:http:quality-gate',
             'external:github-actions:' + WORKFLOW,
+        ]
+    }
+
+    // Scenario: verification/github-external-check / A green check is auditable from the tracker
+    // FR6, D23 (the D9 row's identity spec): each built-in's pass carries its run URL across the
+    //     contract — the run's html_url and the http target — into the recorded Verdict.Pass.
+    def "a green external check records its platform run URL with the pass"() {
+        when:
+        def result = verifyChain([
+            platform.qualityGate(),
+            actionsRun()
+        ], platform.greenSha)
+
+        then:
+        result.results*.verdict.every { it instanceof Verdict.Pass }
+        result.results*.verdict*.runUrl() == [
+            platform.qualityGate().settings().url,
+            runPage(GREEN_RUN)
         ]
     }
 

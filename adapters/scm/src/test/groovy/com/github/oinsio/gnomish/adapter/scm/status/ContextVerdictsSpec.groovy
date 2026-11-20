@@ -21,7 +21,7 @@ class ContextVerdictsSpec extends Specification {
 
     def "within one listing the larger sequence wins, and on a tie the first listed: #why"() {
         expect:
-        ContextVerdicts.of(reports).of('build').get().detail() == winner
+        ContextVerdicts.of(reports, 0).of('build').get().detail() == winner
 
         where:
         why | reports || winner
@@ -48,7 +48,7 @@ class ContextVerdictsSpec extends Specification {
         ContextVerdicts.of([
             report(STATUS, statusState, 9, 'status'),
             report(CHECK_RUN, runState, 1, 'run')
-        ])
+        ], 0)
         .of('build').get().detail() == winner
 
         where:
@@ -63,6 +63,6 @@ class ContextVerdictsSpec extends Specification {
         expect:
         ContextVerdicts.of([
             report(STATUS, PASSED, 1, 'x')
-        ]).of('lint').isEmpty()
+        ], 0).of('lint').isEmpty()
     }
 }

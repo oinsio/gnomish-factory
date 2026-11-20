@@ -44,14 +44,14 @@ sealed interface FilesExistOutcome {
 
     /**
      * The {@code error} results {@code missing} is reported as: one per path while they fit the
-     * contract's result cap; above it, the first {@code MAX_RESULTS - 1} paths and one result naming
-     * how many more are missing, so the answer never exceeds the cap.
+     * contract's result cap; above it, the first {@code MAX_RESULTS - 1} paths ({@link ResultCap#listed})
+     * and one result naming how many more are missing, so the answer never exceeds the cap.
      *
      * @param missing the missing paths, in the order the settings list them; possibly empty
      * @return the results, in that order; never null
      */
     static List<Reported> reported(List<String> missing) {
-        int listed = missing.size() <= Answer.Verdict.MAX_RESULTS ? missing.size() : Answer.Verdict.MAX_RESULTS - 1;
+        int listed = ResultCap.listed(missing.size());
         List<Reported> results = new ArrayList<>(listed + 1);
         for (String path : missing.subList(0, listed)) {
             results.add(new Reported(message(path), path));

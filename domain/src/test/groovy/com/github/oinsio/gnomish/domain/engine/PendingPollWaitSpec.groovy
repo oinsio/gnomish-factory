@@ -24,7 +24,7 @@ class PendingPollWaitSpec extends PendingPollSpecBase {
         def answer = poll(executor).answer(ci, ref(0, ci), round([ci])).answer()
 
         then:
-        answer == new VerdictAnswer.Sarif([])
+        answer == new VerdictAnswer.Sarif([], null)
         sleeper.slept == [waited]
         turns(executor) == [null, [ISSUED, 'k-1']]
 

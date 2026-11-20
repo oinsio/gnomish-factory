@@ -17,7 +17,7 @@
 // modules, so any dependency added here would be pushed into both.
 //
 // What stays outside: composing a request from a manifest, resolving its credential and judging
-// the verdict (`HttpExternalCheckClient` in `:adapters`), and logging a refusal, which needs the
+// the verdict (`HttpCheckProbe` in `:adapters`), and logging a refusal, which needs the
 // logging API this leaf does not carry, are the callers'.
 //
 // The Spock/Groovy test stack, the JSpecify + Error Prone compiler plugins and the PIT mutation

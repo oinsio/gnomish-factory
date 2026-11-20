@@ -20,7 +20,7 @@ class VerifyDerivationRoutingSpec extends VerifyOrchestratorSpecBase {
     private static VerdictAnswer warningAnswer() {
         new VerdictAnswer.Sarif([
             new VerdictAnswer.Result(ResultLevel.WARNING, WARNING)
-        ])
+        ], null)
     }
 
     private static VerifyCheck.Executor withThreshold(VerifyCheck.Executor check, Threshold threshold) {
@@ -48,6 +48,47 @@ class VerifyDerivationRoutingSpec extends VerifyOrchestratorSpecBase {
         Threshold.NOTE || new Verdict.Fail([WARNING])
 
         outcome = verdict instanceof Verdict.Pass ? 'a pass' : 'a fail'
+    }
+
+    // FR7, M2: every level x threshold combination, answered by a fake executor's check round and
+    //     judged by the engine, gives the table's verdict (VerdictDerivationSpec pins the same table
+    //     on the component alone; this one pins that the engine routes every executor answer to it)
+    // Scenario: pipeline/stage-engine / Threshold table verified
+    def "FR7: a fake executor's #level result under threshold #threshold #outcome the check"() {
+        given:
+        def finding = new Finding("result at ${level}", 'src/A.java:3', null)
+        def executor = new ScriptedCheckRounds([
+            new VerdictAnswer.Sarif([
+                new VerdictAnswer.Result(level, finding)
+            ], null)
+        ])
+        def check = withThreshold(builtin('files_exist'), threshold)
+
+        when:
+        def result = orchestrator(executor, new ScriptedCheckRounds()).verify(VerifyingStages.of([check]), CONTEXT, WORKSPACE, KEY, TaskState.atStageStart('build'), null)
+
+        then:
+        executor.calls == [check]
+        result.results*.verdict() == [
+            fails ? new Verdict.Fail([finding]) : new Verdict.Pass(null, [finding])
+        ]
+
+        where:
+        level | threshold || fails
+        ResultLevel.NONE | Threshold.ERROR || false
+        ResultLevel.NOTE | Threshold.ERROR || false
+        ResultLevel.WARNING | Threshold.ERROR || false
+        ResultLevel.ERROR | Threshold.ERROR || true
+        ResultLevel.NONE | Threshold.WARNING || false
+        ResultLevel.NOTE | Threshold.WARNING || false
+        ResultLevel.WARNING | Threshold.WARNING || true
+        ResultLevel.ERROR | Threshold.WARNING || true
+        ResultLevel.NONE | Threshold.NOTE || false
+        ResultLevel.NOTE | Threshold.NOTE || true
+        ResultLevel.WARNING | Threshold.NOTE || true
+        ResultLevel.ERROR | Threshold.NOTE || true
+
+        outcome = fails ? 'fails' : 'passes'
     }
 
     // FR7: the command runner's answer is judged against the check's threshold too

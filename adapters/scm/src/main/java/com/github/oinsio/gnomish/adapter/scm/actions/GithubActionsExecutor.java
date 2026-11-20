@@ -24,8 +24,8 @@ import org.jspecify.annotations.Nullable;
  * The {@code github-actions} built-in verdict executor (FR6, FR13 of
  * migrate-verify-to-executor-contract, design D4): the GitHub Actions check, moved out of the
  * vendor bundle into core, answering the executor contract. It is built over the check it judges
- * and the check's working copy, as the other verdict built-ins are, and over the runs judgement it
- * shares with the transitional external-check rendering ({@link GithubCheckExternalClient#runsOf}).
+ * and the check's working copy, as the other verdict built-ins are, and over the runs judgement
+ * ({@link GithubWorkflowRuns#runsOf}).
  *
  * <p>A {@code verdict} run polls the {@code checkId} workflow's runs at the attempt commit the
  * working copy carries: a run still in progress is {@code pending}, its key the attempt commit, and
@@ -67,7 +67,7 @@ public final class GithubActionsExecutor implements Executor {
             "results-receiver.actions.githubusercontent.com",
             EgressEntries.WILDCARD_PREFIX + "blob.core.windows.net");
 
-    private final GithubCheckExternalClient runs;
+    private final GithubWorkflowRuns runs;
     private final VerifyCheck.Executor check;
     private final Workspace workspace;
 
@@ -76,7 +76,7 @@ public final class GithubActionsExecutor implements Executor {
      * @param check the check this executor judges; its {@code checkId} is the workflow file; never null
      * @param workspace the check's working copy, carrying the attempt commit; never null
      */
-    public GithubActionsExecutor(GithubCheckExternalClient runs, VerifyCheck.Executor check, Workspace workspace) {
+    public GithubActionsExecutor(GithubWorkflowRuns runs, VerifyCheck.Executor check, Workspace workspace) {
         this.runs = runs;
         this.check = check;
         this.workspace = workspace;

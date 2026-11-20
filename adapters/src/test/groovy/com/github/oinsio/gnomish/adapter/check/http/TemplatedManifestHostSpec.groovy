@@ -68,7 +68,7 @@ advancement: auto
         def runContext = { name ->
             Optional.ofNullable(['task.id': taskId][name])
         } as HttpRunContext
-        new HttpExecutor(new HttpExternalCheckClient(guard, { name ->
+        new HttpExecutor(new HttpCheckProbe(guard, { name ->
             Optional.empty()
         }, runContext), check, null)
     }

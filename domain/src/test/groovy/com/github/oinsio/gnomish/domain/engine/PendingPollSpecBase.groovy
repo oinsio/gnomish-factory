@@ -64,7 +64,7 @@ abstract class PendingPollSpecBase extends Specification {
     }
 
     static ExecutionResult passed() {
-        new ExecutionResult(new ExecutionResult.Completed(), new ExecutionResult.VerdictReply(new VerdictAnswer.Sarif([])),
+        new ExecutionResult(new ExecutionResult.Completed(), new ExecutionResult.VerdictReply(new VerdictAnswer.Sarif([], null)),
         ExecutorUsage.none(), TRACE, [])
     }
 

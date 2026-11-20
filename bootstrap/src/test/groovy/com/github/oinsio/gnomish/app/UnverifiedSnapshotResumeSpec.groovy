@@ -60,7 +60,10 @@ import spock.lang.TempDir
  * that close and before the round's state commit (or its escalation's park commit) leaves a register
  * the one recogniser does not read as an interrupted verification. The pickup re-runs the round's
  * stage executor at the same round number, and the attempt counter is the one the register carried
- * before the round: the lost failure was never recorded, so no attempt is burned.
+ * before the round: the lost failure was never recorded, so no attempt is burned. K1 is a
+ * {@code quality} or {@code limit} answer (the window before the round's state commit), K2 an
+ * {@code infrastructure} answer (the window before the escalation's park commit); each row stands
+ * for its own window, so a change to the close that treats one failure class apart goes red here.
  *
  * <p>The medium is the container's: the production sandboxed round source over a daemon-free box
  * ({@link LocalBoxEnvironment}: a real clone, real in-box commits, a real harvest), the production
@@ -158,9 +161,17 @@ class UnverifiedSnapshotResumeSpec extends Specification implements BareGitRepoF
         and: 'no attempt was burned: the registered state is the one before the round'
         gitOutput(cloneDir, 'show', closed + ':.gnomish-task/state.json') == stateBefore
 
+        when: 'a second pickup reads the register again'
+        def again = new SnapshotTipCheck(runner, cloneDir).inspect(TASK)
+
+        then: 'the first pass wrote nothing, and the second judges the register alike'
+        again.isEmpty()
+        registered() == closed
+
         where:
         answer | failureClass
         'quality' | ExecutionResult.FailureClass.QUALITY
         'limit' | ExecutionResult.FailureClass.LIMIT
+        'infrastructure' | ExecutionResult.FailureClass.INFRASTRUCTURE
     }
 }

@@ -12,7 +12,7 @@ import org.jspecify.annotations.Nullable;
  * draw a base URL from.
  *
  * <p>{@link Auth} names a credential; it never carries one. The committed manifest holds the
- * environment-variable name only, and {@link HttpExternalCheckClient} resolves it through {@code
+ * environment-variable name only, and {@link HttpCheckProbe} resolves it through {@code
  * SecretsProvider} at request time (FR11, NFR-S1) — while the same name is declared back to the
  * composition root so it is scrubbed from every child environment and refused in the passthrough
  * allowlist, exactly like a vendor plugin's constant (FR17, design D11).

@@ -19,7 +19,7 @@ import org.jspecify.annotations.Nullable;
  * reading onto this type. A malformed answer is a value here rather than an exception, so it can
  * never be lost on the way to the derivation and read as a pass (FR6 of define-executor-contract).
  *
- * <p>Implements FR7 of migrate-verify-to-executor-contract.
+ * <p>Implements FR6, FR7 of migrate-verify-to-executor-contract.
  */
 public sealed interface VerdictAnswer {
 
@@ -29,21 +29,13 @@ public sealed interface VerdictAnswer {
      * @param results every result of every run, in the order written; defensively copied,
      *     unmodifiable, possibly empty
      * @param runUrl the authoritative platform run that produced the answer, carried into a pass
-     *     (NFR-O2 of add-sandbox-core), or {@code null} when no platform run exists
+     *     (NFR-O2 of add-sandbox-core), or {@code null} when no platform run exists; the canonical
+     *     constructor is the only one, so every producer states it (design D23)
      */
     record Sarif(List<Result> results, @Nullable String runUrl) implements VerdictAnswer {
 
         public Sarif {
             results = List.copyOf(results);
-        }
-
-        /**
-         * An answer with no platform run to point at.
-         *
-         * @param results every result, in the order written; never null
-         */
-        public Sarif(List<Result> results) {
-            this(results, null);
         }
     }
 

@@ -58,7 +58,7 @@ class GithubWorkflowRunPollLoggingSpec extends Specification {
     }
 
     /**
-     * The poll object is rebuilt per tick in production ({@code GithubCheckExternalClient}), so
+     * The poll object is rebuilt per tick in production ({@code GithubWorkflowRuns}), so
      * every poll here does the same — which is exactly what makes the suppressor, not the poll,
      * the thing that has to carry the streak.
      */

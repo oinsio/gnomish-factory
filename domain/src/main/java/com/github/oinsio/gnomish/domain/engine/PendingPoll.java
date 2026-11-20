@@ -9,9 +9,6 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.pendingkey.PendingKey;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Collections;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -35,11 +32,8 @@ import org.jspecify.annotations.Nullable;
  *       before the first poll. A throwing write is not caught here: no poll is made, and the verify
  *       chain resolves the check as cannot-verify (D21, "What a failed persistPending comes to").
  *   <li><b>Wait.</b> One method continues an entry, live and resumed (crash-consistency item 14),
- *       with the deadline at the entry's {@code since} plus the check's timeout. After a pending
- *       answer the next poll comes no sooner than {@code max(interval, pollAfter)}; the interval is
- *       the in-poll wait bound, carried to the executor by the check on the request. A hint reaching
- *       past the deadline ends the wait at the deadline with no further poll; a hint never extends
- *       the timeout. A resumed entry is polled at once, since the hint is not persisted.
+ *       on a {@link PendingWait} — the deadline and the wait between polls. A resumed entry is
+ *       polled at once, since the hint is not persisted.
  *   <li><b>Timeout.</b> Classified by {@link PendingTimeout}: the last answer's state first, then
  *       the declared class.
  * </ol>
@@ -51,9 +45,8 @@ import org.jspecify.annotations.Nullable;
  * AttemptPersistence#persistPending} again, before the wait and so before the next poll. It is the
  * same write as the first key's, so no second persistence path exists, and it names nothing of the
  * entry's subject beyond its identity, so another subject reuses it unchanged. A throwing rotation
- * write is not caught here either: the new key is never polled. It sleeps on the injected
- * equipment's sleeper with nothing held (D10). Holds only immutable collaborators, so one instance
- * serves concurrent verifications.
+ * write is not caught here either: the new key is never polled. Holds only immutable
+ * collaborators, so one instance serves concurrent verifications.
  *
  * <p>Every executor check of the verify chain goes through it ({@link VerifyOrchestrator}, task
  * 4.2f): a check whose executor never answers {@code pending} is one {@code start}. Beside the
@@ -141,7 +134,7 @@ final class PendingPoll {
             PendingPollRecord entry,
             PendingTurn.Origin origin,
             ExecutionResult.@Nullable Pending first) {
-        var deadline = entry.since().plus(check.timeout());
+        var wait = new PendingWait(time, check, entry.since());
         var timeout = new PendingTimeout();
         ExecutionResult.@Nullable Pending last = first;
         var turn = new PendingTurn(entry.key(), origin);
@@ -150,7 +143,7 @@ final class PendingPoll {
         while (true) {
             if (last != null) {
                 timeout.note(last);
-                if (!waited(check, last, deadline)) {
+                if (!wait.waited(last)) {
                     var failure = timeout.failure(check);
                     Events.emit(
                             listener,
@@ -159,7 +152,7 @@ final class PendingPoll {
                                     ref,
                                     check.executorName(),
                                     PendingKeyPrefix.of(turn),
-                                    elapsed(entry),
+                                    wait.elapsed(),
                                     failure));
                     return CheckRoundAnswers.polled(check, failure, resumed);
                 }
@@ -172,8 +165,8 @@ final class PendingPoll {
                             check.executorName(),
                             PendingKeyPrefix.of(turn),
                             turn.origin(),
-                            elapsed(entry),
-                            time.remaining(deadline)));
+                            wait.elapsed(),
+                            wait.remaining()));
             var result = executor.execute(round.request(check, ref, turn));
             var pending = ExecutorOutcomeClassifier.pending(result);
             if (pending.isEmpty()) {
@@ -198,28 +191,5 @@ final class PendingPoll {
                 new PendingPollRecord(recorded.check(), recorded.attempt(), recorded.token(), key, recorded.since());
         persistence.persistPending(round.taskId(), round.withRotated(rotated));
         return rotated;
-    }
-
-    /** The time since {@code entry}'s {@code since}, on the injected clock. */
-    private Duration elapsed(PendingPollRecord entry) {
-        return Duration.between(entry.since(), time.clock().instant());
-    }
-
-    /**
-     * Waits before the next poll: false when the deadline ends the wait instead, either because no
-     * time remains or because the answer's hint reaches past it (then the wait ends at the deadline).
-     */
-    private boolean waited(VerifyCheck.Executor check, ExecutionResult.Pending last, Instant deadline) {
-        var remaining = time.remaining(deadline);
-        if (remaining.isZero()) {
-            return false;
-        }
-        var hint = last.pollAfter();
-        if (hint != null && hint.compareTo(remaining) > 0) {
-            time.sleepUntil(deadline);
-            return false;
-        }
-        time.sleeper().sleep(hint == null ? check.interval() : Collections.max(List.of(check.interval(), hint)));
-        return true;
     }
 }

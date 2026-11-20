@@ -54,7 +54,7 @@ import org.slf4j.LoggerFactory;
  * leaves the interrupt set (FR11, NFR-R3 of fix-operator-blockers).
  *
  * <p>Implements NFR-R2, NFR-S1 of add-tracker-port; FR5 of harden-logging-observability; FR11,
- * NFR-R3 of fix-operator-blockers.
+ * NFR-R3 of fix-operator-blockers; FR14, FR15 of migrate-verify-to-executor-contract.
  */
 public final class GithubHttpClient {
 

@@ -22,6 +22,9 @@
 [strict-settings]
 {"protocolVersion":1,"version":"1","roles":["transform"],"capabilities":[],"settingsSchema":{"type":"object","properties":{"maxTurns":{"type":"integer","minimum":1}},"additionalProperties":false},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
 
+[strict-verdict]
+{"protocolVersion":1,"version":"1","roles":["verdict"],"capabilities":[],"settingsSchema":{"type":"object","properties":{"maxTurns":{"type":"integer","minimum":1}},"additionalProperties":false},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
+
 [remote-schema]
 {"protocolVersion":1,"version":"1","roles":["transform"],"capabilities":[],"settingsSchema":{"$ref":"https://schemas.example/acme-settings.json"},"credentials":[],"egress":[],"policyDisablingFlags":[],"enforcementLevel":"PROMPT_ONLY","reportsUsage":false}
 

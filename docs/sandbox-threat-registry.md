@@ -141,8 +141,10 @@ a program declared in the law and spawned only through the task execution enviro
 to over the executor contract's JSON, never Java code loaded into the factory process (ADR
 0020, decision 1). The in-process check SPI (`CheckClientFactory`) is removed, so no
 third-party verifier code runs inside the factory process. A `program` verdict executor that
-declares credentials runs in a fresh box whose egress allowlist is derived from its describe —
-`verify-in: same-box` on such a check is a load error — and the built-in verdict executors
+declares credentials runs in a fresh box whose egress allowlist is the law's
+`executors.<name>.egress` grant, bounded by its describe (a granted host the describe does not
+declare is refused before the first round; a host the describe declares and the law does not
+grant is never admitted) — `verify-in: same-box` on such a check is a load error — and the built-in verdict executors
 that hold a token (`github-actions`, `scm-status`) run in the factory process, their token
 entering no box, every call through the one guarded exchange of `:httpegress`. That exchange
 admits a destination by the medium its URL comes from: a host the operator's files name is

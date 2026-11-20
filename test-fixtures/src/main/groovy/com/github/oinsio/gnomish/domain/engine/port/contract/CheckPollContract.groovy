@@ -2,19 +2,18 @@ package com.github.oinsio.gnomish.domain.engine.port.contract
 
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.PollStatus
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import spock.lang.Specification
 
 /**
- * Abstract contract for a single poll of an external check — the judgement the {@code
- * http} and {@code github-actions} built-ins run over ({@code HttpExternalCheckClient},
- * {@code GithubCheckExternalClient}), an engine port until task 5.2 of
- * migrate-verify-to-executor-contract removed it: the behavioural guarantees a built-in's
- * verdict mapping relies on when it polls once and reads back a single {@link PollStatus}. A concrete
- * subclass binds an adapter-under-test through the {@link #arrange} seam, which
- * builds the client for a target status, polls once, and returns the produced
- * {@link PollStatus}; an unproducible variant returns {@link Optional#empty} and the
- * row is recorded and skipped.
+ * Abstract contract for a single poll of an external check — the judgement the {@code http} and
+ * {@code github-actions} built-in verdict executors render as the executor contract's result
+ * ({@code HttpCheckProbe#probe}, {@code GithubWorkflowRuns#runsOf}); an engine port until task 5.2
+ * of migrate-verify-to-executor-contract removed it. It pins the behavioural guarantees each
+ * built-in's result mapping relies on when it polls once and reads back a single {@link
+ * PollStatus}. A concrete subclass binds a judgement-under-test through the {@link #arrange} seam,
+ * which stages the target for a status, polls once through the path its executor calls, and
+ * returns the produced {@link PollStatus}; an unproducible variant returns {@link Optional#empty}
+ * and the row is recorded and skipped.
  *
  * <p>FR14 of add-manual-run: interactive and real adapters pass the same
  * port-contract suites as the fakes (metric M2). Underlying obligations come from
@@ -22,13 +21,13 @@ import spock.lang.Specification
  */
 abstract class CheckPollContract extends Specification implements PortContractSupport {
 
-    /** The four {@link PollStatus} variants the engine's poll loop switches on. */
+    /** The four {@link PollStatus} variants a built-in's result mapping switches on. */
     enum PollVariant {
         PASS, FAIL_WITH_FINDINGS, RUNNING, CANNOT_VERIFY
     }
 
     /**
-     * The arrangement seam: build the client-under-test so its poll yields the given
+     * The arrangement seam: build the judgement-under-test so its poll yields the given
      * {@code variant}, poll once, and return the produced {@link PollStatus}; or
      * return {@link Optional#empty} to declare the variant unproducible.
      *
@@ -36,24 +35,6 @@ abstract class CheckPollContract extends Specification implements PortContractSu
      * @return the produced status, or empty when unproducible
      */
     protected abstract Optional<PollStatus> arrange(PollVariant variant)
-
-    /**
-     * The canonical {@link PollStatus} for a {@code variant}: what a subclass loads into a
-     * scripted client when its adapter is driven over the fake rather than a real service.
-     *
-     * @param variant which poll status the row needs
-     * @return the canonical status for that variant
-     */
-    protected static PollStatus scriptedStatus(PollVariant variant) {
-        return switch (variant) {
-                    case PollVariant.PASS -> new PollStatus.Pass()
-                    case PollVariant.FAIL_WITH_FINDINGS -> new PollStatus.Fail([
-                        new Finding('CI check failed', null, null)
-                    ])
-                    case PollVariant.RUNNING -> new PollStatus.Running()
-                    case PollVariant.CANNOT_VERIFY -> new PollStatus.CannotVerify(UntrustedText.tracker('service unavailable'), UntrustedText.tracker(''))
-                }
-    }
 
     // FR14: poll returns a non-null PollStatus of the declared sealed type (FR3)
     def "poll returns a non-null PollStatus"() {
@@ -93,7 +74,7 @@ abstract class CheckPollContract extends Specification implements PortContractSu
         thrown(UnsupportedOperationException)
     }
 
-    // FR14: the Running variant is reachable — the engine keeps polling until timeout (FR3)
+    // FR14: the Running variant is reachable — a built-in answers pending on it (FR3)
     def "poll can yield Running"() {
         given: 'a client arranged to report work still in progress'
         def status = arrange(PollVariant.RUNNING)

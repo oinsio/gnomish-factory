@@ -10,6 +10,7 @@ import com.github.oinsio.gnomish.githubapi.RateLimit;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Reads the named verdicts the SCM holds for an attempt SHA (FR4, FR9, NFR-R2 of
@@ -19,6 +20,12 @@ import java.util.List;
  * SHA in their path and go through the shared conditional-request cache, so an unchanged listing
  * costs no rate-limit budget; the platform's own retry, inside {@link GithubHttpClient}, is the
  * only retry.
+ *
+ * <p>Both listings are read page by page — page {@code n} past the first adds {@code &page=n},
+ * each page its own cache entry — until the pages have listed the listing's {@code total_count},
+ * a page lists nothing, or {@link #MAX_PAGES} pages were read. Reports the listings counted and the
+ * read did not list travel with the verdicts ({@link ContextVerdicts#unread()}), so an expected
+ * context left among them is named as such, never silently absent.
  *
  * <p>A rate-limit answer — as the core's one judgement, {@code GithubRateLimit}, read it onto the
  * conditional result (design D19) — is a {@link ScmStatusRead.RateLimited} with its pause; any other
@@ -33,6 +40,13 @@ public final class ScmStatusReader {
 
     /** One page of either listing: the platform's ceiling. */
     private static final String PAGE = "?per_page=100";
+
+    /**
+     * The pages read of one listing: a thousand reports at the platform's page size. A commit
+     * carrying more is past any pipeline the factory runs; each page is one more request per poll,
+     * so the bound caps the poll's rate-limit cost, and what it leaves unread is reported.
+     */
+    static final int MAX_PAGES = 10;
 
     private static final int NOT_FOUND = 404;
 
@@ -84,17 +98,42 @@ public final class ScmStatusReader {
      */
     ScmStatusRead read(AttemptSha sha) {
         String commit = repository.apiPath() + "/commits/" + sha.value();
-        Listing statuses = get(commit + "/status" + PAGE, "combined status", false);
+        Listing statuses =
+                list(commit + "/status", "combined status", false, body -> ScmContextParser.statuses(body, sha));
         if (statuses instanceof Listing.Limited limited) {
             return limited.read();
         }
-        Listing checkRuns = get(commit + "/check-runs" + PAGE, "check runs", true);
+        Listing checkRuns =
+                list(commit + "/check-runs", "check runs", true, body -> ScmContextParser.checkRuns(body, sha));
         if (checkRuns instanceof Listing.Limited limited) {
             return limited.read();
         }
-        List<ScmContext> reports = new ArrayList<>(ScmContextParser.statuses(((Listing.Body) statuses).text(), sha));
-        reports.addAll(ScmContextParser.checkRuns(((Listing.Body) checkRuns).text(), sha));
-        return new ScmStatusRead.Verdicts(ContextVerdicts.of(reports));
+        Listing.Reports byStatus = (Listing.Reports) statuses;
+        Listing.Reports byRun = (Listing.Reports) checkRuns;
+        List<ScmContext> reports = new ArrayList<>(byStatus.reports());
+        reports.addAll(byRun.reports());
+        return new ScmStatusRead.Verdicts(ContextVerdicts.of(reports, byStatus.unread() + byRun.unread()));
+    }
+
+    private Listing list(
+            String path, String listing, boolean absentAllowed, Function<String, ScmContextParser.Page> parse) {
+        List<ScmContext> reports = new ArrayList<>();
+        int listed = 0;
+        int total = 0;
+        for (int page = 1; page <= MAX_PAGES; page++) {
+            Listing answer = get(path + PAGE + (page == 1 ? "" : "&page=" + page), listing, absentAllowed);
+            if (answer instanceof Listing.Limited) {
+                return answer;
+            }
+            ScmContextParser.Page read = parse.apply(((Listing.Body) answer).text());
+            reports.addAll(read.reports());
+            listed += read.listed();
+            total = read.total();
+            if (read.listed() == 0 || listed >= total) {
+                break;
+            }
+        }
+        return new Listing.Reports(reports, total - listed);
     }
 
     private Listing get(String path, String listing, boolean absentAllowed) {
@@ -119,10 +158,12 @@ public final class ScmStatusReader {
         return new Listing.Body(fresh.body());
     }
 
-    /** One listing's answer: its body, or a rate limit. */
+    /** One page's body, a listing's reports with the count it left unread, or a rate limit. */
     private sealed interface Listing {
 
         record Body(String text) implements Listing {}
+
+        record Reports(List<ScmContext> reports, int unread) implements Listing {}
 
         record Limited(ScmStatusRead.RateLimited read) implements Listing {}
     }

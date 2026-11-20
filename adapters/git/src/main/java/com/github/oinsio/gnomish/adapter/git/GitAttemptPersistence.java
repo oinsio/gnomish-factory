@@ -16,7 +16,6 @@ import com.github.oinsio.gnomish.domain.engine.port.AttemptPersistence;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.InstantSource;
-import java.util.Optional;
 
 /**
  * The git realization of the engine's {@link AttemptPersistence} port (design D1, D2): a round is one commit of the
@@ -119,7 +118,7 @@ public final class GitAttemptPersistence implements AttemptPersistence {
                 .map(ClosedRound::registered)
                 .orElseGet(() -> rounds.opened().commit());
 
-        verifyBoundary(taskId, key, base, rounds.snapshot());
+        verifyBoundary(taskId, key, base);
 
         writeStateJson(taskId, key, state);
         writeTrace(taskId, key, trace, gnomishTaskRoot);
@@ -155,10 +154,11 @@ public final class GitAttemptPersistence implements AttemptPersistence {
     }
 
     /** The boundary: committed half, the pending lag, uncommitted half, then the owned paths' restore. */
-    private void verifyBoundary(String taskId, AttemptKey key, String base, Optional<ClosedRound> snapshot) {
+    private void verifyBoundary(String taskId, AttemptKey key, String base) {
         verdict(taskId, key, boundary.committed(base));
-        // The factory's own pending commits are no envelope edit (design D21).
-        snapshot.flatMap(lag::settle).ifPresent(failure -> {
+        // The factory's own pending commits are no envelope edit (design D21), judged over the round's
+        // registered chain as the cell holds it — never walked again (D14; crash-consistency item 14).
+        lag.settle(rounds.registeredChain()).ifPresent(failure -> {
             throw new GitPersistFailedException(taskId, key.stage(), key.attempt(), "pending-commit lag", failure);
         });
         RangeVerdict uncommitted = boundary.uncommitted();

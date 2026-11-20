@@ -132,7 +132,7 @@ class ProgramCredentialDeliverySpec extends CredentialDeliverySpecBase {
                 VerifyChecks.command('test -z "${ACME_API_KEY:-}"'), support.workspace())
 
         then: 'it passes only with the key absent from its process'
-        ShellCheckRounds.answerOf(verdict) == new VerdictAnswer.Sarif([])
+        ShellCheckRounds.answerOf(verdict) == new VerdictAnswer.Sarif([], null)
 
         and: 'FR10: the box guard admits the law\'s executor egress host beside the operator\'s'
         Files.readString(Path.of(System.getProperty('java.io.tmpdir'), 'gnomish-guard', taskId, 'allowlist.json')) ==

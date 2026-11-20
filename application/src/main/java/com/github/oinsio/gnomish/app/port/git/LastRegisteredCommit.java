@@ -10,9 +10,10 @@ import java.util.Optional;
  * snapshot, or the last pending commit landed on it — which names the one move of {@code HEAD}
  * during such a run that is the factory's. The move is judged by this identity, never by the
  * content between two commits (crash-consistency item 13). It also answers the round's registered
- * chain, which the adoption of a recorded key reads for the {@code state.json} lag a pending commit
- * leaves (design D14 as amended 2026-11-13): the chain was walked once, on the factory's side, by the
- * resume's own walk, and is never walked again where the adoption looks (crash-consistency item 14).
+ * chain, which the adoption of a recorded key and the host round close ({@code PendingStateLag})
+ * read for the {@code state.json} lag a pending commit leaves (design D14 as amended 2026-11-13):
+ * the chain was walked once, on the factory's side, by the resume's own walk, and is never walked
+ * again where either reader looks (crash-consistency item 14).
  *
  * <p>{@link CurrentRound} implements it; {@link #NONE}, the local default, holds no commit and is
  * what a run with no round cell passes — the in-place run and the conformance kit's candidate — so

@@ -30,29 +30,20 @@ import org.jspecify.annotations.Nullable;
  * RunnerOutcomeLoop} — {@code take} must behave identically with or without a TTY (design D12),
  * so no in-run console dialog is ever opened for {@code Escalated}/{@code Paused}.
  *
- * <p>{@link Engine#run} returns {@code Aborted} as a plain value, never as a thrown exception —
- * {@link AbortedException} is a {@link RunnerOutcomeLoop}-only wrapper decision, not something the
- * bare engine call produces (verified by reading {@link Engine#run}'s full body: every arm of its
- * exhaustive {@code TaskOutcome}-producing switch returns a value, nothing throws on {@code
- * Aborted}). So an {@code Aborted} return here is routed to {@link
- * com.github.oinsio.gnomish.app.take.AbortHandler} — task 5.3's
- * infrastructure-abort protocol — with fresh {@link
- * com.github.oinsio.gnomish.app.port.tracker.AbortFacts} fetched from the tracker for the K-fuse
- * decision.
+ * <p>{@link Engine#run} returns {@code Aborted} as a plain value, never as a thrown exception
+ * ({@link AbortedException} is a {@link RunnerOutcomeLoop}-only wrapper decision; every arm of the
+ * engine's exhaustive switch returns a value). So an {@code Aborted} return here is routed to {@link
+ * com.github.oinsio.gnomish.app.take.AbortHandler} — task 5.3's infrastructure-abort protocol — with
+ * fresh {@link com.github.oinsio.gnomish.app.port.tracker.AbortFacts} for the K-fuse decision.
  *
  * <p>A revocation is detected by querying {@link RevocationCheckingAttemptPersistence#revocation()}
- * on the wrapped persistence immediately after {@link Engine#run} returns — NOT by catching {@link
- * RevocationDetectedException}, which never reaches this method: {@code AttemptJournal#commit}
- * inside the engine catches it (like any {@code RuntimeException} from {@code persist}) and turns
- * it into a {@code TaskOutcome.Aborted} by {@code AttemptPersistence}'s own documented contract.
- * That {@code Aborted} is therefore checked as a false signal — {@link
- * RevocationCheckingAttemptPersistence#revocation()} is consulted first, regardless of which
- * {@link TaskOutcome} came back, and only when it is empty does the
- * normal {@code Aborted}/{@code Completed}/{@code Paused}/{@code Escalated} dispatch below apply.
- * When a revocation is recorded, control goes to {@link RevocationHandler} instead; {@link
- * GitOutcomeRecorder#recordAndCleanUp} is deliberately NOT called on that path (FR15: revocation
- * leaves the tracker state and cleanup untouched — {@link RevocationHandler} already performs its
- * own salvage/push protocol).
+ * right after {@link Engine#run} returns — NOT by catching {@link RevocationDetectedException},
+ * which {@code AttemptJournal#commit} inside the engine turns into a {@code TaskOutcome.Aborted}
+ * (like any {@code RuntimeException} from {@code persist}). So the revocation is consulted first,
+ * whatever {@link TaskOutcome} came back, and the normal dispatch below applies only when it is
+ * empty; otherwise {@link RevocationHandler} runs its own salvage/push protocol and {@link
+ * GitOutcomeRecorder#recordAndCleanUp} is deliberately NOT called (FR15: revocation leaves the
+ * tracker state and cleanup untouched).
  *
  * <p>Kept in sync with {@link TakeContainerEngineExecution}: both drive one engine run per claim
  * through the same {@code RunAssembly.assemble} contract, and in particular both hand it the
@@ -99,23 +90,21 @@ record TakeEngineExecution(
         LawBinding lawBinding) {
 
     /**
-     * Runs the engine exactly once against {@code context}/{@code state}, wrapping the round
-     * persistence with {@link RevocationCheckingAttemptPersistence} and recording the terminal
-     * outcome through {@link GitOutcomeRecorder} — unless the run was revoked mid-flight, in which
-     * case {@link RevocationHandler} owns the git-side cleanup instead, or the run aborted, in
-     * which case {@link com.github.oinsio.gnomish.app.take.AbortHandler} owns the tracker-side protocol. Every non-aborted, non-revoked
-     * outcome is carried through to a real tracker call by an exhaustive switch: a fresh {@code
-     * Escalated} outcome is parked through {@link TakeEscalationExit} (task 5.8, FR13, D12), a fresh
-     * {@code Completed} outcome is finished through {@link TakeFinishReport} (task 5.11, FR18, D11),
-     * and a fresh {@code Paused} outcome is parked as {@code AwaitingHuman(CHECKPOINT)} through
-     * {@link TakePauseExit} (FR13, FR18, D12) — so a manual checkpoint that exits with code 11
-     * leaves the task {@code AwaitingHuman} in the tracker, not stuck {@code Working}.
+     * Runs the engine exactly once against {@code context}/{@code state}, its round persistence
+     * wrapped with {@link RevocationCheckingAttemptPersistence}, and records the terminal outcome
+     * through {@link GitOutcomeRecorder} — a revoked run's cleanup is {@link RevocationHandler}'s, an
+     * aborted run's tracker protocol the {@code AbortHandler}'s. Every other outcome reaches a real
+     * tracker call by an exhaustive switch: a fresh {@code Escalated} is parked through {@link
+     * TakeEscalationExit} (task 5.8, FR13, D12), a fresh {@code Completed} finished through {@link
+     * TakeFinishReport} (task 5.11, FR18, D11), and a fresh {@code Paused} parked as {@code
+     * AwaitingHuman(CHECKPOINT)} through {@link TakePauseExit} (FR13, FR18, D12) — so a manual
+     * checkpoint exiting with code 11 leaves the task {@code AwaitingHuman}, not stuck {@code Working}.
      *
      * <p>Implements FR9, FR12, FR13, FR18, D2, D3, D11, D12 of add-tracker-port.
      *
      * @param order the take order the run executes: the pipeline it advances through (the task's
-     *     own law on a fresh claim, design D6 of introduce-take-order), and the tracker, task identity and instance identity for the revocation check and the
-     *     terminal write; never null
+     *     own law on a fresh claim, design D6 of introduce-take-order), and the tracker, task and
+     *     instance identities for the revocation check and the terminal write; never null
      * @param bootstrap the located/materialized bundle the worktree and taskId are read from
      * @param context the task context to run with — the caller's choice of original or
      *     decision-appended context

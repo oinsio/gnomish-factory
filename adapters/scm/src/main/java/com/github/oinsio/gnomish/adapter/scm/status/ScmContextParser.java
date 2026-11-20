@@ -34,10 +34,19 @@ final class ScmContextParser {
 
     private ScmContextParser() {}
 
-    /** The check runs of a {@code /commits/<sha>/check-runs} body that name the attempt SHA. */
-    static List<ScmContext> checkRuns(String body, AttemptSha sha) {
+    /**
+     * One page of a listing: the reports on the attempt SHA, how many entries the page listed on any
+     * SHA, and the listing's {@code total_count} — zero when the platform states none, which ends
+     * the listing at this page.
+     */
+    record Page(List<ScmContext> reports, int listed, int total) {}
+
+    /** The check runs of a {@code /commits/<sha>/check-runs} page that name the attempt SHA. */
+    static Page checkRuns(String body, AttemptSha sha) {
+        JsonNode root = tree(body, "check runs");
+        JsonNode runs = root.path("check_runs");
         List<ScmContext> reports = new ArrayList<>();
-        for (JsonNode run : tree(body, "check runs").path("check_runs")) {
+        for (JsonNode run : runs) {
             if (sha.names(run.path("head_sha").asText(""))) {
                 String status = run.path("status").asText("");
                 String conclusion = run.path("conclusion").asText("");
@@ -52,20 +61,25 @@ final class ScmContextParser {
                         run.path("output").path("title")));
             }
         }
-        return reports;
+        return page(root, runs, reports);
     }
 
-    /** The statuses of a {@code /commits/<sha>/status} body, when the body names the attempt SHA. */
-    static List<ScmContext> statuses(String body, AttemptSha sha) {
+    /** The statuses of a {@code /commits/<sha>/status} page, when the page names the attempt SHA. */
+    static Page statuses(String body, AttemptSha sha) {
         JsonNode root = tree(body, "combined status");
-        JsonNode pinned = sha.names(root.path("sha").asText("")) ? root.path("statuses") : MissingNode.getInstance();
+        JsonNode listed = root.path("statuses");
+        JsonNode pinned = sha.names(root.path("sha").asText("")) ? listed : MissingNode.getInstance();
         List<ScmContext> reports = new ArrayList<>();
         for (JsonNode status : pinned) {
             String word = status.path("state").asText(status.path("status").asText(""));
             reports.add(report(
                     ScmContext.Source.STATUS, status, "context", stateOf(word), word, status.path("description")));
         }
-        return reports;
+        return page(root, listed, reports);
+    }
+
+    private static Page page(JsonNode root, JsonNode listed, List<ScmContext> reports) {
+        return new Page(reports, listed.size(), root.path("total_count").asInt());
     }
 
     private static ScmContextState completed(String conclusion) {

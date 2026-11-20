@@ -127,7 +127,7 @@ class ContainerContinuationMedium implements ContinuationMedium, BareGitRepoFixt
         def clock = new VirtualClock()
         // The engine's check rounds through the run's check dispatch, as the run assembly routes them
         // (task 4.2f of migrate-verify-to-executor-contract).
-        def ports = new EnginePorts(CheckDispatchFixture.routed(executor, definition, cloneDir), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
+        def ports = new EnginePorts(HandAssembledCheckDispatch.routed(executor, definition, cloneDir), new ScriptedJudgeVoter(), new RecordingEventListener(), persistence,
                 VirtualTimeEquipment.on(clock), source.identity())
         def outcome = new Engine().run(definition, context(taskId), first,
                 new DirectoryWorkspace(Files.createTempDirectory(root, 'workspace')), ports)

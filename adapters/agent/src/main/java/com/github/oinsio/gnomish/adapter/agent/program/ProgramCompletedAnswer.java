@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  * migrate-verify-to-executor-contract; FR3, FR6 of define-executor-contract), one part of {@link
  * ProgramResultMapping}. A {@code transform} round takes no answer or a decision request; a {@code
  * verdict} round takes a verdict, which crosses as an {@link ExecutionResult.VerdictReply} — each
- * SARIF result read by the one {@link SarifResultReading} — and a malformed verdict answer as a {@link
+ * SARIF result and the run URL read by the one {@link SarifResultReading} (design D23) — and a malformed verdict answer as a {@link
  * VerdictAnswer.Malformed} reply, which the derivation resolves as cannot-verify. A malformed answer
  * of a transform round, a well-formed answer of a kind the role does not take, and a verdict round
  * that completed with no answer are each {@code failed/infrastructure} naming it (FR6: never a pass).
@@ -30,7 +30,7 @@ import org.jspecify.annotations.Nullable;
  * round's close ({@link ProgramResultMapping#closeOf}) is decided by it from the contract result
  * before the mapping (design D22, human decision 2026-11-12), so the two cannot disagree.
  *
- * <p>Implements FR3, FR6 of define-executor-contract; FR1, FR5, FR19 of
+ * <p>Implements FR3, FR6 of define-executor-contract; FR1, FR5, FR6, FR19 of
  * migrate-verify-to-executor-contract.
  */
 final class ProgramCompletedAnswer {
@@ -51,7 +51,8 @@ final class ProgramCompletedAnswer {
             return refused(executor, why, usage, trace, denials);
         }
         if (reading instanceof AnswerReading.Parsed(Answer.Verdict answer)) {
-            return reply(new VerdictAnswer.Sarif(results(answer)), usage, trace, denials);
+            return reply(
+                    new VerdictAnswer.Sarif(results(answer), SarifResultReading.runUrl(answer)), usage, trace, denials);
         }
         if (reading instanceof AnswerReading.Malformed(var reason)) {
             return reply(new VerdictAnswer.Malformed(reason), usage, trace, denials);

@@ -22,14 +22,12 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 public final class Engine {
 
     /**
-     * Runs the task described by {@code context} from its recorded {@code state} through the
-     * pipeline {@code definition}, returning the terminal {@link TaskOutcome}. Emits {@link
-     * EngineEvent.RunStarted} first, then resolves the pre-flight terminals that reach no execution
-     * or persistence port ({@link #preflight}, {@link #atStage}: FR5, FR8, FR9; FR2, FR6 of
-     * make-checkpoint-gate-durable; FR13 of define-executor-contract); otherwise the stage attempt
-     * loop runs. Every path emits {@link EngineEvent.TaskFinished} with the outcome (FR12).
-     * Implements FR1, FR5, FR8, FR9, FR12 of add-stage-engine; FR6 of make-checkpoint-gate-durable; FR13
-     * of define-executor-contract; FR20 of migrate-verify-to-executor-contract.
+     * Runs the task from its recorded {@code state} through {@code definition} to a terminal {@link
+     * TaskOutcome}, between {@link EngineEvent.RunStarted} and {@link EngineEvent.TaskFinished} on every
+     * path (FR12): the pre-flight terminals that reach no port ({@link #preflight}, {@link #atStage})
+     * first, otherwise the stage attempt loop. Implements FR1, FR5, FR8, FR9, FR12 of add-stage-engine;
+     * FR2, FR6 of make-checkpoint-gate-durable; FR13 of define-executor-contract; FR20 of
+     * migrate-verify-to-executor-contract.
      *
      * @param definition the pipeline whose stages the run advances through; never null
      * @param context the task's identity and human decisions; never null
@@ -66,14 +64,11 @@ public final class Engine {
     }
 
     /**
-     * Resolves the run against its {@link Position} with an exhaustive switch — no
-     * {@code default}, so a new variant fails to compile. {@link Position.PipelineEnd}
-     * completes immediately (FR8); {@link Position.AwaitingApproval} escalates as {@link
-     * EscalationReport.PipelineMismatch} when the pipeline no longer declares the gate's stage
-     * (FR9) and otherwise pauses again at the gate (FR2 of make-checkpoint-gate-durable);
-     * {@link Position.AtStage} is resolved by {@link #atStage}, the only arm that threads the
-     * {@code context}, {@code workspace} and {@code ports} on to the stage attempt loop. Every
-     * outcome carries the {@link #resumedFrom} view of the {@code recorded} state.
+     * Resolves the run against its {@link Position} with an exhaustive switch (no {@code default}):
+     * {@link Position.PipelineEnd} completes (FR8); {@link Position.AwaitingApproval} is a {@link
+     * EscalationReport.PipelineMismatch} for a stage the pipeline no longer declares (FR9), else it
+     * pauses at the gate again (FR2 of make-checkpoint-gate-durable); {@link Position.AtStage} goes to
+     * {@link #atStage}. Every outcome carries the {@link #resumedFrom} view of {@code recorded}.
      */
     private TaskOutcome preflight(
             PipelineDefinition definition,
@@ -96,13 +91,12 @@ public final class Engine {
     }
 
     /**
-     * Resolves an {@link Position.AtStage} run: a stage name absent from the pipeline is a
-     * {@link EscalationReport.PipelineMismatch} (FR9), a recorded stop re-escalates through {@link
-     * StopEscalation} (FR6 of make-checkpoint-gate-durable), an {@code attemptsUsed} at the limit is
-     * {@link EscalationReport.AttemptsExhausted} (FR5), an executor version that differs from the
-     * task's pin is a {@code PipelineMismatch} naming both (FR13 of define-executor-contract) — all
-     * before any port, each judged on the {@link #resumedFrom} view — otherwise the stage runs
-     * through {@link #runStages} from the {@code recorded} state itself.
+     * Resolves an {@link Position.AtStage} run before any port, on the {@link #resumedFrom} view: a
+     * stage absent from the pipeline is a {@link EscalationReport.PipelineMismatch} (FR9), a recorded
+     * stop re-escalates through {@link StopEscalation} (FR6 of make-checkpoint-gate-durable), an {@code
+     * attemptsUsed} at the limit is {@link EscalationReport.AttemptsExhausted} (FR5), an executor
+     * version differing from the task's pin is a {@code PipelineMismatch} naming both (FR13 of
+     * define-executor-contract); otherwise {@link #runStages} runs from {@code recorded} itself.
      */
     private TaskOutcome atStage(
             PipelineDefinition definition,
@@ -135,10 +129,9 @@ public final class Engine {
     }
 
     /**
-     * The {@link EscalationReport.PipelineMismatch} for a recorded position naming
-     * {@code stageName}, a stage the pipeline no longer declares (FR9). The branch-document mint
-     * (design D3): the name came off a recorded position some instance wrote, and no stage in the
-     * current pipeline vouches for it — which is exactly what this report says.
+     * The {@link EscalationReport.PipelineMismatch} for a recorded position naming {@code stageName},
+     * a stage the pipeline no longer declares (FR9). The branch-document mint (design D3): the name
+     * came off a recorded position some instance wrote, and no stage of the pipeline vouches for it.
      */
     private static TaskOutcome mismatch(TaskState state, String stageName) {
         return new TaskOutcome.Escalated(
@@ -155,10 +148,9 @@ public final class Engine {
      *
      * <p>Each iteration runs the current stage: a {@link StageResult.Terminal} ends the run; a {@link
      * StageResult.Passed} applies the stage's {@link AdvancementMode} exhaustively. {@code AUTO}
-     * advances — the next stage's loop starts from the passing round's persisted state, whose
-     * position the round commit already advanced (FR4 of harden-task-branch-contract), and resets the
-     * history itself (FR14; {@link #resumedFrom}), so the next stage's first round writes its pending
-     * entries over exactly that persisted state (D21 item 12 of migrate-verify) — or completes at {@link
+     * advances — the next stage starts from the passing round's persisted state, its position already
+     * advanced by the round commit (FR4 of harden-task-branch-contract), and resets the history itself
+     * (FR14; {@link #resumedFrom}; D21 item 12 of migrate-verify) — or completes at {@link
      * Position.PipelineEnd} past the last stage (design D4). {@code MANUAL} pauses with exactly the
      * state the round persisted, the position at the gate (FR1 of make-checkpoint-gate-durable, D1).
      *

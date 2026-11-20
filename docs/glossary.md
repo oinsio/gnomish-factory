@@ -841,10 +841,13 @@ external; the decisions are ADR 0020.
   cannot-verify. A verdict executor declaring `poll` may answer `pending`; the
   engine then owns the wait through the **pending key**. A `program` verdict
   executor declaring credentials runs in a fresh box whose egress allowlist is
-  derived from its describe, and `verify-in: same-box` on such a check is a
-  located load error; a credentialed built-in runs in the factory process under
-  the in-process egress allowlist of its declared hosts, and its token enters
-  no box. A built-in that mediates no model reports usage `REPORTED` with an
+  the law's `executors.<name>.egress` grant, bounded by its describe (a granted
+  host the describe does not declare is refused before the first round), and
+  `verify-in: same-box` on such a check is a located load error; a credentialed
+  built-in runs in the factory process under the in-process egress guard,
+  admitted by its operator connection, the connection's `egress` list, the
+  operator's `factory.egress.in-process` scope and its describe's `egress`, and
+  its token enters no box. A built-in that mediates no model reports usage `REPORTED` with an
   empty model map. Introduced by `migrate-verify-to-executor-contract` (design
   D1, D5, D6, D13). *Not:* the **judge**, which keeps the `JudgeVoter` port
   until `extract-agent-round-runner`.
