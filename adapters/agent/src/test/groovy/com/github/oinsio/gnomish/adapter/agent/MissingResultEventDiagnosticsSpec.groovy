@@ -1,5 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent
+import com.github.oinsio.gnomish.adapter.agent.claude.AgentRoundResultExtractor
+import com.github.oinsio.gnomish.adapter.agent.claude.TimestampedEvent
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.time.Instant
 import spock.lang.Specification

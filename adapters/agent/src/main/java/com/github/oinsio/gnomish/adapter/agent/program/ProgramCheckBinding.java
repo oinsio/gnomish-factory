@@ -92,7 +92,8 @@ public final class ProgramCheckBinding {
     private BoundCheck refused(String cause) {
         return BoundCheck.unboxed(new UnboxedProgram(
                 program.describe(),
-                ProgramFailures.infrastructure(program.declaration().name(), cause, emptyTail())));
+                ProgramFailures.infrastructure(
+                        ProgramFailures.Subject.PROGRAM, program.declaration().name(), cause, emptyTail())));
     }
 
     private static com.github.oinsio.gnomish.untrustedtext.UntrustedText emptyTail() {

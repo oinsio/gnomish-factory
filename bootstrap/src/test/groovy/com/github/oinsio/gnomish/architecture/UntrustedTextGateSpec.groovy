@@ -234,7 +234,7 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleObjectReader':
         'docker listings and inspect lines into listed objects with their labels, and into the' +
         ' timing Instants the sweep decides on',
-        'com.github.oinsio.gnomish.adapter.agent.TokenUsageMapper':
+        'com.github.oinsio.gnomish.adapter.agent.claude.TokenUsageMapper':
         'the round\'s model id into a telemetry key, held to ModelIdSyntax',
         // FR11, NFR-S4 of define-executor-contract: the working-copy-unchanged check's view, read
         // once BoundedCapture minted it at capture instead of handing the check a String.
@@ -276,10 +276,10 @@ class UntrustedTextGateSpec extends Specification {
         // Design D9 of define-executor-contract: the one bounded capture of an exec (a describe, a
         // non-streaming program run, git's view of a working copy) mints its output at capture.
         'com.github.oinsio.gnomish.sandbox.BoundedCapture': ['output'],
-        'com.github.oinsio.gnomish.adapter.agent.AgentEvent$InitEvent': ['sessionId', 'model'],
-        'com.github.oinsio.gnomish.adapter.agent.AgentEvent$AssistantEvent': ['sessionId', 'model'],
-        'com.github.oinsio.gnomish.adapter.agent.AgentEvent$UserEvent': ['sessionId'],
-        'com.github.oinsio.gnomish.adapter.agent.AgentEvent$ResultEvent': ['sessionId'],
+        'com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent$InitEvent': ['sessionId', 'model'],
+        'com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent$AssistantEvent': ['sessionId', 'model'],
+        'com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent$UserEvent': ['sessionId'],
+        'com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent$ResultEvent': ['sessionId'],
         'com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest': ['question', 'options'],
         'com.github.oinsio.gnomish.domain.engine.Verdict$CannotVerify': ['reason', 'details'],
         'com.github.oinsio.gnomish.domain.engine.ExecutionResult$DecisionRequest': ['question', 'options'],

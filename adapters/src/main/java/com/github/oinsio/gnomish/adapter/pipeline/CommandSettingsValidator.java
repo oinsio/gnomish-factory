@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.pipeline;
 
+import com.github.oinsio.gnomish.adapter.settings.RoundTimeout;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -18,12 +19,11 @@ import java.util.TreeMap;
  *
  * <p>The schema of the other executor types is not judged here: {@code agent-cli} executors and
  * every {@code judge} check — a command stage's included — belong to {@link
- * AgentSettingsValidator}, whose {@code roundTimeout} judgement and unknown-key wording this class
- * calls rather than repeats, so the declared pair of {@code RoundTimeout} and {@code
- * AgentSettingsValidator} gains a caller, not a third implementation of the accepted shapes
- * (design D2 of add-command-executor).
+ * AgentSettingsValidator}. The {@code roundTimeout} shapes are judged by their one owner, {@link
+ * RoundTimeout}, which the Claude dialect's settings judge calls too (design D6 of
+ * extract-agent-round-runner), never by a copy here.
  *
- * <p>Implements FR3, UX2 of add-command-executor.
+ * <p>Implements FR3, UX2 of add-command-executor; D6 of extract-agent-round-runner.
  */
 final class CommandSettingsValidator {
 
@@ -42,7 +42,7 @@ final class CommandSettingsValidator {
         for (StageDefinition stage : pipeline.stages()) {
             if (stage.executor().type() == ExecutorType.COMMAND) {
                 validateSettings(
-                        AgentSettingsValidator.manifestPath(stage.name()),
+                        "stages/%s/stage.yaml".formatted(stage.name()),
                         stage.executor().settings(),
                         errors);
             }
@@ -55,9 +55,9 @@ final class CommandSettingsValidator {
         for (Map.Entry<String, Object> entry : new TreeMap<>(settings).entrySet()) {
             String key = entry.getKey();
             String where = "executor.settings." + key;
-            String problem = AgentSettingsValidator.ROUND_TIMEOUT_KEY.equals(key)
-                    ? AgentSettingsValidator.roundTimeoutMalformation(entry.getValue())
-                    : AgentSettingsValidator.unrecognizedKey(key);
+            String problem = RoundTimeout.KEY.equals(key)
+                    ? RoundTimeout.malformation(entry.getValue())
+                    : "unrecognized settings key '%s'".formatted(key);
             if (problem != null) {
                 errors.add(new ConfigError(manifest, where, problem));
             }

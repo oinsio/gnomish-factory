@@ -77,7 +77,7 @@ class WorkingCopyPendingCommitSpec extends Specification implements LocalGitRepo
         def verdict = new ExecutorRequest(Role.VERDICT, new Workspace('.'), new Policy.ReadOnly(),
                 RoleInputs.verdict('criteria'), JsonNodeFactory.instance.objectNode(), ProgramBounds.DEFAULTS.hints(), [], null)
         def answer = JsonNodeFactory.instance.objectNode().put('passed', true)
-        check().judge('acme', verdict, before, new ExecutorResult(Status.COMPLETED, null, null, null, answer,
+        check().judge(ProgramFailures.Subject.PROGRAM, 'acme', verdict, before, new ExecutorResult(Status.COMPLETED, null, null, null, answer,
                 Usage.absent(), []))
     }
 

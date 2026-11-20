@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.adapter.agent.claude.AgentRoundResultExtractor;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
@@ -18,9 +19,9 @@ import java.time.InstantSource;
  * environment and decision transport (host default: worktree + temp-dir
  * decision file; sandboxed: the leased container environment with the
  * in-branch decision file and snapshot-closed rounds — FR4, FR21, FR23 of
- * add-sandbox-core), {@link AgentInvocationOptions#renderForExecutor} for the
- * invocation flags (including the pinpoint decision-file {@code Write}
- * allowance), {@link StreamJsonParser} to read its stream-json stdout, {@link
+ * add-sandbox-core), {@link com.github.oinsio.gnomish.adapter.agent.claude.AgentCommandLine#of} for the
+ * command line (the {@code writeExactly} policy of the decision file: its pinpoint {@code Write}
+ * allowance), {@link com.github.oinsio.gnomish.adapter.agent.claude.StreamJsonParser} to read its stream-json stdout, {@link
  * AgentRoundResultExtractor} to shape the essential result; the round source reads the
  * decision file through the shared {@code DecisionRequestRead}.
  *
@@ -39,7 +40,7 @@ import java.time.InstantSource;
  * regardless of the round's outcome (FR3).
  *
  * <p>The {@link AgentProgressListener} supplied at construction (task 9.4, design D10) is
- * threaded straight into {@link StreamJsonParser}, so every recognized event on this
+ * threaded straight into {@link com.github.oinsio.gnomish.adapter.agent.claude.StreamJsonParser}, so every recognized event on this
  * executor's rounds reaches it live, on the parse loop's own thread (FR7, NFR-O1, UX1);
  * the round source may add a per-round listener (the sandboxed mid-round harvest poll, FR5).
  *

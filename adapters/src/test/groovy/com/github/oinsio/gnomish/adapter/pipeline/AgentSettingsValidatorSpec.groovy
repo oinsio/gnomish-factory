@@ -9,168 +9,129 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
 import spock.lang.Specification
 
 /**
- * Unit spec for {@link AgentSettingsValidator} (task 9.1): exactly {@code
- * allowedTools}/{@code disallowedTools}/{@code maxTurns}/{@code roundTimeout}
- * per {@code agent-cli} executor and every judge check, well-formed values,
- * located startup errors naming the stage/check and key.
+ * Unit spec for {@link AgentSettingsValidator}: which settings reach the agent executor's settings
+ * judge, and where each is located — every {@code agent-cli} stage executor's and every judge
+ * check's, whatever the judge check's parent stage. What the settings may hold is the judge's (the
+ * Claude dialect's schema, {@code ClaudeSettingsSpec} in {@code :adapters:agent}).
  *
- * <p>FR11, UX2, D7 of add-agent-executor.
+ * <p>FR11, UX2, D7 of add-agent-executor; FR7, D6 of extract-agent-round-runner.
  */
 class AgentSettingsValidatorSpec extends Specification {
 
     private static final AutonomyLimits LIMITS = new AutonomyLimits(2)
 
-    def "an agent-cli stage with fully well-formed settings yields no errors"() {
+    /** A judge that reports one error per settings map it is handed, naming where it was. */
+    final List<List<Object>> judged = []
+    final CheckSettingsValidator judge = { String file, String where, Map<String, Object> settings ->
+        judged << [file, where, settings]
+        [
+            new ConfigError(file, where, 'judged')
+        ]
+    } as CheckSettingsValidator
+
+    def "FR7: an agent-cli stage's executor settings reach the judge, located at executor.settings"() {
         given:
-        def stage = stage('build', ExecutorType.AGENT_CLI, [
-            allowedTools : ['Read', 'Write'],
-            disallowedTools: ['Bash'],
-            maxTurns : 5,
-            roundTimeout : 30,
-        ], [])
+        def stage = stage('build', ExecutorType.AGENT_CLI, [maxTurns: 5], [])
 
         expect:
-        AgentSettingsValidator.validate(pipeline(stage)) == []
-    }
-
-    def "an api stage's settings are never inspected, however malformed"() {
-        given:
-        def stage = stage('plan', ExecutorType.API, [allowedTools: 'not-a-list', bogus: 1], [])
-
-        expect:
-        AgentSettingsValidator.validate(pipeline(stage)) == []
-    }
-
-    // Scenario: executor/agent-executor / Typo fails fast
-    def "an unrecognized key on an agent-cli executor is a located error naming the stage and key"() {
-        given:
-        def stage = stage('build', ExecutorType.AGENT_CLI, [allowedTols: ['Read']], [])
-
-        expect:
-        AgentSettingsValidator.validate(pipeline(stage)) == [
-            new ConfigError('stages/build/stage.yaml', 'executor.settings.allowedTols',
-            "unrecognized settings key 'allowedTols'")
+        AgentSettingsValidator.validate(pipeline(stage), judge) == [
+            new ConfigError('stages/build/stage.yaml', 'executor.settings', 'judged')
+        ]
+        judged == [
+            [
+                'stages/build/stage.yaml',
+                'executor.settings',
+                [maxTurns: 5]
+            ]
         ]
     }
 
-    // FR4 of fix-operator-blockers: the permission mode and the MCP exclusion are adapter
-    // policy fixed per role; a manifest that tries to set either fails startup, on the executor
-    // and on a judge check alike (scenario "Manifest cannot set the permission mode").
-    // Scenario: executor/agent-executor / Manifest cannot set the permission mode
-    def "FR4: a stage cannot set the permission mode or the MCP configuration through settings (#key)"() {
+    def "FR7: a #type stage's executor settings never reach the judge"() {
         given:
-        def stage = stage('build', ExecutorType.AGENT_CLI, [(key): value], [judgeCheck([(key): value])])
+        def stage = stage('plan', type, [allowedTools: 'not-a-list', bogus: 1], [])
 
         expect:
-        AgentSettingsValidator.validate(pipeline(stage)) == [
-            new ConfigError('stages/build/stage.yaml', "executor.settings.${key}",
-            "unrecognized settings key '${key}'"),
-            new ConfigError('stages/build/stage.yaml', "verify[0].settings.${key}",
-            "unrecognized settings key '${key}'")
-        ]
+        AgentSettingsValidator.validate(pipeline(stage), judge) == []
+        judged.isEmpty()
 
         where:
-        key | value
-        'permissionMode' | 'bypassPermissions'
-        'strictMcpConfig' | false
-        'mcpConfig' | '.mcp.json'
-    }
-
-    def "a malformed value on an agent-cli executor yields exactly its located error"() {
-        given:
-        def stage = stage('build', ExecutorType.AGENT_CLI, [(key): value], [])
-
-        expect:
-        AgentSettingsValidator.validate(pipeline(stage)) == [
-            new ConfigError('stages/build/stage.yaml', "executor.settings.${key}".toString(), message)
-        ]
-
-        where:
-        key | value || message
-        'allowedTools' | 'Read' || "malformed 'allowedTools': expected a list of strings"
-        'allowedTools' | ['Read', 2] || "malformed 'allowedTools': expected a list of strings"
-        'disallowedTools' | [1, 2] || "malformed 'disallowedTools': expected a list of strings"
-        'maxTurns' | 'five' || "malformed 'maxTurns': expected a number"
-        'roundTimeout' | true || "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string"
-        'roundTimeout' | 'not-a-duration' || "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string"
-    }
-
-    def "roundTimeout accepts both a plain number of seconds and an ISO-8601 duration string"() {
-        given:
-        def stage = stage('build', ExecutorType.AGENT_CLI, [roundTimeout: value], [])
-
-        expect:
-        AgentSettingsValidator.validate(pipeline(stage)) == []
-
-        where:
-        value << [30, 'PT30S', 'pt1m']
-    }
-
-    def "a judge check is validated the same way regardless of its parent stage's executor type"() {
-        given:
-        def judge = judgeCheck([badKey: 1])
-        def stage = stage('plan', executorType, [:], [judge])
-
-        expect:
-        AgentSettingsValidator.validate(pipeline(stage)) == [
-            new ConfigError('stages/plan/stage.yaml', 'verify[0].settings.badKey',
-            "unrecognized settings key 'badKey'")
-        ]
-
-        where:
-        executorType << [
+        type << [
             ExecutorType.API,
-            ExecutorType.AGENT_CLI
+            ExecutorType.COMMAND
         ]
     }
 
-    def "a well-formed judge check under an api stage yields no errors"() {
+    def "FR7: a judge check's settings reach the judge whatever its stage's executor type (#type)"() {
         given:
-        def judge = judgeCheck([allowedTools: ['Read'], maxTurns: 3])
-        def stage = stage('plan', ExecutorType.API, [:], [judge])
+        def stage = stage('plan', type, [:], [
+            command(),
+            judgeCheck([maxTurns: 3])
+        ])
 
-        expect:
-        AgentSettingsValidator.validate(pipeline(stage)) == []
-    }
+        when:
+        def errors = AgentSettingsValidator.validate(pipeline(stage), judge)
 
-    def "multiple independent problems across stage executor and judge checks are all reported, in stage/check order"() {
-        given:
-        def judge = judgeCheck([oops: 1])
-        def stage = stage('build', ExecutorType.AGENT_CLI, [maxTurns: 'nope'], [judge])
-
-        expect:
-        AgentSettingsValidator.validate(pipeline(stage)) == [
-            new ConfigError('stages/build/stage.yaml', 'executor.settings.maxTurns',
-            "malformed 'maxTurns': expected a number"),
-            new ConfigError('stages/build/stage.yaml', 'verify[0].settings.oops',
-            "unrecognized settings key 'oops'"),
+        then: 'located at the check\'s own index; the command check is not the agent\'s'
+        errors.last() == new ConfigError('stages/plan/stage.yaml', 'verify[1].settings', 'judged')
+        judged.last() == [
+            'stages/plan/stage.yaml',
+            'verify[1].settings',
+            [maxTurns: 3]
         ]
-    }
-
-    // FR11, D7: installation-level knobs and manifest data are not settings, on either role
-    def "FR11: a #what in settings is the unknown-settings-key error, on the executor and a judge check"() {
-        // Scenario: executor/agent-executor / The child-environment allowlist is installation config
-        // Scenario: executor/agent-executor / The model is manifest data, not a setting
-        given:
-        def stage = stage('build', ExecutorType.AGENT_CLI, [(key): value], [judgeCheck([(key): value])])
-
-        expect:
-        AgentSettingsValidator.validate(pipeline(stage))*.message() == [
-            "unrecognized settings key '${key}'".toString()
-        ] * 2
 
         where:
-        what | key | value
-        'child-environment allowlist' | 'envAllowlist' | ['PATH']
-        'passthrough variable' | 'envPassthrough' | ['NPM_TOKEN']
-        'model' | 'model' | 'claude-opus'
+        type << [
+            ExecutorType.API,
+            ExecutorType.AGENT_CLI,
+            ExecutorType.COMMAND
+        ]
+    }
+
+    def "every problem is reported, in stage then check order"() {
+        given:
+        def first = stage('build', ExecutorType.AGENT_CLI, [:], [judgeCheck([:])])
+        def second = stage('review', ExecutorType.AGENT_CLI, [:], [])
+
+        expect:
+        AgentSettingsValidator.validate(pipeline(first, second), judge)*.where() == [
+            'executor.settings',
+            'verify[0].settings',
+            'executor.settings'
+        ]
+        AgentSettingsValidator.validate(pipeline(first, second), judge)*.file() == [
+            'stages/build/stage.yaml',
+            'stages/build/stage.yaml',
+            'stages/review/stage.yaml'
+        ]
+    }
+
+    def "a load handed no judge grades no agent settings"() {
+        given:
+        def stage = stage('build', ExecutorType.AGENT_CLI, [bogus: 1], [judgeCheck([bogus: 1])])
+
+        expect:
+        AgentSettingsValidator.validate(pipeline(stage), AgentSettingsValidator.UNJUDGED) == []
+    }
+
+    def "the reported list is immutable"() {
+        when:
+        AgentSettingsValidator.validate(pipeline(stage('build', ExecutorType.AGENT_CLI, [:], [])), judge)
+        .add(new ConfigError('x', 'y', 'z'))
+
+        then:
+        thrown(UnsupportedOperationException)
     }
 
     private static VerifyCheck.Judge judgeCheck(Map<String, Object> settings) {
         new VerifyCheck.Judge('accept.md', 'judge-model', settings, 1)
+    }
+
+    private static VerifyCheck command() {
+        VerifyChecks.command('true')
     }
 
     private static StageDefinition stage(

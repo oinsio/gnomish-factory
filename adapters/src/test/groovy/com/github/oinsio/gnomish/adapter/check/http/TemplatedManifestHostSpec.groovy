@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.check.http
 
+import com.github.oinsio.gnomish.adapter.pipeline.AgentSettingsValidator
 import com.github.oinsio.gnomish.adapter.pipeline.ConnectionAdmission
 import com.github.oinsio.gnomish.adapter.pipeline.GnomishTreeWriter
 import com.github.oinsio.gnomish.adapter.pipeline.PipelineLoader
@@ -53,7 +54,7 @@ verify:
     timeout: 60s
 advancement: auto
 ''')
-        def outcome = PipelineLoader.loadConfiguration(root, [:], [http: new HttpCheckParamsValidator()],
+        def outcome = PipelineLoader.loadConfiguration(root, [:], [http: new HttpCheckParamsValidator()], AgentSettingsValidator.UNJUDGED,
         new ConnectionAdmission(ConnectionProfiles.none(), [:], SCOPE), [] as Set).outcome()
         assert outcome instanceof LoadOutcome.Loaded
         (outcome as LoadOutcome.Loaded).definition().stages()[0].verify()[0] as VerifyCheck.Executor

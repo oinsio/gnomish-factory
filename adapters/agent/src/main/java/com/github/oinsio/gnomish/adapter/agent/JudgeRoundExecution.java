@@ -1,8 +1,14 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
+import com.github.oinsio.gnomish.adapter.agent.claude.AgentCommandLine;
+import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeEnvironment;
+import com.github.oinsio.gnomish.adapter.agent.claude.TimestampedEvent;
+import com.github.oinsio.gnomish.adapter.settings.RoundTimeout;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter.Vote;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
+import com.github.oinsio.gnomish.executorcontract.Bounds;
+import com.github.oinsio.gnomish.executorcontract.Policy;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
@@ -55,9 +61,12 @@ final class JudgeRoundExecution {
             VerifyCheck.Judge check,
             TaskExecutionEnvironment environment,
             String prompt) {
-        var invocationFlags = AgentInvocationOptions.renderForJudge(check.model(), check.settings());
-        List<String> command = AgentCommandLine.fromRenderedFlags(
-                AgentRole.JUDGE, equipment.factoryProperties().agentCliBinary(), invocationFlags);
+        List<String> command = AgentCommandLine.of(
+                equipment.factoryProperties().agentCliBinary(),
+                check.model(),
+                check.settings(),
+                new Policy.ReadOnly(),
+                Bounds.none());
 
         // D14 of tighten-spec-contract: a guard dead since the last vote of the box fails this one.
         JudgeCannotVerify beforeRound = JudgeCannotVerify.beforeRound(check);
@@ -74,8 +83,10 @@ final class JudgeRoundExecution {
             return beforeRound.byThrowable("the round scratch directory could not be created", cause, e);
         }
         try (scratch) {
-            // Factory-set protocol layer (D6, FR9): a judge vote needs only the AI seam variables.
-            var exec = new ExecCommand(command, AgentAiSeam.variables(equipment.childEnv()), prompt, scratch.stderr());
+            // Factory-set protocol layer (D6, FR9): a judge vote needs only the credentials the
+            // Claude describe declares, resolved through the run's allowlist.
+            var exec = new ExecCommand(
+                    command, ClaudeEnvironment.variables(equipment.childEnv()), prompt, scratch.stderr());
             return launchAndGrade(equipment, verdictExtractor, check, environment, exec, scratch);
         }
     }

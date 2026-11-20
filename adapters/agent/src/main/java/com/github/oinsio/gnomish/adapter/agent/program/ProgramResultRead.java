@@ -6,10 +6,13 @@ import com.github.oinsio.gnomish.app.describe.ProgramChannel;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
 import com.github.oinsio.gnomish.executorcontract.ReadResult;
 import com.github.oinsio.gnomish.executorcontract.ResultFileReader;
+import com.github.oinsio.gnomish.executorcontract.ResultSource;
 import com.github.oinsio.gnomish.executorcontract.Usage;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.function.Function;
 
 /**
  * Reads the result of a {@code program} run that exited (FR6, NFR-R1 of define-executor-contract):
@@ -24,9 +27,12 @@ import java.time.Duration;
  * reports no wall time takes the one the factory measured. Nothing here deletes or rewrites a file,
  * so a re-read of the same files reads the same result (NFR-R1).
  *
- * <p>Implements FR5, FR6, NFR-R1, NFR-S2 of define-executor-contract.
+ * <p>The answer file's read is shared with the agent round runner ({@link #answerIn}, {@link
+ * #answerOnHost}): one cap and one wording for every answer file the factory reads back.
+ *
+ * <p>Implements FR5, FR6, NFR-R1, NFR-S2 of define-executor-contract; FR1 of extract-agent-round-runner.
  */
-final class ProgramResultRead {
+public final class ProgramResultRead {
 
     /** The result file's cap: one MiB. */
     static final int RESULT_FILE_CAP_BYTES = 1024 * 1024;
@@ -36,9 +42,6 @@ final class ProgramResultRead {
 
     private static final ResultFileReader RESULT_READER =
             new ResultFileReader(RESULT_FILE_CAP_BYTES, UntrustedText::subprocess);
-
-    private static final ResultFileReader ANSWER_READER =
-            new ResultFileReader(ANSWER_FILE_CAP_BYTES, UntrustedText::subprocess);
 
     private ProgramResultRead() {}
 
@@ -87,17 +90,73 @@ final class ProgramResultRead {
 
     private static ExecutorResult withAnswerFile(
             TaskExecutionEnvironment environment, String answerFile, ExecutorResult result, FailureContext context) {
-        ReadResult<JsonNode> read =
-                ANSWER_READER.readJson(limit -> environment.readFile(answerFile, limit), JsonNode.class);
+        return switch (answerIn(environment, answerFile, UntrustedText::subprocess)) {
+            case AnswerRead.None ignored -> result;
+            case AnswerRead.Read read -> result.withAnswer(read.answer());
+            case AnswerRead.Refused refused -> context.failure(refused.cause());
+        };
+    }
+
+    /**
+     * Reads an answer file in the run's environment through the one capped result reader, at the
+     * answer file's cap: the {@code program} run's answer file, and the agent round's answer file the
+     * agent wrote itself (FR1 of extract-agent-round-runner).
+     *
+     * @param environment the environment the run wrote the file in; never null
+     * @param answerFile the factory-named answer path; never null
+     * @param mint the family the file's text is minted in: the writer's; never null
+     * @return the answer, its absence, or why it is refused; never null
+     */
+    public static AnswerRead answerIn(
+            TaskExecutionEnvironment environment, String answerFile, Function<String, UntrustedText> mint) {
+        return answer(limit -> environment.readFile(answerFile, limit), mint);
+    }
+
+    /**
+     * Reads an answer file on the host through the one capped result reader, at the answer file's
+     * cap: the agent round's answer a dialect extracted from the stream and wrote itself (FR1 of
+     * extract-agent-round-runner).
+     *
+     * @param answerFile the host path; never null
+     * @param mint the family the file's text is minted in: the writer's; never null
+     * @return the answer, its absence, or why it is refused; never null
+     */
+    public static AnswerRead answerOnHost(Path answerFile, Function<String, UntrustedText> mint) {
+        return answer(ResultSource.hostFile(answerFile), mint);
+    }
+
+    private static AnswerRead answer(ResultSource source, Function<String, UntrustedText> mint) {
+        ReadResult<JsonNode> read = new ResultFileReader(ANSWER_FILE_CAP_BYTES, mint).readJson(source, JsonNode.class);
         return switch (read) {
-            case ReadResult.Absent<JsonNode> ignored -> result;
-            case ReadResult.Parsed<JsonNode> parsed -> result.withAnswer(parsed.value());
+            case ReadResult.Absent<JsonNode> ignored -> new AnswerRead.None();
+            case ReadResult.Parsed<JsonNode> parsed -> new AnswerRead.Read(parsed.value());
             case ReadResult.Malformed<JsonNode> malformed ->
-                context.failure(
+                new AnswerRead.Refused(
                         "wrote a malformed answer file: " + malformed.reason().excerpt(512));
             case ReadResult.Truncated<JsonNode> ignored ->
-                context.failure("wrote an answer file over the cap of " + ANSWER_FILE_CAP_BYTES + " bytes");
+                new AnswerRead.Refused("wrote an answer file over the cap of " + ANSWER_FILE_CAP_BYTES + " bytes");
         };
+    }
+
+    /** What an answer file held: nothing, an answer, or a reason the factory refuses it. */
+    public sealed interface AnswerRead {
+
+        /** No answer file was written. */
+        record None() implements AnswerRead {}
+
+        /**
+         * The answer.
+         *
+         * @param answer the file's JSON; never null
+         */
+        record Read(JsonNode answer) implements AnswerRead {}
+
+        /**
+         * A file that cannot be taken as an answer.
+         *
+         * @param cause the factory's sentence, any quoted content already through an exit; never blank
+         */
+        record Refused(String cause) implements AnswerRead {}
     }
 
     private static ExecutorResult withWallTime(ExecutorResult result, Duration wallTime) {
@@ -126,7 +185,8 @@ final class ProgramResultRead {
         }
 
         ExecutorResult failure(String cause) {
-            return ProgramFailures.infrastructure(executor, cause, stderr.tailForFailure());
+            return ProgramFailures.infrastructure(
+                    ProgramFailures.Subject.PROGRAM, executor, cause, stderr.tailForFailure());
         }
     }
 }

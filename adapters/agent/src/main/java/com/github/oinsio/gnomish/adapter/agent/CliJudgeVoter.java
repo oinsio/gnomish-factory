@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.adapter.agent.claude.AgentRoundResultExtractor;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.app.port.agent.JudgeEnvironmentSource;
@@ -22,11 +23,11 @@ import org.jspecify.annotations.Nullable;
  * one fresh {@code claude -p} subprocess per {@link #vote} call, assembling
  * {@link JudgeCriteriaPreflight} for the criteria-readability precheck,
  * {@link JudgePromptBuilder} for the round prompt, {@link
- * AgentInvocationOptions#renderForJudge} for the hard-wired read-only
- * invocation flags, {@link HostTaskExecutionEnvironment#exec} to run the process
+ * com.github.oinsio.gnomish.adapter.agent.claude.AgentCommandLine#of} with the {@code readOnly} policy for the
+ * read-only command line, {@link HostTaskExecutionEnvironment#exec} to run the process
  * through the task environment port (never a direct spawn — FR4 of
  * add-sandbox-core), {@link
- * StreamJsonParser} to read its stream-json stdout, {@link
+ * com.github.oinsio.gnomish.adapter.agent.claude.StreamJsonParser} to read its stream-json stdout, {@link
  * AgentRoundResultExtractor} to shape the essential result, and {@link
  * JudgeVerdictExtractor} to interpret the round's final message.
  *
@@ -40,7 +41,7 @@ import org.jspecify.annotations.Nullable;
  * built or process spawned (FR13): "never a criteria-less vote".
  *
  * <p>The {@link AgentProgressListener} supplied at construction (task 9.4, design D10) is
- * threaded straight into {@link StreamJsonParser}: judge rounds feed the same live-progress
+ * threaded straight into {@link com.github.oinsio.gnomish.adapter.agent.claude.StreamJsonParser}: judge rounds feed the same live-progress
  * stream as executor rounds, indistinguishable in shape — the run assembly wires the shared
  * {@link LoggingAgentProgressListener} renderer here (FR7, D10).
  *

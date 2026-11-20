@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.pipeline
 
+import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeSettings
 import com.github.oinsio.gnomish.app.ConnectionProfiles
 import com.github.oinsio.gnomish.app.TrackerSubsectionValidator
 import com.github.oinsio.gnomish.app.port.pipeline.PipelineSource
@@ -23,6 +24,9 @@ import com.github.oinsio.gnomish.httpegress.OperatorEgress
  * github-actions} check's settings with nothing, so a fixture whose {@code external} check maps to
  * that built-in loads without the real validator, which lives in {@code :adapters:scm}. No load
  * rule reads the operator's {@code factory.check} configuration, so no fixture configures one.
+ *
+ * <p>The real sources it builds judge the agent's settings with the Claude dialect's judge, bound as
+ * the composition root binds it (FR7 of extract-agent-round-runner).
  */
 class TrackerValidatorStub {
 
@@ -45,7 +49,8 @@ class TrackerValidatorStub {
      * callers that inject the port rather than the registry (task 4.4 of split-into-modules).
      */
     static PipelineSource acceptingGithubSource() {
-        new GnomishDirPipelineSource(acceptingGithub(), acceptingGithubActions(), loopbackGranted())
+        new GnomishDirPipelineSource(acceptingGithub(), acceptingGithubActions(), ClaudeSettings.&validate as CheckSettingsValidator,
+                loopbackGranted())
     }
 
     /**
@@ -69,6 +74,6 @@ class TrackerValidatorStub {
 
     /** The real {@code .gnomish/} {@link PipelineSource} with no subsection validator registered. */
     static PipelineSource plainSource() {
-        new GnomishDirPipelineSource([:], acceptingGithubActions())
+        new GnomishDirPipelineSource([:], acceptingGithubActions(), ClaudeSettings.&validate as CheckSettingsValidator)
     }
 }

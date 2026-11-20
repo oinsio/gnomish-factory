@@ -1,0 +1,150 @@
+package com.github.oinsio.gnomish.adapter.agent.claude
+
+import ch.qos.logback.classic.Level
+import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentScenarioReader
+import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
+import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
+import com.github.oinsio.gnomish.domain.engine.TokenUsage
+import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent
+import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText
+import spock.lang.Specification
+
+/**
+ * StreamJsonParser's live progress SPI (design D10): the parse loop emits
+ * RoundStarted/ToolStarted/RoundFinished inline, as each recognized line is
+ * read, to an injected AgentProgressListener — not by scanning the returned
+ * event list afterward. Covers ordering on a plain round, top-level-only
+ * filtering on a subagent round, a throwing listener not interrupting parsing,
+ * and garbage lines producing no spurious progress. Implements FR7, D9, D10 of
+ * add-agent-executor.
+ */
+class StreamJsonParserProgressSpec extends Specification {
+
+    def clock = new VirtualClock()
+
+    // FR7, D10: a plain round emits RoundStarted, one ToolStarted, then RoundFinished, in order
+    // Scenario: executor/agent-executor / Progress observable without logs
+    def "emits RoundStarted, ToolStarted, and RoundFinished in order for the plain-round fixture"() {
+        given: 'a recording listener'
+        def recorded = []
+        AgentProgressListener listener = { event -> recorded << event }
+        def parser = new StreamJsonParser(clock, listener)
+
+        when: 'the plain-round fixture is parsed'
+        parser.parse(FakeAgentScenarioReader.readerOf('plain-round'))
+
+        then: 'RoundStarted carries the model, one ToolStarted for Write, RoundFinished carries the summary'
+        recorded.size() == 3
+        recorded[0] == new AgentProgressEvent.RoundStarted(UntrustedText.agent('claude-fake-main-1'))
+        recorded[1] == new AgentProgressEvent.ToolStarted(UntrustedText.agent('Write'))
+
+        and: 'RoundFinished carries tokensByModel derived from modelUsage, and the summary'
+        def finished = recorded[2] as AgentProgressEvent.RoundFinished
+        finished.tokensByModel() == ['claude-fake-main-1': new TokenUsage(120, 45, 10, 5)]
+        finished.summary().forLog()== 'Stage complete: output.txt written.'
+    }
+
+    // FR6 of extract-agent-round-runner: what a listener of a Claude round observes is
+    //     vendor-neutral — every event type lives in the application's port, outside the dialect's
+    //     package, and none carries the session id or the result subtype the wire events hold
+    // Scenario: executor/agent-round-runner / Listener sees no vendor field
+    def "FR6: a listener of a Claude round sees no vendor field"() {
+        given: 'a recording listener'
+        def recorded = []
+        AgentProgressListener listener = { event -> recorded << event }
+        def parser = new StreamJsonParser(clock, listener)
+
+        when: 'a round with every progress variant is parsed'
+        parser.parse(FakeAgentScenarioReader.readerOf(fixture))
+
+        then: 'every variant was observed'
+        recorded*.getClass().toSet() == AgentProgressEvent.permittedSubclasses.toList().toSet()
+
+        and: 'every observed type is defined outside the dialect package'
+        recorded.every {
+            it.getClass().packageName != StreamJsonParser.packageName
+        }
+
+        and: 'and carries no session id or subtype'
+        recorded.every { event ->
+            def components = event.getClass().recordComponents*.name
+            !components.contains('sessionId') && !components.contains('subtype')
+        }
+
+        where:
+        fixture << [
+            'plain-round',
+            'subagent-round'
+        ]
+    }
+
+    // FR7, D10: only the top-level Task tool call fires ToolStarted; the nested Grep call does not
+    def "emits exactly one ToolStarted for the subagent-round fixture's top-level Task call"() {
+        given: 'a recording listener'
+        def recorded = []
+        AgentProgressListener listener = { event -> recorded << event }
+        def parser = new StreamJsonParser(clock, listener)
+
+        when: 'the subagent-round fixture is parsed'
+        parser.parse(FakeAgentScenarioReader.readerOf('subagent-round'))
+
+        then: 'only Task produces ToolStarted, the nested Grep call does not'
+        def toolStartedEvents = recorded.findAll {
+            it instanceof AgentProgressEvent.ToolStarted
+        }
+        toolStartedEvents == [
+            new AgentProgressEvent.ToolStarted(UntrustedText.agent('Task'))
+        ]
+
+        and: 'RoundStarted and RoundFinished still bracket the round'
+        recorded.first() instanceof AgentProgressEvent.RoundStarted
+        recorded.last() instanceof AgentProgressEvent.RoundFinished
+    }
+
+    // FR7, D10: a throwing listener does not interrupt parsing; parse() still returns every event
+    // Scenario: executor/agent-executor / Broken listener does not break the round
+    def "does not let a throwing listener interrupt parsing or propagate"() {
+        given: 'a listener that always throws'
+        AgentProgressListener throwing = { event ->
+            throw new RuntimeException('boom')
+        }
+        def parser = new StreamJsonParser(clock, throwing)
+        def logs = LogCaptureSupport.attach(AgentProgressEmitter)
+
+        when: 'the plain-round fixture is parsed'
+        def events = parser.parse(FakeAgentScenarioReader.readerOf('plain-round'))
+
+        then: 'no exception propagates and the full event list is still returned'
+        noExceptionThrown()
+        events.size() == 5
+        events.last().event() instanceof AgentEvent.ResultEvent
+
+        and: 'FR15 of harden-logging-observability: every swallowed delivery leaves a coded WARN naming the event variant'
+        def listenerFailures = logs.list.findAll {
+            it.formattedMessage.startsWith(OperatorEvent.AGENT_PROGRESS_LISTENER_THREW.head())
+        }
+        listenerFailures.size() == 3
+        listenerFailures.every { it.level == Level.WARN }
+        listenerFailures*.formattedMessage.any { it.contains('RoundStarted') }
+
+        cleanup:
+        logs.detach()
+    }
+
+    // FR7, D10: garbage/unknown lines interleaved with valid ones produce no spurious progress
+    def "produces no spurious progress from the garbage-output fixture's malformed lines"() {
+        given: 'a recording listener'
+        def recorded = []
+        AgentProgressListener listener = { event -> recorded << event }
+        def parser = new StreamJsonParser(clock, listener)
+
+        when: 'the garbage-output fixture is parsed'
+        parser.parse(FakeAgentScenarioReader.readerOf('garbage-output'))
+
+        then: 'only progress for the recognized lines is emitted, nothing for the malformed ones'
+        recorded.size() == 1
+        recorded[0] instanceof AgentProgressEvent.RoundStarted
+    }
+}

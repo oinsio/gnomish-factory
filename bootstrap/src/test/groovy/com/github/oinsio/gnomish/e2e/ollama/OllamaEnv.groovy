@@ -5,7 +5,7 @@ package com.github.oinsio.gnomish.e2e.ollama
  * 11.1, M1, D11): Ollama v0.14+ speaks the native Anthropic API, so no shim or proxy is needed —
  * {@code ANTHROPIC_BASE_URL} alone redirects the CLI's requests. These three names are exactly
  * the AI seam the factory's agent adapters re-set from their own process environment as
- * factory-set protocol variables ({@code AgentAiSeam}, D6/FR9 of add-sandbox-core), so wiring
+ * factory-set protocol variables ({@code ClaudeEnvironment}, D6/FR9 of add-sandbox-core), so wiring
  * them happens by setting them on the process that ultimately spawns {@code claude} — here, the
  * {@code java -jar} subprocess {@link com.github.oinsio.gnomish.e2e.E2eProcessHarness} launches,
  * via its {@code extraEnv} parameter.

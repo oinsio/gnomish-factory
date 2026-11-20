@@ -3,14 +3,14 @@ package com.github.oinsio.gnomish.adapter.agent.program;
 import java.time.Duration;
 
 /**
- * How one {@code program} process ended, as the factory saw it before reading any file (NFR-R2 of
+ * How one {@code program} process or agent round ended, as the factory saw it before reading any file (NFR-R2 of
  * define-executor-contract): it exited on its own, one of the factory's bounds expired and its
  * process tree was killed, or the waiting thread was interrupted and the tree killed with the flag
  * left set. Only {@link Exited} has a result to read.
  *
- * <p>Implements NFR-R2 of define-executor-contract.
+ * <p>Implements NFR-R2 of define-executor-contract; NFR-R1 of extract-agent-round-runner.
  */
-sealed interface ProgramEnd {
+public sealed interface ProgramEnd {
 
     /**
      * The process exited within its bounds.
@@ -23,7 +23,7 @@ sealed interface ProgramEnd {
     /**
      * A bound expired and the process tree was killed.
      *
-     * @param bound the bound's name, {@code silence} or {@code overall}
+     * @param bound the bound's name, {@code startup-read}, {@code silence} or {@code overall}
      * @param value the bound's value
      */
     record BoundExpired(String bound, Duration value) implements ProgramEnd {}

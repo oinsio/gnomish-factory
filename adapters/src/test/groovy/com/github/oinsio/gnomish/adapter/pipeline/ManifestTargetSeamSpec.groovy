@@ -50,7 +50,7 @@ verify:
     timeout: 60s
 advancement: auto
 """)
-        PipelineLoader.loadConfiguration(root, [:], [http: new HttpCheckParamsValidator()],
+        PipelineLoader.loadConfiguration(root, [:], [http: new HttpCheckParamsValidator()], AgentSettingsValidator.UNJUDGED,
         new ConnectionAdmission(ConnectionProfiles.none(), [:], new OperatorEgress(inProcess)), [] as Set)
         .outcome()
     }

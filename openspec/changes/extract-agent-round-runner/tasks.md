@@ -2,13 +2,13 @@
 
 ## 1. Dialect seam and runner
 
-- [ ] 1.1 Define `AgentDialect` (describe fields, `render(request) → argv`, `parse(line)`,
+- [x] 1.1 Define `AgentDialect` (describe fields, `render(request) → argv`, `parse(line)`,
   `answer(events, answerFile)`, `status(exit, events)`, `continuation(events)`) and the
   vendor-neutral progress events (model, tool name, summary, usage); drop the session id from
   `RoundStarted` and adapt its consumers (`LoggingAgentProgressListener`, `AgentProgressEmitter`,
   `AgentRoundResult`, `AgentRoundResultExtractor`, `StreamJsonEventMapper`,
   `MissingResultEventException`); specs green (FR2, FR6, D7)
-- [ ] 1.2 Implement `AgentRoundRunner implements Executor`: launch via `RoundEnvironment`,
+- [x] 1.2 Implement `AgentRoundRunner implements Executor`: launch via `RoundEnvironment`,
   a capped stdout drain through the one drain owner (byte + line caps), stderr through
   `StderrPolicy.ToFile` into the round scratch directory read capped after the exit (no stderr
   pump; `DrainOwnerGateSpec` stays green), three bounds on virtual time,
@@ -16,16 +16,16 @@
   `verdict`/`decision`; specs with the fake dialect for all three roles, exit-without-result,
   turn-limit → `failed/limit` with the escalation report `budget exhausted: <bound>`, oversized
   stdout, silence bound (FR1, FR8, NFR-R1, NFR-S2, UX2)
-- [ ] 1.3 Add the fake dialect to `test-fixtures` and run the conformance kit against the runner
+- [x] 1.3 Add the fake dialect to `test-fixtures` and run the conformance kit against the runner
   with it (M4)
 
 ## 2. Claude dialect
 
-- [ ] 2.1 Move `AgentCommandLine`, `AgentInvocationOptions`, `StreamJson*`, `AgentEvent`,
+- [x] 2.1 Move `AgentCommandLine`, `AgentInvocationOptions`, `StreamJson*`, `AgentEvent`,
   `ContentBlock`, `TokenUsageMapper`, `ToolTraceBuilder`, `AgentRoundResultExtractor`,
   `ModelIdSyntax` into `adapters/agent/claude` behind `ClaudeDialect`; reference stream-json
   fixtures replay identically (FR3)
-- [ ] 2.2 `ClaudePolicyCompiler`: `Policy` → permission mode, tool sets, `--strict-mcp-config`,
+- [x] 2.2 `ClaudePolicyCompiler`: `Policy` → permission mode, tool sets, `--strict-mcp-config`,
   answer-path allowance; delete `AgentRole`, `JUDGE_READ_ONLY_TOOLS`; specs: no argv carries
   `bypassPermissions`, settings cannot widen read-only; turn and budget hints rendered as
   `--max-turns` and the budget flag (scenario "Turn and budget hints reach the argv") (FR5, D5,

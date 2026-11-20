@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.e2e.paidsmoke
 
-import com.github.oinsio.gnomish.adapter.agent.AgentRoundResultExtractor
-import com.github.oinsio.gnomish.adapter.agent.StreamJsonParser
-import com.github.oinsio.gnomish.adapter.agent.TimestampedEvent
+import com.github.oinsio.gnomish.adapter.agent.claude.AgentRoundResultExtractor
+import com.github.oinsio.gnomish.adapter.agent.claude.StreamJsonParser
+import com.github.oinsio.gnomish.adapter.agent.claude.TimestampedEvent
 import com.github.oinsio.gnomish.sandbox.ExecHandle
 import com.github.oinsio.gnomish.sandbox.ProcessStartException
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText

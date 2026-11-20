@@ -1,26 +1,28 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeEnvironment
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.testfixtures.TestChildEnvironment
 import spock.lang.Specification
 
 /**
- * FR1, NFR-S1 of add-doctor-command (design D4): {@link AgentCredentials} reports which AI-seam
- * credential names resolve through a round's child-environment allowlist — names only, never a
- * value — by asking the same question an agent round asks ({@link AgentAiSeam#variables}).
+ * FR1, NFR-S1 of add-doctor-command (design D4): {@link AgentCredentials} reports which of the
+ * secret-carrying credentials the Claude describe declares resolve through a round's
+ * child-environment allowlist — names only, never a value — by asking the same question an agent
+ * round asks ({@link ClaudeEnvironment#variables}; NFR-S1 of extract-agent-round-runner).
  */
 class AgentCredentialsSpec extends Specification {
 
     def "FR1: the credential subset is the provider auth token and the CLI's own two credentials, in seam order"() {
         expect:
-        AgentAiSeam.CREDENTIAL_NAMES == [
+        ClaudeEnvironment.SECRETS == [
             'ANTHROPIC_AUTH_TOKEN',
             'CLAUDE_CODE_OAUTH_TOKEN',
             'ANTHROPIC_API_KEY'
         ]
 
         and: 'every credential name is a seam name, so the round carries what the report names'
-        AgentAiSeam.NAMES.containsAll(AgentAiSeam.CREDENTIAL_NAMES)
+        ClaudeEnvironment.CREDENTIALS.containsAll(ClaudeEnvironment.SECRETS)
     }
 
     // FR1: iterates CREDENTIAL_NAMES rather than a hand-listed subset, so a credential added to the
@@ -31,7 +33,7 @@ class AgentCredentialsSpec extends Specification {
         presentOver([PATH: '/usr/bin']) == []
 
         where:
-        name << AgentAiSeam.CREDENTIAL_NAMES
+        name << ClaudeEnvironment.SECRETS
     }
 
     def "FR1: every present credential is reported in seam order, and the non-secret seam names are not"() {
@@ -67,7 +69,7 @@ class AgentCredentialsSpec extends Specification {
 
         expect:
         AgentCredentials.presentNames(childEnv) == ['CLAUDE_CODE_OAUTH_TOKEN']
-        AgentAiSeam.variables(childEnv).keySet() == ['CLAUDE_CODE_OAUTH_TOKEN'] as Set
+        ClaudeEnvironment.variables(childEnv).keySet() == ['CLAUDE_CODE_OAUTH_TOKEN'] as Set
     }
 
     def "NFR-S1: no resolved value appears in the result, only names"() {
@@ -97,6 +99,6 @@ class AgentCredentialsSpec extends Specification {
 
     def "FR1: the names an operator may set are the credential subset, in seam order"() {
         expect:
-        AgentCredentials.names() == AgentAiSeam.CREDENTIAL_NAMES
+        AgentCredentials.names() == ClaudeEnvironment.SECRETS
     }
 }

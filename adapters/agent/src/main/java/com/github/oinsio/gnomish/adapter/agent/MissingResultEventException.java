@@ -6,12 +6,12 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Thrown when a round's stream-json output carries no {@link
- * AgentEvent.ResultEvent}: the result event is essential (design D3, FR4) — a
+ * com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent.ResultEvent}: the result event is essential (design D3, FR4) — a
  * verdict on the round cannot exist without it, so its absence is an
  * infrastructure failure of the round, not a quality failure (NFR-R1). A
  * malformed result-event <em>line</em> never reaches this point at all: {@link
- * StreamJsonParser} silently drops any line it cannot map to a known {@link
- * AgentEvent} variant (task 3.1, FR4), so "missing" and "unparseable" collapse
+ * com.github.oinsio.gnomish.adapter.agent.claude.StreamJsonParser} silently drops any line it cannot map to a known {@link
+ * com.github.oinsio.gnomish.adapter.agent.claude.AgentEvent} variant (task 3.1, FR4), so "missing" and "unparseable" collapse
  * into the same observable symptom here — no {@code ResultEvent} in the parsed
  * list — and this single exception covers both.
  *
@@ -51,7 +51,7 @@ public final class MissingResultEventException extends RuntimeException {
     private static final long BOUNDARY_TOLERANCE_BYTES = 8_192L;
 
     /** Passed as {@code bytesRead} when the caller has no byte accounting to report. */
-    static final long UNKNOWN_VOLUME = -1L;
+    public static final long UNKNOWN_VOLUME = -1L;
 
     /** What the message names when even the init event is absent, so no session id was read. */
     private static final String UNKNOWN_SESSION = "unknown";

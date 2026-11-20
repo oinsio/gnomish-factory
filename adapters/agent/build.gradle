@@ -57,7 +57,9 @@ dependencies {
     // The launch-owner leaf (design D16, D20 of fix-terminal-receipt-convergence): the host
     // environment source hands `ProcessLaunch.grouped()` to every host environment it builds.
     // Declared, not inherited through `:sandbox:docker`: this module names the type in its own source.
-    implementation project(':subprocess')
+    // `api` since the agent round runner (extract-agent-round-runner, task 1.2) shares the line
+    // reader `ProgressLines`, whose public factory takes a `ChildOutput`.
+    api project(':subprocess')
     // The operator-event catalog leaf (FR4, design D3 of split-logtext-leaves): every WARN/ERROR
     // site in this module takes its `[GFnnn]` head from an `OperatorEvent` constant.
     // `implementation`, not `api`: the enum is named only inside log calls, never in a signature
@@ -84,10 +86,11 @@ dependencies {
     implementation project(':gittransfer')
     implementation libs.slf4j.api
 
-    // The agent CLI's stream-JSON output. The DTOs are internal to this module,
-    // so no Jackson type reaches a consumer through its api surface.
+    // The agent CLI's stream-JSON output. The DTOs are internal to this module; `JsonNode` is
+    // `api` because the shared answer read (`ProgramResultRead.AnswerRead.Read`), which the
+    // agent round runner reaches from its own package, carries the parsed answer.
     implementation libs.jackson.annotations
-    implementation libs.jackson.databind
+    api libs.jackson.databind
     implementation libs.jackson.core
 
     // Shared fakes (FR7, design D8), test scope only — `FakeAgentBinary` and the scenario library

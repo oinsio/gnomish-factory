@@ -131,7 +131,7 @@ final class FactoryMove {
         return rest.isEmpty()
                 ? Optional.empty()
                 : Optional.of("the working copy holds changes against HEAD other than the factory's state.json lag: "
-                        + WorkingCopyCheck.named(StatusEntries.changedPaths(Set.of(), rest)));
+                        + WorkingCopyRefusal.named(StatusEntries.changedPaths(Set.of(), rest)));
     }
 
     /** A {@code state.json} entry whose working tree equals its index, mode included, on an index object {@code blobOk}. */

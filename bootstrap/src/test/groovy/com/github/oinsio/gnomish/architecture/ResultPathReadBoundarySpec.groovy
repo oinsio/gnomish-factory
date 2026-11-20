@@ -45,7 +45,7 @@ class ResultPathReadBoundarySpec extends Specification {
         ('adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/BranchDecisionFile.java'): 'the box decision file, read through the environment channel into DecisionRequestRead',
         ('adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/SnapshotTipCheck.java'): 'the decision blob of a snapshot on resume, through the live path\'s parse',
         ('application/src/main/java/com/github/oinsio/gnomish/app/describe/ProgramDescribe.java'): 'the describe answer (GNOMISH_RESULT_FILE) of a program executor, through the environment channel, 64 KiB',
-        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/program/ProgramResultRead.java'): 'the result (GNOMISH_RESULT_FILE, 1 MiB) and answer (GNOMISH_ANSWER_FILE, 4 MiB) files of a program run, through the environment channel (task 7.1)',
+        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/program/ProgramResultRead.java'): 'the result (GNOMISH_RESULT_FILE, 1 MiB) and answer (GNOMISH_ANSWER_FILE, 4 MiB) files of a program run, through the environment channel (task 7.1); the answer file of an agent round, in its environment or the host scratch file its dialect wrote (task 1.2 of extract-agent-round-runner)',
     ]
 
     /** Decorating environments (D19): {@code readFile} passed through, no reader row (D10), held so below. */

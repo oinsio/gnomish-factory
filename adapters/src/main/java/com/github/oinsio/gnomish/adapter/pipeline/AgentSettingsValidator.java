@@ -5,175 +5,63 @@ import com.github.oinsio.gnomish.domain.pipeline.ExecutorType;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
-import java.time.Duration;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
-import org.jspecify.annotations.Nullable;
 
 /**
- * Startup-time settings-schema validator for the CLI adapters (task 9.1):
- * every {@code agent-cli} stage executor's {@code settings} map, and every
- * {@code judge} check's {@code settings} map regardless of its parent
- * stage's executor type, must contain only the four recognized keys —
- * {@code allowedTools}, {@code disallowedTools}, {@code maxTurns},
- * {@code roundTimeout} — with well-formed values, matching exactly what
- * {@code AgentInvocationOptions} and {@code RoundTimeout} consume at round
- * time. A judge check always launches its own {@code agent-cli} round (FR8
- * of add-agent-executor) independent of the stage's own executor, so its
- * settings are validated unconditionally — an {@code api} stage's judge
- * check is not exempt (FR11, D7).
+ * Load-time routing of the agent's settings to the agent executor's settings judge (task 9.1 of
+ * add-agent-executor; FR7, design D6 of extract-agent-round-runner): every {@code agent-cli} stage
+ * executor's {@code settings}, and every {@code judge} check's {@code settings} regardless of its
+ * parent stage's executor type — a judge check always runs its own agent round (FR8 of
+ * add-agent-executor), so an {@code api} or {@code command} stage's judge check is not exempt.
  *
- * <p>{@code api} stage executor settings are never inspected: {@code api}
- * stages are rejected at startup by a separate fail-fast check (task 9.2,
- * FR10); validating their opaque settings here would be validating a shape
- * this change never consumes.
+ * <p>What the settings may hold is not this class's knowledge: the agent executor's describe owns its
+ * settings schema (the Claude dialect's, in {@code :adapters:agent}), and the composition root hands
+ * its judge in as a {@link CheckSettingsValidator}, bound by a method reference since this module
+ * cannot reach that one. This class only finds the settings the judge must see and the location each
+ * is reported at — {@code executor.settings} or {@code verify[<i>].settings} of the stage manifest.
+ * A load handed no judge grades no agent settings, the same way an empty check registry grades no
+ * check's settings.
  *
- * <p>Lives in {@code adapter.pipeline}, next to its only caller {@link PipelineModelBuilder},
- * rather than in {@code adapter.agent} with the classes whose settings it describes (moved
- * at task 10.2 of split-into-modules). It is load-time validation of one config subsection —
- * the same role {@code TrackerSubsectionValidator} plays for {@code tracker.<type>} — and
- * keeping it here is what lets {@code :adapters:agent} be a module that depends on the coarse
- * remainder without the remainder depending back on it (FR2, M4, design D1's "pass 2 decides
- * whether `:adapters:agent` depends on the coarse module"). Nothing else moved: the round-time
- * consumers it mirrors stay where they are, and this class names none of them in code.
+ * <p>{@code api} stage executor settings are never inspected: {@code api} stages are rejected at
+ * startup by a separate fail-fast check (task 9.2, FR10 of add-agent-executor).
  *
- * <p>This validator is owned by the adapter package, not the domain: the
- * pipeline loader and domain model stay opaque to executor-settings shape
- * (design D5a of load-pipeline-config) — {@code StageSanityRule} explicitly
- * does not validate settings keys, values, or ranges. Errors are located
- * {@link ConfigError}s naming the stage manifest and the offending
- * {@code executor.settings.<key>} or {@code verify[n].settings.<key>} path,
- * surfaced before any dialog (UX2) once wired into the loader.
+ * <p>Lives in {@code adapter.pipeline}, next to its only caller {@link PipelineModelBuilder}, so that
+ * {@code :adapters:agent} depends on this module and never the reverse (task 10.2 of
+ * split-into-modules).
  *
- * <p>Implements FR11, UX2, D7 of add-agent-executor.
+ * <p>Implements FR11, UX2, D7 of add-agent-executor; FR7, D6 of extract-agent-round-runner.
  */
 public final class AgentSettingsValidator {
-
-    private static final String ALLOWED_TOOLS_KEY = "allowedTools";
-    private static final String DISALLOWED_TOOLS_KEY = "disallowedTools";
-    private static final String MAX_TURNS_KEY = "maxTurns";
-    /** The one spelling of the round-bound key on the load side, read by {@link CommandSettingsValidator} too. */
-    static final String ROUND_TIMEOUT_KEY = "roundTimeout";
-
-    private static final Set<String> RECOGNIZED_KEYS =
-            Set.of(ALLOWED_TOOLS_KEY, DISALLOWED_TOOLS_KEY, MAX_TURNS_KEY, ROUND_TIMEOUT_KEY);
 
     private AgentSettingsValidator() {}
 
     /**
-     * Validates every {@code agent-cli} stage executor's settings and every
-     * judge check's settings across the whole pipeline.
-     *
-     * <p>Implements FR11, UX2, D7 of add-agent-executor.
+     * Grades every {@code agent-cli} stage executor's settings and every judge check's settings
+     * across the whole pipeline with {@code judge}.
      *
      * @param pipeline the mapped, domain-validated pipeline definition
-     * @return every located settings problem, in stage-then-check order;
-     *     immutable, possibly empty
+     * @param judge the agent executor's settings judge, or {@link #UNJUDGED} to grade nothing; never null
+     * @return every located settings problem, in stage-then-check order; immutable, possibly empty
      */
-    public static List<ConfigError> validate(PipelineDefinition pipeline) {
+    public static List<ConfigError> validate(PipelineDefinition pipeline, CheckSettingsValidator judge) {
         List<ConfigError> errors = new ArrayList<>();
         for (StageDefinition stage : pipeline.stages()) {
-            validateStage(stage, errors);
+            String manifest = "stages/%s/stage.yaml".formatted(stage.name());
+            if (stage.executor().type() == ExecutorType.AGENT_CLI) {
+                errors.addAll(judge.validate(
+                        manifest, "executor.settings", stage.executor().settings()));
+            }
+            List<VerifyCheck> checks = stage.verify();
+            for (int index = 0; index < checks.size(); index++) {
+                if (checks.get(index) instanceof VerifyCheck.Judge check) {
+                    errors.addAll(judge.validate(manifest, "verify[%d].settings".formatted(index), check.settings()));
+                }
+            }
         }
         return List.copyOf(errors);
     }
 
-    private static void validateStage(StageDefinition stage, List<ConfigError> errors) {
-        String manifest = manifestPath(stage.name());
-        if (stage.executor().type() == ExecutorType.AGENT_CLI) {
-            validateSettings(manifest, "executor.settings", stage.executor().settings(), errors);
-        }
-        List<VerifyCheck> checks = stage.verify();
-        for (int index = 0; index < checks.size(); index++) {
-            if (checks.get(index) instanceof VerifyCheck.Judge judge) {
-                validateSettings(manifest, "verify[%d].settings".formatted(index), judge.settings(), errors);
-            }
-        }
-    }
-
-    private static void validateSettings(
-            String manifest, String where, Map<String, Object> settings, List<ConfigError> errors) {
-        // Keys in name order: the settings map is unordered (Map.copyOf), the report must not be.
-        for (Map.Entry<String, Object> entry : new TreeMap<>(settings).entrySet()) {
-            String key = entry.getKey();
-            if (!RECOGNIZED_KEYS.contains(key)) {
-                errors.add(new ConfigError(manifest, where + "." + key, unrecognizedKey(key)));
-                continue;
-            }
-            String problem = malformationOf(key, entry.getValue());
-            if (problem != null) {
-                errors.add(new ConfigError(manifest, where + "." + key, problem));
-            }
-        }
-    }
-
-    /** Returns the malformed-value message for {@code key}/{@code value}, or {@code null} when well-formed. */
-    private static @Nullable String malformationOf(String key, @Nullable Object value) {
-        return switch (key) {
-            case ALLOWED_TOOLS_KEY, DISALLOWED_TOOLS_KEY ->
-                isStringList(value) ? null : "malformed '%s': expected a list of strings".formatted(key);
-            case MAX_TURNS_KEY -> value instanceof Number ? null : "malformed 'maxTurns': expected a number";
-            case ROUND_TIMEOUT_KEY -> roundTimeoutMalformation(value);
-            default -> throw new IllegalStateException("unreachable: key already filtered by RECOGNIZED_KEYS");
-        };
-    }
-
-    /**
-     * The one message of an unrecognized settings key, shared with {@link CommandSettingsValidator}
-     * so both executor schemas report the error alike (UX2 of add-command-executor).
-     */
-    static String unrecognizedKey(String key) {
-        return "unrecognized settings key '%s'".formatted(key);
-    }
-
-    /**
-     * Returns the malformed-value message for a {@code roundTimeout} value, or {@code null} when
-     * well-formed. The one judge of the accepted shapes on the load side, called by the agent-cli
-     * and judge schemas here and by {@link CommandSettingsValidator} (FR3 of add-command-executor:
-     * the declared pair with {@code RoundTimeout} is reused, not widened).
-     */
-    static @Nullable String roundTimeoutMalformation(@Nullable Object value) {
-        return isWellFormedRoundTimeout(value)
-                ? null
-                : "malformed 'roundTimeout': expected a number of seconds or an ISO-8601 duration string";
-    }
-
-    private static boolean isStringList(@Nullable Object value) {
-        if (!(value instanceof List<?> list)) {
-            return false;
-        }
-        for (Object element : list) {
-            if (!(element instanceof String)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** Mirrors {@code RoundTimeout.resolve}'s accepted shapes exactly: a {@link Number}, or a parseable ISO-8601 string. */
-    private static boolean isWellFormedRoundTimeout(@Nullable Object value) {
-        if (value instanceof Number) {
-            return true;
-        }
-        if (!(value instanceof String text) || text.isBlank()) {
-            return false;
-        }
-        String withPrefix =
-                text.startsWith("PT") || text.startsWith("pt") ? text : "PT" + text.toUpperCase(Locale.ROOT);
-        try {
-            Duration.parse(withPrefix);
-            return true;
-        } catch (DateTimeParseException e) {
-            return false;
-        }
-    }
-
-    static String manifestPath(String stageName) {
-        return "stages/%s/stage.yaml".formatted(stageName);
-    }
+    /** The judge of a load that grades no agent settings: every settings map is accepted. */
+    public static final CheckSettingsValidator UNJUDGED = (file, where, settings) -> List.of();
 }

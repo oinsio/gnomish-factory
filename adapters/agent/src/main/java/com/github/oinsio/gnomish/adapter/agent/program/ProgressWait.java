@@ -1,19 +1,23 @@
 package com.github.oinsio.gnomish.adapter.agent.program;
 
-import com.github.oinsio.gnomish.app.describe.ProgramBounds;
 import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import java.time.Duration;
 import java.time.Instant;
+import org.jspecify.annotations.Nullable;
 
 /**
- * The wait of a {@code program} run whose describe declares {@code streams_progress}, under two
- * bounds (NFR-R2 of define-executor-contract; wire-contract "Silence bound expires"): the overall
- * bound from the start, and the silence bound from the last bytes the progress reader saw. The
- * handle's own bounded wait kills on expiry, so it cannot be waited on in slices; this wait instead
- * watches the reader, which ends at the process's exit, and checks both deadlines on the run's clock
- * at least every {@link #TICK}. Each slice is spent first in a bounded join on the reader — which
- * returns at once when the stream ends — and then in the time equipment's {@code sleepUntil} the
+ * The wait of a run whose stdout is read live by {@link ProgressLines} (NFR-R2 of
+ * define-executor-contract; wire-contract "Silence bound expires"; NFR-R1 of
+ * extract-agent-round-runner), under up to three bounds: the overall bound from the start; when one is
+ * given, the startup-read bound from the start until the first bytes arrive; and the silence bound from
+ * the last bytes the reader saw — from the start too when no startup-read bound is given. A {@code
+ * streams_progress} program waits without a startup-read bound, the agent round runner with one.
+ *
+ * <p>The handle's own bounded wait kills on expiry, so it cannot be waited on in slices; this wait
+ * instead watches the reader, which ends at the process's exit, and checks the deadlines on the run's
+ * clock at least every {@link #TICK}. Each slice is spent first in a bounded join on the reader —
+ * which returns at once when the stream ends — and then in the time equipment's {@code sleepUntil} the
  * slice's end, which returns at once on real time (the join already spent the slice) and advances
  * a virtual clock under test: a spec reaches a deadline without waiting for it, and a stream that
  * ends is seen whichever thread runs first. A deadline reached is a kill through the handle — a
@@ -23,22 +27,29 @@ import java.time.Instant;
  * <p>An interrupt during a sleep kills the tree the same way and reports {@link
  * ProgramEnd.Interrupted} with the flag left set.
  *
- * <p>Implements NFR-R2 of define-executor-contract.
+ * <p>Implements NFR-R2 of define-executor-contract; NFR-R1 of extract-agent-round-runner.
  */
-final class ProgressWait {
+public final class ProgressWait {
 
     /** The longest the wait goes without looking at the reader and the deadlines. */
     static final Duration TICK = Duration.ofMillis(100);
 
-    private final ProgramBounds bounds;
+    private final @Nullable Duration startupRead;
+    private final Duration silence;
+    private final Duration overall;
     private final TimeEquipment time;
 
     /**
-     * @param bounds the run's bounds; never null
-     * @param time the run's time equipment, shared with the progress reader's clock; never null
+     * @param startupRead how long the run may take to write its first bytes, or {@code null} to hold
+     *     the start to the silence bound instead
+     * @param silence how long the run may go without writing; never null
+     * @param overall how long the run may take at all; never null
+     * @param time the run's time equipment, shared with the reader's clock; never null
      */
-    ProgressWait(ProgramBounds bounds, TimeEquipment time) {
-        this.bounds = bounds;
+    public ProgressWait(@Nullable Duration startupRead, Duration silence, Duration overall, TimeEquipment time) {
+        this.startupRead = startupRead;
+        this.silence = silence;
+        this.overall = overall;
         this.time = time;
     }
 
@@ -46,20 +57,26 @@ final class ProgressWait {
      * Waits for the run to end.
      *
      * @param handle the run's process; never null
-     * @param lines the run's progress reader; never null
+     * @param lines the run's stdout reader; never null
      * @return how the run ended; never null
      */
-    ProgramEnd await(ExecHandle handle, ProgressLines lines) {
-        Instant overallEnd = time.clock().instant().plus(bounds.overall());
+    public ProgramEnd await(ExecHandle handle, ProgressLines lines) {
+        Instant start = time.clock().instant();
+        Instant overallEnd = start.plus(overall);
         while (!lines.ended()) {
-            Instant silentUntil = lines.lastActivity().plus(bounds.silence());
+            @Nullable Duration first = lines.anyRead() ? null : startupRead;
+            Instant quietUntil = first == null ? lines.lastActivity().plus(silence) : start.plus(first);
             if (time.remaining(overallEnd).isZero()) {
-                return killed(handle, new ProgramEnd.BoundExpired("overall", bounds.overall()));
+                return killed(handle, new ProgramEnd.BoundExpired("overall", overall));
             }
-            if (time.remaining(silentUntil).isZero()) {
-                return killed(handle, new ProgramEnd.BoundExpired("silence", bounds.silence()));
+            if (time.remaining(quietUntil).isZero()) {
+                return killed(
+                        handle,
+                        first == null
+                                ? new ProgramEnd.BoundExpired("silence", silence)
+                                : new ProgramEnd.BoundExpired("startup-read", first));
             }
-            Instant next = earliest(time.clock().instant().plus(TICK), earliest(overallEnd, silentUntil));
+            Instant next = earliest(time.clock().instant().plus(TICK), earliest(overallEnd, quietUntil));
             if (lines.endsWithin(time.remaining(next))) {
                 break;
             }
@@ -82,7 +99,7 @@ final class ProgressWait {
     private ProgramEnd ended(ExecHandle.Wait wait, ExecHandle handle) {
         return switch (wait) {
             case ExecHandle.Wait.Exited exited -> new ProgramEnd.Exited(handle.waitForExit(), exited.wallTime());
-            case ExecHandle.Wait.TimedOut ignored -> new ProgramEnd.BoundExpired("overall", bounds.overall());
+            case ExecHandle.Wait.TimedOut ignored -> new ProgramEnd.BoundExpired("overall", overall);
             case ExecHandle.Wait.Interrupted ignored -> new ProgramEnd.Interrupted();
         };
     }

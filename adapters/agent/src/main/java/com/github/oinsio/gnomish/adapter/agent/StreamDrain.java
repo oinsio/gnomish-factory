@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
+import com.github.oinsio.gnomish.adapter.agent.claude.StreamJsonParser;
+import com.github.oinsio.gnomish.adapter.agent.claude.TimestampedEvent;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.subprocess.ChildOutput;
 import java.io.BufferedReader;

@@ -47,7 +47,9 @@ final class PipelineModelBuilder {
      * (FR6 of add-parameter-count-gate, design D12).
      *
      * <p>{@code checkProviders} maps a built-in executor's name to the params
-     * validator the check seam grades its checks' settings with.
+     * validator the check seam grades its checks' settings with; {@code agentSettings} is the
+     * agent executor's settings judge, handed every agent-cli stage's and judge check's settings
+     * ({@link AgentSettingsValidator}; FR7 of extract-agent-round-runner).
      *
      * @return the mapped, validated definition, or {@code null} when it could not
      *     be produced
@@ -57,6 +59,7 @@ final class PipelineModelBuilder {
             ParsedTree tree,
             Map<String, TrackerSubsectionValidator> trackerValidators,
             Map<String, CheckSettingsValidator> checkProviders,
+            CheckSettingsValidator agentSettings,
             ConnectionAdmission connections,
             List<ConfigError> errors) {
         if (!(tree.config() instanceof Ok<ConfigDto>(ConfigDto value))
@@ -81,7 +84,7 @@ final class PipelineModelBuilder {
         }
         errors.addAll(PipelineValidator.validate(model));
         errors.addAll(ReferencedFiles.check(law, model.stages()));
-        errors.addAll(AgentSettingsValidator.validate(model));
+        errors.addAll(AgentSettingsValidator.validate(model, agentSettings));
         errors.addAll(CommandSettingsValidator.validate(model));
         errors.addAll(ExternalCheckSeamValidator.validate(model.stages(), checkProviders));
         errors.addAll(ManifestTargetSeam.judge(model.stages(), connections.operator()));

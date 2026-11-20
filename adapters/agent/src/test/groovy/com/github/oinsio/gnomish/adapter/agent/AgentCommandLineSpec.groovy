@@ -1,8 +1,12 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.adapter.agent.claude.AgentCommandLine
+import com.github.oinsio.gnomish.adapter.agent.claude.AgentRoundResultExtractor
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
+import com.github.oinsio.gnomish.executorcontract.Bounds
+import com.github.oinsio.gnomish.executorcontract.Policy
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
@@ -77,6 +81,9 @@ class AgentCommandLineSpec extends Specification {
         carriesPair(argv, '--permission-mode', 'acceptEdits')
         argv.contains('--strict-mcp-config')
         !argv.contains('bypassPermissions')
+
+        and: 'the transitional executor round is the writeExactly policy of its own decision file'
+        carriesPair(argv, '--allowedTools', "Write(${workspaceDir.resolve('decision.json')})".toString())
     }
 
     // FR2, FR3: the judge vote denies anything outside its read-only set and loads no MCP server
@@ -90,23 +97,28 @@ class AgentCommandLineSpec extends Specification {
         argv.contains('--strict-mcp-config')
         !argv.contains('acceptEdits')
         !argv.contains('bypassPermissions')
+
+        and: 'the transitional judge vote is the readOnly policy: the whole read-only set'
+        carriesPair(argv, '--allowedTools', 'Read,Grep,Glob')
     }
 
-    // FR1–FR4, NFR-S1, NFR-S2 of fix-operator-blockers: every role gets its own mode and the MCP
-    // exclusion, in one fixed position beside the transport flags, and no role ever renders the
-    // mode that skips all permission checks.
+    // FR1–FR4, NFR-S1, NFR-S2 of fix-operator-blockers; FR5, D5 of extract-agent-round-runner: every
+    // policy gets its own mode and the MCP exclusion from the one compiler, beside the transport
+    // flags, and no policy ever renders the mode that skips all permission checks.
     // Scenario: executor/agent-executor / No command line skips all permission checks
     // Scenario: executor/agent-executor / Transport flags are not configurable
-    def "FR1-FR4, NFR-S1: the assembled argv carries the role's mode and the MCP exclusion for #role"() {
+    def "FR1-FR4, NFR-S1: the assembled argv carries the policy's mode and the MCP exclusion for #policy"() {
         when:
-        def argv = AgentCommandLine.fromRenderedFlags(role, 'claude', ['--model', 'm'])
+        def argv = AgentCommandLine.of('claude', 'm', [:], policy, Bounds.none())
 
         then:
-        argv == [
+        argv.take(4) == [
             'claude',
             '-p',
             '--model',
-            'm',
+            'm'
+        ]
+        argv.takeRight(6) == [
             '--permission-mode',
             expectedMode,
             '--strict-mcp-config',
@@ -117,18 +129,10 @@ class AgentCommandLineSpec extends Specification {
         !argv.contains('bypassPermissions')
 
         where:
-        role << AgentRole.values()
-        expectedMode = [(AgentRole.EXECUTOR): 'acceptEdits', (AgentRole.JUDGE): 'dontAsk'][role]
-    }
-
-    // NFR-S1: the role → mode table is total and never names bypassPermissions.
-    // Scenario: executor/agent-executor / No command line skips all permission checks
-    def "NFR-S1: no role maps to bypassPermissions"() {
-        expect:
-        AgentRole.values()*.permissionMode().every {
-            it != null && it != 'bypassPermissions'
-        }
-        AgentRole.values()*.permissionMode() as Set == ['acceptEdits', 'dontAsk'] as Set
+        policy || expectedMode
+        new Policy.ReadOnly() || 'dontAsk'
+        new Policy.WriteExactly('/r/answer.json') || 'acceptEdits'
+        new Policy.WorkspaceWrite() || 'acceptEdits'
     }
 
     // FR3 of fix-operator-blockers: a project .mcp.json is the gnome's to write, so neither role may

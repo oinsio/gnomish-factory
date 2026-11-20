@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.command
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory
-import com.github.oinsio.gnomish.adapter.agent.RoundTimeout
+import com.github.oinsio.gnomish.adapter.settings.RoundTimeout
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.executorcontract.Bounds
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest

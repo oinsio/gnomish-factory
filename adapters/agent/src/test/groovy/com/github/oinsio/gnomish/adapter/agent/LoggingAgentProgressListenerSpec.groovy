@@ -32,14 +32,15 @@ class LoggingAgentProgressListenerSpec extends Specification {
         }
     }
 
-    // FR7, UX1: RoundStarted logs one INFO line naming model and sessionId
-    def "RoundStarted logs one INFO line naming model and sessionId"() {
+    // FR7, UX1: RoundStarted logs one INFO line naming the model (FR6 of
+    //     extract-agent-round-runner: the event carries no session id, so the line names none)
+    def "RoundStarted logs one INFO line naming the model and no session"() {
         given:
         def listener = new LoggingAgentProgressListener()
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.RoundStarted(UntrustedText.agent('claude-fake-main-1'), UntrustedText.agent('fake-session-plain-1')))
+            listener.onProgress(new AgentProgressEvent.RoundStarted(UntrustedText.agent('claude-fake-main-1')))
         }
 
         then:
@@ -47,7 +48,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
         events[0].level == Level.INFO
         events[0].formattedMessage.contains('round started')
         events[0].formattedMessage.contains('claude-fake-main-1')
-        events[0].formattedMessage.contains('fake-session-plain-1')
+        !events[0].formattedMessage.contains('session')
     }
 
     // FR7, UX1 + FR12 of harden-logging-observability: the tool call is still on the record, but
@@ -75,7 +76,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.RoundFinished('success', [:], UntrustedText.agent('Stage complete: output.txt written.')))
+            listener.onProgress(new AgentProgressEvent.RoundFinished([:], UntrustedText.agent('Stage complete: output.txt written.')))
         }
 
         then:
@@ -83,6 +84,9 @@ class LoggingAgentProgressListenerSpec extends Specification {
         events[0].level == Level.INFO
         events[0].formattedMessage.contains('round finished')
         events[0].formattedMessage.contains('Stage complete: output.txt written.')
+
+        and: 'FR6 of extract-agent-round-runner: no result subtype on the event, none on the line'
+        !events[0].formattedMessage.contains('subtype')
     }
 
     // FR7: RoundFinished with an empty summary still logs one INFO line
@@ -92,7 +96,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.RoundFinished(null, [:], UntrustedText.agent('')))
+            listener.onProgress(new AgentProgressEvent.RoundFinished([:], UntrustedText.agent('')))
         }
 
         then:
@@ -111,7 +115,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.RoundFinished('success', [:], UntrustedText.agent(forged)))
+            listener.onProgress(new AgentProgressEvent.RoundFinished([:], UntrustedText.agent(forged)))
         }
 
         then: 'one event, one line — no line break of any flavour survives into the message'
@@ -134,7 +138,7 @@ class LoggingAgentProgressListenerSpec extends Specification {
 
         when:
         def events = capture {
-            listener.onProgress(new AgentProgressEvent.RoundStarted(UntrustedText.agent("opus\nINFO forged"), UntrustedText.agent("s\u001B[2J")))
+            listener.onProgress(new AgentProgressEvent.RoundStarted(UntrustedText.agent("opus\nINFO forged\u001B[2J")))
             listener.onProgress(new AgentProgressEvent.ToolStarted(UntrustedText.agent("Bash\nWARN forged")))
         }
 

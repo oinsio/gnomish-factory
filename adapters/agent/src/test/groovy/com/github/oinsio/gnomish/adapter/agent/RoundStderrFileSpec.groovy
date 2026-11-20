@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent
 
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.adapter.agent.claude.AgentRoundResultExtractor
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock

@@ -1,0 +1,120 @@
+package com.github.oinsio.gnomish.adapter.agent.claude;
+
+import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent;
+import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.domain.engine.ModelUsages;
+import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.util.ArrayList;
+import java.util.List;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Dispatches the {@link AgentProgressEvent}(s) a recognized {@link AgentEvent}
+ * implies to an injected {@link AgentProgressListener} (design D10, FR7).
+ * Extracted from {@link StreamJsonParser} (design D3) to separate the parse
+ * loop's own concern — tolerant reading, JSON decoding, read-time {@code
+ * Clock} stamping (NFR-O3) — from progress fan-out, a detachable half with no
+ * need for the {@code Clock}; the DEBUG raw-event log stays in {@link
+ * StreamJsonParser}, which owns the loop that reads each line.
+ *
+ * <p>The events it emits are vendor-neutral (FR6 of extract-agent-round-runner): the init event's
+ * session id and the result event's subtype stay on the {@link AgentEvent}s this class reads and
+ * never reach a listener — the session id is the round's continuation key (design D4 of that
+ * change), carried on {@link com.github.oinsio.gnomish.adapter.agent.AgentRoundResult}.
+ *
+ * <p>Implements FR1, FR3, NFR-O1 of fix-oversized-adapters; FR6 of extract-agent-round-runner.
+ */
+record AgentProgressEmitter(AgentProgressListener progressListener, TokenUsageMapper tokenUsageMapper) {
+
+    private static final Logger log = LoggerFactory.getLogger(AgentProgressEmitter.class);
+
+    /**
+     * @param progressListener the live-progress subscriber (design D10); never
+     *     null — pass a fan-out implementation to reach several subscribers, or a
+     *     no-op ({@code event -> {}}) to reach none
+     * @param tokenUsageMapper derives {@code tokensByModel} for {@code
+     *     RoundFinished} from an {@link AgentEvent.ResultEvent}; never null
+     */
+    AgentProgressEmitter {}
+
+    /**
+     * Dispatches the {@link AgentProgressEvent}(s) implied by {@code event}
+     * (design D10, FR7): {@code RoundStarted} for an {@link
+     * AgentEvent.InitEvent}, one {@code ToolStarted} per top-level {@link
+     * ContentBlock.ToolUse} block for an {@link AgentEvent.AssistantEvent}
+     * whose {@code parentToolUseId} is {@code null}, {@code RoundFinished} for
+     * an {@link AgentEvent.ResultEvent} — its {@code tokensByModel} derived by
+     * {@link TokenUsageMapper} the same way {@link
+     * AgentRoundResultExtractor}'s telemetry is, using {@code roundInit} for
+     * the flat-{@code usage} fallback's model key. A {@link
+     * AgentEvent.UserEvent} implies no progress event.
+     *
+     * @param roundInit the round's {@link AgentEvent.InitEvent} recognized so
+     *     far by the caller's parse loop, or {@code null} if none has been
+     *     recognized yet
+     */
+    void emit(AgentEvent event, AgentEvent.@Nullable InitEvent roundInit) {
+        progressOf(event, roundInit, tokenUsageMapper).forEach(this::deliver);
+    }
+
+    /**
+     * The {@link AgentProgressEvent}s {@code event} implies, in delivery order — the one mapping
+     * both this emitter's live delivery and {@link ClaudeDialect#parse} use (FR3 of
+     * extract-agent-round-runner), so the dialect's progress cannot drift from the parse loop's.
+     *
+     * @param event the recognized event
+     * @param roundInit the round's {@link AgentEvent.InitEvent} recognized so far, or {@code null}
+     * @param tokenUsageMapper derives {@code RoundFinished}'s tokens from a result event
+     * @return the implied progress, possibly empty; never null
+     */
+    static List<AgentProgressEvent> progressOf(
+            AgentEvent event, AgentEvent.@Nullable InitEvent roundInit, TokenUsageMapper tokenUsageMapper) {
+        List<AgentProgressEvent> progress = new ArrayList<>();
+        switch (event) {
+            case AgentEvent.InitEvent init -> progress.add(new AgentProgressEvent.RoundStarted(init.model()));
+            case AgentEvent.AssistantEvent assistant -> {
+                if (assistant.parentToolUseId() == null) {
+                    for (ContentBlock block : assistant.content()) {
+                        if (block instanceof ContentBlock.ToolUse toolUse) {
+                            progress.add(new AgentProgressEvent.ToolStarted(UntrustedText.agent(toolUse.name())));
+                        }
+                    }
+                }
+            }
+            case AgentEvent.ResultEvent result -> {
+                var tokensByModel = ModelUsages.tokensOf(tokenUsageMapper.toByModel(result, roundInit));
+                progress.add(new AgentProgressEvent.RoundFinished(tokensByModel, result.result()));
+            }
+            case AgentEvent.UserEvent ignored -> {
+                // tool results carry no progress signal of their own (FR7)
+            }
+        }
+        return progress;
+    }
+
+    /**
+     * Delivers {@code event} to {@link #progressListener}, swallowing and
+     * logging any {@link RuntimeException} it throws so a broken listener never
+     * interrupts parsing (design D10) — mirroring how {@code Events.emit}
+     * shields the engine's own event delivery.
+     */
+    private void deliver(AgentProgressEvent event) {
+        try {
+            progressListener.onProgress(event);
+        } catch (RuntimeException ex) {
+            // FR6: the event's rendered form carries the agent's own words, and none of them
+            // explains this failure — the variant's type name and the listener that broke on it do.
+            // The listener named here is the single subscriber this emitter was handed; when that
+            // is a CompositeAgentProgressListener, the child that actually threw is named by the
+            // composite's own line (its per-child guard runs first).
+            log.warn(
+                    OperatorEvent.AGENT_PROGRESS_LISTENER_THREW.head() + "agent progress listener {} threw for {}",
+                    progressListener.getClass().getSimpleName(),
+                    event.getClass().getSimpleName(),
+                    ex);
+        }
+    }
+}

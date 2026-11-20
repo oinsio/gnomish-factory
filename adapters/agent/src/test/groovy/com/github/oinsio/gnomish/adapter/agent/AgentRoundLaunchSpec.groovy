@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
 import com.github.oinsio.gnomish.FactoryProperties
+import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeEnvironment
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
 import com.github.oinsio.gnomish.app.port.agent.JudgeEnvironmentSource
@@ -49,7 +50,7 @@ class AgentRoundLaunchSpec extends Specification {
     final List<ExecCommand> launched = []
 
     /** The factory's values: every seam variable planted, beside a variable the seam never names. */
-    static final Map<String, String> FACTORY_VALUES = AgentAiSeam.NAMES.collectEntries {
+    static final Map<String, String> FACTORY_VALUES = ClaudeEnvironment.CREDENTIALS.collectEntries {
         [(it): "value-of-${it}".toString()]
     } + [AWS_SECRET_ACCESS_KEY: 'never']
 
@@ -169,20 +170,20 @@ class AgentRoundLaunchSpec extends Specification {
     }
 
     // FR5 of fix-operator-blockers: both roles hand the port the seam the factory's values hold;
-    //     the five names are pinned by AgentAiSeamSpec. NFR-S3 of tighten-spec-contract: the values
+    //     the five names are pinned by ClaudeEnvironmentSpec. NFR-S3 of tighten-spec-contract: the values
     //     come from the run's allowlist (the secrets port, in production), planted here, never from
     //     this process's environment — so every name is present and the comparison is not vacuous
     // Scenario: executor/agent-executor / The AI seam carries five variables
     def "FR5: every agent round and judge vote receives the AI seam with its current values"() {
         given:
-        def seam = FACTORY_VALUES.subMap(AgentAiSeam.NAMES)
+        def seam = FACTORY_VALUES.subMap(ClaudeEnvironment.CREDENTIALS)
 
         when:
         executorRound(FakeAgentSupport.requestFor(workspaceDir))
         judgeVote()
 
         then: 'the seam is the five names the factory sets, and each launch carries every one present'
-        AgentAiSeam.NAMES as Set == [
+        ClaudeEnvironment.CREDENTIALS as Set == [
             'CLAUDE_CODE_OAUTH_TOKEN',
             'ANTHROPIC_API_KEY',
             'ANTHROPIC_BASE_URL',
@@ -192,7 +193,7 @@ class AgentRoundLaunchSpec extends Specification {
         launched.size() == 2
         seam.size() == 5
         launched.every {
-            it.env().subMap(AgentAiSeam.NAMES) == seam && !it.env().containsKey('AWS_SECRET_ACCESS_KEY')
+            it.env().subMap(ClaudeEnvironment.CREDENTIALS) == seam && !it.env().containsKey('AWS_SECRET_ACCESS_KEY')
         }
     }
 }

@@ -82,6 +82,8 @@ public final class RoundScratchDirectory implements AutoCloseable {
 
     private static final String STDERR_FILE = "stderr";
 
+    private static final String ANSWER_FILE_NAME = "answer.json";
+
     private final Path directory;
     private final Writer writer;
 
@@ -120,6 +122,15 @@ public final class RoundScratchDirectory implements AutoCloseable {
     /** Where the round's process writes its stderr: a policy the environment applies at the launch. */
     public StderrPolicy stderr() {
         return StderrPolicy.toFile(directory.resolve(STDERR_FILE));
+    }
+
+    /**
+     * Where an agent round's dialect writes the final answer it extracted from the stream (FR1 of
+     * extract-agent-round-runner): a host file in this directory, which leaves with the round once the
+     * runner has read it back. An answer the agent wrote itself is in its environment, not here.
+     */
+    public Path answerPath() {
+        return directory.resolve(ANSWER_FILE_NAME);
     }
 
     /**

@@ -18,7 +18,8 @@ class ProgressLinesLifecycleSpec extends Specification {
 
     FakeProcess live = FakeProcess.running()
 
-    ProgressLines lines = ProgressLines.start(ChildOutput.stdout(live), new VirtualClock(), 'acme')
+    ProgressLines lines = ProgressLines.start(ChildOutput.stdout(live), new VirtualClock(),
+    ProgressJudge.LINE_CAP_BYTES, new ProgressJudge('acme'))
 
     def cleanup() {
         lines.close()

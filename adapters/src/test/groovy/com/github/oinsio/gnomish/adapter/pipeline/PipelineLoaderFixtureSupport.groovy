@@ -47,6 +47,7 @@ trait PipelineLoaderFixtureSupport implements GnomishTreeWriter {
                 getRoot(),
                 TrackerValidatorStub.acceptingGithub(),
                 TrackerValidatorStub.acceptingGithubActions(),
+                AgentSettingsValidator.UNJUDGED,
                 ConnectionAdmission.of(ConnectionProfiles.none()),
                 designatorKinds)
     }

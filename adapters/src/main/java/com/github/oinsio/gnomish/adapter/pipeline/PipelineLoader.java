@@ -115,6 +115,9 @@ public final class PipelineLoader {
      *     an empty map means no adapters are known and every declared type is reported unknown
      * @param checkProviders the params validators keyed by built-in executor name; an empty map
      *     grades no check's settings
+     *     <p>The {@code load} forms grade no agent settings ({@link AgentSettingsValidator#UNJUDGED});
+     *     the composition root loads through {@link #loadConfiguration}, which takes the agent
+     *     executor's settings judge (FR7 of extract-agent-round-runner).
      * @return {@link LoadOutcome.Loaded} with the validated model when the tree has
      *     no problem, else {@link LoadOutcome.Invalid} with every located error
      * @throws IOException when a required file cannot be read (an I/O fault, never a
@@ -144,7 +147,12 @@ public final class PipelineLoader {
             ConnectionProfiles profiles)
             throws IOException {
         return loadConfiguration(
-                        gnomishRoot, trackerValidators, checkProviders, ConnectionAdmission.of(profiles), Set.of())
+                        gnomishRoot,
+                        trackerValidators,
+                        checkProviders,
+                        AgentSettingsValidator.UNJUDGED,
+                        ConnectionAdmission.of(profiles),
+                        Set.of())
                 .outcome();
     }
 
@@ -165,6 +173,9 @@ public final class PipelineLoader {
      * {@link Path} overload below is the working-tree boundary for a caller holding a directory.
      *
      * @param law the law source rooted at the {@code .gnomish/} tree
+     * @param agentSettings the agent executor's settings judge, handed every agent-cli stage's and
+     *     judge check's settings ({@link AgentSettingsValidator}); {@link
+     *     AgentSettingsValidator#UNJUDGED} grades none
      * @param connections the operator's connection profiles, the adapters' endpoint declarations and
      *     the operator's in-process egress, which admit the tracker's endpoint (FR17, design D16 of
      *     migrate-verify-to-executor-contract)
@@ -179,10 +190,12 @@ public final class PipelineLoader {
             LawSource law,
             Map<String, TrackerSubsectionValidator> trackerValidators,
             Map<String, CheckSettingsValidator> checkProviders,
+            CheckSettingsValidator agentSettings,
             ConnectionAdmission connections,
             Set<String> configuredDesignatorKinds)
             throws IOException {
-        return loadConfiguration(law, trackerValidators, checkProviders, connections, _ -> configuredDesignatorKinds);
+        return loadConfiguration(
+                law, trackerValidators, checkProviders, agentSettings, connections, _ -> configuredDesignatorKinds);
     }
 
     /**
@@ -198,6 +211,7 @@ public final class PipelineLoader {
             LawSource law,
             Map<String, TrackerSubsectionValidator> trackerValidators,
             Map<String, CheckSettingsValidator> checkProviders,
+            CheckSettingsValidator agentSettings,
             ConnectionAdmission connections,
             ConfiguredDesignatorKinds designatorKinds)
             throws IOException {
@@ -214,8 +228,8 @@ public final class PipelineLoader {
         tree.checkShape(errors);
         errors.addAll(StageConsistency.check(tree.pipelineStageNames(), raw.stages()));
 
-        PipelineDefinition model =
-                PipelineModelBuilder.mapAndValidate(law, tree, trackerValidators, checkProviders, connections, errors);
+        PipelineDefinition model = PipelineModelBuilder.mapAndValidate(
+                law, tree, trackerValidators, checkProviders, agentSettings, connections, errors);
 
         LoadOutcome outcome =
                 errors.isEmpty() && model != null ? new LoadOutcome.Loaded(model) : new LoadOutcome.Invalid(errors);
@@ -235,6 +249,7 @@ public final class PipelineLoader {
             Path gnomishRoot,
             Map<String, TrackerSubsectionValidator> trackerValidators,
             Map<String, CheckSettingsValidator> checkProviders,
+            CheckSettingsValidator agentSettings,
             ConnectionAdmission connections,
             Set<String> configuredDesignatorKinds)
             throws IOException {
@@ -242,6 +257,7 @@ public final class PipelineLoader {
                 new WorkingTreeLawSource(gnomishRoot),
                 trackerValidators,
                 checkProviders,
+                agentSettings,
                 connections,
                 configuredDesignatorKinds);
     }

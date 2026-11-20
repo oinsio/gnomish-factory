@@ -28,7 +28,7 @@ class GnomishDirPipelineSourceSpec extends Specification implements LocalGitRepo
     Path tempDir
 
     def source = new GnomishDirPipelineSource(
-    [:], TrackerValidatorStub.acceptingGithubActions())
+    [:], TrackerValidatorStub.acceptingGithubActions(), AgentSettingsValidator.UNJUDGED)
 
     private Path projectWithDefinition() {
         Path project = Files.createDirectories(tempDir.resolve('project'))
@@ -127,7 +127,7 @@ class GnomishDirPipelineSourceSpec extends Specification implements LocalGitRepo
         given:
         Map<String, TrackerSubsectionValidator> mutableTrackers = [:]
         Map<String, CheckSettingsValidator> mutableProviders = [:]
-        def built = new GnomishDirPipelineSource(mutableTrackers, mutableProviders)
+        def built = new GnomishDirPipelineSource(mutableTrackers, mutableProviders, AgentSettingsValidator.UNJUDGED)
 
         when:
         mutableTrackers['github'] = null
@@ -177,7 +177,7 @@ class GnomishDirPipelineSourceSpec extends Specification implements LocalGitRepo
                 new ConfigError(file, where, 'rejected')
             ]
         } as CheckSettingsValidator
-        def strict = new GnomishDirPipelineSource([:], ['github-actions': rejecting])
+        def strict = new GnomishDirPipelineSource([:], ['github-actions': rejecting], AgentSettingsValidator.UNJUDGED)
 
         when:
         def outcome = strict.load(projectWithDefinition())

@@ -341,7 +341,11 @@ public enum OperatorEvent {
     // refused a tracker call — the operator's grant, the daemon's truth — so the EGRESS condition
     // opened with the refusal and the key to edit, and past the sustained-open threshold the ERROR.
     CONDITION_EGRESS_OPENED("GF188"),
-    CONDITION_EGRESS_SUSTAINED_OPEN("GF189");
+    CONDITION_EGRESS_SUSTAINED_OPEN("GF189"),
+    // agent round runner (extract-agent-round-runner, FR1, FR8, NFR-R1): an agent CLI's stdout passed
+    // its caps — lines cut at the line cap, events dropped between the round's opening and its latest
+    // lines past the retained cap; one WARN per round, which is still judged by what was kept.
+    AGENT_STDOUT_CAPPED("GF190");
 
     private final String code;
     private final String head;

@@ -1,8 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent.command;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.github.oinsio.gnomish.adapter.agent.RoundTimeout;
 import com.github.oinsio.gnomish.adapter.command.CommandRun;
+import com.github.oinsio.gnomish.adapter.settings.RoundTimeout;
 import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.executorcontract.EnforcementLevel;
 import com.github.oinsio.gnomish.executorcontract.Executor;

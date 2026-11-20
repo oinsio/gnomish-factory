@@ -66,10 +66,16 @@ dependencies {
     // paths and port types. `SeededCloneFixture` (fix-uncommitted dedup) types
     // its `runner` field as `GitProcessRunner`, which is part of a consuming
     // spec's compile surface — so `api`, not `implementation`.
-    // No `:adapters:agent` edge: `FakeAgentBinary` and `FakeAgentSupport` name
-    // the agent adapter in prose and in the scripts they lay down, never in
-    // bytecode.
+    // `FakeAgentBinary` and `FakeAgentSupport` name the agent adapter in prose
+    // and in the scripts they lay down, never in bytecode.
     api project(':adapters:git')
+    // The fake dialect (M4 of extract-agent-round-runner, task 1.3): a second
+    // `AgentDialect` beside the vendor's, shared by the runner's own specs and
+    // the conformance kit's in the composition root. It implements the
+    // adapter's interface, so the adapter is on this module's own signatures:
+    // `api`. A test-only classpath, as for every edge above (FR7 forbids only a
+    // production module depending on this one).
+    api project(':adapters:agent')
     // `InProcessExecutorDouble` implements the executor contract's mirror interface over its DTOs
     // (task 8.2a of define-executor-contract), so the contract is on this module's own signatures.
     api project(':executor-contract')

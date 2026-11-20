@@ -18,7 +18,8 @@ import org.slf4j.LoggerFactory;
  * a file, never a pipe a factory thread writes into — its stderr to the file the caller's policy
  * names, its stdout a capped log. Without {@code streams_progress} stdout is read by the one bounded
  * capture ({@link BoundedCapture}) and the wait is bounded by the overall bound alone; with it, stdout is
- * read live by {@link ProgressLines} and {@link ProgressWait} applies the silence bound too. The
+ * read live by {@link ProgressLines}, each line judged by {@link ProgressJudge}, and {@link ProgressWait}
+ * applies the silence bound too, from the start. The
  * handle kills the process tree when a bound expires; this class owns no reader, pump or close of a
  * child's pipe, and joins each drain with the handle's post-exit bound only.
  *
@@ -64,8 +65,9 @@ final class ProgramInvocation {
     ProgramEnd run(String executor, ExecCommand command, boolean streamsProgress) {
         ExecHandle handle = environment.exec(command);
         if (streamsProgress) {
-            try (ProgressLines lines = ProgressLines.start(handle.output(), time.clock(), executor)) {
-                ProgramEnd end = new ProgressWait(bounds, time).await(handle, lines);
+            try (ProgressLines lines = ProgressLines.start(
+                    handle.output(), time.clock(), ProgressJudge.LINE_CAP_BYTES, new ProgressJudge(executor))) {
+                ProgramEnd end = new ProgressWait(null, bounds.silence(), bounds.overall(), time).await(handle, lines);
                 lines.await(handle.postExitBound());
                 return end;
             }

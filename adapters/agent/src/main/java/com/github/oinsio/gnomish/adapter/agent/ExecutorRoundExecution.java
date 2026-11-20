@@ -1,6 +1,11 @@
 package com.github.oinsio.gnomish.adapter.agent;
 
 import com.github.oinsio.gnomish.FactoryProperties;
+import com.github.oinsio.gnomish.adapter.agent.claude.AgentCommandLine;
+import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeEnvironment;
+import com.github.oinsio.gnomish.adapter.agent.claude.TimestampedEvent;
+import com.github.oinsio.gnomish.adapter.agent.claude.ToolTraceBuilder;
+import com.github.oinsio.gnomish.adapter.settings.RoundTimeout;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.app.port.agent.RoundClose;
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
@@ -11,6 +16,8 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult;
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage;
 import com.github.oinsio.gnomish.domain.engine.ToolTrace;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
+import com.github.oinsio.gnomish.executorcontract.Bounds;
+import com.github.oinsio.gnomish.executorcontract.Policy;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
 import com.github.oinsio.gnomish.sandbox.ExecHandle;
 import com.github.oinsio.gnomish.sandbox.ProcessStartException;
@@ -82,13 +89,19 @@ final class ExecutorRoundExecution {
         // takes the CLI's stderr; the catch reads its tail before the finally removes it.
         @Nullable RoundScratchDirectory scratch = null;
         try {
-            var invocationFlags = AgentInvocationOptions.renderForExecutor(
-                    executor.model(), executor.settings(), round.decisionFilePath());
-            List<String> command = AgentCommandLine.fromRenderedFlags(
-                    AgentRole.EXECUTOR, factoryProperties.agentCliBinary(), invocationFlags);
-            // Factory-set protocol layer (D6, FR9): the AI seam variables plus this round's
-            // decision-file path — the only variables beyond base and passthrough a round sees.
-            Map<String, String> env = new java.util.LinkedHashMap<>(AgentAiSeam.variables(equipment.childEnv()));
+            // The decision file is the one path beyond the working copy the round may write: the
+            // legacy writeExactly compatibility (FR5 of extract-agent-round-runner), compiled by
+            // the one policy owner like every other Claude argv.
+            List<String> command = AgentCommandLine.of(
+                    factoryProperties.agentCliBinary(),
+                    executor.model(),
+                    executor.settings(),
+                    new Policy.WriteExactly(round.decisionFilePath().toString()),
+                    Bounds.none());
+            // Factory-set protocol layer (D6, FR9): the credentials the Claude describe declares,
+            // resolved through the run's allowlist, plus this round's decision-file path — the only
+            // variables beyond base and passthrough a round sees.
+            Map<String, String> env = new java.util.LinkedHashMap<>(ClaudeEnvironment.variables(equipment.childEnv()));
             env.putAll(round.decisionEnvFragment());
             scratch = RoundScratchDirectory.open(equipment.roundScratchParent());
             // D14 of tighten-spec-contract: an in-box retry reuses the box, and with it a guard
