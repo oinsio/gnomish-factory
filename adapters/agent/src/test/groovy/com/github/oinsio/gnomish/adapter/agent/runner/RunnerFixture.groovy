@@ -48,6 +48,8 @@ final class RunnerFixture {
     TimeEquipment time = VirtualTimeEquipment.on(new VirtualClock())
     StdoutCaps caps = StdoutCaps.DEFAULTS
     FakeDialect dialect = new FakeDialect()
+    /** Another dialect the runner runs instead of {@link #dialect}, when set. */
+    AgentDialect<?> otherDialect
     /** The names the run's allowlist declares, and so withholds from every child. */
     List<String> withheld = []
     AgentProgressListener listener
@@ -56,18 +58,32 @@ final class RunnerFixture {
     final List<ProcessBuilder> agentLaunches = []
     final List<ProcessBuilder> gitLaunches = []
     StdinSource stdin
+    /** The stdin text of each CLI launch, in launch order. */
+    final List<String> stdins = []
 
     /** {@code files(answerPath, stderrPath)}; the CLI is handed back after it ran. */
     ExecutorResult start(ExecutorRequest request, Process agent, Closure files = { Path answer, Path err -> }) {
+        startEach(request, [agent], files)
+    }
+
+    /**
+     * One start whose CLI launches are {@code agents}, in turn; {@code files} runs inside each launch,
+     * as in {@link #start}, and is told the launch's 0-based number when it takes a third argument.
+     */
+    ExecutorResult startEach(ExecutorRequest request, List<Process> agents, Closure files = { Path answer, Path err -> }) {
         run(request, { ProcessBuilder builder, StdinSource source ->
             if (builder.command().first() == 'git') {
                 gitLaunches << builder
                 return view()
             }
+            int launch = agentLaunches.size()
             agentLaunches << builder
             stdin = source
-            files(Path.of(builder.environment()['GNOMISH_ANSWER_FILE']), builder.redirectError().file().toPath())
-            agent
+            stdins << stdinText()
+            def answer = Path.of(builder.environment()['GNOMISH_ANSWER_FILE'])
+            def err = builder.redirectError().file().toPath()
+            files.maximumNumberOfParameters> 2 ? files(answer, err, launch) : files(answer, err)
+            agents[launch]
         } as ProcessLaunch)
     }
 
@@ -84,8 +100,8 @@ final class RunnerFixture {
         }
     }
 
-    AgentRoundRunner<FakeEvent> runner(HostTaskExecutionEnvironment environment, ProgramRoundEquipment equipment) {
-        new AgentRoundRunner<FakeEvent>(NAME, dialect, environment, equipment,
+    AgentRoundRunner<?> runner(HostTaskExecutionEnvironment environment, ProgramRoundEquipment equipment) {
+        new AgentRoundRunner(NAME, otherDialect ?: dialect, environment, equipment,
                 listener ?: ({ AgentProgressEvent event ->
                     progress << event
                 } as AgentProgressListener), caps)

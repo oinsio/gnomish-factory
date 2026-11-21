@@ -119,7 +119,8 @@ final class ExecutorAdapterSelector {
                 childEnv.programGrant(),
                 RoundScratchDirectory.HOST_TEMP,
                 registered);
-        var builtIns = assembly.checks.builtIns(childEnv, sandbox, runContext, assembly.time.clock());
+        var builtIns =
+                assembly.checks.builtIns(childEnv, sandbox, runContext, assembly.time.clock(), equipment.bounds());
         var registry = ExecutorRegistry.of(
                 described, definition, law, equipment, builtIns, sandbox == null ? null : sandbox.freshBoxes());
         StageExecutor dispatch = new ExecutorDispatch(registry, rounds, cli);

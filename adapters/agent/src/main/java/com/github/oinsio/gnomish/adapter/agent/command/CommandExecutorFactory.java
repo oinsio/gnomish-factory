@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.adapter.agent.command;
 
 import com.github.oinsio.gnomish.adapter.agent.program.RoundExecutorFactory;
 import com.github.oinsio.gnomish.adapter.command.CommandRun;
+import com.github.oinsio.gnomish.app.describe.ProgramBounds;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors;
 import com.github.oinsio.gnomish.domain.pipeline.CommandLine;
@@ -23,10 +24,11 @@ import org.jspecify.annotations.Nullable;
  * whose instructions are the stage's declared command and whose settings are the stage's own — so the
  * built-in reads its {@code roundTimeout} where a program reads its settings; and each round's
  * executor a {@link CommandStageExecutor} over the round's environment on one shared {@link
- * CommandRun}. The request carries no feedback and no bounds: a command reads no request, and its one
- * bound is its {@code roundTimeout}, which the built-in enforces itself.
+ * CommandRun}, with the factory's bounds. The request carries no feedback and no bounds: a command
+ * reads no request, and its one bound is the overall bound the executor resolves from its {@code
+ * roundTimeout} and the factory's bounds, which the built-in enforces itself.
  *
- * <p>Implements FR4, FR8 of add-command-executor.
+ * <p>Implements FR4, FR8 of add-command-executor; FR7 of extract-agent-round-runner.
  */
 public final class CommandExecutorFactory implements RoundExecutorFactory {
 
@@ -37,12 +39,16 @@ public final class CommandExecutorFactory implements RoundExecutorFactory {
     private static final String WORKSPACE = ".";
 
     private final CommandRun run;
+    private final ProgramBounds bounds;
 
     /**
      * @param clock the read-time source the round's wait measures its exit on; never null
+     * @param bounds the factory's bounds, whose overall bound a stage declaring no {@code
+     *     roundTimeout} is bounded by; never null
      */
-    public CommandExecutorFactory(InstantSource clock) {
+    public CommandExecutorFactory(InstantSource clock, ProgramBounds bounds) {
         this.run = new CommandRun(CommandRun.POSIX_SHELL, clock);
+        this.bounds = bounds;
     }
 
     @Override
@@ -77,6 +83,6 @@ public final class CommandExecutorFactory implements RoundExecutorFactory {
 
     @Override
     public CommandStageExecutor executor(TaskExecutionEnvironment environment) {
-        return new CommandStageExecutor(environment, run);
+        return new CommandStageExecutor(environment, run, bounds);
     }
 }

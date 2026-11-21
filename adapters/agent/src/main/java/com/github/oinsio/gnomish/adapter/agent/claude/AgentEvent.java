@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.claude;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -107,36 +108,29 @@ public sealed interface AgentEvent {
     }
 
     /**
-     * The round-closing {@code result} event: essential per FR4/D3 — an
-     * unparseable or missing one is an infrastructure failure of the round (task
-     * 3.2's concern, not this one). {@code usage} and {@code modelUsage} are
-     * carried as raw wire data (JSON-derived {@code Map}/{@code Number} values,
-     * not yet coerced into {@link com.github.oinsio.gnomish.domain.engine.TokenUsage});
-     * task 3.3 interprets them numerically and resolves the {@code modelUsage}
-     * absent-vs-present fallback to the init event's main model. {@code
-     * modelUsage} is {@code null}, distinct from an empty map, exactly when the
-     * wire event omitted the key — collapsing the two would erase the very
-     * signal task 3.3's fallback depends on.
+     * The round-closing {@code result} event: essential per FR4/D3 — a missing one is an
+     * infrastructure failure of the round. {@code usage} and {@code modelUsage} are carried as raw
+     * wire data, interpreted by {@link TokenUsageMapper}; {@code modelUsage} is {@code null}, distinct
+     * from an empty map, exactly when the wire event omitted the key (older CLIs), the signal the
+     * mapper's fallback to the init event's model depends on.
      *
      * @param sessionId the CLI's session id for this round; never blank
-     * @param subtype the event's {@code subtype} (e.g. {@code "success"},
-     *     {@code "error_max_turns"}), verbatim from the wire, or {@code null}
-     *     if the event carried none
-     * @param result the agent's final result text; never null (the CLI may
-     *     report an empty string)
-     * @param usage the event's raw {@code usage} object (token counts under
-     *     CLI-native keys), or {@code null} if the event carried none
-     * @param modelUsage the event's raw {@code modelUsage} object (per-model
-     *     token counts under CLI-native keys), or {@code null} if the wire event
-     *     omitted the key entirely (older CLIs); defensively copied and
-     *     unmodifiable when present
+     * @param subtype the event's {@code subtype} verbatim, or {@code null} if it carried none
+     * @param result the agent's final result text; never null (the CLI may report an empty string)
+     * @param usage the raw {@code usage} object, or {@code null} if the event carried none
+     * @param modelUsage the raw {@code modelUsage} object, or {@code null} if the key was omitted;
+     *     defensively copied and unmodifiable when present
+     * @param structuredOutput the {@code structured_output} the CLI validated against the {@code
+     *     --json-schema} it was handed, or {@code null} when it reported none; the agent's JSON,
+     *     judged and minted only by the dialect's answer step (FR3 of extract-agent-round-runner)
      */
     record ResultEvent(
             UntrustedText sessionId,
             @Nullable String subtype,
             UntrustedText result,
             @Nullable Map<String, Object> usage,
-            @Nullable Map<String, Object> modelUsage)
+            @Nullable Map<String, Object> modelUsage,
+            @Nullable JsonNode structuredOutput)
             implements AgentEvent {
 
         public ResultEvent {

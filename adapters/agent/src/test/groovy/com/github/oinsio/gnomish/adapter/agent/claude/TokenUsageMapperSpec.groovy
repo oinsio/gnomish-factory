@@ -96,7 +96,7 @@ class TokenUsageMapperSpec extends Specification {
     // Scenario: executor/agent-executor / Old CLI fallback
     def "falls back to the flat usage object keyed by the init event's model when modelUsage is absent"() {
         given: 'a synthetic result event with usage present but modelUsage null (key omitted from the wire)'
-        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-fallback-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-fallback-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null, null)
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-fallback-1'), UntrustedText.agent('claude-fake-legacy-1'))
 
         when: 'tokens are mapped'
@@ -109,7 +109,7 @@ class TokenUsageMapperSpec extends Specification {
     // NFR-R2, FR4: neither modelUsage nor usage present/interpretable — degrade to empty map, never throw
     def "degrades to an empty tokensByModel when neither modelUsage nor usage is present"() {
         given: 'a synthetic result event with neither usage nor modelUsage'
-        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-empty-1'), 'success', UntrustedText.agent('done'), null, null)
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-empty-1'), 'success', UntrustedText.agent('done'), null, null, null)
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-empty-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
@@ -125,7 +125,7 @@ class TokenUsageMapperSpec extends Specification {
     // Scenario: observability/factory-logging / A reader that drops data says so
     def "FR5: an extraction that yields nothing at all warns that the round's cost is unreported"() {
         given:
-        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-empty-2'), 'success', UntrustedText.agent('done'), null, null)
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-empty-2'), 'success', UntrustedText.agent('done'), null, null, null)
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-empty-2'), UntrustedText.agent('claude-fake-main-1'))
         def logs = LogCaptureSupport.attach(TokenUsageMapper, Level.DEBUG)
 
@@ -147,7 +147,7 @@ class TokenUsageMapperSpec extends Specification {
     // FR5: a round that DID report usage says nothing — a healthy round produces no console output.
     def "FR5: a round that reported usage warns about nothing"() {
         given:
-        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-ok-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-ok-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null, null)
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-ok-1'), UntrustedText.agent('claude-fake-main-1'))
         def logs = LogCaptureSupport.attach(TokenUsageMapper, Level.DEBUG)
 
@@ -164,7 +164,7 @@ class TokenUsageMapperSpec extends Specification {
     // NFR-R2, FR4: modelUsage absent, usage present, but no init event available to key the fallback
     def "degrades to an empty tokensByModel when the fallback usage cannot be keyed (no init event)"() {
         given: 'a synthetic result event with a usable flat usage but no init event supplied'
-        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-no-init-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-no-init-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null, null)
 
         when: 'tokens are mapped with a null init event'
         def tokensByModel = ModelUsages.tokensOf(mapper.toByModel(resultEvent, null))
@@ -179,7 +179,7 @@ class TokenUsageMapperSpec extends Specification {
         def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-partial-1'), 'success', UntrustedText.agent('done'), null, [
             'claude-fake-good-1': [inputTokens: 100, outputTokens: 20, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
             'claude-fake-bad-1' : [inputTokens: 100, outputTokens: 'not-a-number', cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
-        ])
+        ], null)
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-partial-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
@@ -195,7 +195,7 @@ class TokenUsageMapperSpec extends Specification {
         def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-notmap-1'), 'success', UntrustedText.agent('done'), null, [
             'claude-fake-good-1': [inputTokens: 5, outputTokens: 5, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
             'claude-fake-weird-1': 'oops',
-        ])
+        ], null)
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-notmap-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
@@ -208,7 +208,7 @@ class TokenUsageMapperSpec extends Specification {
     // NFR-R2, FR4: flat usage missing a required field degrades the whole fallback to empty
     def "degrades the fallback to empty when the flat usage is missing a required field"() {
         given: 'a synthetic result event with usage missing output_tokens'
-        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-partial-usage-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
+        def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-partial-usage-1'), 'success', UntrustedText.agent('done'), [input_tokens: 120, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null, null)
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-partial-usage-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when: 'tokens are mapped'
@@ -225,7 +225,7 @@ class TokenUsageMapperSpec extends Specification {
         def hostile = "claude-x\u001B[2J\n2026-01-01 ERROR forged"
         def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-hostile-1'), 'success', UntrustedText.agent('done'), null, [
             (hostile): [inputTokens: 7, outputTokens: 3, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
-        ])
+        ], null)
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-hostile-1'), UntrustedText.agent('claude-fake-main-1'))
 
         when:
@@ -239,7 +239,7 @@ class TokenUsageMapperSpec extends Specification {
     def "FR10: a hostile init model is held to ModelIdSyntax on the flat-usage fallback"() {
         given: 'an init event whose model carries a line break and a forged record'
         def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-hostile-2'), 'success', UntrustedText.agent('done'),
-                [input_tokens: 120, output_tokens: 20, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null)
+                [input_tokens: 120, output_tokens: 20, cache_creation_input_tokens: 10, cache_read_input_tokens: 5], null, null)
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-hostile-2'),
                 UntrustedText.agent("claude-x\n2026-01-01 ERROR forged"))
 
@@ -259,7 +259,7 @@ class TokenUsageMapperSpec extends Specification {
             ("claude-a[2J"): [inputTokens: 7, outputTokens: 3, cacheCreationInputTokens: 1, cacheReadInputTokens: 2],
             ("claude-b\nforged"): [inputTokens: 10, outputTokens: 5, cacheCreationInputTokens: 0, cacheReadInputTokens: 4],
             ('claude-opus-4-8[1m]'): [inputTokens: 100, outputTokens: 50, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
-        ])
+        ], null)
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-collide'), UntrustedText.agent('claude-fake-main-1'))
 
         when:
@@ -285,7 +285,7 @@ class TokenUsageMapperSpec extends Specification {
         def hostile = "claude-x[2J"
         def resultEvent = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-hostile-3'), 'success', UntrustedText.agent('done'), null, [
             (hostile): [inputTokens: 7, outputTokens: 3, cacheCreationInputTokens: 0, cacheReadInputTokens: 0],
-        ])
+        ], null)
         def initEvent = new AgentEvent.InitEvent(UntrustedText.agent('fake-session-hostile-3'), UntrustedText.agent('claude-fake-main-1'))
 
         when:

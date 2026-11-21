@@ -3,7 +3,8 @@ package com.github.oinsio.gnomish.adapter.agent;
 import com.github.oinsio.gnomish.adapter.agent.claude.AgentCommandLine;
 import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeEnvironment;
 import com.github.oinsio.gnomish.adapter.agent.claude.TimestampedEvent;
-import com.github.oinsio.gnomish.adapter.settings.RoundTimeout;
+import com.github.oinsio.gnomish.adapter.agent.runner.RoundBounds;
+import com.github.oinsio.gnomish.app.describe.ProgramBounds;
 import com.github.oinsio.gnomish.domain.engine.Verdict;
 import com.github.oinsio.gnomish.domain.engine.port.JudgeVoter.Vote;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
@@ -112,7 +113,9 @@ final class JudgeRoundExecution {
         // Same shared drain as the executor round (FR6 of fix-round-stdout-drain), started
         // before the wait so the vote's stream is never bounded by the OS pipe buffer (FR1).
         try (StreamDrain drain = StreamDrain.start(launched.output(), clock, equipment.progressListener())) {
-            Duration roundTimeout = RoundTimeout.resolve(check.settings());
+            // FR7, D6 of extract-agent-round-runner: the one resolution, over the root's factory bounds.
+            Duration roundTimeout =
+                    RoundBounds.of(ProgramBounds.DEFAULTS, check.settings()).overall();
             var wait = launched.waitForExitOrTimeout(roundTimeout, clock);
             if (wait instanceof ExecHandle.Wait.TimedOut) {
                 // Still decided before the drain's events are consulted (FR3).

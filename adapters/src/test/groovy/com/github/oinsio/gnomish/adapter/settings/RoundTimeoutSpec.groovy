@@ -4,79 +4,56 @@ import java.time.Duration
 import spock.lang.Specification
 
 /**
- * FR11, FR13, D7: {@link RoundTimeout} resolves the process-kill budget
- * tolerantly from a stage executor's or judge check's opaque settings map —
- * a numeric seconds value, an ISO-8601 duration string (with or without the
- * {@code PT} prefix, case-insensitively), or a fallback to {@link
- * RoundTimeout#DEFAULT} when the key is absent or unparseable.
+ * FR11, FR13, D7: {@link RoundTimeout} reads the {@code roundTimeout} a stage executor's or judge
+ * check's opaque settings map declares — a numeric seconds value, an ISO-8601 duration string (with or
+ * without the {@code PT} prefix, case-insensitively).
  *
- * <p>FR7, D6 of extract-agent-round-runner: the load-time judge of the same shapes lives here too,
- * behind the same parse, so what the judge accepts is exactly what the resolver resolves.
+ * <p>FR7, D6 of extract-agent-round-runner (as amended 2026-11-21): the load-time judge of the same
+ * shapes lives here too, behind the same parse, so what the judge accepts is exactly what the reader
+ * reads; and the reader answers "declared or not" with no default of its own — the factory's overall
+ * bound, written once in {@code ProgramBounds.DEFAULTS}, is {@code RoundBounds}' to apply.
  */
 class RoundTimeoutSpec extends Specification {
 
-    def "a numeric roundTimeout resolves to that many seconds"() {
-        when:
-        def resolved = RoundTimeout.resolve([roundTimeout: 45])
-
-        then:
-        resolved == Duration.ofSeconds(45)
+    def "a numeric roundTimeout is declared as that many seconds"() {
+        expect:
+        RoundTimeout.declared([roundTimeout: 45]) == Optional.of(Duration.ofSeconds(45))
     }
 
-    def "an ISO-8601 duration string with the PT prefix already present resolves as-is"() {
-        when:
-        def resolved = RoundTimeout.resolve([roundTimeout: 'PT30S'])
-
-        then:
-        resolved == Duration.ofSeconds(30)
+    def "an ISO-8601 duration string with the PT prefix already present is read as-is"() {
+        expect:
+        RoundTimeout.declared([roundTimeout: 'PT30S']) == Optional.of(Duration.ofSeconds(30))
     }
 
     def "a lowercase pt prefix is accepted unchanged"() {
-        when:
-        def resolved = RoundTimeout.resolve([roundTimeout: 'pt30s'])
-
-        then:
-        resolved == Duration.ofSeconds(30)
+        expect:
+        RoundTimeout.declared([roundTimeout: 'pt30s']) == Optional.of(Duration.ofSeconds(30))
     }
 
     def "a bare unit string without a PT prefix is uppercased and prefixed"() {
-        when:
-        def resolved = RoundTimeout.resolve([roundTimeout: '45s'])
-
-        then:
-        resolved == Duration.ofSeconds(45)
+        expect:
+        RoundTimeout.declared([roundTimeout: '45s']) == Optional.of(Duration.ofSeconds(45))
     }
 
-    def "an absent roundTimeout key falls back to DEFAULT"() {
-        when:
-        def resolved = RoundTimeout.resolve([:])
-
-        then:
-        resolved == RoundTimeout.DEFAULT
+    // FR7, D6 of extract-agent-round-runner: no fallback here — absent is "not declared"
+    def "an absent roundTimeout key is not declared"() {
+        expect:
+        RoundTimeout.declared([:]) == Optional.empty()
     }
 
-    def "an unparseable ISO duration string falls back to DEFAULT"() {
-        when:
-        def resolved = RoundTimeout.resolve([roundTimeout: 'not-a-duration'])
+    // D6: a value the load-time judge refuses declares nothing a round could be bound by; a loaded
+    //     law never carries one
+    def "a value with no accepted shape (#value) declares nothing"() {
+        expect:
+        RoundTimeout.declared([roundTimeout: value]) == Optional.empty()
 
-        then:
-        resolved == RoundTimeout.DEFAULT
-    }
-
-    def "a value of an unsupported type falls back to DEFAULT"() {
-        when:
-        def resolved = RoundTimeout.resolve([roundTimeout: [1, 2, 3]])
-
-        then:
-        resolved == RoundTimeout.DEFAULT
-    }
-
-    def "a blank string value falls back to a zero-second duration via the PT0S default text"() {
-        when:
-        def resolved = RoundTimeout.resolve([roundTimeout: '   '])
-
-        then:
-        resolved == Duration.ZERO
+        where:
+        value << [
+            'not-a-duration',
+            [1, 2, 3],
+            '   ',
+            true
+        ]
     }
 
     // FR3 of add-command-executor, D6 of extract-agent-round-runner: the accepted shapes are the ones
@@ -111,10 +88,10 @@ class RoundTimeoutSpec extends Specification {
         ]
     }
 
-    // D6: one parse behind both — a value the judge accepts resolves to what it names, never DEFAULT
-    def "D6: every accepted shape resolves to the duration it names"() {
+    // D6: one parse behind both — a value the judge accepts is declared as what it names
+    def "D6: every accepted shape is declared as the duration it names"() {
         expect:
-        RoundTimeout.resolve([roundTimeout: value]) == expected
+        RoundTimeout.declared([roundTimeout: value]) == Optional.of(expected)
 
         where:
         value || expected

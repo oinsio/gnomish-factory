@@ -110,6 +110,8 @@ class CliJudgeVoterSpec extends Specification {
     // FR13, NFR-R1: roundTimeout expiry kills the process and returns CannotVerify,
     // never a thrown RoundTimeoutException — the judge port never throws.
     // Scenario: executor/agent-executor / A dead judge process cannot verify
+    // FR7 of extract-agent-round-runner: the vote's bound is its check's roundTimeout through RoundBounds
+    // Scenario: executor/agent-round-runner / A judge vote is bounded by its check's roundTimeout
     def "hung process past roundTimeout yields Vote(CannotVerify), not a thrown exception"() {
         given:
         def voter = voterFor('hangs-forever')

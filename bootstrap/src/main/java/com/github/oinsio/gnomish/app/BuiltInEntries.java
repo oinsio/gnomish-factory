@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.adapter.check.http.HttpExecutor;
 import com.github.oinsio.gnomish.adapter.scm.ScmConnection;
 import com.github.oinsio.gnomish.adapter.scm.builtin.ScmBuiltIn;
 import com.github.oinsio.gnomish.adapter.scm.builtin.ScmBuiltIns;
+import com.github.oinsio.gnomish.app.describe.ProgramBounds;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.pipeline.BuiltInExecutors;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -51,6 +52,7 @@ final class BuiltInEntries {
     private final HttpCheckProbe http;
     private final SecretsProvider secrets;
     private final InstantSource clock;
+    private final ProgramBounds bounds;
 
     /**
      * @param filesExist the run's existence runner; never null
@@ -58,18 +60,22 @@ final class BuiltInEntries {
      * @param http the run's guarded {@code http} judgement; never null
      * @param secrets the secrets port the SCM tokens resolve through; never null
      * @param clock the run's read-time source; never null
+     * @param bounds the run's program bounds, whose overall bound a {@code command} stage declaring no
+     *     {@code roundTimeout} is bounded by (FR7 of extract-agent-round-runner); never null
      */
     BuiltInEntries(
             FilesExistCheckRunner filesExist,
             ShellCommandCheckRunner shell,
             HttpCheckProbe http,
             SecretsProvider secrets,
-            InstantSource clock) {
+            InstantSource clock,
+            ProgramBounds bounds) {
         this.filesExist = filesExist;
         this.shell = shell;
         this.http = http;
         this.secrets = secrets;
         this.clock = clock;
+        this.bounds = bounds;
     }
 
     /**
@@ -83,7 +89,8 @@ final class BuiltInEntries {
      */
     List<RegistryEntry> of(PipelineDefinition definition, DescribedLaw described) {
         List<RegistryEntry> entries = new ArrayList<>();
-        entries.add(RegistryEntry.stage(CommandStageExecutor.describeAnswer(), new CommandExecutorFactory(clock)));
+        entries.add(
+                RegistryEntry.stage(CommandStageExecutor.describeAnswer(), new CommandExecutorFactory(clock, bounds)));
         for (String name : named(definition)) {
             switch (name) {
                 case BuiltInExecutors.FILES_EXIST ->

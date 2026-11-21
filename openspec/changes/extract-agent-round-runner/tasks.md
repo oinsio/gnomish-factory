@@ -38,7 +38,7 @@
   `CommandSettingsValidator` and the command executor's `roundTimeout` resolution, with the shapes
   accepted today (command-stage validation specs stay green); located-error spec for a settings
   typo (FR7, NFR-S1, D6)
-- [ ] 2.3a `RoundBounds` — the one resolution of a round's three bounds (FR7, NFR-R1, D6 as
+- [x] 2.3a `RoundBounds` — the one resolution of a round's three bounds (FR7, NFR-R1, D6 as
   amended, D8 row). TDD on virtual time. `RoundBounds.of(ProgramBounds factory, settings)` in
   `adapters/agent`: the factory's startup-read and silence, `overall` from the settings'
   `roundTimeout` when declared, the factory's otherwise; `RoundTimeout` (`:adapters`) keeps the
@@ -78,7 +78,7 @@
   and `AgentSecretsFolderRoundSpec` (a host-folder token reaching every round and vote) stays
   green. Note that the allowlist's declared credential names are a withheld set — `compose` and
   `resolve` strip them — so the dialect's credential names must not be added through `declaring`.
-- [ ] 2.4 `--json-schema` for `verdict` and `decision` answers with final-text fallback at WARN;
+- [x] 2.4 `--json-schema` for `verdict` and `decision` answers with final-text fallback at WARN;
   `JudgeVerdictExtractor` reduced to SARIF conversion; malformed → malformed answer (FR3, FR4)
 - [ ] 2.5 Continuation: session id as key in the result; `--resume` on `start` with continuation;
   refused resume → fresh start with WARN; ledger token `continued session=<prefix>` (FR9,

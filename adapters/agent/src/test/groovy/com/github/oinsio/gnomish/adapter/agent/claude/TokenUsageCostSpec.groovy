@@ -107,7 +107,7 @@ class TokenUsageCostSpec extends Specification {
     def "FR22: the flat-usage fallback carries no cost"() {
         given: 'a result event with flat usage, no modelUsage, and a top-level total cost'
         def result = new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-cost-1'), 'success', UntrustedText.agent('done'),
-                [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5, total_cost_usd: 0.3], null)
+                [input_tokens: 120, output_tokens: 45, cache_creation_input_tokens: 10, cache_read_input_tokens: 5, total_cost_usd: 0.3], null, null)
 
         expect:
         mapper.toByModel(result, init) == ['claude-fake-main-1': new ModelUsage(new TokenUsage(120, 45, 10, 5), null)]
@@ -132,7 +132,7 @@ class TokenUsageCostSpec extends Specification {
     }
 
     private static AgentEvent.ResultEvent resultWith(Map<String, Object> modelUsage) {
-        new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-cost-1'), 'success', UntrustedText.agent('done'), null, modelUsage)
+        new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-cost-1'), 'success', UntrustedText.agent('done'), null, modelUsage, null)
     }
 
     private static Map<String, Object> counts(TokenUsage tokens) {

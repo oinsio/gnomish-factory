@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.agent.program.ProgramEnd;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramFailures;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultRead;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultRead.AnswerRead;
+import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
 import com.github.oinsio.gnomish.executorcontract.FailureClass;
 import com.github.oinsio.gnomish.executorcontract.Status;
@@ -32,7 +33,12 @@ import org.jspecify.annotations.Nullable;
  * the stderr tail. A round's usage rides every result the dialect judged; a usage that reports no wall
  * time takes the one the factory measured.
  *
- * <p>Implements FR1, FR2, FR8, UX2 of extract-agent-round-runner.
+ * <p>Continuation (FR9, NFR-R2, design D4): a round started with a continuation whose resume the
+ * dialect says the CLI refused is no result but a {@link RoundAttempt.ResumeRefused}, which the round
+ * answers by a fresh start; a completed round's {@code decision-request} answer carries the dialect's
+ * session as its continuation key ({@link SessionContinuation#stamped}).
+ *
+ * <p>Implements FR1, FR2, FR8, FR9, NFR-R2, UX2 of extract-agent-round-runner.
  *
  * @param <E> the dialect's own event type
  */
@@ -42,19 +48,26 @@ final class RoundJudgement<E> {
     private final AgentDialect<E> dialect;
     private final TaskExecutionEnvironment environment;
     private final RoundScratchDirectory scratch;
+    private final ExecutorRequest request;
 
     /**
      * @param name the executor's name; never blank
      * @param dialect the round's dialect; never null
      * @param environment where the round ran; never null
      * @param scratch the round's scratch directory, holding its stderr; never null
+     * @param request the run the round served; never null
      */
     RoundJudgement(
-            String name, AgentDialect<E> dialect, TaskExecutionEnvironment environment, RoundScratchDirectory scratch) {
+            String name,
+            AgentDialect<E> dialect,
+            TaskExecutionEnvironment environment,
+            RoundScratchDirectory scratch,
+            ExecutorRequest request) {
         this.name = name;
         this.dialect = dialect;
         this.environment = environment;
         this.scratch = scratch;
+        this.request = request;
     }
 
     /** The round's {@code failed/infrastructure} for {@code cause}, quoting its stderr tail. */
@@ -69,11 +82,22 @@ final class RoundJudgement<E> {
      * @param lines the round's line sink, joined; never null
      * @param answerFile the answer path the round's environment was handed; never null
      * @param roundEnd the instant an unfinished tool call is measured to; never null
-     * @return the round's result; never null
+     * @return the round's result, or the CLI's refusal to resume the request's continuation; never null
      */
-    ExecutorResult exited(ProgramEnd.Exited exited, DialectLines<E> lines, String answerFile, Instant roundEnd) {
+    RoundAttempt exited(ProgramEnd.Exited exited, DialectLines<E> lines, String answerFile, Instant roundEnd) {
         lines.reportCaps(name);
         ParsedEvents<E> events = lines.events();
+        if (request.continuation() != null) {
+            UntrustedText stderrTail = scratch.tailForFailure();
+            if (dialect.resumeRefused(exited.exitCode(), events, stderrTail)) {
+                return new RoundAttempt.ResumeRefused(stderrTail);
+            }
+        }
+        return new RoundAttempt.Ended(judged(exited, events, answerFile, roundEnd));
+    }
+
+    private ExecutorResult judged(
+            ProgramEnd.Exited exited, ParsedEvents<E> events, String answerFile, Instant roundEnd) {
         Usage usage = measured(dialect.usage(events, roundEnd), exited.wallTime());
         return switch (dialect.status(exited.exitCode(), events)) {
             case RoundStatus.Completed ignored -> answered(events, answerFile, usage);
@@ -95,7 +119,7 @@ final class RoundJudgement<E> {
     private ExecutorResult answered(ParsedEvents<E> events, String answerFile, Usage usage) {
         Path extracted = scratch.answerPath();
         AnswerRead read =
-                switch (dialect.answer(events, extracted)) {
+                switch (dialect.answer(request, events, extracted)) {
                     case DialectAnswer.Written ignored ->
                         ProgramResultRead.answerOnHost(extracted, UntrustedText::agent);
                     case DialectAnswer.NotWritten ignored ->
@@ -106,7 +130,8 @@ final class RoundJudgement<E> {
                 };
         return switch (read) {
             case AnswerRead.None ignored -> completed(null, usage);
-            case AnswerRead.Read answer -> completed(answer.answer(), usage);
+            case AnswerRead.Read answer ->
+                completed(SessionContinuation.stamped(answer.answer(), dialect.continuation(events)), usage);
             case AnswerRead.Refused refused -> failure(refused.cause()).withUsage(usage);
         };
     }

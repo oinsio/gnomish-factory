@@ -1,12 +1,12 @@
 package com.github.oinsio.gnomish.adapter.agent.command;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.github.oinsio.gnomish.adapter.agent.runner.RoundBounds;
 import com.github.oinsio.gnomish.adapter.command.CommandRun;
-import com.github.oinsio.gnomish.adapter.settings.RoundTimeout;
+import com.github.oinsio.gnomish.app.describe.ProgramBounds;
 import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.executorcontract.EnforcementLevel;
 import com.github.oinsio.gnomish.executorcontract.Executor;
-import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
 import com.github.oinsio.gnomish.executorcontract.Role;
@@ -21,8 +21,9 @@ import java.util.Map;
  * The {@code command} built-in of the executor contract (FR4, FR5, FR8 of add-command-executor; design
  * D1, D2, D5): a {@code transform} run is the request's instructions — the stage's declared command —
  * run as {@code sh -c} through the round's {@link TaskExecutionEnvironment}, the sole process seam, on
- * the shared {@link CommandRun} core, bounded by the request's {@code roundTimeout} as the shared
- * {@link RoundTimeout} resolves it. It reports the contract's {@link ExecutorResult} only, by the
+ * the shared {@link CommandRun} core, bounded by the overall bound {@link RoundBounds} resolves for
+ * the request — its declared {@code roundTimeout}, or the factory's overall bound the executor is
+ * constructed with (FR7, D6 of extract-agent-round-runner). It reports the contract's {@link ExecutorResult} only, by the
  * exit-code contract {@link CommandRoundReport} owns: the mapping to the engine's result is {@code
  * ProgramResultMapping}'s, in the shared round wrapper.
  *
@@ -32,20 +33,25 @@ import java.util.Map;
  * (NFR-C1, D8), so its describe declares that it reports usage. {@link #poll} answers
  * {@code failed/infrastructure}: a command round is never {@code pending}.
  *
- * <p>Implements FR3, FR4, FR5, FR6, FR7, FR8, NFR-C1, NFR-S1, NG1 of add-command-executor.
+ * <p>Implements FR3, FR4, FR5, FR6, FR7, FR8, NFR-C1, NFR-S1, NG1 of add-command-executor; FR7 of
+ * extract-agent-round-runner.
  */
 public final class CommandStageExecutor implements Executor {
 
     private final TaskExecutionEnvironment environment;
     private final CommandRun run;
+    private final ProgramBounds factoryBounds;
 
     /**
      * @param environment the open round's execution environment; never null
      * @param run the shared command-run core; never null
+     * @param factoryBounds the factory's bounds, whose overall bound applies when a stage declares no
+     *     {@code roundTimeout}; never null
      */
-    public CommandStageExecutor(TaskExecutionEnvironment environment, CommandRun run) {
+    public CommandStageExecutor(TaskExecutionEnvironment environment, CommandRun run, ProgramBounds factoryBounds) {
         this.environment = environment;
         this.run = run;
+        this.factoryBounds = factoryBounds;
     }
 
     /**
@@ -53,7 +59,7 @@ public final class CommandStageExecutor implements Executor {
      *
      * <p>The settings schema states only that the settings are an object: which keys a command stage
      * takes and the shapes of {@code roundTimeout} are the load-time validation's
-     * ({@code CommandSettingsValidator}) and {@link RoundTimeout}'s, never a second statement here.
+     * ({@code CommandSettingsValidator}) and {@code RoundTimeout}'s, never a second statement here.
      */
     @Override
     public Describe describe() {
@@ -89,7 +95,7 @@ public final class CommandStageExecutor implements Executor {
             return CommandRoundReport.refused("the command built-in runs transform rounds only, and was asked for a "
                     + request.role().wire() + " run");
         }
-        Duration timeout = RoundTimeout.resolve(ExecutorContractJson.settingsValues(request.settings()));
+        Duration timeout = RoundBounds.of(factoryBounds, request).overall();
         return CommandRoundReport.of(command, timeout, run.run(environment, command, Map.of(), timeout));
     }
 

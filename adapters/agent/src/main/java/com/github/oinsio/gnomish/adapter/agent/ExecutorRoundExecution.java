@@ -5,7 +5,8 @@ import com.github.oinsio.gnomish.adapter.agent.claude.AgentCommandLine;
 import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeEnvironment;
 import com.github.oinsio.gnomish.adapter.agent.claude.TimestampedEvent;
 import com.github.oinsio.gnomish.adapter.agent.claude.ToolTraceBuilder;
-import com.github.oinsio.gnomish.adapter.settings.RoundTimeout;
+import com.github.oinsio.gnomish.adapter.agent.runner.RoundBounds;
+import com.github.oinsio.gnomish.app.describe.ProgramBounds;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.app.port.agent.RoundClose;
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
@@ -116,7 +117,9 @@ final class ExecutorRoundExecution {
             // round (NFR-R1); its close closes no pipe (D5 of make-pipe-reads-non-parking).
             try (StreamDrain drain =
                     StreamDrain.start(launched.output(), clock, listenerFor(equipment.progressListener(), round))) {
-                Duration roundTimeout = RoundTimeout.resolve(executor.settings());
+                // FR7, D6 of extract-agent-round-runner: the one resolution, over the root's factory bounds.
+                Duration roundTimeout = RoundBounds.of(ProgramBounds.DEFAULTS, executor.settings())
+                        .overall();
                 var wait = launched.waitForExitOrTimeout(roundTimeout, clock);
                 // Both early endings are classified before the drain's events are consulted
                 // (FR3): the kill ended the stream mid-line, and that secondary symptom must not

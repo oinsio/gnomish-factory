@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.command
 
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramStageExecutor
+import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
@@ -37,7 +38,7 @@ class CommandExecutorFactorySpec extends Specification {
     @TempDir
     Path workspace
 
-    def factory = new CommandExecutorFactory(new VirtualClock())
+    def factory = new CommandExecutorFactory(new VirtualClock(), ProgramBounds.DEFAULTS)
 
     def "FR8: the built-in's registry name is command"() {
         expect:

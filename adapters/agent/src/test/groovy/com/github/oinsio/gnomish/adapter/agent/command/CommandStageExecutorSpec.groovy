@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.command
 
 import com.github.oinsio.gnomish.adapter.command.CommandRun
+import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.executorcontract.Capability
 import com.github.oinsio.gnomish.executorcontract.Describe
@@ -54,8 +55,8 @@ class CommandStageExecutorSpec extends Specification {
         def environment = new HostTaskExecutionEnvironment(workspace, new VirtualClock(), allowlist, launch)
         environment.materialize('gnomish/TASK-7', null)
         try {
-            new CommandExecutorFactory(new VirtualClock()).executor(environment)
-                    .start(new CommandExecutorFactory(new VirtualClock()).request(CommandFixtures.round()))
+            new CommandExecutorFactory(new VirtualClock(), ProgramBounds.DEFAULTS).executor(environment)
+                    .start(new CommandExecutorFactory(new VirtualClock(), ProgramBounds.DEFAULTS).request(CommandFixtures.round()))
         } finally {
             environment.dispose()
         }
@@ -135,7 +136,7 @@ class CommandStageExecutorSpec extends Specification {
 
     def "FR8: describe lists transform alone, no poll, no credentials and no usage report"() {
         when:
-        Describe describe = new CommandStageExecutor(Stub(TaskExecutionEnvironment), new CommandRun(CommandRun.POSIX_SHELL, new VirtualClock())).describe()
+        Describe describe = new CommandStageExecutor(Stub(TaskExecutionEnvironment), new CommandRun(CommandRun.POSIX_SHELL, new VirtualClock()), ProgramBounds.DEFAULTS).describe()
 
         then:
         describe.protocolVersion() == Describe.SPOKEN_PROTOCOL_VERSION
@@ -151,10 +152,10 @@ class CommandStageExecutorSpec extends Specification {
     // Scenario: executor/command-executor / Poll is never pending
     def "FR8: a poll of the command built-in is failed/infrastructure, never pending, and runs nothing"() {
         given:
-        def request = new CommandExecutorFactory(new VirtualClock()).request(CommandFixtures.round())
+        def request = new CommandExecutorFactory(new VirtualClock(), ProgramBounds.DEFAULTS).request(CommandFixtures.round())
 
         when:
-        def result = new CommandStageExecutor(Stub(TaskExecutionEnvironment), new CommandRun(CommandRun.POSIX_SHELL, new VirtualClock()))
+        def result = new CommandStageExecutor(Stub(TaskExecutionEnvironment), new CommandRun(CommandRun.POSIX_SHELL, new VirtualClock()), ProgramBounds.DEFAULTS)
                 .poll(request, new PendingKey('k-1'))
 
         then:

@@ -70,7 +70,7 @@ class PlatformCheckRounds implements GitObjectsFixture {
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, VirtualTimeEquipment.create(),
                 TestChildEnvironment.hostAllowlist().programGrant(), Path.of('/tmp'), LastRegisteredCommit.NONE)
         def builtIns = new BuiltInEntries(new FilesExistCheckRunner(), shell,
-                HttpCheckProbe.guarded(new OperatorEgress(inProcessEgress), secrets, HttpRunContext.none()), secrets, clock)
+                HttpCheckProbe.guarded(new OperatorEgress(inProcessEgress), secrets, HttpRunContext.none()), secrets, clock, equipment.bounds())
         def registry = ExecutorRegistry.of(DescribedLaws.connected((admission as BuiltInConnections.Admission.Admitted).connections()),
                 definition, PipelineLaw.ofContent([:]), equipment, builtIns, null)
         def stages = { request ->

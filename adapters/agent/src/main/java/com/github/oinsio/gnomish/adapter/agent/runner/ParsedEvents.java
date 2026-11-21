@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent.runner;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The events one round parsed, in arrival order, each stamped with the instant its line was read
@@ -31,6 +32,23 @@ public record ParsedEvents<E>(List<Stamped<E>> stamped) {
      */
     public static <E> ParsedEvents<E> none() {
         return new ParsedEvents<>(List.of());
+    }
+
+    /**
+     * The last event of {@code type}, read off the view without copying it.
+     *
+     * @param <T> the event type looked for
+     * @param type the event type looked for; never null
+     * @return the last such event, or {@code null} when the round parsed none
+     */
+    public <T extends E> @Nullable T last(Class<T> type) {
+        T found = null;
+        for (Stamped<E> each : stamped) {
+            if (type.isInstance(each.event())) {
+                found = type.cast(each.event());
+            }
+        }
+        return found;
     }
 
     /**

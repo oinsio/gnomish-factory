@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.command
 
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramStageExecutor
+import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.Engine
 import com.github.oinsio.gnomish.domain.engine.EnginePorts
@@ -78,7 +79,7 @@ final class CommandEngineHarness {
             }, identity: {
                 RoundIdentity.inPlace()
             }] as RoundEnvironmentSource
-        def executor = new ProgramStageExecutor(new CommandExecutorFactory(clock), rounds)
+        def executor = new ProgramStageExecutor(new CommandExecutorFactory(clock, ProgramBounds.DEFAULTS), rounds)
         AttemptPersistence persistence = { String taskId, TaskState state, ToolTrace trace ->
             persisted << state
             traces << trace

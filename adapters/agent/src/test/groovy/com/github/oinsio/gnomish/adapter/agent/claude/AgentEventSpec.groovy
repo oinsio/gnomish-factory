@@ -77,7 +77,7 @@ class AgentEventSpec extends Specification {
         def modelUsage = ['claude-x': [inputTokens: 10]]
 
         when:
-        def event = new AgentEvent.ResultEvent(UntrustedText.agent('sess-1'), 'success', UntrustedText.agent('done'), usage, modelUsage)
+        def event = new AgentEvent.ResultEvent(UntrustedText.agent('sess-1'), 'success', UntrustedText.agent('done'), usage, modelUsage, null)
 
         then:
         event.result().forLog()== 'done'
@@ -88,8 +88,8 @@ class AgentEventSpec extends Specification {
     // FR5, D4: ResultEvent preserves a null modelUsage distinctly from an empty map (fallback signal for task 3.3)
     def "ResultEvent preserves a null modelUsage distinctly from an empty map"() {
         expect:
-        new AgentEvent.ResultEvent(UntrustedText.agent('sess-1'), 'success', UntrustedText.agent('done'), [:], null).modelUsage() == null
-        new AgentEvent.ResultEvent(UntrustedText.agent('sess-1'), 'success', UntrustedText.agent('done'), [:], [:]).modelUsage() == [:]
+        new AgentEvent.ResultEvent(UntrustedText.agent('sess-1'), 'success', UntrustedText.agent('done'), [:], null, null).modelUsage() == null
+        new AgentEvent.ResultEvent(UntrustedText.agent('sess-1'), 'success', UntrustedText.agent('done'), [:], [:], null).modelUsage() == [:]
     }
 
     // FR4: a JSON null inside usage/modelUsage is dropped rather than rejected, and the copy is unmodifiable
@@ -99,7 +99,7 @@ class AgentEventSpec extends Specification {
         def modelUsage = ['claude-x': [inputTokens: 10], 'claude-y': null]
 
         when:
-        def event = new AgentEvent.ResultEvent(UntrustedText.agent('sess-1'), 'success', UntrustedText.agent('done'), usage, modelUsage)
+        def event = new AgentEvent.ResultEvent(UntrustedText.agent('sess-1'), 'success', UntrustedText.agent('done'), usage, modelUsage, null)
 
         then:
         event.usage() == [input_tokens: 10]
@@ -115,7 +115,7 @@ class AgentEventSpec extends Specification {
     // FR4: ResultEvent rejects a blank sessionId
     def "ResultEvent rejects a blank sessionId"() {
         when:
-        new AgentEvent.ResultEvent(UntrustedText.agent(''), 'success', UntrustedText.agent('done'), null, null)
+        new AgentEvent.ResultEvent(UntrustedText.agent(''), 'success', UntrustedText.agent('done'), null, null, null)
 
         then:
         thrown(IllegalArgumentException)

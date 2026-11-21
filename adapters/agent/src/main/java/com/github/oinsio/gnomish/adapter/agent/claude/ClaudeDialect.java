@@ -14,12 +14,12 @@ import com.github.oinsio.gnomish.executorcontract.EnforcementLevel;
 import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.Role;
-import com.github.oinsio.gnomish.executorcontract.RoleInputs;
 import com.github.oinsio.gnomish.executorcontract.Usage;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,9 +36,9 @@ import org.jspecify.annotations.Nullable;
  * until they are deleted.
  *
  * <p>Status: a result event whose subtype is the CLI's turn or budget stop is a limit stop naming
- * the stop; any other {@code error_*} subtype, and a stream with no result event at all, is a broken
- * round. The exit code is not consulted beyond that: the result event is what the CLI's own contract
- * makes essential.
+ * the stop; {@code error_max_structured_output_retries} is completed, its answer malformed; any other
+ * {@code error_*} subtype, and a stream with no result event, is a broken round. The exit code is
+ * not consulted beyond that: the result event is what the CLI's own contract makes essential.
  *
  * <p>The argv is {@link AgentCommandLine}'s: the request's policy compiled by {@link
  * ClaudePolicyCompiler} and its turn and budget bounds rendered as the CLI's hints (task 2.2).
@@ -47,10 +47,13 @@ import org.jspecify.annotations.Nullable;
  * capabilities {@code streams_progress}, {@code cancel}, {@code resumable}; enforcement level {@code
  * TOOL_GATE}; the credentials, configuration-directory variable and repo-policy-disabling flags of
  * {@link ClaudeEnvironment}; the one egress host, that of the configured base URL; and the settings
- * schema of {@link ClaudeSettings}. Left to later tasks: the schema-enforced answer (task 2.4) and
- * the continuation key with {@code --resume} (task 2.5).
+ * schema of {@link ClaudeSettings}. Answers (task 2.4, FR3, FR4): a {@code verdict} or {@code
+ * decision} argv ends with {@code --json-schema} and {@link ClaudeAnswerSchema}'s reply schema, and
+ * {@link ClaudeAnswer} judges the reply. Continuation (task 2.5, FR9, NFR-R2): the session, its
+ * {@code --resume} and the CLI's refusal of one are {@link ClaudeSession}'s, the stdin {@link
+ * ClaudePrompt}'s.
  *
- * <p>Implements FR2, FR3, FR7, NFR-S1 of extract-agent-round-runner.
+ * <p>Implements FR2, FR3, FR4, FR7, FR9, NFR-R2, NFR-S1 of extract-agent-round-runner.
  */
 public final class ClaudeDialect implements AgentDialect<AgentEvent> {
 
@@ -61,6 +64,8 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
     static final String MAX_BUDGET_SUBTYPE = "error_max_budget_usd";
 
     private static final String ERROR_SUBTYPE_PREFIX = "error_";
+
+    private static final String JSON_SCHEMA_FLAG = "--json-schema";
 
     private final String binary;
     private final UntrustedText version;
@@ -114,8 +119,14 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
     public RenderedArgv render(ExecutorRequest request) {
         Map<String, Object> settings = ExecutorContractJson.settingsValues(request.settings());
         String model = settings.get(ExecutorSettings.MODEL_KEY) instanceof String named ? named : "";
-        List<String> argv = AgentCommandLine.of(binary, model, settings, request.policy(), request.bounds());
-        return new RenderedArgv(argv, prompt(request.roleInputs()));
+        List<String> argv =
+                new ArrayList<>(AgentCommandLine.of(binary, model, settings, request.policy(), request.bounds()));
+        argv.addAll(ClaudeSession.resume(request.continuation()));
+        ClaudeAnswerSchema.of(request).ifPresent(schema -> {
+            argv.add(JSON_SCHEMA_FLAG);
+            argv.add(schema.toString());
+        });
+        return new RenderedArgv(argv, ClaudePrompt.of(request));
     }
 
     @Override
@@ -126,7 +137,7 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
         }
         AgentEvent event = recognized.get();
         AgentEvent.@Nullable InitEvent init =
-                event instanceof AgentEvent.InitEvent current ? current : last(earlier, AgentEvent.InitEvent.class);
+                event instanceof AgentEvent.InitEvent current ? current : earlier.last(AgentEvent.InitEvent.class);
         return new ParsedLine<>(List.of(event), AgentProgressEmitter.progressOf(event, init, tokenUsageMapper));
     }
 
@@ -136,18 +147,20 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
     }
 
     @Override
-    public DialectAnswer answer(ParsedEvents<AgentEvent> events, Path answerFile) {
-        return new DialectAnswer.NotWritten();
+    public DialectAnswer answer(ExecutorRequest request, ParsedEvents<AgentEvent> events, Path answerFile) {
+        return ClaudeAnswer.of(request, events, answerFile);
     }
 
     @Override
     public RoundStatus status(int exitCode, ParsedEvents<AgentEvent> events) {
-        AgentEvent.ResultEvent result = last(events, AgentEvent.ResultEvent.class);
+        AgentEvent.ResultEvent result = events.last(AgentEvent.ResultEvent.class);
         if (result == null) {
             return new RoundStatus.Broken(UntrustedText.factory("stream-json carried no result event"));
         }
         String subtype = result.subtype();
-        if (subtype == null || !subtype.startsWith(ERROR_SUBTYPE_PREFIX)) {
+        if (subtype == null
+                || !subtype.startsWith(ERROR_SUBTYPE_PREFIX)
+                || subtype.equals(ClaudeAnswer.RETRIES_EXHAUSTED_SUBTYPE)) {
             return new RoundStatus.Completed();
         }
         return switch (subtype) {
@@ -159,41 +172,18 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
     }
 
     @Override
-    public Optional<ContinuationKey> continuation(ParsedEvents<AgentEvent> events) {
-        return Optional.empty();
+    public boolean resumeRefused(int exitCode, ParsedEvents<AgentEvent> events, UntrustedText stderrTail) {
+        return ClaudeSession.refused(exitCode, events, stderrTail);
     }
 
-    /** What the CLI reads on stdin: the role's input, as the request carries it. */
-    private static String prompt(RoleInputs inputs) {
-        if (inputs.instructions() != null) {
-            return inputs.instructions();
-        }
-        if (inputs.criteria() != null) {
-            return inputs.criteria();
-        }
-        String question = inputs.question();
-        if (question == null) {
-            return "";
-        }
-        StringBuilder prompt = new StringBuilder(question);
-        inputs.options().forEach(option -> prompt.append('\n').append("- ").append(option));
-        return prompt.toString();
+    @Override
+    public Optional<ContinuationKey> continuation(ParsedEvents<AgentEvent> events) {
+        return ClaudeSession.key(events);
     }
 
     private static List<TimestampedEvent> timestamped(ParsedEvents<AgentEvent> events) {
         return events.stamped().stream()
                 .map(stamped -> new TimestampedEvent(stamped.event(), stamped.at()))
                 .toList();
-    }
-
-    /** The last event of {@code type}, read off the runner's view without copying it. */
-    private static <T extends AgentEvent> @Nullable T last(ParsedEvents<AgentEvent> events, Class<T> type) {
-        T found = null;
-        for (ParsedEvents.Stamped<AgentEvent> stamped : events.stamped()) {
-            if (type.isInstance(stamped.event())) {
-                found = type.cast(stamped.event());
-            }
-        }
-        return found;
     }
 }

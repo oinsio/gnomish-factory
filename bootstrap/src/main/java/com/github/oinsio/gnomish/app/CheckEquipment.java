@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.check.ShellCommandCheckRunner;
 import com.github.oinsio.gnomish.adapter.check.http.HttpCheckProbe;
 import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext;
 import com.github.oinsio.gnomish.adapter.scm.ScmConnectionReader;
+import com.github.oinsio.gnomish.app.describe.ProgramBounds;
 import com.github.oinsio.gnomish.app.port.run.SandboxRunPieces;
 import com.github.oinsio.gnomish.app.port.secrets.SecretsProvider;
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition;
@@ -122,16 +123,18 @@ public final class CheckEquipment {
      * The run's built-in registry entries' collaborators (design D18 of
      * migrate-verify-to-executor-contract): the run's two in-process runners, the {@code http}
      * judgement guarded by the operator's {@code in-process} scope over the run's variables, and the
-     * secrets port the SCM tokens resolve through, never readable back out.
+     * secrets port the SCM tokens resolve through, never readable back out; and the run's program
+     * bounds, the {@code command} built-in's factory overall bound (FR7 of extract-agent-round-runner).
      */
     BuiltInEntries builtIns(
             ChildEnvAllowlist childEnv,
             @Nullable SandboxRunPieces sandbox,
             HttpRunContext runContext,
-            InstantSource clock) {
+            InstantSource clock,
+            ProgramBounds bounds) {
         var http = HttpCheckProbe.guarded(operatorEgress(), secretsProvider, runContext);
         return new BuiltInEntries(
-                builtinRunner(sandbox), commandRunner(childEnv, sandbox), http, secretsProvider, clock);
+                builtinRunner(sandbox), commandRunner(childEnv, sandbox), http, secretsProvider, clock, bounds);
     }
 
     /** The run-assembly admission of the SCM built-ins' operator connections (design D18). */

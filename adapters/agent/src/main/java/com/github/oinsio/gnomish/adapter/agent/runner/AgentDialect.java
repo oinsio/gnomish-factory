@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent.runner;
 import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.Usage;
+import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Optional;
@@ -11,7 +12,8 @@ import java.util.Optional;
  * What one agent CLI vendor contributes to a round, and nothing else (FR2, G1 of
  * extract-agent-round-runner): the describe fields, the argv a request renders to, the parse of one
  * output line into the dialect's own events and the vendor-neutral progress they imply, the round's
- * usage, the final answer, the mapping of the exit to a status, and the continuation key. The agent
+ * usage, the final answer, the mapping of the exit to a status, the continuation key and the refusal
+ * of a resume. The agent
  * round runner depends on nothing else from the vendor (design D1): launch, drains, bounds, the
  * result-file read, denials and the working-copy check are the runner's, the same for every dialect.
  *
@@ -23,7 +25,7 @@ import java.util.Optional;
  * while the process runs; every other method runs on the round's thread after the drain has been
  * joined. An implementation holds no per-round state — the events it parsed are its memory.
  *
- * <p>Implements FR2, FR6, FR8 of extract-agent-round-runner.
+ * <p>Implements FR2, FR6, FR8, FR9, NFR-R2 of extract-agent-round-runner.
  *
  * @param <E> the dialect's own event type
  */
@@ -72,13 +74,15 @@ public interface AgentDialect<E> {
     /**
      * Writes the round's final answer to {@code answerFile} when the dialect extracts it from the
      * stream (a schema-enforced final output), or reports that it wrote none: a {@code transform}
-     * round, or an answer the agent wrote to the file itself.
+     * round, or an answer the agent wrote to the file itself. A {@code verdict} or {@code decision}
+     * answer the dialect extracts is judged against the schema its argv carried for {@code request}.
      *
+     * @param request the run the round served, the one {@link #render} rendered
      * @param events every event the round parsed
      * @param answerFile the request's answer path, the one the runner reads afterwards
      * @return what the dialect did with the answer; never null
      */
-    DialectAnswer answer(ParsedEvents<E> events, Path answerFile);
+    DialectAnswer answer(ExecutorRequest request, ParsedEvents<E> events, Path answerFile);
 
     /**
      * How the round ended, from the process's exit code and the events: completed, stopped by a
@@ -89,6 +93,19 @@ public interface AgentDialect<E> {
      * @return the status; never null
      */
     RoundStatus status(int exitCode, ParsedEvents<E> events);
+
+    /**
+     * Whether a round started with a continuation ended because the CLI refused to resume the
+     * session it named — one it no longer knows, or cannot load — rather than for any other reason
+     * (NFR-R2 of extract-agent-round-runner). The runner asks only for a request that carried a
+     * continuation, and starts a refused one again as a fresh round.
+     *
+     * @param exitCode the CLI's exit code
+     * @param events every event the round parsed
+     * @param stderrTail the tail of the CLI's stderr, as the runner kept it
+     * @return true when the CLI refused the resume
+     */
+    boolean resumeRefused(int exitCode, ParsedEvents<E> events, UntrustedText stderrTail);
 
     /**
      * The key a later request continues this round's session by, if the stream named one.

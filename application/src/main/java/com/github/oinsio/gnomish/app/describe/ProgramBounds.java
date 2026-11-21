@@ -13,7 +13,11 @@ import java.util.Objects;
  * carries all three as hints ({@link #hints()}), so a well-behaved executor can stop itself first.
  *
  * <p>The bounds are the factory's, not the executor's (an executor that set its own would set the
- * bound meant to contain it) and not the law's (no law field names them in this version). {@link
+ * bound meant to contain it), and for a {@code program} run not the law's either. An agent round
+ * takes its overall bound from the {@code roundTimeout} its stage or check declares, and these bounds'
+ * startup-read and silence bounds always, through the one resolution {@code RoundBounds} in {@code
+ * :adapters:agent} (FR7, D6 of extract-agent-round-runner): the law is bound from the base ref before
+ * any round and is not the contained party. {@link
  * #DEFAULTS} is the one place the values are written; every consumer — the describe preflight and
  * the program executor — takes a {@code ProgramBounds} as a parameter from the composition root, so
  * an operator configuration key, when one is added, is one binding there.

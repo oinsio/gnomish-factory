@@ -4,7 +4,6 @@ import com.github.oinsio.gnomish.adapter.agent.RoundScratchDirectory;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramEnd;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgressLines;
-import com.github.oinsio.gnomish.adapter.agent.program.ProgressWait;
 import com.github.oinsio.gnomish.app.describe.ProgramChannel;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
@@ -29,15 +28,22 @@ import java.util.Map;
  * round scratch directory ({@link RoundScratchDirectory}), read capped after the exit and never through
  * a pipe of its own; stdout read live from the launch by the one line reader ({@link ProgressLines})
  * under the line cap, each line parsed by the dialect ({@link DialectLines}); the wait under the
- * startup-read, silence and overall bounds of the run's equipment, on its time equipment ({@link
- * ProgressWait}), an expiry killing the process tree. How the process ended is judged by {@link
+ * round's three bounds, resolved once per run by {@link RoundBounds} — the factory's startup-read and
+ * silence bounds, the overall bound the request's {@code roundTimeout} declares or the factory's — on
+ * the run's time equipment ({@code ProgressWait}), an expiry killing the process tree. The dialect
+ * renders the request with those same bounds as its time hints, so the bound the CLI is told and the
+ * bound it is killed at are one value. How the process ended is judged by {@link
  * RoundJudgement}.
  *
  * <p>Every outcome is a result, never a throw: a refused start, an expired bound, an interrupt and a
  * stdout that did not end within the handle's post-exit bound are each {@code failed/infrastructure}
  * naming what went wrong, with the stderr tail.
  *
- * <p>Implements FR1, FR8, NFR-R1 of extract-agent-round-runner.
+ * <p>A request carrying a continuation whose resume the CLI refused (the dialect's judgement, {@link
+ * AgentDialect#resumeRefused}) is started once more as a fresh request with the reply in its feedback,
+ * after one WARN; the result is the fresh round's (FR9, NFR-R2, design D4).
+ *
+ * <p>Implements FR1, FR7, FR8, FR9, NFR-R1, NFR-R2 of extract-agent-round-runner.
  *
  * @param <E> the dialect's own event type
  */
@@ -76,24 +82,38 @@ final class AgentRound<E> {
     /**
      * Runs {@code request} as one round; never throws for what the CLI did.
      *
+     * A refused resume runs once more as the fresh request {@link SessionContinuation#fallback} makes,
+     * which carries no continuation and so cannot be refused again.
+     *
      * @param request the run, in exactly one role; never null
      * @return the round's result; never null
      */
     ExecutorResult run(ExecutorRequest request) {
-        RenderedArgv rendered = dialect.render(request);
+        return switch (attempt(request)) {
+            case RoundAttempt.Ended ended -> ended.result();
+            case RoundAttempt.ResumeRefused refused ->
+                run(SessionContinuation.fallback(name, request, refused.stderrTail()));
+        };
+    }
+
+    private RoundAttempt attempt(ExecutorRequest request) {
+        RoundBounds bounds = RoundBounds.of(equipment.bounds(), request);
+        RenderedArgv rendered = dialect.render(bounds.hinted(request));
         String answerFile = ProgramChannel.freshPath(environment, name, "answer");
         Map<String, String> variables = new LinkedHashMap<>(credentials());
         variables.put(ProgramChannel.ANSWER_FILE_VARIABLE, answerFile);
         try (RoundScratchDirectory scratch =
                 RoundScratchDirectory.open(equipment.stderrParent(), RoundScratchDirectory.Writer.AGENT_CLI)) {
-            ExecutorResult result = launched(
+            RoundAttempt attempt = launched(
                     new ExecCommand(rendered.argv(), variables, rendered.stdin(), scratch.stderr()),
                     answerFile,
-                    scratch);
-            if (result.status() == Status.COMPLETED) {
+                    scratch,
+                    bounds,
+                    request);
+            if (attempt instanceof RoundAttempt.Ended(ExecutorResult result) && result.status() == Status.COMPLETED) {
                 scratch.logTailOnSuccess();
             }
-            return result;
+            return attempt;
         }
     }
 
@@ -113,37 +133,42 @@ final class AgentRound<E> {
         return grant.grant(grantable);
     }
 
-    private ExecutorResult launched(ExecCommand command, String answerFile, RoundScratchDirectory scratch) {
-        var judgement = new RoundJudgement<>(name, dialect, environment, scratch);
+    private RoundAttempt launched(
+            ExecCommand command,
+            String answerFile,
+            RoundScratchDirectory scratch,
+            RoundBounds bounds,
+            ExecutorRequest request) {
+        var judgement = new RoundJudgement<>(name, dialect, environment, scratch, request);
         ExecHandle handle;
         try {
             handle = environment.exec(command);
         } catch (ProcessStartException refused) {
-            return judgement.failure("the environment refused to start the agent CLI: "
+            return new RoundAttempt.Ended(judgement.failure("the environment refused to start the agent CLI: "
                     + UntrustedText.subprocess(String.valueOf(refused.getMessage()))
-                            .excerpt(512));
+                            .excerpt(512)));
         }
         var time = equipment.time();
-        var bounds = equipment.bounds();
         var lines = new DialectLines<>(dialect, listener, time.clock(), caps);
         ProgramEnd end;
         boolean drained;
         try (ProgressLines reader = ProgressLines.start(handle.output(), time.clock(), caps.lineBytes(), lines)) {
-            end = new ProgressWait(bounds.startup(), bounds.silence(), bounds.overall(), time).await(handle, reader);
+            end = bounds.waitOn(time).await(handle, reader);
             drained = reader.await(handle.postExitBound());
         }
-        return switch (end) {
-            case ProgramEnd.Exited exited ->
-                drained
-                        ? judgement.exited(
-                                exited, lines, answerFile, time.clock().instant())
-                        : judgement.failure(
+        if (end instanceof ProgramEnd.Exited exited && drained) {
+            return judgement.exited(exited, lines, answerFile, time.clock().instant());
+        }
+        return new RoundAttempt.Ended(
+                switch (end) {
+                    case ProgramEnd.Exited ignored ->
+                        judgement.failure(
                                 "its stdout did not end within the post-exit bound of " + handle.postExitBound());
-            case ProgramEnd.BoundExpired expired ->
-                judgement.failure("the " + expired.bound() + " bound of " + expired.value()
-                        + " expired and its process tree was killed");
-            case ProgramEnd.Interrupted ignored ->
-                judgement.failure("the round was interrupted and its process tree killed");
-        };
+                    case ProgramEnd.BoundExpired expired ->
+                        judgement.failure("the " + expired.bound() + " bound of " + expired.value()
+                                + " expired and its process tree was killed");
+                    case ProgramEnd.Interrupted ignored ->
+                        judgement.failure("the round was interrupted and its process tree killed");
+                });
     }
 }

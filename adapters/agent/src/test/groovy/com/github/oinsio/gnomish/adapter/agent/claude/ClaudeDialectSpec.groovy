@@ -118,10 +118,9 @@ class ClaudeDialectSpec extends Specification {
         usage.tools()*.totalMillis() == [0L]
     }
 
-    def "FR2: the answer is the one the agent wrote, and no continuation is named before task 2.5"() {
+    def "FR2: the answer of a transform round is the one the agent wrote"() {
         expect:
-        dialect.answer(events(INIT), Path.of('/scratch/answer.json')) instanceof DialectAnswer.NotWritten
-        dialect.continuation(events(INIT, result('success'))).isEmpty()
+        dialect.answer(ClaudeDialectAnswerSpec.TRANSFORM, events(INIT), Path.of('/scratch/answer.json')) instanceof DialectAnswer.NotWritten
     }
 
     static final String INIT = '{"type":"system","subtype":"init","session_id":"s","model":"claude-x"}'

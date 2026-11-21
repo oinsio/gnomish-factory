@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.claude;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -31,7 +32,8 @@ record StreamJsonLine(
         @Nullable Message message,
         @Nullable String result,
         @Nullable Map<String, Object> usage,
-        @Nullable Map<String, Object> modelUsage) {
+        @Nullable Map<String, Object> modelUsage,
+        @Nullable JsonNode structured_output) {
 
     /**
      * The {@code message} object of an {@code assistant}/{@code user} line:

@@ -86,7 +86,8 @@ class UntrustedTextGateSpec extends Specification {
      * that reason for every member rather than trusting this list.
      */
     private static final List<String> ANNOTATED_EXITS = [
-        'com.github.oinsio.gnomish.adapter.agent.JudgeVerdictExtractor',
+        // JudgeVerdictExtractor left at task 2.4 of extract-agent-round-runner: its final-text read
+        //     moved to the parser FinalTextObject, and it reads no raw text of its own any more.
         // Joined at task 7.1 of define-executor-contract: the program executor's result mapped onto
         //     the engine's shape — the executor's quality reason and denial texts become domain
         //     Findings, which hold plain text (the CheckFindings precedent).
@@ -234,6 +235,15 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.sandbox.environment.SandboxLifecycleObjectReader':
         'docker listings and inspect lines into listed objects with their labels, and into the' +
         ' timing Instants the sweep decides on',
+        // FR3 of extract-agent-round-runner (task 2.4): the one read of a judge's final message and of
+        //     the Claude dialect's final-text fallback, moved out of JudgeVerdictExtractor.
+        'com.github.oinsio.gnomish.adapter.agent.claude.FinalTextObject':
+        'an agent\'s final text into the JSON tree of the one object it carries, whose texts its readers' +
+        ' mint again in the agent family',
+        // FR9 of extract-agent-round-runner (task 2.5): the session id the next start resumes by.
+        'com.github.oinsio.gnomish.adapter.agent.claude.ClaudeSession':
+        'the init event\'s session id into the continuation key, held to ClaudeSession.SESSION_ID' +
+        ' (no leading dash, no space), since it goes back to the CLI as the argument of --resume',
         'com.github.oinsio.gnomish.adapter.agent.claude.TokenUsageMapper':
         'the round\'s model id into a telemetry key, held to ModelIdSyntax',
         // FR11, NFR-S4 of define-executor-contract: the working-copy-unchanged check's view, read

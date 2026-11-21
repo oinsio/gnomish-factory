@@ -101,7 +101,12 @@ final class StreamJsonEventMapper {
             return skip(wire, "result line without a result field");
         }
         return present(new AgentEvent.ResultEvent(
-                sessionId, wire.subtype(), UntrustedText.agent(resultTextOf(wire)), wire.usage(), wire.modelUsage()));
+                sessionId,
+                wire.subtype(),
+                UntrustedText.agent(resultTextOf(wire)),
+                wire.usage(),
+                wire.modelUsage(),
+                wire.structured_output()));
     }
 
     /**

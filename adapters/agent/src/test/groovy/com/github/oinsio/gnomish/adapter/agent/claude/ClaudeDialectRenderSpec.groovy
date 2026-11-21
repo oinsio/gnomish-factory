@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.claude
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.executorcontract.Bounds
 import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest
@@ -42,7 +43,7 @@ class ClaudeDialectRenderSpec extends Specification {
                 [model: 'opus', allowedTools: ['Read', 'Write']]))
 
         then:
-        rendered.argv().join(' ') == "claude -p --model opus --allowedTools Read --permission-mode dontAsk ${TRANSPORT}"
+        rendered.argv().join(' ').startsWith("claude -p --model opus --allowedTools Read --permission-mode dontAsk ${TRANSPORT} --json-schema ")
         rendered.stdin() == 'is it built?'
         !rendered.argv().contains('acceptEdits')
         !rendered.argv().contains('bypassPermissions')
@@ -54,8 +55,8 @@ class ClaudeDialectRenderSpec extends Specification {
                 RoleInputs.decision('which way?', ['left', 'right']), [model: 'opus']))
 
         then: 'the decision prompt lists its options under the question'
-        rendered.argv().join(' ') == 'claude -p --model opus --allowedTools Write(/scratch/answer.json)' +
-                " --permission-mode acceptEdits ${TRANSPORT}"
+        rendered.argv().join(' ').startsWith('claude -p --model opus --allowedTools Write(/scratch/answer.json)' +
+                " --permission-mode acceptEdits ${TRANSPORT} --json-schema ")
         rendered.stdin() == 'which way?\n- left\n- right'
     }
 
@@ -94,6 +95,40 @@ class ClaudeDialectRenderSpec extends Specification {
             argv.contains('--strict-mcp-config') && !argv.contains('bypassPermissions') && argv.count('--permission-mode') == 1
         }
     }
+
+    // FR3: --json-schema <schema> is the flag `claude --help` (2.1.325) lists for structured output in print mode
+    def "FR3: a verdict request hands the CLI the judge reply's schema, the last two words of its argv"() {
+        when:
+        def argv = dialect.render(request(Role.VERDICT, new Policy.ReadOnly(), RoleInputs.verdict('ok?'), [:])).argv()
+
+        then:
+        argv[-2] == '--json-schema'
+        JSON.readTree(argv[-1]) == JSON.readTree('{"type":"object","required":["passed"],"properties":{' +
+                '"passed":{"type":"boolean"},"findings":{"type":"array","items":{"type":"string","pattern":"\\\\S"}}}}')
+    }
+
+    def "FR3: a decision request's schema offers exactly the request's options to choose and rank"() {
+        when:
+        def argv = dialect.render(request(Role.DECISION, new Policy.ReadOnly(), RoleInputs.decision('which?', ['a', 'b']), [:])).argv()
+
+        then:
+        argv[-2] == '--json-schema'
+        JSON.readTree(argv[-1]) == JSON.readTree('{"type":"object","required":["chosen"],"properties":{' +
+                '"chosen":{"enum":["a","b"]},"ranking":{"type":"array","items":{"enum":["a","b"]}},' +
+                '"rationale":{"type":"string"}}}')
+    }
+
+    def "FR3: a #role request carries no answer schema"() {
+        expect:
+        !dialect.render(request(role, new Policy.WorkspaceWrite(), inputs, [:])).argv().contains('--json-schema')
+
+        where:
+        role | inputs
+        Role.TRANSFORM | RoleInputs.transform('build')
+        Role.EFFECT | RoleInputs.none()
+    }
+
+    static final ObjectMapper JSON = new ObjectMapper()
 
     private static ExecutorRequest request(Role role, Policy policy, RoleInputs inputs, Map<String, Object> settings,
             Bounds bounds = Bounds.none()) {
