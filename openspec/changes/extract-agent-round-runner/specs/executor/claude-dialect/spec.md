@@ -9,7 +9,7 @@ The observable behavior of the Claude Code dialect: how the contract's request b
 
 ### Requirement: Claude describe
 The Claude dialect SHALL describe roles `transform`, `verdict`, `decision`; capabilities
-`streams_progress`, `cancel`, `resumable`; enforcement level `TOOL_GATE`; its credentials, egress
+`streams_progress`, `cancel`; enforcement level `TOOL_GATE`; its credentials, egress
 host and config-directory isolation; and a settings schema that accepts exactly `allowedTools`,
 `disallowedTools`, `maxTurns` and `roundTimeout`.
 **Implements**: FR3, FR7, NFR-S1 of extract-agent-round-runner
@@ -73,13 +73,15 @@ output that fails the schema SHALL be reported as a malformed answer, never as a
 ### Requirement: Stream parsing preserved
 The dialect SHALL keep today's stream-json behavior: prompt on stdin, `init`, `assistant` and
 `result` events, per-model token usage, top-level tool trace, the result event as essential
-and other telemetry best-effort; the session id from `init` is the continuation key.
-**Implements**: FR3, FR9, NFR-O1 of extract-agent-round-runner
+and other telemetry best-effort. No argv SHALL carry a session flag, and the session id SHALL
+NOT leave the dialect package.
+**Implements**: FR3, FR6, FR9, NFR-O1 of extract-agent-round-runner
 
 #### Scenario: Reference transcripts still parse
 - **WHEN** the committed reference stream-json fixtures are replayed through the dialect
 - **THEN** usage, trace and final text equal the recorded expectations
 
-#### Scenario: Resume flag on continuation
-- **WHEN** a `start` carries a continuation key
-- **THEN** argv carries `--resume <session id>`
+#### Scenario: No argv carries a session flag
+- **WHEN** a request of any role is rendered, with or without a continuation
+- **THEN** argv carries none of `--resume`, `--continue` and `--session-id`, and the prompt is
+  the role's input

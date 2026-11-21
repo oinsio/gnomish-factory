@@ -25,9 +25,9 @@ the environment, and the post-hoc working-copy check for `verdict` and `decision
 
 ### Requirement: Dialect contract
 A dialect SHALL provide describe fields, argv rendering for a request (compiled policy, model,
-bounds, answer schema, session resume), event parsing into progress and usage, final-answer
-extraction, exit-code mapping to status with `limit` for turn or budget stops, and
-continuation-key extraction. The runner SHALL depend on nothing else from the vendor.
+bounds, answer schema), event parsing into progress and usage, final-answer extraction, and
+exit-code mapping to status with `limit` for turn or budget stops. The runner SHALL depend on
+nothing else from the vendor.
 **Implements**: FR2, FR8, G1, UX2 of extract-agent-round-runner
 
 #### Scenario: Second dialect needs no runner change
@@ -86,20 +86,20 @@ be the factory's, and no settings key SHALL set them.
 - **WHEN** a judge check's settings declare `roundTimeout` and one of its votes outlives it
 - **THEN** that vote's process tree is killed and the vote is cannot-verify
 
-### Requirement: Decision continuation through the session
-A `decision-request` answer SHALL carry the dialect's session id as the continuation key; a
-later `start` carrying the continuation and the answer SHALL resume that session; a session
-the CLI no longer knows SHALL fall back to a fresh start with the answer in feedback, logged.
+### Requirement: An agent round keeps no state past its end
+The `decision-request` answer of an agent round SHALL carry no continuation key, a key the agent
+wrote included, and no agent executor SHALL declare `resumable`: the CLI's session lives on the
+worker and is no record. The round after an answer SHALL be a fresh `start`
+(`executor/agent-executor`, "A decision is rendered with the question it answers").
 **Implements**: FR9, NFR-R2 of extract-agent-round-runner
 
-#### Scenario: Answered question continues the session
-- **WHEN** a round ends with a decision request and the answer arrives
-- **THEN** the next round's argv carries the resume flag with the session id and the ledger
-  shows `continued session=<prefix>`
+#### Scenario: An agent-written continuation key is removed
+- **WHEN** the agent writes a decision request carrying a `continuationKey` to the answer file
+- **THEN** the result's answer carries the question and its options and no continuation key
 
-#### Scenario: Unknown session falls back
-- **WHEN** the CLI refuses the resume
-- **THEN** a fresh round starts with the answer in feedback and a WARN line names the fallback
+#### Scenario: No agent executor declares resumable
+- **WHEN** the describe of an agent executor built from the runner and a dialect is read
+- **THEN** its capabilities do not contain `resumable`
 
 ### Requirement: Vendor-neutral progress
 Progress events SHALL carry model, tool name, final summary and usage only; no vendor field

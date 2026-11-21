@@ -28,13 +28,14 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   stdout drain through the one drain owner, stderr to the round scratch file, three bounds, result and answer through the shared result-file channel,
   denials, post-hoc working-copy check for `verdict`/`decision`) parameterized by an
   **agent dialect**: argv rendering, policy compilation, event parsing, usage and trace
-  extraction, continuation (session id). Claude is the first dialect.
+  extraction. Claude is the first dialect.
 - **ADDED**: `judge` checks run as `verdict` requests to a named executor; `JudgeVoter`
   leaves `EnginePorts`; votes are N `start`s reduced by the existing majority rule; the verdict
   arrives as a SARIF answer produced through the CLI's schema-enforced output.
-- **ADDED**: decision continuation: the agent's session id is the `decision-request`
-  continuation key; after the answer the next round `start`s with the continuation and the
-  dialect resumes the session instead of starting from scratch.
+- **ADDED**: decision continuation from the record (design D4 as amended 2026-11-21): the
+  decision that answers a decision request is recorded on the task branch with the question and
+  options it answers, and the next round is a fresh `start` whose briefing renders them with the
+  reply. No agent executor resumes a vendor session: the CLI's session lives on the worker.
 - **ADDED**: engine handling of `pending + key` for the `transform` role (human decision
   2026-11-02): a `transform` executor whose describe declares `poll` may return `pending`; the
   round's working copy and the key land in one pending round commit before the first poll, any
@@ -86,13 +87,24 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   whose operator is not the author of the law it runs (one daemon serving the laws of several
   projects), or an agent CLI whose liveness cadence differs per stage; the ceiling then refuses an
   over-ceiling value at law load.
+- NG8: an engine path for the contract's continuation key (the key on the engine's decision
+  request, in the attempt record, in the next `start` and in the ledger). The key stays reserved
+  vocabulary, read and dropped as on `main`; the Claude session it would have named is
+  worker-local (design D4). Pickup condition: the first executor whose describe declares
+  `resumable` over state any factory instance reaches (a remote agent service's thread), which
+  then builds that path with its consumer list.
+- NG9: a hand-off note as a field of the `decision-request` answer. The stage's own report and
+  the working copy ride the snapshot commit already. Pickup condition: a recorded round that,
+  started fresh with the question, the options and the reply, redid or contradicted work the
+  asking round had finished.
 
 ## Users & Scenarios
 
 - U1 — Pipeline author: `executor: claude` on a stage and `executor: claude` on a `judge`
   check; the judge's `allowedTools` typo is a located load error from the dialect's schema.
-- U2 — Operator: a gnome asks a question, the arbiter or a human answers, and the next round
-  continues the same session — the ledger shows `continued session=<prefix>`.
+- U2 — Operator: a gnome asks a question, the arbiter or a human answers, and the next round —
+  on any instance, in a fresh box — starts with the question, its options and the reply in its
+  briefing.
 - U3 — Executor author: adds a dialect by implementing argv rendering, event parsing and
   policy compilation; the runner, bounds, channels and specs are inherited.
 - U4 — Engine maintainer: `EnginePorts` holds one `StageExecutor` and nothing else.
@@ -112,14 +124,14 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   result-file reader, attach denials, run the post-hoc working-copy check for `verdict` and
   `decision`, and return `ExecutorResult`.
 - FR2: An `AgentDialect` SHALL provide: describe fields, argv for a request (including the
-  compiled policy, model, bounds, output schema for `verdict`/`decision`, session resume),
-  event parsing into progress and usage, final-answer extraction, exit-code mapping to status
-  (`limit` for turn/budget stops), and continuation key extraction.
+  compiled policy, model, bounds, output schema for `verdict`/`decision`),
+  event parsing into progress and usage, final-answer extraction, and exit-code mapping to status
+  (`limit` for turn/budget stops).
 - FR3: The Claude dialect SHALL reproduce today's observable behavior: prompt on stdin,
   stream-json parsing, per-model usage, top-level trace, `--strict-mcp-config`, permission
   mode per policy (`acceptEdits` for `workspaceWrite`, `dontAsk` for `readOnly`), decision
   request via the answer file; and SHALL add `--json-schema` for `verdict` and `decision`
-  answers and `--resume <session>` for continuation.
+  answers. No argv SHALL carry a session flag (`--resume`, `--continue`, `--session-id`).
 - FR4: `judge` checks SHALL resolve to a named executor in role `verdict`; `JudgeVoting` SHALL
   issue N `start`s and reduce with the existing majority rule; a vote's malformed answer is
   cannot-verify for the whole check; `JudgeVoter` is removed from `EnginePorts`.
@@ -127,7 +139,7 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   name a vendor tool; `writeExactly` is used only for legacy decision-file compatibility and
   removed when the answer file replaces it.
 - FR6: Progress events SHALL carry only vendor-neutral fields (model, tool name, final summary,
-  usage); the session id SHALL travel as the continuation key in the result, not in events.
+  usage); the session id SHALL NOT leave the dialect package, in an event or in a result.
 - FR7: Settings of an agent executor SHALL be validated at law load against the dialect's
   describe schema; the Claude schema accepts exactly `allowedTools`, `disallowedTools`,
   `maxTurns` and `roundTimeout`. `roundTimeout` SHALL be the overall bound of every round and
@@ -137,8 +149,11 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 - FR8: The agent's exit code and stderr SHALL be read: non-zero exit with no result event is
   `failed/infrastructure`; a turn or budget stop is `failed/limit`; stderr is read from the scratch file after the exit,
   capped.
-- FR9: Decision continuation: a `decision-request` answer SHALL carry the session id as its
-  continuation key; a `start` with a continuation and an answer SHALL resume the session.
+- FR9: Decision continuation from the record: the gnome's decision request SHALL be the answer
+  file; the decision that answers it SHALL be recorded on the task branch, in the decision commit,
+  with the question and options it answers; the next round SHALL be a fresh `start` whose briefing
+  renders them with the reply. No agent executor SHALL resume a vendor session, declare
+  `resumable` or return a continuation key (design D4).
 - FR10: A `transform` executor whose describe declares `poll` MAY return `pending + key`. The
   engine SHALL then, through the pending-poll owner of `migrate-verify-to-executor-contract`,
   land the round's working copy and a pending record (the round's token, stage, attempt, key,
@@ -161,8 +176,9 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   specs; expiry kills the process tree and reports the bound. The overall bound a round is
   killed at is the `roundTimeout` its stage or check declares (FR7), asserted end to end by one
   identity spec; the silence bound rests on the CLI's measured liveness cadence (design D6).
-- NFR-R2: A resumed session that the CLI no longer knows SHALL fall back to a fresh start with
-  the answer in feedback, logged, never an infrastructure failure.
+- NFR-R2: The round after an answer SHALL depend on nothing outside the tracker and the task
+  branch: an instance on another machine, or a fresh box, SHALL start it with the same briefing
+  as the instance that parked the task.
 - NFR-R3: Every kill window of a pending `transform` round classifies to a named shape with one
   recovery owner: a kill before the pending commit is pushed re-drives `start` (one duplicate
   remote run per kill, logged); a kill after it — including after a key-rotating poll and after a
@@ -238,16 +254,22 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 - `executor/claude-dialect`: the Claude Code dialect's observable behavior.
 
 ### Modified Capabilities
-- `agent-executor`: round mechanics, policy, settings, progress, judge move onto the contract.
+- `agent-executor`: round mechanics, policy, settings, progress, judge move onto the contract;
+  the briefing renders a decision with the question it answers.
+- `git/git-task-persistence`: the decision commit records the question and options a decision
+  answers.
 - `stage-engine`: judge votes as verdict requests; `JudgeVoter` removed; pending `transform`
   rounds persisted, polled and resumed.
 - `executor/wire-contract` (added by `define-executor-contract`): `pending` from `transform` is
-  refused only without `poll`.
+  refused only without `poll`; a continuation key names state any instance reaches.
 
 ## Impact
 
 - `adapters/agent` restructured into `runner` and `claude` packages; `application/port/agent`
   progress types trimmed; `domain/engine` `JudgeVoting` and `EnginePorts`.
+- `domain/engine` `Decision` gains the optional question it answers; `task.json` carries it
+  (`TaskJsonMapper`, read without it as before); the two decision builders (`ResumeDecisionCommit`,
+  `EscalationResume`) and the briefing renderer (`BriefingSections`) follow.
 - `domain/engine` `PendingPoll`/`PendingPollRecord` (from `migrate-verify-to-executor-contract`)
   gain the round subject; the persistence pair (`GitAttemptPersistence`,
   `EnvironmentAttemptPersistence`) writes the pending round commit through its landed

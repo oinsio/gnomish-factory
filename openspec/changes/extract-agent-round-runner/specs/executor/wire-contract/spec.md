@@ -1,5 +1,18 @@
 # executor/wire-contract — delta for extract-agent-round-runner
 
+## ADDED Requirements
+
+### Requirement: A continuation key names state any instance reaches
+An executor SHALL declare `resumable` and return a continuation key only when the state the key
+names is reachable by every factory instance; state on the worker — a process, a machine's
+files, a box — SHALL NOT be named by one. The engine SHALL send no continuation in this version:
+the key is reserved vocabulary, read and dropped.
+**Implements**: FR9, NFR-R2 of extract-agent-round-runner
+
+#### Scenario: A returned continuation key is not sent back
+- **WHEN** a round's `decision-request` answer carries a continuation key and the decision is answered
+- **THEN** the next round's `start` request carries no continuation
+
 ## MODIFIED Requirements
 
 ### Requirement: Closed status taxonomy

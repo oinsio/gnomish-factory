@@ -72,11 +72,68 @@ decision request is a `decision-request` answer written to `GNOMISH_ANSWER_FILE`
 reader, and the transport pair dissolves. *Alternative rejected:* keep the decision file as a
 second channel — the third copy of a path constant the envelope change already removed once.
 
-**D4 — Session id is the continuation key.** (FR9, NFR-R2.) The Claude `init` session id travels
-in the result as the continuation key; on a `start` with continuation the dialect renders
-`--resume <id>`; a refused resume falls back to a fresh start with the answer in feedback (WARN).
-*Alternative rejected:* always fresh start — loses the gnome's context at the exact moment it
-asked a question.
+**D4 — A decision is continued from the branch record, never from the worker.** (FR9, NFR-R2;
+amended 2026-11-21 after a decision review on the escalation of task 2.5.) The decision that
+answers a decision request is recorded on the task branch with the question and options it
+answers, in the decision commit that carries the reply; the next round is a fresh `start` whose
+briefing renders the question, the options and the reply through the one briefing renderer. No
+agent executor resumes a vendor session: the Claude dialect declares no `resumable`, renders no
+session flag and returns no continuation key, and the runner removes a key an agent wrote.
+
+*Why the original decision (the session id as the continuation key, `--resume` on the next
+start, a fresh start when the resume is refused) is withdrawn.* Its premise was that the session
+the key names is there for the next round. Checked:
+
+- The CLI keeps a session as a file under its configuration directory on the machine that ran
+  it — on the host `~/.claude/projects/<working-directory key>/<session id>.jsonl`, one to two
+  megabytes a round for this change's own task, removed after 30 days by default. Anthropic's
+  documentation says it in these words: "Session files are local to the machine that created
+  them."
+- In a box that directory is `/home/gnome` in the container's own layer, and the kept box of an
+  escalated task is disposed before the decision commit (`sandbox/execution-environment`,
+  "Escalated-container resume disposes before deciding"). In container mode every resume would
+  be refused.
+- On the host another instance, another machine or an answer after the retention window finds
+  nothing either, which contradicts the project's rule that the tracker and the task branch are
+  the whole state and any instance resumes.
+- The engine had no path for the key and no task built one: `ExecutionResult.DecisionRequest`
+  and `Stop.DecisionNeeded` carry none, `ProgramCompletedAnswer` drops the contract's field,
+  nothing builds a request's `continuation`.
+
+So the fallback would have been the path production takes, while the designed path ran on one
+machine within one month: a WARN on every answered question in container mode, and a behaviour
+that depends on which instance picked the task up.
+
+*Alternative zero, costed.* With no session continuation at all, what a fresh round lacks is
+what the asking round knew. The working copy and the stage's own report ride the snapshot commit
+(D9); the reply is in `task.json` and in the briefing of every later round
+(`BriefingSections.renderDecisions`), which is how every answered escalation continues on `main`
+today. The remainder is one fact: the briefing shows a decision's author and body and not the
+question it answers, which `task.json` keeps only as `lastEscalation`, overwritten by the next
+escalation. That remainder is what this decision builds: the question and its options become
+part of the decision record and of its rendering.
+
+*Alternatives rejected.*
+- *Resume when the session happens to be local, fresh start otherwise (the original D4).*
+  Steelman: the gnome asks at the moment it knows most, and a resumed session repeats no
+  exploration. It breaks on the facts above: in container mode the worse path is permanent and
+  silent but for a WARN, and two instances resuming one session lose messages. A resumed session
+  also keeps the system prompt it started with, and after hours the prompt cache has expired, so
+  the whole transcript is paid for again. What is kept from it: what the gnome knew when it asked
+  belongs in the record, hence the question in the briefing.
+- *Carry the session file on the task branch, or in a store.* It restores the session anywhere,
+  and breaks on four things: the transcript holds every tool result verbatim, secrets included,
+  and the branch is pushed to origin; it is a record the gnome can rewrite that the next round
+  would take as its own memory (the authorship class of `task-branch-contract`); its format is
+  internal to one CLI version; and a store beside the branch is a third state medium.
+- *A hand-off note as a field of the decision request.* Deferred, NG9: the stage's report
+  already rides the commit, and no round has yet shown the question and the reply to be too
+  little.
+
+*The contract's continuation key.* It stays in the wire contract as reserved vocabulary under
+one rule, added to `executor/wire-contract`: a key in a durable record names state any factory
+instance reaches. An executor whose conversation lives on the worker declares no `resumable`.
+The engine path for the key is NG8.
 
 **D5 — Policy compiled by the dialect, verified by the runner.** (FR5, NFR-S2.) `readOnly` →
 `dontAsk` + read-only tool set (settings may narrow), `workspaceWrite` → `acceptEdits`,
@@ -201,7 +258,8 @@ measurement does not show.
 | Owner                                                                       | Value (type)                                                                 | Consumers                                                                                                                                                                                                                                          | Old way removed                                                                                                                                                                                      | Enforced by                                                                                                                                                                                                                                                                                                                       |
 |-----------------------------------------------------------------------------|------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `AgentRoundRunner` (adapters/agent/runner)                                  | `ExecutorResult`                                                             | `ExecutorRegistry` entry `claude` (stage dispatch), `JudgeVoting` via registry, arbiter via registry                                                                                                                                               | `CliStageExecutor`, `CliJudgeVoter`, `ExecutorRoundExecution`, `JudgeRoundExecution` deleted; `ResumeVerificationStageExecutor` stays the one recovery owner of an interrupted verification (`task-branch-contract`) and decorates the chain over the `claude` executor as it did the old arm | `JudgeVoter` type deleted (compile); `EnginePorts` holds one executor port (spec)                                                                                                                                                                                                                                                 |
-| `AgentDialect` (interface)                                                  | `RenderedArgv`, `ParsedEvents`, `Answer`, `ContinuationKey`                  | `AgentRoundRunner` only                                                                                                                                                                                                                            | `AgentCommandLine`/`AgentInvocationOptions` called from round classes; `AgentAiSeam` static names                                                                                                    | `ArchUnit`: no class outside `adapters/agent/claude` imports a Claude type; grep `stream-json\|ANTHROPIC_\|acceptEdits` → dialect package only (M2)                                                                                                                                                                               |
+| `AgentDialect` (interface)                                                  | `RenderedArgv`, `ParsedEvents`, `Answer`                                     | `AgentRoundRunner` only                                                                                                                                                                                                                            | `AgentCommandLine`/`AgentInvocationOptions` called from round classes; `AgentAiSeam` static names                                                                                                    | `ArchUnit`: no class outside `adapters/agent/claude` imports a Claude type; grep `stream-json\|ANTHROPIC_\|acceptEdits` → dialect package only (M2)                                                                                                                                                                               |
+| The question a decision answers (`Decision`, `domain/engine`; D4 as amended) | `Decision` with its optional question and options, built by one function from the position, the consumed outcome's report, the reply, the author and the instant | `ResumeDecisionCommit` (the `take` path) and `EscalationResume` (the `run` path), which both call that function; `TaskJsonMapper` (the `decisions` entries of `task.json`, read without a question as before); `BriefingSections.renderDecisions` (the stage round prompt and the judge prompt). Reads the body only, by design: `StatusTextRenderer`/`StatusReport`, `DecisionAck` | `new Decision(` at `ResumeDecisionCommit.java:36` and `EscalationResume.java:127`, each with its own copy of the position switch; `lastEscalation` as the only place a question survives | `DecisionOwnerSpec` (`:bootstrap`): `new Decision(` in main sources only in the one builder and in `TaskJsonMapper`, the allowlist asserted reached; identity spec `DecisionQuestionIdentitySpec` on a real bare origin: the question and options of the park commit's report equal those of the decision in the decision commit and those in the next round's prompt, on the host and in container mode |
 | `EnvelopePaths.answerFile` (domain)                                         | `EnvelopePath`                                                               | `AgentRoundRunner` (hands the path), `BranchDecisionFile` (reads it), salvage (`FactoryOwnedPaths`). Invariant: `EnvelopePaths.answerFile` is the branch-durable location of a `decision-request` answer, the one path `BranchDecisionFile` reads at the tip; the contract's result channel separately names a per-request scratch answer path | `DecisionFileTransport` deleted; `GNOMISH_DECISION_FILE` literal removed. Exemption: `ProgramSpawn`/`ProgramResultRead` (the `program` executor, `result-channel` capability) keep their per-request answer path, unchanged — a scratch channel of one request, not the branch envelope | existing envelope-paths build gate extended with the new constant                                                                                                                                                                                                                                                                 |
 | Policy compilation (`ClaudePolicyCompiler`)                                 | argv fragment from `Policy`                                                  | `ClaudeDialect`                                                                                                                                                                                                                                    | `AgentRole`, `JUDGE_READ_ONLY_TOOLS`, per-role branches in `AgentInvocationOptions`                                                                                                                  | `Policy` sealed type in the request; spec: no argv carries `bypassPermissions`                                                                                                                                                                                                                                                    |
 | `PendingPoll` (`domain/engine`, from `migrate-verify-to-executor-contract`) | `PendingPollRecord` (an entry of `TaskState.pendingPolls`) with the sealed subject `Round` beside `Check(CheckRef)`; the round token is already on the record | `StageAttemptLoop` (hands a `transform` `pending` to `PendingPoll`), `PendingPoll` (live and resumed), the two `persistPending` implementations (`GitAttemptPersistence`, `EnvironmentAttemptPersistence`), `StateJsonMapper`/`TaskState` (the `pendingPolls` list), `ResumeVerificationStageExecutor` (the recogniser and one recovery owner; a `Round` entry resumes through `PendingPoll`, never as `Completed`) | the `transform` arm "a `pending` the stage cannot poll" in `RoundFailures`/`AttemptAccounting`/`RoundOutcome` narrowed to executors declaring no `poll`; no second pending record, loop or key store | sealed subject (exhaustive switch); `PendingKey` parameter type; architecture spec `ExecutorPollOwnerSpec` (`:bootstrap`): `Executor.poll(` is called in `domain`/`application` main sources only from `PendingPoll`, the scan asserted to reach its allowlist; identity spec `PendingRoundIdentitySpec`; kill-point specs of D11 |
@@ -210,8 +268,10 @@ measurement does not show.
 
 **D9 — Crash consistency.** No new durable step on the decision path (the pending `transform`
 round adds one, D11): the answer file rides the snapshot/salvage
-commit exactly as the decision file did; the continuation key is a field of the recorded
-`decision-request` in the attempt record (one commit). Kill-point specs of the decision path
+commit exactly as the decision file did. The question a decision answers (D4) adds no step
+either: it is read from the consumed `escalated` outcome at the registered commit, through the
+parse the resume already uses, and lands in the decision commit together with the reply
+(mutually implied fields in one commit), so no window holds a reply without its question. Kill-point specs of the decision path
 are re-pointed at the answer file.
 
 **D10 — Lock scope.** No lock added; `FreshJudgeEnvironments` keeps its resource-serializing
@@ -297,12 +357,12 @@ verbatim but one): the WHEN of "Pending from a role whose caller cannot poll" na
 verified premise that the refusal lives in `RoundFailures`/`AttemptAccounting`/`RoundOutcome`
 and is pinned by `ExecutorOutcomeTableSpec`; a scenario for the pollable case is added.
 
-*Relation to the continuation key (D4):* two different keys. The continuation key is a session
-the *next* round `start`s with after a `decision-request` answer; the pending key is the *same*
-round's handle for `poll`. Neither becomes the other: a `start` carrying a continuation may go
-pending, and a round that ends by `poll` with a `decision-request` answer carries its
-continuation key as any round does. The Claude dialect declares no `poll` (NG5), so its rounds
-never take this path.
+*Relation to the continuation key (D4):* two different keys. The contract's continuation key
+would name a conversation the *next* round continues after a `decision-request` answer; the
+pending key is the *same* round's handle for `poll`. Neither becomes the other. The engine sends
+no continuation (NG8), and a pending key is persisted because its executor's contract makes it
+pollable by any instance — the rule D4 now states for the continuation key as well. The Claude
+dialect declares neither `poll` (NG5) nor `resumable`, so its rounds take neither path.
 
 *Alternative zero — no engine path:* a long `transform` stays `failed/infrastructure` and the
 executor must finish within one `start` under the overall bound, holding the slot; a kill loses
@@ -343,6 +403,12 @@ live one sees the started tree — two inputs for one round.
   `adapters/agent` (`LoggingAgentProgressListener`, `AgentProgressEmitter`, `AgentRoundResult`,
   `AgentRoundResultExtractor`, `StreamJsonEventMapper`, `MissingResultEventException`); each is
   adapted in task 1.1, and no listener outside the module reads it.
+- [A fresh round after an answer repeats exploration the asking round had done] → bounded
+  extra cost, never a wrong result: the working copy, the stage's report and now the question
+  are in the briefing or on the branch. A measured case of rework is the pickup of NG9.
+- [The resume half of task 2.5 was built before D4 was amended] → task 2.5 as rewritten deletes
+  it (`--resume`, the refusal recognition, the fallback, GF192) with its specs and markers; no
+  resume path is left behind a flag.
 - [`add-decision-arbiter` written against `DecisionNeeded`] → its rebase is a named task in that
   change; this design fixes the shape it targets (role `decision`, answer `select`).
 

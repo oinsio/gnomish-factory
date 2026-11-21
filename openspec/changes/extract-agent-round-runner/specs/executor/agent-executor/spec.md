@@ -27,6 +27,24 @@ transport of its own. The branch-side reader of a pending request SHALL read the
 - **THEN** at most the cap is read, truncation is recorded, and the round still resolves as a
   decision request
 
+### Requirement: A decision is rendered with the question it answers
+The briefing's decisions section SHALL render a decision that answers a decision request as the
+question, its options and the reply, through the one shared renderer, in the stage round prompt
+and the judge prompt alike; a decision that answers no request SHALL render as author and body.
+**Implements**: FR9, NFR-R2 of extract-agent-round-runner
+
+#### Scenario: Question, options and reply reach the next round
+- **WHEN** a task parked on a decision request is answered and the next round starts
+- **THEN** the round's prompt carries the question, each option and the reply in its decisions section
+
+#### Scenario: A decision without a question renders as author and body
+- **WHEN** the briefing renders a decision that records no question
+- **THEN** its line carries the author and the body only
+
+#### Scenario: Any instance starts the round after an answer alike
+- **WHEN** a task parked on a decision request is answered and a second instance with a fresh clone, or a fresh box, starts the next round
+- **THEN** the round's prompt equals the one the parking instance would have built, and no argv carries a session flag
+
 ## REMOVED Requirements
 
 ### Requirement: Decision file is read through the shared result reader

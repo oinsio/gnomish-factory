@@ -80,9 +80,57 @@
   `resolve` strip them — so the dialect's credential names must not be added through `declaring`.
 - [x] 2.4 `--json-schema` for `verdict` and `decision` answers with final-text fallback at WARN;
   `JudgeVerdictExtractor` reduced to SARIF conversion; malformed → malformed answer (FR3, FR4)
-- [ ] 2.5 Continuation: session id as key in the result; `--resume` on `start` with continuation;
-  refused resume → fresh start with WARN; ledger token `continued session=<prefix>` (FR9,
-  NFR-R2, D4)
+- [ ] 2.5 No session continuation in the agent runner (FR9, NFR-R2, FR6; D4 as amended
+  2026-11-21 — read D4 first: the resume half built in the earlier round is withdrawn, not
+  finished). Remove, with their specs: `--resume` rendering and the refusal recognition
+  (`claude/ClaudeSession`), the refused-resume fallback and its WARN (`runner/SessionContinuation`,
+  `runner/RoundAttempt`, the retry in `AgentRound`, the refusal arm of `RoundJudgement`),
+  `AgentDialect.resumeRefused` and `AgentDialect.continuation`, `ContinuationKey`, the
+  continuation branch of `claude/ClaudePrompt`, the operator event `AGENT_RESUME_REFUSED` (GF192)
+  with its catalog entry, and `Capability.RESUMABLE` in `ClaudeDialect.describe`; `FakeDialect`
+  and the `UntrustedTextGateSpec` lists follow. Keep one thing of `SessionContinuation`: the
+  runner writes a `decision-request` answer with no `continuationKey`, removing one the agent
+  wrote. Delete `AgentRoundContinuationSpec` and `ClaudeDialectContinuationSpec` together with
+  their markers `executor/agent-round-runner / Unknown session falls back` and
+  `executor/claude-dialect / Resume flag on continuation` (both scenarios are gone from the
+  deltas; a marker left behind is dangling). New features, markers included:
+  `executor/agent-round-runner / An agent-written continuation key is removed`,
+  `executor/agent-round-runner / No agent executor declares resumable` (fake dialect),
+  `executor/claude-dialect / No argv carries a session flag` (every role, with and without a
+  continuation on the request), and `executor/wire-contract / A returned continuation key is not
+  sent back` (a `program` round whose answer carries a key, then the next request built by
+  `ProgramRequests`). The old-path `AgentRoundResult.sessionId` stays until 5.1 deletes its
+  class. Sweep, reported with its hits:
+  `grep -rn -e '"--resume"' -e RESUME_FLAG -e resumeRefused -e ContinuationKey -e AGENT_RESUME_REFUSED -e GF192 -e 'RESUMABLE' --include='*.java' --include='*.groovy' . | grep -v /build/`
+  — hits only in `executor-contract` (the wire vocabulary, `Capability.RESUMABLE` among it), the
+  conformance kit, and the new features asserting absence; `GitFlagsValidator`'s `gnomish
+  --resume` is unrelated
+- [ ] 2.5a A decision records and renders the question it answers (FR9, NFR-R2; D4 as amended,
+  D8 row "The question a decision answers", D9). TDD. (1) `Decision` (`domain/engine`) gains the
+  optional question and options it answers, carried as the `UntrustedText` they were minted in.
+  (2) One builder of a decision from the position, the consumed outcome's report, the reply, the
+  author and the instant; `ResumeDecisionCommit.decisionFor` (`ResumeDecisionCommit.java:36`,
+  author `tracker`) and `EscalationResume.appendDecision` (`EscalationResume.java:127`, author
+  `operator`) both call it and lose their own copy of the position switch; the question is set
+  only when the consumed outcome is `escalated` with a decision-request report, read from the
+  registered commit's `task.json` through the parse the resume already uses — never from
+  `lastEscalation` after a later write. (3) `TaskJsonMapper`: the `decisions` entries carry the
+  question and options; an entry without them reads as before and is written back unchanged
+  (features for the three scenarios of `git/git-task-persistence`, "A decision records the
+  question it answers", markers included, host and container mode). (4)
+  `BriefingSections.renderDecisions` renders question, options, reply for such a decision and
+  author and body otherwise — the one renderer, so the stage round prompt and the judge prompt
+  follow (scenarios of `executor/agent-executor`, "A decision is rendered with the question it
+  answers"; the third, "Any instance starts the round after an answer alike", is the identity
+  spec below). Consumers that read the body only and stay as they are: `StatusTextRenderer`,
+  `StatusReport`, `DecisionAck`. Gate `DecisionOwnerSpec` (`:bootstrap`): `new Decision(` in main
+  sources only in the builder and `TaskJsonMapper`, the allowlist asserted reached. Identity spec
+  `DecisionQuestionIdentitySpec` on a real bare origin, host and container mode: park on a
+  decision request, answer, resume from a second clone — the question and options of the park
+  commit's report equal those of the decision in the decision commit and those in the next
+  round's prompt. Sweep, reported with its hits:
+  `grep -rn -e 'new Decision(' -e 'renderDecisions(' -e 'decisions()' --include='*.java' */src/main adapters/*/src/main`.
+  Before 4.2 and 5.1
 - [ ] 2.6 Old-way sweep: `grep -rn "stream-json\|ANTHROPIC_\|acceptEdits\|dontAsk"
   --include=*.java */src/main adapters/*/src/main` → hits only under `adapters/agent/claude`;
   ArchUnit rule pinning it (M2, D8)
@@ -128,7 +176,12 @@
   `ExecutorAdapterSelector`. `ResumeVerificationStageExecutor` is **not** deleted: it stays the one
   recovery owner of an interrupted verification (`task-branch-contract`, "An interrupted
   verification is InProgress with one recovery owner") and decorates the chain over the `claude`
-  executor as it did the old arm; its pending-round subject is task 6.5 (D7, D8)
+  executor as it did the old arm; its pending-round subject is task 6.5. The `claude` entry's
+  `transform` request carries, as its instructions, the round prompt `ExecutorPromptBuilder`
+  composes (`executor/agent-executor`, "Round prompt composition": the briefing with its
+  decisions section, the verify plan, the answer-file instruction, the rework preamble), so the
+  question and the reply of 2.5a reach the CLI's stdin unchanged; no request carries a
+  continuation (D4, NG8) (D7, D8)
 - [ ] 5.1a Dispatch arm (carried from D8 and the `ExecutorRegistry` row of D10 of
   `define-executor-contract`): `ExecutorDispatch` (`:bootstrap`) sends a `program` stage to the
   registry by `executor.name` and every other stage to one type-keyed `agent-cli` arm, kept "until
@@ -140,8 +193,10 @@
   collapse `MidRoundPushRounds` ↔ `SandboxRoundEnvironmentSource` into one round-token minting
   step the host decoration and the box acquisition both call, and remove both markers (D7);
   `grep -rn "Kept in sync with" adapters/agent` → zero, and no marker names a deleted class (M1)
-- [ ] 5.3 Glossary: agent dialect, agent round runner, continuation key (update), answer file;
-  update the `Executor` and `Judge` entries
+- [ ] 5.3 Glossary: agent dialect, agent round runner, answer file; the "continuation key"
+  entry updated to D4 as amended (reserved vocabulary; names state any factory instance reaches;
+  no agent executor returns one; *Not:* a vendor session id); the "Decision" entry gains the
+  question it answers; update the `Executor` and `Judge` entries
 - Spec contract (`tighten-spec-contract`): this change REMOVES seven `agent-executor`
   requirements and the `stage-engine` requirement "Judge majority voting"; their scenarios carry
   `// Scenario: executor/agent-executor / <title>` and `// Scenario: pipeline/stage-engine / <title>` markers
@@ -225,6 +280,8 @@ owner). Old way: the `transform` arm "a
   `start`, the round closes with the service's changes, second recovery a no-op), and killed
   before it (two `start`s, both in the ledger) (M5, G5)
 - [ ] 7.2 Packaged-jar end-to-end with the fake agent binary through the Claude dialect: transform
-  round, judge vote, decision request → answer → continued session; ledger asserts
+  round, judge vote, decision request → answer → a fresh round started by a second instance whose
+  recorded stdin carries the question, its options and the reply and whose recorded argv carries
+  no session flag; ledger asserts
   `executor=claude@<version>` (NFR-O1)
 - [ ] 7.3 `./gradlew check` with PIT; sweep report for D8 rows; recommend a commit message
