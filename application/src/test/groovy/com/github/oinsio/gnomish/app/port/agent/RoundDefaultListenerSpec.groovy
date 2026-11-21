@@ -24,12 +24,12 @@ class RoundDefaultListenerSpec extends Specification {
         }
 
         @Override
-        Path decisionFilePath() {
+        Path answerFilePath() {
             Path.of('decision.json')
         }
 
         @Override
-        Map<String, String> decisionEnvFragment() {
+        Map<String, String> answerEnvFragment() {
             [:]
         }
 

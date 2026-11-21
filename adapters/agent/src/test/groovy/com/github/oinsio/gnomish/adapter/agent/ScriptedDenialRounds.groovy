@@ -109,13 +109,13 @@ final class ScriptedDenialRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        Path decisionFilePath() {
-            delegate.decisionFilePath()
+        Path answerFilePath() {
+            delegate.answerFilePath()
         }
 
         @Override
-        Map<String, String> decisionEnvFragment() {
-            delegate.decisionEnvFragment()
+        Map<String, String> answerEnvFragment() {
+            delegate.answerEnvFragment()
         }
 
         @Override

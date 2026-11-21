@@ -1,7 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.claude;
 
 import com.github.oinsio.gnomish.adapter.agent.runner.AgentDialect;
-import com.github.oinsio.gnomish.adapter.agent.runner.ContinuationKey;
 import com.github.oinsio.gnomish.adapter.agent.runner.DialectAnswer;
 import com.github.oinsio.gnomish.adapter.agent.runner.ParsedEvents;
 import com.github.oinsio.gnomish.adapter.agent.runner.ParsedLine;
@@ -44,14 +43,14 @@ import org.jspecify.annotations.Nullable;
  * ClaudePolicyCompiler} and its turn and budget bounds rendered as the CLI's hints (task 2.2).
  *
  * <p>Describe (task 2.3, FR7, NFR-S1): roles {@code transform}, {@code verdict}, {@code decision};
- * capabilities {@code streams_progress}, {@code cancel}, {@code resumable}; enforcement level {@code
+ * capabilities {@code streams_progress} and {@code cancel}, never {@code resumable}; enforcement level {@code
  * TOOL_GATE}; the credentials, configuration-directory variable and repo-policy-disabling flags of
  * {@link ClaudeEnvironment}; the one egress host, that of the configured base URL; and the settings
  * schema of {@link ClaudeSettings}. Answers (task 2.4, FR3, FR4): a {@code verdict} or {@code
  * decision} argv ends with {@code --json-schema} and {@link ClaudeAnswerSchema}'s reply schema, and
- * {@link ClaudeAnswer} judges the reply. Continuation (task 2.5, FR9, NFR-R2): the session, its
- * {@code --resume} and the CLI's refusal of one are {@link ClaudeSession}'s, the stdin {@link
- * ClaudePrompt}'s.
+ * {@link ClaudeAnswer} judges the reply. No session (task 2.5, FR9, NFR-R2, design D4 as amended
+ * 2026-11-21): the CLI's session lives on the worker, so no argv carries a session flag and the stdin
+ * is always the role's input ({@link ClaudePrompt}).
  *
  * <p>Implements FR2, FR3, FR4, FR7, FR9, NFR-R2, NFR-S1 of extract-agent-round-runner.
  */
@@ -104,7 +103,7 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
                 Describe.SPOKEN_PROTOCOL_VERSION,
                 version,
                 List.of(Role.TRANSFORM, Role.VERDICT, Role.DECISION),
-                List.of(Capability.STREAMS_PROGRESS, Capability.CANCEL, Capability.RESUMABLE),
+                List.of(Capability.STREAMS_PROGRESS, Capability.CANCEL),
                 ClaudeSettings.schema(),
                 ClaudeEnvironment.CREDENTIALS,
                 List.of(egressHost),
@@ -121,7 +120,6 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
         String model = settings.get(ExecutorSettings.MODEL_KEY) instanceof String named ? named : "";
         List<String> argv =
                 new ArrayList<>(AgentCommandLine.of(binary, model, settings, request.policy(), request.bounds()));
-        argv.addAll(ClaudeSession.resume(request.continuation()));
         ClaudeAnswerSchema.of(request).ifPresent(schema -> {
             argv.add(JSON_SCHEMA_FLAG);
             argv.add(schema.toString());
@@ -169,16 +167,6 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
                 new RoundStatus.LimitReached("the CLI's budget limit (" + MAX_BUDGET_SUBTYPE + ")");
             default -> new RoundStatus.Broken(UntrustedText.agent("the CLI ended the round as " + subtype));
         };
-    }
-
-    @Override
-    public boolean resumeRefused(int exitCode, ParsedEvents<AgentEvent> events, UntrustedText stderrTail) {
-        return ClaudeSession.refused(exitCode, events, stderrTail);
-    }
-
-    @Override
-    public Optional<ContinuationKey> continuation(ParsedEvents<AgentEvent> events) {
-        return ClaudeSession.key(events);
     }
 
     private static List<TimestampedEvent> timestamped(ParsedEvents<AgentEvent> events) {

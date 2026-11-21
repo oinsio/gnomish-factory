@@ -6,6 +6,7 @@ import com.github.oinsio.gnomish.adapter.git.state.TaskJsonDto
 import com.github.oinsio.gnomish.adapter.git.state.TaskJsonMapper
 import com.github.oinsio.gnomish.adapter.git.state.TaskOutcomeDto
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
+import com.github.oinsio.gnomish.app.port.git.TaskRecord
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
@@ -79,6 +80,11 @@ class BranchHistory implements BareGitRepoFixture {
 
     List<String> decisionBodies(String commit) {
         task(commit)?.decisions()?.collect { it.body() }
+    }
+
+    /** {@code commit}'s {@code task.json} through the production parse a resume reads it with. */
+    TaskRecord record(String commit) {
+        TaskJsonMapper.fromDto(task(commit))
     }
 
     /** Every path under {@code .gnomish-task/decisions/} in the commit's tree. */

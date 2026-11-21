@@ -22,7 +22,7 @@ import spock.lang.TempDir
  * {@link ExecutorPromptBuilder} composes the round prompt from the shared
  * briefing sections plus the executor epilogue — the verify plan (with judge
  * criteria content taken from the frozen {@link PipelineLaw}, the same source
- * as the control file), the decision-file instruction, and the rework preamble
+ * as the control file), the answer-file instruction, and the rework preamble
  * on retries only. Control-file and judge-criteria content come from the frozen
  * law, never lazily from the workspace.
  */
@@ -98,7 +98,9 @@ class ExecutorPromptBuilderSpec extends Specification {
         secondAttemptPrompt.toLowerCase().contains('rework')
     }
 
-    def "D1: prompt instructs the agent to use GNOMISH_DECISION_FILE to ask a question"() {
+    // FR9 of extract-agent-round-runner (D3): the decision request is a decision-request answer
+    //     in the answer file, so the instruction names the contract's answer-file variable and kind
+    def "FR9: prompt instructs the agent to write a decision request to GNOMISH_ANSWER_FILE to ask a question"() {
         given:
         def builder = builderWith(['instructions.md': 'Do the thing.'])
         def stage = stageWith([])
@@ -107,7 +109,8 @@ class ExecutorPromptBuilderSpec extends Specification {
         def prompt = builder.build(requestFor(stage, 0, []))
 
         then:
-        prompt.contains('GNOMISH_DECISION_FILE')
+        prompt.contains('$GNOMISH_ANSWER_FILE')
+        prompt.contains('"kind": "decision-request"')
         prompt.contains('question')
         prompt.contains('options')
     }

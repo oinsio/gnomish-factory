@@ -4,28 +4,28 @@ import com.github.oinsio.gnomish.testsupport.RepoSourceTree
 import spock.lang.Specification
 
 /**
- * Design D7/D10 of make-checkpoint-gate-durable: a decision request is live only under the token
- * of the round that owns it, so its path has one spelling — {@code
- * GnomeRangeInspection.decisionPath(key, token)} — over one directory constant, {@code
- * EnvelopePaths.DECISIONS_DIR}. A second spelling (a token-less name, a hand-joined
- * {@code DECISIONS_DIR + "/" + ...}) would compile, read correctly in its own spec, and reopen the
- * stale-request defect the token closed: a file under another name read as a fresh question. The
- * parameter type keeps the one spelling honest; this scan keeps it the only one.
+ * Design D7/D10 of make-checkpoint-gate-durable; design D3, D8 of extract-agent-round-runner: a
+ * decision request is live only under the token of the round that owns it, so the answer file's
+ * path has one spelling — {@code EnvelopePaths.answerFile(key, token)} — over one directory
+ * constant, {@code EnvelopePaths.DECISIONS_DIR}, both in the owner. A second spelling (a token-less
+ * name, a hand-joined {@code DECISIONS_DIR + "/" + ...}) would compile, read correctly in its own
+ * spec, and reopen the stale-request defect the token closed: a file under another name read as a
+ * fresh question. The parameter and return types keep the one spelling honest; this scan keeps it
+ * the only one.
  *
- * <p>The allowlist, by file: the constant's owner ({@code EnvelopePaths}); the gnome-writable
- * directory ({@code FactoryOwnedPaths}, a directory, not a file name — {@code
- * ConsumedRequestRemoval} reaches it through {@code FactoryOwnedPaths.GNOME_WRITABLE}, so the
- * remover needs no entry here); the spelling ({@code GnomeRangeInspection}) and its carve-outs ({@code
- * AdmissionRule}, the admission's rules of a round);
- * and the two readers that take the spelling, never compose one ({@code BranchDecisionFile} — the
- * path handed to the gnome and the one path read — and {@code SnapshotTipCheck} — the request in a
- * snapshot's tree on resume). Every allowlisted file must still name a token, so a rename cannot
- * leave the gate naming nothing.
+ * <p>The allowlist, by file: the owner ({@code EnvelopePaths}); the gnome-writable directory
+ * ({@code FactoryOwnedPaths}, a directory, not a file name — {@code ConsumedRequestRemoval} reaches
+ * it through {@code FactoryOwnedPaths.GNOME_WRITABLE}, so the remover needs no entry here); the
+ * admission's carve-outs ({@code AdmissionRule}, the admission's rules of a round); and the two
+ * readers that take the spelling, never compose one ({@code BranchDecisionFile} — the path handed
+ * to the gnome and the one path read — and {@code SnapshotTipCheck} — the request in a snapshot's
+ * tree on resume). Every allowlisted file must still name one, so a rename cannot leave the gate
+ * naming nothing.
  *
  * <p>The whole production tree is scanned, {@code :test-fixtures} included: a fixture that spelled
  * the path by hand would let a fake drift from the owner it stands in for. Comments are stripped.
  *
- * <p>FR13, FR15 of make-checkpoint-gate-durable.
+ * <p>FR13, FR15 of make-checkpoint-gate-durable; FR9 of extract-agent-round-runner.
  */
 class DecisionPathOwnerSpec extends Specification {
 
@@ -33,16 +33,16 @@ class DecisionPathOwnerSpec extends Specification {
 
     /** The files allowed to name the directory constant or the path's one spelling, each with why. */
     private static final Map<String, String> ALLOWED = [
-        ('domain/src/main/java/com/github/oinsio/gnomish/domain/branch/EnvelopePaths.java'): 'owns DECISIONS_DIR',
+        ('domain/src/main/java/com/github/oinsio/gnomish/domain/branch/EnvelopePaths.java'): 'owns DECISIONS_DIR and the one spelling of the answer file',
         (GIT + 'FactoryOwnedPaths.java') : 'the gnome-writable directory',
-        (GIT + 'GnomeRangeInspection.java'): 'the one spelling of the path',
         (GIT + 'AdmissionRule.java') : 'the carve-out of a round\'s admission rules',
         (GIT + 'BranchDecisionFile.java') : 'the path handed to the gnome and the one path read',
         (GIT + 'SnapshotTipCheck.java') : 'the request read from a snapshot on resume',
     ]
 
-    // FR13, FR15: the directory constant and the path's spelling are named only by the allowlist
-    def "FR13, FR15: DECISIONS_DIR and decisionPath( appear in production only in the allowlisted files"() {
+    // FR13, FR15; FR9 of extract-agent-round-runner: the directory constant and the answer file's
+    //     spelling are named only by the allowlist
+    def "FR13, FR15, FR9: DECISIONS_DIR and EnvelopePaths.answerFile( appear in production only in the allowlisted files"() {
         given: 'every production source, comments stripped'
         def sources = RepoSourceTree.productionSources()
 
@@ -69,14 +69,16 @@ class DecisionPathOwnerSpec extends Specification {
         shape | line || detected
         'a hand-joined path' | 'String p = EnvelopePaths.DECISIONS_DIR + "/" + key.stage() + ".json";' || true
         'a static-imported constant' | 'String p = DECISIONS_DIR + "/x.json";' || true
-        'a call of the spelling' | 'var p = GnomeRangeInspection.decisionPath(key, token);' || true
-        'a javadoc mention' | ' * named by {@link GnomeRangeInspection#decisionPath(AttemptKey, RoundToken)}' || false
-        'a trailing comment' | 'var p = handle.relativePath(); // was decisionPath(key)' || false
-        'a longer identifier' | 'var p = round.decisionFilePath();' || false
+        'a call of the spelling' | 'var p = EnvelopePaths.answerFile(key, token);' || true
+        'a static import of the spelling' | 'import static com.github.oinsio.gnomish.domain.branch.EnvelopePaths.answerFile;' || true
+        'a javadoc mention' | ' * named by {@link EnvelopePaths#answerFile(AttemptKey, RoundToken)}' || false
+        'a trailing comment' | 'var p = handle.relativePath(); // was EnvelopePaths.answerFile(key)' || false
+        'a longer identifier' | 'var p = round.answerFilePath();' || false
+        'another owner\'s answer path' | 'String answerFile = answerFile(request);' || false
         'a longer constant' | 'var d = DECISIONS_DIR_LEGACY;' || false
     }
 
     private static boolean namesDecisionPath(String code) {
-        code =~ /\bDECISIONS_DIR\b/ || code =~ /\bdecisionPath\s*\(/
+        code =~ /\bDECISIONS_DIR\b/ || code =~ /\bEnvelopePaths\s*\.\s*answerFile\b/
     }
 }

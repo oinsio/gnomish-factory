@@ -18,7 +18,8 @@ import java.time.Instant
  * needs no runner change"; FR2 of extract-agent-round-runner): plain words, one event per line —
  * {@code hello <model> <session>}, {@code use <tool>}, {@code done <summary>}, {@code stop <bound>},
  * {@code answer <json>} — and anything else is no event. It renders the role's input on stdin and the
- * role's word as the one argument (a continuation as {@code --resume <key>}, its reply on stdin), writes the answer an {@code answer} event carries itself (the word
+ * role's word as the one argument — never a session flag, a continuation on the request included —
+ * writes the answer an {@code answer} event carries itself (the word
  * {@code malformed} is an answer that does not match its schema), stops on a bound when a {@code stop}
  * event came, completes when a {@code done} event came, and is broken otherwise. It records what the
  * runner handed it, so a spec sees what the runner's path did without reaching into it.
@@ -56,15 +57,6 @@ final class FakeDialect implements AgentDialect<FakeEvent> {
     RenderedArgv render(ExecutorRequest request) {
         rendered << request
         def inputs = request.roleInputs()
-        def continuation = request.continuation()
-        if (continuation != null) {
-            return new RenderedArgv([
-                'fake-agent',
-                request.role().wire(),
-                '--resume',
-                continuation.key()
-            ], continuation.reply())
-        }
         new RenderedArgv([
             'fake-agent',
             request.role().wire()
@@ -125,18 +117,6 @@ final class FakeDialect implements AgentDialect<FakeEvent> {
         kinds.any {
             it.kind == 'done'
         } ? new RoundStatus.Completed() : new RoundStatus.Broken(UntrustedText.agent('no result event'))
-    }
-
-    /** A resume is refused when the CLI failed before any event and said {@code unknown session}. */
-    @Override
-    boolean resumeRefused(int exitCode, ParsedEvents<FakeEvent> events, UntrustedText stderrTail) {
-        exitCode != 0 && events.stamped().isEmpty() && stderrTail.contains('unknown session')
-    }
-
-    @Override
-    Optional<ContinuationKey> continuation(ParsedEvents<FakeEvent> events) {
-        def hello = events.stamped()*.event().find { it.kind == 'hello' }
-        hello == null ? Optional.empty() : Optional.of(new ContinuationKey(hello.payload.split(' ').last()))
     }
 }
 

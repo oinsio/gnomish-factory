@@ -1,1 +1,1 @@
-{"question": "Refactor or patch?", "options": ["refactor", "patch"]}
+{"kind": "decision-request", "question": "Refactor or patch?", "options": ["refactor", "patch"]}

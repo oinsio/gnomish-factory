@@ -78,9 +78,9 @@ class ExecutorRegistryCommandSpec extends Specification {
     private RoundEnvironmentSource rounds() {
         def round = [environment: {
                 host
-            }, decisionFilePath: {
+            }, answerFilePath: {
                 null
-            }, decisionEnvFragment: {
+            }, answerEnvFragment: {
                 [:]
             }, closeRound: { }, readDecision: {
                 Optional.empty()

@@ -6,6 +6,9 @@ import com.github.oinsio.gnomish.adapter.agent.program.ProgramEnd;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramFailures;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultRead;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultRead.AnswerRead;
+import com.github.oinsio.gnomish.executorcontract.Answer;
+import com.github.oinsio.gnomish.executorcontract.AnswerReading;
+import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
 import com.github.oinsio.gnomish.executorcontract.FailureClass;
@@ -33,10 +36,11 @@ import org.jspecify.annotations.Nullable;
  * the stderr tail. A round's usage rides every result the dialect judged; a usage that reports no wall
  * time takes the one the factory measured.
  *
- * <p>Continuation (FR9, NFR-R2, design D4): a round started with a continuation whose resume the
- * dialect says the CLI refused is no result but a {@link RoundAttempt.ResumeRefused}, which the round
- * answers by a fresh start; a completed round's {@code decision-request} answer carries the dialect's
- * session as its continuation key ({@link SessionContinuation#stamped}).
+ * <p>An agent round keeps no state past its end (FR9, NFR-R2, design D4 as amended 2026-11-21): a
+ * completed round's {@code decision-request} answer leaves with its question and options and no
+ * continuation key, a key the agent wrote removed, since the CLI's session lives on the worker and is
+ * no record. Any other answer, and one that does not read as an answer at all, leaves as the agent
+ * wrote it: judging it is the reader's.
  *
  * <p>Implements FR1, FR2, FR8, FR9, NFR-R2, UX2 of extract-agent-round-runner.
  *
@@ -82,22 +86,11 @@ final class RoundJudgement<E> {
      * @param lines the round's line sink, joined; never null
      * @param answerFile the answer path the round's environment was handed; never null
      * @param roundEnd the instant an unfinished tool call is measured to; never null
-     * @return the round's result, or the CLI's refusal to resume the request's continuation; never null
+     * @return the round's result; never null
      */
-    RoundAttempt exited(ProgramEnd.Exited exited, DialectLines<E> lines, String answerFile, Instant roundEnd) {
+    ExecutorResult exited(ProgramEnd.Exited exited, DialectLines<E> lines, String answerFile, Instant roundEnd) {
         lines.reportCaps(name);
         ParsedEvents<E> events = lines.events();
-        if (request.continuation() != null) {
-            UntrustedText stderrTail = scratch.tailForFailure();
-            if (dialect.resumeRefused(exited.exitCode(), events, stderrTail)) {
-                return new RoundAttempt.ResumeRefused(stderrTail);
-            }
-        }
-        return new RoundAttempt.Ended(judged(exited, events, answerFile, roundEnd));
-    }
-
-    private ExecutorResult judged(
-            ProgramEnd.Exited exited, ParsedEvents<E> events, String answerFile, Instant roundEnd) {
         Usage usage = measured(dialect.usage(events, roundEnd), exited.wallTime());
         return switch (dialect.status(exited.exitCode(), events)) {
             case RoundStatus.Completed ignored -> answered(events, answerFile, usage);
@@ -130,10 +123,17 @@ final class RoundJudgement<E> {
                 };
         return switch (read) {
             case AnswerRead.None ignored -> completed(null, usage);
-            case AnswerRead.Read answer ->
-                completed(SessionContinuation.stamped(answer.answer(), dialect.continuation(events)), usage);
+            case AnswerRead.Read answer -> completed(keyless(answer.answer()), usage);
             case AnswerRead.Refused refused -> failure(refused.cause()).withUsage(usage);
         };
+    }
+
+    /** {@code answer} with no continuation key when it is a decision request; otherwise as written. */
+    private static JsonNode keyless(JsonNode answer) {
+        if (Answer.read(answer, UntrustedText::agent) instanceof AnswerReading.Parsed(Answer.DecisionRequest asked)) {
+            return ExecutorContractJson.answerTree(new Answer.DecisionRequest(asked.question(), asked.options(), null));
+        }
+        return answer;
     }
 
     private static ExecutorResult completed(@Nullable JsonNode answer, Usage usage) {

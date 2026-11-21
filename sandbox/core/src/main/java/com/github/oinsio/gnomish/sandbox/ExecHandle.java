@@ -10,7 +10,7 @@ import java.time.InstantSource;
  * TaskExecutionEnvironment#exec(ExecCommand)} (design D1): its streamed output,
  * the instant it started, and the ways a caller waits for it to finish. The
  * handle is host-agnostic — it exposes streams and exit control, never a raw OS
- * {@code Process} or a filesystem path — so an agent round parsing stream-json
+ * {@code Process} or a filesystem path — so an agent round parsing its event stream
  * and a command check reading a bounded tail drive the same contract whether
  * the process runs on the host or inside a container.
  *

@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
  * The command line a dialect rendered for one request, binary first, and what the command reads on
  * its standard input (FR2, FR3 of extract-agent-round-runner). The runner launches it as given and
  * never edits it: what a vendor's CLI is told — the compiled policy, the model, the bounds, the answer
- * schema, the resume, the prompt on stdin or in an argument — is the dialect's alone. The runner hands
+ * schema, the prompt on stdin or in an argument — is the dialect's alone. The runner hands
  * {@link #stdin} to the launch owner, which gives it to the child as a file, never a pipe a factory
  * thread writes into.
  *

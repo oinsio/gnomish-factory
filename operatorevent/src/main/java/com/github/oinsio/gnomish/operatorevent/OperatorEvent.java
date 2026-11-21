@@ -349,11 +349,7 @@ public enum OperatorEvent {
     // Claude dialect (extract-agent-round-runner, FR3, FR4): a verdict or decision round's result
     // event carried no structured output for the --json-schema it was handed, so its answer is read
     // from the final text instead; one WARN per round.
-    AGENT_ANSWER_FROM_FINAL_TEXT("GF191"),
-    // agent round runner (extract-agent-round-runner, FR9, NFR-R2, design D4): the CLI refused to
-    // resume the session a continued start named, so the round ran again as a fresh start with the
-    // reply in its feedback; one WARN per refused resume.
-    AGENT_RESUME_REFUSED("GF192");
+    AGENT_ANSWER_FROM_FINAL_TEXT("GF191");
 
     private final String code;
     private final String head;

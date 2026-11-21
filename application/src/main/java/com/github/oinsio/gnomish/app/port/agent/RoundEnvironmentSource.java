@@ -9,21 +9,23 @@ import java.util.Optional;
 
 /**
  * Where a {@code CliStageExecutor} round gets its execution environment and
- * decision transport (the sandbox integration pass of add-sandbox-core): the
- * host default builds a {@code HostTaskExecutionEnvironment} over the {@code
- * DirectoryWorkspace} root with the temp-dir decision file ({@code
- * DecisionFileTransport}), today's behavior; the sandboxed source leases the
- * task's container environment per segment, moves the decision file into the
- * branch (FR23, D17), and closes each round with the snapshot commit (FR21,
- * D15) — the executor's flow stays identical either way.
+ * answer file (the sandbox integration pass of add-sandbox-core): the host
+ * default builds a {@code HostTaskExecutionEnvironment} over the {@code
+ * DirectoryWorkspace} root with the answer file in that environment's scratch
+ * area, outside the workspace; the sandboxed source leases the task's container
+ * environment per segment, names the answer file in the branch ({@code
+ * EnvelopePaths.answerFile}; FR23, D17), and closes each round with the snapshot
+ * commit (FR21, D15) — the executor's flow stays identical either way. Either
+ * way the agent is told the path in {@code GNOMISH_ANSWER_FILE}, the executor
+ * contract's one answer-file variable (FR9 of extract-agent-round-runner).
  *
- * <p>Implements FR4, FR21, FR23 of add-sandbox-core.
+ * <p>Implements FR4, FR21, FR23 of add-sandbox-core; FR9 of extract-agent-round-runner.
  */
 public interface RoundEnvironmentSource {
 
     /**
      * Opens one round: resolves the environment the round runs in and its
-     * decision transport.
+     * answer file.
      *
      * @param request the round's inputs; never null
      * @return the round's handle; never null
@@ -42,17 +44,17 @@ public interface RoundEnvironmentSource {
      */
     RoundIdentity identity();
 
-    /** One round's environment, decision transport, and boundary hooks. */
+    /** One round's environment, answer file, and boundary hooks. */
     interface Round {
 
         /** The environment the round's agent process executes in (FR4). */
         TaskExecutionEnvironment environment();
 
-        /** This round's decision-file path, for the pinpoint {@code Write} allowance in the flags. */
-        Path decisionFilePath();
+        /** This round's answer file, for the pinpoint {@code Write} allowance in the flags. */
+        Path answerFilePath();
 
-        /** The env fragment naming the decision path for the launched process. */
-        Map<String, String> decisionEnvFragment();
+        /** The env fragment naming the answer file for the launched process: {@code GNOMISH_ANSWER_FILE}. */
+        Map<String, String> answerEnvFragment();
 
         /**
          * The per-round progress listener joined to the executor's own (the
@@ -68,23 +70,23 @@ public interface RoundEnvironmentSource {
          * the sandboxed source executes the snapshot commit and harvest here,
          * recording the attempt commit (FR21, D15) under the subject {@code close}
          * names (design D22 of migrate-verify-to-executor-contract); the host
-         * source does nothing, and ignores {@code close}: the git-mode host
-         * snapshot is taken after a {@code completed} result only. Runs before
-         * {@link #readDecision()}.
+         * source ignores {@code close} — the git-mode host snapshot is taken
+         * after a {@code completed} result only — and reads its answer file before
+         * its scratch area leaves with the round. Runs before {@link #readDecision()}.
          *
          * @param close whether the round's executor completed; never null
          */
         void closeRound(RoundClose close);
 
         /**
-         * The decision request the agent wrote this round, if any — read after {@link
-         * #closeRound} through the one tolerant {@link DecisionRequestRead}, so no
+         * The decision request the agent wrote to the answer file this round, if any —
+         * read at or after {@link #closeRound} through the one tolerant {@link DecisionRequestRead}, so no
          * implementation hands raw decision content on for a second parse (FR6 of
          * define-executor-contract).
          */
         Optional<RoundDecisionRequest> readDecision();
 
-        /** Infrastructure-failure cleanup (NFR-R3): discards round-scoped transport state. */
+        /** Infrastructure-failure cleanup (NFR-R3): discards round-scoped state. */
         void discard();
     }
 }

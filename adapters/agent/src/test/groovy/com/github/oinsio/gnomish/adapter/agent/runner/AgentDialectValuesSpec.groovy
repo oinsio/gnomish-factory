@@ -6,9 +6,9 @@ import java.time.Instant
 import spock.lang.Specification
 
 /**
- * FR2, FR6, FR8, FR9 of extract-agent-round-runner: the vendor-neutral values a dialect hands the
- * agent round runner — the rendered argv, one line's yield, the round's stamped events, the status
- * of its end and the continuation key — hold what they claim and refuse what cannot be a value.
+ * FR2, FR6, FR8 of extract-agent-round-runner: the vendor-neutral values a dialect hands the
+ * agent round runner — the rendered argv, one line's yield, the round's stamped events and the status
+ * of its end — hold what they claim and refuse what cannot be a value.
  */
 class AgentDialectValuesSpec extends Specification {
 
@@ -105,19 +105,5 @@ class AgentDialectValuesSpec extends Specification {
         then:
         def e = thrown(IllegalArgumentException)
         e.message.contains('bound')
-    }
-
-    def "FR9: a continuation key carries the session it resumes"() {
-        expect:
-        new ContinuationKey('sess-1').value() == 'sess-1'
-    }
-
-    def "FR9: a blank continuation key is refused"() {
-        when:
-        new ContinuationKey('')
-
-        then:
-        def e = thrown(IllegalArgumentException)
-        e.message.contains('ContinuationKey')
     }
 }

@@ -32,11 +32,10 @@ import spock.lang.TempDir
  * TaskContext.decisions()} — carries the operator's answer verbatim into the fake agent's actual
  * stdin prompt (prompts travel on stdin since add-sandbox-core, FR24/D18), captured via {@code
  * GNOMISH_FAKE_CAPTURE_STDIN} (see {@code fake-agent/README.md},
- * task 9.5). Per {@code Decision}'s own contract (domain spec of add-stage-engine), only the
- * answer travels forward as recorded context — the question itself was already delivered to the
- * operator by the escalation dialog print, not re-carried into {@code TaskContext} — so this
- * spec's scripted operator answer names the question inline, the way a real reply naturally
- * would, making "the decision in the next round's prompt" checkable end to end.
+ * task 9.5). This spec hands the second run a decision built by hand, without the question it
+ * answers, so its scripted operator answer names the question inline; a decision a real resume
+ * appends records the question too (FR9 of extract-agent-round-runner), and {@code
+ * DecisionQuestionIdentitySpec} follows it from the park into the next round's prompt.
  *
  * <p>Uses the {@code decision-then-plain} fake-agent scenario (multi-attempt, D1): attempt 1
  * plays {@code decision-needed}, attempt 2+ in the same workspace plays {@code plain-round} —

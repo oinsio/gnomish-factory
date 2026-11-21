@@ -111,9 +111,9 @@ class RoundTokenIdentitySpec extends Specification implements BareGitRepoFixture
         def next = source.openRound(request)
 
         then: 'the next round is handed its own token\'s path, which the tip does not hold, and reads nothing'
-        next.decisionFilePath().toString() == requestPath(answered)
+        next.answerFilePath().toString() == requestPath(answered)
         answered != openedOn
-        gitExitCode(origin, 'cat-file', '-e', "${answered}:${next.decisionFilePath()}") != 0
+        gitExitCode(origin, 'cat-file', '-e', "${answered}:${next.answerFilePath()}") != 0
         next.readDecision().isEmpty()
     }
 

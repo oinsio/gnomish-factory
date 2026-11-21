@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.domain.branch
 
+import com.github.oinsio.gnomish.domain.engine.AttemptKey
+import com.github.oinsio.gnomish.domain.engine.RoundToken
 import spock.lang.Specification
 
 /**
@@ -46,5 +48,37 @@ class EnvelopePathsSpec extends Specification {
         expect:
         BranchShapeClassifier.TASK_FILE.is(EnvelopePaths.TASK_FILE)
         BranchShapeClassifier.STATE_FILE.is(EnvelopePaths.STATE_FILE)
+    }
+
+    // FR9 of extract-agent-round-runner (D3): the answer file spells the stage, the attempt and the
+    //     round token under the gnome-writable directory — the path every existing pending request
+    //     on a task branch was written at, so the spelling is the medium's contract.
+    def "FR9: answerFile spells the stage, the attempt and the round token"() {
+        expect:
+        EnvelopePaths.answerFile(new AttemptKey('T-1', 'implement', 2), RoundToken.of('abc123')) ==
+                new EnvelopePath('.gnomish-task/decisions/implement-a2-abc123.json')
+    }
+
+    // FR9 of extract-agent-round-runner: an envelope path cannot name a file outside the state
+    //     directory, so no value of the type is a path a caller joined by hand elsewhere.
+    def "FR9: an envelope path outside the state directory is refused: #relative"() {
+        when:
+        new EnvelopePath(relative)
+
+        then:
+        def refused = thrown(IllegalArgumentException)
+        refused.message.contains(EnvelopePaths.DIR)
+
+        where:
+        relative << [
+            'decisions/x.json',
+            '.gnomish-task/../x.json',
+            '.gnomish-taskx/y.json'
+        ]
+    }
+
+    def "FR9: a path beneath the state directory is accepted as spelled"() {
+        expect:
+        new EnvelopePath('.gnomish-task/decisions/x.json').relative() == '.gnomish-task/decisions/x.json'
     }
 }

@@ -21,7 +21,7 @@ class HostRoundsFactorySpec extends Specification {
     Path workspaceDir
 
     // FR2: the factory's rounds behave identically to the host constructor's — a fresh host
-    // environment over the workspace root, the temp-dir decision transport's path/env pair,
+    // environment over the workspace root, the answer file's path/env pair in its scratch area,
     // and the seam's default no-op roundListener (the decorator overrides it, nothing else).
     def "hostRounds opens rounds identical to the host constructor's"() {
         given:
@@ -32,8 +32,8 @@ class HostRoundsFactorySpec extends Specification {
 
         then:
         round.environment() instanceof HostTaskExecutionEnvironment
-        round.decisionFilePath() != null
-        round.decisionEnvFragment() == [GNOMISH_DECISION_FILE: round.decisionFilePath().toString()]
+        round.answerFilePath() != null
+        round.answerEnvFragment() == [GNOMISH_ANSWER_FILE: round.answerFilePath().toString()]
 
         when: 'the default listener is exercised'
         round.roundListener().onProgress(new AgentProgressEvent.ToolStarted(UntrustedText.agent('Bash')))

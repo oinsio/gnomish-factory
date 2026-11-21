@@ -22,9 +22,9 @@ import java.util.Optional;
 /**
  * The sandboxed {@link RoundEnvironmentSource} (the integration pass of
  * add-sandbox-core): rounds run in the task's leased container environment
- * ({@link EnvironmentLease}, FR12), the decision file lives in the branch at
- * {@code .gnomish-task/decisions/<stage>-a<attempt>-<token>.json} ({@link
- * BranchDecisionFile}, FR23, D17) named by the round's {@link RoundToken} — the task branch's tip
+ * ({@link EnvironmentLease}, FR12), the answer file lives in the branch at
+ * {@code EnvelopePaths.answerFile} ({@link BranchDecisionFile}; FR23, D17; FR9 of
+ * extract-agent-round-runner) named by the round's {@link RoundToken} — the task branch's tip
  * when the round opened, minted here for a fresh round ({@link RoundToken#of}) and opened in the
  * run's {@link CurrentRound} (FR13 of make-checkpoint-gate-durable, design D10) — every round closes
  * with the in-box snapshot commit + harvest recording the attempt commit into the same cell ({@link
@@ -34,8 +34,8 @@ import java.util.Optional;
  *
  * <p>Kept in sync with {@code com.github.oinsio.gnomish.adapter.agent.HostRoundEnvironmentSource}
  * (no shared classpath between {@code adapters/git} and {@code adapters/agent}): both implement
- * {@link RoundEnvironmentSource} for their execution mode and must open/close rounds with a
- * decision-file handle, a round listener, and close-round semantics consistent with FR4/FR21; and
+ * {@link RoundEnvironmentSource} for their execution mode and must open/close rounds with an
+ * answer file named in {@code GNOMISH_ANSWER_FILE}, a round listener, and close-round semantics consistent with FR4/FR21; and
  * in a branch mode both rounds open on a round token minted from the tip the round opens on through
  * {@code RoundToken.of} — for the host, by its git-mode decoration {@link MidRoundPushRounds}; and
  * both hand out an environment with a scratch area from the open to the close — here the live box's,
@@ -160,14 +160,14 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
         }
 
         @Override
-        public Path decisionFilePath() {
+        public Path answerFilePath() {
             // Working-copy-relative by protocol (D17): the agent runs with the working copy as
             // its cwd in every adapter, so the relative path is the correct Write-allowance form.
             return Path.of(decision.relativePath());
         }
 
         @Override
-        public Map<String, String> decisionEnvFragment() {
+        public Map<String, String> answerEnvFragment() {
             return decision.envFragment();
         }
 
@@ -189,7 +189,7 @@ public final class SandboxRoundEnvironmentSource implements RoundEnvironmentSour
 
         @Override
         public void discard() {
-            // The in-branch decision transport holds no round-scoped host state to clean up: a
+            // The in-branch answer file holds no round-scoped host state to clean up: a
             // pending file either rides a later snapshot/salvage commit or dies with the box.
         }
     }

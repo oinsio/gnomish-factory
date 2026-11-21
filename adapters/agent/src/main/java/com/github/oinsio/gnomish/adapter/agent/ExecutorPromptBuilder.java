@@ -11,7 +11,7 @@ import java.util.List;
  * Composes the full round prompt for the CLI {@code StageExecutor} (task 6.5
  * assembles it into {@code execute()}): the shared briefing sections, the
  * executor epilogue — the stage's full verify plan with judge acceptance
- * criteria embedded, and the decision-file instruction — and, on retries
+ * criteria embedded, and the answer-file instruction — and, on retries
  * only, a rework preamble (design D9(a)).
  *
  * <p>Control-file and judge-criteria content comes from the invocation's frozen
@@ -32,13 +32,13 @@ import java.util.List;
  */
 public record ExecutorPromptBuilder(PipelineLaw law) {
 
-    private static final String DECISION_FILE_INSTRUCTION = """
+    private static final String ANSWER_FILE_INSTRUCTION = """
             === Asking a human ===
             If you need a human decision before you can proceed, write a JSON \
-            object of the form {"question": "...", "options": ["...", "..."]} \
-            to the path in the $GNOMISH_DECISION_FILE environment variable and \
-            finish your turn. Leave that file untouched if you do not need to ask \
-            anything.
+            object of the form {"kind": "decision-request", "question": "...", \
+            "options": ["...", "..."]} to the path in the $GNOMISH_ANSWER_FILE \
+            environment variable and finish your turn. Leave that file untouched \
+            if you do not need to ask anything.
             """;
 
     private static final String REWORK_PREAMBLE = """
@@ -72,7 +72,7 @@ public record ExecutorPromptBuilder(PipelineLaw law) {
                 law.controlFile(request.stage().instructionsRef()));
 
         renderVerifyPlan(out, request.stage().verify());
-        out.append(DECISION_FILE_INSTRUCTION).append('\n');
+        out.append(ANSWER_FILE_INSTRUCTION).append('\n');
         if (request.attempt() > 0) {
             out.append(REWORK_PREAMBLE).append('\n');
         }

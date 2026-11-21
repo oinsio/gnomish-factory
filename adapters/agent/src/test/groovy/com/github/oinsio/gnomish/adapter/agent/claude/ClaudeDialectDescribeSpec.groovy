@@ -33,8 +33,7 @@ class ClaudeDialectDescribeSpec extends Specification {
         ]
         describe.capabilities() == [
             Capability.STREAMS_PROGRESS,
-            Capability.CANCEL,
-            Capability.RESUMABLE
+            Capability.CANCEL
         ]
         !describe.capabilities().contains(Capability.POLL)
         describe.enforcementLevel() == EnforcementLevel.TOOL_GATE

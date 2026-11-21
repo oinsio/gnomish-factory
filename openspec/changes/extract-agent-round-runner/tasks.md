@@ -80,7 +80,7 @@
   `resolve` strip them — so the dialect's credential names must not be added through `declaring`.
 - [x] 2.4 `--json-schema` for `verdict` and `decision` answers with final-text fallback at WARN;
   `JudgeVerdictExtractor` reduced to SARIF conversion; malformed → malformed answer (FR3, FR4)
-- [ ] 2.5 No session continuation in the agent runner (FR9, NFR-R2, FR6; D4 as amended
+- [x] 2.5 No session continuation in the agent runner (FR9, NFR-R2, FR6; D4 as amended
   2026-11-21 — read D4 first: the resume half built in the earlier round is withdrawn, not
   finished). Remove, with their specs: `--resume` rendering and the refusal recognition
   (`claude/ClaudeSession`), the refused-resume fallback and its WARN (`runner/SessionContinuation`,
@@ -105,7 +105,7 @@
   — hits only in `executor-contract` (the wire vocabulary, `Capability.RESUMABLE` among it), the
   conformance kit, and the new features asserting absence; `GitFlagsValidator`'s `gnomish
   --resume` is unrelated
-- [ ] 2.5a A decision records and renders the question it answers (FR9, NFR-R2; D4 as amended,
+- [x] 2.5a A decision records and renders the question it answers (FR9, NFR-R2; D4 as amended,
   D8 row "The question a decision answers", D9). TDD. (1) `Decision` (`domain/engine`) gains the
   optional question and options it answers, carried as the `UntrustedText` they were minted in.
   (2) One builder of a decision from the position, the consumed outcome's report, the reply, the
@@ -131,17 +131,17 @@
   round's prompt. Sweep, reported with its hits:
   `grep -rn -e 'new Decision(' -e 'renderDecisions(' -e 'decisions()' --include='*.java' */src/main adapters/*/src/main`.
   Before 4.2 and 5.1
-- [ ] 2.6 Old-way sweep: `grep -rn "stream-json\|ANTHROPIC_\|acceptEdits\|dontAsk"
+- [x] 2.6 Old-way sweep: `grep -rn "stream-json\|ANTHROPIC_\|acceptEdits\|dontAsk"
   --include=*.java */src/main adapters/*/src/main` → hits only under `adapters/agent/claude`;
   ArchUnit rule pinning it (M2, D8)
 
 ## 3. Answer file replaces the decision file
 
-- [ ] 3.1 Add `EnvelopePaths.answerFile`; runner hands `GNOMISH_ANSWER_FILE`; `BranchDecisionFile`
+- [x] 3.1 Add `EnvelopePaths.answerFile`; runner hands `GNOMISH_ANSWER_FILE`; `BranchDecisionFile`
   reads it through `ResultFileReader`; delete `DecisionFileTransport`; remove the
   `GNOMISH_DECISION_FILE` literal everywhere (grep → zero); envelope-paths gate extended;
   kill-point specs of the decision path re-pointed (FR9, D3, D9)
-- [ ] 3.2 Remove the `DecisionFileTransport` ↔ `BranchDecisionFile` registry row and markers; the
+- [x] 3.2 Remove the `DecisionFileTransport` ↔ `BranchDecisionFile` registry row and markers; the
   `agent-executor` requirement "Decision file is read through the shared result reader" is
   REMOVED by this change's delta (superseded by "Decision request is the answer file"): its two
   scenario markers retire with the others in the section-5 note, and the feature for the new

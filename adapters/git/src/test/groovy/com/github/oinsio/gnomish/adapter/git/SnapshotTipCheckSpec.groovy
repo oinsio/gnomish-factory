@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import ch.qos.logback.classic.Level
 import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
 import com.github.oinsio.gnomish.app.port.git.PendingVerification
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.executorcontract.ResultSource
@@ -166,7 +167,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR15, FR20: the request a snapshot carries is read through the pending commit above it"() {
         given:
         def token = RoundToken.of(tip())
-        def path = GnomeRangeInspection.decisionPath(new AttemptKey(TASK, 'implement', 0), token)
+        def path = EnvelopePaths.answerFile(new AttemptKey(TASK, 'implement', 0), token).relative()
         commitFile(path, '{"question":"which db?"}', ServiceCommitMessages.snapshot('implement', 0, token))
         registeredCommitOn(ServiceCommitMessages.pending('implement', 0, token), tip())
 
@@ -264,7 +265,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR15: the request the round asked is read from the snapshot's tree at its token path"() {
         given:
         def token = RoundToken.of(tip())
-        def path = GnomeRangeInspection.decisionPath(new AttemptKey(TASK, 'implement', 0), token)
+        def path = EnvelopePaths.answerFile(new AttemptKey(TASK, 'implement', 0), token).relative()
         commitFile(path, '{"question":"which db?"}', ServiceCommitMessages.snapshot('implement', 0, token))
 
         and: 'the working copy no longer holds it — the read is of the snapshot, not of a working copy'
@@ -279,7 +280,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "FR6: the recovered request is what the live read makes of the same bytes, fallbacks included"() {
         given: 'a round that wrote garbage instead of decision JSON, and died after its snapshot'
         def token = RoundToken.of(tip())
-        def path = GnomeRangeInspection.decisionPath(new AttemptKey(TASK, 'implement', 0), token)
+        def path = EnvelopePaths.answerFile(new AttemptKey(TASK, 'implement', 0), token).relative()
         def garbage = 'not json, the agent rambled'
         commitFile(path, garbage, ServiceCommitMessages.snapshot('implement', 0, token))
 
@@ -300,7 +301,7 @@ class SnapshotTipCheckSpec extends Specification implements BareGitRepoFixture, 
     def "NFR-R4: a request at the same key under another round's token is not read"() {
         given: 'an earlier round left its request on the branch'
         def earlier = RoundToken.of(tip())
-        commitFile(GnomeRangeInspection.decisionPath(new AttemptKey(TASK, 'implement', 0), earlier),
+        commitFile(EnvelopePaths.answerFile(new AttemptKey(TASK, 'implement', 0), earlier).relative(),
                 '{"question":"stale?"}', 'gnomish: task approved')
 
         and: 'the current round, opened on the next tip, asked nothing'

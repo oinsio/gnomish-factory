@@ -38,10 +38,10 @@ import java.util.List;
  * condition names an operator mistake the run cannot proceed past, not a resumable one.
  *
  * <p>Task 4.5 (NFR-S2, workspace hygiene): pointing the workspace at the worktree here does not,
- * by itself, risk decision-file temp dirs or logs entering the round commit. Both are already
- * anchored outside any workspace root by construction, unchanged by this class: {@code
- * CliStageExecutor}'s {@code DecisionFileTransport} always roots each round's temp directory
- * under {@code java.io.tmpdir} (never under the workspace it is handed), and
+ * by itself, risk a host round's answer file or logs entering the round commit. Both are already
+ * anchored outside any workspace root by construction, unchanged by this class: the host round's
+ * answer file lives in its environment's scratch area under {@code java.io.tmpdir} (never under
+ * the workspace it is handed), and
  * {@code logback-spring.xml} writes the instance's rolling log file under the factory home's {@code
  * projects/<name>/logs/} — both independent of {@code --dir}/worktree/workspace entirely. See {@code
  * GitModeWorkspaceHygieneSpec} for the regression proof: a real round's commit tree contains only

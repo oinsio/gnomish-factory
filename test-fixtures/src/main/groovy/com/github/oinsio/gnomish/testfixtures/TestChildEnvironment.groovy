@@ -8,11 +8,11 @@ import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironmen
  * The one spelling of what a test-spawned child process may see of the test JVM's environment
  * (design D14 of make-checkpoint-gate-durable): a spawner clears its {@link ProcessBuilder}'s
  * inherited environment through {@link #cleared}, then puts only the test-owned variables it sets
- * itself ({@code GNOMISH_FAKE_*}, {@code GNOMISH_HOME}, {@code GNOMISH_DECISION_FILE}).
+ * itself ({@code GNOMISH_FAKE_*}, {@code GNOMISH_HOME}, {@code GNOMISH_ANSWER_FILE}).
  *
- * <p>The failure this exists for: a test run inside a gnome round inherited the round's
- * {@code GNOMISH_DECISION_FILE}, and the fake agent a fixture spawned wrote its scenario's
- * decision into the round's real decision file. A {@code GNOMISH_*} variable of the parent never
+ * <p>The failure this exists for: a test run inside a gnome round inherited the variable naming
+ * the round's decision file (the answer file since extract-agent-round-runner), and the fake agent
+ * a fixture spawned wrote its scenario's decision into the round's real file. A {@code GNOMISH_*} variable of the parent never
  * reaches a child through this helper — none is on {@link #NAMES} and none matches a prefix.
  *
  * <p>Kept: the production host base set ({@link HostTaskExecutionEnvironment#BASE_ENV_NAMES}),

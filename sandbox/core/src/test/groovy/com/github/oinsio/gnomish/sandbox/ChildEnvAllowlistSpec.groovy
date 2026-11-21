@@ -125,8 +125,8 @@ class ChildEnvAllowlistSpec extends Specification {
         def allowlist = ChildEnvAllowlist.of(['NPM_TOKEN'], [], valuesOf(factoryEnv))
 
         expect:
-        allowlist.compose(['PATH', 'HOME'], [GNOMISH_DECISION_FILE: '/d.json']) ==
-        [PATH: '/usr/bin', HOME: '/home/op', NPM_TOKEN: 'n', GNOMISH_DECISION_FILE: '/d.json']
+        allowlist.compose(['PATH', 'HOME'], [GNOMISH_ANSWER_FILE: '/d.json']) ==
+        [PATH: '/usr/bin', HOME: '/home/op', NPM_TOKEN: 'n', GNOMISH_ANSWER_FILE: '/d.json']
     }
 
     // NFR-S3 of tighten-spec-contract: none() resolves no value at all — it reads no environment,

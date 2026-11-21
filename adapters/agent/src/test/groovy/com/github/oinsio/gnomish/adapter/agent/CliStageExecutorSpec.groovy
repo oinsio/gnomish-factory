@@ -29,8 +29,6 @@ class CliStageExecutorSpec extends Specification {
     @TempDir
     Path workspaceDir
 
-    @TempDir
-    Path decisionRoot
 
     def clock = new VirtualClock()
 
@@ -115,17 +113,17 @@ class CliStageExecutorSpec extends Specification {
         result.usage().wallTime() != null
     }
 
-    // FR3, NFR-R3, D1: an infrastructure failure mid-round still cleans up the round's
-    // decision temp directory — runRound() calls Handle.discard() on any RuntimeException
-    // path (here a roundTimeout kill), so nothing from the decision protocol leaks after
-    // a failed round. The transport is rooted at this spec's own @TempDir, so the check is
-    // deterministic under the parallel suite (no dependence on the shared JVM temp dir).
-    def "a failed round discards the decision temp directory"() {
+    // FR3, NFR-R3, D1: an infrastructure failure mid-round still cleans up the round — the
+    // discard on any RuntimeException path (here a roundTimeout kill) removes the scratch area
+    // that holds the answer file (FR9 of extract-agent-round-runner), so nothing of the round
+    // survives it.
+    def "a failed round discards the scratch area that holds its answer file"() {
         given:
         def properties = FakeAgentSupport.propertiesFor('hangs-forever')
-        def transport = new DecisionFileTransport(decisionRoot)
-        def executor =
-                new CliStageExecutor(properties, clock, { AgentProgressEvent e -> } as AgentProgressListener, transport, LAW)
+        def countingSource = new CountingRoundEnvironmentSource(
+                new HostRoundEnvironmentSource(clock, TestChildEnvironment.hostAllowlist()))
+        def executor = new CliStageExecutor(properties, clock, { AgentProgressEvent e -> } as AgentProgressListener,
+        ChildEnvAllowlist.none(), LAW, countingSource)
 
         when:
         def result = executor.execute(requestFor([roundTimeout: 1]))
@@ -133,8 +131,8 @@ class CliStageExecutorSpec extends Specification {
         then:
         InfrastructureResults.endedBy(result, RoundTimeoutException)
 
-        and: 'NFR-R3, D1: no round directory survives under the injected root'
-        Files.list(decisionRoot).withCloseable { it.count() == 0L }
+        and: 'NFR-R3, D1: the answer file\'s directory did not survive the round'
+        !Files.exists(countingSource.round.answerFilePath().parent)
     }
 
     // FR4, NFR-R1: a stream with no result event is an infrastructure failure, reported.
@@ -175,8 +173,7 @@ class CliStageExecutorSpec extends Specification {
     def "closeRound is invoked exactly once on the round, before the decision is read"() {
         given:
         def properties = FakeAgentSupport.propertiesFor('plain-round')
-        def hostSource = new HostRoundEnvironmentSource(
-                new DecisionFileTransport(decisionRoot), clock, TestChildEnvironment.hostAllowlist())
+        def hostSource = new HostRoundEnvironmentSource(clock, TestChildEnvironment.hostAllowlist())
         def countingSource = new CountingRoundEnvironmentSource(hostSource)
         def executor = new CliStageExecutor(properties, clock, { AgentProgressEvent e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, countingSource)
 
@@ -225,13 +222,13 @@ class CliStageExecutorSpec extends Specification {
         }
 
         @Override
-        Path decisionFilePath() {
-            delegate.decisionFilePath()
+        Path answerFilePath() {
+            delegate.answerFilePath()
         }
 
         @Override
-        Map<String, String> decisionEnvFragment() {
-            delegate.decisionEnvFragment()
+        Map<String, String> answerEnvFragment() {
+            delegate.answerEnvFragment()
         }
 
         @Override

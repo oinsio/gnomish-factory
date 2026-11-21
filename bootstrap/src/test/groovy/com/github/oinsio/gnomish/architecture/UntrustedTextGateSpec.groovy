@@ -104,6 +104,9 @@ class UntrustedTextGateSpec extends Specification {
         //     question, options, reason and details are written verbatim into state.json —
         //     split out of StateJsonMapper, the same branch-document writer.
         'com.github.oinsio.gnomish.adapter.git.state.StateStopMapper',
+        // Joined at task 2.5a of extract-agent-round-runner: the task.json decision entries' question
+        //     and options, split out of TaskJsonMapper when the entries gained them.
+        'com.github.oinsio.gnomish.adapter.git.state.TaskDecisionMapper',
         // Joined at task 4.2 of define-executor-contract: the task.json escalation reports' carried
         //     text, split out of TaskJsonMapper when the sixth report kind arrived.
         'com.github.oinsio.gnomish.adapter.git.state.TaskEscalationMapper',
@@ -240,10 +243,6 @@ class UntrustedTextGateSpec extends Specification {
         'com.github.oinsio.gnomish.adapter.agent.claude.FinalTextObject':
         'an agent\'s final text into the JSON tree of the one object it carries, whose texts its readers' +
         ' mint again in the agent family',
-        // FR9 of extract-agent-round-runner (task 2.5): the session id the next start resumes by.
-        'com.github.oinsio.gnomish.adapter.agent.claude.ClaudeSession':
-        'the init event\'s session id into the continuation key, held to ClaudeSession.SESSION_ID' +
-        ' (no leading dash, no space), since it goes back to the CLI as the argument of --resume',
         'com.github.oinsio.gnomish.adapter.agent.claude.TokenUsageMapper':
         'the round\'s model id into a telemetry key, held to ModelIdSyntax',
         // FR11, NFR-S4 of define-executor-contract: the working-copy-unchanged check's view, read

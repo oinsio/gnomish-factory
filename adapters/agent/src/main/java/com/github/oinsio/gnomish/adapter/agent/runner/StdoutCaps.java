@@ -6,7 +6,7 @@ package com.github.oinsio.gnomish.adapter.agent.runner;
  * line read and dropped, and the capped prefix parsed — and the retained cap — the most bytes of
  * lines whose events the round keeps for its dialect. Past the retained cap the round keeps the
  * events of its first half and of its latest half, and drops those in between, so the history a
- * dialect reads its session from and the final result it reads its answer from both survive, and the
+ * dialect reads its model from and the final result it reads its answer from both survive, and the
  * heap stays bounded however long the CLI talks.
  *
  * <p>The retained cap is at least twice the line cap, so the line just read always fits the latest

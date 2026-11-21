@@ -15,7 +15,7 @@ import java.util.Objects;
  *   <li>{@link Piped} — a separate pipe the caller drains itself: the container file channel
  *       reads both pipes with a drain each (D17).
  *   <li>{@link ToFile} — a host file, written by the process directly: the agent round's CLI,
- *       whose stdout is the live stream-json pipe and whose stderr is read after the exit from the
+ *       whose stdout is the live event pipe and whose stderr is read after the exit from the
  *       round scratch directory. In a box the file is the host-side {@code docker exec} client's
  *       stderr, which carries the in-box process's.
  * </ul>

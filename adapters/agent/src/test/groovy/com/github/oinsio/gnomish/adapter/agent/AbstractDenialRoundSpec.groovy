@@ -26,8 +26,6 @@ abstract class AbstractDenialRoundSpec extends Specification {
     @TempDir
     Path workspaceDir
 
-    @TempDir
-    Path decisionRoot
 
     def clock = new VirtualClock()
 
@@ -36,7 +34,7 @@ abstract class AbstractDenialRoundSpec extends Specification {
     }
 
     protected HostRoundEnvironmentSource hostSource() {
-        new HostRoundEnvironmentSource(new DecisionFileTransport(decisionRoot), clock, TestChildEnvironment.hostAllowlist())
+        new HostRoundEnvironmentSource(clock, TestChildEnvironment.hostAllowlist())
     }
 
     protected StageExecutor executorFor(String scenario, RoundEnvironmentSource source) {

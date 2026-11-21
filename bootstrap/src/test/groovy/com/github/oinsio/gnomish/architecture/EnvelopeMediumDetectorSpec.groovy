@@ -72,6 +72,21 @@ class EnvelopeMediumDetectorSpec extends Specification {
         failure.contains('EnvelopePaths')
     }
 
+    // FR9 of extract-agent-round-runner: the answer file's directory name is one of rule 2's
+    //     literals, so a hand-joined answer path beside the owner fails the build
+    def "FR9: a seeded answer-file path joined by hand is found: #shape"() {
+        expect:
+        EnvelopeMediumRule.hits('adapters/git/src/main/java/Elsewhere.java', [line], EnvelopeMediumRule.PATH_LITERALS) ==
+        [
+            'adapters/git/src/main/java/Elsewhere.java:1 — "decisions'
+        ]
+
+        where:
+        shape | line
+        'the directory name' | 'String d = EnvelopePaths.DIR + "decisions";'
+        'the directory and a name' | 'String p = EnvelopePaths.DIR + "decisions/" + stage + ".json";'
+    }
+
     // The scan reads what the compiler sees: a javadoc or trailing-comment mention of a banned
     //     call or path name is not a defect, and a gate that flagged it would be turned off.
     def "a commented mention is not a hit: #shape"() {

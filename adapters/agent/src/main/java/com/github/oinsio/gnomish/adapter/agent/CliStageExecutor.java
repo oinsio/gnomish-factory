@@ -16,14 +16,14 @@ import java.time.InstantSource;
  * one fresh {@code claude -p} subprocess per {@link #execute} call, assembling
  * every collaborator built by tasks 4–6 — {@link ExecutorPromptBuilder} for
  * the round prompt, a {@link RoundEnvironmentSource} for the round's execution
- * environment and decision transport (host default: worktree + temp-dir
- * decision file; sandboxed: the leased container environment with the
- * in-branch decision file and snapshot-closed rounds — FR4, FR21, FR23 of
+ * environment and answer file (host default: worktree + an answer file in the
+ * environment's scratch area; sandboxed: the leased container environment with the
+ * in-branch answer file and snapshot-closed rounds — FR4, FR21, FR23 of
  * add-sandbox-core), {@link com.github.oinsio.gnomish.adapter.agent.claude.AgentCommandLine#of} for the
- * command line (the {@code writeExactly} policy of the decision file: its pinpoint {@code Write}
+ * command line (the {@code writeExactly} policy of the answer file: its pinpoint {@code Write}
  * allowance), {@link com.github.oinsio.gnomish.adapter.agent.claude.StreamJsonParser} to read its stream-json stdout, {@link
  * AgentRoundResultExtractor} to shape the essential result; the round source reads the
- * decision file through the shared {@code DecisionRequestRead}.
+ * answer file through the shared {@code DecisionRequestRead}.
  *
  * <p>A round that was opened and ended without its result — a process that cannot even start, a
  * {@code roundTimeout} expiry ({@link RoundTimeoutException}), an interrupted wait, a missing
@@ -85,13 +85,13 @@ public final class CliStageExecutor implements StageExecutor {
             AgentProgressListener progressListener,
             ChildEnvAllowlist childEnv,
             PipelineLaw law) {
-        this(factoryProperties, clock, progressListener, new DecisionFileTransport(), childEnv, law);
+        this(factoryProperties, clock, progressListener, childEnv, law, hostRounds(clock, childEnv));
     }
 
     /**
      * The canonical constructor. The sandboxed construction (the integration pass of
      * add-sandbox-core): rounds run through {@code environmentSource} — the leased container
-     * environment with the in-branch decision file and snapshot-closed rounds — instead of the
+     * environment with the in-branch answer file and snapshot-closed rounds — instead of the
      * host default.
      *
      * @param factoryProperties installation config: the CLI binary path; never null
@@ -101,7 +101,7 @@ public final class CliStageExecutor implements StageExecutor {
      *     resolved through — the secrets port, in production (NFR-S3 of tighten-spec-contract);
      *     never null
      * @param law the invocation's frozen pipeline law (D14 of add-sandbox-core); never null
-     * @param environmentSource where each round's environment and decision transport come from;
+     * @param environmentSource where each round's environment and answer file come from;
      *     never null
      */
     public CliStageExecutor(
@@ -123,44 +123,10 @@ public final class CliStageExecutor implements StageExecutor {
     }
 
     /**
-     * Testing seam (package-private): the same executor with the per-round
-     * decision-file transport supplied by the caller, so a spec can assert the
-     * infrastructure-failure cleanup contract — a failed round must {@link
-     * DecisionFileTransport.Handle#discard()} the round directory (NFR-R3, D1) — without depending on the shared JVM temp
-     * directory. Production always uses the no-arg transport.
-     */
-    CliStageExecutor(
-            FactoryProperties factoryProperties,
-            InstantSource clock,
-            AgentProgressListener progressListener,
-            DecisionFileTransport decisionFileTransport,
-            PipelineLaw law) {
-        this(factoryProperties, clock, progressListener, decisionFileTransport, ChildEnvAllowlist.none(), law);
-    }
-
-    /** Testing seam (package-private): same as the four-argument overload, plus the allowlist. */
-    CliStageExecutor(
-            FactoryProperties factoryProperties,
-            InstantSource clock,
-            AgentProgressListener progressListener,
-            DecisionFileTransport decisionFileTransport,
-            ChildEnvAllowlist childEnv,
-            PipelineLaw law) {
-        this(
-                factoryProperties,
-                clock,
-                progressListener,
-                childEnv,
-                law,
-                hostRounds(decisionFileTransport, clock, childEnv));
-    }
-
-    /**
      * The host-mode {@link RoundEnvironmentSource} the host convenience constructor wires —
      * exposed so {@code bootstrap} can decorate it (the git-mode mid-round push) and hand the
      * decorated source back through the canonical rounds-accepting constructor, keeping {@code
-     * HostRoundEnvironmentSource} and its {@link DecisionFileTransport} internals package-private
-     * (design D2 of wire-host-mid-round-push).
+     * HostRoundEnvironmentSource} package-private (design D2 of wire-host-mid-round-push).
      *
      * <p>Implements FR2 of wire-host-mid-round-push.
      *
@@ -169,21 +135,15 @@ public final class CliStageExecutor implements StageExecutor {
      * @return the host round source, identical to the host constructor's; never null
      */
     public static RoundEnvironmentSource hostRounds(InstantSource clock, ChildEnvAllowlist childEnv) {
-        return hostRounds(new DecisionFileTransport(), clock, childEnv);
-    }
-
-    /** Testing seam (package-private): {@link #hostRounds} with the transport supplied. */
-    static RoundEnvironmentSource hostRounds(
-            DecisionFileTransport transport, InstantSource clock, ChildEnvAllowlist childEnv) {
-        return new HostRoundEnvironmentSource(transport, clock, childEnv);
+        return new HostRoundEnvironmentSource(clock, childEnv);
     }
 
     /**
      * Runs one fresh CLI round for {@code request} (FR1, D2): builds the
-     * prompt, opens the round's environment and decision transport, launches
+     * prompt, opens the round's environment and answer file, launches
      * the process, parses its stream-json output, waits for exit within {@code
      * roundTimeout}, closes the round (the sandboxed snapshot commit, FR21),
-     * extracts the round's essential result, and maps the decision file's
+     * extracts the round's essential result, and maps the answer file's
      * presence to {@link ExecutionResult#completed} or
      * {@link ExecutionResult#decisionNeeded}.
      *

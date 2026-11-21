@@ -23,16 +23,15 @@ import spock.lang.TempDir
  * CliStageExecutor} round (fake agent binary, {@code plain-round} scenario, task 9's fixture)
  * through {@link GitModeRunner} against a real worktree, then inspects the round commit's tree
  * and the worktree's final state to prove the round contains only the gnome's own change
- * ({@code output.txt}) plus {@code .gnomish-task/} — no decision-file temp dir and no log file
- * ever entered the worktree, exactly the guarantee add-agent-executor's NFR-S2 already gives the
- * in-place path (verified by {@code LogbackConfigSpec} for logs and {@code
- * DecisionFileTransportSpec} for the temp-dir lifecycle).
+ * ({@code output.txt}) plus {@code .gnomish-task/} — no round scratch area (where a host round's
+ * answer file lives) and no log file ever entered the worktree, exactly the guarantee
+ * add-agent-executor's NFR-S2 already gives the in-place path (verified by {@code
+ * LogbackConfigSpec} for logs and {@code HostRoundEnvironmentSourceSpec} for the answer file).
  *
- * <p>{@link com.github.oinsio.gnomish.adapter.agent.DecisionFileTransport}'s production
- * constructor always roots the per-round temp directory under {@code java.io.tmpdir}, never under
- * the workspace it is handed (which {@link GitModeRunner} sets to the worktree); this spec is the
- * regression net that would fail if a future change threaded the workspace root into that
- * decision instead.
+ * <p>The host round's environment always allocates its scratch area under {@code java.io.tmpdir},
+ * never under the workspace it is handed (which {@link GitModeRunner} sets to the worktree), and
+ * the answer file is a path in it (FR9 of extract-agent-round-runner); this spec is the regression
+ * net that would fail if a future change threaded the workspace root into that choice instead.
  */
 class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFixture, AppAssemblyFixture {
 
@@ -72,7 +71,7 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
     }
 
     // NFR-S2: a real agent round's commit contains exactly the gnome's own file plus
-    // .gnomish-task/ — no decision-file temp dir, no log file, nothing from the round transport.
+    // .gnomish-task/ — no round scratch area, no log file, nothing of the round's answer file.
     def "a completed git-mode round's commit tree holds only the gnome's change and .gnomish-task/"() {
         given:
         def properties = FakeAgentSupport.propertiesFor('plain-round')
@@ -98,17 +97,16 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
         }
         .isEmpty()
 
-        and: 'no decision-file or fake-agent-log scratch path leaked into the tree'
+        and: 'no answer-file, scratch-area or fake-agent-log path leaked into the tree'
         tree.every {
-            !it.contains('gnomish-decision-') && !it.contains('gnomish-findings-')
+            !it.contains('gnomish-scratch-') && !it.contains('answer-agent-cli-') && !it.contains('gnomish-findings-')
         }
     }
 
-    // NFR-S2: DecisionFileTransport's production constructor (adapter/agent/DecisionFileTransport
-    // .java) always roots the per-round temp directory under java.io.tmpdir; this asserts the
-    // consequence that actually matters for a task branch — no gnomish-decision- directory ever
-    // appears anywhere under the worktree a git-mode round ran against.
-    def "a git-mode round leaves no decision-file temp dir under the worktree"() {
+    // NFR-S2: the host round's scratch area, which holds its answer file, is always allocated under
+    // java.io.tmpdir; this asserts the consequence that actually matters for a task branch — no
+    // gnomish-scratch- directory ever appears anywhere under the worktree a git-mode round ran against.
+    def "a git-mode round leaves no round scratch area under the worktree"() {
         given:
         def properties = FakeAgentSupport.propertiesFor('plain-round')
         def runner = newRunner(properties)
@@ -118,7 +116,7 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
         runner.run(new RunOrder(cloneDir, null, pipeline(), false),
                 context, TaskState.atStageStart('build'))
 
-        then: 'no leftover gnomish-decision- directory anywhere under the worktree root'
+        then: 'no leftover gnomish-scratch- directory anywhere under the worktree root'
         def worktree = expectedWorktree('HYG-2')
         !worktree.toFile().exists() || findDecisionDirs(worktree).isEmpty()
     }
@@ -130,7 +128,7 @@ class GitModeWorkspaceHygieneSpec extends Specification implements BareGitRepoFi
         try (def stream = Files.walk(root)) {
             return stream
                     .filter {
-                        Files.isDirectory(it) && it.fileName.toString().startsWith('gnomish-decision-')
+                        Files.isDirectory(it) && it.fileName.toString().startsWith('gnomish-scratch-')
                     }
                     .toList()
         }

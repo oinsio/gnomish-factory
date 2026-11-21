@@ -29,7 +29,10 @@ class ObservedBox implements TaskExecutionEnvironment {
     final List<ChannelCall> channelCalls = [].asSynchronized()
     private final Set<Object> running = ConcurrentHashMap.newKeySet()
 
-    /** Runs at each agent launch (an exec naming a decision file), before the process starts. */
+    /**
+     * Runs at each agent launch (an exec naming an answer file and no result file, which a program
+     * executor's run names too), before the process starts.
+     */
     Closure atAgentLaunch = null
 
     /** When set, answers an agent launch in place of the box (a runtime that stopped answering). */
@@ -53,7 +56,7 @@ class ObservedBox implements TaskExecutionEnvironment {
 
     @Override
     ExecHandle exec(ExecCommand command) {
-        boolean agent = command.env().containsKey('GNOMISH_DECISION_FILE')
+        boolean agent = command.env().containsKey('GNOMISH_ANSWER_FILE') && !command.env().containsKey('GNOMISH_RESULT_FILE')
         if (agent && atAgentLaunch != null) {
             atAgentLaunch(command)
         }

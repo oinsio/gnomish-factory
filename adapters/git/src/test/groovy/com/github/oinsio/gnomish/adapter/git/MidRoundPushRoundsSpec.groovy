@@ -121,8 +121,8 @@ class MidRoundPushRoundsSpec extends Specification implements BareGitRepoFixture
 
         then:
         delegate.round.environment.is(round.environment())
-        round.decisionFilePath() == Path.of('decision.json')
-        round.decisionEnvFragment() == [GNOMISH_DECISION_FILE: 'decision.json']
+        round.answerFilePath() == Path.of('decision.json')
+        round.answerEnvFragment() == [GNOMISH_ANSWER_FILE: 'decision.json']
         round.readDecision() == Optional.of(PassThroughRounds.DECISION)
         delegate.round.closed
         delegate.round.discarded

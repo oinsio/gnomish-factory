@@ -2,7 +2,7 @@ import com.github.oinsio.gnomish.buildlogic.TestEnvironmentHygiene
 
 // --- The operator's GNOMISH_* variables never reach a test JVM (make-checkpoint-gate-durable, D14) ---
 //
-// A build launched from inside a gnome's round inherits the round's `GNOMISH_DECISION_FILE`, and
+// A build launched from inside a gnome's round inherits the round's `GNOMISH_ANSWER_FILE`, and
 // Gradle hands a forked test JVM the build's whole environment by default; a fixture that
 // inherited it once wrote a scenario's decision into the real round. `TestEnvironmentHygiene`
 // strips every inherited `GNOMISH_*` key — at configuration time, before a module's build script

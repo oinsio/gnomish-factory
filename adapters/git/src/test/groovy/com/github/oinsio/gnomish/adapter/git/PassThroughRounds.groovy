@@ -49,13 +49,13 @@ final class PassThroughRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        Path decisionFilePath() {
+        Path answerFilePath() {
             Path.of('decision.json')
         }
 
         @Override
-        Map<String, String> decisionEnvFragment() {
-            [GNOMISH_DECISION_FILE: 'decision.json']
+        Map<String, String> answerEnvFragment() {
+            [GNOMISH_ANSWER_FILE: 'decision.json']
         }
 
         @Override

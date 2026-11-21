@@ -14,21 +14,37 @@ import org.jspecify.annotations.Nullable;
  * <p>Inert value data compared by content; a blank {@code body} is rejected
  * because a decision with no message is meaningless context.
  *
- * <p>Implements FR7 of add-stage-engine.
+ * <p>A decision that answers a decision request records the request it answers — the question and
+ * its options, as the {@code UntrustedText} they were minted in — so the next round's briefing can
+ * render them with the reply from the branch record alone (design D4 as amended 2026-11-21 of
+ * extract-agent-round-runner). It is built only by {@link DecisionBuilder#answering}; the branch
+ * document's reader rebuilds it as recorded ({@code DecisionOwnerSpec}).
+ *
+ * <p>Implements FR7 of add-stage-engine; FR9, NFR-R2 of extract-agent-round-runner.
  *
  * @param body the free-text decision message, carried verbatim; never blank
  * @param stage the stage the decision pertains to, or {@code null} if unscoped
  * @param author who made the decision, or {@code null} if unattributed
  * @param time when the decision was recorded, or {@code null} if unknown
+ * @param answers the decision request this decision answers, or {@code null} when it answers none
  */
 public record Decision(
         String body,
         @Nullable String stage,
         @Nullable String author,
-        @Nullable Instant time) {
+        @Nullable Instant time,
+        EscalationReport.@Nullable DecisionNeeded answers) {
 
     public Decision {
         body = requireNonBlank(body, "body");
+    }
+
+    /**
+     * A decision that answers no decision request — a reply to another escalation, or one written
+     * before decisions recorded their question.
+     */
+    public Decision(String body, @Nullable String stage, @Nullable String author, @Nullable Instant time) {
+        this(body, stage, author, time, null);
     }
 
     /**

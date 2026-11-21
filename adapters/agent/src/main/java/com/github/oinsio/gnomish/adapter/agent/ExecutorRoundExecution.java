@@ -35,7 +35,7 @@ import org.jspecify.annotations.Nullable;
  * Runs one CLI executor round to an {@link ExecutionResult} (FR1, FR3, FR4, FR13, D1, D2, D3, D9
  * of add-agent-executor): launches the process, drains and parses its stream-json stdout
  * concurrently through a {@link StreamDrain}, waits for exit within {@code roundTimeout}, closes
- * the round, and reads the decision file. Extracted from {@link CliStageExecutor} for file size.
+ * the round, and reads the answer file. Extracted from {@link CliStageExecutor} for file size.
  *
  * <p>Kept in sync with {@link JudgeRoundExecution}: both launch one agent round from the same
  * {@link AgentRoundEquipment} — the CLI binary through the environment port with the factory-set
@@ -90,20 +90,20 @@ final class ExecutorRoundExecution {
         // takes the CLI's stderr; the catch reads its tail before the finally removes it.
         @Nullable RoundScratchDirectory scratch = null;
         try {
-            // The decision file is the one path beyond the working copy the round may write: the
+            // The answer file is the one path beyond the working copy the round may write: the
             // legacy writeExactly compatibility (FR5 of extract-agent-round-runner), compiled by
             // the one policy owner like every other Claude argv.
             List<String> command = AgentCommandLine.of(
                     factoryProperties.agentCliBinary(),
                     executor.model(),
                     executor.settings(),
-                    new Policy.WriteExactly(round.decisionFilePath().toString()),
+                    new Policy.WriteExactly(round.answerFilePath().toString()),
                     Bounds.none());
             // Factory-set protocol layer (D6, FR9): the credentials the Claude describe declares,
-            // resolved through the run's allowlist, plus this round's decision-file path — the only
+            // resolved through the run's allowlist, plus this round's answer file — the only
             // variables beyond base and passthrough a round sees.
             Map<String, String> env = new java.util.LinkedHashMap<>(ClaudeEnvironment.variables(equipment.childEnv()));
-            env.putAll(round.decisionEnvFragment());
+            env.putAll(round.answerEnvFragment());
             scratch = RoundScratchDirectory.open(equipment.roundScratchParent());
             // D14 of tighten-spec-contract: an in-box retry reuses the box, and with it a guard
             // that may have died after the previous round closed. A dead guard fails this round
@@ -155,7 +155,7 @@ final class ExecutorRoundExecution {
                 // ExecutionResult exactly like usage and trace.
                 List<Denial> denials = RoundDenialRead.onFinish(round);
 
-                // The round's source read its decision file through the one tolerant read (FR6 of
+                // The round's source read its answer file through the one tolerant read (FR6 of
                 // define-executor-contract): this class reads no file and parses nothing.
                 Optional<RoundDecisionRequest> decision = round.readDecision();
                 scratch.logTailOnSuccess();

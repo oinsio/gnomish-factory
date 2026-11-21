@@ -120,13 +120,13 @@ public final class MidRoundPushRounds implements RoundEnvironmentSource {
         }
 
         @Override
-        public Path decisionFilePath() {
-            return host.decisionFilePath();
+        public Path answerFilePath() {
+            return host.answerFilePath();
         }
 
         @Override
-        public Map<String, String> decisionEnvFragment() {
-            return host.decisionEnvFragment();
+        public Map<String, String> answerEnvFragment() {
+            return host.answerEnvFragment();
         }
 
         @Override

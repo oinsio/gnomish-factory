@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.app
 
+import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
+import com.github.oinsio.gnomish.adapter.git.AdversarialLocalConfig
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
 import com.github.oinsio.gnomish.app.git.TaskIdSanitizer
 import com.github.oinsio.gnomish.app.port.git.TaskGit
@@ -32,6 +34,20 @@ class HostContinuationMedium implements ContinuationMedium, BareGitRepoFixture, 
         origin = initBareRepo(root, 'origin.git')
         addRemote(cloneDir, 'origin', origin.toString())
         gitOutput(cloneDir, 'push', 'origin', 'HEAD:refs/heads/main')
+        registeredClone = RegisteredCloneFixture.registered(root.resolve('home'), cloneDir)
+    }
+
+    /**
+     * A second instance over the same {@code origin}: its own fresh clone of it, under the adversarial
+     * local configuration every fixture repository carries, registered in its own home — another
+     * machine, as far as the task is concerned (NFR-R2 of extract-agent-round-runner; the shape of
+     * {@code DeliveredCleanupWorld#secondClone}).
+     */
+    HostContinuationMedium(Path root, Path origin) {
+        Files.createDirectories(root)
+        cloneDir = seedClone(root, origin.toString(), root.resolve('my-project'), '--branch', 'main')
+        AdversarialLocalConfig.plant(cloneDir)
+        this.origin = origin
         registeredClone = RegisteredCloneFixture.registered(root.resolve('home'), cloneDir)
     }
 
@@ -81,8 +97,13 @@ class HostContinuationMedium implements ContinuationMedium, BareGitRepoFixture, 
 
     /** {@link #resume} over {@code git} — a wrapped bundle, for a spec that kills the continuation. */
     void resume(String taskId, PipelineDefinition definition, String scenario, String decision, TaskGit git) {
+        resume(taskId, definition, FakeAgentSupport.propertiesFor(scenario), decision, git)
+    }
+
+    /** {@link #resume} with the agent {@code agent} names — a capturing binary, for a spec that reads the round. */
+    void resume(String taskId, PipelineDefinition definition, FactoryProperties agent, String decision, TaskGit git) {
         try {
-            new GitResumeRunner(assembly(scenario), git, registeredClone, 'taskId')
+            new GitResumeRunner(assembly(agent), git, registeredClone, 'taskId')
                     .run(order(definition), taskId, decision)
         } catch (RunParkedException ignored) {
             // The continued drive parked again; the continuation commit is already on origin.
@@ -94,7 +115,10 @@ class HostContinuationMedium implements ContinuationMedium, BareGitRepoFixture, 
     }
 
     private ManualRunAssembly assembly(String scenario) {
-        newAssembly(new ByteArrayInputStream(new byte[0]), new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8'),
-                FakeAgentSupport.propertiesFor(scenario))
+        assembly(FakeAgentSupport.propertiesFor(scenario))
+    }
+
+    private ManualRunAssembly assembly(FactoryProperties agent) {
+        newAssembly(new ByteArrayInputStream(new byte[0]), new PrintStream(new ByteArrayOutputStream(), true, 'UTF-8'), agent)
     }
 }

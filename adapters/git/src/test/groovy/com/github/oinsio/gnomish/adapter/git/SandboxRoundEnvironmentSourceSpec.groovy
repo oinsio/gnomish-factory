@@ -111,8 +111,8 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         def round = source().openRound(request(2))
 
         then:
-        round.decisionFilePath().toString() == tokenPath(2)
-        round.decisionEnvFragment() == [GNOMISH_DECISION_FILE: tokenPath(2)]
+        round.answerFilePath().toString() == tokenPath(2)
+        round.answerEnvFragment() == [GNOMISH_ANSWER_FILE: tokenPath(2)]
     }
 
     def "FR13: each round records the tip it opened on as the run's token, so a repeated key names a new path"() {
@@ -120,7 +120,7 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
         def openTip = branchTip()
         def first = source().openRound(request(0))
         assert rounds.opened() == RoundToken.of(openTip)
-        def firstPath = first.decisionFilePath().toString()
+        def firstPath = first.answerFilePath().toString()
         first.closeRound(RoundClose.VERIFIABLE)
 
         when: 'the same stage and attempt open again on the moved tip'
@@ -128,8 +128,8 @@ class SandboxRoundEnvironmentSourceSpec extends Specification implements BareGit
 
         then: 'the token follows the tip, so the same key names a different file'
         rounds.opened() == RoundToken.of(branchTip())
-        second.decisionFilePath().toString() == tokenPath(0)
-        second.decisionFilePath().toString() != firstPath
+        second.answerFilePath().toString() == tokenPath(0)
+        second.answerFilePath().toString() != firstPath
     }
 
     // FR21 of define-executor-contract: the engine takes the round's token from the run's cell

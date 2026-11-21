@@ -4,13 +4,12 @@ import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.app.port.TaskRepository;
 import com.github.oinsio.gnomish.app.port.console.ConsoleIO;
 import com.github.oinsio.gnomish.domain.engine.Decision;
+import com.github.oinsio.gnomish.domain.engine.DecisionBuilder;
 import com.github.oinsio.gnomish.domain.engine.EscalationReport;
-import com.github.oinsio.gnomish.domain.engine.Position;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.status.ReportPlane;
 import java.time.InstantSource;
-import java.util.ArrayList;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -77,7 +76,7 @@ public final class EscalationResume {
             throw new DecisionRequiredException(escalated, returnPath);
         }
         var finalState = escalated.finalState();
-        var resumedContext = decision == null ? context : appendDecision(context, finalState.position(), decision);
+        var resumedContext = decision == null ? context : appendDecision(context, escalated, decision);
         return new RunnerOutcomeLoop.Resumption(resumedContext, finalState.resetAttempts());
     }
 
@@ -110,21 +109,14 @@ public final class EscalationResume {
     }
 
     /**
-     * Appends a new {@link Decision} — {@code author = "operator"}, {@code body = decision}, {@code
-     * time} from {@link #clock} — scoped to the current stage name when {@code position} resolves to
-     * one (it always does here: {@code PipelineMismatch} is refused above and never leaves {@code
-     * AtStage}).
+     * Appends the {@link Decision} the one builder, {@link DecisionBuilder#answering}, makes of
+     * {@code decision} — {@code author = "operator"}, {@code time} from {@link #clock}, scoped to the
+     * stage the parked position names, and recording the question and options of the consumed
+     * report when it is a decision request (design D4 as amended, D8 of extract-agent-round-runner).
      */
-    private TaskContext appendDecision(TaskContext context, Position position, String decision) {
-        String stage =
-                switch (position) {
-                    case Position.AtStage(String name) -> name;
-                    // FR1 of make-checkpoint-gate-durable: a gate names the stage that passed.
-                    case Position.AwaitingApproval(String gate) -> gate;
-                    case Position.PipelineEnd() -> null;
-                };
-        var decisions = new ArrayList<>(context.decisions());
-        decisions.add(new Decision(decision, stage, "operator", clock.instant()));
-        return new TaskContext(context.taskId(), context.title(), context.body(), decisions);
+    private TaskContext appendDecision(TaskContext context, TaskOutcome.Escalated escalated, String decision) {
+        Decision appended = DecisionBuilder.answering(
+                escalated.finalState().position(), escalated.report(), decision, "operator", clock.instant());
+        return ResumeDecisionCommit.appendTo(context, appended);
     }
 }

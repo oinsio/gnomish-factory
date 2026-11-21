@@ -14,6 +14,15 @@
 * export GNOMISH_FAKE_CAPTURE_STDIN @log
 * exec-sh ../fake-agent/fake-agent.sh
 
+[agent-capturing-round]
+# The fake agent CLI playing the scenario its link is named after, every round prompt (its stdin)
+# captured in the per-run log and every argv in the per-run argv file
+# (DecisionQuestionIdentitySpec).
+* export-name GNOMISH_FAKE_SCENARIO
+* export GNOMISH_FAKE_CAPTURE_STDIN @log
+* export GNOMISH_FAKE_CAPTURE_ARGV @argv
+* exec-sh ../fake-agent/fake-agent.sh
+
 [agent-gnome-mid-round-commit]
 # A gnome that commits in its cwd between two tool events, then waits for the pushed tip on the bare
 # remote the spec named and records what it saw before closing the round (GitModeMidRoundPushSpec).

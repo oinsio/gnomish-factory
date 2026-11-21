@@ -20,10 +20,10 @@ import spock.lang.TempDir
  *   <li><b>The fixture box.</b> {@code LocalBoxEnvironment.exec} composes its child's environment
  *       through the production allowlist over a cleared one. A running JVM cannot change its own
  *       environment, so the planted variable rides a child JVM ({@link FixtureBoxRoundProcess})
- *       whose environment this spec composes: {@code GNOMISH_DECISION_FILE} names a file here, the
+ *       whose environment this spec composes: {@code GNOMISH_ANSWER_FILE} names a file here, the
  *       child runs one {@code decision-needed} fake-agent round through the box, and the file must
  *       be byte-for-byte what it was. The defect this pins: the fake agent wrote its scenario's
- *       question into the decision file of the gnome round whose build ran the test.
+ *       question into the answer file of the gnome round whose build ran the test.
  * </ul>
  *
  * <p>FR22, M10 of make-checkpoint-gate-durable.
@@ -41,16 +41,16 @@ class TestEnvironmentHygieneSpec extends Specification implements BareGitRepoFix
         System.getenv().keySet().findAll { it.startsWith('GNOMISH_') }.isEmpty()
     }
 
-    // FR22, M10: a GNOMISH_DECISION_FILE in the box's parent environment never reaches the fake
+    // FR22, M10: a GNOMISH_ANSWER_FILE in the box's parent environment never reaches the fake
     //     agent (task 9.1; red with LocalBoxEnvironment.exec inheriting)
     // Scenario: sandbox/execution-environment / The fixture box inherits nothing from the test process
-    def "FR22, M10: a fake-agent round through the fixture box leaves a planted GNOMISH_DECISION_FILE untouched"() {
+    def "FR22, M10: a fake-agent round through the fixture box leaves a planted GNOMISH_ANSWER_FILE untouched"() {
         given: 'a factory clone with one commit on its branch'
         Path clone = initWorkingRepo(tempDir, 'clone')
         commit(clone, 'seed.txt', 'seed')
         String branch = gitOutput(clone, 'rev-parse', '--abbrev-ref', 'HEAD')
 
-        and: 'the operator round\'s decision file, planted in the box\'s parent environment'
+        and: 'the operator round\'s answer file, planted in the box\'s parent environment'
         Path planted = tempDir.resolve('operator-round').resolve('decision.json')
         Files.createDirectories(planted.parent)
         Files.writeString(planted, UNTOUCHED)
@@ -65,7 +65,7 @@ class TestEnvironmentHygieneSpec extends Specification implements BareGitRepoFix
             tempDir.resolve('box').toString(),
             branch
         ] + FakeAgentBinary.commandPrefix()).redirectErrorStream(true)
-        TestChildEnvironment.cleared(builder).put('GNOMISH_DECISION_FILE', planted.toString())
+        TestChildEnvironment.cleared(builder).put('GNOMISH_ANSWER_FILE', planted.toString())
         def process = builder.start()
         String output = process.inputStream.text
         boolean exited = process.waitFor(2, TimeUnit.MINUTES)

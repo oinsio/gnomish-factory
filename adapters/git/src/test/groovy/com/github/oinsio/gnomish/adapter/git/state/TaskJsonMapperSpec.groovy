@@ -62,7 +62,7 @@ class TaskJsonMapperSpec extends Specification {
 
         then:
         dto.decisions() == [
-            new TaskDecisionDto("patch in place", "operator", "plan", "2026-07-16T14:21:30Z")
+            new TaskDecisionDto("patch in place", "operator", "plan", "2026-07-16T14:21:30Z", null, null)
         ]
     }
 
@@ -77,7 +77,7 @@ class TaskJsonMapperSpec extends Specification {
 
         then:
         dto.decisions() == [
-            new TaskDecisionDto("just a note", null, null, null)
+            new TaskDecisionDto("just a note", null, null, null, null, null)
         ]
     }
 
@@ -180,7 +180,7 @@ class TaskJsonMapperSpec extends Specification {
                 "2026-07-18T09:00:00Z",
                 "abc123",
                 [
-                    new TaskDecisionDto("patch in place", "operator", "plan", "2026-07-16T14:21:30Z")
+                    new TaskDecisionDto("patch in place", "operator", "plan", "2026-07-16T14:21:30Z", null, null)
                 ],
                 new TaskOutcomeDto.Escalated(
                         "escalated",

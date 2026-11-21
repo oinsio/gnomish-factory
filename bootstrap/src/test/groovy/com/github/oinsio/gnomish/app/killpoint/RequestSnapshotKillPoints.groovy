@@ -103,7 +103,7 @@ final class RequestSnapshotKillPoints {
         def now = Instant.parse('2026-01-01T00:00:00Z')
         objects.commit(new CommitRequest(ref, Optional.of(tip), tip,
                 [
-                    new TreeEdit.PutFile(round.decisionFilePath().toString(), REQUEST.getBytes(StandardCharsets.UTF_8))
+                    new TreeEdit.PutFile(round.answerFilePath().toString(), REQUEST.getBytes(StandardCharsets.UTF_8))
                 ],
                 new CommitMetadata(identity, now, identity, now, ServiceCommitMessages.snapshot(STAGE, 0, rounds.opened())))
                 // The snapshot is a closing commit: it lands with its register in one transaction,
@@ -143,7 +143,7 @@ final class RequestSnapshotKillPoints {
         def rounds = new CurrentRound()
         def next = roundSource(world, rounds).openRound(request(world, 0))
         assert next.readDecision().isEmpty(): 'the next round read the answered request'
-        assert next.decisionFilePath().toString().endsWith("-${rounds.opened().commit()}.json")
+        assert next.answerFilePath().toString().endsWith("-${rounds.opened().commit()}.json")
     }
 
     private static SandboxRoundEnvironmentSource roundSource(KillPointWorld world, CurrentRound rounds) {

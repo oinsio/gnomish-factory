@@ -141,11 +141,11 @@ class ExitedExecHandle implements ExecHandle {
 class StandInRound implements RoundEnvironmentSource.Round {
 
     private final TaskExecutionEnvironment environment
-    private final Path decisionFile
+    private final Path answerFile
 
-    StandInRound(TaskExecutionEnvironment environment, Path decisionFile) {
+    StandInRound(TaskExecutionEnvironment environment, Path answerFile) {
         this.environment = environment
-        this.decisionFile = decisionFile
+        this.answerFile = answerFile
     }
 
     @Override
@@ -154,12 +154,12 @@ class StandInRound implements RoundEnvironmentSource.Round {
     }
 
     @Override
-    Path decisionFilePath() {
-        decisionFile
+    Path answerFilePath() {
+        answerFile
     }
 
     @Override
-    Map<String, String> decisionEnvFragment() {
+    Map<String, String> answerEnvFragment() {
         [:]
     }
 

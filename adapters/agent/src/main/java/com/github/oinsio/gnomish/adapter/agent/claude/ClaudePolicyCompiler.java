@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  *       omits {@code --allowedTools}: under {@code dontAsk} nothing outside it runs.
  *   <li>{@code writeExactly(path)} → {@code --permission-mode acceptEdits} with the settings'
  *       {@code allowedTools} and a pinpoint {@code Write(path)} allowance appended, never omitted
- *       — the answer-path allowance, the legacy decision-file compatibility of FR5.
+ *       — the answer-path allowance: the round's answer file (FR5, FR9 of extract-agent-round-runner).
  *   <li>{@code workspaceWrite} → {@code --permission-mode acceptEdits} with the settings' tool
  *       lists passed through.
  * </ul>

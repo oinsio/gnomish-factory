@@ -1,14 +1,14 @@
 package com.github.oinsio.gnomish.adapter.agent.claude;
 
-import com.github.oinsio.gnomish.executorcontract.Continuation;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.RoleInputs;
 
 /**
- * What the Claude CLI reads on stdin for a request (FR3, FR9 of extract-agent-round-runner): the
- * reply of a continued start, which the resumed session reads as the answer to the question it asked;
- * otherwise the role's input as the request carries it — a {@code transform}'s instructions, a {@code
- * verdict}'s criteria, a {@code decision}'s question with its options one per line.
+ * What the Claude CLI reads on stdin for a request (FR3, FR9 of extract-agent-round-runner): the role's
+ * input as the request carries it — a {@code transform}'s instructions, a {@code verdict}'s criteria,
+ * a {@code decision}'s question with its options one per line. A continuation on the request is not
+ * read: the round after an answer is a fresh start whose briefing carries the reply (design D4 as
+ * amended 2026-11-21).
  *
  * <p>Implements FR3, FR9 of extract-agent-round-runner.
  */
@@ -23,10 +23,6 @@ final class ClaudePrompt {
      * @return the prompt, possibly empty; never null
      */
     static String of(ExecutorRequest request) {
-        Continuation continuation = request.continuation();
-        if (continuation != null) {
-            return continuation.reply();
-        }
         RoleInputs inputs = request.roleInputs();
         if (inputs.instructions() != null) {
             return inputs.instructions();

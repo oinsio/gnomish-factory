@@ -3,18 +3,14 @@ package com.github.oinsio.gnomish.adapter.agent.runner;
 import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.Usage;
-import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.Optional;
 
 /**
  * What one agent CLI vendor contributes to a round, and nothing else (FR2, G1 of
  * extract-agent-round-runner): the describe fields, the argv a request renders to, the parse of one
  * output line into the dialect's own events and the vendor-neutral progress they imply, the round's
- * usage, the final answer, the mapping of the exit to a status, the continuation key and the refusal
- * of a resume. The agent
- * round runner depends on nothing else from the vendor (design D1): launch, drains, bounds, the
+ * usage, the final answer, and the mapping of the exit to a status. The agent round runner depends on nothing else from the vendor (design D1): launch, drains, bounds, the
  * result-file read, denials and the working-copy check are the runner's, the same for every dialect.
  *
  * <p>{@code E} is the dialect's own event type. The runner never looks inside one: it collects the
@@ -24,6 +20,10 @@ import java.util.Optional;
  * <p>Threads: {@link #parse} runs on the round's stdout drain thread, once per line in arrival order,
  * while the process runs; every other method runs on the round's thread after the drain has been
  * joined. An implementation holds no per-round state — the events it parsed are its memory.
+ *
+ * <p>A dialect continues no vendor session (FR9, NFR-R2, design D4 as amended 2026-11-21): it
+ * renders no session flag and declares no {@code resumable}, since the CLI's session lives on the
+ * worker and is no record.
  *
  * <p>Implements FR2, FR6, FR8, FR9, NFR-R2 of extract-agent-round-runner.
  *
@@ -41,9 +41,9 @@ public interface AgentDialect<E> {
     Describe describe();
 
     /**
-     * The command line {@code request} runs as: the compiled policy, model, bounds as hints, the
-     * answer schema of a {@code verdict} or {@code decision} request, and the session resume of a
-     * request carrying a continuation.
+     * The command line {@code request} runs as: the compiled policy, model, bounds as hints, and the
+     * answer schema of a {@code verdict} or {@code decision} request — never a session flag, a
+     * continuation on the request included.
      *
      * @param request the run, in exactly one role
      * @return the argv, binary first; never null
@@ -93,25 +93,4 @@ public interface AgentDialect<E> {
      * @return the status; never null
      */
     RoundStatus status(int exitCode, ParsedEvents<E> events);
-
-    /**
-     * Whether a round started with a continuation ended because the CLI refused to resume the
-     * session it named — one it no longer knows, or cannot load — rather than for any other reason
-     * (NFR-R2 of extract-agent-round-runner). The runner asks only for a request that carried a
-     * continuation, and starts a refused one again as a fresh round.
-     *
-     * @param exitCode the CLI's exit code
-     * @param events every event the round parsed
-     * @param stderrTail the tail of the CLI's stderr, as the runner kept it
-     * @return true when the CLI refused the resume
-     */
-    boolean resumeRefused(int exitCode, ParsedEvents<E> events, UntrustedText stderrTail);
-
-    /**
-     * The key a later request continues this round's session by, if the stream named one.
-     *
-     * @param events every event the round parsed
-     * @return the key, or empty when the round named no session
-     */
-    Optional<ContinuationKey> continuation(ParsedEvents<E> events);
 }

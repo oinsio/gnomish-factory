@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.git
 
 import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.executorcontract.ResultFileReader
@@ -13,8 +14,8 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR23 of add-sandbox-core (design D17): the in-branch decision protocol —
- * the {@code $GNOMISH_DECISION_FILE} fragment names the working-copy-relative
+ * FR23 of add-sandbox-core (design D17); FR9 of extract-agent-round-runner (design D3): the
+ * in-branch answer file — the {@code $GNOMISH_ANSWER_FILE} fragment names the working-copy-relative
  * {@code .gnomish-task/decisions/<stage>-a<attempt>-<token>.json} path (identical to
  * the boundary check's carve-out by construction), the boundary-time read goes
  * through the environment channel, stale names are excluded, and the file is
@@ -44,18 +45,20 @@ class BranchDecisionFileSpec extends Specification implements BareGitRepoFixture
     }
 
     // Scenario: cli/manual-run / Decision requests travel by the mode's own channel
-    def "FR23: the env fragment names exactly the boundary check's carved-out path, working-copy-relative"() {
+    // FR9 of extract-agent-round-runner (D3, D8): the one path is the owner's, under the contract's
+    //     answer-file variable
+    def "FR23, FR9: the env fragment names exactly the owner's answer file, working-copy-relative"() {
         given:
         def handle = BranchDecisionFile.open(box, KEY, TOKEN)
 
         expect:
         handle.relativePath() == TOKEN_PATH
-        handle.relativePath() == GnomeRangeInspection.decisionPath(KEY, TOKEN)
-        handle.envFragment() == ['GNOMISH_DECISION_FILE': TOKEN_PATH]
+        handle.relativePath() == EnvelopePaths.answerFile(KEY, TOKEN).relative()
+        handle.envFragment() == ['GNOMISH_ANSWER_FILE': TOKEN_PATH]
     }
 
     def "FR23: a decision the agent wrote at the announced path is read back through the channel"() {
-        given: 'the agent wrote the decision at $GNOMISH_DECISION_FILE relative to its cwd'
+        given: 'the agent wrote the decision at $GNOMISH_ANSWER_FILE relative to its cwd'
         def handle = BranchDecisionFile.open(box, KEY, TOKEN)
         def target = box.workingCopy.resolve(handle.relativePath())
         Files.createDirectories(target.parent)
@@ -87,7 +90,10 @@ class BranchDecisionFileSpec extends Specification implements BareGitRepoFixture
         request.get().options().isEmpty()
     }
 
-    def "FR6: a decision file over the cap is read up to the cap through the box channel, and still asks"() {
+    // FR9 of extract-agent-round-runner: the branch medium's answer file takes the shared reader's
+    //     cap and truncation marker, and the round still resolves as a decision request
+    // Scenario: executor/agent-executor / Answer file read is capped
+    def "FR6, FR9: an answer file over the cap is read up to the cap through the box channel, and still asks"() {
         given:
         def cap = ResultFileReader.DECISION_FILE_CAP_BYTES
         def handle = BranchDecisionFile.open(box, KEY, TOKEN)

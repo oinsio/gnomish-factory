@@ -33,9 +33,9 @@ import org.slf4j.LoggerFactory;
  * tail is read as agent text ({@link UntrustedText#agent}), minted at the read: the CLI writes it,
  * and what it quotes may come from the model.
  *
- * <p>The decision transport's own host directory ({@link DecisionFileTransport}) is not this
- * directory: in container mode the decision file lives in the task branch, which is the envelope
- * and no place for a host diagnostic.
+ * <p>The round's answer file is not in this directory: on the host it lives in the round
+ * environment's scratch area, and in container mode in the task branch, which is the envelope and
+ * no place for a host diagnostic.
  *
  * <p>A {@code program} executor's run keeps its stderr by the same rule (design D3 of
  * define-executor-contract: "its tail kept as the agent round keeps it"); the {@link Writer} names

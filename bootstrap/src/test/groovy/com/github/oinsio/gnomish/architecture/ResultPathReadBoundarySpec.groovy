@@ -7,20 +7,19 @@ import spock.lang.Specification
  * Design D10 of define-executor-contract, row {@code ResultFileReader}: a file an executor, a check
  * or a gnome writes for the factory to read back (a result path) is read only through the owner,
  * which caps the read, refuses a link and binds every free-text field as {@code UntrustedText}. A
- * second read of the same path — a bare {@code Files.readString} of the decision file, an
+ * second read of the same path — a bare {@code Files.readString} of the answer file, an
  * {@code environment.readFile} of the findings file parsed by hand — compiles, passes its own spec
  * and reopens the uncapped read the owner closed.
  *
  * <p><b>The rule, and why it is keyed on vocabulary.</b> Source text cannot follow a path through a
  * variable, so the scan keys on what a result-path reader cannot avoid spelling: a file that names
- * a result path ({@link #RESULT_PATH}: the {@code GNOMISH_*_FILE} variables, the future
- * {@code GNOMISH_RESULT_FILE} and {@code GNOMISH_ANSWER_FILE} of task 7.1 included, the decision
- * path's one spelling, the findings path) <em>and</em> performs a raw read ({@link #RAW_READ}: the
+ * a result path ({@link #RESULT_PATH}: the {@code GNOMISH_*_FILE} variables, the answer file's one
+ * spelling ({@code EnvelopePaths.answerFile}, FR9 of extract-agent-round-runner), the findings path) <em>and</em> performs a raw read ({@link #RAW_READ}: the
  * {@code Files} reads, a channel {@code readFile}, a git blob read) is a reader. Every reader must be
  * allowlisted, and so must every file that builds the owner's entry points ({@link #ENTRY}: a
  * {@code ResultFileReader}, a host source), so a new consumer is a visible allowlist row. The
  * non-result reads D10 exempts (law sources, envelopes, the ledger, the environments' own
- * {@code readFile}) name no result path and need no row. The decision path's spelling itself is
+ * {@code readFile}) name no result path and need no row. The answer file's spelling itself is
  * single-owned by {@code DecisionPathOwnerSpec}, which this gate leans on.
  *
  * <p>The whole production tree is scanned, {@code :test-fixtures} included, comments stripped. M3,
@@ -41,8 +40,8 @@ class ResultPathReadBoundarySpec extends Specification {
     private static final Map<String, String> READERS = [
         ('adapters/src/main/java/com/github/oinsio/gnomish/adapter/check/CheckFindings.java'): 'the findings file (GNOMISH_FINDINGS_FILE): its own reader, 256 KiB',
         ('application/src/main/java/com/github/oinsio/gnomish/app/port/agent/DecisionRequestRead.java'): 'the one tolerant decision read both decision media share, 1 MiB',
-        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/DecisionFileTransport.java'): 'the host decision file (GNOMISH_DECISION_FILE) through ResultSource.hostFile',
-        ('adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/BranchDecisionFile.java'): 'the box decision file, read through the environment channel into DecisionRequestRead',
+        ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/HostRoundEnvironmentSource.java'): 'the host round\'s answer file (GNOMISH_ANSWER_FILE) in its scratch area, read through the environment channel into DecisionRequestRead (FR9 of extract-agent-round-runner)',
+        ('adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/BranchDecisionFile.java'): 'the box answer file, read through the environment channel into DecisionRequestRead',
         ('adapters/git/src/main/java/com/github/oinsio/gnomish/adapter/git/SnapshotTipCheck.java'): 'the decision blob of a snapshot on resume, through the live path\'s parse',
         ('application/src/main/java/com/github/oinsio/gnomish/app/describe/ProgramDescribe.java'): 'the describe answer (GNOMISH_RESULT_FILE) of a program executor, through the environment channel, 64 KiB',
         ('adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/program/ProgramResultRead.java'): 'the result (GNOMISH_RESULT_FILE, 1 MiB) and answer (GNOMISH_ANSWER_FILE, 4 MiB) files of a program run, through the environment channel (task 7.1); the answer file of an agent round, in its environment or the host scratch file its dialect wrote (task 1.2 of extract-agent-round-runner)',
@@ -69,7 +68,7 @@ class ResultPathReadBoundarySpec extends Specification {
         'test-fixtures',
     ]
 
-    static final String RESULT_PATH = /GNOMISH_(DECISION|FINDINGS|RESULT|ANSWER)_FILE|\bdecisionPath\s*\(|\bDECISIONS_DIR\b|\b(findings|decision|result|answer)File(Path)?\b|\bfindingsPath\b/
+    static final String RESULT_PATH = /GNOMISH_(FINDINGS|RESULT|ANSWER)_FILE|\bDECISIONS_DIR\b|\b(findings|decision|result|answer)File(Path)?\b|\bfindingsPath\b/
     static final String RAW_READ = /\.readFile\s*\(|\bFiles\.(readString|readAllBytes|readAllLines|lines|newInputStream|newBufferedReader|newByteChannel)\s*\(|\bnew\s+(FileInputStream|FileReader|RandomAccessFile)\s*\(|\.(readAtRegister|readBlob|show)\s*\(/
     static final String ENTRY = /\bnew\s+ResultFileReader\s*[(<]|\bResultSource\s*\.\s*hostFile\s*\(|\bimplements\b[^{;]*\bResultSource\b/
 
@@ -130,12 +129,12 @@ class ResultPathReadBoundarySpec extends Specification {
 
     // Scenario: executor/result-channel / Second reader is a build failure
     // M3: a planted bypass is reported by the same verdict the tree is judged by
-    def "M3: a planted source that names GNOMISH_DECISION_FILE and calls Files.readString is reported"() {
+    def "M3: a planted source that names GNOMISH_ANSWER_FILE and calls Files.readString is reported"() {
         given: 'the real tree with one bypass planted beside the allowlisted readers'
         def planted = '''
             final class PlantedDecisionRead {
                 String question(Path dir) throws IOException {
-                    return Files.readString(dir.resolve(System.getenv("GNOMISH_DECISION_FILE")));
+                    return Files.readString(dir.resolve(System.getenv("GNOMISH_ANSWER_FILE")));
                 }
             }
         '''
@@ -153,12 +152,12 @@ class ResultPathReadBoundarySpec extends Specification {
 
         where:
         shape | source || detected
-        'decision variable read with readString' | 'var q = Files.readString(Path.of(env.get("GNOMISH_DECISION_FILE")));' || true
+        'answer variable read with readString' | 'var q = Files.readString(Path.of(env.get("GNOMISH_ANSWER_FILE")));' || true
         'result variable read as a stream' | 'var in = Files.newInputStream(Path.of(env.get("GNOMISH_RESULT_FILE")));' || true
         'answer variable read as lines' | 'var l = Files.readAllLines(Path.of(env.get("GNOMISH_ANSWER_FILE")));' || true
         'findings variable read as a reader' | 'var r = Files.newBufferedReader(Path.of(env.get("GNOMISH_FINDINGS_FILE")));' || true
         'findings path read through the channel' | 'var b = environment.readFile(findingsPath, CAP);' || true
-        'decision path read from a blob' | 'var b = objects.readAtRegister(GnomeRangeInspection.decisionPath(key, token));' || true
+        'answer file read from a blob' | 'var b = objects.readAtRegister(EnvelopePaths.answerFile(key, token).relative());' || true
         'decision directory read by git show' | 'var b = git.show(tip, DECISIONS_DIR + "/x.json");' || true
         'decision file read with a FileInputStream' | 'var in = new FileInputStream(decisionFile);' || true
         'a reader of the owner built' | 'var r = new ResultFileReader(CAP, UntrustedText::agent);' || true
@@ -166,7 +165,7 @@ class ResultPathReadBoundarySpec extends Specification {
         'a source implemented' | 'final class BoxSource implements Supplier<String>, ResultSource {}' || true
         'a name with no read' | 'var env = Map.of("GNOMISH_FINDINGS_FILE", findingsPath);' || false
         'a read of no result path' | 'var s = Files.readString(stateFile);' || false
-        'a name in a comment' | '// GNOMISH_DECISION_FILE\nvar s = Files.readString(lawFile);' || false
+        'a name in a comment' | '// GNOMISH_ANSWER_FILE\nvar s = Files.readString(lawFile);' || false
         'a read in a comment' | 'var p = findingsPath; /* Files.readString(p) */' || false
         'a consumer of the owner' | 'var r = CheckFindings.read(environment, findingsPath);' || false
         'a longer identifier' | 'var h = round.decisionFileHandle(); Files.readString(other);' || false

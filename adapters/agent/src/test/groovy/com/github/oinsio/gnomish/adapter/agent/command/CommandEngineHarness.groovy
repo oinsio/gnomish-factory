@@ -66,9 +66,9 @@ final class CommandEngineHarness {
         host.materialize('gnomish/TASK-7', null)
         def round = [environment: {
                 host
-            }, decisionFilePath: {
+            }, answerFilePath: {
                 null
-            }, decisionEnvFragment: {
+            }, answerEnvFragment: {
                 [:]
             },
             closeRound: { }, readDecision: {

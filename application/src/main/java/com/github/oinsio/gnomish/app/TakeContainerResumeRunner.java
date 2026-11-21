@@ -122,7 +122,10 @@ final class TakeContainerResumeRunner {
     TaskContext appendDecision(
             ContainerResumeBootstrap bootstrap, TaskState finalState, TaskState resetState, String text) {
         var decision = ResumeDecisionCommit.decisionFor(
-                finalState, text, wiring.assembly().timeEquipment().clock().instant());
+                finalState,
+                bootstrap.outcome(),
+                text,
+                wiring.assembly().timeEquipment().clock().instant());
         bootstrap.support().disposeExistingEnvironment();
         bootstrap.support().taskRepository().appendDecision(bootstrap.taskId(), decision, resetState);
         return ResumeDecisionCommit.appendTo(bootstrap.context(), decision);

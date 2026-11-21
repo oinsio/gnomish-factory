@@ -33,10 +33,10 @@ import spock.lang.Timeout
 @Timeout(60)
 class CommandStageExecutorSpec extends Specification {
 
-    /** What the factory's own process environment holds: the base, an operator variable, a tracker token, a decision file, noise. */
+    /** What the factory's own process environment holds: the base, an operator variable, a tracker token, an answer file, noise. */
     static final Map<String, String> FACTORY_ENV = [
         PATH: '/usr/bin', HOME: '/home/gnome', OPERATOR_TOOL_HOME: '/opt/tool', GITHUB_TOKEN: 'ghp_secret',
-        GNOMISH_DECISION_FILE: '/tmp/decision.json', UNRELATED_CLOUD_KEY: 'aws-secret']
+        GNOMISH_ANSWER_FILE: '/tmp/answer.json', UNRELATED_CLOUD_KEY: 'aws-secret']
 
     @TempDir
     Path workspace
@@ -109,7 +109,7 @@ class CommandStageExecutorSpec extends Specification {
         seen.environment() == [PATH: '/usr/bin', HOME: '/home/gnome', OPERATOR_TOOL_HOME: '/opt/tool']
     }
 
-    def "NG1: no decision file variable reaches the command, though the factory's environment holds one"() {
+    def "NG1: no answer file variable reaches the command, though the factory's environment holds one"() {
         given:
         def allowlist = ChildEnvAllowlist.of([], [], { String name ->
             Optional.ofNullable(FACTORY_ENV[name])
@@ -119,7 +119,7 @@ class CommandStageExecutorSpec extends Specification {
         start(0, {}, allowlist)
 
         then:
-        !seen.environment().containsKey('GNOMISH_DECISION_FILE')
+        !seen.environment().containsKey('GNOMISH_ANSWER_FILE')
     }
 
     def "NG1: a decision-request file the command writes into the working copy is no answer: the round completes"() {

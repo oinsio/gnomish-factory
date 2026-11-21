@@ -1,5 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent
 
+import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentInvocation
+import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead
 import com.github.oinsio.gnomish.app.port.agent.RoundClose
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.sandbox.environment.HostTaskExecutionEnvironment
@@ -10,46 +12,53 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * FR2, FR4 of add-sandbox-core: the host-mode round environment source opens each round as a
- * fresh host environment over the DirectoryWorkspace root with the temp-dir decision-file
- * transport — the round hands the executor the transport's decision-file path and the matching
- * {@code GNOMISH_DECISION_FILE} env fragment.
+ * FR2, FR4 of add-sandbox-core; FR9 of extract-agent-round-runner (design D3): the host-mode round
+ * source opens each round as a fresh host environment over the DirectoryWorkspace root, its answer
+ * file a fresh path in that environment's scratch area — outside the workspace, named to the agent in
+ * {@code GNOMISH_ANSWER_FILE} — read at the close through the one tolerant {@link DecisionRequestRead},
+ * before the scratch area leaves with the round. The answer file has no transport of its own.
  */
 class HostRoundEnvironmentSourceSpec extends Specification {
 
     @TempDir
     Path workspaceDir
 
-    @TempDir
-    Path decisionRoot
+    HostRoundEnvironmentSource source = new HostRoundEnvironmentSource(new VirtualClock(), TestChildEnvironment.hostAllowlist())
 
-    // FR2, FR4: the round's decision-file path is the transport's, never null — the executor
-    // wires it into the CLI flags' pinpoint Write allowance and the process env fragment.
-    def "openRound exposes the transport's decision-file path and the matching env fragment"() {
-        given:
-        def source = new HostRoundEnvironmentSource(
-                new DecisionFileTransport(decisionRoot), new VirtualClock(), TestChildEnvironment.hostAllowlist())
-
+    // FR9, D3: the round's answer file lives in its scratch area, never under the workspace, and is
+    //     named to the agent by the contract's answer-file variable
+    // Scenario: cli/manual-run / Decision requests travel by the mode's own channel
+    def "FR9: openRound names an answer file in the round's scratch area, outside the workspace"() {
         when:
         def round = source.openRound(StageExecutorRequests.request(workspaceDir))
 
         then:
         round.environment() instanceof HostTaskExecutionEnvironment
-        round.decisionFilePath() != null
-        round.decisionFilePath().startsWith(decisionRoot)
-        round.decisionEnvFragment() == [GNOMISH_DECISION_FILE: round.decisionFilePath().toString()]
+        round.answerFilePath().startsWith(round.environment().scratchRoot())
+        !round.answerFilePath().startsWith(workspaceDir)
+        round.answerEnvFragment() == [GNOMISH_ANSWER_FILE: round.answerFilePath().toString()]
 
         cleanup:
         round.discard()
     }
 
+    // FR9: every round gets a path of its own, so no round reads a request an earlier one left
+    def "FR9: two rounds get distinct answer files"() {
+        when:
+        def first = source.openRound(StageExecutorRequests.request(workspaceDir))
+        def second = source.openRound(StageExecutorRequests.request(workspaceDir))
+
+        then:
+        first.answerFilePath() != second.answerFilePath()
+
+        cleanup:
+        first.discard()
+        second.discard()
+    }
+
     // FR21 of define-executor-contract: undecorated, the host source serves the git-less in-place
     // run, so it names the in-place identity — a round it opens yields no token and reads no git
     def "FR21: the bare host source names the in-place identity, which yields no token"() {
-        given:
-        def source = new HostRoundEnvironmentSource(
-                new DecisionFileTransport(decisionRoot), new VirtualClock(), TestChildEnvironment.hostAllowlist())
-
         when:
         def round = source.openRound(StageExecutorRequests.request(workspaceDir))
 
@@ -64,8 +73,6 @@ class HostRoundEnvironmentSourceSpec extends Specification {
     // the open to the close or discard, where a program executor names its result files
     def "FR5: a round's environment has a scratch area that leaves at its #ending"() {
         given:
-        def source = new HostRoundEnvironmentSource(
-                new DecisionFileTransport(decisionRoot), new VirtualClock(), TestChildEnvironment.hostAllowlist())
         def round = source.openRound(StageExecutorRequests.request(workspaceDir))
         def scratch = Path.of(round.environment().scratchRoot())
 
@@ -83,5 +90,39 @@ class HostRoundEnvironmentSourceSpec extends Specification {
 
         where:
         ending << ['close', 'discard']
+    }
+
+    // FR9: the agent's request survives the close that removes the scratch area holding it
+    def "FR9: a request the fake agent wrote at the answer file is read at the close and handed on"() {
+        given:
+        def round = source.openRound(StageExecutorRequests.request(workspaceDir))
+        def run = new FakeAgentInvocation(scenario: 'decision-needed', workingDirectory: workspaceDir,
+        answerFilePath: round.answerFilePath()).run()
+
+        when:
+        round.closeRound(RoundClose.VERIFIABLE)
+
+        then:
+        run.exitCode() == 0
+        !Files.exists(round.answerFilePath())
+        with(round.readDecision().get()) {
+            question().forLog() == 'Refactor or patch?'
+            options()*.forLog() == ['refactor', 'patch']
+        }
+    }
+
+    // FR9: an agent that asked nothing leaves no file, and the round hands no request on
+    def "FR9: no answer file means no request, before and after the close"() {
+        given:
+        def round = source.openRound(StageExecutorRequests.request(workspaceDir))
+
+        expect:
+        round.readDecision().isEmpty()
+
+        when:
+        round.closeRound(RoundClose.VERIFIABLE)
+
+        then:
+        round.readDecision().isEmpty()
     }
 }

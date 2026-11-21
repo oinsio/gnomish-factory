@@ -28,7 +28,7 @@ import java.util.Map;
  * ProgramResultMapping}'s, in the shared round wrapper.
  *
  * <p>The child environment is the environment's layered allowlist alone: the built-in adds no variable
- * of its own, so no {@code GNOMISH_DECISION_FILE} reaches the command and no answer is ever returned —
+ * of its own, so no {@code GNOMISH_ANSWER_FILE} reaches the command and no answer is ever returned —
  * a command escalates by failing (D5). The run reports a known zero of model use and its wall time
  * (NFR-C1, D8), so its describe declares that it reports usage. {@link #poll} answers
  * {@code failed/infrastructure}: a command round is never {@code pending}.

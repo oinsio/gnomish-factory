@@ -4,6 +4,7 @@ import com.github.oinsio.gnomish.app.git.TaskIdSanitizer;
 import com.github.oinsio.gnomish.app.port.agent.DecisionRequestRead;
 import com.github.oinsio.gnomish.app.port.agent.RoundDecisionRequest;
 import com.github.oinsio.gnomish.app.port.git.PendingVerification;
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
 import com.github.oinsio.gnomish.domain.engine.RoundToken;
 import com.github.oinsio.gnomish.executorcontract.ResultSource;
@@ -36,7 +37,7 @@ import org.slf4j.LoggerFactory;
  * refused.
  *
  * <p>The token, with the stage and round, fixes the one path the round's decision request could live
- * at ({@link GnomeRangeInspection#decisionPath}), so a round killed after asking re-raises its question
+ * at ({@link EnvelopePaths#answerFile}), so a round killed after asking re-raises its question
  * (FR15, NFR-R4 of make-checkpoint-gate-durable); it travels on through {@link RoundToken#of}, reused,
  * never minted, so the round is restored from the record (FR13 of make-checkpoint-gate-durable).
  *
@@ -175,7 +176,7 @@ public final class SnapshotTipCheck {
      */
     private Optional<RoundDecisionRequest> request(RegisteredCommit registered, AttemptKey key, RoundToken token) {
         Optional<byte[]> blob = new GitShowTip(runner, cloneDir, registered)
-                .readAtRegister(GnomeRangeInspection.decisionPath(key, token))
+                .readAtRegister(EnvelopePaths.answerFile(key, token).relative())
                 .map(text -> text.forParsing().getBytes(StandardCharsets.UTF_8));
         return DecisionRequestRead.read(limit -> blob.map(bytes -> Arrays.copyOf(bytes, prefixLength(bytes, limit))));
     }

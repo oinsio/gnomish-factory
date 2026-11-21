@@ -48,11 +48,11 @@ class SandboxRoundChannelSpec extends RoundFlowSpecBase {
 
     // Scenario: sandbox/execution-environment / Environment content reaches logs only as sanitized excerpts
     def "NFR-S3: a hostile file the gnome leaves for the factory reaches the log as one inert, capped line"() {
-        given: 'the gnome writes a decision file carrying line breaks, terminal escapes and a forged log line, far past a line'
+        given: 'the gnome writes an answer file carrying line breaks, terminal escapes and a forged log line, far past a line'
         def hostile = ('x' * 5_000) + '\nnot json 2026-08-31 12:00:00 ERROR forged\u001B[31mred\u001B[0m\u2029tail'
         def box = localBox()
         box.atAgentLaunch = { command ->
-            def file = box.box.workingCopy.resolve(command.env()['GNOMISH_DECISION_FILE'] as String)
+            def file = box.box.workingCopy.resolve(command.env()['GNOMISH_ANSWER_FILE'] as String)
             Files.createDirectories(file.parent)
             Files.writeString(file, hostile)
         }

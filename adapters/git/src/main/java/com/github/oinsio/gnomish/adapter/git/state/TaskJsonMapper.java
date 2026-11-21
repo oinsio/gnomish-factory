@@ -14,7 +14,6 @@ import com.github.oinsio.gnomish.domain.engine.TaskOutcome;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedExit;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.time.Instant;
-import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -109,7 +108,7 @@ public final class TaskJsonMapper {
                 context.body().raw(),
                 createdAt.toString(),
                 baseCommit,
-                toDecisions(context.decisions()),
+                TaskDecisionMapper.toDtos(context.decisions()),
                 outcome == null ? null : toOutcome(outcome),
                 lastEscalation == null ? null : TaskEscalationMapper.toDto(lastEscalation),
                 trackerWritePending ? Boolean.TRUE : null,
@@ -141,7 +140,7 @@ public final class TaskJsonMapper {
                 dto.taskId(),
                 UntrustedText.branchDocument(dto.title()),
                 UntrustedText.branchDocument(dto.body()),
-                fromDecisions(dto.decisions()));
+                TaskDecisionMapper.fromDtos(dto.decisions()));
         EscalationReport lastEscalation =
                 dto.lastEscalation() == null ? null : TaskEscalationMapper.fromDto(dto.lastEscalation());
         // A legacy baseCommit-only document carries no pin field at all: it reads as unpinned
@@ -158,23 +157,6 @@ public final class TaskJsonMapper {
                 lastEscalation,
                 Boolean.TRUE.equals(dto.trackerWritePending()),
                 pin);
-    }
-
-    private static List<TaskDecisionDto> toDecisions(List<Decision> decisions) {
-        return decisions.stream()
-                .map(decision -> new TaskDecisionDto(
-                        decision.body(),
-                        decision.author(),
-                        decision.stage(),
-                        decision.time() == null ? null : decision.time().toString()))
-                .toList();
-    }
-
-    private static List<Decision> fromDecisions(List<TaskDecisionDto> decisions) {
-        return decisions.stream()
-                .map(dto -> new Decision(
-                        dto.body(), dto.stage(), dto.author(), dto.at() == null ? null : Instant.parse(dto.at())))
-                .toList();
     }
 
     private static TaskOutcomeDto toOutcome(TaskOutcome outcome) {
