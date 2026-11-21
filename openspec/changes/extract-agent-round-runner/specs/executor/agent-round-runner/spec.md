@@ -59,6 +59,33 @@ and report `failed/infrastructure` naming the bound.
 - **WHEN** no event arrives for longer than the silence bound
 - **THEN** the tree is killed and the result names the silence bound
 
+#### Scenario: A liveness line during a long tool call keeps the round alive
+- **WHEN** the CLI writes nothing but a liveness line every 30 seconds for longer than the
+  silence bound
+- **THEN** the round is not killed on silence
+
+### Requirement: The declared roundTimeout is the round's overall bound
+The overall bound of a round SHALL be the `roundTimeout` of the request's settings when they
+declare one and the factory's overall bound otherwise; the startup-read and silence bounds SHALL
+be the factory's, and no settings key SHALL set them.
+**Implements**: FR7, NFR-R1 of extract-agent-round-runner
+
+#### Scenario: A declared roundTimeout is the round's overall bound
+- **WHEN** a stage whose executor settings declare `roundTimeout: 28800s` runs a round that is
+  still writing events after the factory's own overall bound has passed
+- **THEN** the round is not killed at the factory's bound
+- **AND** a round that outlives 28800 seconds is killed and reports `failed/infrastructure`
+  naming the overall bound and that value
+
+#### Scenario: Without a roundTimeout the factory's overall bound applies
+- **WHEN** a stage whose executor settings declare no `roundTimeout` runs a round that outlives
+  the factory's overall bound
+- **THEN** the tree is killed and the result names the overall bound
+
+#### Scenario: A judge vote is bounded by its check's roundTimeout
+- **WHEN** a judge check's settings declare `roundTimeout` and one of its votes outlives it
+- **THEN** that vote's process tree is killed and the vote is cannot-verify
+
 ### Requirement: Decision continuation through the session
 A `decision-request` answer SHALL carry the dialect's session id as the continuation key; a
 later `start` carrying the continuation and the answer SHALL resume that session; a session

@@ -10,8 +10,8 @@ The observable behavior of the Claude Code dialect: how the contract's request b
 ### Requirement: Claude describe
 The Claude dialect SHALL describe roles `transform`, `verdict`, `decision`; capabilities
 `streams_progress`, `cancel`, `resumable`; enforcement level `TOOL_GATE`; its credentials, egress
-host and config-directory isolation; and a settings schema with `allowedTools`,
-`disallowedTools`, `maxTurns`, `roundTimeout` and the three bounds.
+host and config-directory isolation; and a settings schema that accepts exactly `allowedTools`,
+`disallowedTools`, `maxTurns` and `roundTimeout`.
 **Implements**: FR3, FR7, NFR-S1 of extract-agent-round-runner
 
 #### Scenario: Describe names the credentials, the egress host and the config isolation

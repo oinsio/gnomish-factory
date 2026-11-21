@@ -84,17 +84,86 @@ asked a question.
 after `verdict`/`decision`. `AgentRole` and `JUDGE_READ_ONLY_TOOLS` are deleted. *Alternative
 rejected:* keep vendor tool names in the request — the leak this change exists to close.
 
-**D6 — Settings schema from describe; bounds replace `roundTimeout`'s special status.** (FR7.)
-The Claude dialect's schema accepts the four legacy keys plus the three bounds;
+**D6 — Settings schema from describe; `roundTimeout` is the round's overall bound.** (FR7,
+NFR-R1; amended 2026-11-21 by a decision review, after task 2.3 found the first wording
+unmeetable.) The Claude dialect's schema accepts exactly the four legacy keys;
 `AgentSettingsValidator`'s Claude key list moves into the schema. The `roundTimeout` shape judge
 is not Claude's alone: since `add-command-executor` it is also called by `CommandSettingsValidator`
-and the command executor resolves `roundTimeout` through `RoundTimeout`
-(`AgentSettingsValidator.roundTimeoutMalformation`). It therefore stays one shape owner, in
-`:adapters`, which both the Claude dialect's schema and the command executor (`adapters/agent`
-depends on `:adapters`) reach; it keeps exactly the shapes accepted today. The `RoundTimeout` ↔
-`AgentSettingsValidator` pair dissolves into that one owner (shared abstraction, preference 1),
-not into a third copy inside the schema. The dispatch's `COMMAND` arm is untouched (design D6 of
-`add-command-executor`).
+and the command executor resolves `roundTimeout` through `RoundTimeout`. It therefore stays one
+shape owner, in `:adapters`, which both the Claude dialect's schema and the command executor
+(`adapters/agent` depends on `:adapters`) reach; it keeps exactly the shapes accepted today. The
+`RoundTimeout` ↔ `AgentSettingsValidator` pair dissolves into that one owner (shared abstraction,
+preference 1), not into a third copy inside the schema. The dispatch's `COMMAND` arm is untouched
+(design D6 of `add-command-executor`).
+
+*Who owns each bound.* A round has three time bounds, and they have two owners:
+
+| Bound          | Owner                                                                                   | Why                                                                                                                                                                                              |
+|----------------|-----------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| overall        | the law: `roundTimeout` of the stage's executor settings or of the judge check's settings; the factory's overall bound (`ProgramBounds`) when the key is absent | only the stage's author knows how long its work takes; the main specs already promise it (`agent-executor`, "Round timeout and control-file preflight"; `claim-heartbeat`, which names the per-stage `roundTimeout` as what bounds a round) |
+| startup read   | the factory (`ProgramBounds`)                                                           | a property of the CLI's start, the same for every stage                                                                                                                                          |
+| silence        | the factory (`ProgramBounds`)                                                           | a property of the CLI's liveness cadence, not of the stage's work (measurement below)                                                                                                            |
+
+The three are resolved once per `start` by one owner, `RoundBounds` (`adapters/agent`): the
+factory's `ProgramBounds` with `overall` replaced by the request settings' `roundTimeout` when
+the settings declare one. The value the runner waits on and the time hints the request carries
+are that one value. `RoundTimeout` keeps the shapes and the parse and loses its own default: the
+30 minutes are written once, in `ProgramBounds.DEFAULTS`.
+
+*What the first wording got wrong, verified in code.* It promised "the three bounds" as schema
+keys. (1) `define-executor-contract` landed after it was written and decided the opposite for
+the bounds as a set (`ProgramBounds.java:15-19`; that change's D3, "Bounds and settings, as
+built"): neither describe nor the law sets them, an operator key deferred "until an operator
+needs a non-default bound". (2) No key names existed anywhere. (3) The runner built in task 1.2
+takes all three from the factory's `ProgramBounds` (`AgentRound.java:127-132`) and never reads
+`roundTimeout`; the key's only round-time readers are `ExecutorRoundExecution` and
+`JudgeRoundExecution`, which tasks 4.1 and 5.1 delete, and `CommandStageExecutor`. Left as
+written, `roundTimeout` would have become an accepted key with no reader, and every agent round
+would have been killed at the factory's 30 minutes — the `implement` round that found this ran
+1 h 37 min under a law that declares `roundTimeout: 28800s`. The deferral's pickup condition is
+met for the overall bound, and only for it.
+
+*Containment.* The reason `ProgramBounds` gives — "an executor that set its own would set the
+bound meant to contain it" — is about the executor's describe answer. The law is not the
+contained party: it is bound from the base ref before any round and the gnome cannot write it,
+and it has set this bound since `add-agent-executor`. Describe still sets no bound.
+
+*The silence bound, measured.* A silence bound is sound only for a worker that reports liveness
+(Temporal's heartbeat timeout and Step Functions' `HeartbeatSeconds` are off unless the worker
+heartbeats; CircleCI's and Travis' no-output timers are the record of what a silence timer does
+to a quiet healthy step). Measured 2026-11-21 on `claude` 2.1.325, macOS, with the flags the
+dialect renders (`-p --output-format stream-json --verbose`): during one foreground Bash call
+of 420 s the CLI wrote a `tool_progress` line with `heartbeat: true` every 30.0 s (14 lines, no
+gap above 30 s). `ProgressLines` counts every chunk read as activity, so the factory's 5 minutes
+is ten missed heartbeats. The CLI's documentation dates the heartbeat of a foreground subagent
+call to 2.1.257 and says tool calls inside a subagent emit none; a subagent's own tool events
+reach the parent stream (`subagent-round.reference.json`). Two facts are therefore still
+unmeasured — a long tool call inside a subagent, and the Linux CLI of the sandbox base image —
+and task 2.3b measures both before the runner serves a stage (`design-decisions.md`, "A platform
+fact is measured on every platform CI runs"). What the bound buys: the CLI is known to stop
+writing without exiting (anthropics/claude-code issues 39700 and 53584); without it such a round
+holds its slot for the whole `roundTimeout`, eight hours under this repository's law.
+
+*Alternative zero — no law key at all* (the escalation's option 1 as worded): the bounds stay
+the factory's three constants. What is left per round is one number that differs per stage by a
+factor of a hundred (300 s for `cleanup`, 28800 s for `implement`); a constant either kills the
+long stages or bounds nothing on the short ones, and the main-spec promise of `roundTimeout`
+would be removed to make the code pass. Rejected.
+*Alternative rejected — law keys for all three bounds, or keys that may only narrow the
+factory's* (the escalation's option 2): the per-step override of a silence timer exists in CI
+systems because their steps are silent by nature; here the cadence is the CLI's, measured, and
+the same for every stage, so the keys would have no value an author could choose better than
+the factory. Narrow-only breaks the one real need: the long stages need a bound above the
+factory's default, not below it.
+*Alternative rejected — a factory ceiling over `roundTimeout`* (GitLab's runner maximum,
+Buildkite's maximum step timeout): a ceiling protects a platform operator from a pipeline author
+who is someone else. Today the law's author and the factory's operator are one party and the old
+path has no ceiling, so it would be a mechanism with no consumer (NG7 names the pickup). What is
+borrowed for that day: refuse an over-ceiling value at law load (Kubernetes `LimitRange`), never
+clamp it silently at round time.
+*Alternative rejected — no silence bound for an agent round* (the old path's behaviour): it
+gives up the only detector of a silent hang earlier than `roundTimeout`, for a risk the
+measurement does not show.
 
 **D7 — Sync surfaces.** Scout: `grep -rn "Kept in sync with"` and the registry.
 - `ExecutorRoundExecution` ↔ `JudgeRoundExecution`: **dissolved** into `AgentRoundRunner`
@@ -137,6 +206,7 @@ not into a third copy inside the schema. The dispatch's `COMMAND` arm is untouch
 | Policy compilation (`ClaudePolicyCompiler`)                                 | argv fragment from `Policy`                                                  | `ClaudeDialect`                                                                                                                                                                                                                                    | `AgentRole`, `JUDGE_READ_ONLY_TOOLS`, per-role branches in `AgentInvocationOptions`                                                                                                                  | `Policy` sealed type in the request; spec: no argv carries `bypassPermissions`                                                                                                                                                                                                                                                    |
 | `PendingPoll` (`domain/engine`, from `migrate-verify-to-executor-contract`) | `PendingPollRecord` (an entry of `TaskState.pendingPolls`) with the sealed subject `Round` beside `Check(CheckRef)`; the round token is already on the record | `StageAttemptLoop` (hands a `transform` `pending` to `PendingPoll`), `PendingPoll` (live and resumed), the two `persistPending` implementations (`GitAttemptPersistence`, `EnvironmentAttemptPersistence`), `StateJsonMapper`/`TaskState` (the `pendingPolls` list), `ResumeVerificationStageExecutor` (the recogniser and one recovery owner; a `Round` entry resumes through `PendingPoll`, never as `Completed`) | the `transform` arm "a `pending` the stage cannot poll" in `RoundFailures`/`AttemptAccounting`/`RoundOutcome` narrowed to executors declaring no `poll`; no second pending record, loop or key store | sealed subject (exhaustive switch); `PendingKey` parameter type; architecture spec `ExecutorPollOwnerSpec` (`:bootstrap`): `Executor.poll(` is called in `domain`/`application` main sources only from `PendingPoll`, the scan asserted to reach its allowlist; identity spec `PendingRoundIdentitySpec`; kill-point specs of D11 |
 | Credential names (`ClaudeDialect.describe`)                                 | `ExecutorCredentialNames`                                                    | `ChildEnvAllowlist` layer via the contract's delivery                                                                                                                                                                                              | `AgentAiSeam` deleted (the dead `agent-cli-env-passthrough` knob is already gone, `RemovedKeys.java:14`)                                                                                             | identity spec `ProgramCredentialDeliverySpec` extended for `claude`                                                                                                                                                                                                                                                               |
+| `RoundBounds` (`adapters/agent`; D6 as amended) | `ProgramBounds` of one round: the factory's startup-read and silence bounds, the overall bound from the request settings' `roundTimeout` or the factory's | `AgentRound`'s wait (every role: a stage round, each judge vote, a decision round); the time hints of the request an agent executor receives; `CommandStageExecutor`'s timeout | `RoundTimeout.resolve(` in `ExecutorRoundExecution` and `JudgeRoundExecution` (both deleted, 4.1 and 5.1) and in `CommandStageExecutor`; `equipment.bounds()` read for the round's wait in `AgentRound`; the `RoundTimeout.DEFAULT` literal, a second spelling of `ProgramBounds.DEFAULTS.overall()` | `RoundBoundsOwnerSpec` (`:bootstrap`): `RoundTimeout.resolve(` appears only in `RoundBounds.java`, and `new ProgressWait(` in `adapters/agent/runner` only where the bounds come from it (scan asserted reached); identity spec `RoundBoundIdentitySpec`: a stage declaring `roundTimeout` is killed at exactly that value on virtual time, and the request's overall hint equals it |
 
 **D9 — Crash consistency.** No new durable step on the decision path (the pending `transform`
 round adds one, D11): the answer file rides the snapshot/salvage
@@ -254,6 +324,16 @@ live one sees the started tree — two inputs for one round.
 - [`migrate-verify-to-executor-contract` task 4.3a lands a design that does not let another
   instance poll a `program` key] → FR11 cannot hold for `program` executors; task 6.1 checks the
   premise first and stops under `spec-mismatch.md` if it fails.
+
+- [The CLI of the sandbox base image, or a tool call inside a subagent, is quiet for longer than the
+  factory's silence bound] → a healthy round would be killed as infrastructure on every retry.
+  Task 2.3b measures both before the runner serves a stage (task 5.1); a gap above a fifth of the
+  bound stops the change under `spec-mismatch.md` for a decision on the bound, never a raised
+  constant.
+- [The CLI's own timers are not derived from `roundTimeout`] → a foreground Bash call is moved to
+  the background at the CLI's `BASH_MAX_TIMEOUT_MS` whatever the stage declares; that is the
+  agent's tool budget, the operator's to set through the child environment, and no part of the
+  round's bound.
 
 - [Behavior drift while splitting the module's Claude and round classes] → the 51 existing specs and the reference stream-json
   fixtures are kept green through the refactor; the fake dialect proves the seam (M4).

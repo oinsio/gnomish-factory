@@ -30,13 +30,41 @@
   `bypassPermissions`, settings cannot widen read-only; turn and budget hints rendered as
   `--max-turns` and the budget flag (scenario "Turn and budget hints reach the argv") (FR5, D5,
   NFR-C1)
-- [ ] 2.3 Describe: roles, capabilities, `TOOL_GATE`, credential names, egress host from base
-  URL, `CLAUDE_CONFIG_DIR`, repo-policy-disabling flags, settings schema (four legacy keys +
-  three bounds); delete `AgentAiSeam` and the Claude list in `AgentSettingsValidator`; the
+- [x] 2.3 Describe: roles, capabilities, `TOOL_GATE`, credential names, egress host from base
+  URL, `CLAUDE_CONFIG_DIR`, repo-policy-disabling flags, settings schema (exactly the four legacy
+  keys — D6 as amended 2026-11-21: no key for a bound but `roundTimeout`); delete `AgentAiSeam`
+  and the Claude list in `AgentSettingsValidator`; the
   `roundTimeout` shape judge stays one owner in `:adapters`, called by the Claude schema,
   `CommandSettingsValidator` and the command executor's `roundTimeout` resolution, with the shapes
   accepted today (command-stage validation specs stay green); located-error spec for a settings
   typo (FR7, NFR-S1, D6)
+- [ ] 2.3a `RoundBounds` — the one resolution of a round's three bounds (FR7, NFR-R1, D6 as
+  amended, D8 row). TDD on virtual time. `RoundBounds.of(ProgramBounds factory, settings)` in
+  `adapters/agent`: the factory's startup-read and silence, `overall` from the settings'
+  `roundTimeout` when declared, the factory's otherwise; `RoundTimeout` (`:adapters`) keeps the
+  shapes and the parse, loses `DEFAULT`, and answers "declared or not" instead of falling back.
+  Consumers, each shown to take the value from the owner: (1) `AgentRound`'s `ProgressWait`
+  (`AgentRound.java:127-132` today reads `equipment.bounds()` — the old way) for every role;
+  (2) the time hints of the request an agent executor receives, the same value the runner waits
+  on; (3) `CommandStageExecutor` (`CommandStageExecutor.java:92`), with the factory's bounds it is
+  constructed with; (4) until 4.1 and 5.1 delete them, `ExecutorRoundExecution.java:119` and
+  `JudgeRoundExecution.java:115`. Old-way sweep, reported with its hits:
+  `grep -rn -e 'RoundTimeout.resolve(' -e 'RoundTimeout.DEFAULT' -e 'bounds().overall()' --include='*.java' */src/main adapters/*/src/main`
+  — every hit is the owner, routed through it, or gone. Gate `RoundBoundsOwnerSpec` (`:bootstrap`,
+  scan asserted reached); identity spec `RoundBoundIdentitySpec`: a stage declaring
+  `roundTimeout` runs past the factory's overall bound and is killed at exactly its own value,
+  and the request's overall hint equals that value; scenario markers for the three `roundTimeout`
+  scenarios and "A liveness line during a long tool call keeps the round alive" of
+  `agent-round-runner`. Must land before 4.1: after it no vote reads `roundTimeout` any other way
+- [ ] 2.3b Measure the CLI's liveness cadence where it is still unmeasured (D6, "The silence
+  bound, measured"; `design-decisions.md`, "A platform fact is measured on every platform CI
+  runs"): with the argv the dialect renders, record the largest gap between two stdout lines
+  (a) during one foreground Bash call of at least 7 minutes — on the Linux CLI of the sandbox
+  base image, or of the paid-smoke container when no image is built for the repository; (b) while
+  a subagent runs one Bash call of at least 7 minutes, on macOS and on that Linux CLI. Record the
+  CLI version and the gaps in D6. A gap above 60 s (a fifth of the factory's silence bound) is a
+  blocker reported under `spec-mismatch.md`, never a raised constant. Must land before 5.1 wires
+  the `claude` entry
 - F107 (carried from `tighten-spec-contract`): since that change, the agent CLI's credentials and
   every child-environment value reach a round only through `SecretsProvider`: the run's
   `ChildEnvAllowlist` resolves them through the `ChildEnvValues` role interface the root binds at

@@ -81,6 +81,11 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   the pending commit) — `cancel` is not an operation of the contract (NG16 of
   `define-executor-contract`); its pickup condition stands, and this change's re-drive is a
   second engine path that would prefer a cooperative stop.
+- NG7: a factory-owned ceiling over the law's `roundTimeout`, and settings keys for the
+  startup-read and silence bounds (design D6, alternatives rejected). Pickup condition: a factory
+  whose operator is not the author of the law it runs (one daemon serving the laws of several
+  projects), or an agent CLI whose liveness cadence differs per stage; the ceiling then refuses an
+  over-ceiling value at law load.
 
 ## Users & Scenarios
 
@@ -124,8 +129,11 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 - FR6: Progress events SHALL carry only vendor-neutral fields (model, tool name, final summary,
   usage); the session id SHALL travel as the continuation key in the result, not in events.
 - FR7: Settings of an agent executor SHALL be validated at law load against the dialect's
-  describe schema; the Claude schema accepts `allowedTools`, `disallowedTools`, `maxTurns`,
-  `roundTimeout` and the three bounds.
+  describe schema; the Claude schema accepts exactly `allowedTools`, `disallowedTools`,
+  `maxTurns` and `roundTimeout`. `roundTimeout` SHALL be the overall bound of every round and
+  vote the runner starts for the stage or check that declares it, the factory's overall bound
+  when it declares none; the startup-read and silence bounds are the factory's and have no
+  settings key (amended 2026-11-21, design D6).
 - FR8: The agent's exit code and stderr SHALL be read: non-zero exit with no result event is
   `failed/infrastructure`; a turn or budget stop is `failed/limit`; stderr is read from the scratch file after the exit,
   capped.
@@ -150,7 +158,9 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 ### Non-Functional Reliability
 
 - NFR-R1: The runner's bounds (startup read, silence, overall) are driven on virtual time in
-  specs; expiry kills the process tree and reports the bound.
+  specs; expiry kills the process tree and reports the bound. The overall bound a round is
+  killed at is the `roundTimeout` its stage or check declares (FR7), asserted end to end by one
+  identity spec; the silence bound rests on the CLI's measured liveness cadence (design D6).
 - NFR-R2: A resumed session that the CLI no longer knows SHALL fall back to a fresh start with
   the answer in feedback, logged, never an infrastructure failure.
 - NFR-R3: Every kill window of a pending `transform` round classifies to a named shape with one
