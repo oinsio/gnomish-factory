@@ -83,8 +83,8 @@ be the factory's, and no settings key SHALL set them.
 - **THEN** the tree is killed and the result names the overall bound
 
 #### Scenario: A judge vote is bounded by its check's roundTimeout
-- **WHEN** a judge check's settings declare `roundTimeout` and one of its votes outlives it
-- **THEN** that vote's process tree is killed and the vote is cannot-verify
+- **WHEN** a judge check's executor settings declare `roundTimeout` and its request outlives it
+- **THEN** the request's process tree is killed and the check is cannot-verify
 
 ### Requirement: An agent round keeps no state past its end
 The `decision-request` answer of an agent round SHALL carry no continuation key, a key the agent

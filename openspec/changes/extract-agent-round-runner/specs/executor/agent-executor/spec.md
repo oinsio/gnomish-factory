@@ -67,9 +67,11 @@ answer file".
 **Migration**: none for manifests.
 
 ### Requirement: CLI judge vote
-**Reason**: Judge votes are `verdict` requests to the named executor (`stage-engine`, "Judge
-votes are verdict requests"); the fresh-environment rule is unchanged.
-**Migration**: `judge` checks name an executor; criteria and model keep their meaning.
+**Reason**: A `judge` check is one `verdict` request to the executor its block declares
+(`stage-engine`, "A judge check is one verdict request"); it runs in a fresh box of its own
+(`verification-hardening`, "Sandboxed judge votes run in a fresh environment").
+**Migration**: a `judge` check declares the stage's `executor:` block in place of `model` and
+`settings`; the criteria file keeps its meaning.
 
 ### Requirement: Manifest settings with strict validation
 **Reason**: Settings are validated against the executor's describe schema

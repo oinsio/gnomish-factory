@@ -3,20 +3,24 @@
 ## ADDED Requirements
 
 ### Requirement: Stage manifest declares the arbiter
-`stage.yaml` MAY carry a `decisions:` section: `model` (required),
-`settings` (bounded by the same agent-cli settings vocabulary as
-executors), `rulesFile` (required, resolved inside `.gnomish/` like every
-control file), and `maxDecisions` (positive integer, defaulted when
-absent). Validation SHALL reject a `rulesFile` resolving outside
-`.gnomish/`, an unknown key, or a non-positive cap, as located config
-errors at load time — no execution, consistent with loader safety rules.
+`stage.yaml` MAY carry a `decisions:` section: `executor` (required, the
+block a stage declares, parsed and validated by the same owner), `rulesFile`
+(required, resolved inside `.gnomish/`) and `maxDecisions` (positive,
+defaulted when absent). Validation SHALL reject a missing or invalid
+`executor` block, a `rulesFile` resolving outside `.gnomish/`, an unknown
+key or a non-positive cap as located config errors at load time.
 **Implements**: FR1 of add-decision-arbiter
 
 #### Scenario: Valid section loads
-- **WHEN** a stage declares model, rulesFile inside `.gnomish/`, and
-  maxDecisions 3
+- **WHEN** a stage declares an `executor` block with a model, rulesFile
+  inside `.gnomish/`, and maxDecisions 3
 - **THEN** the pipeline loads and the stage definition carries the arbiter
   configuration
+
+#### Scenario: Arbiter without an executor block is rejected
+- **WHEN** a `decisions:` section declares no `executor` block, or an agent
+  block with no model, or `model` or `settings` beside the block
+- **THEN** loading fails with the located ConfigError a stage's block gets
 
 #### Scenario: Escaping rulesFile rejected
 - **WHEN** rulesFile resolves outside `.gnomish/` (including via symlink)

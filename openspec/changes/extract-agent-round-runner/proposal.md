@@ -29,9 +29,20 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   denials, post-hoc working-copy check for `verdict`/`decision`) parameterized by an
   **agent dialect**: argv rendering, policy compilation, event parsing, usage and trace
   extraction. Claude is the first dialect.
-- **ADDED**: `judge` checks run as `verdict` requests to a named executor; `JudgeVoter`
-  leaves `EnginePorts`; votes are N `start`s reduced by the existing majority rule; the verdict
-  arrives as a SARIF answer produced through the CLI's schema-enforced output.
+- **ADDED**: a `judge` check is one `verdict` request to the executor its own `executor:` block
+  declares, on the check path every executor check already takes; `JudgeVoter` leaves
+  `EnginePorts`; the verdict arrives as a SARIF answer produced through the CLI's
+  schema-enforced output (amended 2026-11-22, design D2).
+- **ADDED**: one executor block for every role: a stage, a `judge` check and (in
+  `add-decision-arbiter`) the arbiter declare who does the work with the same `executor:` block,
+  parsed and validated by one owner; nothing defaults — a `judge` check with no block, or an
+  agent block with no model, stops the factory at load (design D12).
+- **ADDED**: the egress guard's liveness probe has one owner around every request that runs in a
+  box, stage round and check round alike; a `program` verdict check in a fresh box, judged
+  without a probe on `main`, is covered by it (design D13).
+- **REMOVED**: judge votes. The `votes` key, the majority reducer (`JudgeVoting`) and the
+  odd-count rule are deleted; a manifest that still carries `votes` is refused at load. Several
+  opinions are several `judge` checks in the stage's `verify` list (human decision 2026-11-22).
 - **ADDED**: decision continuation from the record (design D4 as amended 2026-11-21): the
   decision that answers a decision request is recorded on the task branch with the question and
   options it answers, and the next round is a fresh `start` whose briefing renders them with the
@@ -52,6 +63,9 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   separate channel (the decision request is the answer file).
 - **BREAKING** (manifest): `settings.allowedTools`/`disallowedTools` move under the executor's
   own settings schema; existing keys remain accepted by the Claude dialect's schema.
+- **BREAKING** (manifest): a `judge` check declares `executor:` (the stage's block: `type`,
+  `model`, `settings`, or `type: program` with `name`) in place of its own `model` and
+  `settings` keys, and no `votes`; the old form is a located load error.
 
 ## Goals
 
@@ -97,11 +111,22 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   the working copy ride the snapshot commit already. Pickup condition: a recorded round that,
   started fresh with the question, the options and the reply, redid or contradicted work the
   asking round had finished.
+- NG10: several votes of one `judge` check reduced by a majority (removed by this change, human
+  decision 2026-11-22: the votes cost tokens and decided nothing a single verdict did not).
+  Pickup condition: a recorded case of one `judge` check returning opposite verdicts on the same
+  attempt commit; the reducer then returns as a check-level mechanism with a vote ordinal in the
+  check's identity, which a pending key needs.
+- NG11: rewriting this repository's own `.gnomish/stages/*/stage.yaml` (`archive`,
+  `fix-artifacts`, `review-code`, `fix-code`) to the new `judge` form. The factory that runs
+  this repository is the release named in `.gnomish/factory/gnomish.env`, which reads the old
+  form, and no stage may edit `.gnomish/`. Pickup condition: the commit that moves
+  `GNOMISH_VERSION` to a release containing this change rewrites the four manifests with it.
 
 ## Users & Scenarios
 
-- U1 — Pipeline author: `executor: claude` on a stage and `executor: claude` on a `judge`
-  check; the judge's `allowedTools` typo is a located load error from the dialect's schema.
+- U1 — Pipeline author: writes the same `executor:` block (`type: agent-cli`, `model`,
+  `settings`) on a stage and on a `judge` check; the judge's `allowedTools` typo, a missing
+  block or a missing model is a located load error; a second opinion is a second `judge` check.
 - U2 — Operator: a gnome asks a question, the arbiter or a human answers, and the next round —
   on any instance, in a fresh box — starts with the question, its options and the reply in its
   briefing.
@@ -132,9 +157,12 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   mode per policy (`acceptEdits` for `workspaceWrite`, `dontAsk` for `readOnly`), decision
   request via the answer file; and SHALL add `--json-schema` for `verdict` and `decision`
   answers. No argv SHALL carry a session flag (`--resume`, `--continue`, `--session-id`).
-- FR4: `judge` checks SHALL resolve to a named executor in role `verdict`; `JudgeVoting` SHALL
-  issue N `start`s and reduce with the existing majority rule; a vote's malformed answer is
-  cannot-verify for the whole check; `JudgeVoter` is removed from `EnginePorts`.
+- FR4: A `judge` check SHALL be one `verdict` request to the executor its `executor:` block
+  declares, run as a check round on the path every executor check takes and judged by the one
+  verdict derivation; a malformed answer is cannot-verify; `JudgeVoter` is removed from
+  `EnginePorts`. A manifest carrying `votes` SHALL be refused at load, as an unknown field. Checks of one stage,
+  several `judge` checks included, run in declaration order and stop at the first non-pass
+  (amended 2026-11-22, design D2).
 - FR5: Policy SHALL be the contract's abstract policy; no engine or application type SHALL
   name a vendor tool; `writeExactly` is used only for legacy decision-file compatibility and
   removed when the answer file replaces it.
@@ -143,7 +171,7 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 - FR7: Settings of an agent executor SHALL be validated at law load against the dialect's
   describe schema; the Claude schema accepts exactly `allowedTools`, `disallowedTools`,
   `maxTurns` and `roundTimeout`. `roundTimeout` SHALL be the overall bound of every round and
-  vote the runner starts for the stage or check that declares it, the factory's overall bound
+  judge request the runner starts for the stage or check that declares it, the factory's overall bound
   when it declares none; the startup-read and silence bounds are the factory's and have no
   settings key (amended 2026-11-21, design D6).
 - FR8: The agent's exit code and stderr SHALL be read: non-zero exit with no result event is
@@ -169,6 +197,19 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   `migrate-verify-to-executor-contract` (its FR10, human decision 2026-11-02): a `poll` that
   returns `pending` with a key different from the recorded one has the new key persisted, in a
   pending round commit, before the next `poll`; this change adds no rotation mechanism of its own.
+- FR13: Who does the work SHALL be declared by one `executor:` block — the stage's — wherever
+  the law names an executor: on a stage and on a `judge` check (and, in `add-decision-arbiter`,
+  on the arbiter). One owner SHALL parse it and one rule SHALL validate it; no declaration
+  defaults: a `judge` check with no `executor:` block, an agent block with no `model`, or an
+  executor that does not support the role the declaration uses it in SHALL be a located load
+  error, and the factory SHALL NOT start (design D12).
+- FR14: An `agent-cli` declaration SHALL resolve through the executor registry, like every other
+  executor, to one entry under the reserved built-in name `claude`, which serves stage rounds and
+  check rounds; a law that declares an executor under that name SHALL be refused (design D12).
+- FR15: The egress guard's liveness SHALL be probed before and after every executor request that
+  runs in a box with a guard — a stage round and a check round alike — by one owner; a guard
+  found dead SHALL make the request an infrastructure failure (a cannot-verify for a check), no
+  attempt burned (design D13).
 
 ### Non-Functional Reliability
 
@@ -231,6 +272,10 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   fixture service, killed after the pending commit and resumed by a second instance: the service
   counts exactly one `start`, the round closes with the service's changes, and a second recovery
   pass changes nothing; killed before the pending commit: exactly two `start`s, both in the ledger.
+- M6: `grep -rn "probeGuard(" --include=*.java` over main sources, the environment types' own
+  declarations aside → one calling file.
+- M7: no main source declares `JudgeVoting` or `JudgeVoter`, and none reads a manifest key
+  `votes`.
 
 ## Open Questions
 
@@ -258,15 +303,24 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   the briefing renders a decision with the question it answers.
 - `git/git-task-persistence`: the decision commit records the question and options a decision
   answers.
-- `stage-engine`: judge votes as verdict requests; `JudgeVoter` removed; pending `transform`
-  rounds persisted, polled and resumed.
+- `stage-engine`: a judge check is one verdict request; majority voting and `JudgeVoter`
+  removed; pending `transform` rounds persisted, polled and resumed.
+- `pipeline/pipeline-config`: a `judge` check declares the stage's `executor:` block; `votes` is
+  refused.
+- `verification/verification-hardening`: a judge request runs in a fresh box of its own.
+- `sandbox/sandbox-egress`: the guard is probed around every request in a box, check rounds
+  included.
 - `executor/wire-contract` (added by `define-executor-contract`): `pending` from `transform` is
   refused only without `poll`; a continuation key names state any instance reaches.
 
 ## Impact
 
 - `adapters/agent` restructured into `runner` and `claude` packages; `application/port/agent`
-  progress types trimmed; `domain/engine` `JudgeVoting` and `EnginePorts`.
+  progress types trimmed; `domain/engine` `JudgeVoting` deleted, `EnginePorts` narrowed;
+  `domain/pipeline` `VerifyCheck.Judge` carries the stage's executor block in place of `model`,
+  `settings` and `votes`.
+- `add-decision-arbiter` (unarchived, sequenced after this change) is amended with this change:
+  its `decisions:` section declares the arbiter with the same `executor:` block (FR13).
 - `domain/engine` `Decision` gains the optional question it answers; `task.json` carries it
   (`TaskJsonMapper`, read without it as before); the two decision builders (`ResumeDecisionCommit`,
   `EscalationResume`) and the briefing renderer (`BriefingSections`) follow.

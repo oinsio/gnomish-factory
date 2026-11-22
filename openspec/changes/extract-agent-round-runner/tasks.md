@@ -63,8 +63,10 @@
   base image, or of the paid-smoke container when no image is built for the repository; (b) while
   a subagent runs one Bash call of at least 7 minutes, on macOS and on that Linux CLI. Record the
   CLI version and the gaps in D6. A gap above 60 s (a fifth of the factory's silence bound) is a
-  blocker reported under `spec-mismatch.md`, never a raised constant. Must land before 5.1 wires
-  the `claude` entry
+  blocker reported under `spec-mismatch.md`, never a raised constant. Must land before the first
+  consumer is switched onto the runner — task 4.1 (the judge) or task 5.1 (the stages),
+  whichever is reached first; tasks 4.0, 4.0a and 4.2 do not wait for it. The human measures the
+  Linux half and ticks this task
 - F107 (carried from `tighten-spec-contract`): since that change, the agent CLI's credentials and
   every child-environment value reach a round only through `SecretsProvider`: the run's
   `ChildEnvAllowlist` resolves them through the `ChildEnvValues` role interface the root binds at
@@ -149,31 +151,124 @@
 
 ## 4. Judge on the contract
 
-- [ ] 4.1 `JudgeVoting` issues N `start`s to the registry-resolved executor in the fresh
-  environment, derives each vote through `VerdictDerivation`, keeps the majority rule and
-  odd-votes check; malformed vote → cannot-verify; `JudgeVoter` removed from `EnginePorts` and
-  the ports package; `CliJudgeVoter`, `JudgeRoundExecution`, `JudgeCriteriaPreflight` moved
-  into the runner's `verdict` preflight; specs (FR4, M3, D2)
-- [ ] 4.2 `judge` manifest check names an executor (default: the stage's); loader validates the
-  role; `JudgePromptBuilder` renders the criteria as the `verdict` role input (FR4)
+Rebuilt 2026-11-22 after the decision review of task 4.1 (design D2, D12, D13). The order is
+provider, then consumers, then deletion, and the build is green after each task. Work the tasks
+of sections 4 and 5 **in the order they are written here**, which is not the order of their
+numbers: 4.0, 4.0a, 4.2, then — only once 2.3b is ticked — 4.1, 4.3, 5.1, 5.1a, 5.2, 5.3. The
+numbers 4.1, 4.2 and 5.1 are kept because earlier tasks and code comments cite them. If you
+reach 4.1 while 2.3b is still open, stop and report that; do not switch a consumer.
+
+- [ ] 4.0 One owner of the guard probe (FR15, D13, M6). **Do this first; nothing else in
+  sections 4 and 5 starts before it is done.** A decorator over the contract's `Executor`, in
+  `adapters/agent`, that calls `environment.probeGuard()` before `start` and `poll` and after
+  each returns, and answers `failed/infrastructure` naming the guard when the probe throws
+  (the throwable's message as container text, as `JudgeCannotVerify.ifGuardDead` renders it
+  today). Applied where an executor is bound to an environment: the stage half
+  (`RoundExecutorFactory.executor(environment)` as `ProgramStageExecutor` uses it) and the check
+  half (`ProgramCheckBinding.bind`, over the fresh box). Consumers, each visited: `program`
+  stage rounds, `program` check rounds in a fresh box (unprobed on `main` — the defect this task
+  fixes), and, when 4.0a builds it, both halves of the `claude` entry. Old-way sweep:
+  `grep -rn "probeGuard(" --include='*.java'` over main sources; the calls at
+  `ProgramStageExecutor.java:63,65` are replaced by the decorator in this task; the calls at
+  `ExecutorRoundExecution.java:111,138` and `JudgeCannotVerify.java:68` are listed in the gate's
+  allowlist with the tasks that delete them (5.1, 4.1) and leave it there. Gate:
+  `GuardProbeOwnerSpec` (`:bootstrap`) — `probeGuard(` in main sources only in the decorator,
+  the environment types that declare or forward it (`TaskExecutionEnvironment`,
+  `SelfCheckedEnvironment`, `LeasedEnvironment`, `WireObservation`) and the two dated rows, the
+  allowlist asserted reached. Specs, TDD: the decorator on a fake environment whose probe
+  throws before the request (no `start` is issued) and after it (the executor's answer is
+  replaced); a `program` verdict check bound in a fresh box with a dead guard is cannot-verify
+  and burns no attempt. Scenario markers for the two scenarios added to "Guard outage is an
+  infrastructure failure" (`sandbox/sandbox-egress`)
+- [ ] 4.0a The `claude` registry entry, with no consumer (FR14, D12). Reserve the name: `claude`
+  joins `BuiltInExecutors`, so a law declaring an executor of that name is refused at load by
+  the existing rule. Build the entry in `ExecutorRegistry` in the shape of
+  `RegistryEntry.program`: describe from `ClaudeDialect`; a stage half — a
+  `RoundExecutorFactory` whose executor is `AgentRoundRunner` over the Claude dialect bound to
+  the round's environment, behind the 4.0 decorator; a check half — the runner bound to the
+  check's fresh box from `FreshBoxSource` in a run that has boxes, and to the host environment
+  in a run that has none (design D2: the judge's stated exemption; `ProgramCheckPlacement`
+  keeps refusing a law's `program` there), behind the same decorator. This is the first
+  production construction of `AgentRoundRunner`. Nothing resolves the entry yet:
+  `ExecutorDispatch`'s agent arm and `CliJudgeVoter` are untouched, and no behaviour changes.
+  Specs: the registry resolves `claude` to an entry whose describe lists the three roles; a law
+  naming an executor `claude` is a located load error; both halves bind and answer through the
+  fake dialect. Scenario marker for "An agent block resolves to the reserved executor name"
+  (`pipeline/pipeline-config`)
+- [ ] 4.2 The `judge` check declares the stage's executor block (FR4, FR13, UX1, D12).
+  Consumers of the block, each visited: `StageDefinition.Executor` (a stage), `VerifyCheck.Judge`
+  (the check now carries `criteriaFile` and that same executor type, and no `model`,
+  `settings` or `votes` of its own), the DTO and mapper of both (`VerifyCheckDto`,
+  `VerifyCheckMapper` — one mapping function for the block, called from the stage mapper and
+  the check mapper), `StageMechanismRule` (the one rule: an agent block pins its model; called
+  for the judge's block too, located at `verify[i].executor.*`), `ExecutorReferenceRule` (a
+  judge's `program` block names a declared executor), `AgentSettingsValidator` (the judge's
+  settings are the block's), and a role rule: the executor a judge block resolves to lists
+  `verdict` in its describe, else a located load error. Old way removed in this task:
+  `StageSanityRule.validateJudge`'s own model rule and vote rule; `votes`, `model` and
+  `settings` as fields of the judge DTO, so each is refused as an unknown field by
+  `StructuralParse`. Until 4.1, `CliJudgeVoter` reads the model and settings from the check's
+  block, so the judge's behaviour is unchanged and `JudgeVoting` runs its loop once (4.1
+  deletes it). `JudgePromptBuilder` renders the criteria and the briefing as the `verdict` role
+  input, the text `CheckRound` will hand the request in 4.1. Gate: `ExecutorBlockOwnerSpec`
+  (`:bootstrap`) — the manifest keys `model` and `settings` of an executor are read in main
+  sources only by the one block mapper, the scan asserted reached. Fixtures and example
+  pipelines under the test trees and `docs/` move to the new form; `.gnomish/` of this
+  repository is not touched (proposal NG11). Specs and scenario markers: the other five scenarios of
+  "A judge check declares the stage's executor block" (`pipeline/pipeline-config`); the marker
+  of "Judge vote count must be positive and odd" stays on a feature that now asserts any
+  `votes` is refused
+- [ ] 4.1 The judge runs as a check round; the judge path is deleted (FR4, M3, M7, D2). **Gate:
+  2.3b is ticked.** The engine's verify loop hands a `judge` check to the check-round path it
+  already uses for an executor check (`checkRounds.answer` in `VerifyOrchestrator`), and
+  `CheckRoundRoute` → `CheckDispatch` → the registry entry's check half → `CheckRound` →
+  `VerdictDerivation` serve it. The check-round chain is typed on `VerifyCheck.Executor` today
+  (`StageExecutor.Request.check()`, `CheckRoundRoute.java:37`, `CheckDispatch.bind`,
+  `CheckRound.java:54`, `RegistryEntry.bound`, `CheckBinding.bind`, `PinCheck.guarding`): give
+  the two check kinds what the chain reads — the executor name, the settings, the threshold,
+  the pin paths, the role input — through one type, and name in the report which one you chose
+  and why; do not add a second chain. `CheckRound` takes the `verdict` role input from the
+  check (the criteria prompt for a judge, today's `check '<id>'` text otherwise), and the
+  criteria preflight runs ahead of the request as it does ahead of a vote today. Deleted, with
+  their specs: `JudgeVoter` (from `EnginePorts` and the ports package), `JudgeVoting`,
+  `CliJudgeVoter`, `JudgeRoundExecution`, `JudgeCannotVerify`, `FreshJudgeEnvironments`,
+  `HostJudgeEnvironmentSource`, `JudgeEnvironmentSource`, the `judgeVoter` wiring of
+  `ExecutorAdapterSelector` and `RunAssembler`, and the `JudgeCannotVerify.java:68` row of
+  `GuardProbeOwnerSpec`. Old-way sweep, reported with its hits:
+  `grep -rn "JudgeVoter\|JudgeVoting\|judgeVoter\|FreshJudgeEnvironments\|\.votes()" --include='*.java' --include='*.groovy'`
+  → zero in main sources (the usage type's `votes` list and the `vote` ordinal stay: design
+  D2). Specs, TDD: a judge check's one verdict is the check's verdict; a malformed answer is
+  cannot-verify; a stage with two `judge` checks runs them in order and never requests the
+  second after the first fails; two judge checks on one attempt commit each get a box of their
+  own; `EnginePorts` holds one port. Scenario markers: the four scenarios of "A judge check is
+  one verdict request" (`pipeline/stage-engine`); "Two judge checks do not share a box" and
+  "Poisoned round box cannot grade itself" (`verification/verification-hardening`, the second
+  moved from `FreshJudgeEnvironmentsSpec`); "A judge vote is bounded by its check's
+  roundTimeout" moved from `CliJudgeVoterSpec`; "A judge check classifies by its votes" stays on
+  `VerifyClassificationSpec` with its body following the delta; "Judge votes are participants"
+  (`observability/status-report`) on a round with two judge checks. The markers of the four
+  scenarios of the removed "Judge majority voting" go with `JudgeVotingSpec` and
+  `JudgeVotingCannotVerifySpec`
 - [ ] 4.3 Judge exemptions and the judge participant (carried from D10 of
   `define-executor-contract` and task 2.4 of `migrate-verify-to-executor-contract`):
   `OutcomeClassifierOwnerSpec` (`:bootstrap`) allowlists the judge's `new Verdict.CannotVerify(`
   sites (`JudgeVerdictExtractor`, `JudgeCriteriaPreflight`, `JudgeCannotVerify`) under this
-  change's pickup; each row leaves with its class's last such construction (2.4, 4.1, D2: votes
-  derive through `VerdictDerivation`), and the pickup leaves the spec's `PICKUPS` once no row
-  names it. `Participants.JUDGE_EXECUTOR` (`domain/engine`) names every judge vote's participant
-  by the `agent-cli` type word; once 4.2 lets a judge check name an executor, the vote's
-  participant is the executor the check resolves to, and the constant goes with its javadoc
-  (which names this change)
+  change's pickup; each row leaves with its class's last such construction (2.4, 4.1, D2: the
+  verdict derives through `VerdictDerivation`), and the pickup leaves the spec's `PICKUPS` once
+  no row names it. `Participants.JUDGE_EXECUTOR` (`domain/engine`) names every judge
+  participant by the `agent-cli` type word; with 4.1 the participant is named by the registry
+  entry the check's block resolved to, its `vote` the ordinal of the request among the round's
+  judge checks, and the constant goes with its javadoc (which names this change)
   (FR4)
 
 ## 5. Deletions and pair dissolution
 
 - [ ] 5.1 Delete `CliStageExecutor`, `ExecutorRoundExecution`, `HostRoundEnvironmentSource`,
-  `SandboxRoundEnvironmentSource`, `HostJudgeEnvironmentSource`; runner takes the environment
-  from the existing `verifyIn` acquisition; registry entry `claude` wired in
-  `ExecutorAdapterSelector`. `ResumeVerificationStageExecutor` is **not** deleted: it stays the one
+  `SandboxRoundEnvironmentSource`; the stage half of the `claude` entry (built in 4.0a) takes
+  the environment from the existing `verifyIn` acquisition, and the
+  `ExecutorRoundExecution.java:111,138` row leaves `GuardProbeOwnerSpec`, whose allowlist is
+  then the decorator and the environment types alone (M6). **Gate: 2.3b is ticked.**
+  `ResumeVerificationStageExecutor` is **not** deleted: it stays the one
   recovery owner of an interrupted verification (`task-branch-contract`, "An interrupted
   verification is InProgress with one recovery owner") and decorates the chain over the `claude`
   executor as it did the old arm; its pending-round subject is task 6.5. The `claude` entry's
@@ -185,9 +280,11 @@
 - [ ] 5.1a Dispatch arm (carried from D8 and the `ExecutorRegistry` row of D10 of
   `define-executor-contract`): `ExecutorDispatch` (`:bootstrap`) sends a `program` stage to the
   registry by `executor.name` and every other stage to one type-keyed `agent-cli` arm, kept "until
-  `extract-agent-round-runner` makes the agent a named executor"; with the `claude` entry of 5.1
-  the agent arm is deleted and an agent stage resolves through `ExecutorRegistry` like any other;
-  the `COMMAND` arm stays (design D6 of `add-command-executor`) (D8)
+  `extract-agent-round-runner` makes the agent a named executor"; with the `claude` entry of
+  4.0a serving stage rounds the agent arm is deleted and an agent stage resolves through
+  `ExecutorRegistry` like any other, under the reserved name (D12); the `COMMAND` arm stays
+  (design D6 of `add-command-executor`). Done together with 5.1, the switch first and the
+  deletions after it, the build green between them (D8)
 - [ ] 5.2 Remove the `ExecutorRoundExecution` ↔ `JudgeRoundExecution`, `HostRoundEnvironmentSource`
   ↔ `SandboxRoundEnvironmentSource`, `RoundTimeout` ↔ `AgentSettingsValidator` registry rows;
   collapse `MidRoundPushRounds` ↔ `SandboxRoundEnvironmentSource` into one round-token minting

@@ -89,8 +89,12 @@ weakening any verification gate.
 
 ### Functional
 
-- FR1: `stage.yaml` MAY declare a `decisions:` section (arbiter model,
-  settings, `rulesFile`, `maxDecisions`). Absent section = today's behavior
+- FR1: `stage.yaml` MAY declare a `decisions:` section (the arbiter's
+  `executor:` block, `rulesFile`, `maxDecisions`). The block is the one a
+  stage and a `judge` check declare — same type, same parser, same
+  validation, no default (FR13 and design D12 of
+  `extract-agent-round-runner`, amended 2026-11-22); the section has no
+  `model` or `settings` key of its own. Absent section = today's behavior
   unchanged.
 - FR2: The referenced decision-rules file is read once at invocation start
   from the factory-owned clone into the frozen pipeline law; the gnome

@@ -42,10 +42,12 @@ See proposal.md — Why. Constraints:
 ## Goals / Non-Goals
 
 **Goals:** one runner, one dialect seam (FR1, FR2); Claude as the first dialect with no behavior
-loss (FR3); judge on the contract (FR4); every pair in the module dissolved (G3).
+loss (FR3); judge on the contract (FR4); one executor block and one registry for every role
+(FR13, FR14); one owner of the guard probe (FR15); every pair in the module dissolved (G3).
 
 **Non-Goals:** out-of-process Claude (NG1), ACP (NG2), repo-policy isolation enforcement
-(NG4), a Claude round returning `pending` (NG5), cancelling an abandoned run (NG6). Transform
+(NG4), a Claude round returning `pending` (NG5), cancelling an abandoned run (NG6), judge votes
+(NG10), this repository's own manifests (NG11). Transform
 `pending` in the engine is in scope (D11).
 
 ## Decisions
@@ -57,12 +59,48 @@ data; keeping the step in process proves the seam with the existing 51 specs bef
 crosses a process boundary (`externalize-claude-executor` does that next). *Alternative
 rejected:* externalize at once — two risks in one change and no reference for the kit yet.
 
-**D2 — Judge is a `verdict` request; votes are N starts.** (FR4.) `JudgeVoting` keeps the
-majority reducer and odd-votes rule; each vote is `executor.start(verdictRequest)` in the
-fresh environment the verification-hardening spec already requires; verdicts derive through
-`VerdictDerivation`; `JudgeVoter` leaves `EnginePorts`. *Alternative rejected:* a built-in
-`llm-api` judge now — a second LLM mechanism before the dialect seam is proven (proposal Q3 of
-the contract change stays open for `externalize-claude-executor`).
+**D2 — A judge check is one `verdict` request on the check path.** (FR4; amended 2026-11-22
+after the decision review of task 4.1.) A `judge` check runs as every executor check does: the
+engine asks its one port for a check round, `CheckRoundRoute` hands it to `CheckDispatch`, the
+registry resolves the executor the check's `executor:` block declares (D12), `CheckRound` builds
+the `verdict` request, and `VerdictDerivation` judges the answer. The criteria file and the
+briefing are rendered into the request's `verdict` role input by `JudgePromptBuilder`; the
+criteria preflight stays ahead of the request. `JudgeVoter` leaves `EnginePorts`, and
+`JudgeVoting`, `CliJudgeVoter`, `JudgeRoundExecution`, `FreshJudgeEnvironments` and
+`HostJudgeEnvironmentSource` are deleted. In a run with fresh boxes the request runs in a box of
+its own from the one `FreshBoxSource`, as a `program` check does; on the host it runs in the
+host environment, as the judge does today — the one stated exemption from "a verdict runs in a
+fresh box", which `ProgramCheckPlacement` keeps refusing for a law's `program`.
+
+*What was wrong before the amendment.* The decision said "`JudgeVoting` issues N starts to the
+registry-resolved executor", and the migration plan said "behind the existing registry entry".
+Neither premise held: `agent-cli` was no registry entry (`ExecutorRegistry.java:40-41`,
+`ExecutorDispatch.java:65`), `AgentRoundRunner` was built in no main source, a `judge` check
+named no executor (`VerifyCheck.java:152`), and `JudgeVoting` lives in `:domain`, which has one
+port and no registry (M3). Task 4.1 switched a consumer before its provider existed.
+
+*Votes are removed* (human decision 2026-11-22; NG10). The reducer bought nothing a single
+verdict did not and cost a model call per vote; every manifest of this repository declares
+`votes: 1`. A second opinion is a second `judge` check: the `verify` list is ordered and stops at
+the first non-pass (`VerifyOrchestrator`), so a later judge runs only after the earlier ones
+pass. A manifest that still carries `votes` — or the old `model` and `settings` keys beside the
+check — is refused at load as an unknown field of that check (`StructuralParse`), the loader's
+standing answer to a key removed with no replacement; no message of its own is added. The usage
+entry's `vote` field stays: it is the ordinal of the
+`verdict` request among the round's judge checks.
+
+*Alternative zero — keep `CliJudgeVoter`:* zero cost per run, and FR4 and M3 stay unmet with a
+second round class beside the runner for good. *Alternative rejected — `JudgeVoting` calls the
+executor itself:* `:domain` would need the registry or a second port, the thing M3 removes.
+*Alternative rejected — the judge defaults to the stage's executor* (the proposal's first text):
+it grades work with the model that produced it, which the self-preference results warn against
+(Panickssery, Bowman, Feng, NeurIPS 2024, arXiv 2404.13076), and it silently changes the judge
+of a `program` or `command` stage; Inspect AI's `ModelRole("grader", required=True)` is the
+precedent for a grader that never falls back. *Alternative rejected — a built-in `llm-api` judge
+now:* a second LLM mechanism before the dialect seam is proven (proposal Q3 of the contract
+change stays open for `externalize-claude-executor`). *Kept from the sources:* the reducer, had
+it stayed, belongs outside the grader (Inspect AI `multi_scorer`), and a trial starts from a
+clean environment (Anthropic, "Demystifying evals for AI agents") — hence a box per request.
 
 **D3 — Answer file replaces the decision file; path owned by `EnvelopePaths`.** (FR9.) The
 decision request is a `decision-request` answer written to `GNOMISH_ANSWER_FILE` under
@@ -157,7 +195,7 @@ preference 1), not into a third copy inside the schema. The dispatch's `COMMAND`
 
 | Bound          | Owner                                                                                   | Why                                                                                                                                                                                              |
 |----------------|-----------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| overall        | the law: `roundTimeout` of the stage's executor settings or of the judge check's settings; the factory's overall bound (`ProgramBounds`) when the key is absent | only the stage's author knows how long its work takes; the main specs already promise it (`agent-executor`, "Round timeout and control-file preflight"; `claim-heartbeat`, which names the per-stage `roundTimeout` as what bounds a round) |
+| overall        | the law: `roundTimeout` of the stage's executor settings or of the judge check's executor settings; the factory's overall bound (`ProgramBounds`) when the key is absent | only the stage's author knows how long its work takes; the main specs already promise it (`agent-executor`, "Round timeout and control-file preflight"; `claim-heartbeat`, which names the per-stage `roundTimeout` as what bounds a round) |
 | startup read   | the factory (`ProgramBounds`)                                                           | a property of the CLI's start, the same for every stage                                                                                                                                          |
 | silence        | the factory (`ProgramBounds`)                                                           | a property of the CLI's liveness cadence, not of the stage's work (measurement below)                                                                                                            |
 
@@ -257,7 +295,7 @@ measurement does not show.
 
 | Owner                                                                       | Value (type)                                                                 | Consumers                                                                                                                                                                                                                                          | Old way removed                                                                                                                                                                                      | Enforced by                                                                                                                                                                                                                                                                                                                       |
 |-----------------------------------------------------------------------------|------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `AgentRoundRunner` (adapters/agent/runner)                                  | `ExecutorResult`                                                             | `ExecutorRegistry` entry `claude` (stage dispatch), `JudgeVoting` via registry, arbiter via registry                                                                                                                                               | `CliStageExecutor`, `CliJudgeVoter`, `ExecutorRoundExecution`, `JudgeRoundExecution` deleted; `ResumeVerificationStageExecutor` stays the one recovery owner of an interrupted verification (`task-branch-contract`) and decorates the chain over the `claude` executor as it did the old arm | `JudgeVoter` type deleted (compile); `EnginePorts` holds one executor port (spec)                                                                                                                                                                                                                                                 |
+| `AgentRoundRunner` (adapters/agent/runner)                                  | `ExecutorResult`                                                             | `ExecutorRegistry` entry `claude` (D12): its stage half (stage dispatch) and its check half (a `judge` check's check round, D2); the arbiter through the same entry (`add-decision-arbiter`)                                                                                                                                               | `CliStageExecutor`, `CliJudgeVoter`, `ExecutorRoundExecution`, `JudgeRoundExecution` deleted; `ResumeVerificationStageExecutor` stays the one recovery owner of an interrupted verification (`task-branch-contract`) and decorates the chain over the `claude` executor as it did the old arm | `JudgeVoter` type deleted (compile); `EnginePorts` holds one executor port (spec)                                                                                                                                                                                                                                                 |
 | `AgentDialect` (interface)                                                  | `RenderedArgv`, `ParsedEvents`, `Answer`                                     | `AgentRoundRunner` only                                                                                                                                                                                                                            | `AgentCommandLine`/`AgentInvocationOptions` called from round classes; `AgentAiSeam` static names                                                                                                    | `ArchUnit`: no class outside `adapters/agent/claude` imports a Claude type; grep `stream-json\|ANTHROPIC_\|acceptEdits` → dialect package only (M2)                                                                                                                                                                               |
 | The question a decision answers (`Decision`, `domain/engine`; D4 as amended) | `Decision` with its optional question and options, built by one function from the position, the consumed outcome's report, the reply, the author and the instant | `ResumeDecisionCommit` (the `take` path) and `EscalationResume` (the `run` path), which both call that function; `TaskJsonMapper` (the `decisions` entries of `task.json`, read without a question as before); `BriefingSections.renderDecisions` (the stage round prompt and the judge prompt). Reads the body only, by design: `StatusTextRenderer`/`StatusReport`, `DecisionAck` | `new Decision(` at `ResumeDecisionCommit.java:36` and `EscalationResume.java:127`, each with its own copy of the position switch; `lastEscalation` as the only place a question survives | `DecisionOwnerSpec` (`:bootstrap`): `new Decision(` in main sources only in the one builder and in `TaskJsonMapper`, the allowlist asserted reached; identity spec `DecisionQuestionIdentitySpec` on a real bare origin: the question and options of the park commit's report equal those of the decision in the decision commit and those in the next round's prompt, on the host and in container mode |
 | `EnvelopePaths.answerFile` (domain)                                         | `EnvelopePath`                                                               | `AgentRoundRunner` (hands the path), `BranchDecisionFile` (reads it), salvage (`FactoryOwnedPaths`). Invariant: `EnvelopePaths.answerFile` is the branch-durable location of a `decision-request` answer, the one path `BranchDecisionFile` reads at the tip; the contract's result channel separately names a per-request scratch answer path | `DecisionFileTransport` deleted; `GNOMISH_DECISION_FILE` literal removed. Exemption: `ProgramSpawn`/`ProgramResultRead` (the `program` executor, `result-channel` capability) keep their per-request answer path, unchanged — a scratch channel of one request, not the branch envelope | existing envelope-paths build gate extended with the new constant                                                                                                                                                                                                                                                                 |
@@ -265,6 +303,9 @@ measurement does not show.
 | `PendingPoll` (`domain/engine`, from `migrate-verify-to-executor-contract`) | `PendingPollRecord` (an entry of `TaskState.pendingPolls`) with the sealed subject `Round` beside `Check(CheckRef)`; the round token is already on the record | `StageAttemptLoop` (hands a `transform` `pending` to `PendingPoll`), `PendingPoll` (live and resumed), the two `persistPending` implementations (`GitAttemptPersistence`, `EnvironmentAttemptPersistence`), `StateJsonMapper`/`TaskState` (the `pendingPolls` list), `ResumeVerificationStageExecutor` (the recogniser and one recovery owner; a `Round` entry resumes through `PendingPoll`, never as `Completed`) | the `transform` arm "a `pending` the stage cannot poll" in `RoundFailures`/`AttemptAccounting`/`RoundOutcome` narrowed to executors declaring no `poll`; no second pending record, loop or key store | sealed subject (exhaustive switch); `PendingKey` parameter type; architecture spec `ExecutorPollOwnerSpec` (`:bootstrap`): `Executor.poll(` is called in `domain`/`application` main sources only from `PendingPoll`, the scan asserted to reach its allowlist; identity spec `PendingRoundIdentitySpec`; kill-point specs of D11 |
 | Credential names (`ClaudeDialect.describe`)                                 | `ExecutorCredentialNames`                                                    | `ChildEnvAllowlist` layer via the contract's delivery                                                                                                                                                                                              | `AgentAiSeam` deleted (the dead `agent-cli-env-passthrough` knob is already gone, `RemovedKeys.java:14`)                                                                                             | identity spec `ProgramCredentialDeliverySpec` extended for `claude`                                                                                                                                                                                                                                                               |
 | `RoundBounds` (`adapters/agent`; D6 as amended) | `ProgramBounds` of one round: the factory's startup-read and silence bounds, the overall bound from the request settings' `roundTimeout` or the factory's | `AgentRound`'s wait (every role: a stage round, each judge vote, a decision round); the time hints of the request an agent executor receives; `CommandStageExecutor`'s timeout | `RoundTimeout.resolve(` in `ExecutorRoundExecution` and `JudgeRoundExecution` (both deleted, 4.1 and 5.1) and in `CommandStageExecutor`; `equipment.bounds()` read for the round's wait in `AgentRound`; the `RoundTimeout.DEFAULT` literal, a second spelling of `ProgramBounds.DEFAULTS.overall()` | `RoundBoundsOwnerSpec` (`:bootstrap`): `RoundTimeout.resolve(` appears only in `RoundBounds.java`, and `new ProgressWait(` in `adapters/agent/runner` only where the bounds come from it (scan asserted reached); identity spec `RoundBoundIdentitySpec`: a stage declaring `roundTimeout` is killed at exactly that value on virtual time, and the request's overall hint equals it |
+| The executor block (`StageDefinition.Executor` and its one mapper; D12) | who does the work: `type`, `model`, `settings`, `name` | a stage's `executor:`; a `judge` check's `executor:` (`VerifyCheck.Judge`); the arbiter's, in `add-decision-arbiter`; `StageMechanismRule`, `ExecutorReferenceRule`, `AgentSettingsValidator` and the role rule, which judge every one of them; the registry resolution by the block's name (`claude` for `agent-cli`) | `VerifyCheck.Judge`'s own `model`, `settings` and `votes`; `StageSanityRule.validateJudge`; the judge keys of `VerifyCheckDto`; the type-keyed agent arm of `ExecutorDispatch`; `Participants.JUDGE_EXECUTOR` | the judge record holds the block's type and no `model` field (compile); `ExecutorBlockOwnerSpec` (`:bootstrap`): an executor's `model` and `settings` keys are read by the one mapper only, the scan asserted reached |
+| The guard probe (the decorator over `Executor`, `adapters/agent`; D13) | a request's result, or `failed/infrastructure` naming a dead guard | every executor bound to an environment: the stage half and the check half of a `program` entry and of the `claude` entry | `probeGuard()` called by `ProgramStageExecutor`, `ExecutorRoundExecution` and `JudgeCannotVerify`, each for itself, and by no one for a check round | `GuardProbeOwnerSpec` (`:bootstrap`): `probeGuard(` in main sources only in the decorator and the environment types that declare or forward it, the allowlist asserted reached; spec: a `program` verdict check in a box with a dead guard is cannot-verify |
+| A fresh box for a verdict (`FreshBoxSource`, from `migrate-verify-to-executor-contract`) | one materialized box per check request, released when the request ends | the check half of a `program` entry (`ProgramCheckBinding`) and of the `claude` entry | `FreshJudgeEnvironments` (one box per attempt commit, shared by the votes), `JudgeEnvironmentSource`, `HostJudgeEnvironmentSource` | the types are deleted (compile); scenario "Two judge checks do not share a box" |
 
 **D9 — Crash consistency.** No new durable step on the decision path (the pending `transform`
 round adds one, D11): the answer file rides the snapshot/salvage
@@ -274,8 +315,10 @@ parse the resume already uses, and lands in the decision commit together with th
 (mutually implied fields in one commit), so no window holds a reply without its question. Kill-point specs of the decision path
 are re-pointed at the answer file.
 
-**D10 — Lock scope.** No lock added; `FreshJudgeEnvironments` keeps its resource-serializing
-lock (the exception, documented) and becomes the `verifyIn: fresh-box` acquisition for votes.
+**D10 — Lock scope.** No lock added. `FreshJudgeEnvironments` is deleted with the judge path
+(D2): a judge request takes a box of its own from `FreshBoxSource`, so no box is shared between
+requests and its `LiveBox` has no user left in the verification path. The guard probe (D13) is a
+`docker inspect` on the request's own thread, under no lock.
 
 **D11 — A pending `transform` round rides the one pending-poll owner.** (FR10–FR12, NFR-R3,
 NFR-R4, NFR-O2, NFR-C2, UX3, G5; human decision 2026-11-02.)
@@ -376,6 +419,58 @@ recovery owner for one kind of message (item 13), and a second parse. *Alternati
 persist the key without the working copy:* a resumed poll would see the round-open tree while the
 live one sees the started tree — two inputs for one round.
 
+**D12 — One executor block, one registry entry, no default.** (FR13, FR14, UX1; added
+2026-11-22.) Three declarations say who does the work — a stage's `executor:`, a `judge` check's
+own `model` and `settings`, and, as `add-decision-arbiter` was written, the arbiter's `model` and
+`settings` — with the rule "an agent pins its model" spelled twice (`StageMechanismRule`,
+`StageSanityRule.validateJudge`) and a third copy planned. They become one: the block a stage
+declares (`type`, `model`, `settings`, and `name` for a `program`) is the block a `judge` check
+and the arbiter declare, carried by one domain type, mapped by one mapper and judged by one
+rule; the executor, the judge and the arbiter differ in their instructions and their role, never
+in how they are configured or run. Nothing defaults: a `judge` check with no block, an agent
+block with no model, or a block whose executor does not support the role it is used in (the
+describe's role list) is a located load error and the factory does not start.
+
+*The name.* `type: agent-cli` resolves to one registry entry under the reserved built-in name
+`claude`, owned by `BuiltInExecutors` beside the six names it reserves; a law declaring an
+executor of that name is refused at load, as for every built-in. The entry has the shape
+`RegistryEntry.program` already has — a stage half (a `RoundExecutorFactory` over
+`AgentRoundRunner` with the Claude dialect) and a check half (the runner bound to the check's
+box, or to the host environment in a run without boxes) — and its describe is the dialect's.
+`ExecutorDispatch`'s type-keyed agent arm is deleted once the entry serves stage rounds (task
+5.1a), and `Participants.JUDGE_EXECUTOR` goes with it: a judge's participant is named by the
+entry it resolved to. `externalize-claude-executor` (NG1) lifts the reservation when it turns
+the entry into a law-declared program.
+
+*Alternative rejected — "a fixed name until the judge can name one"* (option A of the task 4.1
+question): a shim with no removal step, the shape Jenkins' implied plugin dependencies record.
+*Alternative rejected — `type: judge` defaults to `claude`, as `external` defaults to
+`github-actions`:* a default the operator did not write is the judge identity nobody chose
+(human decision 2026-11-22). *Alternative rejected — a name-only reference (`executor: claude`)
+with the model in a separate key:* two spellings of one block, the duplication this decision
+removes.
+
+**D13 — The guard probe has one owner.** (FR15; added 2026-11-22.) Design D14 of
+`tighten-spec-contract` put a liveness probe of the egress guard at the close of every round.
+On `main` each caller makes it for itself — `ExecutorRoundExecution.java:111,138`,
+`JudgeCannotVerify.java:68`, `ProgramStageExecutor.java:63,65` — and `CheckRound` does not, so a
+`program` verdict check in a fresh box, with the egress its law grants, is judged without one:
+one instance of the class "a result accepted from a box whose guard was not shown alive". The
+judge would have been the second once it moved onto check rounds. The probe moves to the one
+place an executor is bound to an environment: a decorator over `Executor`, applied where the
+stage half and the check half of an entry bind (`RoundExecutorFactory.executor(environment)`,
+the check binding), probing before `start` and `poll` and after each returns. A dead guard, or a
+runtime that cannot say, is `failed/infrastructure` naming the guard — a cannot-verify for a
+check, an infrastructure failure for a stage round, no attempt burned. An environment with no
+guard (the host) answers the probe as today, by doing nothing. Enforced by an architecture spec
+in `:bootstrap`: `probeGuard(` in main sources only in the decorator and in the environment
+types that implement or forward it, the allowlist asserted reached. Crash consistency is D14's
+own: the probe is a read and the classification an in-memory outcome, so no window is added.
+*Rationale:* the platform that owns the isolation gates every workload on it, not each workload
+for itself (Kubernetes KEP-753, sidecar containers; Istio `holdApplicationUntilProxyStarts`).
+*Alternative rejected — copy the probe into `CheckRound`:* a fourth caller of a rule whose
+third already missed a path.
+
 ## Risks / Trade-offs
 
 - [A non-conforming executor that refuses a superseded or ended key (K3, K4)] → the conformance
@@ -387,7 +482,9 @@ live one sees the started tree — two inputs for one round.
 
 - [The CLI of the sandbox base image, or a tool call inside a subagent, is quiet for longer than the
   factory's silence bound] → a healthy round would be killed as infrastructure on every retry.
-  Task 2.3b measures both before the runner serves a stage (task 5.1); a gap above a fifth of the
+  Task 2.3b measures both before the first consumer is switched onto the runner — the judge
+  (task 4.1) or a stage (task 5.1), whichever comes first; no inactivity bound meets an
+  unmeasured cadence (CircleCI's `no_output_timeout` is the record). A gap above a fifth of the
   bound stops the change under `spec-mismatch.md` for a decision on the bound, never a raised
   constant.
 - [The CLI's own timers are not derived from `roundTimeout`] → a foreground Bash call is moved to
@@ -415,8 +512,12 @@ live one sees the started tree — two inputs for one round.
 ## Migration Plan
 
 1. After `migrate-verify-to-executor-contract` and `remove-interactive-console`.
-2. Introduce runner + Claude dialect behind the existing registry entry; switch judge; delete
-   the old classes; remove four registry rows.
+2. Provider, then consumers, then deletion, the build green at each step (Fowler, "Branch by
+   Abstraction" and "Parallel Change"): the guard-probe owner (D13); the `claude` registry entry
+   with both halves and no consumer (D12); the `judge` check's executor block in the loader
+   (D12); then, once task 2.3b is ticked, the judge onto check rounds with the judge path
+   deleted (D2); then the stage dispatch onto the registry with the old round classes deleted;
+   then the four registry rows.
 3. Transform `pending` (D11) lands after the runner, on `PendingPoll`, `persistPending` and the
    recogniser as `migrate-verify-to-executor-contract` leaves them, adding the `Round` subject
    and the pending-round snapshot subject.

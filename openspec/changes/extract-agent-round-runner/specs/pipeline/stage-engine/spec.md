@@ -2,20 +2,25 @@
 
 ## ADDED Requirements
 
-### Requirement: Judge votes are verdict requests
-A `judge` check SHALL resolve to a named executor in role `verdict`; the engine SHALL issue
-`votes` independent `start` requests, derive each vote's verdict through the one verdict
-derivation, and reduce with the existing majority rule; any vote with a malformed answer SHALL
-make the whole check cannot-verify. `EnginePorts` SHALL expose no `JudgeVoter`.
+### Requirement: A judge check is one verdict request
+A `judge` check SHALL be one `verdict` request to the executor its `executor:` block declares,
+run as a check round and judged by the one verdict derivation; an answer that is no verdict SHALL
+make the check cannot-verify. The checks of a stage SHALL run in declaration order and stop at
+the first that does not pass. `EnginePorts` SHALL expose no `JudgeVoter`.
 **Implements**: FR4, M3 of extract-agent-round-runner
 
-#### Scenario: Majority preserved
-- **WHEN** three votes return two passing and one failing verdict
-- **THEN** the check passes and the aggregated findings are recorded as before
+#### Scenario: The judge's verdict is the check's verdict
+- **WHEN** the executor of a `judge` check answers with a failing verdict carrying two findings
+- **THEN** the check fails with those two findings and exactly one request was made
 
-#### Scenario: One malformed vote
-- **WHEN** one of three votes returns a malformed answer
+#### Scenario: A malformed judge answer is cannot-verify
+- **WHEN** the executor of a `judge` check returns an answer that is no verdict
 - **THEN** the check is cannot-verify, no attempt is burned
+
+#### Scenario: A second judge runs only after the first passes
+- **WHEN** a stage declares two `judge` checks and the first one fails
+- **THEN** the second is never requested
+- **AND** when the first passes, the second is requested and its verdict decides the stage
 
 #### Scenario: Only one executor-facing port remains
 - **WHEN** the engine ports record is inspected
@@ -86,10 +91,46 @@ call `start`.
 - **WHEN** recovery runs again on a branch whose pending round already closed
 - **THEN** nothing is polled or started and the branch is unchanged
 
+## MODIFIED Requirements
+
+### Requirement: Failure classification
+Verdicts SHALL be Pass, Fail (findings, possibly empty), or CannotVerify (reason, details). Fail increments the attempt counter and feeds the non-passing check results (every non-Pass result, including CannotVerify) of all prior attempts of the stage into the next executor request; CannotVerify escalates without burning an attempt. Each check situation SHALL classify as the scenarios below state.
+**Implements**: FR4 of add-stage-engine; FR4 of extract-agent-round-runner
+**Notes**: The scenario "A judge check classifies by its votes" keeps its title from before votes were removed; a judge check now has one verdict.
+
+#### Scenario: Classification table verified
+- **WHEN** each classification case this requirement's scenarios state is produced by a fake port
+- **THEN** the engine classifies it as stated (data-driven spec, one row per case)
+
+#### Scenario: A command check classifies by how it ended
+- **WHEN** a `command` check's process exits with a non-zero code
+- **THEN** the check is Fail
+- **AND** a `command` check whose binary is not found or cannot start is CannotVerify
+
+#### Scenario: An external check classifies by its poll
+- **WHEN** an `external` check's poll returns failure
+- **THEN** the check is Fail
+- **AND** a poll timeout is Fail under the timeout class `quality` (the default) and CannotVerify under `infrastructure`
+- **AND** a check id unknown to the service is CannotVerify
+
+#### Scenario: A judge check classifies by its votes
+- **WHEN** a `judge` check's verdict is negative
+- **THEN** the check is Fail
+- **AND** a model reply unparseable as a verdict is CannotVerify
+
+#### Scenario: A throwing adapter keeps its stack trace
+- **WHEN** a check adapter throws
+- **THEN** the engine catches the exception and the check's CannotVerify carries the exception's stack trace
+
+#### Scenario: Feedback carries the whole stage history
+- **WHEN** attempt 3 starts after two quality failures
+- **THEN** the executor request contains the non-passing check results of attempts 1 and 2
+
 ## REMOVED Requirements
 
 ### Requirement: Judge majority voting
-**Reason**: Superseded by "Judge votes are verdict requests": the vote count, odd-votes rule and
-majority reduction are unchanged, the port is replaced by the executor contract.
-**Migration**: `judge` checks name an executor supporting `verdict`; `model` and `criteriaFile`
-keep their meaning.
+**Reason**: Judge votes are removed (human decision 2026-11-22; proposal NG10): a `judge` check
+is one request ("A judge check is one verdict request"), and a second opinion is a second
+`judge` check in the stage's `verify` list.
+**Migration**: remove `votes` from every `judge` check — a manifest that carries it is refused
+at load; declare one `judge` check per opinion wanted.
