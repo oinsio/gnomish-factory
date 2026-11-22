@@ -29,6 +29,22 @@ host and config-directory isolation; and a settings schema that accepts exactly 
 - **WHEN** production sources are grepped for `ANTHROPIC_`
 - **THEN** hits exist only in the Claude dialect package
 
+### Requirement: Claude's liveness cadence
+While one tool call runs quietly for longer than the factory's silence bound, the Claude CLI,
+started with the argv the dialect renders, SHALL write to stdout at gaps of at most a fifth of
+that bound, on macOS and on Linux, whether the call runs in the main agent or inside a subagent.
+**Implements**: FR17 of extract-agent-round-runner
+
+#### Scenario: A quiet tool call in the main agent is reported within a fifth of the silence bound
+- **WHEN** the real CLI runs one tool call that prints nothing for 420 seconds
+- **THEN** the call runs to its end and the largest gap between two stdout lines is at most a
+  fifth of the factory's silence bound, on macOS and in a Linux container
+
+#### Scenario: A quiet tool call inside a subagent is reported within a fifth of the silence bound
+- **WHEN** a subagent of the real CLI runs one tool call that prints nothing for 420 seconds
+- **THEN** the call runs to its end and the largest gap between two stdout lines of the parent
+  stream is at most a fifth of the factory's silence bound, on macOS and in a Linux container
+
 ### Requirement: Policy compilation
 The dialect SHALL compile `workspaceWrite` to `--permission-mode acceptEdits`, `readOnly` to
 `--permission-mode dontAsk` with a read-only tool set that settings may only narrow, and SHALL

@@ -37,6 +37,10 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   `add-decision-arbiter`) the arbiter declare who does the work with the same `executor:` block,
   parsed and validated by one owner; nothing defaults — a `judge` check with no block, or an
   agent block with no model, stops the factory at load (design D12).
+- **ADDED**: the silence bound of an agent round follows the dialect's own declaration
+  (`streams_progress`), by the rule the `program` executor already obeys, and a declared
+  liveness is checked per dialect by a paid smoke spec on macOS and Linux, so the next dialect
+  needs no remembered measurement (design D6, amended 2026-11-22).
 - **ADDED**: the egress guard's liveness probe has one owner around every request that runs in a
   box, stage round and check round alike; a `program` verdict check in a fresh box, judged
   without a probe on `main`, is covered by it (design D13).
@@ -210,13 +214,23 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   runs in a box with a guard — a stage round and a check round alike — by one owner; a guard
   found dead SHALL make the request an infrastructure failure (a cannot-verify for a check), no
   attempt burned (design D13).
+- FR16: The startup-read and silence bounds of an agent round SHALL apply only when the
+  dialect's describe declares `streams_progress`, decided by the one owner the `program`
+  executor's wait also reads; a round of a dialect that does not declare it SHALL be held to the
+  overall bound alone (design D6).
+- FR17: A dialect's declared `streams_progress` SHALL be verified by one spec of the paid smoke
+  layer, with one row per declaring dialect, on macOS and on Linux: during one quiet tool call
+  longer than the silence bound, in the main agent and inside a subagent where the dialect has
+  them, the largest gap between two stdout lines SHALL be at most a fifth of the factory's
+  silence bound (design D6).
 
 ### Non-Functional Reliability
 
 - NFR-R1: The runner's bounds (startup read, silence, overall) are driven on virtual time in
   specs; expiry kills the process tree and reports the bound. The overall bound a round is
   killed at is the `roundTimeout` its stage or check declares (FR7), asserted end to end by one
-  identity spec; the silence bound rests on the CLI's measured liveness cadence (design D6).
+  identity spec; the silence bound applies to a dialect that declares liveness (FR16) and rests
+  on that dialect's measured cadence, kept as a paid smoke spec (FR17, design D6).
 - NFR-R2: The round after an answer SHALL depend on nothing outside the tracker and the task
   branch: an instance on another machine, or a fresh box, SHALL start it with the same briefing
   as the instance that parked the task.

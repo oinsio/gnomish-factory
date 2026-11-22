@@ -232,12 +232,58 @@ of 420 s the CLI wrote a `tool_progress` line with `heartbeat: true` every 30.0 
 gap above 30 s). `ProgressLines` counts every chunk read as activity, so the factory's 5 minutes
 is ten missed heartbeats. The CLI's documentation dates the heartbeat of a foreground subagent
 call to 2.1.257 and says tool calls inside a subagent emit none; a subagent's own tool events
-reach the parent stream (`subagent-round.reference.json`). Two facts are therefore still
-unmeasured — a long tool call inside a subagent, and the Linux CLI of the sandbox base image —
-and task 2.3b measures both before the runner serves a stage (`design-decisions.md`, "A platform
-fact is measured on every platform CI runs"). What the bound buys: the CLI is known to stop
+reach the parent stream (`subagent-round.reference.json`). Two facts were therefore unmeasured —
+a long tool call inside a subagent, and the Linux CLI of the sandbox base image
+(`design-decisions.md`, "A platform fact is measured on every platform CI runs"). Task 2.3b
+measured both on 2026-11-22, on `claude` 2.1.325 with the same flags and one quiet tool call of
+420 s (`perl -e 'select(undef, undef, undef, 420)'`; the CLI refuses a bare `sleep 420`):
+
+| Platform                                   | Where the call ran | Heartbeat lines | Largest gap between two stdout lines |
+|--------------------------------------------|--------------------|-----------------|--------------------------------------|
+| Linux (Ubuntu 24.04.5, aarch64, container) | the main agent     | 14              | 30.0 s                               |
+| Linux (the same container image)           | a subagent         | 14              | 30.0 s                               |
+| macOS                                      | a subagent         | 14              | 30.0 s                               |
+
+The Linux CLI was the one a sandbox image built from the base image carries, run in a container
+outside the factory's network (no guard, the image's proxy variables unset); the heartbeat is
+written by the CLI itself and does not depend on the route to the backend. The documentation's
+statement about subagents does not hold on this version: a tool call inside a subagent is
+reported on the parent stream every 30 s. Every gap is a tenth of the bound, under the 60 s
+threshold, so the bound stands. What the bound buys: the CLI is known to stop
 writing without exiting (anthropics/claude-code issues 39700 and 53584); without it such a round
 holds its slot for the whole `roundTimeout`, eight hours under this repository's law.
+
+*The silence bound follows the dialect's declaration.* (FR16; added 2026-11-22.) The measurement
+is a fact about one CLI. The next dialects (Codex in `externalize-claude-executor`, others
+after it) have their own cadence or none, and the contract already carries the answer: an
+executor declares `streams_progress` in its describe, and the main spec applies the silence
+bound only to an executor that declares it (`wire-contract`, "Silence bound expires"). The
+`program` executor obeys that (`ProgramExecutor.java:70`); the agent runner built in task 1.2
+does not — `RoundBounds.waitOn` applies the startup-read and silence bounds to every dialect
+(`RoundBounds.java:108`), so a dialect that honestly declares no liveness would be killed after
+5 minutes of healthy quiet work. One rule decided in two places in two ways. The rule gets one
+owner: whether the bounds on a quiet stdout apply is read from the describe's capabilities by
+one predicate beside `ProgramBounds`, which both `ProgramExecutor` and `RoundBounds` call. With
+the declaration an agent round waits under all three bounds; without it under the overall bound
+alone — the startup-read bound goes with the silence bound, since a dialect that prints only
+its final answer prints nothing at the start either. The time hints of the request follow: a
+bound the runner does not apply is not hinted. For Claude nothing changes.
+
+*A declared liveness is tested, per dialect.* (FR17; added 2026-11-22.) The declaration is a
+promise the factory kills healthy rounds on when it is false, and until now it was checked by a
+measurement someone had to remember. It becomes a spec of the paid smoke layer,
+`PaidSmokeLivenessSpec`: a table with one row per dialect that declares `streams_progress`; for
+each row and each platform CI runs (macOS on the host, Linux in a container of an image that
+carries the CLI) it starts the real CLI with the argv the dialect renders, has it run one quiet
+tool call longer than the silence bound — in the main agent and, where the dialect has
+subagents, inside one — and asserts that the largest gap between two stdout lines is at most a
+fifth of the factory's silence bound. A new dialect adds one row; the adapter author guide says
+`streams_progress` is declared only after that row is green. The layer spends money and is run
+by hand, as today: on a CLI version bump and before a change that adds or changes a dialect is
+archived. *Alternative rejected — a conformance-kit case:* the kit runs in `check` against a
+fake program, and a cadence is a property of the real CLI on a real platform over seven
+minutes; a fake would assert its own script. *Alternative rejected — measure at run time and
+adapt the bound:* a round that goes quiet is exactly the case the bound exists to end.
 
 *Alternative zero — no law key at all* (the escalation's option 1 as worded): the bounds stay
 the factory's three constants. What is left per round is one number that differs per stage by a
@@ -302,6 +348,7 @@ measurement does not show.
 | Policy compilation (`ClaudePolicyCompiler`)                                 | argv fragment from `Policy`                                                  | `ClaudeDialect`                                                                                                                                                                                                                                    | `AgentRole`, `JUDGE_READ_ONLY_TOOLS`, per-role branches in `AgentInvocationOptions`                                                                                                                  | `Policy` sealed type in the request; spec: no argv carries `bypassPermissions`                                                                                                                                                                                                                                                    |
 | `PendingPoll` (`domain/engine`, from `migrate-verify-to-executor-contract`) | `PendingPollRecord` (an entry of `TaskState.pendingPolls`) with the sealed subject `Round` beside `Check(CheckRef)`; the round token is already on the record | `StageAttemptLoop` (hands a `transform` `pending` to `PendingPoll`), `PendingPoll` (live and resumed), the two `persistPending` implementations (`GitAttemptPersistence`, `EnvironmentAttemptPersistence`), `StateJsonMapper`/`TaskState` (the `pendingPolls` list), `ResumeVerificationStageExecutor` (the recogniser and one recovery owner; a `Round` entry resumes through `PendingPoll`, never as `Completed`) | the `transform` arm "a `pending` the stage cannot poll" in `RoundFailures`/`AttemptAccounting`/`RoundOutcome` narrowed to executors declaring no `poll`; no second pending record, loop or key store | sealed subject (exhaustive switch); `PendingKey` parameter type; architecture spec `ExecutorPollOwnerSpec` (`:bootstrap`): `Executor.poll(` is called in `domain`/`application` main sources only from `PendingPoll`, the scan asserted to reach its allowlist; identity spec `PendingRoundIdentitySpec`; kill-point specs of D11 |
 | Credential names (`ClaudeDialect.describe`)                                 | `ExecutorCredentialNames`                                                    | `ChildEnvAllowlist` layer via the contract's delivery                                                                                                                                                                                              | `AgentAiSeam` deleted (the dead `agent-cli-env-passthrough` knob is already gone, `RemovedKeys.java:14`)                                                                                             | identity spec `ProgramCredentialDeliverySpec` extended for `claude`                                                                                                                                                                                                                                                               |
+| Whether the bounds on a quiet stdout apply (one predicate over the describe's capabilities, beside `ProgramBounds`; D6, FR16) | yes when the describe declares `streams_progress`, no otherwise | `ProgramExecutor` (the `program` run's wait); `RoundBounds` (the agent round's wait and the request's time hints) | `describe.capabilities().contains(Capability.STREAMS_PROGRESS)` in `ProgramExecutor.java:70`; the unconditional `new ProgressWait(bounds.startup(), bounds.silence(), …)` in `RoundBounds.waitOn` | `RoundBoundsOwnerSpec` (`:bootstrap`): `Capability.STREAMS_PROGRESS` is read in main sources only by the predicate's file, and written only in a describe (scan asserted reached); the runner's spec with a fake dialect that declares no `streams_progress`, quiet past the silence bound and alive; `PaidSmokeLivenessSpec` for the truth of a declaration (FR17) |
 | `RoundBounds` (`adapters/agent`; D6 as amended) | `ProgramBounds` of one round: the factory's startup-read and silence bounds, the overall bound from the request settings' `roundTimeout` or the factory's | `AgentRound`'s wait (every role: a stage round, each judge vote, a decision round); the time hints of the request an agent executor receives; `CommandStageExecutor`'s timeout | `RoundTimeout.resolve(` in `ExecutorRoundExecution` and `JudgeRoundExecution` (both deleted, 4.1 and 5.1) and in `CommandStageExecutor`; `equipment.bounds()` read for the round's wait in `AgentRound`; the `RoundTimeout.DEFAULT` literal, a second spelling of `ProgramBounds.DEFAULTS.overall()` | `RoundBoundsOwnerSpec` (`:bootstrap`): `RoundTimeout.resolve(` appears only in `RoundBounds.java`, and `new ProgressWait(` in `adapters/agent/runner` only where the bounds come from it (scan asserted reached); identity spec `RoundBoundIdentitySpec`: a stage declaring `roundTimeout` is killed at exactly that value on virtual time, and the request's overall hint equals it |
 | The executor block (`StageDefinition.Executor` and its one mapper; D12) | who does the work: `type`, `model`, `settings`, `name` | a stage's `executor:`; a `judge` check's `executor:` (`VerifyCheck.Judge`); the arbiter's, in `add-decision-arbiter`; `StageMechanismRule`, `ExecutorReferenceRule`, `AgentSettingsValidator` and the role rule, which judge every one of them; the registry resolution by the block's name (`claude` for `agent-cli`) | `VerifyCheck.Judge`'s own `model`, `settings` and `votes`; `StageSanityRule.validateJudge`; the judge keys of `VerifyCheckDto`; the type-keyed agent arm of `ExecutorDispatch`; `Participants.JUDGE_EXECUTOR` | the judge record holds the block's type and no `model` field (compile); `ExecutorBlockOwnerSpec` (`:bootstrap`): an executor's `model` and `settings` keys are read by the one mapper only, the scan asserted reached |
 | The guard probe (the decorator over `Executor`, `adapters/agent`; D13) | a request's result, or `failed/infrastructure` naming a dead guard | every executor bound to an environment: the stage half and the check half of a `program` entry and of the `claude` entry | `probeGuard()` called by `ProgramStageExecutor`, `ExecutorRoundExecution` and `JudgeCannotVerify`, each for itself, and by no one for a check round | `GuardProbeOwnerSpec` (`:bootstrap`): `probeGuard(` in main sources only in the decorator and the environment types that declare or forward it, the allowlist asserted reached; spec: a `program` verdict check in a box with a dead guard is cannot-verify |
@@ -482,10 +529,11 @@ third already missed a path.
 
 - [The CLI of the sandbox base image, or a tool call inside a subagent, is quiet for longer than the
   factory's silence bound] → a healthy round would be killed as infrastructure on every retry.
-  Task 2.3b measures both before the first consumer is switched onto the runner — the judge
-  (task 4.1) or a stage (task 5.1), whichever comes first; no inactivity bound meets an
-  unmeasured cadence (CircleCI's `no_output_timeout` is the record). A gap above a fifth of the
-  bound stops the change under `spec-mismatch.md` for a decision on the bound, never a raised
+  Task 2.3b measured both on 2026-11-22 (D6: 30.0 s on both platforms, in a subagent too); no
+  inactivity bound meets an unmeasured cadence (CircleCI's `no_output_timeout` is the record).
+  A later CLI version or a new dialect can change the cadence, so the measurement is kept as
+  `PaidSmokeLivenessSpec` (FR17): a gap above a fifth of the bound fails it, and that failure is
+  reported under `spec-mismatch.md` for a decision on the bound, never answered with a raised
   constant.
 - [The CLI's own timers are not derived from `roundTimeout`] → a foreground Bash call is moved to
   the background at the CLI's `BASH_MAX_TIMEOUT_MS` whatever the stage declares; that is the
@@ -515,7 +563,7 @@ third already missed a path.
 2. Provider, then consumers, then deletion, the build green at each step (Fowler, "Branch by
    Abstraction" and "Parallel Change"): the guard-probe owner (D13); the `claude` registry entry
    with both halves and no consumer (D12); the `judge` check's executor block in the loader
-   (D12); then, once task 2.3b is ticked, the judge onto check rounds with the judge path
+   (D12); then, once task 2.3b is ticked and task 2.3c has landed, the judge onto check rounds with the judge path
    deleted (D2); then the stage dispatch onto the registry with the old round classes deleted;
    then the four registry rows.
 3. Transform `pending` (D11) lands after the runner, on `PendingPoll`, `persistPending` and the

@@ -47,7 +47,7 @@ nothing else from the vendor.
 Stdout SHALL be drained from launch through the one drain owner with byte and line caps; stderr
 SHALL go to a file in the round scratch directory and be read, capped, after the exit
 (`agent-executor`, "The round's stderr is kept"), never through a pipe of its own; the
-startup-read, silence and overall bounds SHALL be applied; expiry SHALL kill the process tree
+round's bounds SHALL be applied; expiry SHALL kill the process tree
 and report `failed/infrastructure` naming the bound.
 **Implements**: FR1, FR8, NFR-R1 of extract-agent-round-runner
 
@@ -63,6 +63,22 @@ and report `failed/infrastructure` naming the bound.
 - **WHEN** the CLI writes nothing but a liveness line every 30 seconds for longer than the
   silence bound
 - **THEN** the round is not killed on silence
+
+### Requirement: The bounds on a quiet stdout follow the dialect's declaration
+The startup-read and silence bounds SHALL apply to a round only when the dialect's describe
+declares `streams_progress`; a round of a dialect that does not declare it SHALL be held to the
+overall bound alone, and its request SHALL carry no startup-read and no silence hint.
+**Implements**: FR16 of extract-agent-round-runner
+
+#### Scenario: A dialect that declares no liveness is not killed on silence
+- **WHEN** a dialect whose describe does not declare `streams_progress` writes nothing for
+  longer than the startup-read bound and the silence bound, then its result
+- **THEN** the round completes with that result
+
+#### Scenario: A dialect that declares no liveness is still held to the overall bound
+- **WHEN** a dialect whose describe does not declare `streams_progress` writes nothing for
+  longer than the round's overall bound
+- **THEN** the tree is killed and the result is `failed/infrastructure` naming the overall bound
 
 ### Requirement: The declared roundTimeout is the round's overall bound
 The overall bound of a round SHALL be the `roundTimeout` of the request's settings when they

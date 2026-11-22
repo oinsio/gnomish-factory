@@ -56,7 +56,7 @@
   and the request's overall hint equals that value; scenario markers for the three `roundTimeout`
   scenarios and "A liveness line during a long tool call keeps the round alive" of
   `agent-round-runner`. Must land before 4.1: after it no vote reads `roundTimeout` any other way
-- [ ] 2.3b Measure the CLI's liveness cadence where it is still unmeasured (D6, "The silence
+- [x] 2.3b Measure the CLI's liveness cadence where it is still unmeasured (D6, "The silence
   bound, measured"; `design-decisions.md`, "A platform fact is measured on every platform CI
   runs"): with the argv the dialect renders, record the largest gap between two stdout lines
   (a) during one foreground Bash call of at least 7 minutes — on the Linux CLI of the sandbox
@@ -65,8 +65,52 @@
   CLI version and the gaps in D6. A gap above 60 s (a fifth of the factory's silence bound) is a
   blocker reported under `spec-mismatch.md`, never a raised constant. Must land before the first
   consumer is switched onto the runner — task 4.1 (the judge) or task 5.1 (the stages),
-  whichever is reached first; tasks 4.0, 4.0a and 4.2 do not wait for it. The human measures the
-  Linux half and ticks this task
+  whichever is reached first; tasks 4.0, 4.0a and 4.2 do not wait for it. Done 2026-11-22 in a
+  decision review: 30.0 s on Linux (main agent and subagent) and on macOS (subagent), recorded
+  in D6 with the conditions
+- [ ] 2.3c The silence bound follows the dialect's declaration (FR16, D6 "The silence bound
+  follows the dialect's declaration", D8 row). TDD on virtual time. One predicate beside
+  `ProgramBounds` (`:application`, `app/describe`) answers, from a describe's capabilities,
+  whether the bounds on a quiet stdout apply. Consumers, each shown to take the answer from it:
+  (1) `ProgramExecutor` (`ProgramExecutor.java:70`, which reads the capability itself today —
+  the old way); (2) `RoundBounds`, which takes the dialect's describe with the request: with
+  `streams_progress` the wait is as today, without it the wait is under the overall bound alone
+  (no startup-read bound, no silence bound) and `hinted` carries no startup-read and no silence
+  hint. `RoundBounds.waitOn` is the only place an agent round's wait is built. Old-way sweep,
+  reported with its hits:
+  `grep -rn -e 'STREAMS_PROGRESS' -e 'new ProgressWait(' --include='*.java' */src/main adapters/*/src/main`
+  — every hit is the predicate, a describe that declares the capability, or a wait built from
+  the predicate's answer. Extend `RoundBoundsOwnerSpec` with that scan (asserted reached). Specs:
+  a fake dialect without `streams_progress` stays quiet past the silence bound and completes,
+  and is killed at its overall bound; the fake dialect with it keeps today's three scenarios;
+  `ProgramExecutor`'s specs stay green unchanged. Scenario markers for the two scenarios of
+  "The bounds on a quiet stdout follow the dialect's declaration" of `agent-round-runner`.
+  Update the `ProgramBounds` and `RoundBounds` javadoc, which say "always". Must land before
+  4.1
+- [ ] 2.3d The liveness measurement as a spec of the paid smoke layer (FR17, D6 "A declared
+  liveness is tested, per dialect"). `PaidSmokeLivenessSpec` in
+  `bootstrap/src/test/groovy/…/e2e/paidsmoke/`, run by `paidSmokeTest` only (the layer is
+  already excluded from `test` and from PIT). A data table: one row per dialect whose describe
+  declares `streams_progress` — today `ClaudeDialect` alone — crossed with the platforms: macOS
+  or Linux on the host the task runs on, and Linux in a container of the image named by
+  `-PpaidSmoke.linuxImage=<image>` (an image that carries the CLI; the credential reaches the
+  container by variable name, never on the argv; the image's proxy variables are unset, since
+  the container runs outside a factory network). With no image named the container rows fail
+  with a message naming the property — never a silent skip. Each row starts the real CLI with
+  the argv the dialect renders for a `transform` request, with the prompt asking for one quiet
+  tool call of 420 s (`perl -e 'select(undef, undef, undef, 420)'`; the Claude CLI refuses a
+  bare `sleep`) — once in the main agent and, where the row says the dialect has subagents,
+  once inside a subagent — timestamps every stdout line on arrival, and asserts: the call ran
+  to its end (the final answer arrived after 420 s), and the largest gap between two lines is
+  at most `ProgramBounds.DEFAULTS.silence()` divided by five. The failure message names the
+  dialect, the platform, the CLI version and the gap. Scenario markers for the two scenarios of
+  "Claude's liveness cadence" of `claude-dialect`. Add to `docs/guides/adapter-author-guide.md`,
+  where describe's capabilities are explained: an executor declares `streams_progress` only
+  when it writes to stdout at least every fifth of the silence bound during its longest quiet
+  step, and a dialect proves it with a green row of this spec on both platforms before the
+  declaration is merged. This task writes the spec and the guide text; it is not a gate for 4.1
+  (the measurement of 2.3b holds that gate). The human runs `paidSmokeTest` on both platforms
+  before the change is archived (task 7.3a)
 - F107 (carried from `tighten-spec-contract`): since that change, the agent CLI's credentials and
   every child-environment value reach a round only through `SecretsProvider`: the run's
   `ChildEnvAllowlist` resolves them through the `ChildEnvValues` role interface the root binds at
@@ -154,9 +198,9 @@
 Rebuilt 2026-11-22 after the decision review of task 4.1 (design D2, D12, D13). The order is
 provider, then consumers, then deletion, and the build is green after each task. Work the tasks
 of sections 4 and 5 **in the order they are written here**, which is not the order of their
-numbers: 4.0, 4.0a, 4.2, then — only once 2.3b is ticked — 4.1, 4.3, 5.1, 5.1a, 5.2, 5.3. The
+numbers: 4.0, 4.0a, 4.2, then — only once 2.3b is ticked (done 2026-11-22) and 2.3c has landed — 4.1, 4.3, 5.1, 5.1a, 5.2, 5.3. The
 numbers 4.1, 4.2 and 5.1 are kept because earlier tasks and code comments cite them. If you
-reach 4.1 while 2.3b is still open, stop and report that; do not switch a consumer.
+reach 4.1 while 2.3c is still open, stop and report that; do not switch a consumer.
 
 - [ ] 4.0 One owner of the guard probe (FR15, D13, M6). **Do this first; nothing else in
   sections 4 and 5 starts before it is done.** A decorator over the contract's `Executor`, in
@@ -219,7 +263,7 @@ reach 4.1 while 2.3b is still open, stop and report that; do not switch a consum
   of "Judge vote count must be positive and odd" stays on a feature that now asserts any
   `votes` is refused
 - [ ] 4.1 The judge runs as a check round; the judge path is deleted (FR4, M3, M7, D2). **Gate:
-  2.3b is ticked.** The engine's verify loop hands a `judge` check to the check-round path it
+  2.3b is ticked and 2.3c has landed.** The engine's verify loop hands a `judge` check to the check-round path it
   already uses for an executor check (`checkRounds.answer` in `VerifyOrchestrator`), and
   `CheckRoundRoute` → `CheckDispatch` → the registry entry's check half → `CheckRound` →
   `VerdictDerivation` serve it. The check-round chain is typed on `VerifyCheck.Executor` today
@@ -267,7 +311,7 @@ reach 4.1 while 2.3b is still open, stop and report that; do not switch a consum
   `SandboxRoundEnvironmentSource`; the stage half of the `claude` entry (built in 4.0a) takes
   the environment from the existing `verifyIn` acquisition, and the
   `ExecutorRoundExecution.java:111,138` row leaves `GuardProbeOwnerSpec`, whose allowlist is
-  then the decorator and the environment types alone (M6). **Gate: 2.3b is ticked.**
+  then the decorator and the environment types alone (M6). **Gate: 2.3b is ticked and 2.3c has landed.**
   `ResumeVerificationStageExecutor` is **not** deleted: it stays the one
   recovery owner of an interrupted verification (`task-branch-contract`, "An interrupted
   verification is InProgress with one recovery owner") and decorates the chain over the `claude`
@@ -382,3 +426,6 @@ owner). Old way: the `transform` arm "a
   no session flag; ledger asserts
   `executor=claude@<version>` (NFR-O1)
 - [ ] 7.3 `./gradlew check` with PIT; sweep report for D8 rows; recommend a commit message
+- [ ] 7.3a (human) `./gradlew :bootstrap:paidSmokeTest --tests '*PaidSmokeLivenessSpec*' -PpaidSmoke.linuxImage=<image>`
+  green on macOS and on the Linux container rows; record the CLI version and the largest gap
+  per row in D6 (FR17). A gap above the threshold is reported under `spec-mismatch.md`
