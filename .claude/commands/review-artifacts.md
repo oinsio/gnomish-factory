@@ -170,6 +170,12 @@ Each stale claim → ❌ or ⚠️ with what reality looks like now and how to u
   `fix-envelope-medium`. An archived deferral the change's files touch that names a time ("a
   later change") instead of a condition is ⚠️: judge whether this change meets it and say so.
   Report each in the **Deferrals** section, with the archived proposal and its NG-ID.
+- Vs removed scenarios (`delta-specs.md`, the REMOVED-requirement rule): for every REMOVED
+  requirement, list its scenarios from `openspec/specs/` and check the Reason against that rule.
+  Report each in **External consistency** with the scenario title and its fate, or "none".
+- Vs deleted mechanisms (`design-decisions.md`, "A decision that deletes a class lists its
+  duties"): for every type a decision or a task deletes, grep its callers and implementations
+  and check the decision against that section. Report each in **External consistency**.
 - Vs narrowed scenarios (`spec-mismatch.md`): for every MODIFIED requirement, diff each
   scenario against its main-spec text (and, for a delta revised in place, against the delta's
   last committed text: `git diff HEAD -- openspec/changes/<name>/specs`). A WHEN clause that
