@@ -97,7 +97,7 @@ class AgentRoundNoStateSpec extends Specification {
         def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, VirtualTimeEquipment.on(new VirtualClock()),
                 ChildEnvAllowlist.none().programGrant(), stderrParent, LastRegisteredCommit.NONE)
         def runner = new AgentRoundRunner(dialectName, dialect, Stub(TaskExecutionEnvironment), equipment,
-                {} as AgentProgressListener, StdoutCaps.DEFAULTS)
+                {} as AgentProgressListener, StdoutCaps.DEFAULTS, null)
 
         expect:
         !runner.describe().capabilities().contains(Capability.RESUMABLE)

@@ -6,9 +6,7 @@ import com.github.oinsio.gnomish.adapter.agent.runner.DialectAnswer
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.nio.file.Path
 import spock.lang.Specification
-import spock.lang.TempDir
 
 /**
  * The Claude dialect's final-text fallback (FR3 of extract-agent-round-runner): a {@code verdict} or
@@ -24,25 +22,16 @@ class ClaudeDialectFinalTextAnswerSpec extends Specification {
 
     def dialect = new ClaudeDialect('claude', UntrustedText.subprocess('2.1.0'), 'api.anthropic.com')
 
-    @TempDir
-    Path scratch
-
-    Path answerFile
-
-    def setup() {
-        answerFile = scratch.resolve('answer.json')
-    }
-
     def "FR3: with no structured output the answer is read from the final text, at WARN"() {
         when:
         DialectAnswer answer = null
         def logged = LogCaptureSupport.capture(ClaudeAnswer, Level.INFO) {
-            answer = dialect.answer(ClaudeDialectAnswerSpec.VERDICT, ClaudeDialectAnswerSpec.events(dialect, ClaudeDialectAnswerSpec.finalText('Done.\n```json\n{"passed":false,"findings":["x"]}\n```')), answerFile)
+            answer = dialect.answer(ClaudeDialectAnswerSpec.VERDICT, ClaudeDialectAnswerSpec.events(dialect, ClaudeDialectAnswerSpec.finalText('Done.\n```json\n{"passed":false,"findings":["x"]}\n```')))
         }
 
         then:
-        answer instanceof DialectAnswer.Written
-        JSON.readTree(answerFile.toFile()).sarif.runs[0].results*.message*.text*.asText() == ['x']
+        answer instanceof DialectAnswer.Replied
+        (answer as DialectAnswer.Replied).document().sarif.runs[0].results*.message*.text*.asText() == ['x']
         logged.size() == 1
         logged[0].level == Level.WARN
         logged[0].formattedMessage.startsWith(OperatorEvent.AGENT_ANSWER_FROM_FINAL_TEXT.head())
@@ -53,7 +42,7 @@ class ClaudeDialectFinalTextAnswerSpec extends Specification {
         when:
         DialectAnswer answer = null
         LogCaptureSupport.capture(ClaudeAnswer, Level.INFO) {
-            answer = dialect.answer(ClaudeDialectAnswerSpec.VERDICT, ClaudeDialectAnswerSpec.events(dialect, ClaudeDialectAnswerSpec.finalText(text)), answerFile)
+            answer = dialect.answer(ClaudeDialectAnswerSpec.VERDICT, ClaudeDialectAnswerSpec.events(dialect, ClaudeDialectAnswerSpec.finalText(text)))
         }
 
         then:
@@ -76,12 +65,12 @@ class ClaudeDialectFinalTextAnswerSpec extends Specification {
         when:
         DialectAnswer answer = null
         LogCaptureSupport.capture(ClaudeAnswer, Level.INFO) {
-            answer = dialect.answer(ClaudeDialectAnswerSpec.VERDICT, ClaudeDialectAnswerSpec.events(dialect, ClaudeDialectAnswerSpec.finalText(text)), answerFile)
+            answer = dialect.answer(ClaudeDialectAnswerSpec.VERDICT, ClaudeDialectAnswerSpec.events(dialect, ClaudeDialectAnswerSpec.finalText(text)))
         }
 
         then:
-        answer instanceof DialectAnswer.Written
-        def results = JSON.readTree(answerFile.toFile()).sarif.runs[0].results
+        answer instanceof DialectAnswer.Replied
+        def results = (answer as DialectAnswer.Replied).document().sarif.runs[0].results
         results*.message*.text*.asText() == messages
         results*.level*.asText().every {
             it == (messages.isEmpty() ? 'none' : 'error')
@@ -89,13 +78,13 @@ class ClaudeDialectFinalTextAnswerSpec extends Specification {
 
         where:
         shape | text || messages
-        'nothing around it' | '{"passed": true}' || []
-        'a plain code fence' | '```\n{"passed": true}\n```' || []
-        'prose around it' | 'I reviewed the code carefully. {"passed": true} Thanks for reading.' || []
-        'nested braces' | '{"passed": true, "meta": {"nested": "value"}}' || []
+        'nothing around it' | '{"passed": true, "findings": []}' || []
+        'a plain code fence' | '```\n{"passed": true, "findings": []}\n```' || []
+        'prose around it' | 'I reviewed the code carefully. {"passed": true, "findings": []} Thanks for reading.' || []
+        'nested braces' | '{"passed": false, "findings": ["a map {k: {v}} is unsorted"]}' || ['a map {k: {v}} is unsorted']
         'prose around a failing object' | 'I checked it. {"passed": false, "findings": ["no tests"]} Done.' || ['no tests']
-        'a pass, then a fail' | '{"passed": true} Actually, on reflection: {"passed": false, "findings": ["x"]}' || []
-        'a fail, then a pass' | 'Draft: {"passed": false, "findings": ["x"]} Final: {"passed": true}' || ['x']
+        'a pass, then a fail' | '{"passed": true, "findings": []} Actually, on reflection: {"passed": false, "findings": ["x"]}' || []
+        'a fail, then a pass' | 'Draft: {"passed": false, "findings": ["x"]} Final: {"passed": true, "findings": []}' || ['x']
     }
 
     def "FR3: a JSON null structured output is no structured output, so the final text is read"() {
@@ -103,11 +92,11 @@ class ClaudeDialectFinalTextAnswerSpec extends Specification {
         DialectAnswer answer = null
         def logged = LogCaptureSupport.capture(ClaudeAnswer, Level.INFO) {
             answer = dialect.answer(ClaudeDialectAnswerSpec.VERDICT, ClaudeDialectAnswerSpec.events(dialect, '{"type":"result","subtype":"success","session_id":"s",' +
-            '"result":"{\\"passed\\":true}","structured_output":null}'), answerFile)
+            '"result":"{\\"passed\\":true,\\"findings\\":[]}","structured_output":null}'))
         }
 
         then:
-        answer instanceof DialectAnswer.Written
+        answer instanceof DialectAnswer.Replied
         logged*.formattedMessage.every {
             it.startsWith(OperatorEvent.AGENT_ANSWER_FROM_FINAL_TEXT.head())
         }

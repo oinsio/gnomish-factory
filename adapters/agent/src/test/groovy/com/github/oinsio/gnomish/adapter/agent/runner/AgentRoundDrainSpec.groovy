@@ -87,7 +87,7 @@ class AgentRoundDrainSpec extends Specification {
         def equipment = new ProgramRoundEquipment(bounds, fixture.time, ChildEnvAllowlist.none().programGrant(),
                 stderrParent, LastRegisteredCommit.NONE)
         new AgentRoundRunner<>('fake', fixture.dialect, environment, equipment, { event -> } as AgentProgressListener,
-        StdoutCaps.DEFAULTS).start(RunnerFixture.request(Role.TRANSFORM))
+        StdoutCaps.DEFAULTS, null).start(RunnerFixture.request(Role.TRANSFORM))
     }
 
     // Scenario: executor/agent-executor / A drain unfinished after the post-exit bound is infrastructure

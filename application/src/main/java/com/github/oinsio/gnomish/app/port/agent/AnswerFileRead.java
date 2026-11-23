@@ -8,15 +8,14 @@ import com.github.oinsio.gnomish.executorcontract.ResultFileReader;
 import com.github.oinsio.gnomish.executorcontract.ResultSource;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.nio.file.Path;
 import java.util.function.Function;
 
 /**
  * The one read of an answer file (FR21, NFR-R5 of extract-agent-round-runner; design D15, part 4,
  * and the single-owner row "The answer read" of D8): an agent round's answer file, a {@code program}
  * run's or a built-in's, read live, and the answer file a snapshot carries, read at the recovery of
- * an interrupted verification. Each caller hands its medium over — the run's environment, a host
- * file, a blob of the registered commit as a {@link ResultSource} — and the bytes go through the
+ * an interrupted verification. Each caller hands its medium over — the run's environment or a
+ * blob of the registered commit as a {@link ResultSource} — and the bytes go through the
  * executor contract's {@link ResultFileReader} at {@link ResultFileReader#ANSWER_FILE_CAP_BYTES},
  * then through the contract's {@link Answer#read}. So the cap, the parse and the refusals are one
  * rule for every medium and for live and recovery alike: the same bytes give the same {@link
@@ -48,17 +47,6 @@ public final class AnswerFileRead {
     public static AnswerFileReading in(
             TaskExecutionEnvironment environment, String path, Function<String, UntrustedText> mint) {
         return read(limit -> environment.readFile(path, limit), mint);
-    }
-
-    /**
-     * Reads an answer file on the factory's own filesystem, refusing a link.
-     *
-     * @param path the factory-chosen host path; never null
-     * @param mint the family the file's text is minted in: its writer's; never null
-     * @return the reading; never null
-     */
-    public static AnswerFileReading onHost(Path path, Function<String, UntrustedText> mint) {
-        return read(ResultSource.hostFile(path), mint);
     }
 
     /**

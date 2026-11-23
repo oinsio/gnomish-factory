@@ -1,6 +1,7 @@
 package com.github.oinsio.gnomish.adapter.agent.claude;
 
 import com.github.oinsio.gnomish.adapter.agent.runner.AgentDialect;
+import com.github.oinsio.gnomish.adapter.agent.runner.AnswerForm;
 import com.github.oinsio.gnomish.adapter.agent.runner.DialectAnswer;
 import com.github.oinsio.gnomish.adapter.agent.runner.ParsedEvents;
 import com.github.oinsio.gnomish.adapter.agent.runner.ParsedLine;
@@ -16,7 +17,6 @@ import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.executorcontract.Usage;
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,28 +31,26 @@ import org.jspecify.annotations.Nullable;
  * per-model usage and the top-level tool trace derived exactly as the round result always derived
  * them. A line, its progress and the round's telemetry each have one owner here — {@link
  * StreamJsonParser#recognize}, {@link AgentProgressEmitter#progressOf} and {@link
- * AgentRoundResultExtractor#usage} — shared with the stream-json path the old round classes still run
- * until they are deleted.
+ * AgentRoundResultExtractor#usage}.
  *
  * <p>Status: a result event whose subtype is the CLI's turn or budget stop is a limit stop naming
  * the stop; {@code error_max_structured_output_retries} is completed, its answer malformed; any other
- * {@code error_*} subtype, and a stream with no result event, is a broken round. The exit code is
- * not consulted beyond that: the result event is what the CLI's own contract makes essential.
- *
- * <p>The argv is {@link AgentCommandLine}'s: the request's policy compiled by {@link
+ * {@code error_*} subtype, and a stream with no result event, is a broken round; the exit code is
+ * not consulted. The argv is {@link AgentCommandLine}'s: the request's policy compiled by {@link
  * ClaudePolicyCompiler} and its turn and budget bounds rendered as the CLI's hints (task 2.2).
  *
  * <p>Describe (task 2.3, FR7, NFR-S1): roles {@code transform}, {@code verdict}, {@code decision};
  * capabilities {@code streams_progress} and {@code cancel}, never {@code resumable}; enforcement level {@code
  * TOOL_GATE}; the credentials, configuration-directory variable and repo-policy-disabling flags of
  * {@link ClaudeEnvironment}; the one egress host, that of the configured base URL; and the settings
- * schema of {@link ClaudeSettings}. Answers (task 2.4, FR3, FR4): a {@code verdict} or {@code
- * decision} argv ends with {@code --json-schema} and {@link ClaudeAnswerSchema}'s reply schema, and
- * {@link ClaudeAnswer} judges the reply. No session (task 2.5, FR9, NFR-R2, design D4 as amended
+ * schema of {@link ClaudeSettings}. Answers (task 2.4, FR3, FR4; FR19, design D15): schema-enforced
+ * in every role ({@link ClaudeAnswerSchema#FORM}) — the argv ends with {@code --json-schema} and {@link
+ * ClaudeAnswerSchema}'s reply schema, {@link ClaudeAnswer} judges the reply, and the runner writes the
+ * answer it states to the round's answer path. No session (task 2.5, FR9, NFR-R2, design D4 as amended
  * 2026-11-21): the CLI's session lives on the worker, so no argv carries a session flag and the stdin
  * is always the role's input ({@link ClaudePrompt}).
  *
- * <p>Implements FR2, FR3, FR4, FR7, FR9, NFR-R2, NFR-S1 of extract-agent-round-runner.
+ * <p>Implements FR2, FR3, FR4, FR7, FR9, FR19, NFR-R2, NFR-S1 of extract-agent-round-runner.
  */
 public final class ClaudeDialect implements AgentDialect<AgentEvent> {
 
@@ -157,8 +155,13 @@ public final class ClaudeDialect implements AgentDialect<AgentEvent> {
     }
 
     @Override
-    public DialectAnswer answer(ExecutorRequest request, ParsedEvents<AgentEvent> events, Path answerFile) {
-        return ClaudeAnswer.of(request, events, answerFile);
+    public AnswerForm answerForm(Role role) {
+        return ClaudeAnswerSchema.FORM;
+    }
+
+    @Override
+    public DialectAnswer answer(ExecutorRequest request, ParsedEvents<AgentEvent> events) {
+        return ClaudeAnswer.of(request, events);
     }
 
     @Override

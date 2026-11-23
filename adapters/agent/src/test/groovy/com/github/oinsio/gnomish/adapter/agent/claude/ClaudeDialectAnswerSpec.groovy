@@ -16,20 +16,17 @@ import com.github.oinsio.gnomish.executorcontract.Workspace
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent
 import com.github.oinsio.gnomish.testfixtures.logging.LogCaptureSupport
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.nio.file.Files
-import java.nio.file.Path
 import java.time.Instant
 import spock.lang.Specification
-import spock.lang.TempDir
 
 /**
  * The schema-enforced answer of the Claude dialect (FR3, FR4 of extract-agent-round-runner): a
  * {@code verdict} or {@code decision} round's structured output — or, when the CLI reported none,
  * the first JSON object of its final text, at WARN — judged against the schema the argv carried
- * and written to the answer file as the contract's answer; a reply that fails the schema is a
+ * and stated as the contract's answer the runner writes; a reply that fails the schema is a
  * malformed answer, never a pass.
  *
- * <p>FR3, FR4 of extract-agent-round-runner.
+ * <p>FR3, FR4, FR19 of extract-agent-round-runner.
  */
 class ClaudeDialectAnswerSpec extends Specification {
 
@@ -37,22 +34,13 @@ class ClaudeDialectAnswerSpec extends Specification {
 
     def dialect = new ClaudeDialect('claude', UntrustedText.subprocess('2.1.0'), 'api.anthropic.com')
 
-    @TempDir
-    Path scratch
-
-    Path answerFile
-
-    def setup() {
-        answerFile = scratch.resolve('answer.json')
-    }
-
     def "FR4: a failing verdict's findings become error results of the SARIF verdict the answer file holds"() {
         when:
-        def answer = dialect.answer(VERDICT, events(structured('{"passed":false,"findings":["no tests","typo"]}')), answerFile)
+        def answer = dialect.answer(VERDICT, events(structured('{"passed":false,"findings":["no tests","typo"]}')))
 
         then:
-        answer instanceof DialectAnswer.Written
-        def written = JSON.readTree(answerFile.toFile())
+        answer instanceof DialectAnswer.Replied
+        def written = (answer as DialectAnswer.Replied).document()
         written.kind.asText() == 'verdict'
         written.sarif.version.asText() == '2.1.0'
         written.sarif.runs[0].tool.driver.name.asText() == 'claude'
@@ -62,55 +50,57 @@ class ClaudeDialectAnswerSpec extends Specification {
 
     def "FR4: a passing verdict's findings are results of level none, and a failure without findings still fails"() {
         when:
-        dialect.answer(VERDICT, events(structured(reply)), answerFile)
+        def answer = dialect.answer(VERDICT, events(structured(reply)))
 
         then:
-        def results = JSON.readTree(answerFile.toFile()).sarif.runs[0].results
+        def results = (answer as DialectAnswer.Replied).document().sarif.runs[0].results
         results*.level*.asText() == levels
         results*.message*.text*.asText() == texts
 
         where:
         reply || levels | texts
         '{"passed":true,"findings":["nit"]}' || ['none'] | ['nit']
-        '{"passed":true}' || [] | []
-        '{"passed":false}' || ['error'] | [
+        '{"passed":true,"findings":[]}' || [] | []
+        '{"passed":false,"findings":[]}' || ['error'] | [
             JudgeVerdictExtractor.NO_FINDING
         ]
     }
 
     def "FR3: a decision's structured output is written as the select answer it chose"() {
         when:
-        def answer = dialect.answer(DECISION, events(structured('{"chosen":"right","ranking":["right","left"],"rationale":"why"}')), answerFile)
+        def answer = dialect.answer(DECISION, events(structured('{"chosen":"right","ranking":["right","left"],"rationale":"why"}')))
 
         then:
-        answer instanceof DialectAnswer.Written
-        JSON.readTree(answerFile.toFile()) == JSON.readTree(
+        answer instanceof DialectAnswer.Replied
+        (answer as DialectAnswer.Replied).document() == JSON.readTree(
                 '{"kind":"select","chosen":"right","ranking":["right","left"],"rationale":"why"}')
     }
 
-    def "FR3: a decision without a ranking or rationale writes only its choice"() {
+    def "FR3: a decision with an empty ranking and a blank rationale states only its choice"() {
         when:
-        dialect.answer(DECISION, events(structured('{"chosen":"left"}')), answerFile)
+        def answer = dialect.answer(DECISION, events(structured('{"chosen":"left","ranking":[],"rationale":" "}')))
 
         then:
-        JSON.readTree(answerFile.toFile()) == JSON.readTree('{"kind":"select","chosen":"left"}')
+        (answer as DialectAnswer.Replied).document() == JSON.readTree('{"kind":"select","chosen":"left"}')
     }
 
     // Scenario: executor/claude-dialect / Malformed final output
-    def "FR3, FR4: #what is a malformed answer and writes no answer file"() {
+    def "FR3, FR4: #what is a malformed answer"() {
         when:
-        def answer = dialect.answer(request, events(line), answerFile)
+        def answer = dialect.answer(request, events(line))
 
         then:
         answer instanceof DialectAnswer.Malformed
         (answer as DialectAnswer.Malformed).reason().forLog().contains(words)
-        !Files.exists(answerFile)
 
         where:
         what | request | line || words
-        'a verdict whose passed is no boolean' | VERDICT | structured('{"passed":"yes"}') || 'passed'
+        'a verdict whose passed is no boolean' | VERDICT | structured('{"passed":"yes","findings":[]}') || 'passed'
         'a verdict with a blank finding' | VERDICT | structured('{"passed":false,"findings":[" "]}') || 'findings'
-        'a choice the request did not offer' | DECISION | structured('{"chosen":"up"}') || 'chosen'
+        'a verdict without its findings' | VERDICT | structured('{"passed":true}') || 'findings'
+        'a verdict with a field the schema does not name' | VERDICT | structured('{"passed":true,"findings":[],"note":"x"}') || 'note'
+        'a choice the request did not offer' | DECISION | structured('{"chosen":"up","ranking":[],"rationale":""}') || 'chosen'
+        'a transform reply with an unknown outcome' | TRANSFORM | structured('{"outcome":"maybe","question":"","options":[]}') || 'outcome'
         'a structured output that is no object' | VERDICT | structured('[true]') || 'not a JSON object'
         'a round whose structured-output retries ran out' | VERDICT | RETRIES_EXHAUSTED || 'structured-output retries'
     }
@@ -120,21 +110,29 @@ class ClaudeDialectAnswerSpec extends Specification {
         dialect.status(1, events(RETRIES_EXHAUSTED)) instanceof RoundStatus.Completed
     }
 
-    def "FR3: a transform round's answer is the one the agent wrote itself"() {
-        expect:
-        dialect.answer(TRANSFORM, events(structured('{"passed":true}')), answerFile) instanceof DialectAnswer.NotWritten
-        !Files.exists(answerFile)
-    }
-
-    def "FR3: an answer file that cannot be written is the factory's own failure, thrown"() {
-        given: 'a parent that is a regular file, so no directory can hold the answer'
-        def blocker = Files.writeString(scratch.resolve('blocker'), 'not a directory')
-
+    def "FR19: a transform reply that is done states no answer, one that asks a decision states the decision request"() {
         when:
-        dialect.answer(VERDICT, events(structured('{"passed":true}')), blocker.resolve('answer.json'))
+        def answer = dialect.answer(TRANSFORM, events(structured(reply)))
 
         then:
-        thrown(UncheckedIOException)
+        answer.class == kind
+        answer instanceof DialectAnswer.NoReply || (answer as DialectAnswer.Replied).document() == JSON.readTree(document)
+
+        where:
+        reply || kind | document
+        '{"outcome":"done","question":"","options":[]}' || DialectAnswer.NoReply | null
+        '{"outcome":"decision_request","question":"which db?","options":["pg","sqlite"]}' || DialectAnswer.Replied | '{"kind":"decision-request","question":"which db?","options":["pg","sqlite"]}'
+        '{"outcome":"decision_request","question":"which db?","options":["pg"]}' || DialectAnswer.Replied | '{"kind":"decision-request","question":"which db?","options":["pg"]}'
+    }
+
+    def "FR3: a round with no result event, or a role the dialect declares no schema for, states no answer"() {
+        expect:
+        dialect.answer(request, events(line)) instanceof DialectAnswer.NoReply
+
+        where:
+        request | line
+        VERDICT | '{"type":"system","subtype":"init","session_id":"s","model":"m"}'
+        EFFECT | structured('{"passed":true,"findings":[]}')
     }
 
     def "FR3: a schema the validator cannot use makes the reply malformed rather than accepted"() {
@@ -149,6 +147,8 @@ class ClaudeDialectAnswerSpec extends Specification {
     static final ExecutorRequest DECISION = request(Role.DECISION, RoleInputs.decision('which way?', ['left', 'right']))
     static final ExecutorRequest TRANSFORM = new ExecutorRequest(Role.TRANSFORM, new Workspace('.'),
     new Policy.WorkspaceWrite(), RoleInputs.transform('build'), ExecutorContractJson.settingsTree([:]), Bounds.none(), [], null)
+    static final ExecutorRequest EFFECT = new ExecutorRequest(Role.EFFECT, new Workspace('.'),
+    new Policy.WorkspaceWrite(), RoleInputs.transform('ship'), ExecutorContractJson.settingsTree([:]), Bounds.none(), [], null)
 
     static final String RETRIES_EXHAUSTED =
     '{"type":"result","subtype":"error_max_structured_output_retries","session_id":"s"}'

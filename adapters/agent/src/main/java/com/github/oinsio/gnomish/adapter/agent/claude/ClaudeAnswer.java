@@ -1,23 +1,19 @@
 package com.github.oinsio.gnomish.adapter.agent.claude;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.oinsio.gnomish.adapter.agent.JudgeVerdictExtractor;
 import com.github.oinsio.gnomish.adapter.agent.runner.DialectAnswer;
 import com.github.oinsio.gnomish.adapter.agent.runner.ParsedEvents;
-import com.github.oinsio.gnomish.atomicfile.AtomicFileWriter;
 import com.github.oinsio.gnomish.executorcontract.Answer;
 import com.github.oinsio.gnomish.executorcontract.ExecutorContractJson;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
-import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.executorcontract.SettingsJudgement;
 import com.github.oinsio.gnomish.executorcontract.SettingsSchema;
 import com.github.oinsio.gnomish.executorcontract.SettingsViolation;
 import com.github.oinsio.gnomish.operatorevent.OperatorEvent;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -25,30 +21,31 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The Claude dialect's answer step (FR3, FR4 of extract-agent-round-runner): the reply of a {@code
- * verdict} or {@code decision} round is the {@code structured_output} of its result event — the CLI
- * validated it against the {@link ClaudeAnswerSchema} it was handed — or, when the result event
- * carries none (a CLI that ignored the flag), the object of its final text read by {@link
- * FinalTextObject}, logged at WARN. Either way the reply is judged against the same schema, by the
- * factory's one JSON Schema judge ({@link SettingsSchema}), and only an accepted reply is converted
- * — a verdict into the contract's SARIF verdict ({@link JudgeVerdictExtractor#sarif}), a decision
- * into its {@code select} — and written to the answer file through the contract's answer writer. A
- * reply that fails the schema, a final text with no object, and a round whose structured-output
- * retries ran out are a malformed answer, never a pass, and write no file; an unreadable final text
- * is quoted in the malformed answer's reason, through the log exit, so the one operator line of a
- * judge that cannot verify shows what the model wrote on one line.
+ * The Claude dialect's answer step (FR3, FR4, FR19 of extract-agent-round-runner; design D15): the
+ * reply of a round in every role the dialect declares is the {@code structured_output} of its result
+ * event — the CLI validated it against the {@link ClaudeAnswerSchema} it was handed — or, when the
+ * result event carries none (a CLI that ignored the flag), the object of its final text read by
+ * {@link FinalTextObject}, logged at WARN. Either way the reply is judged against the same schema, by
+ * the factory's one JSON Schema judge ({@link SettingsSchema}), and only an accepted reply is
+ * converted into the contract answer it states — a verdict into the contract's SARIF verdict ({@link
+ * JudgeVerdictExtractor#sarif}), a decision into its {@code select}, a {@code transform} reply that
+ * asks a decision into its {@code decision-request}, one that is done into no answer. The runner
+ * writes that answer to the round's answer path and reads it back through the one answer read, which
+ * holds what the schema subset cannot carry (a decision request's two options). A reply that fails the
+ * schema, a final text with no object, and a round whose structured-output retries ran out are a
+ * malformed answer, never a pass; an unreadable final text is quoted in the malformed answer's reason,
+ * through the log exit, so the one operator line of a judge that cannot verify shows what the model
+ * wrote on one line.
  *
- * <p>A {@code transform} round's answer is the file the agent wrote itself. The answer file is the
- * factory's own scratch file, written through the shared {@link AtomicFileWriter} so the result
- * reader sees the whole answer or none (FR5 of harden-task-branch-contract); a failure to write it is
- * the factory's, thrown.
- *
- * <p>Implements FR3, FR4 of extract-agent-round-runner.
+ * <p>Implements FR3, FR4, FR19 of extract-agent-round-runner.
  */
 final class ClaudeAnswer {
 
     /** The result subtype of a round whose structured output never matched its schema. */
     static final String RETRIES_EXHAUSTED_SUBTYPE = "error_max_structured_output_retries";
+
+    /** The contract's kind word of a decision request. */
+    static final String DECISION_REQUEST_KIND = "decision-request";
 
     /** The name a verdict's SARIF run is attributed to. */
     static final String TOOL = "claude";
@@ -70,14 +67,13 @@ final class ClaudeAnswer {
      *
      * @param request the run; never null
      * @param events the round's events, its result event among them; never null
-     * @param answerFile where an accepted answer is written; never null
      * @return the answer; never null
      */
-    static DialectAnswer of(ExecutorRequest request, ParsedEvents<AgentEvent> events, Path answerFile) {
+    static DialectAnswer of(ExecutorRequest request, ParsedEvents<AgentEvent> events) {
         Optional<ObjectNode> schema = ClaudeAnswerSchema.of(request);
         AgentEvent.ResultEvent result = events.last(AgentEvent.ResultEvent.class);
         if (schema.isEmpty() || result == null) {
-            return new DialectAnswer.NotWritten();
+            return new DialectAnswer.NoReply();
         }
         JsonNode reply = result.structuredOutput();
         if (reply == null || reply.isNull()) {
@@ -104,8 +100,11 @@ final class ClaudeAnswer {
         if (refusal.isPresent()) {
             return new DialectAnswer.Malformed(refusal.get());
         }
-        write(answerFile, request.role() == Role.VERDICT ? JudgeVerdictExtractor.sarif(reply, TOOL) : select(reply));
-        return new DialectAnswer.Written();
+        return switch (request.role()) {
+            case VERDICT -> replied(JudgeVerdictExtractor.sarif(reply, TOOL));
+            case DECISION -> replied(select(reply));
+            default -> transform(reply);
+        };
     }
 
     /**
@@ -133,19 +132,31 @@ final class ClaudeAnswer {
     private static Answer.Select select(JsonNode reply) {
         List<UntrustedText> ranking = new ArrayList<>();
         reply.path("ranking").forEach(option -> ranking.add(UntrustedText.agent(option.asText())));
-        JsonNode rationale = reply.get("rationale");
+        String rationale = reply.path("rationale").asText();
         return new Answer.Select(
                 UntrustedText.agent(reply.path("chosen").asText()),
                 ranking,
-                rationale == null ? null : UntrustedText.agent(rationale.asText()));
+                rationale.isBlank() ? null : UntrustedText.agent(rationale));
     }
 
-    private static void write(Path answerFile, Answer answer) {
-        try {
-            AtomicFileWriter.write(answerFile, ExecutorContractJson.writer().writeValueAsString(answer));
-        } catch (IOException failed) {
-            throw new UncheckedIOException("could not write the round's answer file " + answerFile, failed);
+    /**
+     * A {@code transform} reply: done is no answer; a decision asked is the contract's {@code
+     * decision-request} document with the reply's question and options as written, which the runner's
+     * one read judges against the contract — a request with fewer than two options is refused there,
+     * as a file of that shape would be.
+     */
+    private static DialectAnswer transform(JsonNode reply) {
+        if (!ClaudeAnswerSchema.DECISION_REQUEST.equals(reply.path("outcome").asText())) {
+            return new DialectAnswer.NoReply();
         }
+        ObjectNode request = JsonNodeFactory.instance.objectNode().put("kind", DECISION_REQUEST_KIND);
+        request.set("question", reply.get("question"));
+        request.set("options", reply.get("options"));
+        return new DialectAnswer.Replied(request);
+    }
+
+    private static DialectAnswer replied(Answer answer) {
+        return new DialectAnswer.Replied(ExecutorContractJson.answerTree(answer));
     }
 
     private static DialectAnswer malformed(String reason) {

@@ -91,7 +91,7 @@ class ResultPathReadBoundarySpec extends Specification {
     ]
 
     static final String ANSWER_PATH = /GNOMISH_ANSWER_FILE|\bDECISIONS_DIR\b|\b(decision|answer)File(Path)?\b/
-    static final String ONE_ANSWER_READ = /\bAnswerFileRead\s*\.\s*(read|in|onHost)\s*\(/
+    static final String ONE_ANSWER_READ = /\bAnswerFileRead\s*\.\s*(read|in)\s*\(/
     static final String ANSWER_PARSE = /\bAnswer\s*\.\s*read\s*\(/
 
     static final String RESULT_PATH = /GNOMISH_(FINDINGS|RESULT|ANSWER)_FILE|\bDECISIONS_DIR\b|\b(findings|decision|result|answer)File(Path)?\b|\bfindingsPath\b/

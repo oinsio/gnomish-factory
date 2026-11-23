@@ -76,7 +76,7 @@ class AgentRoundRunnerConformanceSpec extends Specification {
             def equipment = new ProgramRoundEquipment(ProgramBounds.DEFAULTS, time,
                     ChildEnvAllowlist.none().programGrant(), stderrParent, LastRegisteredCommit.NONE)
             new AgentRoundRunner<FakeEvent>('fake', dialect, environment, equipment,
-                    { event -> } as AgentProgressListener, StdoutCaps.DEFAULTS)
+                    { event -> } as AgentProgressListener, StdoutCaps.DEFAULTS, null)
         } as CaseBinding
 
         when:

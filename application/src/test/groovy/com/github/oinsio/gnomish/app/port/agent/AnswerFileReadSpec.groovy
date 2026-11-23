@@ -7,10 +7,7 @@ import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment
 import com.github.oinsio.gnomish.untrustedtext.Provenance
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
-import java.nio.file.Path
 import spock.lang.Specification
-import spock.lang.TempDir
 
 /**
  * The one read of an answer file (FR21, NFR-R5 of extract-agent-round-runner; design D15, part 4):
@@ -20,8 +17,6 @@ class AnswerFileReadSpec extends Specification {
 
     static final String DECISION = '{"kind":"decision-request","question":"which db?","options":["pg","sqlite"]}'
 
-    @TempDir
-    Path tempDir
 
     /** A medium holding {@code text}, answering a read of {@code limit} bytes as a file would. */
     private static ResultSource holding(String text) {
@@ -112,12 +107,10 @@ class AnswerFileReadSpec extends Specification {
                 Optional.of(Arrays.copyOf(text.getBytes(StandardCharsets.UTF_8), (int) Math.min(text.length(), limit)))
             }
         }
-        def host = Files.writeString(tempDir.resolve('answer.json'), text)
 
         expect:
         AnswerFileRead.in(environment, '.gnomish-task/decisions/a.json', UntrustedText.&agent) ==
                 AnswerFileRead.read(holding(text), UntrustedText.&agent)
-        AnswerFileRead.onHost(host, UntrustedText.&agent) == AnswerFileRead.read(holding(text), UntrustedText.&agent)
 
         where:
         text << [DECISION, 'not json']

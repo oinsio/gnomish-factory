@@ -3,7 +3,6 @@ package com.github.oinsio.gnomish.adapter.agent;
 import com.github.oinsio.gnomish.adapter.briefing.BriefingSections;
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw;
 import com.github.oinsio.gnomish.adapter.law.UnreadableLawFileException;
-import com.github.oinsio.gnomish.app.describe.ProgramChannel;
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import java.util.List;
@@ -12,8 +11,13 @@ import java.util.List;
  * Composes the full round prompt for the CLI {@code StageExecutor} (task 6.5
  * assembles it into {@code execute()}): the shared briefing sections, the
  * executor epilogue — the stage's full verify plan with judge acceptance
- * criteria embedded, and the answer-file instruction — and, on retries
+ * criteria embedded, and the answer instruction it is handed — and, on retries
  * only, a rework preamble (design D9(a)).
+ *
+ * <p>The answer instruction is the agent dialect's, in the words of its declared
+ * answer form (FR19 of extract-agent-round-runner, design D15): this
+ * vendor-neutral builder spells neither the final structured reply nor the
+ * answer file, and carries the instruction as it is handed.
  *
  * <p>Control-file and judge-criteria content comes from the invocation's frozen
  * {@link PipelineLaw} (D14, FR19 of add-sandbox-core), read once at invocation
@@ -26,22 +30,12 @@ import java.util.List;
  * burning a stage attempt.
  *
  * <p>Implements FR2, FR13, D8, D9 of add-agent-executor; FR19, D14 of
- * add-sandbox-core.
+ * add-sandbox-core; FR19 of extract-agent-round-runner.
  *
  * @param law the invocation's frozen pipeline law, the source of control-file
  *     and judge-criteria content (D14 of add-sandbox-core); never null
  */
 public record ExecutorPromptBuilder(PipelineLaw law) {
-
-    /** The variable is named by its one owner, {@link ProgramChannel}, so the prompt cannot drift from the wire. */
-    private static final String ANSWER_FILE_INSTRUCTION = """
-            === Asking a human ===
-            If you need a human decision before you can proceed, write a JSON \
-            object of the form {"kind": "decision-request", "question": "...", \
-            "options": ["...", "..."]} to the path in the $%s \
-            environment variable and finish your turn. Leave that file untouched \
-            if you do not need to ask anything.
-            """.formatted(ProgramChannel.ANSWER_FILE_VARIABLE);
 
     private static final String REWORK_PREAMBLE = """
             === Rework, not restart ===
@@ -57,12 +51,14 @@ public record ExecutorPromptBuilder(PipelineLaw law) {
      *
      * @param request the round's inputs: task context, stage, workspace,
      *     attempt number and prior-attempt feedback
+     * @param answerInstruction how the agent asks for a human decision, in the
+     *     words of its dialect's answer form; never null
      * @return the full prompt text; never null
      * @throws UnreadableLawFileException if the stage's control file, or a judge
      *     check's acceptance-criteria file, was unreadable when the invocation's
      *     law was frozen — propagated uncaught (FR13, D14 of add-sandbox-core)
      */
-    public String build(StageExecutor.Request request) {
+    public String build(StageExecutor.Request request, String answerInstruction) {
         StringBuilder out = new StringBuilder();
 
         BriefingSections.renderExecutorBriefing(
@@ -74,7 +70,7 @@ public record ExecutorPromptBuilder(PipelineLaw law) {
                 law.controlFile(request.stage().instructionsRef()));
 
         renderVerifyPlan(out, request.stage().verify());
-        out.append(ANSWER_FILE_INSTRUCTION).append('\n');
+        out.append(answerInstruction).append('\n');
         if (request.attempt() > 0) {
             out.append(REWORK_PREAMBLE).append('\n');
         }

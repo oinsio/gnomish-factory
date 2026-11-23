@@ -78,9 +78,6 @@ dependencies {
     // working-copy-unchanged check of a verdict or decision run (FR11, NFR-S4 of
     // define-executor-contract) runs `git status` in the environment under `GitInvocation`.
     implementation project(':gittransfer')
-    // The atomic-write leaf (FR5, D10 of harden-task-branch-contract): the Claude dialect writes the
-    // round's answer file through it, so no reader sees half an answer. Called from a body only.
-    implementation project(':atomicfile')
     implementation libs.slf4j.api
 
     // The agent CLI's stream-JSON output. The DTOs are internal to this module; `JsonNode` is

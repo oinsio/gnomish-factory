@@ -2,15 +2,15 @@ package com.github.oinsio.gnomish.adapter.agent.runner;
 
 import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
+import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.executorcontract.Usage;
-import java.nio.file.Path;
 import java.time.Instant;
 
 /**
  * What one agent CLI vendor contributes to a round, and nothing else (FR2, G1 of
  * extract-agent-round-runner): the describe fields, the argv a request renders to, the parse of one
  * output line into the dialect's own events and the vendor-neutral progress they imply, the round's
- * usage, the final answer, and the mapping of the exit to a status. The agent round runner depends on nothing else from the vendor (design D1): launch, drains, bounds, the
+ * usage, the form its answer takes and the final answer, and the mapping of the exit to a status. The agent round runner depends on nothing else from the vendor (design D1): launch, drains, bounds, the
  * result-file read, denials and the working-copy check are the runner's, the same for every dialect.
  *
  * <p>{@code E} is the dialect's own event type. The runner never looks inside one: it collects the
@@ -25,7 +25,7 @@ import java.time.Instant;
  * renders no session flag and declares no {@code resumable}, since the CLI's session lives on the
  * worker and is no record.
  *
- * <p>Implements FR2, FR6, FR8, FR9, NFR-R2 of extract-agent-round-runner.
+ * <p>Implements FR2, FR6, FR8, FR9, FR19, NFR-R2 of extract-agent-round-runner.
  *
  * @param <E> the dialect's own event type
  */
@@ -42,7 +42,7 @@ public interface AgentDialect<E> {
 
     /**
      * The command line {@code request} runs as: the compiled policy, model, bounds as hints, and the
-     * answer schema of a {@code verdict} or {@code decision} request — never a session flag, a
+     * answer schema of a role whose answer is schema-enforced — never a session flag, a
      * continuation on the request included.
      *
      * @param request the run, in exactly one role
@@ -72,17 +72,27 @@ public interface AgentDialect<E> {
     Usage usage(ParsedEvents<E> events, Instant roundEnd);
 
     /**
-     * Writes the round's final answer to {@code answerFile} when the dialect extracts it from the
-     * stream (a schema-enforced final output), or reports that it wrote none: a {@code transform}
-     * round, or an answer the agent wrote to the file itself. A {@code verdict} or {@code decision}
-     * answer the dialect extracts is judged against the schema its argv carried for {@code request}.
+     * How the agent hands over its answer in {@code role} (FR19 of extract-agent-round-runner, design
+     * D15 part 1): schema-enforced — the CLI is handed the reply's schema and {@link #answer} reads
+     * the validated reply — or a file the agent writes itself, which the runner reads and never asks
+     * this dialect about.
+     *
+     * @param role the request's role
+     * @return the declared form; never null
+     */
+    AnswerForm answerForm(Role role);
+
+    /**
+     * The contract answer a schema-enforced round's final reply states (design D15 part 2), judged
+     * against the schema its argv carried for {@code request}; called only for a role whose {@link
+     * #answerForm} is {@link AnswerForm.SchemaEnforced}. Writes nothing: the runner writes the answer
+     * to the round's answer path.
      *
      * @param request the run the round served, the one {@link #render} rendered
      * @param events every event the round parsed
-     * @param answerFile the request's answer path, the one the runner reads afterwards
-     * @return what the dialect did with the answer; never null
+     * @return the reply's answer, no answer, or a malformed reply; never null
      */
-    DialectAnswer answer(ExecutorRequest request, ParsedEvents<E> events, Path answerFile);
+    DialectAnswer answer(ExecutorRequest request, ParsedEvents<E> events);
 
     /**
      * How the round ended, from the process's exit code and the events: completed, stopped by a

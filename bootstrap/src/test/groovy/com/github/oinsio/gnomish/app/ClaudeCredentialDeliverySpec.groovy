@@ -56,7 +56,7 @@ class ClaudeCredentialDeliverySpec extends CredentialDeliverySpecBase {
 
         when: 'a real runner round runs the dialect in the box; a sibling exec carries nothing of its own'
         def result = new AgentRoundRunner<>('claude', dialect, box, equipment, { event -> } as AgentProgressListener,
-        StdoutCaps.DEFAULTS).start(ProgramInBox.request())
+        StdoutCaps.DEFAULTS, null).start(ProgramInBox.request())
         def captured = output(box, [
             'cat',
             FakeAgentSandboxImage.CREDENTIAL_CAPTURE

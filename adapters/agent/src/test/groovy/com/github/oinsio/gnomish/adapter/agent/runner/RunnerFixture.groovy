@@ -50,6 +50,8 @@ final class RunnerFixture {
     FakeDialect dialect = new FakeDialect()
     /** Another dialect the runner runs instead of {@link #dialect}, when set. */
     AgentDialect<?> otherDialect
+    /** The open round's answer path the runner is bound to, or null for a fresh one per request. */
+    String answerFile
     /** The names the run's allowlist declares, and so withholds from every child. */
     List<String> withheld = []
     AgentProgressListener listener
@@ -80,7 +82,7 @@ final class RunnerFixture {
             agentLaunches << builder
             stdin = source
             stdins << stdinText()
-            def answer = Path.of(builder.environment()['GNOMISH_ANSWER_FILE'])
+            def answer = workspace.resolve(builder.environment()['GNOMISH_ANSWER_FILE'])
             def err = builder.redirectError().file().toPath()
             files.maximumNumberOfParameters> 2 ? files(answer, err, launch) : files(answer, err)
             agents[launch]
@@ -104,7 +106,7 @@ final class RunnerFixture {
         new AgentRoundRunner(NAME, otherDialect ?: dialect, environment, equipment,
                 listener ?: ({ AgentProgressEvent event ->
                     progress << event
-                } as AgentProgressListener), caps)
+                } as AgentProgressListener), caps, answerFile)
     }
 
     /** The bytes the CLI was handed on its standard input, or null for none. */

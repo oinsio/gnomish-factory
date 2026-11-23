@@ -3,7 +3,9 @@ package com.github.oinsio.gnomish.adapter.agent.runner;
 import com.github.oinsio.gnomish.adapter.agent.CompositeAgentProgressListener;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
+import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource;
 import com.github.oinsio.gnomish.executorcontract.Describe;
+import com.github.oinsio.gnomish.executorcontract.Role;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import java.util.List;
 
@@ -60,6 +62,17 @@ public final class AgentRunners<E> {
         return dialect.describe();
     }
 
+    /**
+     * How the dialect's agent hands over its answer in {@code role}: the declaration the stage half's
+     * policy and round prompt follow (FR19, design D15 part 1).
+     *
+     * @param role the request's role
+     * @return the declared form; never null
+     */
+    AnswerForm answerForm(Role role) {
+        return dialect.answerForm(role);
+    }
+
     /** The run's program equipment, which a request's hints and a host environment's clock read. */
     ProgramRoundEquipment equipment() {
         return equipment;
@@ -72,25 +85,26 @@ public final class AgentRunners<E> {
      * @return the runner; never null
      */
     public AgentRoundRunner<E> runner(TaskExecutionEnvironment environment) {
-        return new AgentRoundRunner<>(name, dialect, environment, equipment, listener, caps);
+        return new AgentRoundRunner<>(name, dialect, environment, equipment, listener, caps, null);
     }
 
     /**
-     * A runner bound to {@code environment} whose rounds also report to {@code roundListener} — the
-     * open stage round's own listener (the mid-round harvest of a box round, the mid-round push of a
-     * git-mode host round), joined to the run's; its caller puts it behind the guard probe's owner.
+     * A runner bound to the open stage round {@code round}: its rounds run in the round's environment,
+     * also report to the round's own listener (the mid-round harvest of a box round, the mid-round push
+     * of a git-mode host round), joined to the run's, and answer at the round's answer path; its caller
+     * puts it behind the guard probe's owner.
      *
-     * @param environment the materialized environment its rounds run in; never null
-     * @param roundListener the open round's listener; never null
+     * @param round the open round; never null
      * @return the runner; never null
      */
-    public AgentRoundRunner<E> runner(TaskExecutionEnvironment environment, AgentProgressListener roundListener) {
+    public AgentRoundRunner<E> runner(RoundEnvironmentSource.Round round) {
         return new AgentRoundRunner<>(
                 name,
                 dialect,
-                environment,
+                round.environment(),
                 equipment,
-                new CompositeAgentProgressListener(List.of(listener, roundListener)),
-                caps);
+                new CompositeAgentProgressListener(List.of(listener, round.roundListener())),
+                caps,
+                round.answerFilePath().toString());
     }
 }

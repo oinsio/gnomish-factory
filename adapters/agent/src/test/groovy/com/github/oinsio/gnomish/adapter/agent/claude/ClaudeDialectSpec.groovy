@@ -7,7 +7,6 @@ import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
 import com.github.oinsio.gnomish.executorcontract.UsageProvenance
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.nio.file.Path
 import java.time.Instant
 import spock.lang.Specification
 
@@ -118,9 +117,9 @@ class ClaudeDialectSpec extends Specification {
         usage.tools()*.totalMillis() == [0L]
     }
 
-    def "FR2: the answer of a transform round is the one the agent wrote"() {
+    def "FR2: a round with no result event states no answer"() {
         expect:
-        dialect.answer(ClaudeDialectAnswerSpec.TRANSFORM, events(INIT), Path.of('/scratch/answer.json')) instanceof DialectAnswer.NotWritten
+        dialect.answer(ClaudeDialectAnswerSpec.TRANSFORM, events(INIT)) instanceof DialectAnswer.NoReply
     }
 
     static final String INIT = '{"type":"system","subtype":"init","session_id":"s","model":"claude-x"}'

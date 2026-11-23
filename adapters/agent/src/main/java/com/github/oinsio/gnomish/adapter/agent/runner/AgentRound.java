@@ -8,7 +8,6 @@ import com.github.oinsio.gnomish.app.describe.ProgramChannel;
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener;
 import com.github.oinsio.gnomish.executorcontract.ExecutorRequest;
 import com.github.oinsio.gnomish.executorcontract.ExecutorResult;
-import com.github.oinsio.gnomish.executorcontract.Policy;
 import com.github.oinsio.gnomish.executorcontract.Status;
 import com.github.oinsio.gnomish.sandbox.CredentialGrantStanding;
 import com.github.oinsio.gnomish.sandbox.ExecCommand;
@@ -20,13 +19,14 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One agent CLI round, launched and watched to its end (FR1, FR8, NFR-R1 of
  * extract-agent-round-runner): the dialect's argv and stdin, with the credentials the dialect's
  * describe names granted through the run's allowlist and the round's answer path in {@code
- * GNOMISH_ANSWER_FILE} — the path a {@code writeExactly} policy names, else a fresh factory-named
- * one ({@link #answerFile}) — spawned only through the environment's process seam; stderr to a file in the
+ * GNOMISH_ANSWER_FILE} — the open round's answer path the runner was bound to, else a fresh
+ * factory-named one ({@link #answerFile}) — spawned only through the environment's process seam; stderr to a file in the
  * round scratch directory ({@link RoundScratchDirectory}), read capped after the exit and never through
  * a pipe of its own; stdout read live from the launch by the one line reader ({@link ProgressLines})
  * under the line cap, each line parsed by the dialect ({@link DialectLines}); the wait under the
@@ -42,7 +42,7 @@ import java.util.Map;
  * stdout that did not end within the handle's post-exit bound are each {@code failed/infrastructure}
  * naming what went wrong, with the stderr tail.
  *
- * <p>Implements FR1, FR7, FR8, FR9, FR16, NFR-R1 of extract-agent-round-runner.
+ * <p>Implements FR1, FR7, FR8, FR9, FR16, FR19, NFR-R1 of extract-agent-round-runner.
  *
  * @param <E> the dialect's own event type
  */
@@ -54,6 +54,7 @@ final class AgentRound<E> {
     private final ProgramRoundEquipment equipment;
     private final AgentProgressListener listener;
     private final StdoutCaps caps;
+    private final @Nullable String roundAnswerFile;
 
     /**
      * @param name the executor's name; never blank
@@ -62,6 +63,8 @@ final class AgentRound<E> {
      * @param equipment the run's bounds, time, credential grant and stderr parent; never null
      * @param listener the round's progress listener, which must not throw; never null
      * @param caps the round's stdout caps; never null
+     * @param roundAnswerFile the open round's answer path, or null for a request served outside a
+     *     round source
      */
     AgentRound(
             String name,
@@ -69,13 +72,15 @@ final class AgentRound<E> {
             TaskExecutionEnvironment environment,
             ProgramRoundEquipment equipment,
             AgentProgressListener listener,
-            StdoutCaps caps) {
+            StdoutCaps caps,
+            @Nullable String roundAnswerFile) {
         this.name = name;
         this.dialect = dialect;
         this.environment = environment;
         this.equipment = equipment;
         this.listener = listener;
         this.caps = caps;
+        this.roundAnswerFile = roundAnswerFile;
     }
 
     /**
@@ -87,7 +92,7 @@ final class AgentRound<E> {
     ExecutorResult run(ExecutorRequest request) {
         RoundBounds bounds = RoundBounds.of(equipment.bounds(), dialect.describe(), request);
         RenderedArgv rendered = dialect.render(bounds.hinted(request));
-        String answerFile = answerFile(request);
+        String answerFile = answerFile();
         Map<String, String> variables = new LinkedHashMap<>(credentials());
         variables.put(ProgramChannel.ANSWER_FILE_VARIABLE, answerFile);
         try (RoundScratchDirectory scratch =
@@ -106,17 +111,16 @@ final class AgentRound<E> {
     }
 
     /**
-     * The path the round's answer file is handed at (FR9 of extract-agent-round-runner, design D3):
-     * the one path a {@code writeExactly} policy names — in a branch mode the round's answer file
-     * under {@code .gnomish-task/} the request was built with ({@code EnvelopePaths.answerFile}),
-     * where a decision request rides the round's commit — or else a fresh factory-named path in the
-     * environment's scratch area, the contract's per-request answer channel.
+     * The path the round's answer file is handed at (FR9, FR19 of extract-agent-round-runner, design
+     * D3 as amended): the open round's answer path — in a branch mode the round's answer file under
+     * {@code .gnomish-task/} ({@code EnvelopePaths.answerFile}), where a decision request rides the
+     * round's commit whoever wrote it, the agent or, for a schema-enforced answer, the runner — or else
+     * a fresh factory-named path in the environment's scratch area, the contract's per-request answer
+     * channel. The request's policy names no answer path: a {@code writeExactly} grant is the stage
+     * half's for a file-form dialect only, and names this same path.
      */
-    private String answerFile(ExecutorRequest request) {
-        if (request.policy() instanceof Policy.WriteExactly exactly) {
-            return exactly.path();
-        }
-        return ProgramChannel.freshPath(environment, name, "answer");
+    private String answerFile() {
+        return roundAnswerFile != null ? roundAnswerFile : ProgramChannel.freshPath(environment, name, "answer");
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.runner
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.JsonNodeFactory
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressEvent
 import com.github.oinsio.gnomish.executorcontract.Capability
@@ -10,8 +11,6 @@ import com.github.oinsio.gnomish.executorcontract.Role
 import com.github.oinsio.gnomish.executorcontract.Usage
 import com.github.oinsio.gnomish.executorcontract.UsageProvenance
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
-import java.nio.file.Files
-import java.nio.file.Path
 import java.time.Instant
 
 /**
@@ -20,7 +19,9 @@ import java.time.Instant
  * {@code hello <model> <session>}, {@code use <tool>}, {@code done <summary>}, {@code stop <bound>},
  * {@code answer <json>} — and anything else is no event. It renders the role's input on stdin and the
  * role's word as the one argument — never a session flag, a continuation on the request included —
- * writes the answer an {@code answer} event carries itself (the word
+ * declares per role how its answer is obtained ({@link #forms}: by default a file the agent writes
+ * for {@code transform}, schema-enforced for {@code verdict} and {@code decision}, so both forms stay
+ * under spec), states for a schema-enforced role the answer an {@code answer} event carries (the word
  * {@code malformed} is an answer that does not match its schema, the word {@code exhausted} a CLI
  * that reports its structured-output retries exhausted), stops on a bound when a {@code stop}
  * event came, completes when a {@code done} event came, and is broken otherwise. It records what the
@@ -45,6 +46,19 @@ final class FakeDialect implements AgentDialect<FakeEvent> {
      * liveness sets none (FR16 of extract-agent-round-runner).
      */
     List<Capability> capabilities = [Capability.STREAMS_PROGRESS]
+
+    /** Its file form's instruction, the one the runner package words. */
+    static final String FILE_INSTRUCTION = new AnswerForm.AgentFile().instruction()
+
+    /** Its schema-enforced form, with words that name no file. */
+    static final AnswerForm SCHEMA = new AnswerForm.SchemaEnforced('=== Asking a human ===\nAsk through your final reply.\n')
+
+    /** How its answer is obtained, per role; a spec of the other form sets the role's entry. */
+    Map<Role, AnswerForm> forms = [
+        (Role.TRANSFORM): new AnswerForm.AgentFile(),
+        (Role.VERDICT): SCHEMA,
+        (Role.DECISION): SCHEMA
+    ]
 
     /** The wall time its usage reports, or null for none. */
     Long wallMillis
@@ -106,10 +120,15 @@ final class FakeDialect implements AgentDialect<FakeEvent> {
     }
 
     @Override
-    DialectAnswer answer(ExecutorRequest request, ParsedEvents<FakeEvent> events, Path answerFile) {
+    AnswerForm answerForm(Role role) {
+        forms[role]
+    }
+
+    @Override
+    DialectAnswer answer(ExecutorRequest request, ParsedEvents<FakeEvent> events) {
         def answer = events.stamped()*.event().find { it.kind == 'answer' }
         if (answer == null) {
-            return new DialectAnswer.NotWritten()
+            return new DialectAnswer.NoReply()
         }
         if (answer.payload == 'malformed') {
             return new DialectAnswer.Malformed(UntrustedText.agent('no verdict field'))
@@ -117,8 +136,7 @@ final class FakeDialect implements AgentDialect<FakeEvent> {
         if (answer.payload == 'exhausted') {
             return new DialectAnswer.Malformed(UntrustedText.factory(RETRIES_EXHAUSTED))
         }
-        Files.writeString(answerFile, answer.payload)
-        new DialectAnswer.Written()
+        new DialectAnswer.Replied(new ObjectMapper().readTree(answer.payload))
     }
 
     @Override

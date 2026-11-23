@@ -13,17 +13,18 @@ import com.github.oinsio.gnomish.executorcontract.Status;
 import com.github.oinsio.gnomish.executorcontract.Usage;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
-import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
 /**
  * The judgement of one agent round that ended (FR1, FR2, FR8, UX2 of extract-agent-round-runner): its
- * usage and status from the dialect, and for a completed round its answer, read back through the one
- * answer read ({@link AnswerFileRead#onHost}, {@link AnswerFileRead#in}) — from the round scratch
- * directory when the dialect extracted it from the stream, from the round's environment when the agent
- * wrote it itself — and made the round's result by the one mapping the recovery of a snapshot shares
+ * usage and status from the dialect, and for a completed round its answer, obtained as the dialect
+ * declares for the request's role ({@link AnswerForm}; FR19, design D15 parts 1 and 2) — a
+ * schema-enforced reply written by the runner to the round's answer path, or the file the agent wrote
+ * there — and read back from the round's environment through the one answer read ({@link
+ * AnswerFileRead#in}) and made the round's result by the one mapping the recovery of a snapshot shares
  * ({@link AnswerOutcome#ofAgent}; FR21, NFR-R5, design D15).
  *
  * <p>The dialect's status maps to the contract's: {@link RoundStatus.Completed} to {@code completed};
@@ -42,7 +43,7 @@ import java.util.List;
  * (FR20, design D15 part 3): a {@code transform} round's quality failure, which burns one attempt and
  * starts no second request; a {@code verdict} or {@code decision} request's cannot-verify.
  *
- * <p>Implements FR1, FR2, FR8, FR9, FR20, FR21, NFR-R2, UX2 of extract-agent-round-runner.
+ * <p>Implements FR1, FR2, FR8, FR9, FR19, FR20, FR21, NFR-R2, UX2 of extract-agent-round-runner.
  *
  * @param <E> the dialect's own event type
  */
@@ -110,20 +111,35 @@ final class RoundJudgement<E> {
     }
 
     private ExecutorResult answered(ParsedEvents<E> events, String answerFile, Usage usage) {
-        Path extracted = scratch.answerPath();
         AnswerFileReading read =
-                switch (dialect.answer(request, events, extracted)) {
-                    case DialectAnswer.Written ignored -> AnswerFileRead.onHost(extracted, UntrustedText::agent);
-                    case DialectAnswer.NotWritten ignored ->
+                switch (dialect.answerForm(request.role())) {
+                    case AnswerForm.AgentFile ignored ->
                         AnswerFileRead.in(environment, answerFile, UntrustedText::agent);
-                    // No file was written: the dialect's reason is the whole cause, and nothing is quoted.
-                    case DialectAnswer.Malformed malformed ->
-                        new AnswerFileReading.Refused(
-                                "its final answer does not match the answer's schema: "
-                                        + malformed.reason().excerpt(512),
-                                UntrustedText.agent(""));
+                    case AnswerForm.SchemaEnforced ignored -> replied(dialect.answer(request, events), answerFile);
                 };
         return AnswerOutcome.ofAgent(request.role(), name, read, scratch.tailForFailure(), usage);
+    }
+
+    /**
+     * A schema-enforced reply, made the round's answer file (design D15 part 2): an answer is written
+     * to the round's answer path through the environment's channel before the round closes — so a box
+     * round's snapshot carries it as it carried a file the agent wrote — and read back through the one
+     * answer read, which judges it against the contract as it judges any file at that path.
+     */
+    private AnswerFileReading replied(DialectAnswer answer, String answerFile) {
+        return switch (answer) {
+            case DialectAnswer.Replied replied -> {
+                environment.putFile(answerFile, replied.document().toString().getBytes(StandardCharsets.UTF_8));
+                yield AnswerFileRead.in(environment, answerFile, UntrustedText::agent);
+            }
+            case DialectAnswer.NoReply ignored -> AnswerFileRead.in(environment, answerFile, UntrustedText::agent);
+            // No file was written: the dialect's reason is the whole cause, and nothing is quoted.
+            case DialectAnswer.Malformed malformed ->
+                new AnswerFileReading.Refused(
+                        "its final answer does not match the answer's schema: "
+                                + malformed.reason().excerpt(512),
+                        UntrustedText.agent(""));
+        };
     }
 
     private static Usage measured(Usage usage, Duration wallTime) {

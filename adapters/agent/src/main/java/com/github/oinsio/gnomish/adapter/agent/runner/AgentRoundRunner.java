@@ -15,13 +15,17 @@ import com.github.oinsio.gnomish.pendingkey.PendingKey;
 import com.github.oinsio.gnomish.sandbox.TaskExecutionEnvironment;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The one runner of an agent CLI round, in every role (FR1, FR2, NFR-S2 of extract-agent-round-runner;
  * design D1): a {@code transform}, a {@code verdict} and a {@code decision} request run through one code
  * path — the dialect's argv, the launch through the environment's process seam, the capped stdout
  * drain, the kept stderr file, the three bounds, the answer through the shared capped read ({@link
- * AgentRound}, {@link RoundJudgement}) — and only the dialect's argv and answer extraction differ. The
+ * AgentRound}, {@link RoundJudgement}) — and only the dialect's argv and answer extraction differ.
+ * The answer is obtained as the dialect declares for the role ({@link AnswerForm}): a schema-enforced
+ * reply the runner writes to the round's answer path, or a file the agent writes there; the runner
+ * validates both through the one answer read (FR19, design D15). The
  * runner depends on nothing else from the vendor: whatever names the vendor is the {@link
  * AgentDialect}'s.
  *
@@ -39,7 +43,7 @@ import java.util.List;
  * once around the executor's {@code start} as for a {@code program} executor; the runner reads
  * neither, so the guard's per-round cursor advances once.
  *
- * <p>Implements FR1, FR2, FR8, NFR-R1, NFR-S2 of extract-agent-round-runner.
+ * <p>Implements FR1, FR2, FR8, FR19, NFR-R1, NFR-S2 of extract-agent-round-runner.
  *
  * @param <E> the dialect's own event type
  */
@@ -58,6 +62,9 @@ public final class AgentRoundRunner<E> implements Executor {
      * @param equipment the run's bounds, time, credential grant, stderr parent and round cell; never null
      * @param listener the rounds' progress listener; never null
      * @param caps the rounds' stdout caps; never null
+     * @param roundAnswerFile the open round's answer path, where a schema-enforced answer is written
+     *     and every answer read; null for a request served outside a round source, whose answer path
+     *     is a fresh one in the environment's scratch area
      */
     public AgentRoundRunner(
             String name,
@@ -65,13 +72,20 @@ public final class AgentRoundRunner<E> implements Executor {
             TaskExecutionEnvironment environment,
             ProgramRoundEquipment equipment,
             AgentProgressListener listener,
-            StdoutCaps caps) {
+            StdoutCaps caps,
+            @Nullable String roundAnswerFile) {
         this.name = name;
         this.dialect = dialect;
         this.environment = environment;
         this.equipment = equipment;
         this.round = new AgentRound<>(
-                name, dialect, environment, equipment, new CompositeAgentProgressListener(List.of(listener)), caps);
+                name,
+                dialect,
+                environment,
+                equipment,
+                new CompositeAgentProgressListener(List.of(listener)),
+                caps,
+                roundAnswerFile);
     }
 
     @Override

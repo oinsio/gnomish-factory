@@ -1,6 +1,8 @@
 package com.github.oinsio.gnomish.adapter.agent.claude;
 
+import com.github.oinsio.gnomish.domain.branch.EnvelopePaths;
 import com.github.oinsio.gnomish.executorcontract.Policy;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -20,8 +22,10 @@ import org.jspecify.annotations.Nullable;
  *       order), never widen it — a write-capable tool it names is dropped. An empty intersection
  *       omits {@code --allowedTools}: under {@code dontAsk} nothing outside it runs.
  *   <li>{@code writeExactly(path)} → {@code --permission-mode acceptEdits} with the settings'
- *       {@code allowedTools} and a pinpoint {@code Write(path)} allowance appended, never omitted
- *       — the answer-path allowance: the round's answer file (FR5, FR9 of extract-agent-round-runner).
+ *       {@code allowedTools} and a pinpoint {@code Write(path)} allowance appended — except for a
+ *       path under the task's envelope directory ({@code .gnomish-task/}), which is granted to no
+ *       agent of this dialect: its answers are schema-enforced and the runner writes them (FR5, FR9,
+ *       FR19 of extract-agent-round-runner; design D15).
  *   <li>{@code workspaceWrite} → {@code --permission-mode acceptEdits} with the settings' tool
  *       lists passed through.
  * </ul>
@@ -31,7 +35,7 @@ import org.jspecify.annotations.Nullable;
  * (design D2 of fix-operator-blockers). {@code disallowedTools} passes through for every policy: it
  * only ever narrows.
  *
- * <p>Implements FR3, FR5 of extract-agent-round-runner (design D5).
+ * <p>Implements FR3, FR5, FR19 of extract-agent-round-runner (design D5, D15).
  */
 final class ClaudePolicyCompiler {
 
@@ -77,7 +81,9 @@ final class ClaudePolicyCompiler {
                     }
                     case Policy.WriteExactly exactly -> {
                         List<String> tools = toolNames(allowed);
-                        tools.add("Write(" + exactly.path() + ")");
+                        if (!underEnvelope(exactly.path())) {
+                            tools.add("Write(" + exactly.path() + ")");
+                        }
                         addToolList(argv, ALLOWED_TOOLS_FLAG, tools);
                         yield ACCEPT_EDITS;
                     }
@@ -91,6 +97,20 @@ final class ClaudePolicyCompiler {
         argv.add(mode);
         argv.add(STRICT_MCP_CONFIG_FLAG);
         return List.copyOf(argv);
+    }
+
+    /**
+     * Whether {@code path} lies under the task's envelope directory, by any of its name elements: the
+     * Claude dialect's answer is schema-enforced in every role, so the runner writes it and the agent
+     * is granted no path there (FR19, design D15 part 2).
+     */
+    private static boolean underEnvelope(String path) {
+        for (Path name : Path.of(path).normalize()) {
+            if (name.toString().equals(EnvelopePaths.DIR_NAME)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static List<String> narrowedToReadOnly(@Nullable Object rawAllowedTools) {

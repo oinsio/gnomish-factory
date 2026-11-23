@@ -25,23 +25,24 @@ import java.util.Map;
  * the executor bound here behind the guard probe's one owner — every agent stage round since task 5.1a,
  * which resolves it under the reserved name {@code claude}. A round's request is a {@code transform}
  * whose instructions are the round prompt {@link ExecutorPromptBuilder} composes from the frozen law —
- * the briefing with its decisions, the verify plan, the answer-file instruction and, on a retry, the
- * rework preamble, which already carries the prior attempts' findings, so the request sends no
- * feedback list of its own; its settings are the stage block's {@code model} and {@code settings}; its
- * time hints the factory's, which the runner replaces with the round's own resolution ({@link
- * RoundBounds}). No request carries a continuation (design D4, NG8).
+ * the briefing with its decisions, the verify plan, the answer instruction of the dialect's declared
+ * answer form ({@link AnswerForm#instruction}) and, on a retry, the rework preamble, which already
+ * carries the prior attempts' findings, so the request sends no feedback list of its own; its settings
+ * are the stage block's {@code model} and {@code settings}; its time hints the factory's, which the
+ * runner replaces with the round's own resolution ({@link RoundBounds}). No request carries a
+ * continuation (design D4, NG8).
  *
  * <p>The open round completes the request and the runner ({@link #opened}, {@link
- * #executor(RoundEnvironmentSource.Round)}): the request's policy becomes {@code writeExactly} of the
- * round's answer file — the path the round source names and reads its decision request back from (the
- * in-branch {@code EnvelopePaths.answerFile} of a box round, the host round's scratch path), which the
- * runner hands the agent in {@code GNOMISH_ANSWER_FILE} and reads its answer from, and which the
- * dialect compiles to the edit mode with a pinpoint write allowance for that one path beyond the
- * working copy, as the round's argv always was; and the runner is bound to the round's environment
- * with the round's own progress listener joined to the run's (the mid-round harvest or push). Its
- * refusals name it an agent executor.
+ * #executor(RoundEnvironmentSource.Round)}), as the dialect declares the answer form (FR19, design
+ * D15): the runner is bound to the round's environment and its answer path — the in-branch {@code
+ * EnvelopePaths.answerFile} of a box round, the host round's scratch path — with the round's own
+ * progress listener joined to the run's (the mid-round harvest or push). A schema-enforced answer is
+ * written there by the runner, and the request keeps its {@code workspaceWrite} policy, which grants
+ * no path beyond the working copy; a dialect whose agent writes the file itself gets {@code
+ * writeExactly} of that path, which it compiles to a pinpoint write allowance. Its refusals name it an
+ * agent executor.
  *
- * <p>Implements FR9, FR14 of extract-agent-round-runner.
+ * <p>Implements FR9, FR14, FR19 of extract-agent-round-runner.
  */
 public final class AgentStageRounds implements RoundExecutorFactory {
 
@@ -85,25 +86,35 @@ public final class AgentStageRounds implements RoundExecutorFactory {
                 Role.TRANSFORM,
                 new Workspace(WORKSPACE),
                 new Policy.WorkspaceWrite(),
-                RoleInputs.transform(prompts.build(round)),
+                RoleInputs.transform(
+                        prompts.build(round, runners.answerForm(Role.TRANSFORM).instruction())),
                 ExecutorContractJson.settingsTree(settings),
                 runners.equipment().bounds().hints(),
                 List.of(),
                 null);
     }
 
-    /** {@code request} under {@code writeExactly} of the open round's answer file; nothing else changes. */
+    /**
+     * {@code request} as the open round needs it, by the dialect's declared answer form for its role
+     * (FR19, design D15 part 1): for a file the agent writes, under {@code writeExactly} of the open
+     * round's answer file; for a schema-enforced answer unchanged, so the agent is granted no write
+     * under the envelope directory — the runner writes that answer itself.
+     */
     @Override
     public ExecutorRequest opened(ExecutorRequest request, RoundEnvironmentSource.Round round) {
-        return new ExecutorRequest(
-                request.role(),
-                request.workspace(),
-                new Policy.WriteExactly(round.answerFilePath().toString()),
-                request.roleInputs(),
-                request.settings(),
-                request.bounds(),
-                request.feedback(),
-                request.continuation());
+        return switch (runners.answerForm(request.role())) {
+            case AnswerForm.SchemaEnforced ignored -> request;
+            case AnswerForm.AgentFile ignored ->
+                new ExecutorRequest(
+                        request.role(),
+                        request.workspace(),
+                        new Policy.WriteExactly(round.answerFilePath().toString()),
+                        request.roleInputs(),
+                        request.settings(),
+                        request.bounds(),
+                        request.feedback(),
+                        request.continuation());
+        };
     }
 
     @Override
@@ -111,9 +122,12 @@ public final class AgentStageRounds implements RoundExecutorFactory {
         return runners.runner(environment);
     }
 
-    /** The runner over the open round's environment, reporting to the round's own listener too. */
+    /**
+     * The runner over the open round's environment, reporting to the round's own listener too and
+     * answering at the round's answer path.
+     */
     @Override
     public Executor executor(RoundEnvironmentSource.Round round) {
-        return runners.runner(round.environment(), round.roundListener());
+        return runners.runner(round);
     }
 }
