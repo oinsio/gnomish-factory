@@ -37,7 +37,7 @@ import spock.lang.Specification
 /**
  * NFR-O1 of migrate-verify-to-executor-contract: each poll's line is written under the task's MDC
  * — the {@code stage} and {@code attempt} {@link MdcEventListener} sets from the poll's own {@link
- * com.github.oinsio.gnomish.domain.engine.EngineEvent.CheckPolled} before {@link
+ * com.github.oinsio.gnomish.domain.engine.EngineEvent.PendingPolled} before {@link
  * LoggingEventListener} renders it ({@code taskId} is the runner's, set before the engine starts).
  * A real engine run on virtual time, the two listeners composed in the order the runners compose
  * them.

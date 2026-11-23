@@ -412,7 +412,6 @@ class StreamJsonParserSpec extends Specification {
     }
 
     // FR7, D10: every recognized raw AgentEvent is logged at DEBUG, one line each
-    // Scenario: executor/agent-executor / The log renderer writes the feed under the attempt's keys
     def "logs one DEBUG line per recognized raw AgentEvent"() {
         given: 'an init line followed by a result line'
         def init = '{"type":"system","subtype":"init","session_id":"sess-1","model":"claude-x"}'

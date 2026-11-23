@@ -77,7 +77,7 @@ class ProgramRoundLedgerSpec extends Specification {
                         new PendingRuns()),
                 new HostRoundEnvironmentSource(clock, TestChildEnvironment.hostAllowlist()))
         def versions = new DescribedExecutors(
-                new ExecutorVersions([acme: UntrustedText.subprocess('1')]), ExecutorCredentialNames.none())
+                new ExecutorVersions([acme: UntrustedText.subprocess('1')]), ExecutorCredentialNames.none(), [] as Set)
         def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), writer, new InMemoryAttemptPersistence(),
                 VirtualTimeEquipment.on(clock), AttemptDelivery.assumedDelivered(), versions,
                 new HostRoundEnvironmentSource(clock, TestChildEnvironment.hostAllowlist()).identity())

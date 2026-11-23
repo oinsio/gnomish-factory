@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.git
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -21,7 +22,7 @@ class PendingWriteSpec extends Specification {
     static final RoundToken TOKEN = RoundToken.of('0a1b2c')
 
     private static PendingPollRecord entry(int check, int attempt) {
-        new PendingPollRecord(new CheckRef(check, UntrustedText.factory('ci')), attempt, TOKEN, new PendingKey('run-' + check),
+        new PendingPollRecord(new PendingSubject.Check(new CheckRef(check, UntrustedText.factory('ci'))), attempt, TOKEN, new PendingKey('run-' + check),
                 Instant.EPOCH)
     }
 

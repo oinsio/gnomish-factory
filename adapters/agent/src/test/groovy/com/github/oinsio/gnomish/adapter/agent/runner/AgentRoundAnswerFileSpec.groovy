@@ -16,11 +16,12 @@ import spock.lang.TempDir
 import spock.lang.Timeout
 
 /**
- * The path an agent round hands in {@code GNOMISH_ANSWER_FILE} (FR9 of extract-agent-round-runner,
- * design D3): the one path a {@code writeExactly} policy names — in a branch mode the round's answer
- * file under {@code .gnomish-task/}, {@link EnvelopePaths#answerFile} — so the decision request the
- * agent writes there is the file the branch carries, and the runner reads it back from that path;
- * any other policy gets a fresh path in the environment's scratch area.
+ * The path an agent round hands in {@code GNOMISH_ANSWER_FILE} (FR9, FR19 of
+ * extract-agent-round-runner, design D3 as amended by D15): the open round's answer path the runner is
+ * bound to — in a branch mode the round's answer file under {@code .gnomish-task/}, {@link
+ * EnvelopePaths#answerFile} — so the decision request a file-form agent writes there under its
+ * {@code writeExactly} allowance is the file the branch carries, and the runner reads it back from that
+ * path; a runner bound to no round gets a fresh path in the environment's scratch area.
  */
 @Timeout(60)
 class AgentRoundAnswerFileSpec extends Specification {
@@ -40,9 +41,10 @@ class AgentRoundAnswerFileSpec extends Specification {
         fixture = new RunnerFixture(workspace: workspace, stderrParent: stderrParent)
     }
 
-    // FR9, D3: the writeExactly path is the answer file the CLI is told, and the one read back
-    def "FR9: a writeExactly request hands its path as the answer file and reads the decision request from there"() {
-        given: 'a transform request whose one writable path is the round\'s envelope answer file'
+    // FR9, D3: the open round's answer path is the answer file the CLI is told, and the one read back
+    def "FR9: a runner bound to the open round's answer path hands it as the answer file and reads the decision request from there"() {
+        given: 'a runner bound to the round\'s envelope answer file, and a file-form request writing exactly it'
+        fixture.answerFile = ENVELOPE_ANSWER
         def request = RunnerFixture.request(Role.TRANSFORM, new Policy.WriteExactly(ENVELOPE_ANSWER))
 
         when: 'the agent writes a decision request at the path it was handed, relative to its working copy'
@@ -69,7 +71,7 @@ class AgentRoundAnswerFileSpec extends Specification {
         Files.exists(workspace.resolve(ENVELOPE_ANSWER))
     }
 
-    // FR9, D3: with no writeExactly path the answer channel is the contract's per-request scratch file
+    // FR9, D3: a runner bound to no round answers on the contract's per-request scratch file
     def "FR9: a #policy request hands a fresh path in the environment's scratch area"() {
         when:
         fixture.start(RunnerFixture.request(role, policy), RunnerFixture.exited(0, 'done\n'))

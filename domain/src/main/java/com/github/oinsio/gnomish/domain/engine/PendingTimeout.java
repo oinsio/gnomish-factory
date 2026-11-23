@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.time.Duration;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -21,10 +22,14 @@ import org.jspecify.annotations.Nullable;
  * wait and never persisted (D7 as amended). Two reasons are joined as factory prose quoting each
  * through the log exit, so neither leaves its carrier raw.
  *
+ * <p>A pending {@code transform} round's wait ends at the factory's pending ceiling instead ({@link
+ * #ceiling}; design D11 of extract-agent-round-runner): the ceiling is a factory bound, so its expiry
+ * is {@code failed/infrastructure} naming it whatever the last state, with the same details.
+ *
  * <p>One instance per wait, confined to the thread that runs it.
  *
  * <p>Implements FR2, FR4, FR9, UX1 of migrate-verify-to-executor-contract; FR9 of
- * add-external-check-github-actions.
+ * add-external-check-github-actions; FR10 of extract-agent-round-runner.
  */
 final class PendingTimeout {
 
@@ -69,6 +74,19 @@ final class PendingTimeout {
                 reason,
                 List.of(new Finding(message, null, details == null ? null : details.forLog())),
                 details);
+    }
+
+    /**
+     * The failure a pending {@code transform} round's wait comes to at the factory's ceiling: {@code
+     * failed/infrastructure} naming the ceiling, as every factory bound's expiry is (D3 of
+     * define-executor-contract), its details the wait's.
+     *
+     * @param ceiling the pending ceiling the wait reached; never null
+     * @return the failure; never null
+     */
+    ExecutionResult.Failed ceiling(Duration ceiling) {
+        var reason = UntrustedText.factory("the pending round did not complete within the pending ceiling " + ceiling);
+        return new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, reason, List.of(), details());
     }
 
     private @Nullable UntrustedText details() {

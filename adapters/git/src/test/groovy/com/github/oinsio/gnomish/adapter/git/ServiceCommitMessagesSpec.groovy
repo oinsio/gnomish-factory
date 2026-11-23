@@ -5,6 +5,7 @@ import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
 import com.github.oinsio.gnomish.pendingkey.PendingKey
@@ -91,21 +92,31 @@ class ServiceCommitMessagesSpec extends Specification {
     // token from the list's last entry
     def "FR20: a pending commit's subject names the stage, the last entry's round and its token"() {
         given:
-        def last = new PendingPollRecord(new CheckRef(1, UntrustedText.factory('ci')), 3, RoundToken.of('0a1b2c'),
-                new PendingKey('run-1'), Instant.EPOCH)
+        def last = new PendingPollRecord(subject, 3, RoundToken.of('0a1b2c'), new PendingKey('run-1'), Instant.EPOCH)
 
         expect:
         ServiceCommitMessages.pending('work', last) == 'gnomish: pending work#3 0a1b2c'
+
+        where: 'D11 of extract-agent-round-runner: the subject is the same for a check and for the round'
+        subject << [
+            new PendingSubject.Check(new CheckRef(1, UntrustedText.factory('ci'))),
+            PendingSubject.ROUND
+        ]
     }
 
-    def "FR20: an entry with no round token has no pending subject"() {
+    def "FR20: an entry of #named with no round token has no pending subject"() {
         when:
-        ServiceCommitMessages.pending('work', new PendingPollRecord(new CheckRef(4, UntrustedText.factory('ci')), 3,
-                null, new PendingKey('run-1'), Instant.EPOCH))
+        ServiceCommitMessages.pending('work', new PendingPollRecord(subject, 3, null, new PendingKey('run-1'),
+                Instant.EPOCH))
 
         then:
         def refused = thrown(IllegalArgumentException)
-        refused.message.contains('the entry of check 4 carries none')
+        refused.message.contains('the entry of ' + named + ' carries none')
+
+        where:
+        subject | named
+        new PendingSubject.Check(new CheckRef(4, UntrustedText.factory('ci'))) | 'check 4'
+        PendingSubject.ROUND | 'the round'
     }
 
     def "FR2: salvage() is the fixed constant string"() {

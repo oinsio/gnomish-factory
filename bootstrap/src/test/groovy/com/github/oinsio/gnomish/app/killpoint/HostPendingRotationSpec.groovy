@@ -48,7 +48,7 @@ class HostPendingRotationSpec extends HostPendingPollSpecBase {
 
         and: 'the same entry under the key the poll returned, since unchanged, no outcome named'
         at(other, rotated).pendingPolls()*.key()*.value() == ['pending-when']
-        at(other, rotated).pendingPolls()*.check() == entries*.check()
+        at(other, rotated).pendingPolls()*.subject() == entries*.subject()
         at(other, rotated).pendingPolls()*.since() == entries*.since()
         at(other, rotated).attempts() == at(other, recorded).attempts()
 

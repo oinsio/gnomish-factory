@@ -15,6 +15,7 @@ import com.github.oinsio.gnomish.app.port.git.LastRegisteredCommit
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
+import com.github.oinsio.gnomish.executorcontract.Role
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText
 
@@ -47,5 +48,11 @@ final class ClaudeStages {
         def dialect = ClaudeDialect.of(agent.agentCliBinary(), UntrustedText.factory('built-in'), childEnv)
         def runners = new AgentRunners<>('claude', dialect, listener, equipment, StdoutCaps.DEFAULTS)
         new ProgramStageExecutor(new AgentStageRounds(runners, law), rounds)
+    }
+
+    /** The answer instruction the Claude dialect declares for a {@code transform} round's prompt (FR19). */
+    static String answerInstruction() {
+        ClaudeDialect.of('claude', UntrustedText.factory('built-in'), ChildEnvAllowlist.none())
+                .answerForm(Role.TRANSFORM).instruction()
     }
 }

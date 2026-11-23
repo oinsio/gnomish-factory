@@ -50,6 +50,9 @@ class AgentRoundNoStateSpec extends Specification {
 
     // Scenario: executor/agent-round-runner / An agent-written continuation key is removed
     def "FR9: a decision request leaves the round with its question and options and no continuation key, #what"() {
+        given: 'the dialect declares the answer form of the row: a file the agent writes, or schema-enforced'
+        fixture.dialect.forms[Role.TRANSFORM] = written == null ? FakeDialect.SCHEMA : new AnswerForm.AgentFile()
+
         when:
         def result = fixture.start(RunnerFixture.request(Role.TRANSFORM), RunnerFixture.exited(0, stdout), { Path answer, Path err ->
             if (written != null) {

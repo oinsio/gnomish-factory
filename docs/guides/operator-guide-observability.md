@@ -124,7 +124,7 @@ the same `instance` block as the snapshot.
 | `runSummary`  | drain-run completion only                                                       | `counts` per outcome, summed `tokensByModel`, `wallMillis`                                                                                               |
 | `sweepAction` | the sandbox-lifecycle sweep stops or disposes one object                        | `objectName`, `role`, `mode` (`tracked\|manual`), `taskKey`, `category` (`stoppedOrphan\|disposedAged\|disposedReconstructible`), `reason`, `ageSeconds` |
 | `sweepTick`   | every completed sweep tick                                                      | `counts` per verdict category, including the untouched ones                                                                                              |
-| `roundOutcome` | every executor round a slot ran, recorded or not, and every executor check it finished | `taskId`, `stage`, `attempt`, `executor` (`<name>@<version>`, or the executor type alone when it answered no describe; a check's executor by name), `role` (`transform` for a stage round, `verdict` for a check), `status` (`<status>[/<class>]`), `check` (a check's index in the stage's `verify` list, else `null`), `resumedKey` (see below, else `null`) |
+| `roundOutcome` | every executor round a slot ran, recorded or not, and every executor check it finished | `taskId`, `stage`, `attempt`, `executor` (`<name>@<version>`, or the executor type alone when it answered no describe; a check's executor by name), `role` (`transform` for a stage round, `verdict` for a check), `status` (`<status>[/<class>]`), `check` (a check's index in the stage's `verify` list, else `null`), `resumedKey` (see below, else `null`), `pendingKey` (a stage round that went pending, see below, else `null`) |
 
 A `roundOutcome` line carries no tokens: usage stays on the `taskOutcome` line,
 so summing `taskOutcome` lines (as the dashboard's day view does) never counts a
@@ -143,6 +143,16 @@ only in the log. Each poll logs its executor, key prefix, elapsed and remaining
 time at DEBUG under the task's MDC, and a timeout one INFO line
 `pending poll timed out` naming what was still awaited — for `scm-status`, every
 expected context still absent.
+
+A stage round whose executor declares `poll` and answers `pending` is polled to
+its end before its line is written, at the factory's pending interval (30 s, or
+the executor's longer `pollAfter`) and up to the pending ceiling (24 h, counted
+from the moment its pending record was first written, so a restart never resets
+it). Its line then carries `pendingKey`, the first 16 characters of the key its
+`start` returned, and the status the last poll ended on; a ceiling reached
+reads `failed/infrastructure`. Its polls log as a check's do. A round resumed
+from its pending record by another instance names that key in `resumedKey`
+instead.
 
 Objects the sweep left untouched are never itemized — they are counted on the
 tick's `sweepTick` line only, so a day of quiet ticks costs one line per tick

@@ -16,9 +16,16 @@ import java.util.List;
  * deadline with no further poll; a hint never extends the timeout. It sleeps on the equipment's
  * sleeper, and its caller holds nothing while it does (D10).
  *
+ * <p>Two constructions, one wait: a check's, from its declared interval and timeout ({@link
+ * #ofCheck}); a pending {@code transform} round's, from the factory's {@link PendingBounds} ({@link
+ * #ofRound}; design D11 of extract-agent-round-runner) — the pending interval and the ceiling, with
+ * nothing of either on the round's request (NG13 of migrate-verify-to-executor-contract). Either way
+ * the deadline is counted from the entry's {@code since}, so a restart never resets it.
+ *
  * <p>One instance per wait, confined to the thread that runs it ({@link PendingPoll}).
  *
- * <p>Implements FR2, FR4, NFR-R1 of migrate-verify-to-executor-contract.
+ * <p>Implements FR2, FR4, NFR-R1 of migrate-verify-to-executor-contract; FR10, FR11 of
+ * extract-agent-round-runner.
  */
 final class PendingWait {
 
@@ -27,16 +34,36 @@ final class PendingWait {
     private final Instant since;
     private final Instant deadline;
 
+    private PendingWait(TimeEquipment time, Duration interval, Duration bound, Instant since) {
+        this.time = time;
+        this.interval = interval;
+        this.since = since;
+        this.deadline = since.plus(bound);
+    }
+
     /**
+     * A check's wait: its declared interval between polls and its timeout from {@code since}.
+     *
      * @param time the clock the deadline is measured on and the sleeper waited on; never null
      * @param check the check whose interval and timeout bound the wait; never null
      * @param since when the check's entry was first recorded pending; never null
+     * @return the wait; never null
      */
-    PendingWait(TimeEquipment time, VerifyCheck.Executor check, Instant since) {
-        this.time = time;
-        this.interval = check.interval();
-        this.since = since;
-        this.deadline = since.plus(check.timeout());
+    static PendingWait ofCheck(TimeEquipment time, VerifyCheck.Executor check, Instant since) {
+        return new PendingWait(time, check.interval(), check.timeout(), since);
+    }
+
+    /**
+     * A pending {@code transform} round's wait: the factory's pending interval between polls and its
+     * pending ceiling from {@code since}.
+     *
+     * @param time the clock the deadline is measured on and the sleeper waited on; never null
+     * @param bounds the factory's pending interval and ceiling; never null
+     * @param since when the round's entry was first recorded pending; never null
+     * @return the wait; never null
+     */
+    static PendingWait ofRound(TimeEquipment time, PendingBounds bounds, Instant since) {
+        return new PendingWait(time, bounds.interval(), bounds.ceiling(), since);
     }
 
     /** The time since the entry's {@code since}, on the injected clock. */

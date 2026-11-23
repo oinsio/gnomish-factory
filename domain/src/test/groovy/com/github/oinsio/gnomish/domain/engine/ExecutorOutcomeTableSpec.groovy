@@ -10,11 +10,13 @@ import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.engine.fake.Unpriced
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualTimeEquipment
+import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery
 import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
 import com.github.oinsio.gnomish.domain.pipeline.ExecutorType
 import com.github.oinsio.gnomish.domain.pipeline.PipelineDefinition
+import com.github.oinsio.gnomish.domain.pipeline.Sandbox
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyChecks
@@ -46,12 +48,18 @@ class ExecutorOutcomeTableSpec extends Specification {
     def persistence = new InMemoryAttemptPersistence()
     def listener = new RecordingEventListener()
 
-    def run() {
-        def stage = new StageDefinition('build', 'purpose', [], [], new StageDefinition.Executor(ExecutorType.API, 'model', [:]),
+    def run(boolean pollable = false) {
+        def mechanism = pollable
+                ? new StageDefinition.Executor(ExecutorType.PROGRAM, '', [:], Sandbox.none(), 'remote')
+                : new StageDefinition.Executor(ExecutorType.API, 'model', [:])
+        def stage = new StageDefinition('build', 'purpose', [], [], mechanism,
         'instructions.md', [
             VerifyChecks.builtin('files_exist', [:])
         ], new AutonomyLimits(1), AdvancementMode.AUTO)
-        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), listener, persistence, VirtualTimeEquipment.on(new VirtualClock()), RoundIdentity.inPlace())
+        def described = new DescribedExecutors(ExecutorVersions.none(), ExecutorCredentialNames.none(),
+                pollable ? ['remote'] as Set : [] as Set)
+        def ports = new EnginePorts(CheckRouting.of(executor, builtinRunner, new ScriptedCheckRounds(), new ScriptedCheckRounds()), listener, persistence, VirtualTimeEquipment.on(new VirtualClock()),
+                AttemptDelivery.assumedDelivered(), described, RoundIdentity.inPlace())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(5), [stage]), CONTEXT,
         TaskState.atStageStart('build'), new FakeWorkspace(), ports)
     }
@@ -66,32 +74,72 @@ class ExecutorOutcomeTableSpec extends Specification {
         ], null)
     }
 
-    // FR7, FR2: one row per status and class, through a fake executor and the real engine
+    static ExecutionResult pending() {
+        result(new ExecutionResult.Pending(new PendingKey('k-1'), null, PendingState.RUNNING, null, null))
+    }
+
+    // FR7, FR2: one row per status and class, through a fake executor and the real engine; a pending
+    //     from an executor declaring no poll is refused, one declaring poll is polled to its end and
+    //     classified by the result it ends on (FR10 of extract-agent-round-runner, design D11)
     // Scenario: pipeline/stage-engine / Executor outcome table verified
     // Scenario: executor/wire-contract / Pending from a role whose caller cannot poll
     def "#row: attempts burned #burned, rounds recorded #recorded, outcome #outcomeKind"() {
-        given: 'the executor produces the row once; a completed round passes its one check'
-        executor.scripted << input
+        given: 'the executor produces the row; a completed round passes its one check'
+        executor.scripted.addAll(inputs)
         builtinRunner.scripted << new Verdict.Pass(null, [])
 
         when:
-        def outcome = run()
+        def outcome = run(pollable)
 
         then:
         outcome.finalState().attemptsUsed() == burned
         persistence.entries.size() == recorded
+        persistence.pending.size() == (pollable ? 1 : 0)
         outcomeKind.isInstance(outcome instanceof TaskOutcome.Escalated ? outcome.report() : outcome)
-        executor.requests.size() == 1
+        executor.requests.size() == inputs.size()
 
         where:
-        row | input | burned | recorded | outcomeKind
-        'completed' | result(new ExecutionResult.Completed()) | 0 | 1 | TaskOutcome.Completed
-        'decision-request' | result(new ExecutionResult.Completed(), new ExecutionResult.DecisionRequest(UntrustedText.agent('q?'), [])) |
-        0 | 1 | EscalationReport.DecisionNeeded
-        'failed/quality' | result(failed(ExecutionResult.FailureClass.QUALITY)) | 1 | 1 | EscalationReport.AttemptsExhausted
-        'failed/infrastructure' | result(failed(ExecutionResult.FailureClass.INFRASTRUCTURE)) | 0 | 0 | EscalationReport.CannotExecute
-        'failed/limit' | result(failed(ExecutionResult.FailureClass.LIMIT)) | 0 | 1 | EscalationReport.BudgetExhausted
-        'pending (transform)' | result(new ExecutionResult.Pending(new PendingKey('k-1'), null, PendingState.RUNNING, null, null)) | 0 | 0 | EscalationReport.CannotExecute
+        row | inputs | pollable | burned | recorded | outcomeKind
+        'completed' | [
+            result(new ExecutionResult.Completed())
+        ] | false | 0 | 1 | TaskOutcome.Completed
+        'decision-request' | [
+            result(new ExecutionResult.Completed(), new ExecutionResult.DecisionRequest(UntrustedText.agent('q?'), []))
+        ] |
+        false | 0 | 1 | EscalationReport.DecisionNeeded
+        'failed/quality' | [
+            result(failed(ExecutionResult.FailureClass.QUALITY))
+        ] | false | 1 | 1 | EscalationReport.AttemptsExhausted
+        'failed/infrastructure' | [
+            result(failed(ExecutionResult.FailureClass.INFRASTRUCTURE))
+        ] | false | 0 | 0 | EscalationReport.CannotExecute
+        'failed/limit' | [
+            result(failed(ExecutionResult.FailureClass.LIMIT))
+        ] | false | 0 | 1 | EscalationReport.BudgetExhausted
+        'pending (transform, no poll declared)' | [pending()] | false | 0 | 0 | EscalationReport.CannotExecute
+        'pending (transform, poll declared)' | [
+            pending(),
+            result(new ExecutionResult.Completed())
+        ] | true | 0 | 1 | TaskOutcome.Completed
+    }
+
+    // FR10 of extract-agent-round-runner: the refusal names the unsupported pending, and nothing of the
+    //     round is written
+    // Scenario: pipeline/stage-engine / Pending without the poll capability stays refused
+    def "a pending from an executor declaring no poll escalates naming the unsupported pending"() {
+        given:
+        executor.scripted << pending()
+
+        when:
+        def outcome = run(false)
+
+        then:
+        outcome instanceof TaskOutcome.Escalated
+        def report = outcome.report() as EscalationReport.CannotExecute
+        report.cause().forLog().contains('unsupported pending')
+        report.cause().forLog().contains('declares no poll')
+        persistence.pending.isEmpty()
+        persistence.entries.isEmpty()
     }
 
     // FR7: failed/limit escalates BudgetExhausted carrying the bound, burns nothing, records the

@@ -2,7 +2,9 @@ package com.github.oinsio.gnomish.adapter.git;
 
 import com.github.oinsio.gnomish.app.port.git.TaskLifecycleEvent;
 import com.github.oinsio.gnomish.domain.engine.AttemptRecord;
+import com.github.oinsio.gnomish.domain.engine.CheckRef;
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord;
+import com.github.oinsio.gnomish.domain.engine.PendingSubject;
 import com.github.oinsio.gnomish.domain.engine.RoundToken;
 
 /**
@@ -120,10 +122,18 @@ public final class ServiceCommitMessages {
     public static String pending(String stage, PendingPollRecord last) {
         RoundToken token = last.token();
         if (token == null) {
-            throw new IllegalArgumentException("a pending commit names its round's token; the entry of check "
-                    + last.check().index() + " carries none");
+            throw new IllegalArgumentException(
+                    "a pending commit names its round's token; the entry of " + subject(last) + " carries none");
         }
         return pending(stage, last.attempt(), token);
+    }
+
+    /** The entry's subject as the refusal names it: the check by its index, or the round. */
+    private static String subject(PendingPollRecord entry) {
+        return switch (entry.subject()) {
+            case PendingSubject.Check(CheckRef ref) -> "check " + ref.index();
+            case PendingSubject.Round _ -> "the round";
+        };
     }
 
     /**

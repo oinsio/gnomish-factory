@@ -17,10 +17,13 @@ import org.jspecify.annotations.Nullable;
  * check of the round that went {@code pending}.
  *
  * <p>An entry of the state handed in is the round's own only by identity (crash-consistency items
- * 13 and 14): its {@code attempt} is the round's number and its {@code token} equals the round's
- * token. A carried-over entry — another attempt, another round's token, or any entry when the round
- * has no token (the in-place run, which has no branch and no resume) — is never continued and never
- * written again; the list's presence decides nothing.
+ * 13 and 14), as {@link PendingEntries#ofRound} judges it: its {@code attempt} is the round's number
+ * and its {@code token} equals the round's token. A carried-over entry — another attempt, another
+ * round's token, or any entry when the round has no token (the in-place run, which has no branch and
+ * no resume) — is never continued and never written again; the list's presence decides nothing. A
+ * {@link PendingSubject.Round Round} entry is never a verification's: the round's close drops it
+ * before its checks run (design D11 of extract-agent-round-runner), so one still present is not
+ * carried into a check's pending write either.
  *
  * <p>An entry stays in the list after its check has ended, until the round closes (D21), so every
  * pending write carries every key of the round so far: a kill while a later check is polled loses
@@ -105,7 +108,12 @@ final class PendingRound {
      * @return the entry, or empty when the round holds none for the check
      */
     Optional<PendingPollRecord> entryOf(CheckRef check) {
-        return entries.stream().filter(entry -> entry.check().equals(check)).findFirst();
+        return entries.stream()
+                .filter(entry -> switch (entry.subject()) {
+                    case PendingSubject.Check(CheckRef ref) -> ref.equals(check);
+                    case PendingSubject.Round _ -> false;
+                })
+                .findFirst();
     }
 
     /**
@@ -121,17 +129,17 @@ final class PendingRound {
     }
 
     /**
-     * Replaces the entry of {@code rotated}'s check with {@code rotated} and returns the state the
+     * Replaces the entry of {@code rotated}'s subject with {@code rotated} and returns the state the
      * rotation's pending write carries: the handed-in state with the whole list, every other entry
      * carried unchanged and in its place (D12 as amended 2026-11-12, D21). The entry is matched by
      * its identity alone, so the rotation is the same for any subject an entry names.
      *
-     * @param rotated the entry with the key a {@code poll} returned; never null, its check's entry
+     * @param rotated the entry with the key a {@code poll} returned; never null, its subject's entry
      *     already in the round's list
      * @return the state to persist; never null
      */
     TaskState withRotated(PendingPollRecord rotated) {
-        entries.replaceAll(entry -> entry.check().equals(rotated.check()) ? rotated : entry);
+        entries.replaceAll(entry -> entry.subject().equals(rotated.subject()) ? rotated : entry);
         return state.withPendingPolls(entries);
     }
 
@@ -151,6 +159,9 @@ final class PendingRound {
     }
 
     private boolean ours(PendingPollRecord entry) {
-        return token != null && token.equals(entry.token()) && entry.attempt() == key.attempt();
+        return switch (entry.subject()) {
+            case PendingSubject.Check _ -> PendingEntries.ofRound(entry, key.attempt(), token);
+            case PendingSubject.Round _ -> false;
+        };
     }
 }

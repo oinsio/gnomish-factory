@@ -33,7 +33,7 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  * <p>Implements FR1 of add-stage-engine; FR21 of add-sandbox-core; FR17 of
  * supervise-daemon-loops-and-embed-dashboard (the instant-source environment port); FR22 of
  * supervise-daemon-loops-and-embed-dashboard (the time equipment as the environment ports); M3 of
- * extract-agent-round-runner (one executor port).
+ * extract-agent-round-runner (one executor port); FR10 of extract-agent-round-runner (the pending bounds).
  *
  * @param executor the port that runs one round of a stage's work; never null
  * @param listener the observer the engine emits its event stream to; never null
@@ -48,6 +48,8 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
  * @param roundIdentity where the engine takes each recorded round's token: the run's current-round
  *     cell in a branch mode, {@link RoundIdentity#inPlace()} in the in-place run; no constructor
  *     defaults it (D13 of define-executor-contract); never null
+ * @param pendingBounds the factory's interval and ceiling of a pending {@code transform} round's wait
+ *     (design D11 of extract-agent-round-runner); never null
  */
 public record EnginePorts(
         StageExecutor executor,
@@ -56,7 +58,32 @@ public record EnginePorts(
         TimeEquipment time,
         AttemptDelivery attemptDelivery,
         DescribedExecutors describedExecutors,
-        RoundIdentity roundIdentity) {
+        RoundIdentity roundIdentity,
+        PendingBounds pendingBounds) {
+
+    /**
+     * The ports with the factory's own pending bounds, {@link PendingBounds#DEFAULTS} — a value of
+     * this module (a Local Default); the composition root names its bounds through the canonical
+     * constructor.
+     */
+    public EnginePorts(
+            StageExecutor executor,
+            EngineEventListener listener,
+            AttemptPersistence persistence,
+            TimeEquipment time,
+            AttemptDelivery attemptDelivery,
+            DescribedExecutors describedExecutors,
+            RoundIdentity roundIdentity) {
+        this(
+                executor,
+                listener,
+                persistence,
+                time,
+                attemptDelivery,
+                describedExecutors,
+                roundIdentity,
+                PendingBounds.DEFAULTS);
+    }
 
     /**
      * The dominant construction: assemblies and specs whose checks have no

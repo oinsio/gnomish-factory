@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Participants
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -84,8 +85,8 @@ class HeartbeatProgressSpec extends Specification {
         'implement' | 1 | new EngineEvent.ExecutionFinished(key('implement', 1), Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed())
         'build' | 0 | new EngineEvent.CheckStarted(key('build', 0), new CheckRef(0, UntrustedText.manifest('builtin:files_exist')))
         'build' | 4 | new EngineEvent.CheckFinished(key('build', 4), passResult(), null)
-        'build' | 5 | new EngineEvent.CheckPolled(key('build', 5), new CheckRef(0, UntrustedText.manifest('executor:ci')), 'scm-status', UntrustedText.subprocess('k-1'), PendingTurn.Origin.ISSUED, Duration.ofSeconds(30), Duration.ofMinutes(9))
-        'build' | 6 | new EngineEvent.CheckTimedOut(key('build', 6), new CheckRef(0, UntrustedText.manifest('executor:ci')), 'scm-status', UntrustedText.subprocess('k-1'), Duration.ofMinutes(10), new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, UntrustedText.factory('timed out'), [], null))
+        'build' | 5 | new EngineEvent.PendingPolled(key('build', 5), new PendingSubject.Check(new CheckRef(0, UntrustedText.manifest('executor:ci'))), 'scm-status', UntrustedText.subprocess('k-1'), PendingTurn.Origin.ISSUED, Duration.ofSeconds(30), Duration.ofMinutes(9))
+        'build' | 6 | new EngineEvent.PendingTimedOut(key('build', 6), new PendingSubject.Check(new CheckRef(0, UntrustedText.manifest('executor:ci'))), 'scm-status', UntrustedText.subprocess('k-1'), Duration.ofMinutes(10), new ExecutionResult.Failed(ExecutionResult.FailureClass.QUALITY, UntrustedText.factory('timed out'), [], null))
         'review' | 2 | new EngineEvent.AttemptFinished(key('review', 2), TaskState.atStageStart('review'), trace('review', 2))
     }
 

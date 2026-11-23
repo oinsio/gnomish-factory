@@ -163,12 +163,12 @@ public final class Engine {
             Workspace workspace,
             EnginePorts ports,
             StageDefinition stage) {
-        var verifyOrchestrator = new VerifyOrchestrator(
-                new PendingPoll(
-                        ports.executor(), ports.persistence(), ports.attemptDelivery(), ports.time(), ports.listener()),
-                ports.time().clock(),
-                ports.listener());
-        var loop = new StageAttemptLoop(ports, verifyOrchestrator, definition);
+        // One owner of pending work for the run's checks and its transform rounds alike (design D11
+        // of extract-agent-round-runner).
+        var poll = new PendingPoll(
+                ports.executor(), ports.persistence(), ports.attemptDelivery(), ports.time(), ports.listener());
+        var verifyOrchestrator = new VerifyOrchestrator(poll, ports.time().clock(), ports.listener());
+        var loop = new StageAttemptLoop(ports, verifyOrchestrator, poll, definition);
         var currentState = state;
         var currentStage = stage;
         while (true) {

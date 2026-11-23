@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.app.port.tracker.ClaimEpochSource
 import com.github.oinsio.gnomish.domain.engine.AttemptKey
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.TaskState
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
 import com.github.oinsio.gnomish.domain.engine.fake.RoundStates
@@ -68,7 +69,7 @@ trait InBoxPendingRound implements BareGitRepoFixture {
 
     TaskState pendingState(String... keys) {
         TaskState.atStageStart('implement').withPendingPolls(keys.toList().withIndex().collect { String key, int i ->
-            new PendingPollRecord(new CheckRef(i, UntrustedText.factory('executor:ci')), 1, rounds.opened(),
+            new PendingPollRecord(new PendingSubject.Check(new CheckRef(i, UntrustedText.factory('executor:ci'))), 1, rounds.opened(),
             new PendingKey(key), Instant.parse('2026-11-12T09:00:00Z'))
         })
     }

@@ -27,11 +27,11 @@ class RoundExecutionPendingHandoffSpec extends PendingPollSpecBase {
         def ports = new EnginePorts(executor, new RecordingEventListener(), persistence, time,
                 { Optional.of(TOKEN) } as RoundIdentity)
         def listener = new RecordingEventListener()
-        def chain = new VerifyOrchestrator(new PendingPoll(executor, persistence, AttemptDelivery.assumedDelivered(), time,
-                listener), clock, listener)
+        def poll = new PendingPoll(executor, persistence, AttemptDelivery.assumedDelivered(), time, listener)
+        def chain = new VerifyOrchestrator(poll, clock, listener)
 
         when:
-        def outcome = new RoundExecution(ports, chain).execute(CONTEXT, STATE, WORKSPACE, VerifyingStages.of([ci]), clock.instant())
+        def outcome = new RoundExecution(ports, chain, poll).execute(CONTEXT, STATE, WORKSPACE, VerifyingStages.of([ci]), clock.instant())
 
         then:
         persistence.pending*.state == [

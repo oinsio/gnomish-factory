@@ -45,7 +45,7 @@ class ContainerPendingRotationSpec extends ContainerPendingPollSpecBase {
 
         and: 'the same entry under the key the poll returned, since unchanged, no outcome named'
         at(world.repoDir, rotated).pendingPolls()*.key()*.value() == ['pending-when']
-        at(world.repoDir, rotated).pendingPolls()*.check() == entries*.check()
+        at(world.repoDir, rotated).pendingPolls()*.subject() == entries*.subject()
         at(world.repoDir, rotated).pendingPolls()*.since() == entries*.since()
         at(world.repoDir, rotated).attempts() == at(world.repoDir, recorded).attempts()
 

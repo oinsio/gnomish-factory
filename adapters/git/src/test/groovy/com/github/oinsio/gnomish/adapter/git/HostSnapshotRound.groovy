@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.ToolTrace
@@ -83,7 +84,7 @@ trait HostSnapshotRound implements RegisteredRoundFixture {
     void persistPending(String... keys) {
         def recorded = store.readRecordedState(worktree(), TASK).orElseThrow()
         def entries = keys.toList().withIndex().collect { String key, int index ->
-            new PendingPollRecord(new CheckRef(index, UntrustedText.factory('executor:ci')), ROUND, cell.opened(),
+            new PendingPollRecord(new PendingSubject.Check(new CheckRef(index, UntrustedText.factory('executor:ci'))), ROUND, cell.opened(),
             new PendingKey(key), Instant.parse('2026-11-12T09:00:00Z'))
         }
         persistence().persistPending(TASK, recorded.withPendingPolls(entries))

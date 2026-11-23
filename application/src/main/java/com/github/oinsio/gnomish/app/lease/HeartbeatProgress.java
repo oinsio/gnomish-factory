@@ -72,8 +72,8 @@ public final class HeartbeatProgress implements EngineEventListener {
             case EngineEvent.AttemptStarted e -> record(e.key());
             case EngineEvent.ExecutionFinished e -> record(e.key());
             case EngineEvent.CheckStarted e -> record(e.key());
-            case EngineEvent.CheckPolled e -> record(e.key());
-            case EngineEvent.CheckTimedOut e -> record(e.key());
+            case EngineEvent.PendingPolled e -> record(e.key());
+            case EngineEvent.PendingTimedOut e -> record(e.key());
             case EngineEvent.CheckFinished e -> record(e.key());
             case EngineEvent.AttemptFinished e -> record(e.key());
             case EngineEvent.TaskFinished ignored -> {

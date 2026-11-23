@@ -27,7 +27,7 @@ import spock.lang.Timeout
  * A dialect's declared liveness, measured on the real CLI (FR17 of extract-agent-round-runner;
  * design D6, "A declared liveness is tested, per dialect"): for every dialect whose describe
  * declares {@code streams_progress} — the declaration the factory's silence bound is applied on,
- * read through {@link QuietStdoutBounds} — and every platform of {@link LivenessPlatform}, the real
+ * read through {@link QuietStdoutBounds} — and every platform of {@link PaidSmokePlatform}, the real
  * CLI is started with the argv the dialect renders for a {@code transform} request and asked for one
  * tool call that prints nothing for 420 seconds, in the main agent and, where the dialect has
  * subagents, inside one. Every stdout line is stamped on arrival; the call must run to its end, and
@@ -91,7 +91,7 @@ class PaidSmokeLivenessSpec extends Specification {
         DIALECTS.findAll { Map dialect ->
             declaresLiveness(dialect) && (!subagent || dialect.subagents)
         }.collectMany { Map dialect ->
-            LivenessPlatform.values().collect { [dialect, it] as List<Object> }
+            PaidSmokePlatform.values().collect { [dialect, it] as List<Object> }
         }
     }
 
@@ -101,21 +101,18 @@ class PaidSmokeLivenessSpec extends Specification {
         QuietStdoutBounds.applyTo(probe.describe())
     }
 
-    private boolean quietCallIsReported(Map row, LivenessPlatform platform, String prompt, String where) {
+    private boolean quietCallIsReported(Map row, PaidSmokePlatform platform, String prompt, String where) {
         // real-time-wiring: the subject is the real CLI's cadence on the wall clock; every line is
         //     stamped on arrival, and virtual time would measure nothing.
         def clock = InstantSource.system()
         def hostBinary = System.getProperty('paidSmoke.claudeBinary', 'claude')
         def workspace = Files.createDirectories(scratch.resolve('workspace'))
-        if (platform == LivenessPlatform.HOST) {
-            def preflight = ClaudeLoginPreflight.check(hostBinary, Files.createDirectories(scratch.resolve('preflight')))
-            assert preflight.loggedIn : "paidSmokeTest: claude CLI preflight failed — ${preflight.reason}"
-        }
+        platform.requireLogin(hostBinary, Files.createDirectories(scratch.resolve('preflight')))
         def probe = (row.build as Closure<AgentDialect>).call('probe', UntrustedText.subprocess('probe'),
                 TestChildEnvironment.hostAllowlist())
         List<String> credentials = probe.describe().credentials()
-        def allowlist = TestChildEnvironment.hostAllowlist(credentials + dockerClientNames(), [])
-        def version = version(platform.versionCommand(hostBinary), workspace, clock, allowlist)
+        def allowlist = TestChildEnvironment.hostAllowlist(credentials + PaidSmokePlatform.dockerClientNames(), [])
+        def version = platform.version(hostBinary, workspace, clock, allowlist)
         def dialect = (row.build as Closure<AgentDialect>).call(platform.binary(hostBinary),
                 UntrustedText.subprocess(version), allowlist)
         def rendered = dialect.render(transform(prompt))
@@ -136,19 +133,6 @@ class PaidSmokeLivenessSpec extends Specification {
         "${stdout.sinceStart(answer).seconds} s, before the ${QUIET_CALL.seconds} s call could have ended"
         assert gap <= bound : "${subject} — above a fifth of the silence bound (${bound.toMillis()} ms)"
         true
-    }
-
-    private static String version(List<String> command, Path workspace, InstantSource clock, ChildEnvAllowlist allowlist) {
-        def handle = PaidSmokeAgentLauncher.launch(command, workspace, clock, '', allowlist)
-        def lines = StampedStdout.read(handle, clock).lines
-        handle.waitForExitOrTimeout(Duration.ofMinutes(2), clock)
-        assert !lines.isEmpty() : "'${command.join(' ')}' printed no version"
-        lines.first().text.trim()
-    }
-
-    /** The docker client's own variables the test JVM carries, so a container row reaches its daemon. */
-    private static List<String> dockerClientNames() {
-        TestChildEnvironment.NAMES.findAll { it.startsWith('DOCKER_') }
     }
 
     private static ExecutorRequest transform(String prompt) {

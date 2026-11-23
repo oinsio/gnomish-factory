@@ -95,7 +95,7 @@ class LargeStreamRoundSpec extends Specification {
             ]), Duration.ZERO)
         }
         def request = new StageExecutor.Request(first.context(), first.stage(), first.workspace(), 3, history)
-        def prompt = new ExecutorPromptBuilder(EXECUTOR_LAW).build(request)
+        def prompt = new ExecutorPromptBuilder(EXECUTOR_LAW).build(request, ClaudeStages.answerInstruction())
         assert prompt.length() > 2_500_000
 
         when:

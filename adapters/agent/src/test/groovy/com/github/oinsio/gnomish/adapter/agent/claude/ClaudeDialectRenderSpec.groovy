@@ -29,9 +29,10 @@ class ClaudeDialectRenderSpec extends Specification {
         def rendered = dialect.render(request(Role.TRANSFORM, new Policy.WorkspaceWrite(), RoleInputs.transform('build it'),
                 [model: 'opus', allowedTools: ['Bash'], disallowedTools: ['WebFetch'], maxTurns: 7, roundTimeout: '5m']))
 
-        then: 'the prompt travels on stdin, never in the argv'
-        rendered.argv().join(' ') == 'claude -p --model opus --max-turns 7 --allowedTools Bash --disallowedTools WebFetch' +
-                " --permission-mode acceptEdits ${TRANSPORT}"
+        then: 'the prompt travels on stdin, never in the argv; the transform reply schema closes the argv'
+        rendered.argv().join(' ').startsWith('claude -p --model opus --max-turns 7 --allowedTools Bash --disallowedTools WebFetch' +
+                " --permission-mode acceptEdits ${TRANSPORT} --json-schema ")
+        !rendered.argv().any { it.startsWith('Write(') }
         rendered.stdin() == 'build it'
     }
 
@@ -77,8 +78,8 @@ class ClaudeDialectRenderSpec extends Specification {
                 [model: 'opus'], new Bounds(40L, 100000L, new BigDecimal('2.5'), null, null, null)))
 
         then:
-        rendered.argv().join(' ') == "claude -p --model opus --max-turns 40 --max-budget-usd 2.5" +
-                " --permission-mode acceptEdits ${TRANSPORT}"
+        rendered.argv().join(' ').startsWith("claude -p --model opus --max-turns 40 --max-budget-usd 2.5" +
+                " --permission-mode acceptEdits ${TRANSPORT} --json-schema ")
     }
 
     // NFR-S1: whatever the settings say — a permissionMode key included — no policy renders the
@@ -103,8 +104,9 @@ class ClaudeDialectRenderSpec extends Specification {
 
         then:
         argv[-2] == '--json-schema'
-        JSON.readTree(argv[-1]) == JSON.readTree('{"type":"object","required":["passed"],"properties":{' +
-                '"passed":{"type":"boolean"},"findings":{"type":"array","items":{"type":"string","pattern":"\\\\S"}}}}')
+        JSON.readTree(argv[-1]) == JSON.readTree('{"type":"object","additionalProperties":false,' +
+                '"required":["passed","findings"],"properties":{"passed":{"type":"boolean"},' +
+                '"findings":{"type":"array","items":{"type":"string","pattern":"\\\\S"}}}}')
     }
 
     def "FR3: a decision request's schema offers exactly the request's options to choose and rank"() {
@@ -113,19 +115,16 @@ class ClaudeDialectRenderSpec extends Specification {
 
         then:
         argv[-2] == '--json-schema'
-        JSON.readTree(argv[-1]) == JSON.readTree('{"type":"object","required":["chosen"],"properties":{' +
-                '"chosen":{"enum":["a","b"]},"ranking":{"type":"array","items":{"enum":["a","b"]}},' +
+        JSON.readTree(argv[-1]) == JSON.readTree('{"type":"object","additionalProperties":false,' +
+                '"required":["chosen","ranking","rationale"],"properties":{' +
+                '"chosen":{"type":"string","enum":["a","b"]},' +
+                '"ranking":{"type":"array","items":{"type":"string","enum":["a","b"]}},' +
                 '"rationale":{"type":"string"}}}')
     }
 
-    def "FR3: a #role request carries no answer schema"() {
+    def "FR3: an effect request, a role the dialect does not declare, carries no answer schema"() {
         expect:
-        !dialect.render(request(role, new Policy.WorkspaceWrite(), inputs, [:])).argv().contains('--json-schema')
-
-        where:
-        role | inputs
-        Role.TRANSFORM | RoleInputs.transform('build')
-        Role.EFFECT | RoleInputs.none()
+        !dialect.render(request(Role.EFFECT, new Policy.WorkspaceWrite(), RoleInputs.none(), [:])).argv().contains('--json-schema')
     }
 
     static final ObjectMapper JSON = new ObjectMapper()

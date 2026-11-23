@@ -67,7 +67,7 @@ public final class LoggingEventListener implements EngineEventListener {
             case EngineEvent.ExecutionFinished finished -> logExecutionFinished(finished);
             case EngineEvent.CheckStarted started ->
                 log.info("check started: {}", started.check().label().forLog());
-            case EngineEvent.CheckPolled polled ->
+            case EngineEvent.PendingPolled polled ->
                 log.debug(
                         "pending poll: executor={}, key={}, turn={}, elapsed={}, remaining={}",
                         polled.executor(),
@@ -75,7 +75,7 @@ public final class LoggingEventListener implements EngineEventListener {
                         polled.turn(),
                         polled.elapsed(),
                         polled.remaining());
-            case EngineEvent.CheckTimedOut timedOut -> logTimedOut(timedOut);
+            case EngineEvent.PendingTimedOut timedOut -> logTimedOut(timedOut);
             case EngineEvent.CheckFinished finished ->
                 log.info(
                         "check finished: {} -> {}",
@@ -120,7 +120,7 @@ public final class LoggingEventListener implements EngineEventListener {
      * timeout is a verdict the verify chain classifies, and the attempt's own outcome is the line an
      * operator acts on.
      */
-    private void logTimedOut(EngineEvent.CheckTimedOut timedOut) {
+    private void logTimedOut(EngineEvent.PendingTimedOut timedOut) {
         var details = timedOut.failure().details();
         log.info(
                 "pending poll timed out: executor={}, key={}, elapsed={}, class={}, awaiting={}",

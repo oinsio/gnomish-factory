@@ -393,7 +393,7 @@ This stage edits no file under `.claude/`: where a task names a row of
   ×1) are brought onto a contract-shaped answer or onto the new outcome, whichever the feature's
   own subject is; none is deleted, skipped or weakened, and each is named in `implement.md` with
   what changed
-- [ ] 5.6 The answer form is the dialect's declaration; Claude answers every role by schema
+- [x] 5.6 The answer form is the dialect's declaration; Claude answers every role by schema
   (FR19, FR3, D15 parts 1 and 2; D3 as amended; D8 row "How an answer is obtained"). **Gate: 5.0
   is ticked.** Premise check first, with `file:line`: the admission of a box round permits the
   answer path whoever wrote the file (`AdmissionRule`), and a file put into the box's working
@@ -411,12 +411,12 @@ This stage edits no file under `.claude/`: where a task names a row of
   `executor/agent-round-runner`, "Answers are obtained as the dialect declares",
   `executor/agent-executor`, "The answer instruction is the dialect's", and
   `executor/claude-dialect`, "Schema-enforced answers", markers included
-- [ ] 5.7 The measurement as a spec of the paid smoke layer (FR22): `PaidSmokeStructuredAnswerSpec`
+- [x] 5.7 The measurement as a spec of the paid smoke layer (FR22): `PaidSmokeStructuredAnswerSpec`
   beside `PaidSmokeLivenessSpec`, one row per dialect declaring a schema-enforced answer, the
   two scenarios of `executor/claude-dialect`, "Claude's schema-enforced answer holds on real
   rounds", on macOS and in the Linux image, markers included. **Gate: 5.0 is ticked.** The spec
   is written and compiled here; its paid run is task 7.3b
-- [ ] 5.3 Glossary: agent dialect, agent round runner, answer file; the "continuation key"
+- [x] 5.3 Glossary: agent dialect, agent round runner, answer file; the "continuation key"
   entry updated to D4 as amended (reserved vocabulary; names state any factory instance reaches;
   no agent executor returns one; *Not:* a vendor session id); the "Decision" entry gains the
   question it answers; update the `Executor` and `Judge` entries; the "answer file" entry says who
@@ -447,7 +447,7 @@ resumed), the `persistPending` implementations of `GitAttemptPersistence` and
 owner). Old way: the `transform` arm "a
 `pending` the stage cannot poll" in `RoundFailures`, `AttemptAccounting`, `RoundOutcome`.
 
-- [ ] 6.1 Premise check (`spec-mismatch.md`, item 1): confirm with `file:line` that
+- [x] 6.1 Premise check (`spec-mismatch.md`, item 1): confirm with `file:line` that
   `migrate-verify-to-executor-contract` landed `PendingPoll`, `PendingPollRecord` as entries of
   `TaskState.pendingPolls`, `AttemptPersistence.persistPending` and the recogniser in
   `ResumeVerificationStageExecutor`, and task 4.3a's resumable `program` poll (no per-instance `PendingRuns` membership on
@@ -455,7 +455,7 @@ owner). Old way: the `transform` arm "a
   (FR10 there, "A changed pending key is persisted before the next poll"), and its wire
   obligation with the kit's `pending-repoll` case (FR11, FR12 there). If any is missing, stop and
   report under that rule before 6.2 (FR10, FR11, FR12)
-- [ ] 6.2 Record subject: `PendingPollRecord` gains the sealed subject `Check(CheckRef)` |
+- [x] 6.2 Record subject: `PendingPollRecord` gains the sealed subject `Check(CheckRef)` |
   `Round` (the round token is already on the record); `StateJsonMapper` carries it in the
   `pendingPolls` list; wire round-trip spec iterating every subject
   and pinning the unknown-token arm; a record whose round token does not name the round the

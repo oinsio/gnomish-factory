@@ -68,6 +68,22 @@ Each `scenarios/<name>/` directory may contain:
 | `exitcode`                    | process exit code (plain integer, no newline convention enforced); default `0`                                                                                                                                                                                                                                         |
 | `next-scenario`               | name of the scenario to play on every invocation AFTER the first, in the same cwd (task 9.5) — see below                                                                                                                                                                                                               |
 
+### Schema-enforced replies (FR19 of extract-agent-round-runner)
+
+The Claude dialect declares the schema-enforced answer form for every role
+(design D15): the real CLI, handed `--json-schema`, puts its validated reply
+under `structured_output` on the result event. So every `transform` scenario
+whose round completes carries that field on its result event, as the real
+CLI would: `{"outcome":"done","question":"","options":[]}` for a round that
+asks nothing, and `{"outcome":"decision_request",…}` with the question and
+options for one that asks (`decision-needed`, `decision-then-plain`). The
+runner writes a decision request to the round's answer path itself. A
+`decision.json` a scenario still carries stands for a file at the answer path
+whoever wrote it — `decision-garbage` and `garbage-then-plain` reply `done`
+and leave unparseable text there, which the one answer read refuses. Judge
+scenarios keep a prose or JSON final text and no `structured_output`: they
+exercise the dialect's final-text fallback.
+
 ### Multi-attempt scenarios (task 9.5)
 
 A scenario carrying `next-scenario` plays itself only on the first

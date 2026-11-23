@@ -18,11 +18,16 @@ import java.util.Optional;
  *       {@code CannotExecute}</td></tr>
  *   <tr><td>{@code failed/limit}</td><td>{@link AttemptAccounting.EndStage}
  *       {@code BUDGET_EXHAUSTED}</td></tr>
- *   <tr><td>{@code pending}</td><td>{@link AttemptAccounting.Escalate} {@code CannotExecute}</td></tr>
+ *   <tr><td>{@code pending}, executor declaring no {@code poll}</td><td>{@link
+ *       AttemptAccounting.Escalate} {@code CannotExecute}</td></tr>
  * </table>
  *
- * <p>{@code pending} is {@code infrastructure}: no stage round can be polled in this version, so
- * every role the engine runs is a role it cannot poll. A thrown executor failure reaches this class
+ * <p>A {@code pending} reaches this table only from an executor whose describe declares no {@code
+ * poll}, and is {@code infrastructure} there (wire-contract "Pending from a role whose caller cannot
+ * poll"): a {@code transform} round of an executor declaring {@code poll} is handed to {@link
+ * PendingPoll} by {@link TransformRound} and polled to its end, and a check's rounds are {@link
+ * PendingPoll}'s from the start, so only the terminal result is classified (design D11 of
+ * extract-agent-round-runner). A thrown executor failure reaches this class
  * as the {@code failed/infrastructure} result {@link RoundExecution} builds from it, so it takes
  * the same row. The executor's {@code infrastructure} retries are the adapter's own and are
  * already spent when its result arrives. No adapter decides a class: this is the only switch over
@@ -37,17 +42,19 @@ import java.util.Optional;
  *
  * <p>Pure and stateless (NFR-R1).
  *
- * <p>Implements FR7, FR2 of define-executor-contract; FR2, FR19 of migrate-verify-to-executor-contract.
+ * <p>Implements FR7, FR2 of define-executor-contract; FR2, FR19 of migrate-verify-to-executor-contract;
+ * FR10 of extract-agent-round-runner.
  */
 public final class ExecutorOutcomeClassifier {
 
     /**
-     * The reason a {@code pending} result escalates with: no caller of a stage round can poll in
-     * this version (wire-contract "Pending from a role whose caller cannot poll"; the pending key
-     * is the executor's opaque text and is not quoted into the factory's own prose).
+     * The reason a {@code pending} result escalates with: the executor's describe declares no {@code
+     * poll}, so nothing can continue the round (wire-contract "Pending from a role whose caller cannot
+     * poll"; the pending key is the executor's opaque text and is not quoted into the factory's own
+     * prose).
      */
-    static final UntrustedText UNPOLLABLE =
-            UntrustedText.factory("the executor returned pending, which this stage cannot poll (unsupported pending)");
+    static final UntrustedText UNPOLLABLE = UntrustedText.factory(
+            "the executor returned pending, but its describe declares no poll (unsupported pending)");
 
     private ExecutorOutcomeClassifier() {}
 

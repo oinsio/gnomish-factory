@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.Stop
@@ -33,8 +34,8 @@ class StatePendingPollWireSpec extends Specification {
     private static final RoundToken TOKEN = RoundToken.of(COMMIT)
 
     private static PendingPollRecord poll(int index, int attempt, RoundToken token, String key) {
-        new PendingPollRecord(new CheckRef(index, UntrustedText.branchDocument('executor:scm-status:ci')), attempt,
-                token, new PendingKey(key), SINCE)
+        new PendingPollRecord(new PendingSubject.Check(new CheckRef(index,
+                UntrustedText.branchDocument('executor:scm-status:ci'))), attempt, token, new PendingKey(key), SINCE)
     }
 
     private static TaskState state() {
@@ -66,7 +67,7 @@ class StatePendingPollWireSpec extends Specification {
 
         expect:
         read(write(state)) == state
-        read(write(state)).pendingPolls()*.check()*.index() == polls*.check()*.index()
+        read(write(state)).pendingPolls()*.subject() == polls*.subject()
 
         where:
         polls << [
@@ -90,9 +91,9 @@ class StatePendingPollWireSpec extends Specification {
 
         then:
         tree.get('pendingPolls').toString() == '[' +
-                '{"check":{"index":2,"ref":"executor:scm-status:ci"},"attempt":1,"token":"' + COMMIT +
+                '{"subject":"check","check":{"index":2,"ref":"executor:scm-status:ci"},"attempt":1,"token":"' + COMMIT +
                 '","key":"run-1","since":"2026-11-12T09:01:30Z"},' +
-                '{"check":{"index":3,"ref":"executor:scm-status:ci"},"attempt":1,' +
+                '{"subject":"check","check":{"index":3,"ref":"executor:scm-status:ci"},"attempt":1,' +
                 '"key":"run-2","since":"2026-11-12T09:01:30Z"}]'
         !tree.get('attempts').get(0).has('pendingPoll')
     }

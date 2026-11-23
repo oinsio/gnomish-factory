@@ -110,7 +110,31 @@ public interface StageExecutor {
                 Workspace workspace,
                 int attempt,
                 List<CheckResult> feedback) {
-            this(context, stage, workspace, attempt, feedback, null, null, null);
+            this(context, stage, workspace, attempt, feedback, null);
+        }
+
+        /**
+         * A stage round continuing {@code pending}: no check, the pending turn of a {@code
+         * transform} round whose executor answered {@code pending} — none for its {@code start}
+         * (design D11 of extract-agent-round-runner).
+         *
+         * <p>Implements FR10 of extract-agent-round-runner.
+         *
+         * @param context the task's identity and human decisions
+         * @param stage the stage definition being run this round
+         * @param workspace the opaque working copy the round operates on
+         * @param attempt the zero-based attempt number of this round
+         * @param feedback the failed check results of all prior attempts
+         * @param pending the pending turn the round continues, or {@code null} for its {@code start}
+         */
+        public Request(
+                TaskContext context,
+                StageDefinition stage,
+                Workspace workspace,
+                int attempt,
+                List<CheckResult> feedback,
+                @Nullable PendingTurn pending) {
+            this(context, stage, workspace, attempt, feedback, null, null, pending);
         }
 
         /**

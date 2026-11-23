@@ -21,6 +21,7 @@ import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.ExecutorVersions
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.engine.Stop
 import com.github.oinsio.gnomish.domain.engine.TaskContext
@@ -115,7 +116,7 @@ class PendingCommitResumeSpec extends Specification implements BareGitRepoFixtur
         live.open(RoundToken.of(registered()))
         new File(box.workingCopy.toFile(), 'work.txt').text = 'gnome work'
         new EnvironmentRoundSnapshot(box, runner, cloneDir, live).snapshot(TASK, 'build', ROUND, RoundClose.VERIFIABLE)
-        def entry = new PendingPollRecord(new CheckRef(0, UntrustedText.factory('executor:ci')), ROUND, live.opened(),
+        def entry = new PendingPollRecord(new PendingSubject.Check(new CheckRef(0, UntrustedText.factory('executor:ci'))), ROUND, live.opened(),
                 new PendingKey('run-1'), Instant.parse('2026-11-12T09:00:00Z'))
         persistence(live).persistPending(TASK, stateAt(registered()).withPendingPolls([entry]))
         entry

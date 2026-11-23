@@ -27,10 +27,14 @@ class ClaudeStageTelemetrySpec extends Specification {
     @TempDir
     Path workspaceDir
 
-    /** A result event whose usage fields are all unreadable; no tool was called. */
+    /**
+     * A result event whose usage fields are all unreadable; no tool was called. Its reply is the
+     * schema-enforced {@code transform} reply of a round that asks nothing (FR19), as the CLI states it.
+     */
     static final String UNREADABLE_TELEMETRY =
     '{"type":"system","subtype":"init","session_id":"s-1","model":"claude-fake-main-1"}\n' +
     '{"type":"result","subtype":"success","session_id":"s-1","result":"done",' +
+    '"structured_output":{"outcome":"done","question":"","options":[]},' +
     '"usage":{"input_tokens":"many"},"modelUsage":{"claude-fake-main-1":"not-an-object"}}\n'
 
     private ExecutionResult round() {

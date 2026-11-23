@@ -19,7 +19,7 @@ class DescribedExecutorsSpec extends Specification {
     static final UntrustedText V2 = UntrustedText.subprocess('2')
 
     static final DescribedExecutors DESCRIBED = new DescribedExecutors(
-    new ExecutorVersions(acme: V2, lint: UntrustedText.subprocess('5')), ExecutorCredentialNames.none())
+    new ExecutorVersions(acme: V2, lint: UntrustedText.subprocess('5')), ExecutorCredentialNames.none(), [] as Set)
 
     static StageDefinition stage(ExecutorType type, String name) {
         new StageDefinition('build', 'p', [], [], new StageDefinition.Executor(type, 'm', [:], Sandbox.none(), name),
@@ -51,5 +51,36 @@ class DescribedExecutorsSpec extends Specification {
         expect:
         DescribedExecutors.none().all() == ExecutorVersions.none()
         DescribedExecutors.none().ranBy(stage(ExecutorType.PROGRAM, 'acme')) == ExecutorVersions.none()
+    }
+
+    // FR10 of extract-agent-round-runner (D11): a stage's pending is polled only when the executor it
+    //     names was described as declaring poll
+    def "polls is true exactly for a stage naming a described executor that declares poll: #name"() {
+        given:
+        def described = new DescribedExecutors(DESCRIBED.all(), ExecutorCredentialNames.none(), ['acme'] as Set)
+
+        expect:
+        described.polls(stage(type, name)) == polls
+
+        where:
+        type | name || polls
+        ExecutorType.PROGRAM | 'acme' || true
+        ExecutorType.PROGRAM | 'lint' || false
+        ExecutorType.PROGRAM | 'ghost' || false
+        ExecutorType.AGENT_CLI | null || false
+    }
+
+    def "the pollable names are copied and none declares none"() {
+        given:
+        def names = ['acme'] as Set
+        def described = new DescribedExecutors(DESCRIBED.all(), ExecutorCredentialNames.none(), names)
+
+        when:
+        names << 'lint'
+
+        then:
+        described.pollable() == ['acme'] as Set
+        DescribedExecutors.none().pollable().isEmpty()
+        !DescribedExecutors.none().polls(stage(ExecutorType.PROGRAM, 'acme'))
     }
 }

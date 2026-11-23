@@ -72,7 +72,8 @@ class RoundOutcomeLedgerWriterCheckSpec extends Specification implements Rotatin
                 role : 'verdict',
                 status : 'completed',
                 check : 1,
-                resumedKey: 'sonar-AY12'
+                resumedKey: 'sonar-AY12',
+                pendingKey: null
             ]
         ]
     }

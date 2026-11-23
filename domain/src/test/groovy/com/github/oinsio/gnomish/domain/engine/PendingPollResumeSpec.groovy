@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine
 
 import com.github.oinsio.gnomish.domain.engine.fake.ScriptedExecutor
 import com.github.oinsio.gnomish.domain.pipeline.fixture.VerifyingStages
+import com.github.oinsio.gnomish.pendingkey.PendingKey
 import java.time.Duration
 
 /**
@@ -61,6 +62,24 @@ class PendingPollResumeSpec extends PendingPollSpecBase {
         'of another attempt' | TOKEN | 1 | TOKEN
         'with no token' | null | 0 | TOKEN
         'when the round has no token (in-place)' | null | 0 | null
+    }
+
+    // D11 of extract-agent-round-runner: the round's own entry is the round's, never a check's — it
+    //     is not polled for a check, and a check's pending write does not carry it forward
+    def "FR10 of extract-agent-round-runner: a round entry of the round is not continued by a check and not written again"() {
+        given:
+        def ci = check()
+        def roundEntry = new PendingPollRecord(PendingSubject.ROUND, 0, TOKEN, new PendingKey('k-round'), clock.instant())
+        def executor = new ScriptedExecutor([pending('k-new'), passed()])
+
+        when:
+        poll(executor).answer(ci, ref(0, ci), round([ci], STATE.withPendingPolls([roundEntry]))).answer()
+
+        then:
+        turns(executor) == [null, [ISSUED, 'k-new']]
+        persistence.pending[0].state.pendingPolls()*.subject() == [
+            new PendingSubject.Check(ref(0, ci))
+        ]
     }
 
     def "FR3: an entry of another check of the round is not this check's"() {

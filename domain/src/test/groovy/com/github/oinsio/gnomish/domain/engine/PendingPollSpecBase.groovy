@@ -72,7 +72,7 @@ abstract class PendingPollSpecBase extends Specification {
     }
 
     static PendingPollRecord entry(CheckRef check, String key, Instant since, RoundToken token = TOKEN, int attempt = 0) {
-        new PendingPollRecord(check, attempt, token, new PendingKey(key), since)
+        new PendingPollRecord(new PendingSubject.Check(check), attempt, token, new PendingKey(key), since)
     }
 
     PendingPoll poll(ScriptedExecutor executor, AttemptDelivery delivery = AttemptDelivery.assumedDelivered()) {

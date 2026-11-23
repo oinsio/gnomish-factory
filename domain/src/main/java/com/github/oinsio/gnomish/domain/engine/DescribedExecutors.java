@@ -2,6 +2,7 @@ package com.github.oinsio.gnomish.domain.engine;
 
 import com.github.oinsio.gnomish.domain.pipeline.StageDefinition;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What the describe preflight obtained for this run, as the engine receives it (FR13 of
@@ -29,13 +30,25 @@ import java.util.Map;
  * The engine reads no credential; the {@code program} exec's wiring does, to build that child's own
  * resolved layer.
  *
+ * <p>{@code pollable} rides with them for the same reason: the names of the described executors whose
+ * describe declares {@code poll}, the one fact the engine reads to decide whether a {@code transform}
+ * round's {@code pending} is handed to its pending poll or refused as unsupported (design D11 of
+ * extract-agent-round-runner; wire-contract "Closed status taxonomy"). An executor the preflight did
+ * not describe — the agent entry, a built-in — declares nothing, so none of its rounds is polled.
+ *
  * @param all the describe version per described executor name; never null
  * @param credentials the granted credential names per described executor name; never null
+ * @param pollable the names of the described executors whose describe declares {@code poll}; copied,
+ *     unmodifiable, possibly empty
  */
-public record DescribedExecutors(ExecutorVersions all, ExecutorCredentialNames credentials) {
+public record DescribedExecutors(ExecutorVersions all, ExecutorCredentialNames credentials, Set<String> pollable) {
 
     private static final DescribedExecutors NONE =
-            new DescribedExecutors(ExecutorVersions.none(), ExecutorCredentialNames.none());
+            new DescribedExecutors(ExecutorVersions.none(), ExecutorCredentialNames.none(), Set.of());
+
+    public DescribedExecutors {
+        pollable = Set.copyOf(pollable);
+    }
 
     /** No executor described: a run with no {@code program} executor, or an engine assembled with no preflight. */
     public static DescribedExecutors none() {
@@ -74,5 +87,20 @@ public record DescribedExecutors(ExecutorVersions all, ExecutorCredentialNames c
             return new RoundExecutor(Participants.typeWord(stage.executor().type()), null);
         }
         return new RoundExecutor(name, all.of(name).orElse(null));
+    }
+
+    /**
+     * Whether a {@code pending} of {@code stage}'s rounds is polled (design D11 of
+     * extract-agent-round-runner): the stage names an executor the preflight described as declaring
+     * {@code poll}. A stage that names no executor, or one not described, is never polled.
+     *
+     * <p>Implements FR10 of extract-agent-round-runner.
+     *
+     * @param stage the stage; never null
+     * @return true exactly when the stage's executor declares {@code poll}
+     */
+    public boolean polls(StageDefinition stage) {
+        var name = stage.executor().name();
+        return name != null && pollable.contains(name);
     }
 }

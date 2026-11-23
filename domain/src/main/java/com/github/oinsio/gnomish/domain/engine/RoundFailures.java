@@ -16,8 +16,10 @@ import org.slf4j.LoggerFactory;
  *   <li>A throw — the port's own retries exhausted — is an ERROR under {@link
  *       OperatorEvent#EXECUTOR_THREW} with the cause as the throwable, since only here is the
  *       throwable in hand.
- *   <li>A reported {@code failed/infrastructure}, or a {@code pending} the stage cannot poll
- *       ({@link AttemptAccounting.Escalate}), is a WARN under {@link
+ *   <li>A reported {@code failed/infrastructure}, or a {@code pending} from an executor whose
+ *       describe declares no {@code poll} ({@link AttemptAccounting.Escalate}; a declared {@code
+ *       poll} hands it to {@link PendingPoll} instead, design D11 of extract-agent-round-runner), or
+ *       a pending round's wait ended at the pending ceiling, is a WARN under {@link
  *       OperatorEvent#EXECUTOR_REPORTED_FAILURE} naming the round key and the reason.
  *   <li>A reported {@code failed/limit} ({@link Stop.BudgetExhausted}) is a WARN under {@link
  *       OperatorEvent#EXECUTOR_BUDGET_EXHAUSTED} naming the bound.

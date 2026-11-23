@@ -11,6 +11,7 @@ import com.github.oinsio.gnomish.adapter.git.GitProcessRunner
 import com.github.oinsio.gnomish.app.port.git.CurrentRound
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.PendingPollRecord
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.RoundToken
 import com.github.oinsio.gnomish.domain.pipeline.AdvancementMode
 import com.github.oinsio.gnomish.domain.pipeline.AutonomyLimits
@@ -119,7 +120,7 @@ final class PendingVerificationKill {
             List<List<Object>> entries) {
         entries.collect { List<Object> entry ->
             def check = entry[0] as VerifyCheck
-            new PendingPollRecord(CheckRef.of(world.definition.stages().first().verify().indexOf(check), check), round,
+            new PendingPollRecord(new PendingSubject.Check(CheckRef.of(world.definition.stages().first().verify().indexOf(check), check)), round,
                     entry.size() > 2 ? entry[2] as RoundToken : cell.opened(), new PendingKey(entry[1] as String), SINCE)
         }
     }

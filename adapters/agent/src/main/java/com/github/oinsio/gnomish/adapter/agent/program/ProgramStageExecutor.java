@@ -18,7 +18,9 @@ import org.slf4j.LoggerFactory;
  * The {@link StageExecutor} of a registry entry — a stage that names a {@code program} executor (FR10
  * of define-executor-contract), a built-in (design D2 of add-command-executor), or an agent stage through
  * the {@code claude} entry (task 5.1a of extract-agent-round-runner): one round is one
- * {@code start} of the contract executor the entry's {@link RoundExecutorFactory} builds in the
+ * {@code start} — or, for a {@code transform} round the engine polls, one {@code poll} of the key the
+ * request's turn names, chosen by {@link PendingTurnRun} (D11 of extract-agent-round-runner) — of the
+ * contract executor the entry's {@link RoundExecutorFactory} builds in the
  * environment the
  * mode's round source opens — the sandbox round source in a box, the git-mode host decoration on
  * the host — so the round's token lands in the run's current-round cell exactly as an agent round's
@@ -42,7 +44,7 @@ import org.slf4j.LoggerFactory;
  * engine writes its one operator line.
  *
  * <p>Implements FR5, FR10, FR14, FR21 of define-executor-contract; FR8 of add-command-executor; FR14, FR15 of
- * extract-agent-round-runner.
+ * extract-agent-round-runner; FR10 of extract-agent-round-runner (the poll of a pending round).
  */
 public final class ProgramStageExecutor implements StageExecutor {
 
@@ -72,7 +74,9 @@ public final class ProgramStageExecutor implements StageExecutor {
             // The guard is probed around the request by its one owner (design D13 of
             // extract-agent-round-runner), never here.
             var executor = GuardedExecutor.over(subject, name, round.environment(), executors.executor(round));
-            ExecutorResult result = executor.start(contractRequest);
+            // The engine's turn selects the operation (D11 of extract-agent-round-runner): a round's
+            // start, or a poll of the key its pending round went pending with.
+            ExecutorResult result = PendingTurnRun.run(executor, null, contractRequest, request.pending());
             if (executor.foundGuardDead()) {
                 // A round whose guard died broke its cage: nothing of it is committed (D14 of
                 // tighten-spec-contract). It is discarded exactly once, after its denials were drained.

@@ -18,7 +18,9 @@ import org.slf4j.LoggerFactory;
  * EngineEvent.CheckFinished} of an executor check, role {@code verdict}, naming the check, the status
  * its rounds ended on and the key a resume took up (NFR-O1, UX3 of migrate-verify-to-executor-contract),
  * through the shared {@link RotatingLedgerAppender}, in the words {@link RoundOutcomeWords} owns.
- * Every other event, a judge check's finish included, is not this writer's business. One instance
+ * A stage round's line names the key it went pending with or was resumed by, when it did (UX3 of
+ * extract-agent-round-runner). Every other event, a judge check's finish included, is not this
+ * writer's business. One instance
  * serves every slot of the daemon: it holds no per-run state, and the appender serializes the writes.
  *
  * <p>Write failures never propagate (NFR-R1 of add-serve-observability): an {@link IOException}
@@ -26,7 +28,7 @@ import org.slf4j.LoggerFactory;
  * never fail a round.
  *
  * <p>Implements NFR-O2, UX3 of define-executor-contract; NFR-O1, UX3 of
- * migrate-verify-to-executor-contract.
+ * migrate-verify-to-executor-contract; UX3 of extract-agent-round-runner.
  */
 public final class RoundOutcomeLedgerWriter implements EngineEventListener {
 
@@ -69,7 +71,8 @@ public final class RoundOutcomeLedgerWriter implements EngineEventListener {
                         RoundOutcomeWords.STAGE_ROLE,
                         RoundOutcomeWords.statusWithClass(finished.status()),
                         null,
-                        null));
+                        finished.resumedKey(),
+                        finished.pendingKey()));
             }
             case EngineEvent.CheckFinished finished
             when finished.outcome() != null -> {
@@ -86,7 +89,8 @@ public final class RoundOutcomeLedgerWriter implements EngineEventListener {
                         RoundOutcomeWords.CHECK_ROLE,
                         RoundOutcomeWords.statusWithClass(outcome.status()),
                         finished.result().checkRef().index(),
-                        outcome.resumedKey()));
+                        outcome.resumedKey(),
+                        null));
             }
             default -> {
                 // Not a round's outcome: nothing to write.

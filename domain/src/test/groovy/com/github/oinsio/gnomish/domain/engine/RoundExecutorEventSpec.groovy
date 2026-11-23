@@ -48,7 +48,7 @@ class RoundExecutorEventSpec extends EventEmissionSpecBase {
     //     the preflight described for that name
     def "a round of a stage naming a described executor names that executor and its version"() {
         given:
-        def described = new DescribedExecutors(new ExecutorVersions(['lint-bot': V231, judge: V1]), ExecutorCredentialNames.none())
+        def described = new DescribedExecutors(new ExecutorVersions(['lint-bot': V231, judge: V1]), ExecutorCredentialNames.none(), [] as Set)
 
         when:
         def finished = finishedOf(stageOf(ExecutorType.PROGRAM, 'lint-bot'), described)
@@ -69,7 +69,7 @@ class RoundExecutorEventSpec extends EventEmissionSpecBase {
         where:
         described << [
             DescribedExecutors.none(),
-            new DescribedExecutors(new ExecutorVersions([judge: V1]), ExecutorCredentialNames.none())
+            new DescribedExecutors(new ExecutorVersions([judge: V1]), ExecutorCredentialNames.none(), [] as Set)
         ]
     }
 
@@ -77,7 +77,7 @@ class RoundExecutorEventSpec extends EventEmissionSpecBase {
     //     however many executors the run described
     def "a round of a stage naming no executor names the executor type #word with no version"() {
         when:
-        def finished = finishedOf(stageOf(type), new DescribedExecutors(new ExecutorVersions(['lint-bot': V231]), ExecutorCredentialNames.none()))
+        def finished = finishedOf(stageOf(type), new DescribedExecutors(new ExecutorVersions(['lint-bot': V231]), ExecutorCredentialNames.none(), [] as Set))
 
         then:
         finished.executor() == new RoundExecutor(word, null)

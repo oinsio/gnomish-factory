@@ -17,11 +17,13 @@ import java.util.List;
  *       ends the stage: a {@code decision-request} answer ({@link Stop.DecisionNeeded}) or {@code
  *       failed/limit} ({@link Stop.BudgetExhausted}).
  *   <li>{@link Escalate} — {@code failed/infrastructure}, a thrown executor failure, or {@code
- *       pending} the stage cannot poll: nothing is recorded, no attempt is burned, and the stage
+ *       pending} from an executor whose describe declares no {@code poll} (one that declares it is
+ *       polled to its end by {@link PendingPoll} first, design D11 of extract-agent-round-runner,
+ *       and only the terminal result is classified): nothing is recorded, no attempt is burned, and the stage
  *       escalates {@link EscalationReport.CannotExecute} from the state the round started from.
  * </ul>
  *
- * <p>Implements FR7 of define-executor-contract.
+ * <p>Implements FR7 of define-executor-contract; FR10 of extract-agent-round-runner.
  */
 sealed interface AttemptAccounting
         permits AttemptAccounting.Proceed,

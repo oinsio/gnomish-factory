@@ -14,9 +14,10 @@ import org.jspecify.annotations.Nullable;
  * therefore carry {@code taskId} plus the richer payload the table fixes
  * ({@link Position}/{@link TaskOutcome}), which a bare {@link AttemptKey} — whose
  * {@code stage} is non-blank — cannot represent. The seven per-attempt/per-check
- * events carry the full {@code AttemptKey}; two of them, {@link CheckPolled} and {@link
- * CheckTimedOut}, report a pending check's wait (NFR-O1, UX1 of
- * migrate-verify-to-executor-contract), so the engine's observability of a wait crosses the
+ * events carry the full {@code AttemptKey}; two of them, {@link PendingPolled} and {@link
+ * PendingTimedOut}, report a pending wait — a check's (NFR-O1, UX1 of
+ * migrate-verify-to-executor-contract) or a {@code transform} round's (NFR-O2 of
+ * extract-agent-round-runner) — so the engine's observability of a wait crosses the
  * listener port like every other event rather than a logger of its own.
  *
  * <p>Every variant exposes {@link #taskId()} so a consumer can filter the whole
@@ -24,15 +25,16 @@ import org.jspecify.annotations.Nullable;
  * key logs and telemetry share). The stream suffices to reconstruct a status view —
  * position, attempt, per-check results, aggregate metrics (NFR-O2). Inert values.
  *
- * <p>Implements FR12 of add-stage-engine; NFR-O1, UX1 of migrate-verify-to-executor-contract.
+ * <p>Implements FR12 of add-stage-engine; NFR-O1, UX1 of migrate-verify-to-executor-contract; NFR-O2,
+ * UX3 of extract-agent-round-runner.
  */
 public sealed interface EngineEvent
         permits EngineEvent.RunStarted,
                 EngineEvent.AttemptStarted,
                 EngineEvent.ExecutionFinished,
                 EngineEvent.CheckStarted,
-                EngineEvent.CheckPolled,
-                EngineEvent.CheckTimedOut,
+                EngineEvent.PendingPolled,
+                EngineEvent.PendingTimedOut,
                 EngineEvent.CheckFinished,
                 EngineEvent.AttemptFinished,
                 EngineEvent.TaskFinished {
@@ -107,17 +109,45 @@ public sealed interface EngineEvent
      * An executor round finished — every executed round, recorded or not — carrying its usage, the
      * executor that ran it and the status it reached, which the round's log and ledger lines name.
      * The usage is the executor's {@code transform} participant entry, the same entry a recorded
-     * round carries first in its usage list (FR15 of define-executor-contract).
-     * Implements FR12 of add-stage-engine; NFR-O2, UX3, FR15 of define-executor-contract.
+     * round carries in its usage list (FR15 of define-executor-contract) — of a round that went
+     * {@code pending}, the entry of the request that ended it, the record carrying one entry per
+     * request (NFR-O2 of extract-agent-round-runner). Such a round names the prefix of the key it
+     * went pending with, or the one a resume took from its pending record, which the ledger shows as
+     * {@code pending key} and {@code resumed key} (UX3 of extract-agent-round-runner).
+     * Implements FR12 of add-stage-engine; NFR-O2, UX3, FR15 of define-executor-contract; NFR-O2, UX3
+     * of extract-agent-round-runner.
      *
      * @param key the {@code (taskId, stage, attempt)} correlation key; never null
      * @param usage the executor's participant entry for the round; never null
      * @param executor the executor that ran the round; never null
      * @param status the round's status; a thrown failure is {@code failed/infrastructure}; never null
+     * @param pendingKey the prefix of the key this run's {@code start} went pending with; null when
+     *     the round never went pending on this run
+     * @param resumedKey the prefix of the key a resume took from the round's pending record; null
+     *     otherwise
      */
     record ExecutionFinished(
-            AttemptKey key, ParticipantUsage usage, RoundExecutor executor, ExecutionResult.Status status)
+            AttemptKey key,
+            ParticipantUsage usage,
+            RoundExecutor executor,
+            ExecutionResult.Status status,
+            @Nullable UntrustedText pendingKey,
+            @Nullable UntrustedText resumedKey)
             implements EngineEvent {
+
+        /**
+         * A round that never went pending: no key to show.
+         *
+         * @param key the correlation key; never null
+         * @param usage the executor's participant entry; never null
+         * @param executor the executor that ran the round; never null
+         * @param status the round's status; never null
+         */
+        public ExecutionFinished(
+                AttemptKey key, ParticipantUsage usage, RoundExecutor executor, ExecutionResult.Status status) {
+            this(key, usage, executor, status, null, null);
+        }
+
         @Override
         public String taskId() {
             return key.taskId();
@@ -140,24 +170,25 @@ public sealed interface EngineEvent
     }
 
     /**
-     * A pending check is about to be polled (NFR-O1 of migrate-verify-to-executor-contract): one
-     * event per {@code poll} of its wait, emitted by {@link PendingPoll} before the poll is made.
+     * A pending check or {@code transform} round is about to be polled (NFR-O1 of
+     * migrate-verify-to-executor-contract; NFR-O2 of extract-agent-round-runner): one event per
+     * {@code poll} of its wait, emitted by {@link PendingPoll} before the poll is made.
      * The key is shown only as its prefix ({@link PendingKeyPrefix}), never whole: the event is
      * observability, and the whole key lives in the round's pending record.
      *
-     * <p>Implements NFR-O1 of migrate-verify-to-executor-contract.
+     * <p>Implements NFR-O1 of migrate-verify-to-executor-contract; NFR-O2 of extract-agent-round-runner.
      *
      * @param key the {@code (taskId, stage, attempt)} correlation key; never null
-     * @param check the identity of the polled check; never null
-     * @param executor the executor name the check named; never blank
+     * @param subject what is polled: a check by its identity, or the round; never null
+     * @param executor the executor the check or the stage named; never blank
      * @param keyPrefix the shown prefix of the polled key, in the family of its source; never null
      * @param turn whether the key was this run's or read from the pending record; never null
      * @param elapsed the time since the entry's {@code since}; never null
      * @param remaining the time left to the wait's deadline; never null
      */
-    record CheckPolled(
+    record PendingPolled(
             AttemptKey key,
-            CheckRef check,
+            PendingSubject subject,
             String executor,
             UntrustedText keyPrefix,
             PendingTurn.Origin turn,
@@ -171,23 +202,25 @@ public sealed interface EngineEvent
     }
 
     /**
-     * A pending check's wait reached its deadline (NFR-O1, UX1 of
-     * migrate-verify-to-executor-contract), emitted by {@link PendingPoll} before the check's
-     * {@link CheckFinished}: the failure the engine resolved the wait to, whose details for an
-     * {@code scm-status} check name every expected context still absent.
+     * A pending wait reached its deadline (NFR-O1, UX1 of migrate-verify-to-executor-contract), emitted
+     * by {@link PendingPoll} before the check's {@link CheckFinished} or the round's {@link
+     * ExecutionFinished}: the failure the engine resolved the wait to, whose details for an {@code
+     * scm-status} check name every expected context still absent; a round's names the pending
+     * ceiling (NFR-O2 of extract-agent-round-runner).
      *
-     * <p>Implements NFR-O1, UX1 of migrate-verify-to-executor-contract.
+     * <p>Implements NFR-O1, UX1 of migrate-verify-to-executor-contract; NFR-O2 of
+     * extract-agent-round-runner.
      *
      * @param key the {@code (taskId, stage, attempt)} correlation key; never null
-     * @param check the identity of the timed-out check; never null
-     * @param executor the executor name the check named; never blank
+     * @param subject what timed out: a check by its identity, or the round; never null
+     * @param executor the executor the check or the stage named; never blank
      * @param keyPrefix the shown prefix of the last key the wait polled; never null
      * @param elapsed the time since the entry's {@code since}; never null
      * @param failure the failure the engine resolved the wait to; never null
      */
-    record CheckTimedOut(
+    record PendingTimedOut(
             AttemptKey key,
-            CheckRef check,
+            PendingSubject subject,
             String executor,
             UntrustedText keyPrefix,
             Duration elapsed,

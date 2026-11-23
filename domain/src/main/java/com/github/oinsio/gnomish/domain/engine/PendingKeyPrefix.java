@@ -8,8 +8,8 @@ import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
  * migrate-verify-to-executor-contract): its first {@link #CHARS} code points, followed by {@code ...}
  * when the key is longer — enough to tell two keys apart and to find the whole key in the round's
  * pending record, never the whole opaque key, which may run to {@code PendingKey.MAX_LENGTH}
- * characters. The poll and timeout events ({@link EngineEvent.CheckPolled}, {@link
- * EngineEvent.CheckTimedOut}), which the logging listener renders, and the ledger's {@code
+ * characters. The poll and timeout events ({@link EngineEvent.PendingPolled}, {@link
+ * EngineEvent.PendingTimedOut}), which the logging listener renders, and the ledger's {@code
  * resumedKey} all take it from here.
  *
  * <p>A key is the executor's text, so the prefix stays a carrier: a key the instance read back from

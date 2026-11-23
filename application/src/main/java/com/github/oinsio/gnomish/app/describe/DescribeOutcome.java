@@ -4,12 +4,15 @@ import com.github.oinsio.gnomish.domain.engine.DescribedExecutors;
 import com.github.oinsio.gnomish.domain.engine.ExecutorCredentialNames;
 import com.github.oinsio.gnomish.domain.engine.ExecutorVersions;
 import com.github.oinsio.gnomish.domain.pipeline.ConfigError;
+import com.github.oinsio.gnomish.executorcontract.Capability;
 import com.github.oinsio.gnomish.executorcontract.Describe;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What the describe preflight decided (design D5 of define-executor-contract, as revised
@@ -42,7 +45,9 @@ public sealed interface DescribeOutcome {
         /**
          * The one derivation of the engine's value from the answers (task 7.3 of
          * define-executor-contract): the describe's version, and the describe's own credential names,
-         * which the agreement has shown equal to the law's grant (NFR-S1).
+         * which the agreement has shown equal to the law's grant (NFR-S1); and the names whose describe
+         * declares {@code poll}, whose {@code transform} rounds the engine polls when they answer
+         * {@code pending} (FR10, D11 of extract-agent-round-runner).
          *
          * @param answers the describe answer per executor name; never null
          * @return the versions and credential names; never null
@@ -50,11 +55,16 @@ public sealed interface DescribeOutcome {
         public static DescribedExecutors executorsOf(Map<String, Describe> answers) {
             Map<String, UntrustedText> versions = new LinkedHashMap<>();
             Map<String, List<String>> credentials = new LinkedHashMap<>();
+            Set<String> pollable = new LinkedHashSet<>();
             answers.forEach((name, describe) -> {
                 versions.put(name, describe.version());
                 credentials.put(name, describe.credentials());
+                if (describe.capabilities().contains(Capability.POLL)) {
+                    pollable.add(name);
+                }
             });
-            return new DescribedExecutors(new ExecutorVersions(versions), new ExecutorCredentialNames(credentials));
+            return new DescribedExecutors(
+                    new ExecutorVersions(versions), new ExecutorCredentialNames(credentials), pollable);
         }
     }
 

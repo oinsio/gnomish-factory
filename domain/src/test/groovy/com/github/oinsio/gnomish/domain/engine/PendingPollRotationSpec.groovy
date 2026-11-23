@@ -113,7 +113,7 @@ class PendingPollRotationSpec extends PendingPollSpecBase {
         def written = persistence.pending*.state*.pendingPolls()
         written.size() == 1
         written[0] == recorded.withIndex().collect { PendingPollRecord e, int i ->
-            i == index ? new PendingPollRecord(e.check(), e.attempt(), e.token(), new PendingKey('k-new'), e.since()) : e
+            i == index ? new PendingPollRecord(e.subject(), e.attempt(), e.token(), new PendingKey('k-new'), e.since()) : e
         }
 
         where:

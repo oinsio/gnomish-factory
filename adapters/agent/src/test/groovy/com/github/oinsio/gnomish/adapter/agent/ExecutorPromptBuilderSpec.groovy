@@ -23,11 +23,14 @@ import spock.lang.TempDir
  * {@link ExecutorPromptBuilder} composes the round prompt from the shared
  * briefing sections plus the executor epilogue — the verify plan (with judge
  * criteria content taken from the frozen {@link PipelineLaw}, the same source
- * as the control file), the answer-file instruction, and the rework preamble
+ * as the control file), the dialect's answer instruction it is handed, and the rework preamble
  * on retries only. Control-file and judge-criteria content come from the frozen
  * law, never lazily from the workspace.
  */
 class ExecutorPromptBuilderSpec extends Specification {
+
+    /** A dialect's answer instruction, as the stage half hands it. */
+    static final String INSTRUCTION = '=== Asking a human ===\nAsk through the channel your dialect names.\n'
 
     @TempDir
     Path workspaceRoot
@@ -47,7 +50,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         def request = requestFor(stage, 0, [])
 
         when:
-        def prompt = builder.build(request)
+        def prompt = builder.build(request, INSTRUCTION)
 
         then:
         prompt.contains('./gradlew test')
@@ -73,7 +76,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         ])
 
         when:
-        def prompt = builder.build(requestFor(stage, 0, []))
+        def prompt = builder.build(requestFor(stage, 0, []), INSTRUCTION)
 
         then:
         prompt.contains('- judge: review.md\n')
@@ -92,8 +95,8 @@ class ExecutorPromptBuilderSpec extends Specification {
         ])
 
         when:
-        def firstAttemptPrompt = builder.build(requestFor(stage, 0, []))
-        def secondAttemptPrompt = builder.build(requestFor(stage, 1, []))
+        def firstAttemptPrompt = builder.build(requestFor(stage, 0, []), INSTRUCTION)
+        def secondAttemptPrompt = builder.build(requestFor(stage, 1, []), INSTRUCTION)
 
         then:
         !firstAttemptPrompt.toLowerCase().contains('rework')
@@ -102,21 +105,24 @@ class ExecutorPromptBuilderSpec extends Specification {
         secondAttemptPrompt.toLowerCase().contains('rework')
     }
 
-    // FR9 of extract-agent-round-runner (D3): the decision request is a decision-request answer
-    //     in the answer file, so the instruction names the contract's answer-file variable and kind
-    def "FR9: prompt instructs the agent to write a decision request to GNOMISH_ANSWER_FILE to ask a question"() {
+    // FR19 of extract-agent-round-runner (D15 part 1): the answer instruction is the dialect's, in the
+    //     words of its declared form; this vendor-neutral builder carries it as handed and spells
+    //     neither the answer file nor the final structured reply itself
+    def "FR19: the prompt carries the answer instruction it is handed, and the builder spells no answer form of its own"() {
         given:
         def builder = builderWith(['instructions.md': 'Do the thing.'])
         def stage = stageWith([])
 
         when:
-        def prompt = builder.build(requestFor(stage, 0, []))
+        def prompt = builder.build(requestFor(stage, 0, []), INSTRUCTION)
+        def bare = builder.build(requestFor(stage, 0, []), '')
 
         then:
-        prompt.contains('$GNOMISH_ANSWER_FILE')
-        prompt.contains('"kind": "decision-request"')
-        prompt.contains('question')
-        prompt.contains('options')
+        prompt.contains(INSTRUCTION)
+        !bare.contains('GNOMISH_ANSWER_FILE')
+        !bare.contains('decision-request')
+        !bare.contains('decision_request')
+        !bare.contains('Asking a human')
     }
 
     def "FR2: prompt includes the briefing task-goal section"() {
@@ -125,7 +131,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         def stage = stageWith([])
 
         when:
-        def prompt = builder.build(requestFor(stage, 0, []))
+        def prompt = builder.build(requestFor(stage, 0, []), INSTRUCTION)
 
         then:
         prompt.contains('=== Task goal ===')
@@ -139,7 +145,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         def stage = stageWith([], 'missing-instructions.md')
 
         when:
-        builder.build(requestFor(stage, 0, []))
+        builder.build(requestFor(stage, 0, []), INSTRUCTION)
 
         then:
         def e = thrown(UnreadableLawFileException)
@@ -155,7 +161,7 @@ class ExecutorPromptBuilderSpec extends Specification {
         ])
 
         when:
-        builder.build(requestFor(stage, 0, []))
+        builder.build(requestFor(stage, 0, []), INSTRUCTION)
 
         then:
         def e = thrown(UnreadableLawFileException)

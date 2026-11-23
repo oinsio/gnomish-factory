@@ -20,7 +20,10 @@ import org.jspecify.annotations.Nullable;
  * @param check the check's index in the stage's {@code verify} list; null for a stage round
  *     (migrate-verify-to-executor-contract, NFR-O1)
  * @param resumedKey the prefix of the key a resumed check's wait was taken up with; null otherwise
- *     (migrate-verify-to-executor-contract, UX3)
+ *     (migrate-verify-to-executor-contract, UX3); for a stage round, the key it was resumed with
+ *     (extract-agent-round-runner, UX3)
+ * @param pendingKey the prefix of the key a stage round went pending with on the writing instance;
+ *     null otherwise (extract-agent-round-runner, UX3)
  */
 public record RoundOutcomeLineDto(
         int version,
@@ -34,4 +37,5 @@ public record RoundOutcomeLineDto(
         String role,
         String status,
         @Nullable Integer check,
-        @Nullable String resumedKey) {}
+        @Nullable String resumedKey,
+        @Nullable String pendingKey) {}

@@ -53,7 +53,7 @@ class BriefingRenderIdentitySpec extends Specification {
         def request = new StageExecutor.Request(CONTEXT, first.stage(), first.workspace(), 1, FEEDBACK)
 
         expect:
-        new ExecutorPromptBuilder(LAW).build(request).contains(section(render))
+        new ExecutorPromptBuilder(LAW).build(request, ClaudeStages.answerInstruction()).contains(section(render))
 
         where:
         name | render

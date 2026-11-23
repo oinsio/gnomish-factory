@@ -208,10 +208,11 @@ class ClaudeJudgeCheckSpec extends Specification {
         'not an array' | '{"passed":true,"findings":"x"}'
     }
 
+    // FR19: the closed reply schema requires `findings`, so "no findings" is an empty array.
     def "FR7: a passing judge reply with no findings carries none, and a failing one with none names the omission"() {
         expect:
-        ClaudeVerdictRounds.verdict(fixture(), ClaudeVerdictRounds.structured('{"passed":true}')) == new Verdict.Pass(null, [])
-        (ClaudeVerdictRounds.verdict(fixture(), ClaudeVerdictRounds.structured('{"passed":false}')) as Verdict.Fail)
+        ClaudeVerdictRounds.verdict(fixture(), ClaudeVerdictRounds.structured('{"passed":true,"findings":[]}')) == new Verdict.Pass(null, [])
+        (ClaudeVerdictRounds.verdict(fixture(), ClaudeVerdictRounds.structured('{"passed":false,"findings":[]}')) as Verdict.Fail)
                 .findings()*.message() == [
                     JudgeVerdictExtractor.NO_FINDING
                 ]

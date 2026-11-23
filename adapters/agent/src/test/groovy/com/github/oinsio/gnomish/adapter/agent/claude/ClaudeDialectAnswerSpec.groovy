@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.adapter.agent.claude
 import ch.qos.logback.classic.Level
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.github.oinsio.gnomish.adapter.agent.JudgeVerdictExtractor
+import com.github.oinsio.gnomish.adapter.agent.runner.AnswerForm
 import com.github.oinsio.gnomish.adapter.agent.runner.DialectAnswer
 import com.github.oinsio.gnomish.adapter.agent.runner.ParsedEvents
 import com.github.oinsio.gnomish.adapter.agent.runner.RoundStatus
@@ -123,6 +124,70 @@ class ClaudeDialectAnswerSpec extends Specification {
         '{"outcome":"done","question":"","options":[]}' || DialectAnswer.NoReply | null
         '{"outcome":"decision_request","question":"which db?","options":["pg","sqlite"]}' || DialectAnswer.Replied | '{"kind":"decision-request","question":"which db?","options":["pg","sqlite"]}'
         '{"outcome":"decision_request","question":"which db?","options":["pg"]}' || DialectAnswer.Replied | '{"kind":"decision-request","question":"which db?","options":["pg"]}'
+    }
+
+    // Scenario: executor/claude-dialect / A transform reply asks a decision through the schema
+    def "FR19: a transform request hands the CLI the transform reply schema, and a reply asking a decision is the contract's decision request"() {
+        when:
+        def argv = dialect.render(TRANSFORM).argv()
+        def answer = dialect.answer(TRANSFORM, events(structured(
+                        '{"outcome":"decision_request","question":"which db?","options":["pg","sqlite"]}')))
+
+        then: 'the argv ends with the transform reply schema'
+        argv[-2] == '--json-schema'
+        JSON.readTree(argv[-1]) == JSON.readTree('{"type":"object","additionalProperties":false,' +
+                '"required":["outcome","question","options"],"properties":{' +
+                '"outcome":{"type":"string","enum":["done","decision_request"]},' +
+                '"question":{"type":"string"},"options":{"type":"array","items":{"type":"string"}}}}')
+
+        and: 'the reply becomes the contract decision request with its question and options'
+        (answer as DialectAnswer.Replied).document() == JSON.readTree(
+                '{"kind":"decision-request","question":"which db?","options":["pg","sqlite"]}')
+    }
+
+    // Scenario: executor/claude-dialect / Every reply schema fits both schema families
+    def "FR19: the #request.role() reply schema has an object root, closed objects requiring every property, and no root combinator"() {
+        when:
+        def argv = dialect.render(request).argv()
+        def schema = JSON.readTree(argv[argv.indexOf('--json-schema') + 1])
+
+        then:
+        schema.type.asText() == 'object'
+        !['anyOf', 'oneOf', 'allOf'].any { schema.has(it) }
+        objects(schema).every { object ->
+            object.get('additionalProperties')?.isBoolean() &&
+            !object.get('additionalProperties').booleanValue() &&
+            (object.get('required')*.asText() as Set) == (object.get('properties').fieldNames().toList() as Set)
+        }
+        !objects(schema).isEmpty()
+
+        where:
+        request << [TRANSFORM, VERDICT, DECISION]
+    }
+
+    def "FR19: the dialect declares the schema-enforced form for every role it describes, its instruction naming no answer file"() {
+        expect:
+        dialect.describe().roles().every { role ->
+            def form = dialect.answerForm(role)
+            form instanceof AnswerForm.SchemaEnforced &&
+                    !form.instruction().contains('GNOMISH_ANSWER_FILE') &&
+                    !form.instruction().contains('.gnomish-task') &&
+                    form.instruction().contains('decision_request')
+        }
+    }
+
+    /** Every object schema in {@code node}, itself included: any node whose type is {@code object}. */
+    private static List objects(def node) {
+        List found = []
+        if (node.isObject()) {
+            if (node.path('type').asText() == 'object') {
+                found << node
+            }
+            node.elements().each { found.addAll(objects(it)) }
+        } else if (node.isArray()) {
+            node.elements().each { found.addAll(objects(it)) }
+        }
+        found
     }
 
     def "FR3: a round with no result event, or a role the dialect declares no schema for, states no answer"() {

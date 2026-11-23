@@ -34,7 +34,7 @@ class PendingWaitSpec extends Specification {
     def "FR4: the deadline is since plus the timeout, measured on the injected clock"() {
         given: 'an entry recorded two minutes before now'
         def since = clock.instant().minus(Duration.ofMinutes(2))
-        def wait = new PendingWait(time, check(), since)
+        def wait = PendingWait.ofCheck(time, check(), since)
 
         expect:
         wait.elapsed() == Duration.ofMinutes(2)
@@ -43,7 +43,7 @@ class PendingWaitSpec extends Specification {
 
     def "FR2: a hint of #hint waits #waited and lets the next poll come"() {
         given:
-        def wait = new PendingWait(time, check(), clock.instant())
+        def wait = PendingWait.ofCheck(time, check(), clock.instant())
 
         when:
         def polls = wait.waited(pending(hint))
@@ -64,7 +64,7 @@ class PendingWaitSpec extends Specification {
 
     def "FR2: a hint past the deadline sleeps to the deadline and ends the wait"() {
         given:
-        def wait = new PendingWait(time, check(), clock.instant())
+        def wait = PendingWait.ofCheck(time, check(), clock.instant())
 
         when:
         def polls = wait.waited(pending(TIMEOUT.plusSeconds(1)))
@@ -77,7 +77,7 @@ class PendingWaitSpec extends Specification {
 
     def "FR4: no time left ends the wait without sleeping"() {
         given: 'an entry whose timeout already elapsed'
-        def wait = new PendingWait(time, check(), clock.instant().minus(TIMEOUT))
+        def wait = PendingWait.ofCheck(time, check(), clock.instant().minus(TIMEOUT))
 
         when:
         def polls = wait.waited(pending(null))
@@ -85,5 +85,34 @@ class PendingWaitSpec extends Specification {
         then:
         !polls
         sleeper.slept.isEmpty()
+    }
+
+    def "FR10 of extract-agent-round-runner: a round's wait paces max(pending interval, hint) and ends at the ceiling from since"() {
+        given: 'the factory bounds: a 1-minute interval, a 1-hour ceiling; an entry recorded 20 minutes ago'
+        def bounds = new PendingBounds(Duration.ofMinutes(1), Duration.ofHours(1))
+        def wait = PendingWait.ofRound(time, bounds, clock.instant().minus(Duration.ofMinutes(20)))
+
+        expect: 'the ceiling is counted from since, not from now'
+        wait.elapsed() == Duration.ofMinutes(20)
+        wait.remaining() == Duration.ofMinutes(40)
+
+        when: 'a short hint and a long hint'
+        def first = wait.waited(pending(Duration.ofSeconds(5)))
+        def second = wait.waited(pending(Duration.ofMinutes(3)))
+
+        then: 'the pace is the larger of the two, never below the interval'
+        first && second
+        sleeper.slept == [
+            Duration.ofMinutes(1),
+            Duration.ofMinutes(3)
+        ]
+
+        when: 'a hint reaching past the ceiling'
+        def third = wait.waited(pending(Duration.ofHours(2)))
+
+        then: 'the wait ends at the ceiling with no further poll'
+        !third
+        wait.remaining() == Duration.ZERO
+        wait.elapsed() == Duration.ofHours(1)
     }
 }

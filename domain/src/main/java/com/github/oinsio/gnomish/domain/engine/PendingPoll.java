@@ -9,55 +9,31 @@ import com.github.oinsio.gnomish.domain.engine.time.TimeEquipment;
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck;
 import com.github.oinsio.gnomish.pendingkey.PendingKey;
 import com.github.oinsio.gnomish.untrustedtext.UntrustedText;
+import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The engine's one owner of a verdict that is not ready yet (design D2, D19, D21 of
- * migrate-verify-to-executor-contract): it asks the check's executor through the engine's {@link
- * StageExecutor} port — a request with the check as its subject, no turn for a {@code start}, an
- * {@link PendingTurn.Origin#ISSUED ISSUED} turn for a {@code poll} of a key this run was given — and
- * waits for a terminal answer or the check's timeout.
- *
- * <p>The sequence, in order:
- *
- * <ol>
- *   <li><b>Delivery.</b> A polled check is triggered by the task-branch push, so an undeliverable
- *       attempt commit is a cannot-verify before anything is asked (FR21 of add-sandbox-core).
- *   <li><b>Continue or start.</b> An entry of the open round for the check — its attempt the round's,
- *       its token the round's ({@link PendingRound}) — is continued with a {@link
- *       PendingTurn.Origin#RECORDED RECORDED} turn and no {@code start}; otherwise the check starts.
- *   <li><b>Persist before poll.</b> A {@code start} answering {@code pending} adds the check's entry
- *       to the round's list and hands the whole list to {@link AttemptPersistence#persistPending}
- *       before the first poll. A throwing write is not caught here: no poll is made, and the verify
- *       chain resolves the check as cannot-verify (D21, "What a failed persistPending comes to").
- *   <li><b>Wait.</b> One method continues an entry, live and resumed (crash-consistency item 14),
- *       on a {@link PendingWait} — the deadline and the wait between polls. A resumed entry is
- *       polled at once, since the hint is not persisted.
- *   <li><b>Timeout.</b> Classified by {@link PendingTimeout}: the last answer's state first, then
- *       the declared class.
- * </ol>
- *
- * <p>An entry stays in the round's list after its check ended (D21). A {@code poll} answering
- * {@code pending} with another key rotates the entry (D12 as amended 2026-11-12): the check's entry
- * now names the new key — its check, attempt, token and {@code since} unchanged, so a rotation never
- * extends the timeout — and the whole list, the other entries carried unchanged, goes through {@link
- * AttemptPersistence#persistPending} again, before the wait and so before the next poll. It is the
- * same write as the first key's, so no second persistence path exists, and it names nothing of the
- * entry's subject beyond its identity, so another subject reuses it unchanged. A throwing rotation
- * write is not caught here either: the new key is never polled. Holds only immutable
- * collaborators, so one instance serves concurrent verifications.
- *
- * <p>Every executor check of the verify chain goes through it ({@link VerifyOrchestrator}, task
- * 4.2f): a check whose executor never answers {@code pending} is one {@code start}. Beside the
- * answer it hands the chain the check's {@link CheckOutcome} — the executor, the status the rounds
- * ended on, and the prefix of a key a resume took from the pending record — which the ledger names
- * (NFR-O1, UX3); each poll and a timeout are reported to the run's listener as {@link
- * EngineEvent.CheckPolled} and {@link EngineEvent.CheckTimedOut}, which the application's logging
- * listener renders (NFR-O1, UX1).
+ * The engine's one owner of work that is not done yet (design D2, D19, D21 of
+ * migrate-verify-to-executor-contract; D11 of extract-agent-round-runner): a verdict check's ({@link
+ * #answer}) and a {@code transform} round's whose executor declares {@code poll} ({@link
+ * #continueStarted} live, {@link #resumeRound} from the record). A {@link PendingAsk} is what differs
+ * between the subjects; the path is one. A polled check first needs its attempt delivered (FR21 of
+ * add-sandbox-core). An entry of the open round ({@link PendingEntries}) is continued with a {@link
+ * PendingTurn.Origin#RECORDED RECORDED} turn and no {@code start}. A {@code start} answering {@code
+ * pending} writes the subject's entry through {@link AttemptPersistence#persistPending} before the
+ * first poll — for a round, the pending round commit; a throwing write is not caught, so no poll is
+ * made. One method continues an entry, live and resumed (crash-consistency item 14), on the subject's
+ * {@link PendingWait}; a resumed entry is polled at once. A poll naming another key rewrites the entry,
+ * {@code since} unchanged, through the same write before the next poll (D12 as amended 2026-11-12). The
+ * deadline is classified by {@link PendingTimeout}: a check's by its last state and declared class, a
+ * round's as {@code failed/infrastructure} naming the pending ceiling. Each poll and a timeout are
+ * reported as {@link EngineEvent.PendingPolled} and {@link EngineEvent.PendingTimedOut} naming the
+ * subject (NFR-O1, UX1 of migrate-verify-to-executor-contract; NFR-O2 of extract-agent-round-runner).
+ * Holds only immutable collaborators, so one instance serves concurrent runs.
  *
  * <p>Implements FR1, FR2, FR3, FR4, FR9, FR10, FR20, NFR-R1, NFR-R4, NFR-O1, UX1, UX3 of
- * migrate-verify-to-executor-contract.
+ * migrate-verify-to-executor-contract; FR10, FR11, NFR-O2, UX3 of extract-agent-round-runner.
  */
 final class PendingPoll {
 
@@ -68,8 +44,8 @@ final class PendingPoll {
     private final EngineEventListener listener;
 
     /**
-     * @param executor the engine's port the check rounds go through; never null
-     * @param persistence the port the round's pending entries are written through; never null
+     * @param executor the engine's port every request of a wait goes through; never null
+     * @param persistence the port the pending entries are written through; never null
      * @param delivery the push precondition a polled check is asked behind; never null
      * @param time the clock the deadline is measured on and the sleeper waited on; never null
      * @param listener the run's observer each poll and a timeout are reported to; never null
@@ -105,91 +81,120 @@ final class PendingPoll {
                     new ExecutionResult.Failed(ExecutionResult.FailureClass.INFRASTRUCTURE, reason, List.of(), details),
                     null);
         }
+        var ask = new CheckAsk(check, ref, round);
         var recorded = round.entryOf(ref);
         if (recorded.isPresent()) {
-            return waitFor(check, ref, round, recorded.get(), PendingTurn.Origin.RECORDED, null);
+            var run = waitFor(ask, recorded.get(), null);
+            return CheckRoundAnswers.polled(check, run.result(), run.resumedKey());
         }
-        var started = executor.execute(round.request(check, ref, null));
-        var startedPending = ExecutorOutcomeClassifier.pending(started);
-        if (startedPending.isEmpty()) {
+        var started = executor.execute(ask.request(null));
+        if (ExecutorOutcomeClassifier.pending(started).isEmpty()) {
             return CheckRoundAnswers.polled(check, started, null);
         }
-        var pending = startedPending.get();
-        var entry = new PendingPollRecord(
-                ref, round.attempt(), round.token(), pending.key(), time.clock().instant());
-        persistence.persistPending(round.taskId(), round.withEntry(entry));
-        return waitFor(check, ref, round, entry, PendingTurn.Origin.ISSUED, pending);
+        var run = continueStarted(ask, started);
+        return CheckRoundAnswers.polled(check, run.result(), run.resumedKey());
+    }
+
+    /**
+     * Continues a {@code start} that answered {@code pending}, live: the subject's entry is written
+     * before the first poll, then the wait runs to a terminal answer or the deadline.
+     *
+     * @param ask the subject's wait; never null
+     * @param started the {@code start}'s result, {@code pending}; never null
+     * @return what the wait came to, the {@code start}'s usage first; never null
+     */
+    PendingRun continueStarted(PendingAsk ask, ExecutionResult started) {
+        var pending = ExecutorOutcomeClassifier.pending(started).orElseThrow();
+        var now = time.clock().instant();
+        var entry = new PendingPollRecord(ask.subject(), ask.key().attempt(), ask.token(), pending.key(), now);
+        persistence.persistPending(ask.key().taskId(), ask.withEntry(entry));
+        var run = waitFor(ask, entry, pending);
+        var usages = new ArrayList<>(List.of(started.usage()));
+        usages.addAll(run.usages());
+        var shown = PendingKeyPrefix.of(new PendingTurn(pending.key(), PendingTurn.Origin.ISSUED));
+        return new PendingRun(run.result(), shown, null, usages);
+    }
+
+    /**
+     * Continues {@code recorded}, the round's entry read off the registered commit, with no {@code
+     * start}: the resumed half of the one path (crash-consistency item 14), its deadline from {@code
+     * since}.
+     *
+     * @param ask the round's wait; never null
+     * @param recorded the round's entry; never null
+     * @return what the wait came to; never null
+     */
+    PendingRun resumeRound(RoundAsk ask, PendingPollRecord recorded) {
+        return waitFor(ask, recorded, null);
     }
 
     /**
      * Continues {@code entry} until a terminal answer or the deadline: the one path of a live and a
      * resumed entry. {@code first} is the pending answer the live path already has, which the first
-     * poll waits behind; a resumed entry has none and is polled at once. A resumed entry's outcome
-     * names the key it was resumed with, whatever the polls rotate it to afterwards (UX3).
+     * poll waits behind; a resumed entry ({@code first} null) is polled at once with a {@link
+     * PendingTurn.Origin#RECORDED RECORDED} turn, and names the key it was resumed with (UX3).
      */
-    private PolledCheck waitFor(
-            VerifyCheck.Executor check,
-            CheckRef ref,
-            PendingRound round,
-            PendingPollRecord entry,
-            PendingTurn.Origin origin,
-            ExecutionResult.@Nullable Pending first) {
-        var wait = new PendingWait(time, check, entry.since());
+    private PendingRun waitFor(PendingAsk ask, PendingPollRecord entry, ExecutionResult.@Nullable Pending first) {
+        var wait = ask.waitFrom(time, entry.since());
         var timeout = new PendingTimeout();
         ExecutionResult.@Nullable Pending last = first;
-        var turn = new PendingTurn(entry.key(), origin);
-        var resumed = origin == PendingTurn.Origin.RECORDED ? PendingKeyPrefix.of(turn) : null;
+        var turn =
+                new PendingTurn(entry.key(), first == null ? PendingTurn.Origin.RECORDED : PendingTurn.Origin.ISSUED);
+        var resumed = first == null ? PendingKeyPrefix.of(turn) : null;
+        var usages = new ArrayList<ExecutorUsage>();
         var recorded = entry;
         while (true) {
             if (last != null) {
                 timeout.note(last);
                 if (!wait.waited(last)) {
-                    var failure = timeout.failure(check);
+                    var failure = ask.timedOut(timeout);
                     Events.emit(
                             listener,
-                            new EngineEvent.CheckTimedOut(
-                                    round.key(),
-                                    ref,
-                                    check.executorName(),
+                            new EngineEvent.PendingTimedOut(
+                                    ask.key(),
+                                    ask.subject(),
+                                    ask.executor(),
                                     PendingKeyPrefix.of(turn),
                                     wait.elapsed(),
                                     failure));
-                    return CheckRoundAnswers.polled(check, failure, resumed);
+                    var trace = new ToolTrace(ask.key(), List.of());
+                    var ended = new ExecutionResult(failure, null, ExecutorUsage.none(), trace, List.of());
+                    return new PendingRun(ended, null, resumed, usages);
                 }
             }
             Events.emit(
                     listener,
-                    new EngineEvent.CheckPolled(
-                            round.key(),
-                            ref,
-                            check.executorName(),
+                    new EngineEvent.PendingPolled(
+                            ask.key(),
+                            ask.subject(),
+                            ask.executor(),
                             PendingKeyPrefix.of(turn),
                             turn.origin(),
                             wait.elapsed(),
                             wait.remaining()));
-            var result = executor.execute(round.request(check, ref, turn));
+            var result = executor.execute(ask.request(turn));
+            usages.add(result.usage());
             var pending = ExecutorOutcomeClassifier.pending(result);
             if (pending.isEmpty()) {
-                return CheckRoundAnswers.polled(check, result, resumed);
+                return new PendingRun(result, null, resumed, usages);
             }
             last = pending.get();
-            recorded = persisted(round, recorded, last.key());
+            recorded = persisted(ask, recorded, last.key());
             turn = new PendingTurn(recorded.key(), PendingTurn.Origin.ISSUED);
         }
     }
 
     /**
-     * The entry the next poll continues: {@code recorded} itself when the poll named its key again;
-     * otherwise its rotation to {@code key}, written through the one pending write before it is
-     * returned, so the next poll never names a key the round's record does not (D12 as amended).
+     * The entry the next poll continues: {@code recorded} when the poll named its key again, else its
+     * rotation to {@code key}, written before it is returned (D12 as amended).
      */
-    private PendingPollRecord persisted(PendingRound round, PendingPollRecord recorded, PendingKey key) {
+    private PendingPollRecord persisted(PendingAsk ask, PendingPollRecord recorded, PendingKey key) {
         if (key.equals(recorded.key())) {
             return recorded;
         }
         var rotated =
-                new PendingPollRecord(recorded.check(), recorded.attempt(), recorded.token(), key, recorded.since());
-        persistence.persistPending(round.taskId(), round.withRotated(rotated));
+                new PendingPollRecord(recorded.subject(), recorded.attempt(), recorded.token(), key, recorded.since());
+        persistence.persistPending(ask.key().taskId(), ask.withRotated(rotated));
         return rotated;
     }
 }

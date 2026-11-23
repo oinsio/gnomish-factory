@@ -79,6 +79,9 @@ class AgentRoundInvalidAnswerSpec extends Specification {
 
     // Scenario: executor/agent-round-runner / Exhausted structured-output retries burn one attempt
     def "FR20: a transform round whose CLI reports its structured-output retries exhausted is failed/quality naming that, and no second request is started"() {
+        given: 'a dialect declaring the schema-enforced answer for transform'
+        fixture.dialect.forms[Role.TRANSFORM] = FakeDialect.SCHEMA
+
         when:
         def result = transform('answer exhausted\ndone\n', null)
 

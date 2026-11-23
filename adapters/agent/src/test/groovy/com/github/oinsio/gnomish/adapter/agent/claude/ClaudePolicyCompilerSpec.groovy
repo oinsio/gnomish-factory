@@ -18,7 +18,7 @@ class ClaudePolicyCompilerSpec extends Specification {
         new Policy.WorkspaceWrite()
     ]
 
-    // Scenario: executor/agent-executor / No command line skips all permission checks
+    // Scenario: executor/claude-dialect / Verdict role is read-only
     def "FR5, D5: every policy carries its mode and --strict-mcp-config, never bypassPermissions — #policy"() {
         when:
         def fragment = ClaudePolicyCompiler.compile(policy, settings)
@@ -58,7 +58,6 @@ class ClaudePolicyCompilerSpec extends Specification {
         !fragment.contains('acceptEdits')
     }
 
-    // Scenario: executor/agent-executor / A judge check may narrow its tools
     def "D5: settings that list only read-only tools narrow the set, in the settings' order"() {
         expect:
         ClaudePolicyCompiler.compile(new Policy.ReadOnly(), [allowedTools: requested]).take(2) == ['--allowedTools', effective]
@@ -70,7 +69,6 @@ class ClaudePolicyCompilerSpec extends Specification {
     }
 
     // Scenario: executor/claude-dialect / Settings cannot widen a read-only run
-    // Scenario: executor/agent-executor / Judge cannot widen its tools
     def "D5: a write-capable tool in a readOnly run's settings is dropped from the effective set"() {
         expect:
         ClaudePolicyCompiler.compile(new Policy.ReadOnly(), [allowedTools: [
@@ -98,7 +96,6 @@ class ClaudePolicyCompilerSpec extends Specification {
         ]
     }
 
-    // Scenario: executor/agent-executor / The executor may write exactly its decision file
     def "FR5: a writeExactly policy appends the pinpoint Write allowance to whatever the settings allow"() {
         expect:
         ClaudePolicyCompiler.compile(new Policy.WriteExactly('/tmp/round-1/decision.json'), settings).take(2) ==

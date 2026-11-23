@@ -3,6 +3,7 @@ package com.github.oinsio.gnomish.app;
 import com.github.oinsio.gnomish.app.console.DialogConsole;
 import com.github.oinsio.gnomish.domain.engine.Engine;
 import com.github.oinsio.gnomish.domain.engine.EnginePorts;
+import com.github.oinsio.gnomish.domain.engine.PendingBounds;
 import com.github.oinsio.gnomish.domain.engine.TaskContext;
 import com.github.oinsio.gnomish.domain.engine.TaskState;
 import com.github.oinsio.gnomish.domain.engine.port.AttemptDelivery;
@@ -108,7 +109,10 @@ final class RunAssembler {
                 law.executors(),
                 // FR14, FR21 of define-executor-contract: the identity of the rounds that executor's
                 // source opens — its cell in a branch mode, the in-place identity otherwise.
-                stageRounds.identity());
+                stageRounds.identity(),
+                // FR10 of extract-agent-round-runner (D11): the factory's own pending interval and
+                // ceiling of a pending transform round; no law key sets them.
+                PendingBounds.DEFAULTS);
 
         var loop = new RunnerOutcomeLoop(new Engine(), console, assembly.errorConsole);
         return new Run(loop, ports);

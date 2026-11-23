@@ -15,14 +15,17 @@ import org.jspecify.annotations.Nullable;
  * migrate-verify-to-executor-contract): one per check, naming the status its rounds ended on, the
  * check's index in the stage's {@code verify} list, and — when this instance resumed the check's
  * wait from the round's pending record — the prefix of the key it took from there, the ledger's
- * {@code resumed key} (UX3). A stage round has neither.
+ * {@code resumed key} (UX3). A stage round has no check index; a {@code transform} round that went
+ * {@code pending} on this instance names the prefix of the key its {@code start} returned, the
+ * ledger's {@code pending key}, and one this instance resumed from the round's pending record the
+ * prefix of the key it took from there, the {@code resumed key} (UX3 of extract-agent-round-runner).
  *
  * <p>The words are the ones {@code RoundOutcomeWords} owns; the executor's version and a resumed key
  * are their own text and stay carriers until the ledger's machine exit writes them. Inert value
  * data compared by content.
  *
  * <p>Implements NFR-O2, UX3 of define-executor-contract; NFR-O1, UX3 of
- * migrate-verify-to-executor-contract.
+ * migrate-verify-to-executor-contract; UX3 of extract-agent-round-runner.
  *
  * @param instance the writing process's identity; never null
  * @param at when the round finished; never null
@@ -35,6 +38,8 @@ import org.jspecify.annotations.Nullable;
  * @param status the round's {@code <status>[/<class>]} token; never blank
  * @param check the check's index in the stage's {@code verify} list; null for a stage round
  * @param resumedKey the prefix of the key a resume took from the pending record; null otherwise
+ * @param pendingKey the prefix of the key a stage round's {@code start} went pending with on this
+ *     instance; null otherwise
  */
 public record RoundOutcomeLine(
         InstanceInfo instance,
@@ -47,5 +52,6 @@ public record RoundOutcomeLine(
         String role,
         String status,
         @Nullable Integer check,
-        @Nullable UntrustedText resumedKey)
+        @Nullable UntrustedText resumedKey,
+        @Nullable UntrustedText pendingKey)
         implements LedgerLine {}

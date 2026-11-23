@@ -12,8 +12,8 @@ import java.time.Duration
 
 /**
  * NFR-O1, UX1, UX3 of migrate-verify-to-executor-contract: what a pending check's wait reports to
- * the run's listener — one {@link EngineEvent.CheckPolled} per poll naming the executor, the key's
- * prefix, the turn, the elapsed and the remaining time; one {@link EngineEvent.CheckTimedOut} at the
+ * the run's listener — one {@link EngineEvent.PendingPolled} per poll naming the executor, the key's
+ * prefix, the turn, the elapsed and the remaining time; one {@link EngineEvent.PendingTimedOut} at the
  * timeout carrying the failure the wait was resolved to, whose details name what was still awaited
  * (the lines the logging listener renders from them are {@code LoggingEventListenerPollSpec}'s); and the
  * check's {@link CheckOutcome} on its finish event, which the ledger's {@code roundOutcome} line of
@@ -22,16 +22,16 @@ import java.time.Duration
  */
 class PendingPollObservabilitySpec extends PendingPollSpecBase {
 
-    private List<EngineEvent.CheckPolled> polls() {
+    private List<EngineEvent.PendingPolled> polls() {
         events.events.findAll {
-            it instanceof EngineEvent.CheckPolled
-        } as List<EngineEvent.CheckPolled>
+            it instanceof EngineEvent.PendingPolled
+        } as List<EngineEvent.PendingPolled>
     }
 
-    private List<EngineEvent.CheckTimedOut> timeouts() {
+    private List<EngineEvent.PendingTimedOut> timeouts() {
         events.events.findAll {
-            it instanceof EngineEvent.CheckTimedOut
-        } as List<EngineEvent.CheckTimedOut>
+            it instanceof EngineEvent.PendingTimedOut
+        } as List<EngineEvent.PendingTimedOut>
     }
 
     // NFR-O1: each poll reports executor, key prefix, the turn, elapsed and remaining time
@@ -50,9 +50,9 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
 
         then: 'one event per poll, the start not among them, the issued key shown as a subprocess capture'
         polls() == [
-            new EngineEvent.CheckPolled(KEY, ref(0, ci), 'scm-status', UntrustedText.subprocess('k-1'),
+            new EngineEvent.PendingPolled(KEY, new PendingSubject.Check(ref(0, ci)), 'scm-status', UntrustedText.subprocess('k-1'),
             ISSUED, Duration.ofSeconds(30), Duration.ofSeconds(570)),
-            new EngineEvent.CheckPolled(KEY, ref(0, ci), 'scm-status', UntrustedText.subprocess('k-1'),
+            new EngineEvent.PendingPolled(KEY, new PendingSubject.Check(ref(0, ci)), 'scm-status', UntrustedText.subprocess('k-1'),
             ISSUED, Duration.ofMinutes(1), Duration.ofMinutes(9))
         ]
         timeouts().isEmpty()
@@ -91,7 +91,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         ]
         polled.outcome() == new CheckOutcome('scm-status', new ExecutionResult.Completed(),
                 UntrustedText.branchDocument('k-rotated'))
-        polls()[0] == new EngineEvent.CheckPolled(KEY, ref(0, ci), 'scm-status',
+        polls()[0] == new EngineEvent.PendingPolled(KEY, new PendingSubject.Check(ref(0, ci)), 'scm-status',
                 UntrustedText.branchDocument('k-rotated'), RECORDED, Duration.ofMinutes(2), Duration.ofMinutes(8))
     }
 
@@ -116,7 +116,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         timeouts().size() == 1
         def timedOut = timeouts()[0]
         timedOut.key() == KEY
-        timedOut.check() == ref(0, ci)
+        timedOut.subject() == new PendingSubject.Check(ref(0, ci))
         timedOut.executor() == 'scm-status'
         timedOut.keyPrefix() == UntrustedText.subprocess('k-1')
         timedOut.elapsed() == Duration.ofMinutes(10)
@@ -124,7 +124,7 @@ class PendingPollObservabilitySpec extends PendingPollSpecBase {
         timedOut.failure().details() == UntrustedText.manifest(absent)
 
         and: 'it is the last thing the wait reports: after the twentieth poll'
-        events.events.last() instanceof EngineEvent.CheckTimedOut
+        events.events.last() instanceof EngineEvent.PendingTimedOut
         polls().size() == 20
 
         and: 'the outcome is the failure the engine resolved the wait to, never pending'

@@ -16,9 +16,11 @@ import spock.lang.Specification
  * FR3, FR11, NFR-R1 of migrate-verify-to-executor-contract (design D14 as amended 2026-11-13; the D9
  * row of {@code PendingRuns}): a key enters the run's table of pending runs of a program only from an
  * operation of a binding of that program in the run or from the pending record through the resume
- * path, never from the request on the wire. Two owners keep it so here: the check round is the one
- * caller of {@code PendingAdoption.adopt} — from its dispatch of a turn, whose {@code RECORDED} arm alone
- * adopts ({@code CheckRoundAdoptionSpec} pins the arm: an {@code ISSUED} turn adopts nothing), and
+ * path, never from the request on the wire. Two owners keep it so here: the one dispatch of a turn,
+ * {@code PendingTurnRun} — which the check round and the stage round wrapper both choose their
+ * operation through (design D11 of extract-agent-round-runner) — is the one caller of {@code
+ * PendingAdoption.adopt}, whose {@code RECORDED} arm alone adopts ({@code CheckRoundAdoptionSpec} and
+ * {@code PendingTurnRunSpec} pin the arm: an {@code ISSUED} turn adopts nothing), and
  * {@code PendingPoll} sets {@code RECORDED} on the resume path only — and a table is built only where
  * a run is built: beside the program's registry entry ({@code ExecutorRegistry}) and per case of the
  * conformance kit ({@code ProgramCandidate}). The table's readers and writers are confined to its
@@ -32,7 +34,7 @@ class PendingAdoptionOwnerSpec extends Specification {
 
     private static final String ADOPTION = 'com.github.oinsio.gnomish.app.port.check.PendingAdoption'
     private static final String RUNS = 'com.github.oinsio.gnomish.adapter.agent.program.PendingRuns'
-    private static final String CHECK_ROUND = 'com.github.oinsio.gnomish.app.CheckRound'
+    private static final String TURN_RUN = 'com.github.oinsio.gnomish.adapter.agent.program.PendingTurnRun'
     private static final String REGISTRY = 'com.github.oinsio.gnomish.app.ExecutorRegistry'
     private static final String CANDIDATE = 'com.github.oinsio.gnomish.app.conformance.ProgramCandidate'
     private static final String PROGRAM = 'com.github.oinsio.gnomish.adapter.agent.program.ProgramExecutor'
@@ -47,7 +49,7 @@ class PendingAdoptionOwnerSpec extends Specification {
         [
             ADOPTION,
             RUNS,
-            CHECK_ROUND,
+            TURN_RUN,
             REGISTRY,
             CANDIDATE,
             PROGRAM
@@ -57,7 +59,7 @@ class PendingAdoptionOwnerSpec extends Specification {
         productionClasses.get(ADOPTION).methods*.name == ['adopt']
 
         and: 'each owner really makes the call the rules reserve to it'
-        productionClasses.get(CHECK_ROUND).methodCallsFromSelf.any {
+        productionClasses.get(TURN_RUN).methodCallsFromSelf.any {
             calling(ADOPTION, ['adopt']).test(it)
         }
         [REGISTRY, CANDIDATE].every { owner ->
@@ -72,14 +74,14 @@ class PendingAdoptionOwnerSpec extends Specification {
         }
     }
 
-    def "FR3, D14: only the check round adopts a recorded key, from its dispatch of a turn"() {
+    def "FR3, D14: only the one dispatch of a turn adopts a recorded key"() {
         expect:
-        noClasses().that().doNotHaveFullyQualifiedName(CHECK_ROUND)
+        noClasses().that().doNotHaveFullyQualifiedName(TURN_RUN)
                 .should().callMethodWhere(calling(ADOPTION, ['adopt']))
                 .check(productionClasses)
 
         and:
-        productionClasses.get(CHECK_ROUND).methodCallsFromSelf.findAll {
+        productionClasses.get(TURN_RUN).methodCallsFromSelf.findAll {
             calling(ADOPTION, ['adopt']).test(it)
         }*.origin*.name as Set == ['run'] as Set
     }

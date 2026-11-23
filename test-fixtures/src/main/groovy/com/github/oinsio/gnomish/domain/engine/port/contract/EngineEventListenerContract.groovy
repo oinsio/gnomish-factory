@@ -7,6 +7,7 @@ import com.github.oinsio.gnomish.domain.engine.EngineEvent
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.ExecutorUsage
 import com.github.oinsio.gnomish.domain.engine.Participants
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.Position
 import com.github.oinsio.gnomish.domain.engine.RoundExecutor
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
@@ -70,9 +71,9 @@ abstract class EngineEventListenerContract extends Specification implements Port
             new EngineEvent.AttemptStarted(key),
             new EngineEvent.ExecutionFinished(key, Participants.transform('agent-cli', ExecutorUsage.none()), new RoundExecutor('agent-cli', null), new ExecutionResult.Completed()),
             new EngineEvent.CheckStarted(key, new CheckRef(0, UntrustedText.manifest('files_exist'))),
-            new EngineEvent.CheckPolled(key, new CheckRef(0, UntrustedText.manifest('files_exist')), 'scm-status',
+            new EngineEvent.PendingPolled(key, new PendingSubject.Check(new CheckRef(0, UntrustedText.manifest('files_exist'))), 'scm-status',
             UntrustedText.subprocess('k-1'), PendingTurn.Origin.ISSUED, Duration.ofSeconds(30), Duration.ofMinutes(9)),
-            new EngineEvent.CheckTimedOut(key, new CheckRef(0, UntrustedText.manifest('files_exist')), 'scm-status',
+            new EngineEvent.PendingTimedOut(key, new PendingSubject.Check(new CheckRef(0, UntrustedText.manifest('files_exist'))), 'scm-status',
             UntrustedText.subprocess('k-1'), Duration.ofMinutes(10), new ExecutionResult.Failed(
                     ExecutionResult.FailureClass.QUALITY, UntrustedText.factory('timed out'), [], null)),
             new EngineEvent.CheckFinished(key,

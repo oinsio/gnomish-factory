@@ -133,6 +133,9 @@ class FieldInventorySpec extends Specification {
         // check's index in the stage's verify list, and the shown prefix of the key a resume took up
         check : FieldCategory.COUNTER,
         resumedKey : FieldCategory.IDENTIFIER,
+        // a pending transform round's roundOutcome line (extract-agent-round-runner, UX3): the shown
+        // prefix of the key its start returned
+        pendingKey : FieldCategory.IDENTIFIER,
     ]
 
     /**

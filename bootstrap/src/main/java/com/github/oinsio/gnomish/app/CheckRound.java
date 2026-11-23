@@ -1,5 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
+import com.github.oinsio.gnomish.adapter.agent.program.PendingTurnRun;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramResultMapping;
 import com.github.oinsio.gnomish.app.port.check.PendingAdoption;
 import com.github.oinsio.gnomish.domain.engine.AttemptKey;
@@ -28,7 +29,8 @@ import org.jspecify.annotations.Nullable;
  * the engine's shape ({@link ProgramResultMapping}), in role {@code verdict}, so a verdict answer
  * crosses the port as an {@code ExecutionResult.VerdictReply}.
  *
- * <p>The request's {@link PendingTurn} selects the arm (D14): no turn → {@code start}; a key this run
+ * <p>The request's {@link PendingTurn} selects the arm (D14), through {@link PendingTurnRun}, the one
+ * choice a stage round makes too: no turn → {@code start}; a key this run
  * issued ({@link PendingTurn.Origin#ISSUED}) → {@code poll} by that key, handed over as the turn
  * carries it: the turn and the contract name one type, the {@code :pendingkey} leaf's (D20), so
  * nothing is re-wrapped here. A recorded key ({@link PendingTurn.Origin#RECORDED}, set by the resume
@@ -120,7 +122,7 @@ final class CheckRound implements StageExecutor {
                     Bounds.none(),
                     List.of(),
                     null);
-            result = run(verdict, request.pending());
+            result = PendingTurnRun.run(bound, adoption, verdict, request.pending());
         } finally {
             // A box lives for this one request: its start, or its adoption and poll.
             release.run();
@@ -131,15 +133,5 @@ final class CheckRound implements StageExecutor {
     private static ExecutionResult engineResult(String executor, Request request, ExecutorResult result) {
         var key = new AttemptKey(request.context().taskId(), request.stage().name(), request.attempt());
         return ProgramResultMapping.toEngine(executor, Role.VERDICT, key, result, List.of());
-    }
-
-    private ExecutorResult run(ExecutorRequest verdict, @Nullable PendingTurn turn) {
-        if (turn == null) {
-            return bound.start(verdict);
-        }
-        if (turn.origin() == PendingTurn.Origin.RECORDED && adoption != null) {
-            adoption.adopt(verdict, turn.key());
-        }
-        return bound.poll(verdict, turn.key());
     }
 }

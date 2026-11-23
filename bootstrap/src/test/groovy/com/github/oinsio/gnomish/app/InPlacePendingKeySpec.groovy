@@ -16,6 +16,7 @@ import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.Decision
 import com.github.oinsio.gnomish.domain.engine.Engine
+import com.github.oinsio.gnomish.domain.engine.PendingSubject
 import com.github.oinsio.gnomish.domain.engine.TaskContext
 import com.github.oinsio.gnomish.domain.engine.TaskOutcome
 import com.github.oinsio.gnomish.domain.engine.TaskState
@@ -90,7 +91,9 @@ class InPlacePendingKeySpec extends Specification implements AppAssemblyFixture 
         then: 'the key was held in the run\'s memory: one pending write naming the check, with no round token'
         persistence.pendingWrites().size() == 1
         def entries = persistence.pendingWrites()[0].state().pendingPolls()
-        entries*.check() == [CheckRef.of(0, check)]
+        entries*.subject() == [
+            new PendingSubject.Check(CheckRef.of(0, check))
+        ]
         entries[0].token() == null
 
         and: 'the poll proceeded: the gate was asked on the start and once more, and the check passed'

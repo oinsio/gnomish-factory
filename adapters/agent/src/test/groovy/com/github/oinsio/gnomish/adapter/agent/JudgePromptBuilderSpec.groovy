@@ -22,7 +22,6 @@ import spock.lang.Specification
 class JudgePromptBuilderSpec extends Specification implements BoundedExecutionFixture {
 
 
-    // Scenario: executor/agent-executor / The judge prompt carries the task context and the verdict instruction
     def "FR8: prompt contains the task goal, decisions, criteria content and verdict instruction in order"() {
         given:
         def builder = builderWith(['criteria.md': 'The output must be idempotent.'])
@@ -50,7 +49,6 @@ class JudgePromptBuilderSpec extends Specification implements BoundedExecutionFi
         prompt.contains('use approach A')
     }
 
-    // Scenario: executor/agent-executor / The judge prompt carries the task context and the verdict instruction
     def "FR8: structured-verdict instruction tells the judge to emit a JSON verdict with passed and findings"() {
         given:
         def builder = builderWith(['criteria.md': 'criteria text'])
@@ -66,7 +64,6 @@ class JudgePromptBuilderSpec extends Specification implements BoundedExecutionFi
         prompt.toLowerCase().contains('json')
     }
 
-    // Scenario: executor/agent-executor / Feedback is withheld from the judge
     def "D8: prompt does NOT contain prior-attempt feedback, input-artifact or control-file sections"() {
         given:
         def builder = builderWith(['criteria.md': 'criteria text'])

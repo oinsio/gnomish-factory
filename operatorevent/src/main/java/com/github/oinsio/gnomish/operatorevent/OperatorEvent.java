@@ -322,9 +322,10 @@ public enum OperatorEvent {
     CONDITION_BOX_GIT_FLOOR_OPENED("GF180"),
     CONDITION_BOX_GIT_FLOOR_SUSTAINED_OPEN("GF181"),
     // domain engine, executor outcome classification (define-executor-contract, FR7): the one WARN of
-    // a round whose executor REPORTED a failure the stage cannot run past (failed/infrastructure, or
-    // pending the stage cannot poll), and the one WARN of a round that reported failed/limit. A
-    // thrown executor failure keeps its own ERROR, EXECUTOR_THREW.
+    // a round whose executor REPORTED a failure the stage cannot run past (failed/infrastructure, a
+    // pending from an executor declaring no poll, or a pending round's wait ended at the pending
+    // ceiling — extract-agent-round-runner, D11), and the one WARN of a round that reported
+    // failed/limit. A thrown executor failure keeps its own ERROR, EXECUTOR_THREW.
     EXECUTOR_REPORTED_FAILURE("GF182"),
     EXECUTOR_BUDGET_EXHAUSTED("GF183"),
     // serve ledger (define-executor-contract, NFR-O2, UX3): the roundOutcome line of a finished
