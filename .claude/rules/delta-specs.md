@@ -133,4 +133,17 @@ Errors:
   `ADDED` of one header in one change. A scenario title is therefore permanent unless the whole
   requirement is removed by one change and re-added, under the same header, by the next one,
   the two archived back to back. Choose scenario titles to last.
+- **A `REMOVED` requirement states the fate of each of its scenarios, by title.** The
+  **Reason** lists every scenario of the requirement as it stands in `openspec/specs/` and says
+  of each: *moved* — to which requirement and scenario, in which capability — or *dropped* —
+  with the design decision that removed the promise. "Restated in …" over a group of scenarios
+  is not a fate: each title is checked against the text it is said to have moved to. A scenario
+  whose behavior still holds is moved with its title kept, so its test marker keeps resolving.
+  Reason: a removal takes every scenario with it, and the gate then stops asking for their
+  tests (`testing.md`, "Every scenario has a test"), so a promise lost here is lost with a green
+  build. The failure this exists for: `extract-agent-round-runner` REMOVED "Decision-file
+  protocol" with "naming, fallbacks and survival on the branch are restated"; of its thirteen
+  scenarios one was restated, the fallback the reason named was not, and a second capability
+  still promised it (found at task 5.1, 2026-11-23). `/review-artifacts` reports a scenario
+  with no stated fate as ❌ CRITICAL
 - After `/opsx:archive`, deltas merge into `openspec/specs/` — never edit archived specs directly

@@ -167,6 +167,37 @@ So, before a `Dn` describes how a per-X artefact is produced, the decision lists
 artefact actually varies per X; an alternative that removes the production step is written first,
 and rejected only with the varying part named.
 
+## A decision that deletes a class lists its duties
+
+A decision that deletes, dissolves or replaces a class, a port or a mechanism names the thing by
+what it does **today** and by who calls it **today**, never by the consumer it was first built
+for. Before the deletion is written into `design.md` and `tasks.md`:
+
+1. **Callers, from a grep, with `file:line`.** Every current call site and every implementation
+   or decoration of the type. A caller the decision did not expect is a finding against the
+   decision, not a detail for the implementer.
+2. **Duties, read from the code.** What the thing does at each point of its lifecycle — what it
+   creates, records, commits, cleans up — including what a caller relies on without naming it.
+3. **A carrier for every duty.** Each duty is deleted with a reason, or moved to a named owner;
+   "the replacement does it" is a claim checked against the replacement's signature. A duty with
+   no carrier means the deletion is wrong, and the decision says so.
+
+The task that deletes carries the list, as a single-owner task carries its consumer list
+(`implementation.md`).
+
+The failure this exists for: design D7 of `extract-agent-round-runner` dissolved
+`HostRoundEnvironmentSource` and `SandboxRoundEnvironmentSource` as "the agent round's
+environment sources", to be replaced by the check environment acquisition. By then a later
+decision (D18 of `migrate-verify-to-executor-contract`) had made that source open the round of
+every executor, and it minted the round token, wired the mid-round harvest, committed the
+snapshot and held the durable decision request; the acquisition named as its replacement takes a
+check and returns an environment. The implementer stopped at task 5.1 (2026-11-23). One grep for
+the callers would have refuted the premise when the decision was written.
+
+How this is checked: `/review-artifacts` greps the callers of every type a decision or a task
+deletes and compares them with the decision's list; a caller or a duty the artifacts do not name
+is ❌ CRITICAL, since the loss it leads to is silent.
+
 ## A platform fact is measured on every platform CI runs
 
 A JDK or OS fact a design rests on — what a `close()` wakes, what a lock blocks, what a signal
