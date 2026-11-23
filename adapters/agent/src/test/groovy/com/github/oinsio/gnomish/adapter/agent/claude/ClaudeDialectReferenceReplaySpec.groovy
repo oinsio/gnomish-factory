@@ -31,7 +31,7 @@ class ClaudeDialectReferenceReplaySpec extends Specification {
         def streamEvents = new StreamJsonParser(clock, {
             streamProgress << it
         }).parse(readerOf(scenario))
-        def streamResult = new AgentRoundResultExtractor().extract(streamEvents, clock.instant())
+        def streamResult = ExtractedRound.of(new AgentRoundResultExtractor(), streamEvents, clock.instant())
 
         when: 'the dump is replayed line by line through the dialect'
         List<ParsedEvents.Stamped<AgentEvent>> kept = []

@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.app;
 
-import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor;
+import com.github.oinsio.gnomish.adapter.agent.HostRoundEnvironmentSource;
 import com.github.oinsio.gnomish.adapter.agent.ResumeVerificationStageExecutor;
 import com.github.oinsio.gnomish.adapter.agent.RoundScratchDirectory;
 import com.github.oinsio.gnomish.adapter.agent.program.ProgramRoundEquipment;
@@ -87,7 +87,7 @@ final class ExecutorAdapterSelector {
         // double-wire its rounds. A git-mode host run carries its round identity with the decoration
         // (design D22 of migrate-verify-to-executor-contract); the in-place run carries neither, and
         // its undecorated source names the in-place identity.
-        RoundEnvironmentSource host = CliStageExecutor.hostRounds(assembly.time.clock(), childEnv);
+        RoundEnvironmentSource host = new HostRoundEnvironmentSource(assembly.time.clock(), childEnv);
         RoundEnvironmentSource rounds;
         if (sandbox != null) {
             rounds = sandbox.executorRounds();

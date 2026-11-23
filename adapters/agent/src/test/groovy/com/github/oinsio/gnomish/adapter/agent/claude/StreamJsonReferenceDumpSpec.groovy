@@ -48,7 +48,7 @@ class StreamJsonReferenceDumpSpec extends Specification {
         def events = parser.parse(readerOf('plain-round'))
 
         when: 'the round result is extracted'
-        def result = extractor.extract(events, events.last().readAt())
+        def result = ExtractedRound.of(extractor, events, events.last().readAt())
 
         then: 'the essential result text and session id are surfaced verbatim'
         result.sessionId().forLog()== 'ref-session-plain-1'
@@ -72,7 +72,7 @@ class StreamJsonReferenceDumpSpec extends Specification {
         def events = parser.parse(readerOf('subagent-round'))
 
         when: 'the round result is extracted'
-        def result = extractor.extract(events, events.last().readAt())
+        def result = ExtractedRound.of(extractor, events, events.last().readAt())
 
         then: 'byModel reports the model the round and its subagent ran on, with its four-field split and cost'
         result.usage().byModel() == [
@@ -91,7 +91,7 @@ class StreamJsonReferenceDumpSpec extends Specification {
         def events = parser.parse(readerOf('judge-verdict'))
 
         when: 'the round result is extracted'
-        def result = extractor.extract(events, events.last().readAt())
+        def result = ExtractedRound.of(extractor, events, events.last().readAt())
 
         then: 'the raw fenced verdict text is carried through unparsed — verdict extraction is the judge adapter\'s job (task 7.4), not the parser\'s'
         result.result().forConsole() == '```json\n{"passed": true, "findings": []}\n```'
@@ -121,7 +121,7 @@ class StreamJsonReferenceDumpSpec extends Specification {
         resultEvent.usage() != null
 
         when: 'the round result is extracted'
-        def result = extractor.extract(events, events.last().readAt())
+        def result = ExtractedRound.of(extractor, events, events.last().readAt())
 
         then: 'tokensByModel falls back to a single entry keyed by the init event\'s main model, from the flat usage fields'
         ModelUsages.tokensOf(result.usage().byModel()) == [

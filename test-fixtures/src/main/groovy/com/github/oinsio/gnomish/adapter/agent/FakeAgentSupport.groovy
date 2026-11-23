@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
  * stand-in preset does both for every scenario — {@code agent}, or
  * {@code agent-judged} for the two-role binary — reached through a
  * symbolic link named after the scenario, which the preset reads as
- * {@code GNOMISH_FAKE_SCENARIO}; so a real {@code CliStageExecutor} (running the
+ * {@code GNOMISH_FAKE_SCENARIO}; so a real agent stage round (running the
  * round through the task environment port) can invoke it as a plain binary path
  * (ADR 0015: a test never writes an executable file; the operating system assesses
  * the preset's script once per checkout, not once per spawned round). The links of
@@ -186,7 +186,7 @@ final class FakeAgentSupport {
     /**
      * A one-stage {@code StageExecutor.Request} against {@code workspaceDir}, settings
      * merged into the {@code build} stage's executor settings — the fixture shape every
-     * {@code CliStageExecutor} spec here drives a round through.
+     * agent stage spec here drives a round through.
      *
      * @param workspaceDir the round's workspace, expected to already carry
      *     {@code instructions.md}

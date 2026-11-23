@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.adapter.agent.claude
 
-import com.github.oinsio.gnomish.adapter.agent.MissingResultEventException
 import com.github.oinsio.gnomish.adapter.agent.fake.FakeAgentScenarioReader
 import com.github.oinsio.gnomish.domain.engine.ModelUsages
 import com.github.oinsio.gnomish.domain.engine.TokenUsage
@@ -12,15 +11,12 @@ import java.time.Instant
 import spock.lang.Specification
 
 /**
- * AgentRoundResultExtractor: the essential/best-effort split of design D3
- * (FR4, NFR-R1, NFR-R2) applied to a round's timestamped, parsed {@link
- * AgentEvent} list — a present {@link AgentEvent.ResultEvent} yields an {@link
- * AgentRoundResult} with its text extracted, a real {@code tokensByModel} map
- * derived via {@link TokenUsageMapper} (task 3.3, FR5, D4), and a real {@code
- * tools} aggregate derived from the top-level tool trace (task 3.4, FR6);
- * an absent result event throws {@link MissingResultEventException},
- * mirroring how {@code RoundExecution} treats an executor-port throw as an
- * infrastructure failure.
+ * AgentRoundResultExtractor: the best-effort telemetry of design D3 (NFR-R2) derived from a round's
+ * timestamped, parsed {@link AgentEvent} list — a real {@code tokensByModel} map via {@link
+ * TokenUsageMapper} (task 3.3, FR5, D4) and a real {@code tools} aggregate from the top-level tool
+ * trace (task 3.4, FR6); the session id and result text beside it are read through {@link
+ * ExtractedRound}. A missing result event is the runner's judgement since task 5.1 of
+ * extract-agent-round-runner.
  */
 class AgentRoundResultExtractorSpec extends Specification {
 
@@ -34,7 +30,7 @@ class AgentRoundResultExtractorSpec extends Specification {
         def events = parser.parse(FakeAgentScenarioReader.readerOf('plain-round'))
 
         when: 'the round result is extracted'
-        def result = extractor.extract(events, events.last().readAt())
+        def result = ExtractedRound.of(extractor, events, events.last().readAt())
 
         then: 'the essential result text is surfaced'
         result.sessionId().forLog()== 'fake-session-plain-1'
@@ -56,7 +52,7 @@ class AgentRoundResultExtractorSpec extends Specification {
         def events = parser.parse(FakeAgentScenarioReader.readerOf('subagent-round'))
 
         when: 'the round result is extracted'
-        def result = extractor.extract(events, events.last().readAt())
+        def result = ExtractedRound.of(extractor, events, events.last().readAt())
 
         then: 'exactly one top-level tool call is aggregated, the nested Grep call is excluded'
         result.usage().tools().size() == 1
@@ -78,7 +74,7 @@ class AgentRoundResultExtractorSpec extends Specification {
         when: 'a synthetic result event is appended so extraction does not throw on the essential path'
         def withResult = events + new TimestampedEvent(
                 new AgentEvent.ResultEvent(UntrustedText.agent('fake-session-death-1'), 'success', UntrustedText.agent('killed'), null, null, null), roundEnd)
-        def result = extractor.extract(withResult, roundEnd)
+        def result = ExtractedRound.of(extractor, withResult, roundEnd)
 
         then: 'the orphaned Bash call is aggregated with duration measured to roundEnd, no exception'
         result.usage().tools().size() == 1
@@ -86,43 +82,20 @@ class AgentRoundResultExtractorSpec extends Specification {
         result.usage().tools()[0].totalDuration() == Duration.ofSeconds(30)
     }
 
-    // FR4, NFR-R1, D3: no result event in the stream is an infrastructure failure
-    // Scenario: executor/agent-executor / A success line without a result field is still missing
-    def "throws MissingResultEventException for the missing-result-event fixture"() {
-        given: 'the missing-result-event fixture parsed into events (stream ends without a result)'
-        def events = parser.parse(FakeAgentScenarioReader.readerOf('missing-result-event'))
+    // NFR-R2: a stream with no result event derives no token usage; whether the round failed is the
+    //     runner's judgement (RoundJudgement), no longer this class's (task 5.1 of extract-agent-round-runner)
+    def "derives no token usage for the #fixture fixture, which carries no result event"() {
+        given:
+        def events = parser.parse(FakeAgentScenarioReader.readerOf(fixture))
 
-        when: 'the round result is extracted'
-        extractor.extract(events, clock.instant())
-
-        then: 'the essential-path failure is signaled by throwing'
-        def ex = thrown(MissingResultEventException)
-        ex.message.contains('fake-session-missing-result-1')
-    }
-
-    // FR4, FR5, NFR-R1, D3, D4: garbage-output also carries no result event and fails the same way
-    def "throws MissingResultEventException for the garbage-output fixture"() {
-        given: 'the garbage-output fixture parsed into events (only init + one assistant event survive)'
-        def events = parser.parse(FakeAgentScenarioReader.readerOf('garbage-output'))
-
-        expect: 'no ResultEvent made it through the tolerant parse'
+        expect:
         events.every { !(it.event() instanceof AgentEvent.ResultEvent) }
+        extractor.usage(events, clock.instant()).byModel().isEmpty()
 
-        when: 'the round result is extracted'
-        extractor.extract(events, clock.instant())
-
-        then: 'the essential-path failure is signaled by throwing, same as a truly missing result'
-        def ex = thrown(MissingResultEventException)
-        ex.message.contains('fake-session-garbage-1')
-    }
-
-    // NFR-R1, D3: an empty event list (nothing parsed at all) throws with no init session id known
-    def "throws MissingResultEventException for an empty event list, without a session id to report"() {
-        when: 'the round result is extracted from an empty list'
-        extractor.extract([], clock.instant())
-
-        then: 'the failure is still signaled, falling back to an "unknown" session marker'
-        def ex = thrown(MissingResultEventException)
-        ex.message.contains('unknown')
+        where:
+        fixture << [
+            'missing-result-event',
+            'garbage-output'
+        ]
     }
 }

@@ -39,6 +39,7 @@ class AgentRoundRunnerSpec extends Specification {
 
     // Scenario: executor/agent-round-runner / Three roles, one runner
     // Scenario: executor/agent-round-runner / Second dialect needs no runner change
+    // Scenario: executor/agent-executor / The round waits for its drain after exit
     def "FR1, FR2: a #role request completes through the one launch, drain and read path of the fake dialect"() {
         given:
         def stdout = 'hello fake-model-1 session-9\nuse Read\n' + answerLine + 'done all good\n'

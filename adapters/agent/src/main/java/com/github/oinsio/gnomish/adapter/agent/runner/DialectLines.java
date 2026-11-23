@@ -23,7 +23,7 @@ import org.slf4j.LoggerFactory;
  * <p>The sink runs on the reader's thread; the round's thread reads {@link #events()} and reports
  * only after joining the reader.
  *
- * <p>Implements FR1, FR2, FR6, FR8, NFR-R1 of extract-agent-round-runner.
+ * <p>Implements FR1, FR2, FR6, FR8, NFR-R1 of extract-agent-round-runner; FR5, UX2 of fix-round-stdout-drain.
  *
  * @param <E> the dialect's own event type
  */
@@ -37,6 +37,7 @@ final class DialectLines<E> implements ProgressLines.Sink {
     private final StdoutCaps caps;
     private final RetainedEvents<E> retained;
     private long cutLines;
+    private final ReadVolume volume = new ReadVolume();
 
     /**
      * @param dialect the round's dialect; never null
@@ -56,6 +57,7 @@ final class DialectLines<E> implements ProgressLines.Sink {
     public void line(byte[] line, boolean cut) {
         String text = new String(line, StandardCharsets.UTF_8);
         if (text.isBlank()) {
+            volume.line(line.length, 0);
             return;
         }
         if (cut) {
@@ -63,12 +65,22 @@ final class DialectLines<E> implements ProgressLines.Sink {
         }
         ParsedLine<E> parsed = dialect.parse(text, retained.view());
         retained.add(parsed.events(), clock.instant(), line.length);
+        volume.line(line.length, parsed.events().size());
         parsed.progress().forEach(listener::onProgress);
     }
 
     /** The events the round kept, for the dialect's judgement after the reader was joined. */
     ParsedEvents<E> events() {
         return retained.view();
+    }
+
+    /**
+     * What the round read, as a broken round's reason names it (FR5, UX2 of fix-round-stdout-drain).
+     *
+     * @return the clause; never null
+     */
+    String volume() {
+        return volume.clause();
     }
 
     /**

@@ -21,8 +21,8 @@ final class InfrastructureResults {
         failed
     }
 
-    /** Whether the result is an infrastructure failure whose reason names {@code type}. */
-    static boolean endedBy(ExecutionResult result, Class<? extends Throwable> type) {
-        of(result).reason().contains(type.name + ':')
+    /** Whether the result is an infrastructure failure whose reason says {@code words}. */
+    static boolean endedSaying(ExecutionResult result, String words) {
+        of(result).reason().contains(words)
     }
 }

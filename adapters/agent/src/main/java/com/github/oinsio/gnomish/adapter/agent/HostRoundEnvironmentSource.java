@@ -54,7 +54,8 @@ import java.util.Optional;
  * @param clock the exec start-instant source; never null
  * @param childEnv the run's layered child-env allowlist (D6, FR9); never null
  */
-record HostRoundEnvironmentSource(InstantSource clock, ChildEnvAllowlist childEnv) implements RoundEnvironmentSource {
+public record HostRoundEnvironmentSource(InstantSource clock, ChildEnvAllowlist childEnv)
+        implements RoundEnvironmentSource {
 
     /** The executor word the host round's answer file is named after in its scratch area. */
     private static final String ANSWER_NAME = "agent-cli";

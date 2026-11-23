@@ -7,8 +7,8 @@ import spock.lang.Specification
  * FR7, D10 of add-agent-executor: the factory subscribes one listener to its agent rounds, the
  * shipped SLF4J renderer, and nothing else. A listener is a constructor argument of the {@code claude}
  * entry's runner construction, which every agent stage round (task 5.1a of extract-agent-round-runner)
- * and a judge check's round (task 4.1) run on, and of the CLI stage adapter task 5.1 deletes, which no
- * production path builds any more, so the subscription is a construction site in production code; this scan finds every
+ * and a judge check's round (task 4.1) run on — the CLI stage adapter left with task 5.1 — so the
+ * subscription is a construction site in production code; this scan finds every
  * one in the whole tree and reads the listener it passes. A second subscriber (a console, a
  * metrics hook) would have to be a new argument here, and fails the gate instead of passing as a
  * green wiring nobody asked for.
@@ -23,7 +23,6 @@ class ProgressListenerWiringSpec extends Specification {
     static final String RENDERER = 'new LoggingAgentProgressListener()'
     /** Each construction, with the index of its listener argument. */
     static final Map<String, Integer> ADAPTERS = [
-        'new CliStageExecutor(': 2,
         'new AgentRunners<>(': 2
     ]
 
@@ -66,7 +65,6 @@ class ProgressListenerWiringSpec extends Specification {
     }
 
     // FR7, D10: every round and vote the factory wires is subscribed to the renderer alone
-    // Scenario: executor/agent-executor / The log renderer is the one shipped listener
     def "FR7, D10: every production construction of a CLI adapter subscribes the SLF4J renderer and no other listener"() {
         when:
         def sites = constructions()

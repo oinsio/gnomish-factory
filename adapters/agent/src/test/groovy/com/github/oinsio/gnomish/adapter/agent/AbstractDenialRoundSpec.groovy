@@ -38,9 +38,8 @@ abstract class AbstractDenialRoundSpec extends Specification {
     }
 
     protected StageExecutor executorFor(String scenario, RoundEnvironmentSource source) {
-        new CliStageExecutor(
-                FakeAgentSupport.propertiesFor(scenario), clock,
-                { AgentProgressEvent e -> } as AgentProgressListener, ChildEnvAllowlist.none(), LAW, source)
+        ClaudeStages.executor(FakeAgentSupport.propertiesFor(scenario), clock, LAW,
+                { AgentProgressEvent e -> } as AgentProgressListener, ChildEnvAllowlist.none(), source)
     }
 
     // Delegates to FakeAgentSupport#requestFor, the single owner of this fixture shape.

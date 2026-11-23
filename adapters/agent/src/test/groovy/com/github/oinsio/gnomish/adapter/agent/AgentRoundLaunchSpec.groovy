@@ -4,14 +4,12 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.agent.claude.ClaudeEnvironment
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.domain.engine.CheckRef
 import com.github.oinsio.gnomish.domain.engine.CheckResult
 import com.github.oinsio.gnomish.domain.engine.ExecutionResult
 import com.github.oinsio.gnomish.domain.engine.Finding
 import com.github.oinsio.gnomish.domain.engine.Verdict
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.engine.port.StageExecutor
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ExecCommand
@@ -26,8 +24,8 @@ import spock.lang.TempDir
 /**
  * What each role actually hands the environment port when it launches a round: the command line,
  * the stdin, and the environment of the {@link ExecCommand}, captured as the production consumer
- * ({@link CliStageExecutor}) builds it — the judge's request is the agent round runner's, pinned by
- * its own specs since task 4.1 of extract-agent-round-runner — over a box that plays a
+ * builds it — the {@code claude} entry's stage half, the agent round runner with the Claude dialect,
+ * through the shared round wrapper ({@link ClaudeStages}; task 5.1 of extract-agent-round-runner) — over a box that plays a
  * fake-agent scenario's stdout. Mode-independent by construction: the same command reaches the
  * host environment and the container environment alike, which is the point of the port.
  *
@@ -48,7 +46,7 @@ class AgentRoundLaunchSpec extends Specification {
     /** The factory's values: every seam variable planted, beside a variable the seam never names. */
     static final Map<String, String> FACTORY_VALUES = ClaudeEnvironment.CREDENTIALS.collectEntries {
         [(it): "value-of-${it}".toString()]
-    } + [AWS_SECRET_ACCESS_KEY: 'never']
+    } + [ANTHROPIC_BASE_URL: 'https://gateway.example.test', AWS_SECRET_ACCESS_KEY: 'never']
 
     /** The run's allowlist over {@link #FACTORY_VALUES} — what the root binds to the secrets port. */
     final ChildEnvAllowlist childEnv = ChildEnvAllowlist.of([], [], TestChildEnvironment.valuesOf(FACTORY_VALUES))
@@ -64,10 +62,8 @@ class AgentRoundLaunchSpec extends Specification {
     }
 
     private ExecutionResult executorRound(StageExecutor.Request request) {
-        RoundEnvironmentSource rounds = [openRound: { req ->
-                new StandInRound(box('plain-round'), workspaceDir.resolve('decision.json'))
-            }, identity: { RoundIdentity.inPlace() }] as RoundEnvironmentSource
-        new CliStageExecutor(PROPERTIES, new VirtualClock(), { e -> } as AgentProgressListener, childEnv, LAW, rounds).execute(request)
+        ClaudeStages.executor(PROPERTIES, new VirtualClock(), LAW, { e -> } as AgentProgressListener, childEnv,
+        StandInRound.over(box('plain-round'), workspaceDir.resolve('decision.json'))).execute(request)
     }
 
     private StageExecutor.Request retry(String finding) {
@@ -79,10 +75,6 @@ class AgentRoundLaunchSpec extends Specification {
             ]), Duration.ZERO)
         ]
         new StageExecutor.Request(first.context(), first.stage(), first.workspace(), 1, feedback)
-    }
-
-    private static boolean carriesPair(List<String> argv, String flag, String value) {
-        (0..<argv.size() - 1).any { argv[it] == flag && argv[it + 1] == value }
     }
 
     // FR1, D2: a retry is one more fresh process — no resume of the previous session — whose prompt
@@ -126,16 +118,6 @@ class AgentRoundLaunchSpec extends Specification {
                     !line.contains('a finding the command line must not show') && !line.contains(CRITERIA) &&
                     !line.contains('Do the thing.') && !line.contains('Task goal')
         }
-    }
-
-    // FR1, FR8, D7: the model is manifest data, rendered as --model for each role
-    // Scenario: executor/agent-executor / The model is manifest data, not a setting
-    def "D7: the stage's executor.model reaches the command line as --model"() {
-        when:
-        executorRound(FakeAgentSupport.requestFor(workspaceDir))
-
-        then:
-        carriesPair(launched[0].command(), '--model', 'claude-fake-main-1')
     }
 
     // FR5 of fix-operator-blockers: both roles hand the port the seam the factory's values hold;

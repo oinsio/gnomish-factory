@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * round always runs inside that MDC scope — so this listener does not set MDC
  * itself; it only logs. Since fix-round-stdout-drain the calling thread is the
  * round's stdout drain rather than the round thread, and MDC is thread-local:
- * {@link StreamDrain} is what re-establishes the round's keys there, captured at
+ * the runner's line reader ({@link com.github.oinsio.gnomish.adapter.agent.program.ProgressLines}) is what re-establishes the round's keys there, captured at
  * launch, so these lines keep landing in the attempt's scope (D4).
  *
  * <p>One instance is shared by both the executor and judge CLI adapters (app

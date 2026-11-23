@@ -4,12 +4,10 @@ import com.github.oinsio.gnomish.FactoryProperties
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.adapter.secrets.EnvFileSecretsProvider
 import com.github.oinsio.gnomish.app.port.agent.AgentProgressListener
-import com.github.oinsio.gnomish.app.port.agent.RoundEnvironmentSource
 import com.github.oinsio.gnomish.app.project.FactoryHome
 import com.github.oinsio.gnomish.app.project.ProjectLayout
 import com.github.oinsio.gnomish.app.project.ProjectName
 import com.github.oinsio.gnomish.domain.engine.fake.VirtualClock
-import com.github.oinsio.gnomish.domain.engine.port.RoundIdentity
 import com.github.oinsio.gnomish.domain.pipeline.VerifyCheck
 import com.github.oinsio.gnomish.sandbox.ChildEnvAllowlist
 import com.github.oinsio.gnomish.sandbox.ChildEnvValues
@@ -96,10 +94,8 @@ class AgentSecretsFolderRoundSpec extends Specification {
 
     private void executorRound(ChildEnvAllowlist childEnv) {
         Path workspaceDir = Files.createTempDirectory(tempDir, 'round')
-        RoundEnvironmentSource rounds = [openRound: { req ->
-                new StandInRound(box('plain-round'), workspaceDir.resolve('decision.json'))
-            }, identity: { RoundIdentity.inPlace() }] as RoundEnvironmentSource
-        new CliStageExecutor(PROPERTIES, new VirtualClock(), { e -> } as AgentProgressListener, childEnv, LAW, rounds)
+        ClaudeStages.executor(PROPERTIES, new VirtualClock(), LAW, { e -> } as AgentProgressListener, childEnv,
+        StandInRound.over(box('plain-round'), workspaceDir.resolve('decision.json')))
         .execute(FakeAgentSupport.requestFor(workspaceDir))
     }
 }

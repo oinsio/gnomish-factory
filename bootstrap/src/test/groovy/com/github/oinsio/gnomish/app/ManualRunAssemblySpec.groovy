@@ -96,7 +96,7 @@ class ManualRunAssemblySpec extends Specification implements AppAssemblyFixture 
         run.ports().executor().class == CheckRoundRoute
     }
 
-    // FR7, NFR-O1, UX1, D10, task 9.4: the wired CliStageExecutor's rounds reach the shared
+    // FR7, NFR-O1, UX1, D10, task 9.4: the wired claude entry's rounds reach the shared
     // SLF4J renderer — proven end to end against the fake agent binary's plain-round scenario.
     def "the wired CLI stage executor's round reaches the renderer"() {
         given:

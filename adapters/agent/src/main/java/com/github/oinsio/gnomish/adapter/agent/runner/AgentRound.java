@@ -162,8 +162,13 @@ final class AgentRound<E> {
             return judgement.exited(exited, lines, answerFile, time.clock().instant());
         }
         return switch (end) {
+            // An interrupt that cut the wait for the reader is the round's interruption, never the
+            // bound's expiry (FR6 of fix-round-stdout-drain): the reader's wait keeps the flag set.
             case ProgramEnd.Exited ignored ->
-                judgement.failure("its stdout did not end within the post-exit bound of " + handle.postExitBound());
+                Thread.currentThread().isInterrupted()
+                        ? judgement.failure("the round was interrupted while its stdout was still being read")
+                        : judgement.failure(
+                                "its stdout did not end within the post-exit bound of " + handle.postExitBound());
             case ProgramEnd.BoundExpired expired ->
                 judgement.failure("the " + expired.bound() + " bound of " + expired.value()
                         + " expired and its process tree was killed");

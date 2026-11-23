@@ -12,10 +12,11 @@ import spock.lang.Specification
  * and the check half ({@code ProgramCheckBinding}, over the fresh box of one request) — and the check
  * half of the {@code claude} entry ({@code AgentCheckBinding}, over the fresh box or the host
  * environment of one request; task 4.0a), whose stage half runs through the same stage wrapper. {@code
- * probeGuard(} is spelled in production only by the owner, by the environment types that declare or
- * forward it, and by one dated caller that predates the owner, deleted by a named task: the agent
- * stage round ({@code ExecutorRoundExecution}, task 5.1). The judge round's own probe left with it
- * (task 4.1): a judge check is a check round of the {@code claude} entry's check half. The decorator is applied by its three binding sites alone, the one
+ * probeGuard(} is spelled in production only by the owner and by the environment types that declare or
+ * forward it (M6): the two callers that predated the owner left with their round classes — the judge
+ * round's with task 4.1 (a judge check is a check round of the {@code claude} entry's check half), the
+ * agent stage round's ({@code ExecutorRoundExecution}) with task 5.1, since every agent stage round runs
+ * through the stage wrapper. The decorator is applied by its three binding sites alone, the one
  * caller of a round-executor factory's binding hands the bound executor straight to it, and an agent
  * runner is bound only by the agent entry's two halves — the check half straight into the decorator, the
  * stage half as a round-executor factory's binding — so no binding site hands out an executor bound to
@@ -41,8 +42,6 @@ class GuardProbeOwnerSpec extends Specification {
     private static final String LEASED =
     'sandbox/docker/src/main/java/com/github/oinsio/gnomish/sandbox/environment/LeasedEnvironment.java'
     private static final String OBSERVED = 'bootstrap/src/main/java/com/github/oinsio/gnomish/app/conformance/WireObservation.java'
-    /** Dated: the agent stage round probes for itself until task 5.1 deletes it. */
-    private static final String AGENT_ROUND = AGENT + 'ExecutorRoundExecution.java'
 
     @Shared
     List<File> sources = RepoSourceTree.productionSources()
@@ -61,8 +60,7 @@ class GuardProbeOwnerSpec extends Specification {
             DECLARED,
             SELF_CHECKED,
             LEASED,
-            OBSERVED,
-            AGENT_ROUND
+            OBSERVED
         ])
     }
 
@@ -80,14 +78,13 @@ class GuardProbeOwnerSpec extends Specification {
 
         where:
         form || owners
-        // the owner, the environment types that declare or forward it, and the dated row
+        // the owner and the environment types that declare or forward it (M6)
         'probeGuard(' || [
             OWNER,
             DECLARED,
             SELF_CHECKED,
             LEASED,
-            OBSERVED,
-            AGENT_ROUND
+            OBSERVED
         ]
         // the decorator is applied where the stage half and the check halves bind, and nowhere else
         'GuardedExecutor.over(' || [

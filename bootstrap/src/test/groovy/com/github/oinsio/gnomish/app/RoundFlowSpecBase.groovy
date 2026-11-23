@@ -1,7 +1,7 @@
 package com.github.oinsio.gnomish.app
 
 import com.github.oinsio.gnomish.FactoryProperties
-import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
+import com.github.oinsio.gnomish.adapter.agent.HostRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.agent.FakeAgentSupport
 import com.github.oinsio.gnomish.adapter.check.http.HttpRunContext
 import com.github.oinsio.gnomish.adapter.git.BareGitRepoFixture
@@ -134,7 +134,7 @@ abstract class RoundFlowSpecBase extends Specification implements BareGitRepoFix
         // shared by the round source, the snapshot and the persistence.
         def cell = new CurrentRound()
         def hostGit = TaskGitFixture.real(runner).midRoundPush()
-        def rounds = hostGit.decorate(CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()), cell)
+        def rounds = hostGit.decorate(new HostRoundEnvironmentSource(clock, TestChildEnvironment.hostAllowlist()), cell)
         def executor = hostGit.snapshotting(ClaudeStageFixture.executor(agent, clock, TestChildEnvironment.hostAllowlist(), LAW, rounds, cell), cell)
         engine(definition, CheckRouting.of(executor, checks),
                 new GitAttemptPersistence(runner, worktree, TASK, ClaimEpochSource.NONE, cell, clock), worktree, rounds.identity())

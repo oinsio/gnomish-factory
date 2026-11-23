@@ -8,7 +8,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Where a {@code CliStageExecutor} round gets its execution environment and
+ * Where a stage round of any registry entry (the shared round wrapper, {@code
+ * ProgramStageExecutor}) gets its execution environment and
  * answer file (the sandbox integration pass of add-sandbox-core): the host
  * default builds a {@code HostTaskExecutionEnvironment} over the {@code
  * DirectoryWorkspace} root with the answer file in that environment's scratch

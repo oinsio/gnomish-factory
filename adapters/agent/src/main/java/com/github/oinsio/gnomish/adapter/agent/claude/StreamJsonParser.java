@@ -126,7 +126,7 @@ public final class StreamJsonParser {
     /**
      * The same loop as {@link #parse}, appending each recognized event to
      * {@code sink} as its line is read rather than returning a list at the end
-     * (FR1 of fix-round-stdout-drain). {@link com.github.oinsio.gnomish.adapter.agent.StreamDrain} runs this on its own
+     * (FR1 of fix-round-stdout-drain). A caller may run this on its own
      * thread with a thread-safe {@code sink}, so the events parsed so far are
      * published as they arrive instead of only on a clean end-of-stream — which
      * is also what leaves a partially-read stream's events in place when the

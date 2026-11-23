@@ -36,7 +36,6 @@ class RoundBoundsOwnerSpec extends Specification {
     private static final String OWNER = RUNNER + 'RoundBounds.java'
     private static final String ROUND = RUNNER + 'AgentRound.java'
     private static final String COMMAND = AGENT + 'command/CommandStageExecutor.java'
-    private static final String EXECUTOR_ROUND = AGENT + 'ExecutorRoundExecution.java'
     private static final String PROGRAM_WAIT = AGENT + 'program/ProgramInvocation.java'
     private static final String SHAPES = 'adapters/src/main/java/com/github/oinsio/gnomish/adapter/settings/RoundTimeout.java'
     private static final String PREDICATE = 'application/src/main/java/com/github/oinsio/gnomish/app/describe/QuietStdoutBounds.java'
@@ -58,7 +57,6 @@ class RoundBoundsOwnerSpec extends Specification {
             OWNER,
             ROUND,
             COMMAND,
-            EXECUTOR_ROUND,
             PROGRAM_WAIT,
             SHAPES,
             PREDICATE,
@@ -90,10 +88,7 @@ class RoundBoundsOwnerSpec extends Specification {
         // every consumer of the resolution, as the design's row lists it
         'RoundBounds.of(' || [ROUND]
         // (a judge's request is an agent round since task 4.1: through RoundBounds.of in AgentRound)
-        'RoundBounds.overall(' || [
-            COMMAND,
-            EXECUTOR_ROUND
-        ]
+        'RoundBounds.overall(' || [COMMAND]
         // the agent round's wait is built over the resolved bounds; the program executor's over the factory's
         'new ProgressWait(' || [OWNER, PROGRAM_WAIT]
         '.hinted(' || [ROUND]

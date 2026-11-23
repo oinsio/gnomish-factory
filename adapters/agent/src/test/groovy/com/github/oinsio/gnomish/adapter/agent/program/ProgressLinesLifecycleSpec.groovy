@@ -37,14 +37,18 @@ class ProgressLinesLifecycleSpec extends Specification {
         !lines.ended()
     }
 
-    // NFR-R2: the owner's stop ends the reader, and the wait sees it
-    def "NFR-R2: a stopped reader ends, and a wait reports it"() {
+    // NFR-R2: the owner's stop ends the reader, and the wait sees it; the reader of a live child whose
+    //     pipe holds nothing waited on its own tick and never issued a read (the agent round runner's
+    //     reader since task 5.1 of extract-agent-round-runner)
+    // Scenario: lifecycle/subprocess-supervision / No read is issued for bytes that are not there
+    def "NFR-R2: a stopped reader ends, and a wait reports it, having issued no read of an empty pipe"() {
         when:
         lines.close()
 
         then:
         lines.endsWithin(Duration.ofSeconds(10))
         lines.ended()
+        live.stdoutPipe().reads() == 0
     }
 
     // NFR-R2: a reader still reading at its post-exit bound is stopped and reported unfinished

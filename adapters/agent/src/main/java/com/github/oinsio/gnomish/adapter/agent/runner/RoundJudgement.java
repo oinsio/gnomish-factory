@@ -104,7 +104,7 @@ final class RoundJudgement<E> {
                         usage,
                         List.of());
             case RoundStatus.Broken broken ->
-                failure("exited " + exited.exitCode() + ": " + broken.reason().excerpt(512))
+                failure("exited " + exited.exitCode() + ": " + broken.reason().excerpt(512) + lines.volume())
                         .withUsage(usage);
         };
     }

@@ -14,15 +14,15 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * D17, NFR-S1 of add-tracker-port; FR9, D6 of add-sandbox-core: {@link CliStageExecutor}'s
- * allowlist constructor threads the {@link ChildEnvAllowlist} into the {@code
+ * D17, NFR-S1 of add-tracker-port; FR9, D6 of add-sandbox-core: the agent stage executor's
+ * allowlist ({@link ClaudeStages}; task 5.1 of extract-agent-round-runner) threads the {@link ChildEnvAllowlist} into the {@code
  * HostTaskExecutionEnvironment} it runs each round through, which composes the child environment
  * as base ∪ passthrough ∪ factory-set with declared credential names excluded — a focused
  * unit-level proof, one rung below {@code TakeCommandCredentialScrubSpec}'s full {@code
  * take}-flavored end-to-end wiring proof. HOME doubles as the observable credential: it sits in
  * the host base set, so its absence can only come from the credential exclusion.
  */
-class CliStageExecutorCredentialScrubSpec extends Specification {
+class ClaudeStageCredentialScrubSpec extends Specification {
 
     private static final String CREDENTIAL_VAR = 'HOME'
 
@@ -69,12 +69,8 @@ class CliStageExecutorCredentialScrubSpec extends Specification {
     // Scenario: tracker/tracker-port / Gnome never transitions
     def "a declared credential in the allowlist never reaches the spawned process"() {
         given:
-        def executor = new CliStageExecutor(
-                wrapperReporting(),
-                clock,
-                { event -> } as AgentProgressListener,
-                TestChildEnvironment.hostAllowlist([], [CREDENTIAL_VAR]),
-                LAW)
+        def executor = ClaudeStages.executor(wrapperReporting(), clock, LAW, { event -> } as AgentProgressListener,
+        TestChildEnvironment.hostAllowlist([], [CREDENTIAL_VAR]))
 
         when:
         executor.execute(requestFor(workspaceDir))
@@ -85,8 +81,8 @@ class CliStageExecutorCredentialScrubSpec extends Specification {
 
     def "with nothing declared, the same base variable reaches the spawned process"() {
         given:
-        def executor = new CliStageExecutor(
-                wrapperReporting(), clock, { event -> } as AgentProgressListener, TestChildEnvironment.hostAllowlist(), LAW)
+        def executor = ClaudeStages.executor(wrapperReporting(), clock, LAW, { event -> } as AgentProgressListener,
+        TestChildEnvironment.hostAllowlist())
 
         when:
         executor.execute(requestFor(workspaceDir))

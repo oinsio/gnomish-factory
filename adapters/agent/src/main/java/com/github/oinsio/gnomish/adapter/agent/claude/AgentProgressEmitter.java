@@ -22,8 +22,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>The events it emits are vendor-neutral (FR6 of extract-agent-round-runner): the init event's
  * session id and the result event's subtype stay on the {@link AgentEvent}s this class reads and
- * never reach a listener — the session id is the round's continuation key (design D4 of that
- * change), carried on {@link com.github.oinsio.gnomish.adapter.agent.AgentRoundResult}.
+ * never reach a listener.
  *
  * <p>Implements FR1, FR3, NFR-O1 of fix-oversized-adapters; FR6 of extract-agent-round-runner.
  */

@@ -1,6 +1,6 @@
 package com.github.oinsio.gnomish.adapter.agent.program
 
-import com.github.oinsio.gnomish.adapter.agent.CliStageExecutor
+import com.github.oinsio.gnomish.adapter.agent.HostRoundEnvironmentSource
 import com.github.oinsio.gnomish.adapter.law.PipelineLaw
 import com.github.oinsio.gnomish.app.describe.ProgramBounds
 import com.github.oinsio.gnomish.app.workspace.DirectoryWorkspace
@@ -75,12 +75,12 @@ class ProgramRoundLedgerSpec extends Specification {
                         PipelineLaw.ofContent(['instructions.md': 'build it\n']), described,
                         ProgramFixtures.equipment(stderrParent, ProgramBounds.DEFAULTS, VirtualTimeEquipment.on(clock)),
                         new PendingRuns()),
-                CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()))
+                new HostRoundEnvironmentSource(clock, TestChildEnvironment.hostAllowlist()))
         def versions = new DescribedExecutors(
                 new ExecutorVersions([acme: UntrustedText.subprocess('1')]), ExecutorCredentialNames.none())
         def ports = new EnginePorts(CheckRouting.of(executor, new ScriptedCheckRounds(), new ScriptedCheckRounds(), new ScriptedCheckRounds()), writer, new InMemoryAttemptPersistence(),
                 VirtualTimeEquipment.on(clock), AttemptDelivery.assumedDelivered(), versions,
-                CliStageExecutor.hostRounds(clock, TestChildEnvironment.hostAllowlist()).identity())
+                new HostRoundEnvironmentSource(clock, TestChildEnvironment.hostAllowlist()).identity())
         new Engine().run(new PipelineDefinition('1', new AutonomyLimits(1), [ProgramFixtures.stage()]),
         new TaskContext('TASK-7', UntrustedText.tracker('title'), UntrustedText.tracker('body'), []),
         TaskState.atStageStart('build'), new DirectoryWorkspace(workspace), ports)

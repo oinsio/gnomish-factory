@@ -20,7 +20,7 @@ import spock.lang.TempDir
 
 /**
  * NFR-S2 of add-git-workflow (task 4.5): git-mode workspace hygiene. Runs a real {@code
- * CliStageExecutor} round (fake agent binary, {@code plain-round} scenario, task 9's fixture)
+ * claude} stage round (fake agent binary, {@code plain-round} scenario, task 9's fixture)
  * through {@link GitModeRunner} against a real worktree, then inspects the round commit's tree
  * and the worktree's final state to prove the round contains only the gnome's own change
  * ({@code output.txt}) plus {@code .gnomish-task/} — no round scratch area (where a host round's

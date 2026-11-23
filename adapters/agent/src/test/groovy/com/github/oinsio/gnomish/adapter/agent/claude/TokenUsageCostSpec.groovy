@@ -35,7 +35,7 @@ class TokenUsageCostSpec extends Specification {
         ])
 
         when: "the round's result is extracted"
-        def usage = new AgentRoundResultExtractor().extract([event(init), event(result)], Instant.EPOCH).usage()
+        def usage = new AgentRoundResultExtractor().usage([event(init), event(result)], Instant.EPOCH)
 
         then: 'the priced model carries its cost as the CLI wrote it, the other carries no cost'
         usage.byModel() == [

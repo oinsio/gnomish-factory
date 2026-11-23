@@ -47,14 +47,14 @@ class StreamJsonErrorResultSpec extends Specification {
     }
 
     // Scenario: executor/agent-executor / Limit-ended round carries its result event
-    def "FR4: a round ended on the turn limit extracts a result instead of throwing MissingResultEventException"() {
+    def "FR4: a round ended on the turn limit extracts a result and its usage"() {
         given: 'an init line and the turn-limit result line'
         def events = parser.parse(readerOf(
                         '{"type":"system","subtype":"init","session_id":"sess-1","model":"claude-x"}',
                         '{"type":"result","subtype":"error_max_turns","is_error":true,"session_id":"sess-1"}'))
 
         when:
-        def result = extractor.extract(events, events.last().readAt())
+        def result = ExtractedRound.of(extractor, events, events.last().readAt())
 
         then:
         noExceptionThrown()

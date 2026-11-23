@@ -20,7 +20,7 @@ import org.slf4j.LoggerFactory;
  * verbatim, never duplicating their precondition or push logic).
  *
  * <p><b>Lifecycle: one instance per round.</b> A fresh {@link MidRoundPushListener} is meant to be
- * constructed right before one {@code CliStageExecutor.execute()} call (one round) and discarded
+ * constructed right before one stage round (one {@code openRound}) and discarded
  * right after — mirroring how {@code com.github.oinsio.gnomish.adapter.agent.claude.StreamJsonParser
  * #parse} itself is invoked once per round (module {@code :adapters:agent}, out of this module's
  * reach). The "last observed tip" baseline is the round's token — the worktree tip the round

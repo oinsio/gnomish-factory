@@ -1,6 +1,5 @@
 package com.github.oinsio.gnomish.architecture
 
-import com.github.oinsio.gnomish.adapter.agent.MissingResultEventException
 import com.github.oinsio.gnomish.adapter.git.BranchStateFileMissingException
 import com.github.oinsio.gnomish.adapter.git.GitPersistFailedException
 import com.github.oinsio.gnomish.adapter.git.GitResyncFailedException
@@ -224,23 +223,6 @@ class TypedExceptionMessageSpec extends Specification {
                 { String raw -> UntrustedText.container(raw) },
                 { UntrustedText carried ->
                     new SelfCheckFailedException('non-root', 'could not read the in-box uid, output', carried)
-                }
-            ],
-            [
-                'MissingResultEventException',
-                { String raw -> UntrustedText.agent(raw) },
-                { UntrustedText carried ->
-                    new MissingResultEventException(carried)
-                }
-            ],
-            [
-                // The read-volume arm is the one production takes when the drain kept byte
-                // accounting; it appends factory prose after the carrier, so the carrier's
-                // rendering must still survive byte for byte rather than being re-flattened.
-                'MissingResultEventException (read volume)',
-                { String raw -> UntrustedText.agent(raw) },
-                { UntrustedText carried ->
-                    new MissingResultEventException(carried, 65_528L, 3)
                 }
             ],
             [

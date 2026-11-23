@@ -22,7 +22,7 @@ import spock.lang.Specification
 import spock.lang.TempDir
 
 /**
- * Agent-raised decision round-trip, task 9.5 (FR3, UX3, D1): a real {@code CliStageExecutor}
+ * Agent-raised decision round-trip, task 9.5 (FR3, UX3, D1): a real {@code claude} stage round
  * round against the fake agent binary writes a decision file; the engine turns the unanswered
  * {@code DecisionNeeded} into {@code TaskOutcome.Escalated}; {@link RunnerOutcomeLoop} renders it
  * as an escalation stop (UX3: "rendered exactly like engine escalations"; FR1 of

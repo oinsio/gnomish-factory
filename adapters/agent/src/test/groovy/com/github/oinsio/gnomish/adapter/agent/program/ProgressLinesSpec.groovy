@@ -140,18 +140,24 @@ class ProgressLinesSpec extends Specification {
         ProgressJudge.LINE_CAP_BYTES + 1 || 1 | 'cut, so not JSON'
     }
 
-    // NFR-O2: the reader's lines carry the round's MDC, set on the thread that started it
-    def "NFR-O2: progress lines carry the round's task key from the starting thread's MDC"() {
+    // NFR-O2: the reader's lines carry the round's MDC, set on the thread that started it — the reader
+    //     thread of every program and agent round (the agent round runner's since task 5.1 of
+    //     extract-agent-round-runner)
+    // Scenario: observability/factory-logging / Pump thread keeps the task
+    def "NFR-O2: progress lines carry the round's task key, stage and attempt from the starting thread's MDC"() {
         given:
         MDC.put('taskId', 'TASK-7')
+        MDC.put('stage', 'implement')
+        MDC.put('attempt', '2')
 
         when:
         read('{"step":1}\n')
 
         then:
-        logs.list.find {
+        def mdc = logs.list.find {
             it.formattedMessage.contains('progress:')
-        }.MDCPropertyMap.taskId == 'TASK-7'
+        }.MDCPropertyMap
+        mdc.subMap(['taskId', 'stage', 'attempt']) == [taskId: 'TASK-7', stage: 'implement', attempt: '2']
 
         cleanup:
         MDC.clear()

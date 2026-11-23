@@ -10,8 +10,9 @@ import spock.lang.Specification
  * derives — and the cut flag of a capture is judged by one owner, never read and dropped by a caller.
  *
  * <p><b>M12.</b> The readers of a child's output — {@code CaptureRunner}, {@code GitExec},
- * {@code CapturedExec}, {@code BoundedCapture}, {@code BoundedTail}, {@code ContainerFileChannel}, {@code StreamDrain} (the
- * design's Drain row) — spell no unbounded join ({@code .join()} on a thread or a future) and no
+ * {@code CapturedExec}, {@code BoundedCapture}, {@code BoundedTail}, {@code ContainerFileChannel}, {@code ProgressLines} (the
+ * design's Drain row; {@code StreamDrain}, the old agent round's reader, left with task 5.1 of
+ * extract-agent-round-runner) — spell no unbounded join ({@code .join()} on a thread or a future) and no
  * {@code Duration.of…} literal, since the bound is the supervisor's or the handle's, never a
  * reader's own constant; and {@code ExecPipeDrain}, the second drain implementation task 8.12
  * deleted, appears nowhere. The allowlist of unbounded joins is empty: {@code BoundedTail}'s future
@@ -38,7 +39,7 @@ import spock.lang.Specification
 class DrainOwnerGateSpec extends Specification {
 
     /**
-     * The six readers of a child's output, each with how it takes the bytes from {@code ChildOutput},
+     * The seven readers of a child's output, each with how it takes the bytes from {@code ChildOutput},
      * the one owner of a child's readable pipe (design D1 of make-pipe-reads-non-parking). {@code
      * ChildOutputOwnerGateSpec} asserts its whole-tree scan reaches every one of them.
      */
@@ -51,7 +52,6 @@ class DrainOwnerGateSpec extends Specification {
         'sandbox/core/src/main/java/com/github/oinsio/gnomish/sandbox/BoundedCapture.java': 'drains the ExecHandle\'s ChildOutput on one capped Drain under the handle\'s bounded wait',
         'adapters/src/main/java/com/github/oinsio/gnomish/adapter/command/BoundedTail.java': 'keeps the tail of the ExecHandle\'s ChildOutput on one Drain',
         'sandbox/docker/src/main/java/com/github/oinsio/gnomish/sandbox/environment/ContainerFileChannel.java': 'drains the exec\'s stdout and stderr as ChildOutput on two Drains',
-        'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/StreamDrain.java': 'reads lines from the ChildOutput\'s stream view, the owner\'s pull form',
         // Task 7.1 of define-executor-contract: the live progress reader of a streams_progress program run;
         // task 1.2 of extract-agent-round-runner: also the agent round runner's line reader (one reader, two sinks).
         'adapters/agent/src/main/java/com/github/oinsio/gnomish/adapter/agent/program/ProgressLines.java': 'reads lines from the ChildOutput\'s stream view, the owner\'s pull form, for a progress-streaming program and an agent round',
@@ -157,7 +157,7 @@ class DrainOwnerGateSpec extends Specification {
         'a commented read' | FLAG_READ | '/* captured.truncated() */' || false
     }
 
-    /** The six readers, each asserted to exist so a moved file fails instead of leaving the scan. */
+    /** The seven readers, each asserted to exist so a moved file fails instead of leaving the scan. */
     private static List<String> readers() {
         READERS.keySet().each {
             assert new File(RepoSourceTree.repoRoot().toFile(), it).isFile(): "reader moved or deleted: $it"
