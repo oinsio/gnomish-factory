@@ -43,7 +43,9 @@ See proposal.md — Why. Constraints:
 
 **Goals:** one runner, one dialect seam (FR1, FR2); Claude as the first dialect with no behavior
 loss (FR3); judge on the contract (FR4); one executor block and one registry for every role
-(FR13, FR14); one owner of the guard probe (FR15); every pair in the module dissolved (G3).
+(FR13, FR14); one owner of the guard probe (FR15); every pair in the module dissolved but the
+round-source pair, kept across its classpath barrier (G3, D14); one owner of a round's open and
+close (FR18); one way an answer is obtained and one read of it (FR19–FR21).
 
 **Non-Goals:** out-of-process Claude (NG1), ACP (NG2), repo-policy isolation enforcement
 (NG4), a Claude round returning `pending` (NG5), cancelling an abandoned run (NG6), judge votes
@@ -109,6 +111,10 @@ decision request is a `decision-request` answer written to `GNOMISH_ANSWER_FILE`
 *Rationale:* one channel for every structured answer (verdict, select, decision request), one
 reader, and the transport pair dissolves. *Alternative rejected:* keep the decision file as a
 second channel — the third copy of a path constant the envelope change already removed once.
+*Amended 2026-11-23 (D15):* who writes the file follows the dialect's declared answer form. For
+a schema-enforced answer the runner writes the validated answer there and the agent is granted
+no path under `.gnomish-task/`; `writeExactly(path)` reaches only a dialect whose agent writes
+the file itself. "One reader" is one function for the live path and for recovery.
 
 **D4 — A decision is continued from the branch record, never from the worker.** (FR9, NFR-R2;
 amended 2026-11-21 after a decision review on the escalation of task 2.5.) The decision that
@@ -309,19 +315,23 @@ measurement does not show.
 **D7 — Sync surfaces.** Scout: `grep -rn "Kept in sync with"` and the registry.
 - `ExecutorRoundExecution` ↔ `JudgeRoundExecution`: **dissolved** into `AgentRoundRunner`
   (shared abstraction; role is a request field).
-- `HostRoundEnvironmentSource` ↔ `SandboxRoundEnvironmentSource`: **dissolved** — the runner
-  takes a `RoundEnvironment` from the one environment acquisition the verify path already
-  uses per `verifyIn`; registry row removed.
+- `HostRoundEnvironmentSource` ↔ `SandboxRoundEnvironmentSource`: **kept as a declared pair**
+  (amended 2026-11-23, D14). The first text dissolved it by deleting both and taking the
+  environment from the check acquisition; that rested on a premise the code refutes (D14). The
+  two are implementations of one port in modules with no compile edge (`adapters/agent`,
+  `adapters/git`), the barrier `manual-sync-pairs.md` asks a declared pair to name; what was
+  hand-synced between them is now pinned by one port contract spec both run (D14), and the
+  registry row is reworded to what that spec does not cover.
 - `MidRoundPushRounds` ↔ `SandboxRoundEnvironmentSource` (both in `adapters/git`, markers at both
   ends, listed under the Host/Sandbox registry row): both mint the round token once per opened
-  round through `RoundToken.of` from a `VerifiedTip`-checked tip. With the sandbox source deleted,
-  the box round's mint moves to the environment acquisition that replaces it; since both ends share
-  `adapters/git`, the pair **collapses** (preference 1) into one minting step that the host
-  decoration and the box acquisition both call, and both `Kept in sync with` markers go (task 5.2).
-  *Alternative rejected:* re-pointing `MidRoundPushRounds`' marker at the new owner — a declared
-  pair with no classpath barrier is what `manual-sync-pairs.md` forbids.
+  round through `RoundToken.of` from a `VerifiedTip`-checked tip. Both ends share `adapters/git`,
+  so the pair **collapses** (preference 1) into one minting step that the host decoration and
+  the sandbox round source both call, and both `Kept in sync with` markers go (task 5.2).
+  *Alternative rejected:* leaving the two markers — a declared pair with no classpath barrier is
+  what `manual-sync-pairs.md` forbids.
 - `DecisionFileTransport` ↔ `BranchDecisionFile`: **dissolved** (D3): one path owner, one
-  reader; registry row removed.
+  reader; registry row removed. The read the two ends shared, `DecisionRequestRead`, is deleted
+  with its fallback (D15).
 - `RoundTimeout` ↔ `AgentSettingsValidator`: **dissolved** (D6) into the one shape owner the
   command executor shares; registry row removed.
 - `GitAttemptPersistence` ↔ `EnvironmentAttemptPersistence`: **touched at both ends** (D11). The
@@ -353,6 +363,9 @@ measurement does not show.
 | The executor block (`StageDefinition.Executor` and its one mapper; D12) | who does the work: `type`, `model`, `settings`, `name` | a stage's `executor:`; a `judge` check's `executor:` (`VerifyCheck.Judge`); the arbiter's, in `add-decision-arbiter`; `StageMechanismRule`, `ExecutorReferenceRule`, `AgentSettingsValidator` and the role rule, which judge every one of them; the registry resolution by the block's name (`claude` for `agent-cli`) | `VerifyCheck.Judge`'s own `model`, `settings` and `votes`; `StageSanityRule.validateJudge`; the judge keys of `VerifyCheckDto`; the type-keyed agent arm of `ExecutorDispatch`; `Participants.JUDGE_EXECUTOR` | the judge record holds the block's type and no `model` field (compile); `ExecutorBlockOwnerSpec` (`:bootstrap`): an executor's `model` and `settings` keys are read by the one mapper only, the scan asserted reached |
 | The guard probe (the decorator over `Executor`, `adapters/agent`; D13) | a request's result, or `failed/infrastructure` naming a dead guard | every executor bound to an environment: the stage half and the check half of a `program` entry and of the `claude` entry | `probeGuard()` called by `ProgramStageExecutor`, `ExecutorRoundExecution` and `JudgeCannotVerify`, each for itself, and by no one for a check round | `GuardProbeOwnerSpec` (`:bootstrap`): `probeGuard(` in main sources only in the decorator and the environment types that declare or forward it, the allowlist asserted reached; spec: a `program` verdict check in a box with a dead guard is cannot-verify |
 | A fresh box for a verdict (`FreshBoxSource`, from `migrate-verify-to-executor-contract`) | one materialized box per check request, released when the request ends | the check half of a `program` entry (`ProgramCheckBinding`) and of the `claude` entry | `FreshJudgeEnvironments` (one box per attempt commit, shared by the votes), `JudgeEnvironmentSource`, `HostJudgeEnvironmentSource` | the types are deleted (compile); scenario "Two judge checks do not share a box" |
+| The round bracket (`RoundEnvironmentSource`, `app/port/agent`; D14) | an open round: its environment, identity, answer path, mid-round listener, close and discard | `ProgramStageExecutor`, the one round wrapper of every registry entry (`ExecutorDispatch.java:67`); the implementations `HostRoundEnvironmentSource`, `MidRoundPushRounds`, `SandboxRoundEnvironmentSource` | the planned move of these duties to the check acquisition is withdrawn; `Round.readDecision`, whose value has had no reader since task 5.1a (`ProgramStageExecutor.java:91` discards it), leaves the port | one port contract spec in `:test-fixtures` run against every implementation, the list of implementations asserted reached (M9); `CurrentRoundWriterSpec` as landed |
+| How an answer is obtained (a sealed declaration on `AgentDialect`; D15) | schema-enforced final output, or a file the agent writes | `AgentRoundRunner` (validates; writes a schema-enforced answer to the round's answer path); the dialect's policy compilation (`writeExactly` only for the file form); the prompt's answer instruction | `ClaudeAnswerSchema.of` answering "no schema" for `transform`; the answer-file instruction spelled in the vendor-neutral prompt builder | exhaustive switch over the sealed declaration; spec: no argv of a schema-form dialect grants a write under `.gnomish-task/`; `PaidSmokeStructuredAnswerSpec` for the truth of a declaration (FR22) |
+| The answer read (one function in `:application` over `ResultFileReader` and the contract's `Answer.read`; D15) | a reading: absent, a contract answer, or refused with its cause | `RoundJudgement` (the live agent round), `ProgramResultRead` (a `program` and a built-in), `BranchDecisionFile` (the box round's file), `SnapshotTipCheck` (recovery at the register); the mapping of a refused reading to the round's result is one function both the live path and the recovery call | `DecisionRequestRead` with its raw-text and empty-file fallbacks; the host round's read at close; the second parse in `ProgramResultRead.answer` | `ResultPathReadBoundarySpec` extended to the one function; identity spec `AnswerReadIdentitySpec` on a real bare origin: the same bytes give the same round outcome live and from a snapshot (NFR-R5) |
 
 **D9 — Crash consistency.** No new durable step on the decision path (the pending `transform`
 round adds one, D11): the answer file rides the snapshot/salvage
@@ -360,7 +373,11 @@ commit exactly as the decision file did. The question a decision answers (D4) ad
 either: it is read from the consumed `escalated` outcome at the registered commit, through the
 parse the resume already uses, and lands in the decision commit together with the reply
 (mutually implied fields in one commit), so no window holds a reply without its question. Kill-point specs of the decision path
-are re-pointed at the answer file.
+are re-pointed at the answer file. *Amended 2026-11-23 (D15):* a schema-enforced answer is
+written by the runner into the working copy before the round's close, so it rides the same
+snapshot or salvage commit as an agent-written file did and adds no durable step; and the
+recovery of a snapshot reads the file through the function the live round reads it through
+(item 14), which the tolerant recovery read did not.
 
 **D10 — Lock scope.** No lock added. `FreshJudgeEnvironments` is deleted with the judge path
 (D2): a judge request takes a box of its own from `FreshBoxSource`, so no box is shared between
@@ -518,6 +535,182 @@ for itself (Kubernetes KEP-753, sidecar containers; Istio `holdApplicationUntilP
 *Alternative rejected — copy the probe into `CheckRound`:* a fourth caller of a rule whose
 third already missed a path.
 
+**D14 — The round source owns a round's open and close, for every entry.** (FR18, G3; added
+2026-11-23 after the decision review of task 5.1.) In plain words: one component brackets a
+round — it gives the round its identity and its working place when it opens and puts the result
+on the task branch when it closes — and every kind of executor runs inside that bracket. Handing
+out an environment for a check is a different job and stays one.
+
+*What was wrong before.* D7 dissolved the host and sandbox round sources by deleting them, with
+the runner taking "a `RoundEnvironment` from the one environment acquisition the verify path
+already uses". Three premises, checked in code:
+- "The round source serves the agent round." Refuted: since D18 of
+  `migrate-verify-to-executor-contract`, `ExecutorDispatch.java:67` runs every entry — a
+  `program`, a `command`, the agent — through `ProgramStageExecutor` over the run's one source.
+- "The check acquisition can open a stage round." Refuted: `CheckEnvironmentSource.acquire`
+  (`CheckEnvironmentSource.java:30`) takes a `VerifyCheck.Executor` and returns an environment
+  with its release; `SandboxCheckEnvironmentSource.java:87` returns the lease's current box.
+- "A box acquisition mints the round token" (task 5.2). Refuted: the only box-side mint is
+  `SandboxRoundEnvironmentSource.java:107`.
+
+*The duties, by phase* — each stays where it is; this table is the contract the port spec pins:
+
+| Phase     | Host, in place (`HostRoundEnvironmentSource`)                                   | Host, git mode (`MidRoundPushRounds` over it)                         | Box (`SandboxRoundEnvironmentSource`)                                                                                   |
+|-----------|---------------------------------------------------------------------------------|-----------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| open      | materializes the host environment with its scratch area; names the answer path there; identity `inPlace` | mints the round token from the worktree tip into `CurrentRound`, then as in place | takes the stage's leased box; mints the token from the clone's verified branch tip into `CurrentRound`; names the answer path `EnvelopePaths.answerFile` |
+| mid-round | nothing                                                                         | `MidRoundPushListener` pushes the branch                              | `MidRoundHarvestListener` harvests under the admission rule of the round                                                |
+| close     | disposes the environment and its scratch area                                   | as in place                                                           | `EnvironmentRoundSnapshot`: the snapshot commit and its harvest, the attempt commit into `CurrentRound`                 |
+| discard   | disposes the environment                                                        | as in place                                                           | nothing: the box's file dies with the box or rides a salvage commit                                                     |
+
+*Alternative zero — delete the sources as D7 first said:* every box round loses its token, its
+mid-round harvest, its snapshot and the durable decision request, and nobody carries them; a
+silent loss of persistence with a green unit build. Rejected. *Alternative rejected — widen the
+check acquisition until it carries every round duty* (the steelman: one place hands out every
+environment, and a judge already runs in a box of its own): a check's box is fresh, read-only in
+effect and thrown away, while a round's close is a write on the task branch with kill windows of
+its own; one type would then have two lifecycles chosen by a flag, and the fresh-box rule of
+`verification-hardening` would share a class with the snapshot commit. What is kept from it: one
+`FreshBoxSource` already serves every check, and nothing is added there.
+*Comparable systems* keep the same split — a wrapper around every kind of workload turns what
+the workload wrote into the durable result, and provisioning is a separate thing: Tekton's
+`entrypoint` binary around each step, Argo Workflows' `wait` container ("saving off parameters
+and artifacts"), Buildkite's bootstrap hooks around the command, the `post` steps of a GitHub
+Actions job. The pattern is execute-around (Henney, "Executing Around Sequences"); Fowler's Unit
+of Work names the same separation of the work from the coordinator that writes it out.
+
+*The pair.* The two sources are adapters of one port in modules with no compile edge; their
+agreement was a registry row. It becomes a contract spec in `:test-fixtures`, written against
+the port and run by each implementation's module, one feature per row of the table that holds
+for every medium (an open round names an answer path and an identity; a close followed by a
+discard is refused or a no-op as the port states; a discard after an open leaves no scratch
+area) — `testing.md`, "Contract tests for every port". The registry row stays for what a port
+spec cannot hold, and names the barrier.
+
+*The rule this failure adds* (`design-decisions.md`, "A decision that deletes a class lists its
+duties"): a deletion is named by what the class does today and who calls it today, with
+`file:line`, never by the consumer it was first built for.
+
+**D15 — An agent's answer: obtained as the dialect declares, validated by the runner, read by one
+function.** (FR19–FR22, NFR-R5, NG12, NG13; added 2026-11-23, human decisions of that day.) In
+plain words: an agent that must answer in a fixed shape is asked for that shape by its own CLI,
+which sends a wrong answer back to the model while the conversation is still open. The factory
+checks the result itself, writes it where the branch keeps it, and reads it one way everywhere.
+An answer that is still wrong costs the round one attempt.
+
+*What was wrong before.* Three promises rested on the tolerant read of the decision file
+("unparseable text becomes a question with no options") and one file had two parses:
+- the main-spec scenario `executor/result-channel`, "Garbage decision file keeps its fallback",
+  no delta removed; after task 5.1a the round reads strictly (`RoundJudgement.java:119`,
+  `ProgramResultRead.java:128-137`) and the source's tolerant read is discarded
+  (`ProgramStageExecutor.java:91`);
+- this change's own scenario "Answer file read is capped" promised a decision request for an
+  over-cap file, which the strict read refuses;
+- the recovery of a snapshot still parsed tolerantly (`SnapshotTipCheck.java:181`), so the same
+  bytes gave an infrastructure failure live and a question after a kill — the second producer
+  item 14 of `crash-consistency.md` forbids;
+- the REMOVED reason of "Decision-file protocol" said its fallbacks were "restated", and they
+  were not.
+A raw-text question cannot be a contract answer: a `decision-request` holds at least two options
+(`executor-answer.schema.json:100`, `Answer.java:111`).
+
+*The decision, in four parts.*
+1. **The form is the dialect's declaration.** `AgentDialect` declares, per role, how the answer
+   is obtained: *schema-enforced* (the CLI is handed the answer's schema, returns a validated
+   object and repairs a mismatch itself) or *file* (the agent writes the answer file). Claude
+   declares schema-enforced for `transform`, `verdict` and `decision`; a `transform` reply says
+   either that the work is done or asks a decision with its options.
+2. **The runner validates and writes.** Whatever the form, the runner judges the reply against
+   the contract's answer. A valid schema-enforced answer is written by the runner to the round's
+   answer path — in a box `EnvelopePaths.answerFile`, through the environment's `putFile` —
+   before the close, so the snapshot carries it as it carried an agent-written file (the
+   admission rule permits the path, not an author: `AdmissionRule.java:46`). The agent of such a
+   dialect is granted no write under `.gnomish-task/`.
+3. **An invalid answer is the round's quality failure.** For a `transform` round: `failed/quality`
+   with one finding that names the validation error and carries a bounded, neutralized excerpt
+   of what was written; the engine burns one attempt and the next round starts with that
+   finding (`ExecutorOutcomeClassifier.java:101`). For `verdict` and `decision` the malformed
+   answer stays what FR4 says, a cannot-verify: the work under judgement is not at fault, so no
+   attempt of the stage is burned. No result event, a dead process, a subscription-limit reply
+   in place of a result, an unreachable provider: `failed/infrastructure`, as today. A `program`
+   executor is unchanged: it states its own quality failures in its result, and an answer file
+   of its that the factory cannot read is a defect of the program, `failed/infrastructure`, as
+   the conformance kit holds it.
+4. **One read.** One function in `:application` reads an answer file — absent, a contract
+   answer, or refused with its cause — for the live round, for a `program`, and for the recovery
+   of a snapshot; one function maps a refused reading to the round's result, given whether the
+   round's executor is an agent or a program, so recovery cannot classify differently from the
+   live round. `DecisionRequestRead` and both its fallbacks are deleted.
+
+*The schema's shape.* The reply schema of every role is written in the subset both schema
+families accept — the root an object, every object closed (`additionalProperties: false`) with
+all its properties required, no combinator at the root, alternatives expressed inside the
+object — because OpenAI's strict mode refuses anything else and Claude's validator accepts it. A
+constraint the subset cannot carry is still checked by the runner (part 2).
+
+*Who retries, and what it costs.* The repair runs where the conversation is: inside the CLI,
+under the CLI's own cap. The factory adds no retry of its own, so the two counters sit at two
+levels and never multiply into rounds — "retry at a single point in the stack" (AWS Builders'
+Library, "Timeouts, retries, and backoff with jitter"; Google SRE, "Handling Overload"). Worst
+case: one extra round per answer the CLI could not repair.
+
+*Alternative zero — no fallback and no repair:* an invalid answer is an infrastructure failure
+and a human returns the task (the state of HEAD after 5.1a). Per run it costs nothing; per
+invalid answer it costs a human, for a fault a retry cures. The record: the released factory
+asked the judge for JSON by prompt alone and never passed a schema; in one week of one project's
+logs 2 of 128 judge checks ended cannot-verify because the reply was prose (2026-11-17,
+2026-11-22), each returned by hand. Three other cannot-verify outcomes in the same record were
+not format faults (a subscription limit, a cut stream, an unreachable provider) and stay
+infrastructure.
+*Alternative rejected — a fallback channel beside the contract* (the escalation's option: build
+the question from raw text outside `Answer`). Steelman: it keeps the promise as written and the
+human sees the agent's words at once. It breaks on D1: the agent becomes an out-of-process
+program (NG1), and only what the wire contract carries crosses that boundary; until then it is
+a second result path whose outcomes the ledger, the kit and the usage record do not see.
+*Alternative rejected — fewer than two options in the contract:* it weakens every executor's
+contract for one sender's fault (RFC 9413, section 4.1: a tolerated flaw "can become entrenched
+as a de facto standard") and removes the gate `add-decision-arbiter` builds on (its D6). NG13.
+*Alternative rejected — a repair round run by the factory, with a budget of its own.* Steelman:
+most frameworks count format repair apart from task retries (Instructor, Pydantic AI, CrewAI,
+SWE-agent's `max_requeries`). All of them repair inside the live conversation; a fresh process
+has the raw text and no memory of the question, and would be writing the options itself. The
+separate budget they describe is the one the CLI already has. NG12.
+*Alternative rejected — repair bounded by the round's time alone:* every framework surveyed
+caps the count; the one uncounted class found, a Kubernetes Job's `Ignore`, is reserved for
+causes outside the workload.
+*What other agent CLIs do, for the next dialect:* Codex (`codex exec --output-schema`) and the
+OpenAI Agents SDK constrain the reply at the API and do not repair; Qwen Code (`--json-schema`),
+Goose and opencode validate and re-ask as Claude Code does; Gemini CLI, Cursor and Aider offer
+nothing. None guarantees the result end to end, which is why part 2 validates in every form and
+why the file form stays in the seam.
+
+*A platform fact to measure before the Claude half is built* (`design-decisions.md`, "A platform
+fact is measured on every platform CI runs"): the schema-enforced answer has run in production
+on no role. Task 5.0 measures it on macOS and in the Linux image — a `transform` round of many
+tool calls ending in a decision request, and a `verdict` on acceptance criteria that invite
+prose — and the measurement is kept as `PaidSmokeStructuredAnswerSpec` (FR22). A failure is
+reported under `spec-mismatch.md`; parts 3 and 4 do not depend on it and land first.
+
+Measured 2026-11-23 on `claude` 2.1.325 with the flags the dialect renders and `--json-schema`
+carrying a schema of the common subset, over a copy of a finished task branch of another
+project (a pnpm monorepo):
+
+| Platform | Role and round | Tool calls | Result | Reply |
+|----------|----------------|-----------|--------|-------|
+| macOS (Darwin 24.6.0) | `verdict`, the `implement` acceptance criteria whose prompted-JSON reply was malformed on 2026-11-22; `opus`, read-only policy | 26, then one `StructuredOutput` | `success`, 28 turns, 82 s | valid: `passed` false, long findings with quotes, backticks and code spans |
+| macOS (Darwin 24.6.0) | `transform`, 64 file reads and one file written, ending in a decision request; `sonnet`, workspace-write policy | 68, then one `StructuredOutput` | `success`, 70 turns, 133 s | valid: `outcome` `decision_request`, a question, three options |
+| Linux (Ubuntu 24.04.5, aarch64, container) | `verdict`, the same criteria and settings | 23, then one `StructuredOutput` | `success`, 25 turns, 35 s | valid: `passed` true, no findings |
+| Linux (the same container image) | `transform`, 62 file reads and one file written, ending in a decision request; the same settings | 69, then one `StructuredOutput` | `success`, 71 turns, 170 s | valid: `outcome` `decision_request`, a question, three options |
+
+Two facts of the mechanism, read from the stream: the CLI obtains the reply through a tool call
+of its own, `StructuredOutput`, which costs one turn of the round's turn bound; and the result
+event carries the reply twice, parsed under `structured_output` and as JSON text under
+`result`. Neither round needed a repair, so the exhausted-retries outcome
+(`error_max_structured_output_retries`) is not observed here. The Linux CLI was the one a
+sandbox image built from the base image carries, run in a container outside the factory's
+network (no guard, the image's proxy variables unset), as in D6's measurement. The two
+`verdict` rows judged one tree and disagreed on `passed`: the form of the reply is what this
+measurement covers, never the judgement.
+
 ## Risks / Trade-offs
 
 - [A non-conforming executor that refuses a superseded or ended key (K3, K4)] → the conformance
@@ -544,6 +737,14 @@ third already missed a path.
   fixtures are kept green through the refactor; the fake dialect proves the seam (M4).
 - [`--json-schema` output differs from today's parsed final text] → the Claude dialect falls
   back to final-text extraction when the CLI version lacks the flag, logged at WARN.
+- [The schema-enforced answer misbehaves on a long `transform` round, where it has never run] →
+  measured before it is built (task 5.0) and kept as a paid smoke spec (FR22); if it fails, the
+  Claude dialect declares the file form for `transform` and D15 parts 2–4 still hold.
+- [A round's work is right and only its answer is wrong, and an attempt is burned] → bounded
+  cost, never a wrong result: the working copy keeps the work, the next round reads the finding
+  and answers again. Recorded exhaustion of attempts on this alone is the pickup of NG12.
+- [The full text of an invalid answer is wanted by the human] → the finding carries a bounded
+  excerpt; a file-form answer stays in the snapshot commit, where it was written.
 - [Dropping `sessionId` from progress breaks dashboards] → its only consumers are in
   `adapters/agent` (`LoggingAgentProgressListener`, `AgentProgressEmitter`, `AgentRoundResult`,
   `AgentRoundResultExtractor`, `StreamJsonEventMapper`, `MissingResultEventException`); each is
@@ -565,7 +766,9 @@ third already missed a path.
    with both halves and no consumer (D12); the `judge` check's executor block in the loader
    (D12); then, once task 2.3b is ticked and task 2.3c has landed, the judge onto check rounds with the judge path
    deleted (D2); then the stage dispatch onto the registry with the old round classes deleted;
-   then the four registry rows.
+   then the one answer read and the quality mapping (D15, parts 3 and 4), the port contract spec
+   of the round source (D14), and — once task 5.0 is ticked — the schema-enforced `transform`
+   answer (D15, parts 1 and 2); then the three registry rows this change dissolves.
 3. Transform `pending` (D11) lands after the runner, on `PendingPoll`, `persistPending` and the
    recogniser as `migrate-verify-to-executor-contract` leaves them, adding the `Round` subject
    and the pending-round snapshot subject.

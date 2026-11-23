@@ -307,39 +307,129 @@ reach 4.1 while 2.3c is still open, stop and report that; do not switch a consum
 
 ## 5. Deletions and pair dissolution
 
-- [ ] 5.1 Delete `CliStageExecutor`, `ExecutorRoundExecution`, `HostRoundEnvironmentSource`,
-  `SandboxRoundEnvironmentSource`; the stage half of the `claude` entry (built in 4.0a) takes
-  the environment from the existing `verifyIn` acquisition, and the
-  `ExecutorRoundExecution.java:111,138` row leaves `GuardProbeOwnerSpec`, whose allowlist is
-  then the decorator and the environment types alone (M6). **Gate: 2.3b is ticked and 2.3c has landed.**
+Amended 2026-11-23 after the decision review of task 5.1 (design D14, D15; D3, D7, D8, D9 as
+amended). Read those first. Work in the order written here, not by number:
+5.1, 5.1a, 5.2, 5.4, 5.5, then 5.6 and 5.7 once the human has ticked 5.0, then 5.3.
+This stage edits no file under `.claude/`: where a task names a row of
+`.claude/rules/manual-sync-pairs.md` or a line of another rule file, record it in
+`implement.md` under "Open (for the human)" and tick the task without it.
+
+- [x] 5.0 (human) Measure the schema-enforced answer on real rounds (FR22, D15 "A platform fact
+  to measure"): on macOS and in the Linux image, a `transform` round of at least fifty tool
+  calls that ends by asking a decision, and a `verdict` on prose-inviting acceptance criteria,
+  each with `--json-schema`; record the CLI version and the outcome per row in D15. **The gnome
+  does not run this and does not tick it.** Tasks 5.1–5.5 do not wait for it; 5.6 and 5.7 do. If
+  you reach 5.6 while 5.0 is open, stop and report that
+- [ ] 5.1 The round source stays; its duties are pinned (FR18, M9, D14). The deletions of the
+  first text that are already in HEAD stand: `CliStageExecutor`, `ExecutorRoundExecution` and
+  their helpers, with the `ExecutorRoundExecution.java:111,138` row gone from
+  `GuardProbeOwnerSpec` (M6). `HostRoundEnvironmentSource` and `SandboxRoundEnvironmentSource`
+  are **not** deleted, and the stage half of the `claude` entry keeps opening its round through
+  the run's one round source, as every entry does (`ExecutorDispatch.java:67`).
+  Write the port contract spec of `RoundEnvironmentSource` in `:test-fixtures` (an abstract
+  spec, as the tracker contracts are) and run it from the module of each implementation:
+  `HostRoundEnvironmentSource`, `MidRoundPushRounds` over it, `SandboxRoundEnvironmentSource`.
+  One feature per row of D14's duty table that holds for every medium: an open round names an
+  answer path and an identity; a close ends the round's environment duties; a discard after an
+  open leaves no scratch area behind. An architecture spec in `:bootstrap` lists the main-source
+  implementations of the port and asserts each is a subject of the contract spec (M9).
+  `Round.readDecision`: its value has no reader (`ProgramStageExecutor.java:91` discards it) —
+  remove it from the port and its three implementations, or report the consumer you found; the
+  sweep is `grep -rn "readDecision" --include='*.java'` over main sources.
   `ResumeVerificationStageExecutor` is **not** deleted: it stays the one
   recovery owner of an interrupted verification (`task-branch-contract`, "An interrupted
   verification is InProgress with one recovery owner") and decorates the chain over the `claude`
   executor as it did the old arm; its pending-round subject is task 6.5. The `claude` entry's
   `transform` request carries, as its instructions, the round prompt `ExecutorPromptBuilder`
-  composes (`executor/agent-executor`, "Round prompt composition": the briefing with its
-  decisions section, the verify plan, the answer-file instruction, the rework preamble), so the
-  question and the reply of 2.5a reach the CLI's stdin unchanged; no request carries a
-  continuation (D4, NG8) (D7, D8)
+  composes (`executor/agent-executor`, "Round prompt composition"), so the question and the
+  reply of 2.5a reach the CLI's stdin unchanged; no request carries a continuation (D4, NG8)
+  (D7, D8, D14)
 - [ ] 5.1a Dispatch arm (carried from D8 and the `ExecutorRegistry` row of D10 of
   `define-executor-contract`): `ExecutorDispatch` (`:bootstrap`) sends a `program` stage to the
   registry by `executor.name` and every other stage to one type-keyed `agent-cli` arm, kept "until
   `extract-agent-round-runner` makes the agent a named executor"; with the `claude` entry of
   4.0a serving stage rounds the agent arm is deleted and an agent stage resolves through
   `ExecutorRegistry` like any other, under the reserved name (D12); the `COMMAND` arm stays
-  (design D6 of `add-command-executor`). Done together with 5.1, the switch first and the
-  deletions after it, the build green between them (D8)
-- [ ] 5.2 Remove the `ExecutorRoundExecution` ↔ `JudgeRoundExecution`, `HostRoundEnvironmentSource`
-  ↔ `SandboxRoundEnvironmentSource`, `RoundTimeout` ↔ `AgentSettingsValidator` registry rows;
-  collapse `MidRoundPushRounds` ↔ `SandboxRoundEnvironmentSource` into one round-token minting
-  step the host decoration and the box acquisition both call, and remove both markers (D7);
-  `grep -rn "Kept in sync with" adapters/agent` → zero, and no marker names a deleted class (M1)
+  (design D6 of `add-command-executor`). The switch is already in HEAD: verify it against this
+  text and tick (D8)
+- [ ] 5.2 Pairs (D7 as amended, M1). Remove the code markers of the dissolved pairs
+  (`ExecutorRoundExecution` ↔ `JudgeRoundExecution`, `RoundTimeout` ↔ `AgentSettingsValidator`)
+  where any is left. Collapse `MidRoundPushRounds` ↔ `SandboxRoundEnvironmentSource` into one
+  round-token minting step in `adapters/git` that the host decoration and the sandbox round
+  source both call (`RoundToken.of` over a `VerifiedTip`-checked tip, into `CurrentRound`), and
+  remove both `Kept in sync with` markers between those two. Keep the markers of
+  `HostRoundEnvironmentSource` ↔ `SandboxRoundEnvironmentSource` and reword both to what the
+  port contract spec of 5.1 does not hold. `grep -rn "Kept in sync with" adapters/agent` → the
+  one file `HostRoundEnvironmentSource`; no marker names a deleted class. The registry rows in
+  `.claude/rules/manual-sync-pairs.md` are the human's: list the rows to remove and the row to
+  reword in `implement.md`
+- [ ] 5.4 One read of the answer file, live and at recovery (FR21, NFR-R5, M8, D15 part 4; D8
+  row "The answer read"). Consumers, each visited: `RoundJudgement` (the live agent round),
+  `ProgramResultRead` (a `program` and a built-in), `BranchDecisionFile`, `SnapshotTipCheck`
+  (recovery at the register), `HostRoundEnvironmentSource`'s read at close. One function in
+  `:application`, over `ResultFileReader` and the contract's `Answer.read`, returns absent, a
+  contract answer, or refused with its cause; one function maps a refused reading to the round's
+  result, given whether the round's executor is an agent (5.5) or a program (unchanged:
+  `failed/infrastructure`), and the live path and the recovery both call it. Delete `DecisionRequestRead` with its
+  raw-text and empty-file fallbacks, and the operator events only they raise
+  (`DECISION_FILE_NOT_JSON`, `DECISION_FILE_EMPTY`) if the sweep shows no other writer. Old-way
+  sweep: `grep -rn "DecisionRequestRead\|RoundDecisionRequest\|readJson(" --include='*.java'`
+  over main sources, each hit routed, removed or reported. Extend `ResultPathReadBoundarySpec`
+  to the one function. Identity spec `AnswerReadIdentitySpec` on a real bare origin: the same
+  bytes at a round's answer path give the same round outcome live and from a snapshot resumed by
+  a second instance — one row a valid decision request, one row text that is not JSON
+- [ ] 5.5 An invalid `transform` answer is a quality failure (FR20, D15 part 3). In the runner's
+  judgement of an exited round: a refused reading of a `transform` answer — unparseable, empty,
+  over the cap, refused by the contract, or the dialect reporting its structured-output retries
+  exhausted — becomes `failed/quality` with one finding naming the cause and carrying a bounded
+  excerpt minted as agent text; `verdict` and `decision` keep the malformed answer of today (a
+  cannot-verify); a round with no result event, a kill on a bound, a dead process stay
+  `failed/infrastructure`. No second request is started for the round. One feature per scenario
+  of `executor/agent-round-runner`, "An invalid transform answer is a quality failure", markers
+  included, and one **flow-level** spec through the composition root's own wiring (host and
+  container) for "An unparseable answer file burns one attempt": the next attempt's prompt
+  carries the finding. The seven `Container*Spec` features red at HEAD
+  (`ContainerGitModeRunnerSpec` ×4, `ContainerResumeRunnerSpec` ×2, `ContainerTerminalDriveSpec`
+  ×1) are brought onto a contract-shaped answer or onto the new outcome, whichever the feature's
+  own subject is; none is deleted, skipped or weakened, and each is named in `implement.md` with
+  what changed
+- [ ] 5.6 The answer form is the dialect's declaration; Claude answers every role by schema
+  (FR19, FR3, D15 parts 1 and 2; D3 as amended; D8 row "How an answer is obtained"). **Gate: 5.0
+  is ticked.** Premise check first, with `file:line`: the admission of a box round permits the
+  answer path whoever wrote the file (`AdmissionRule`), and a file put into the box's working
+  copy before the close is carried by the snapshot commit; if either fails, stop under
+  `spec-mismatch.md`. Then: a sealed declaration on `AgentDialect`, per role — schema-enforced,
+  or a file the agent writes; `ClaudeAnswerSchema` gains the `transform` reply schema (done, or a
+  decision request with its question and options) and all three schemas are written in the
+  common subset (object root, closed objects, every property required, no combinator at the
+  root); `ClaudeAnswer` judges a `transform` reply as it judges the other two; the runner writes
+  a valid schema-enforced answer to the round's answer path (`putFile` in a box) before the
+  round closes; `ClaudePolicyCompiler` grants no write under `.gnomish-task/`, `writeExactly`
+  reaching only a file-form dialect (the fake dialect keeps the file form, so both forms stay
+  under spec); the prompt's answer instruction comes from the dialect and
+  `ExecutorPromptBuilder` spells neither form. One feature per scenario of
+  `executor/agent-round-runner`, "Answers are obtained as the dialect declares",
+  `executor/agent-executor`, "The answer instruction is the dialect's", and
+  `executor/claude-dialect`, "Schema-enforced answers", markers included
+- [ ] 5.7 The measurement as a spec of the paid smoke layer (FR22): `PaidSmokeStructuredAnswerSpec`
+  beside `PaidSmokeLivenessSpec`, one row per dialect declaring a schema-enforced answer, the
+  two scenarios of `executor/claude-dialect`, "Claude's schema-enforced answer holds on real
+  rounds", on macOS and in the Linux image, markers included. **Gate: 5.0 is ticked.** The spec
+  is written and compiled here; its paid run is task 7.3b
 - [ ] 5.3 Glossary: agent dialect, agent round runner, answer file; the "continuation key"
   entry updated to D4 as amended (reserved vocabulary; names state any factory instance reaches;
   no agent executor returns one; *Not:* a vendor session id); the "Decision" entry gains the
-  question it answers; update the `Executor` and `Judge` entries
+  question it answers; update the `Executor` and `Judge` entries; the "answer file" entry says who
+  writes it under each answer form and that it has one read; new entry "answer form" (D15)
 - Spec contract (`tighten-spec-contract`): this change REMOVES seven `agent-executor`
-  requirements and the `stage-engine` requirement "Judge majority voting"; their scenarios carry
+  requirements, the `stage-engine` requirement "Judge majority voting" and the
+  `executor/result-channel` requirement "Decision and findings files are result files" (its
+  markers: `grep -rn "Scenario: executor/result-channel / Garbage"`). Each REMOVED reason of the
+  two decision-file requirements and of the result-channel one names the fate of every scenario:
+  a marker of a scenario moved with its title kept stays where it is; a marker of a dropped
+  scenario goes with its test or is retargeted to the scenario named as its replacement. Every
+  scenario this amendment ADDs gets its marker with its test (tasks 5.1, 5.4–5.7). The scenarios
+  of the removed requirements carry
   `// Scenario: executor/agent-executor / <title>` and `// Scenario: pipeline/stage-engine / <title>` markers
   (find every one with grep for `Scenario: executor/agent-executor /` and
   `Scenario: pipeline/stage-engine / <removed title>`). In this same change, every marker of a
@@ -424,8 +514,12 @@ owner). Old way: the `transform` arm "a
   round, judge vote, decision request → answer → a fresh round started by a second instance whose
   recorded stdin carries the question, its options and the reply and whose recorded argv carries
   no session flag; ledger asserts
-  `executor=claude@<version>` (NFR-O1)
+  `executor=claude@<version>` (NFR-O1); and a round whose fake agent leaves an invalid
+  answer: one attempt burned, the next round's recorded stdin carries the finding (FR20)
 - [ ] 7.3 `./gradlew check` with PIT; sweep report for D8 rows; recommend a commit message
 - [ ] 7.3a (human) `./gradlew :bootstrap:paidSmokeTest --tests '*PaidSmokeLivenessSpec*' -PpaidSmoke.linuxImage=<image>`
   green on macOS and on the Linux container rows; record the CLI version and the largest gap
   per row in D6 (FR17). A gap above the threshold is reported under `spec-mismatch.md`
+- [ ] 7.3b (human) `./gradlew :bootstrap:paidSmokeTest --tests '*PaidSmokeStructuredAnswerSpec*' -PpaidSmoke.linuxImage=<image>`
+  green on macOS and on the Linux container rows; record the CLI version per row in D15 (FR22).
+  A red row is reported under `spec-mismatch.md`

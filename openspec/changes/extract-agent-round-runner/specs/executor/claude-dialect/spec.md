@@ -73,10 +73,12 @@ what the CLI honoured.
   budget bound
 
 ### Requirement: Schema-enforced answers
-For `verdict` and `decision` requests the dialect SHALL pass the answer's JSON Schema to the
-CLI (`--json-schema`) and SHALL write the validated final output to the answer file; a final
-output that fails the schema SHALL be reported as a malformed answer, never as a pass.
-**Implements**: FR3, FR4 of extract-agent-round-runner
+For a request of every role the dialect SHALL pass the reply's JSON Schema to the CLI
+(`--json-schema`), declaring the schema-enforced answer form; the validated final output SHALL
+become the answer file's content; a final output that fails the schema SHALL be reported as a
+malformed answer, never as a pass. Every reply schema SHALL have an object root, closed objects
+with all properties required, and no combinator at the root.
+**Implements**: FR3, FR4, FR19 of extract-agent-round-runner
 
 #### Scenario: Judge verdict arrives as SARIF
 - **WHEN** a `verdict` run completes
@@ -85,6 +87,34 @@ output that fails the schema SHALL be reported as a malformed answer, never as a
 #### Scenario: Malformed final output
 - **WHEN** the CLI's final output does not match the schema
 - **THEN** the result carries a malformed answer and the check resolves as cannot-verify
+
+#### Scenario: A transform reply asks a decision through the schema
+- **WHEN** a `transform` request is rendered and its round ends with a schema-valid reply that
+  asks a decision
+- **THEN** argv carries `--json-schema` with the transform reply schema, and the answer is the
+  contract's decision request with the reply's question and options
+
+#### Scenario: Every reply schema fits both schema families
+- **WHEN** the reply schema of each role is read
+- **THEN** its root is an object, every object in it sets `additionalProperties` to false and
+  lists all its properties as required, and its root holds no `anyOf`, `oneOf` or `allOf`
+
+### Requirement: Claude's schema-enforced answer holds on real rounds
+The Claude CLI, started with the argv the dialect renders, SHALL end a `transform` round of many
+tool calls that asks a decision, and a `verdict` on acceptance criteria that invite a long prose
+reply, with a schema-valid structured output, on macOS and on Linux.
+**Implements**: FR22 of extract-agent-round-runner
+
+#### Scenario: A long transform round ends with a schema-valid decision request
+- **WHEN** the real CLI runs a `transform` round of at least fifty tool calls whose instructions
+  end by requiring a decision
+- **THEN** its result event carries a structured output valid against the transform reply
+  schema, on macOS and in a Linux container
+
+#### Scenario: A verdict on prose-inviting criteria is schema-valid
+- **WHEN** the real CLI judges acceptance criteria that ask for a detailed written review
+- **THEN** its result event carries a structured output valid against the verdict reply schema,
+  on macOS and in a Linux container
 
 ### Requirement: Stream parsing preserved
 The dialect SHALL keep today's stream-json behavior: prompt on stdin, `init`, `assistant` and

@@ -44,6 +44,18 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 - **ADDED**: the egress guard's liveness probe has one owner around every request that runs in a
   box, stage round and check round alike; a `program` verdict check in a fresh box, judged
   without a probe on `main`, is covered by it (design D13).
+- **ADDED**: an agent's answer is obtained the way its dialect declares and is validated by the
+  runner (design D15, added 2026-11-23 after the decision review of task 5.1). The Claude dialect
+  answers every role, `transform` included, through the CLI's schema-enforced final output, which
+  the CLI repairs inside its live session; the runner puts the validated answer at the round's
+  answer file path. A `transform` answer that is still not a valid answer is a quality failure of
+  the round: one attempt, the validation error as its finding.
+- **MODIFIED**: the round source stays the one owner of a round's open and close for every
+  registry entry — a `program`, a `command` and the agent alike; its host and sandbox
+  implementations are kept and held to one port contract spec (design D14, added 2026-11-23).
+- **REMOVED**: the raw-text fallback of the decision file — unparseable content becoming a
+  question with no options — and its tolerant reader. The answer file has one strict read, on
+  the live path and at recovery (design D15).
 - **REMOVED**: judge votes. The `votes` key, the majority reducer (`JudgeVoting`) and the
   odd-count rule are deleted; a manifest that still carries `votes` is refused at load. Several
   opinions are several `judge` checks in the stage's `verify` list (human decision 2026-11-22).
@@ -63,8 +75,8 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   exit code and stderr are read and capped.
 - **REMOVED**: `CliStageExecutor`, `CliJudgeVoter`, `ExecutorRoundExecution`,
   `JudgeRoundExecution`, `AgentAiSeam`, `AgentSettingsValidator`'s Claude key list,
-  `AgentRole`, the host/sandbox round-environment source pair, `DecisionFileTransport` as a
-  separate channel (the decision request is the answer file).
+  `AgentRole`, `DecisionFileTransport` as a separate channel (the decision request is the
+  answer file), `DecisionRequestRead`.
 - **BREAKING** (manifest): `settings.allowedTools`/`disallowedTools` move under the executor's
   own settings schema; existing keys remain accepted by the Claude dialect's schema.
 - **BREAKING** (manifest): a `judge` check declares `executor:` (the stage's block: `type`,
@@ -76,7 +88,10 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 - G1: a second agent dialect (Codex) is one dialect class or one external program, with zero
   changes in `domain`, `application` or the runner.
 - G2: `adapters/agent` holds no role-specific round class; one runner serves three roles.
-- G3: every manual-sync pair inside `adapters/agent` and across to `adapters/git` is dissolved.
+- G3: every manual-sync pair inside `adapters/agent` and across to `adapters/git` is dissolved,
+  but one: the host and sandbox round sources stay a declared pair across the
+  `adapters/agent` – `adapters/git` classpath barrier, held in step by one port contract spec
+  (design D14).
 - G4: the arbiter (`add-decision-arbiter`) is a `decision` request to a named executor with no
   port of its own.
 - G5: a `transform` round that returns `pending` survives a factory kill at any step and is
@@ -126,6 +141,15 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   form, and no stage may edit `.gnomish/`. Pickup condition: the commit that moves
   `GNOMISH_VERSION` to a release containing this change rewrites the four manifests with it.
 
+- NG12: a repair round run by the factory, or a repair budget of the factory's own, for an
+  invalid answer (design D15, alternatives rejected). The CLI repairs inside its live session;
+  what it could not repair costs one stage attempt. Pickup condition: recorded runs in which a
+  dialect with no schema-enforced answer exhausts a stage's attempts on invalid answers alone.
+- NG13: a decision request with fewer than two options (relaxing the wire contract). Pickup
+  condition: the first executor that must ask a question whose options it cannot enumerate; the
+  contract and the arbiter's consult gate (`add-decision-arbiter`, design D6) are then decided
+  together.
+
 ## Users & Scenarios
 
 - U1 — Pipeline author: writes the same `executor:` block (`type: agent-cli`, `model`,
@@ -159,8 +183,8 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 - FR3: The Claude dialect SHALL reproduce today's observable behavior: prompt on stdin,
   stream-json parsing, per-model usage, top-level trace, `--strict-mcp-config`, permission
   mode per policy (`acceptEdits` for `workspaceWrite`, `dontAsk` for `readOnly`), decision
-  request via the answer file; and SHALL add `--json-schema` for `verdict` and `decision`
-  answers. No argv SHALL carry a session flag (`--resume`, `--continue`, `--session-id`).
+  request via the answer file; and SHALL pass `--json-schema` for the answer of every role
+  (FR19). No argv SHALL carry a session flag (`--resume`, `--continue`, `--session-id`).
 - FR4: A `judge` check SHALL be one `verdict` request to the executor its `executor:` block
   declares, run as a check round on the path every executor check takes and judged by the one
   verdict derivation; a malformed answer is cannot-verify; `JudgeVoter` is removed from
@@ -168,8 +192,8 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   several `judge` checks included, run in declaration order and stop at the first non-pass
   (amended 2026-11-22, design D2).
 - FR5: Policy SHALL be the contract's abstract policy; no engine or application type SHALL
-  name a vendor tool; `writeExactly` is used only for legacy decision-file compatibility and
-  removed when the answer file replaces it.
+  name a vendor tool; `writeExactly` is granted only to a dialect whose agent writes the answer
+  file itself (FR19).
 - FR6: Progress events SHALL carry only vendor-neutral fields (model, tool name, final summary,
   usage); the session id SHALL NOT leave the dialect package, in an event or in a result.
 - FR7: Settings of an agent executor SHALL be validated at law load against the dialect's
@@ -224,6 +248,33 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   them, the largest gap between two stdout lines SHALL be at most a fifth of the factory's
   silence bound (design D6).
 
+- FR18: The round of every registry entry — a `program`, a `command` and the agent alike — SHALL
+  be opened and closed by the run's one round source: the round's identity, its answer path, its
+  mid-round listener, its close on the task branch and its discard. The environment acquisition
+  of a check SHALL stay provisioning only. Every implementation of the round source SHALL pass
+  one contract spec (design D14).
+- FR19: A dialect SHALL declare how a round's answer is obtained: as the CLI's schema-enforced
+  final output, or as a file the agent writes. The runner SHALL validate the answer against the
+  contract in both forms and, for a schema-enforced answer, SHALL put the validated answer at
+  the round's answer file path before the round closes; the agent of such a dialect is granted
+  no write under `.gnomish-task/`. The Claude dialect SHALL declare the schema-enforced form for
+  all three roles (design D15).
+- FR20: An answer of an agent round that is not a valid answer of its role — unparseable, over the cap, refused by
+  the schema, or reported by the CLI as its structured-output retries exhausted — SHALL be, for
+  a `transform` round, `failed/quality` with one finding naming the validation error and a
+  bounded, neutralized excerpt of what was written; for a `verdict` or `decision` request it
+  stays the malformed answer of FR4. A round with no result event, a dead process or an
+  unreachable provider stays `failed/infrastructure`, and so does an invalid answer file of a
+  `program` executor, which reports its own quality failures in its result. The factory SHALL
+  run no repair round of its own and SHALL keep no repair counter (design D15).
+- FR21: The answer file of a round SHALL be read by one function, on the live path and at
+  recovery alike, and no reader SHALL turn unparseable content into a decision request
+  (design D15).
+- FR22: A dialect's declared schema-enforced answer SHALL be verified by one spec of the paid
+  smoke layer, one row per declaring dialect, on macOS and on Linux: a `transform` round of many
+  tool calls that ends by asking a decision, and a `verdict` on acceptance criteria that invite
+  a long prose reply, SHALL each end with a schema-valid answer (design D15).
+
 ### Non-Functional Reliability
 
 - NFR-R1: The runner's bounds (startup read, silence, overall) are driven on virtual time in
@@ -243,6 +294,9 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   owner's one wait path over one record — the live path from the entry it persisted, the resume
   from that entry parsed back at the register — so the round token, usage and ledger lines of a resumed round are those of the round
   that went pending (identity spec on a real bare origin).
+
+- NFR-R5: The answer file a snapshot carries, read at recovery, SHALL give the round the outcome
+  the live round would have had from the same bytes (identity spec on a real bare origin).
 
 ### Non-Functional Observability
 
@@ -275,8 +329,8 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 
 ## Success Metrics
 
-- M1: `grep -rn "Kept in sync with" adapters/agent` → zero; the four registry rows involving
-  `adapters/agent` are removed.
+- M1: `grep -rn "Kept in sync with" adapters/agent` → one file, `HostRoundEnvironmentSource`
+  (the pair D14 keeps); the three other registry rows involving `adapters/agent` are removed.
 - M2: `grep -rn "ANTHROPIC_\|stream-json\|acceptEdits" --include=*.java` → hits only in the
   Claude dialect package.
 - M3: `EnginePorts` holds exactly one executor-facing port.
@@ -290,6 +344,11 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   declarations aside → one calling file.
 - M7: no main source declares `JudgeVoting` or `JudgeVoter`, and none reads a manifest key
   `votes`.
+
+- M8: `grep -rn "DecisionRequestRead" --include='*.java'` over main sources → zero, and no main
+  source builds a decision request from unparsed text.
+- M9: every implementation of `RoundEnvironmentSource` in main sources is a subject of the one
+  port contract spec, the list asserted reached.
 
 ## Open Questions
 
@@ -314,7 +373,10 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
 
 ### Modified Capabilities
 - `agent-executor`: round mechanics, policy, settings, progress, judge move onto the contract;
-  the briefing renders a decision with the question it answers.
+  the briefing renders a decision with the question it answers; the prompt's answer instruction
+  is the dialect's.
+- `executor/result-channel`: the answer file and the findings file keep one reader each; the
+  raw-text fallback of the decision file is removed.
 - `git/git-task-persistence`: the decision commit records the question and options a decision
   answers.
 - `stage-engine`: a judge check is one verdict request; majority voting and `JudgeVoter`
@@ -334,7 +396,11 @@ the one pending-poll owner `migrate-verify-to-executor-contract` builds for `ver
   `domain/pipeline` `VerifyCheck.Judge` carries the stage's executor block in place of `model`,
   `settings` and `votes`.
 - `add-decision-arbiter` (unarchived, sequenced after this change) is amended with this change:
-  its `decisions:` section declares the arbiter with the same `executor:` block (FR13).
+  its `decisions:` section declares the arbiter with the same `executor:` block (FR13). Its
+  design D6 and its `agent-executor` delta still describe the tolerant parse ("garbage becomes a
+  raw question for the human path") and MODIFY a requirement this change REMOVES; its rebase
+  onto role `decision` rewrites both against FR20: an invalid answer never reaches a consult or
+  a human as a question, and the feedback naming the missing fields is the quality finding.
 - `domain/engine` `Decision` gains the optional question it answers; `task.json` carries it
   (`TaskJsonMapper`, read without it as before); the two decision builders (`ResumeDecisionCommit`,
   `EscalationResume`) and the briefing renderer (`BriefingSections`) follow.

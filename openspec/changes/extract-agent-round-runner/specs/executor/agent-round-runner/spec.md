@@ -102,6 +102,69 @@ be the factory's, and no settings key SHALL set them.
 - **WHEN** a judge check's executor settings declare `roundTimeout` and its request outlives it
 - **THEN** the request's process tree is killed and the check is cannot-verify
 
+### Requirement: Answers are obtained as the dialect declares
+A dialect SHALL declare, per role, whether the answer is the CLI's schema-enforced final output
+or a file the agent writes. The runner SHALL validate the answer against the contract in both
+forms, SHALL write a valid schema-enforced answer to the round's answer file path before the
+round closes, and SHALL grant the agent of such a dialect no write under `.gnomish-task/`.
+**Implements**: FR19 of extract-agent-round-runner
+
+#### Scenario: A schema-enforced decision request reaches the answer file
+- **WHEN** a `transform` round of a dialect declaring a schema-enforced answer ends with a reply
+  that asks a decision with two options
+- **THEN** the result's answer is that decision request, and the round's answer file path holds
+  it before the round closes
+
+#### Scenario: A round with no answer completes
+- **WHEN** a `transform` round ends with a reply that asks nothing, or — for a file answer —
+  with no file at its answer path
+- **THEN** the result is `completed` with no answer
+
+#### Scenario: A decision request keeps the round's usage
+- **WHEN** a round ends with a decision request
+- **THEN** the result carries the round's usage, as a `completed` result with no answer would
+
+#### Scenario: A schema-enforced dialect's agent may not write the answer file
+- **WHEN** a `transform` request of a dialect declaring a schema-enforced answer is rendered
+- **THEN** its argv grants no write to a path under `.gnomish-task/`
+
+#### Scenario: A file answer is validated by the runner
+- **WHEN** a `transform` round of a dialect declaring a file answer writes a decision request
+  with one option
+- **THEN** the answer is refused as invalid, as a schema-enforced reply of that shape would be
+
+### Requirement: An invalid transform answer is a quality failure
+A `transform` answer that is not a valid answer of the contract SHALL make the round
+`failed/quality` with one finding naming the validation error and carrying a bounded,
+neutralized excerpt of what was written. The factory SHALL run no repair round of its own. A
+round that produced no result stays `failed/infrastructure`.
+**Implements**: FR20 of extract-agent-round-runner
+
+#### Scenario: An unparseable answer file burns one attempt
+- **WHEN** a `transform` round of a file-answer dialect leaves text that is not JSON at its
+  answer path
+- **THEN** the result is `failed/quality`, its one finding names the parse error and quotes at
+  most the excerpt bound of the text, and the stage's next attempt is given that finding
+
+#### Scenario: Exhausted structured-output retries burn one attempt
+- **WHEN** the CLI of a schema-enforced dialect reports that its structured-output retries are
+  exhausted on a `transform` round
+- **THEN** the result is `failed/quality` naming that, and no second request is started for the
+  round
+
+#### Scenario: An empty answer file is an invalid answer
+- **WHEN** a `transform` round of a file-answer dialect leaves an empty file at its answer path
+- **THEN** the result is `failed/quality` naming the empty answer, and no question is raised
+
+#### Scenario: A round with no result event stays an infrastructure failure
+- **WHEN** a `transform` round is killed on its bound, or its CLI exits having emitted no result
+  event
+- **THEN** the result is `failed/infrastructure` and no attempt is burned
+
+#### Scenario: An invalid verdict answer burns no attempt
+- **WHEN** a `verdict` request ends with an answer that is not a valid verdict
+- **THEN** the check is cannot-verify and the stage's attempt count is unchanged
+
 ### Requirement: An agent round keeps no state past its end
 The `decision-request` answer of an agent round SHALL carry no continuation key, a key the agent
 wrote included, and no agent executor SHALL declare `resumable`: the CLI's session lives on the
